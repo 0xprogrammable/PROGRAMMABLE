@@ -5,7 +5,11 @@
   "profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
-    "profileVersion": "3.0.0",
+    "profileVersion": "3.1.0",
+    "compatibleProfileVersions": [
+      "3.0.0"
+    ],
+    "legacyProfileSemantics": "readable-and-byte-identical-retryable-only",
     "chainId": "1",
     "network": "Ethereum Mainnet",
     "productionLaunchAuthorized": true
@@ -16,11 +20,13 @@
     "packConfigSchemaUrl": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
     "guideUrl": "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
     "openApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
-    "cliReleaseVersion": "3.2.1",
-    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.2.1",
-    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
-    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
-    "cliTarballSha256": "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807"
+    "capabilitiesUrl": "https://api.programmable.market/v3/capabilities",
+    "preflightUrl": "https://api.programmable.market/v3/custom-launches/preflight",
+    "cliReleaseVersion": "3.3.0",
+    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.0",
+    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
+    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
+    "cliTarballSha256": "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8"
   },
   "agentContract": {
     "coldStartUrl": "https://programmable.market/.well-known/programmable.json",
@@ -33,8 +39,22 @@
     "automaticRouterSimulation": true,
     "automaticWalletSigning": false,
     "automaticBroadcast": false,
+    "remotePreflight": {
+      "quotaConsumed": false,
+      "nonceAllocated": false,
+      "persisted": false,
+      "walletSignatureRequiredLater": true,
+      "walletBroadcastByService": false
+    },
     "instruction": "Fetch discovery, this catalog and the advertised pack-config schema before inspecting or changing the project. Never expect the API key itself to contain instructions. Never place the secret value in source, config, prompts, chat, logs, screenshots or command history."
   },
+  "quickstart": [
+    "pack",
+    "validate --remote",
+    "submit",
+    "wallet",
+    "status"
+  ],
   "workflow": [
     {
       "step": 1,
@@ -59,7 +79,7 @@
     {
       "step": 5,
       "id": "validate",
-      "action": "Run the exact validate command with the same config and require byte-identical reproduction of launch.json."
+      "action": "Run validate with --remote and the same config. It first requires byte-identical local reproduction, then fetches public capabilities and posts those same bytes to authenticated preflight. Require quotaConsumed=false, nonceAllocated=false and persisted=false. Read riskClassification, behaviorEvidence and all six productTruthAxes independently before continuing."
     },
     {
       "step": 6,
@@ -68,15 +88,28 @@
     },
     {
       "step": 7,
-      "id": "track",
-      "action": "Poll the single resource. At action_required fix the bound source or config finding and create a new exact request. At awaiting_funding_authorization or authorized stop for separate controller-wallet review and signing."
+      "id": "wallet",
+      "action": "When the resource exposes walletHandoffUrl and expiresAt, stop automation. The connected controller independently reviews and signs the exact funding authorization or Router transaction. The API and CLI never sign or broadcast."
+    },
+    {
+      "step": 8,
+      "id": "status",
+      "action": "Poll the single resource after each explicit wallet action. Use lifecycleQueue only as bounded worker scheduling guidance; queue completion is not launch finality. At action_required follow the typed remediation, fix the bound source or config hard blocker and create a new exact request. Keep deployment, trading, platform-fee evidence, source verification, indexing and featured state separate."
     }
   ],
   "commands": [
     "programmable-launch pack --config programmable-launch.config.json --output launch.json",
-    "programmable-launch validate launch.json --config programmable-launch.config.json",
+    "programmable-launch validate launch.json --config programmable-launch.config.json --remote",
     "programmable-launch submit launch.json --config programmable-launch.config.json",
     "programmable-launch status REQUEST_UUID --watch --until authorized"
+  ],
+  "productTruthAxes": [
+    "deployment",
+    "trading",
+    "platform_fee_evidence",
+    "source_verification",
+    "indexing",
+    "featured"
   ],
   "existingProjectInspection": {
     "requiredCompilerVersion": "0.8.26+commit.8a97fa7a",
@@ -132,6 +165,10 @@
     ]
   },
   "funding": {
+    "quoteCurrencies": [
+      "native",
+      "erc20"
+    ],
     "modes": [
       "none",
       "wallet-transaction-value",
@@ -251,13 +288,71 @@
   "automaticAdmission": {
     "manualAllowlist": false,
     "manualProjectApproval": false,
+    "currentProfileVersion": "3.1.0",
+    "legacyExactProfileVersions": [
+      "3.0.0"
+    ],
+    "legacyProfileSemantics": "readable-and-byte-identical-retryable-only",
     "staticAdmission": "automatic-role-aware-exact-source",
+    "hardBlockFindingRules": [
+      {
+        "code": "RUNTIME_CALLCODE",
+        "targetRoles": ["any"]
+      },
+      {
+        "code": "RUNTIME_SELFDESTRUCT",
+        "targetRoles": ["any"]
+      },
+      {
+        "code": "SOURCE_SELFDESTRUCT_SURFACE",
+        "targetRoles": ["any"]
+      },
+      {
+        "code": "V4_CALLBACK_AUTHENTICATION_MISSING",
+        "targetRoles": ["hook"]
+      },
+      {
+        "code": "V4_CALLBACK_AUTHENTICATION_INVALID",
+        "targetRoles": ["hook"]
+      },
+      {
+        "code": "V4_CALLBACK_POOL_MANAGER_MISMATCH",
+        "targetRoles": ["hook"]
+      },
+      {
+        "code": "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
+        "targetRoles": ["hook"]
+      }
+    ],
+    "needsEvidenceFindingCodes": [
+      "RUNTIME_CREATE",
+      "RUNTIME_CREATE2",
+      "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+      "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+      "RUNTIME_DELEGATECALL",
+      "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+      "SOURCE_MUTABLE_PAUSE_SURFACE",
+      "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
+      "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+      "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+      "SOURCE_MUTABLE_ADMIN_SURFACE",
+      "SOURCE_PUBLIC_MINT_SURFACE",
+      "SOURCE_EXTERNAL_DEPENDENCY_SURFACE",
+      "SOURCE_TRANSFER_FEE_SURFACE",
+      "SOURCE_LIQUIDITY_LOCK_OR_CUSTODY_SURFACE"
+    ],
+    "advancedSurfacesRequireEvidence": [
+      "proxy-or-delegatecall",
+      "mint-tax-pause-or-transfer-controls",
+      "liquidity-custody-or-locking",
+      "return-delta-custom-accounting"
+    ],
     "routerSimulationBeforeAuthorization": true,
     "routerSimulationRole": "Final execution-compatibility detector for the exact prepared Router transaction. It is not a safety, fee-behavior, liquidity or economic-solvency claim.",
     "blockingStatus": "action_required",
     "warningDisposition": "continue-to-router-simulation",
-    "warningMeaning": "A nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. It is not an admission, conformance or safety claim.",
-    "actionRequiredInstruction": "Read the exact single-resource report, match each blocking finding to its target and role, change the exact source or config, rebuild, repack and validate, then submit a new immutable request. Do not retry unchanged and do not ask for an allowlist bypass.",
+    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.1.0 deployment blocks. No warning is an admission, conformance or safety claim.",
+    "actionRequiredInstruction": "Read the exact single-resource report, match each hard-blocking finding to its target and role, change the exact source or config, rebuild, repack and validate, then submit a new immutable request. Do not retry unchanged and do not ask for an allowlist bypass.",
     "supportInstruction": "When the resource directs you to support, send only requestId, status, UTC time and the public finding or error code. Never send the API key."
   },
   "runtimeRemediationPayload": {
@@ -348,7 +443,7 @@
     {
       "remediationId": "PLATFORM_ADMISSION_FINDING",
       "stage": "admission",
-      "condition": "The resource enters action_required with a bound role-aware static finding.",
+      "condition": "The resource enters action_required because one of the current profile's exact hard-blocking code-and-role rules matched.",
       "requiredChange": "Fix the exact reported target and source surface, preserve the report as evidence, then rebuild, repack, validate and submit a new request. There is no project allowlist or manual approval shortcut.",
       "resumeAt": "inspect-project"
     },

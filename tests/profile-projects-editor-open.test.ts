@@ -94,7 +94,10 @@ describe("My projects editor opening", () => {
     expect(source).toContain("const canEditArticle = editableTokens.has(");
     expect(source).toContain("{canEditArticle ? (");
     expect(source).toContain("className={styles.articleActionSlot}");
-    expect(source).toContain('aria-hidden="true"');
+    expect(source).toContain(': "Unavailable"}');
+    expect(source).not.toMatch(
+      /className=\{styles\.articleActionState\}[\s\S]{0,120}aria-hidden/u,
+    );
     expect(source).toContain(
       "Launch details could not be refreshed. The current list is still shown.",
     );
@@ -128,9 +131,9 @@ describe("My projects editor opening", () => {
       "utf8",
     );
 
-    expect(source).toContain('aria-busy={phase === "loading"}');
+    expect(source).toContain("aria-busy={refreshInProgress}");
     expect(source).toContain('? "Refreshing…" : "Refresh"');
-    expect(source).toContain('data-loading={phase === "loading"}');
+    expect(source).toContain("data-loading={refreshInProgress}");
     expect(styles).toMatch(
       /@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*\.refresh\[data-loading="true"\] \.refreshIcon/u,
     );
@@ -146,10 +149,43 @@ describe("My projects editor opening", () => {
     expect(source).toContain(
       "controller.abort(creatorProjectRefreshTimeoutReason)",
     );
+    expect(source).toContain("loadCreatorProjectListV1({");
+    expect(source).toContain("const authHeaders = await input.getAuthHeaders()");
+    expect(source).toContain("Promise.race([");
     expect(source).toContain(
       "Launch refresh took too long. Select Refresh to try again.",
     );
     expect(source).toContain("onClick={refreshProjects}");
+  });
+
+  it("bounds a stalled authentication read before the network request starts", async () => {
+    let fetched = false;
+    await expect(profileProjects.loadCreatorProjectListV1({
+      fetchImpl: (async () => {
+        fetched = true;
+        throw new Error("fetch must not start");
+      }) as typeof fetch,
+      getAuthHeaders: () => new Promise<Record<string, string>>(() => undefined),
+      timeoutMs: 5,
+    })).rejects.toThrow("creator-project-refresh-timeout");
+    expect(fetched).toBe(false);
+  });
+
+  it("keeps the launch refresh busy until local and profile reads settle", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const profileSource = readFileSync(
+      join(process.cwd(), "components/profile-view.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      'const refreshInProgress = phase === "loading" || refreshing;',
+    );
+    expect(source).toContain('phase === "ready" ? "Launches updated"');
+    expect(profileSource).toContain("refreshing={profileRefreshing}");
   });
 
   it("reserves a complete first page while keeping warm launch actions visible", () => {

@@ -28,18 +28,20 @@ describe("public Custom Launch CLI surface", () => {
       readStatus: "live",
       apiVersion: "3",
       readyzUrl: "https://api.programmable.market/readyz",
+      capabilitiesUrl: "https://api.programmable.market/v3/capabilities",
+      preflightUrl: "https://api.programmable.market/v3/custom-launches/preflight",
       openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       legacyIntake: { registry: "closed", github: "closed" },
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.2.1",
+        releaseVersion: "3.3.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
         tarballSha256:
-          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+          "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
       },
       compatibility: {
         v1: {
@@ -60,13 +62,13 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.2.1",
+          releaseVersion: "3.3.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
           tarballSha256:
-            "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+            "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
         },
       },
       generalHookProfile: {
@@ -74,26 +76,63 @@ describe("public Custom Launch CLI surface", () => {
         apiVersion: "3",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.0.0",
+        profileVersion: "3.1.0",
+        compatibleProfileVersions: ["3.0.0"],
+        legacyProfileSemantics: "readable-and-byte-identical-retryable-only",
         productionLaunchAuthorized: true,
         createPath: "/v3/custom-launches",
+        capabilitiesPath: "/v3/capabilities",
+        preflightPath: "/v3/custom-launches/preflight",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.2.1",
+        cliReleaseVersion: "3.3.0",
+        admissionPolicy: {
+          manualProjectAllowlist: false,
+          hardBlockFindingRules: [
+            { code: "RUNTIME_CALLCODE", targetRoles: ["any"] },
+            { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["any"] },
+            { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["any"] },
+            { code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: ["hook"] },
+            { code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: ["hook"] },
+            { code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: ["hook"] },
+            { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
+          ],
+          returnDeltaRequiresBehaviorEvidence: true,
+        },
       },
       integrationPreview: {
         status: "live",
         apiVersion: "3",
         publicAuthorization: true,
         createPath: "/v3/custom-launches",
+        capabilitiesPath: "/v3/capabilities",
+        preflightPath: "/v3/custom-launches/preflight",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
+        profileVersion: "3.1.0",
+        compatibleProfileVersions: ["3.0.0"],
         requestSchemaVersion: "programmable.custom-launch-create-request.v3",
         minimumTargets: 3,
         maximumTargets: 16,
         projectOwnedToken: true,
         projectOwnedHook: true,
         hookPermissionMaskRange: { minimum: 0, maximum: 16_383 },
+        allFourteenHookPermissionsStructurallySupported: true,
+        manualProjectAllowlist: false,
+        quoteCurrencies: ["native", "erc20"],
+        liquidityModels: [
+          "external-concentrated-liquidity",
+          "launch-seeded-concentrated-liquidity",
+          "hook-inventory-custom-accounting",
+        ],
+        productTruthAxes: [
+          "deployment",
+          "trading",
+          "platform_fee_evidence",
+          "source_verification",
+          "indexing",
+          "featured",
+        ],
         platformAdmissionReceiptRequired: true,
         routerSimulationRequiredBeforeAuthorization: true,
         safetyClaim: false,
@@ -113,14 +152,14 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "3.2.1",
-        releaseTag: "programmable-launch-v3.2.1",
+        releaseVersion: "3.3.0",
+        releaseTag: "programmable-launch-v3.3.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
         tarballSha256:
-          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+          "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -164,6 +203,11 @@ describe("public Custom Launch CLI surface", () => {
           publicAuthorization: true,
           createHttpStatus: 202,
           replayHttpStatus: 200,
+          capabilitiesPath: "/v3/capabilities",
+          preflightPath: "/v3/custom-launches/preflight",
+          preflightQuotaConsumed: false,
+          preflightNonceAllocated: false,
+          preflightPersisted: false,
         },
       },
     });
@@ -193,14 +237,14 @@ describe("public Custom Launch CLI surface", () => {
         "--json",
       ], { cwd: root, stdio: "pipe" });
       const tarball = readFileSync(
-        join(temporaryRoot, "programmable-launch-3.2.1.tgz"),
+        join(temporaryRoot, "programmable-launch-3.3.0.tgz"),
       );
       const digest = `sha256:${createHash("sha256").update(tarball).digest("hex")}`;
       const document = programmableWellKnownDocumentV1(
         PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
       );
       expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
-      expect(tarball.byteLength).toBe(245_763);
+      expect(tarball.byteLength).toBe(251_312);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -403,6 +447,7 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v3.openapi).toBe("3.1.0");
+    expect(v3.info.version).toBe("3.3.0");
     expect(v3["x-programmable-availability"]).toMatchObject({
       status: "live",
       publicAuthorized: true,
@@ -412,16 +457,128 @@ describe("public Custom Launch CLI surface", () => {
         httpStatus: 202,
         replayHttpStatus: 200,
       },
+      publicCapabilities: {
+        status: "live",
+        path: "/v3/capabilities",
+        authentication: "none",
+      },
+      publicPreflight: {
+        status: "live",
+        path: "/v3/custom-launches/preflight",
+        httpStatus: 200,
+        authentication: "wallet-bound-api-key",
+        requiredScope: "custom-launch:create",
+        quotaConsumed: false,
+        nonceAllocated: false,
+        persisted: false,
+      },
       stableProductionVersion: "3",
       stableOpenApiUrl:
         "https://programmable.market/openapi/custom-launch-v3.json",
       activationBlockers: [],
     });
     expect(Object.keys(v3.paths).sort()).toEqual([
+      "/v3/capabilities",
       "/v3/custom-launches",
+      "/v3/custom-launches/preflight",
       "/v3/custom-launches/{launchId}",
       "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization",
     ]);
+    const capabilities = v3.paths["/v3/capabilities"].get;
+    expect(capabilities.security).toEqual([]);
+    expect(capabilities.responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CustomLaunchCapabilitiesV1");
+    const preflight = v3.paths["/v3/custom-launches/preflight"].post;
+    expect(preflight.security).toEqual([{ CustomLaunchApiKey: [] }]);
+    expect(preflight.parameters).toBeUndefined();
+    expect(preflight.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CustomLaunchCreateRequestV3");
+    expect(preflight.responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CustomLaunchPreflightV1");
+    expect(Object.keys(preflight.responses)).toEqual([
+      "200", "400", "401", "403", "413", "415", "422", "500", "503",
+    ]);
+    expect(preflight.responses["503"].$ref)
+      .toBe("#/components/responses/V3Unavailable");
+    expect(v3.components.responses.V3Unavailable.headers["Retry-After"]
+      .schema.pattern).toBe("^[1-9][0-9]*$");
+    expect(preflight["x-programmable-side-effects"]).toEqual({
+      quotaConsumed: false,
+      nonceAllocated: false,
+      persisted: false,
+      walletSignatureRequiredLater: true,
+      walletBroadcastByService: false,
+    });
+    const preflightSchema = v3.components.schemas.CustomLaunchPreflightV1;
+    expect(preflightSchema.properties).toMatchObject({
+      schemaVersion: { const: "programmable.custom-launch-preflight.v1" },
+      requestHash: {
+        $ref: "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+      },
+      disposition: {
+        enum: [
+          "supported",
+          "supported_with_warnings",
+          "needs_evidence",
+          "unsupported",
+        ],
+      },
+      quotaConsumed: { const: false },
+      nonceAllocated: { const: false },
+      persisted: { const: false },
+      walletSignatureRequiredLater: { const: true },
+      walletBroadcastByService: { const: false },
+    });
+    expect(preflightSchema.properties.launchEligibility.required).toEqual([
+      "deployable", "routable", "featured",
+    ]);
+    expect(preflightSchema.properties.evidenceTier.enum).toEqual([
+      "launch_mechanics_verified",
+      "standard_swap_compatible",
+      "advanced_custom_accounting",
+      "governed_external_trust",
+    ]);
+    expect(preflightSchema.required).toEqual(expect.arrayContaining([
+      "riskClassification",
+      "behaviorEvidence",
+      "productTruthAxes",
+    ]));
+    expect(preflightSchema.properties.riskClassification.oneOf).toEqual([
+      { $ref: "#/components/schemas/PlatformAdmissionRiskClassificationV3" },
+      { type: "null" },
+    ]);
+    expect(preflightSchema.properties.behaviorEvidence.$ref)
+      .toBe("#/components/schemas/CustomLaunchBehaviorEvidenceSummaryV3");
+    expect(preflightSchema.properties.productTruthAxes.$ref)
+      .toBe("#/components/schemas/CustomLaunchProductTruthAxesV3");
+    expect(preflightSchema.properties.hardBlockFindingCodes.$ref)
+      .toBe("#/components/schemas/CustomLaunchFindingCodeListV1");
+    expect(preflightSchema.properties.needsEvidenceFindingCodes.$ref)
+      .toBe("#/components/schemas/CustomLaunchFindingCodeListV1");
+    expect(preflightSchema.properties.warningFindingCodes.$ref)
+      .toBe("#/components/schemas/CustomLaunchFindingCodeListV1");
+    expect(preflightSchema.properties.staticBaseline.oneOf).toEqual([
+      { $ref: "#/components/schemas/StaticBaselineReportV1" },
+      { type: "null" },
+    ]);
+    expect(preflightSchema.properties.remediations.items.$ref)
+      .toBe("#/components/schemas/CustomLaunchRemediationV1");
+    expect(v3.components.schemas.CustomLaunchCapabilitiesV1.properties
+      .productTruthAxes.const).toEqual([
+      "deployment",
+      "trading",
+      "platform_fee_evidence",
+      "source_verification",
+      "indexing",
+      "featured",
+    ]);
+    expect(v3.components.schemas.CustomLaunchResourceV3.required)
+      .toContain("lifecycleQueue");
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties
+      .lifecycleQueue.oneOf).toEqual([
+        { $ref: "#/components/schemas/CustomLaunchLifecycleQueueV3" },
+        { type: "null" },
+      ]);
     expect(v3.paths["/v3/custom-launches"].post
       ["x-programmable-public-availability"]).toBe("live");
     expect(v3.paths["/v3/custom-launches"].post.responses["503"]
@@ -482,12 +639,12 @@ describe("public Custom Launch CLI surface", () => {
     ]);
     expect(request.properties.schemaVersion.const)
       .toBe("programmable.custom-launch-create-request.v3");
-    expect(request.allOf[0].oneOf).toHaveLength(2);
+    expect(request.allOf[0].oneOf).toHaveLength(3);
     expect(request.allOf[0].oneOf[0].properties.launchProfile.properties)
       .toMatchObject({
         schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v3" },
         profileRevision: { const: 3 },
-        profileVersion: { const: "3.0.0" },
+        profileVersion: { const: "3.1.0" },
       });
     expect(request.allOf[0].oneOf[0].properties.launchProfileSelection
       .properties).toMatchObject({
@@ -499,6 +656,12 @@ describe("public Custom Launch CLI surface", () => {
     expect(request.allOf[0].oneOf[0].properties.verificationBundle.$ref)
       .toBe("#/components/schemas/DirectNativeExactSourceVerificationBundleV3");
     expect(request.allOf[0].oneOf[1].properties.launchProfile.properties)
+      .toMatchObject({
+        schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v3" },
+        profileRevision: { const: 3 },
+        profileVersion: { const: "3.0.0" },
+      });
+    expect(request.allOf[0].oneOf[2].properties.launchProfile.properties)
       .toMatchObject({
         schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v2" },
         profileRevision: { const: 2 },
@@ -518,7 +681,8 @@ describe("public Custom Launch CLI surface", () => {
     expect(v3["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 3,
-      profileVersion: "3.0.0",
+      profileVersion: "3.1.0",
+      compatibleProfileVersions: ["3.0.0"],
       productionLaunchAuthorized: true,
       minimumHookPermissionMask: 0,
       maximumHookPermissionMask: 16383,
@@ -542,11 +706,11 @@ describe("public Custom Launch CLI surface", () => {
       "permitAuthorityRuntimeCodeHash",
       "platformFeePolicy",
     ]));
-    expect(profile.oneOf).toHaveLength(2);
+    expect(profile.oneOf).toHaveLength(3);
     expect(profile.properties.permitAuthority.const)
       .toBe("0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b");
     expect(profile.properties).toMatchObject({
-      profileVersion: { enum: ["2.0.0", "3.0.0"] },
+      profileVersion: { enum: ["2.0.0", "3.0.0", "3.1.0"] },
       productionLaunchAuthorized: { const: true },
       routerRuntimeCodeHash: {
         const:
@@ -573,7 +737,11 @@ describe("public Custom Launch CLI surface", () => {
       .toBe("#/components/schemas/PlatformFeePolicyV1");
     expect(profile.properties.platformAdmissionPolicy.$ref)
       .toBe("#/components/schemas/PlatformAdmissionPolicyV1");
-    expect(v3.components.schemas.PlatformAdmissionPolicyV1.properties)
+    expect(v3.components.schemas.PlatformAdmissionPolicyV1.oneOf).toEqual([
+      { $ref: "#/components/schemas/PlatformAdmissionPolicyV3_1_0" },
+      { $ref: "#/components/schemas/PlatformAdmissionPolicyV3_0_0" },
+    ]);
+    expect(v3.components.schemas.PlatformAdmissionPolicyV3_1_0.properties)
       .toMatchObject({
         warningDisposition: { const: "bound-and-visible" },
         noBlockingFindingDisposition: { const: "router-simulation-eligible" },
@@ -583,22 +751,27 @@ describe("public Custom Launch CLI surface", () => {
         safetyClaim: { const: false },
         feeBehaviorClaim: { const: false },
       });
-    expect(v3.components.schemas.PlatformAdmissionPolicyV1.properties
+    expect(v3.components.schemas.PlatformAdmissionPolicyV3_1_0.properties
       .blockingFindingRules.const).toEqual([
-        { code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: ["any"] },
-        { code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: ["hook"] },
+        { code: "RUNTIME_CALLCODE", targetRoles: ["any"] },
+        { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["any"] },
+        { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["any"] },
+        { code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: ["hook"] },
+        { code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: ["hook"] },
+        { code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: ["hook"] },
         { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
-        { code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: ["token"] },
-        { code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: ["token"] },
-        { code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: ["token"] },
-        { code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: ["token"] },
-        { code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: ["token"] },
-        { code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: ["token", "hook"] },
-        { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["token", "hook"] },
-        { code: "RUNTIME_CALLCODE", targetRoles: ["token", "hook"] },
-        { code: "RUNTIME_DELEGATECALL", targetRoles: ["token", "hook"] },
-        { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["token", "hook"] },
       ]);
+    expect(v3.components.schemas.PlatformAdmissionPolicyV3_0_0.properties
+      .blockingFindingRules.const).toHaveLength(13);
+    expect(v3["x-programmable-admission-policy"]
+      .needsEvidenceFindingCodes).toEqual(expect.arrayContaining([
+        "RUNTIME_DELEGATECALL",
+        "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+        "SOURCE_PUBLIC_MINT_SURFACE",
+        "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+        "SOURCE_MUTABLE_PAUSE_SURFACE",
+        "SOURCE_LIQUIDITY_LOCK_OR_CUSTODY_SURFACE",
+      ]));
     expect(v3.components.schemas.StaticBaselineFindingV1.properties.code.enum)
       .toContain("V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING");
     expect(v3.components.schemas.DirectNativeExactSourceVerificationBundleV3
@@ -668,6 +841,16 @@ describe("public Custom Launch CLI surface", () => {
         "funding_authorization_verified",
         "authorized",
       ]));
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties
+      .walletHandoffUrl.oneOf).toEqual([
+      { type: "string", format: "uri" },
+      { type: "null" },
+    ]);
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties
+      .expiresAt.oneOf).toEqual([
+      { type: "string", format: "date-time" },
+      { type: "null" },
+    ]);
     const outputVariants = v3.components.schemas.CustomLaunchOutputV3.oneOf;
     const outputForStage = (stage: string) => outputVariants.find(
       (variant: { properties: { stage: { const?: string } } }) =>
@@ -923,10 +1106,10 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "Package `3.2.1` supports production general profile",
+      "Package `3.3.0` supports production general profile",
     );
     expect(packageGuide).toContain(
-      "`programmable.direct-native-hook-graph.v1` version `3.0.0`",
+      "`programmable.direct-native-hook-graph.v1` version `3.1.0`",
     );
     const guide = readFileSync(
       join(root, "packages/launch/examples/no-broadcast/README.md"),
@@ -978,11 +1161,11 @@ describe("public Custom Launch CLI surface", () => {
       );
       expect(rehearsalEvidence.profile).toMatchObject({
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileVersion: "3.0.0",
+        profileVersion: "3.1.0",
         profileRevision: 3,
         productionLaunchAuthorized: true,
       });
-      expect(exampleBuildSource.match(/profileVersion: "3\.0\.0"/gu))
+      expect(exampleBuildSource.match(/profileVersion: "3\.1\.0"/gu))
         .toHaveLength(2);
       expect(exampleBuildSource).not.toContain('profileVersion: "2.0.0"');
       const packOutput = JSON.parse(execFileSync(process.execPath, [
@@ -1022,7 +1205,7 @@ describe("public Custom Launch CLI surface", () => {
         schemaVersion: "programmable.custom-launch-create-request.v3",
         launchProfile: {
           schemaVersion: "programmable.direct-native-hook-graph-profile.v3",
-          profileVersion: "3.0.0",
+          profileVersion: "3.1.0",
           profileRevision: 3,
           productionLaunchAuthorized: true,
         },
@@ -1081,7 +1264,8 @@ describe("public Custom Launch CLI surface", () => {
         status: "live",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.0.0",
+        profileVersion: "3.1.0",
+        compatibleProfileVersions: ["3.0.0"],
         productionLaunchAuthorized: true,
         createHttpStatus: 202,
         replayHttpStatus: 200,

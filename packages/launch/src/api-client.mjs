@@ -3,13 +3,17 @@ import path from "node:path";
 
 import {
   API_ORIGIN,
+  CAPABILITIES_PATH_V3,
   CREATE_PATH_V1,
   CREATE_PATH_V2,
   CREATE_PATH_V3,
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  PREFLIGHT_PATH_V3,
+  PREFLIGHT_SCHEMA_V1,
   TERMINAL_STATUSES,
+  WALLET_HANDOFF_BASE_URL,
   WALLET_HANDOFF_STATUS,
 } from "./constants.mjs";
 import {
@@ -28,6 +32,13 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const MAX_SUBMISSION_JOURNAL_BYTES = 12_582_912;
+const PREFLIGHT_DISPOSITIONS = new Set([
+  "supported",
+  "supported_with_warnings",
+  "needs_evidence",
+  "unsupported",
+]);
+const REMEDIATION_SCHEMA_V1 = "programmable.custom-launch-remediation.v1";
 
 export class ProgrammableApiError extends Error {
   constructor(message, details) {
@@ -35,6 +46,88 @@ export class ProgrammableApiError extends Error {
     this.name = "ProgrammableApiError";
     this.details = details;
   }
+}
+
+export async function getLaunchCapabilities(options = {}) {
+  const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
+  const result = await requestWithRetry({
+    method: "GET",
+    url: `${apiOrigin}${CAPABILITIES_PATH_V3}`,
+    headers: { accept: "application/json" },
+    maxAttempts: options.maxAttempts,
+    timeoutMs: options.timeoutMs,
+    fetchImpl: options.fetchImpl,
+    sleepImpl: options.sleepImpl,
+  });
+  assertResponseObject(result.body, "capabilities");
+  return {
+    httpStatus: result.status,
+    retryAfter: result.retryAfter,
+    resource: result.body,
+  };
+}
+
+export async function validateLaunchRemote(options) {
+  const launchPath = path.resolve(options.launchPath);
+  const validation = await (options.validateLaunchFileImpl ?? validateLaunchFile)({
+    launchPath,
+    configPath: options.configPath,
+  });
+  const requestBytes = Buffer.from(await (options.readLaunchBytesImpl ?? readFile)(launchPath));
+  const requestHash = sha256Digest(requestBytes);
+  if (requestHash !== validation.requestSha256) {
+    throw new TypeError(
+      "REMOTE_VALIDATION_BYTES_CHANGED: launch.json changed after exact local validation",
+    );
+  }
+  if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3) {
+    throw new TypeError("remote preflight is available only for V3 Custom launch requests");
+  }
+
+  const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
+  const capabilities = await getLaunchCapabilities({
+    apiOrigin,
+    maxAttempts: options.maxAttempts,
+    timeoutMs: options.timeoutMs,
+    fetchImpl: options.fetchImpl,
+    sleepImpl: options.sleepImpl,
+  });
+  const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
+  const result = await requestWithRetry({
+    method: "POST",
+    url: `${apiOrigin}${PREFLIGHT_PATH_V3}`,
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: requestBytes,
+    maxAttempts: options.maxAttempts,
+    timeoutMs: options.timeoutMs,
+    fetchImpl: options.fetchImpl,
+    sleepImpl: options.sleepImpl,
+  });
+  assertPreflightResponse(result.body, requestHash);
+  const action = resourceActionSummary(result.body, {
+    apiOrigin,
+    walletHandoffBaseUrl: capabilities.resource.walletHandoffBaseUrl,
+  });
+  return {
+    ...validation,
+    remoteValidation: true,
+    capabilitiesHttpStatus: capabilities.httpStatus,
+    preflightHttpStatus: result.status,
+    capabilities: capabilities.resource,
+    preflight: result.body,
+    disposition: result.body.disposition,
+    launchEligibility: result.body.launchEligibility,
+    evidenceTier: result.body.evidenceTier,
+    hardBlockFindingCodes: result.body.hardBlockFindingCodes,
+    needsEvidenceFindingCodes: result.body.needsEvidenceFindingCodes,
+    warningFindingCodes: result.body.warningFindingCodes,
+    remediations: result.body.remediations,
+    ...action,
+  };
 }
 
 export async function submitLaunch(options) {
@@ -90,6 +183,7 @@ export async function submitLaunch(options) {
     sleepImpl: options.sleepImpl,
   });
   await updateJournal(journalPath, journal, result);
+  const action = resourceActionSummary(result.body, { apiOrigin });
   return {
     idempotencyKey,
     requestSha256,
@@ -97,6 +191,7 @@ export async function submitLaunch(options) {
     httpStatus: result.status,
     retryAfter: result.retryAfter,
     resource: result.body,
+    ...action,
   };
 }
 
@@ -142,6 +237,7 @@ export async function statusLaunch(options) {
       || (until === WALLET_HANDOFF_STATUS && walletHandoffReady)
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
+      const action = resourceActionSummary(resource, { apiOrigin });
       return {
         httpStatus: result.status,
         stopped,
@@ -155,6 +251,7 @@ export async function statusLaunch(options) {
             ? "router-transaction-required"
             : null,
         resource,
+        ...action,
       };
     }
     await (options.sleepImpl ?? sleep)(pollIntervalMs);
@@ -252,12 +349,12 @@ async function requestWithRetry(options) {
     }
     if (response.status === 429 || response.status === 503) {
       if (attempt === maxAttempts) {
-        throw apiError(response.status, body, retryAfter);
+        throw apiError(response.status, body, retryAfter, options.url);
       }
       await sleepImpl(retryDelayMs(retryAfter, attempt));
       continue;
     }
-    if (!response.ok) throw apiError(response.status, body, retryAfter);
+    if (!response.ok) throw apiError(response.status, body, retryAfter, options.url);
     return { status: response.status, retryAfter, body };
   }
   throw new ProgrammableApiError("Custom Launch API request remained ambiguous after identical retries", {
@@ -275,8 +372,16 @@ function parseResponseBody(bytes, status) {
   }
 }
 
-function apiError(status, body, retryAfter) {
+function apiError(status, body, retryAfter, requestUrl) {
   const error = body?.error ?? body;
+  const serverDetails = isJsonValue(error?.details) ? error.details : undefined;
+  const remediations = typedRemediations(
+    error?.remediations
+      ?? (isPlainObject(serverDetails) ? serverDetails.remediations : undefined)
+      ?? body?.remediations,
+  );
+  const apiOrigin = safeRequestOrigin(requestUrl);
+  const action = resourceActionSummary(error, { apiOrigin });
   return new ProgrammableApiError(
     `Custom Launch API returned HTTP ${status}`,
     {
@@ -284,8 +389,238 @@ function apiError(status, body, retryAfter) {
       code: safeApiCode(error?.code),
       requestId: safeErrorRequestId(error?.requestId),
       retryAfter: safeRetryAfter(retryAfter),
+      ...(serverDetails === undefined ? {} : { serverDetails }),
+      ...(remediations === null ? {} : { remediations }),
+      ...action,
     },
   );
+}
+
+function assertPreflightResponse(value, requestHash) {
+  assertResponseObject(value, "preflight");
+  assertPreflightField(value.schemaVersion === PREFLIGHT_SCHEMA_V1, "schemaVersion");
+  assertPreflightField(value.requestHash === requestHash, "requestHash");
+  assertPreflightField(
+    Number.isSafeInteger(value.profileRevision) && value.profileRevision > 0,
+    "profileRevision",
+  );
+  assertPreflightField(
+    typeof value.serverTime === "string" && Number.isFinite(Date.parse(value.serverTime)),
+    "serverTime",
+  );
+  assertPreflightField(PREFLIGHT_DISPOSITIONS.has(value.disposition), "disposition");
+  assertPreflightField(isPlainObject(value.launchEligibility), "launchEligibility");
+  for (const field of ["deployable", "routable", "featured"]) {
+    assertPreflightField(typeof value.launchEligibility[field] === "boolean", `launchEligibility.${field}`);
+  }
+  assertPreflightField(
+    typeof value.evidenceTier === "string" && value.evidenceTier.length > 0,
+    "evidenceTier",
+  );
+  for (const field of [
+    "hardBlockFindingCodes",
+    "needsEvidenceFindingCodes",
+    "warningFindingCodes",
+  ]) {
+    assertPreflightField(isCodeArray(value[field]), field);
+  }
+  assertPreflightField(
+    value.staticBaseline === null || isPlainObject(value.staticBaseline),
+    "staticBaseline",
+  );
+  assertPreflightField(typedRemediations(value.remediations) !== null, "remediations");
+  for (const [field, expected] of [
+    ["quotaConsumed", false],
+    ["nonceAllocated", false],
+    ["persisted", false],
+    ["walletSignatureRequiredLater", true],
+    ["walletBroadcastByService", false],
+  ]) {
+    assertPreflightField(value[field] === expected, field);
+  }
+}
+
+function assertPreflightField(condition, field) {
+  if (condition) return;
+  throw new ProgrammableApiError(
+    `Custom Launch API returned an invalid ${PREFLIGHT_SCHEMA_V1} response`,
+    {
+      code: "PREFLIGHT_CONTRACT_INVALID",
+      serverDetails: { field },
+    },
+  );
+}
+
+function assertResponseObject(value, label) {
+  if (!isPlainObject(value)) {
+    throw new ProgrammableApiError(`Custom Launch API returned invalid ${label} JSON`, {
+      code: `${label.toUpperCase()}_CONTRACT_INVALID`,
+    });
+  }
+}
+
+function typedRemediations(value) {
+  if (!Array.isArray(value)) return null;
+  return value.every(isTypedRemediation) ? value : null;
+}
+
+function isTypedRemediation(value) {
+  if (!isPlainObject(value)
+    || value.schemaVersion !== REMEDIATION_SCHEMA_V1
+    || !nonemptyString(value.remediationId)
+    || !nonemptyString(value.code)
+    || !nonemptyString(value.stage)
+    || !nonemptyString(value.requiredChange)
+    || !nonemptyString(value.catalogUrl)
+    || !nonemptyString(value.guideUrl)
+    || !nonemptyString(value.resumeAt)
+    || typeof value.retryable !== "boolean"
+    || typeof value.requiresNewRequest !== "boolean") {
+    return false;
+  }
+  for (const field of ["targetId", "targetRole", "sourcePath"]) {
+    if (value[field] !== null && !nonemptyString(value[field])) return false;
+  }
+  return Object.hasOwn(value, "expected") && Object.hasOwn(value, "observed");
+}
+
+function resourceActionSummary(resource, { apiOrigin, walletHandoffBaseUrl } = {}) {
+  if (!isPlainObject(resource)) return {};
+  const output = isPlainObject(resource.output) ? resource.output : null;
+  const outputAction = isPlainObject(output?.actionRequired) ? output.actionRequired : null;
+  const resourceAction = isPlainObject(resource.actionRequired) ? resource.actionRequired : null;
+  const summary = {};
+  if (Object.hasOwn(resource, "actionRequired")) {
+    summary.actionRequired = resource.actionRequired;
+  } else if (output !== null && Object.hasOwn(output, "actionRequired")) {
+    summary.actionRequired = output.actionRequired;
+  }
+
+  const handoffUrl = firstDefined(
+    resource.walletHandoffUrl,
+    output?.walletHandoffUrl,
+    resourceAction?.walletHandoffUrl,
+    outputAction?.walletHandoffUrl,
+  );
+  const safeHandoffUrl = safeWalletHandoffUrl(
+    handoffUrl,
+    apiOrigin,
+    walletHandoffBaseUrl,
+  );
+  if (safeHandoffUrl !== null) summary.walletHandoffUrl = safeHandoffUrl;
+
+  const expiresAt = safeExpiresAt(firstDefined(
+    resource.expiresAt,
+    output?.expiresAt,
+    resourceAction?.expiresAt,
+    outputAction?.expiresAt,
+  ));
+  if (expiresAt !== null) summary.expiresAt = expiresAt;
+
+  const secondsRemaining = firstDefined(
+    resource.secondsRemaining,
+    output?.secondsRemaining,
+    resourceAction?.secondsRemaining,
+    outputAction?.secondsRemaining,
+  );
+  if (Number.isSafeInteger(secondsRemaining) && secondsRemaining >= 0) {
+    summary.secondsRemaining = secondsRemaining;
+  }
+
+  const remediations = typedRemediations(firstDefined(
+    resource.remediations,
+    output?.remediations,
+    resourceAction?.remediations,
+    outputAction?.remediations,
+  ));
+  if (remediations !== null) summary.remediations = remediations;
+  return summary;
+}
+
+function safeWalletHandoffUrl(value, apiOrigin, advertisedBaseUrl) {
+  if (typeof value !== "string") return null;
+  let candidate;
+  try {
+    candidate = new URL(value);
+  } catch {
+    return null;
+  }
+  if (candidate.username || candidate.password) return null;
+  const bases = [
+    safeWalletHandoffBase(advertisedBaseUrl, apiOrigin, true),
+    safeWalletHandoffBase(WALLET_HANDOFF_BASE_URL, apiOrigin, false),
+  ].filter((entry) => entry !== null);
+  if (isLoopbackOrigin(apiOrigin)) {
+    bases.push(`${apiOrigin}/`);
+  }
+  return bases.some((base) => candidate.href.startsWith(base)) ? candidate.href : null;
+}
+
+function safeWalletHandoffBase(value, apiOrigin, allowAdvertisedHttps) {
+  if (typeof value !== "string") return null;
+  let base;
+  try {
+    base = new URL(value);
+  } catch {
+    return null;
+  }
+  if (base.username || base.password || base.search || base.hash) return null;
+  const productionBase = base.protocol === "https:"
+    && (allowAdvertisedHttps || base.origin === new URL(WALLET_HANDOFF_BASE_URL).origin);
+  const loopbackBase = isLoopbackOrigin(apiOrigin) && base.origin === apiOrigin;
+  return productionBase || loopbackBase
+    ? `${base.origin}${base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`}`
+    : null;
+}
+
+function isLoopbackOrigin(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.hostname === "127.0.0.1" || url.hostname === "[::1]" || url.hostname === "localhost";
+  } catch {
+    return false;
+  }
+}
+
+function safeExpiresAt(value) {
+  return typeof value === "string" && value.length <= 64 && Number.isFinite(Date.parse(value))
+    ? value
+    : null;
+}
+
+function safeRequestOrigin(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined);
+}
+
+function isCodeArray(value) {
+  return Array.isArray(value)
+    && value.every((entry) => typeof entry === "string" && SAFE_API_CODE.test(entry));
+}
+
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isJsonValue(value, depth = 0) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (depth >= 32) return false;
+  if (Array.isArray(value)) return value.every((entry) => isJsonValue(entry, depth + 1));
+  return isPlainObject(value)
+    && Object.values(value).every((entry) => isJsonValue(entry, depth + 1));
+}
+
+function nonemptyString(value) {
+  return typeof value === "string" && value.length > 0;
 }
 
 function safeApiCode(value) {

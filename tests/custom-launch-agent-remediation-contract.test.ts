@@ -58,6 +58,8 @@ describe("Custom Launch cold-agent remediation contract", () => {
       packConfigSchemaUrl,
       existingProjectGuideUrl: guideUrl,
       openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
+      capabilitiesUrl: "https://api.programmable.market/v3/capabilities",
+      preflightUrl: "https://api.programmable.market/v3/custom-launches/preflight",
       apiKeyEnvironmentVariable: "PROGRAMMABLE_API_KEY",
       apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY",
       apiKeyContainsPolicy: false,
@@ -70,7 +72,15 @@ describe("Custom Launch cold-agent remediation contract", () => {
         authorizationEncoding: "eip3009-nonce-r-s-v-abi-leaves",
       },
       walletSigning: "separate-controller-action",
-      requiredCommandOrder: ["pack", "validate", "submit", "status"],
+      requiredCommandOrder: ["pack", "validate --remote", "submit", "status"],
+      quickstart: ["pack", "validate --remote", "submit", "wallet", "status"],
+      remotePreflight: {
+        quotaConsumed: false,
+        nonceAllocated: false,
+        persisted: false,
+        walletSignatureRequiredLater: true,
+        walletBroadcastByService: false,
+      },
     });
 
     expect(openApi["x-programmable-agent-integration"]).toMatchObject({
@@ -80,11 +90,22 @@ describe("Custom Launch cold-agent remediation contract", () => {
       remediationCatalogUrl: catalogUrl,
       packConfigSchemaUrl,
       guideUrl,
+      capabilitiesUrl: "https://api.programmable.market/v3/capabilities",
+      preflightUrl: "https://api.programmable.market/v3/custom-launches/preflight",
       apiKeyEnvironmentVariable: "PROGRAMMABLE_API_KEY",
       apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY",
       apiKeyContainsPolicy: false,
       manualProjectAllowlist: false,
       automaticAdmission: true,
+      requiredCommandOrder: ["pack", "validate --remote", "submit", "status"],
+      quickstart: ["pack", "validate --remote", "submit", "wallet", "status"],
+      remotePreflight: {
+        quotaConsumed: false,
+        nonceAllocated: false,
+        persisted: false,
+        walletSignatureRequiredLater: true,
+        walletBroadcastByService: false,
+      },
     });
   });
 
@@ -99,15 +120,17 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.2.1",
+        cliReleaseVersion: "3.3.0",
         cliChecksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
         cliTarballSha256:
-          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+          "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
+        profileVersion: "3.1.0",
+        compatibleProfileVersions: ["3.0.0"],
         chainId: "1",
         productionLaunchAuthorized: true,
       },
@@ -121,6 +144,13 @@ describe("Custom Launch cold-agent remediation contract", () => {
         automaticAdmission: true,
         automaticWalletSigning: false,
         automaticBroadcast: false,
+        remotePreflight: {
+          quotaConsumed: false,
+          nonceAllocated: false,
+          persisted: false,
+          walletSignatureRequiredLater: true,
+          walletBroadcastByService: false,
+        },
       },
     });
     expect(catalog.workflow.map(({ id }: { id: string }) => id)).toEqual([
@@ -130,11 +160,19 @@ describe("Custom Launch cold-agent remediation contract", () => {
       "pack",
       "validate",
       "submit",
-      "track",
+      "wallet",
+      "status",
+    ]);
+    expect(catalog.quickstart).toEqual([
+      "pack",
+      "validate --remote",
+      "submit",
+      "wallet",
+      "status",
     ]);
     expect(catalog.commands).toEqual([
       "programmable-launch pack --config programmable-launch.config.json --output launch.json",
-      "programmable-launch validate launch.json --config programmable-launch.config.json",
+      "programmable-launch validate launch.json --config programmable-launch.config.json --remote",
       "programmable-launch submit launch.json --config programmable-launch.config.json",
       "programmable-launch status REQUEST_UUID --watch --until authorized",
     ]);
@@ -151,6 +189,14 @@ describe("Custom Launch cold-agent remediation contract", () => {
       sourceRevisionMustContainSubmittedBytes: true,
       derivedValuesAreCliOwned: true,
     });
+    expect(catalog.productTruthAxes).toEqual([
+      "deployment",
+      "trading",
+      "platform_fee_evidence",
+      "source_verification",
+      "indexing",
+      "featured",
+    ]);
   });
 
   it("makes funding, liquidity and automatic admission actionable", () => {
@@ -191,7 +237,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.2.1");
+    expect(openApi.info.version).toBe("3.3.0");
     const v2Patch =
       openApi.components.schemas.FundingAuthorizationPatchDescriptorV2;
     expect(v2Patch.required).toEqual([
@@ -239,6 +285,8 @@ describe("Custom Launch cold-agent remediation contract", () => {
     expect(catalog.automaticAdmission).toMatchObject({
       manualAllowlist: false,
       manualProjectApproval: false,
+      currentProfileVersion: "3.1.0",
+      legacyExactProfileVersions: ["3.0.0"],
       routerSimulationBeforeAuthorization: true,
       blockingStatus: "action_required",
       warningDisposition: "continue-to-router-simulation",
@@ -246,6 +294,24 @@ describe("Custom Launch cold-agent remediation contract", () => {
     expect(catalog.automaticAdmission.routerSimulationRole).toContain(
       "not a safety",
     );
+    expect(catalog.automaticAdmission.hardBlockFindingRules).toEqual([
+      { code: "RUNTIME_CALLCODE", targetRoles: ["any"] },
+      { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["any"] },
+      { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["any"] },
+      { code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: ["hook"] },
+      { code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: ["hook"] },
+      { code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: ["hook"] },
+      { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
+    ]);
+    expect(catalog.automaticAdmission.needsEvidenceFindingCodes)
+      .toEqual(expect.arrayContaining([
+        "RUNTIME_DELEGATECALL",
+        "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+        "SOURCE_PUBLIC_MINT_SURFACE",
+        "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+        "SOURCE_MUTABLE_PAUSE_SURFACE",
+        "SOURCE_LIQUIDITY_LOCK_OR_CUSTODY_SURFACE",
+      ]));
   });
 
   it("publishes stable remediation IDs for every cold-agent boundary", () => {

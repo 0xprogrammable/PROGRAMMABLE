@@ -20,6 +20,7 @@ import {
   buildFundingSignaturePatch,
   hashDirectNativeProfile,
   resolveDirectNativeProfile,
+  validateEmbeddedDirectNativeProfile,
   validateDirectNativeProfileGraph,
   validateDirectNativePermitWindow,
   validateDirectNativeProfileSelection,
@@ -277,6 +278,7 @@ test("V3 selection closes funding, accounting, claim, and applicant-selected rat
 
 test("V3 profile binds static admission without claiming safety or fee behavior", () => {
   const profile = resolveDirectNativeProfile(SELECTION);
+  assert.equal(profile.profileVersion, "3.1.0");
   assert.deepEqual(profile.platformFeePolicy, {
     schemaVersion: "programmable.platform-fee-policy.v1",
     accountingMode: "inclusive-selected-total",
@@ -297,19 +299,13 @@ test("V3 profile binds static admission without claiming safety or fee behavior"
     exactSourceCompilerGraphBindingRequired: true,
     staticBaselineGateVersion: "1.0.0",
     blockingFindingRules: [
-      { code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: ["any"] },
-      { code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: ["hook"] },
+      { code: "RUNTIME_CALLCODE", targetRoles: ["any"] },
+      { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["any"] },
+      { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["any"] },
+      { code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: ["hook"] },
+      { code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: ["hook"] },
+      { code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: ["hook"] },
       { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
-      { code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: ["token"] },
-      { code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: ["token"] },
-      { code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: ["token"] },
-      { code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: ["token"] },
-      { code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: ["token"] },
-      { code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: ["token", "hook"] },
-      { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["token", "hook"] },
-      { code: "RUNTIME_CALLCODE", targetRoles: ["token", "hook"] },
-      { code: "RUNTIME_DELEGATECALL", targetRoles: ["token", "hook"] },
-      { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["token", "hook"] },
     ],
     warningDisposition: "bound-and-visible",
     noBlockingFindingDisposition: "router-simulation-eligible",
@@ -340,6 +336,45 @@ test("V3 profile binds static admission without claiming safety or fee behavior"
     accountingMode: "additive-platform-share",
   });
   assert.equal(additive.platformFeePolicy.accountingMode, "additive-platform-share");
+});
+
+test("V3.1 preserves exact V3.0 embedded-profile validation for retries", () => {
+  const current = resolveDirectNativeProfile(SELECTION);
+  const legacy = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.0.0" });
+
+  assert.equal(current.profileVersion, "3.1.0");
+  assert.equal(legacy.profileVersion, "3.0.0");
+  assert.deepEqual(validateEmbeddedDirectNativeProfile(current), current);
+  assert.deepEqual(validateEmbeddedDirectNativeProfile(legacy), legacy);
+  assert.deepEqual(
+    legacy.platformAdmissionPolicy.blockingFindingRules.map(({ code }) => code),
+    [
+      "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+      "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+      "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
+      "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
+      "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+      "SOURCE_PUBLIC_MINT_SURFACE",
+      "SOURCE_MUTABLE_PAUSE_SURFACE",
+      "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+      "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+      "SOURCE_SELFDESTRUCT_SURFACE",
+      "RUNTIME_CALLCODE",
+      "RUNTIME_DELEGATECALL",
+      "RUNTIME_SELFDESTRUCT",
+    ],
+  );
+  assert.throws(
+    () => validateEmbeddedDirectNativeProfile({
+      ...legacy,
+      platformAdmissionPolicy: current.platformAdmissionPolicy,
+    }),
+    /closed embedded launchProfile/u,
+  );
+  assert.throws(
+    () => resolveDirectNativeProfile(SELECTION, { profileVersion: "3.2.0" }),
+    /version is not supported/u,
+  );
 });
 
 test("V3.2 keeps revision 2 profile and hash semantics available for exact retries", () => {

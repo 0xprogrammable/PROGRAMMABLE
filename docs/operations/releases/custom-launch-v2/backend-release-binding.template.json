@@ -25,7 +25,7 @@
   },
   "database": {
     "migrationInventorySha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    "lastMigration": "migrations/0008_direct_native_platform_admission_v3.sql",
+    "lastMigration": "migrations/0010_durable_launch_lifecycle_queue_v3.sql",
     "schemaEvidenceSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   },
   "api": {
@@ -33,7 +33,7 @@
     "readinessIdentitySha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "apiContractSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "profileId": "programmable.direct-native-hook-graph.v1",
-    "profileVersion": "3.0.0",
+    "profileVersion": "3.1.0",
     "publicProfilePath": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json",
     "publicProfileSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   },

@@ -19,6 +19,13 @@ import {
   PROGRAMMABLE_AGENT_SETUP_LINKS_V1,
   PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
 } from "../lib/custom-launch/agent-setup-v1";
+import {
+  buildCustomLaunchAgentFixV1,
+  customLaunchTruthRowsV1,
+  parseCustomLaunchRemediationV1,
+  parseCustomLaunchWalletHandoffV1,
+  parseSourceVerificationStatusV1,
+} from "../lib/custom-launch/developer-launch-truth-v1";
 
 const apiKeysSource = readFileSync(
   new URL("../components/developer-api-keys.tsx", import.meta.url),
@@ -74,6 +81,11 @@ function launch(
     launchProfileHash: null,
     launchIntentHash: null,
     fundingIntentHash: null,
+    liquidityIntent: null,
+    sourceVerification: null,
+    walletHandoffUrl: null,
+    expiresAt: null,
+    secondsRemaining: null,
     createdAt: "2026-08-25T10:00:00.000Z",
     updatedAt,
     output: null,
@@ -96,6 +108,11 @@ function v3Launch(
     launchProfileHash: `sha256:${"11".repeat(32)}`,
     launchIntentHash: `sha256:${"22".repeat(32)}`,
     fundingIntentHash: `0x${"33".repeat(32)}`,
+    liquidityIntent: {
+      model: "external-concentrated-liquidity",
+      declaredLaunchState: "liquidity_required",
+      binding: "explicit-request-hash",
+    },
   };
 }
 
@@ -106,7 +123,17 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "keys"}');
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "history"}');
     expect(apiKeysSource).toContain('activeSection === "keys" ?');
-    expect(apiKeysSource).not.toContain("launchPath");
+    expect(apiKeysSource).toContain("launchPath");
+    expect(apiKeysSource).toContain(
+      "https://api.programmable.market/v3/capabilities",
+    );
+    expect(apiKeysSource).toContain("POST /v3/custom-launches/preflight");
+    expect(apiKeysSource).toContain("authenticated, quota-free and creates");
+    expect(apiKeysSource).toContain("no request, nonce or");
+    expect(apiKeysSource).toContain("wallet action");
+    expect(apiKeysSource).toContain(
+      "A finalized launch is not automatically source verified, liquid,",
+    );
     expect(apiKeysSource).not.toContain("Fee claims and automated buybacks");
     expect(apiKeysSource).not.toContain("Key owner");
     expect(apiKeysSource).not.toContain("activeCount");
@@ -172,6 +199,12 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.discovery,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.capabilities,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.preflight,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
@@ -190,17 +223,24 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "pack, then validate, submit, and status",
+      "pack -> validate --remote -> submit -> wallet -> status",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "There is no project allowlist or private approval path.",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("action_required");
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("quotaConsumed");
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("nonceAllocated");
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "launchEligibility.deployable",
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("needs_evidence");
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("walletHandoffUrl");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "awaiting_funding_authorization",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "review and sign the exact Router transaction",
+      "review and send the exact Router transaction",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("integration-pending");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
@@ -279,12 +319,21 @@ describe("developer launch history interface", () => {
       failure: null,
     } as const;
     const { requestHash: _requestHash, ...projectedResource } = resource;
+    void _requestHash;
     expect(parseHistoryPage({
       schemaVersion: "programmable.custom-launch-history.v1",
       launches: [resource],
       nextCursor: null,
     }, resource.ownerWallet)).toEqual({
-      launches: [{ ...projectedResource, fundingIntentHash: null }],
+      launches: [{
+        ...projectedResource,
+        fundingIntentHash: null,
+        liquidityIntent: null,
+        sourceVerification: null,
+        walletHandoffUrl: null,
+        expiresAt: null,
+        secondsRemaining: null,
+      }],
       nextCursor: null,
     });
     expect(historySource).toContain(
@@ -295,10 +344,10 @@ describe("developer launch history interface", () => {
   it("stays behind the compact view switch and keeps the signing boundary clear", () => {
     expect(historySource).toContain("Launch history");
     expect(historySource).toContain(
-      "A launch is onchain only after the\n        wallet signs and broadcasts it.",
+      "A launch is onchain only after the\n        wallet sends its Router transaction.",
     );
     expect(historySource).toContain("Check onchain status");
-    expect(historySource).toContain("Review and sign in wallet");
+    expect(historySource).toContain("Review and send launch transaction");
     expect(historySource).toContain("sendCustomLaunchWalletAction(action)");
     expect(historySource).toContain("startStatusPolling(current)");
     expect(historySource).toContain('launch.routeId === "custom-launch:create:v2"');
@@ -306,7 +355,7 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("&version=${version}");
     expect(historySource).toContain("Wallet action required");
     expect(historySource).toContain(
-      "Review and sign the prepared transaction in your wallet.",
+      "Review the exact Mainnet transaction, then ask your wallet to send it.",
     );
     expect(historySource).not.toContain("Your agent&apos;s first accepted request");
     expect(historyStyles).not.toContain("height: clamp(");
@@ -335,17 +384,24 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('launch.routeId === "custom-launch:create:v3"');
     expect(historySource).toContain('? "v3"');
     expect(historySource).toContain('? "v2"');
-    expect(historySource).toContain(': "v1"}/custom-launches/{launch.launchId}');
+    expect(historySource).toContain(
+      "encodeURIComponent(launch.requestId)",
+    );
     expect(historySource).toContain("PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation");
     expect(historySource).toContain("Read the remediation catalog");
-    expect(historySource).toContain("manual or project-specific allowlist");
-    expect(historySource).toContain("This automated result is not a");
+    expect(historySource).toContain("View exact fixes");
+    expect(historySource).toContain("Copy fix for agent");
+    expect(historySource).toContain(
+      "Rebuild and submit a new immutable request. Do not sign this one.",
+    );
+    expect(historySource).toContain("manual or project allowlist");
+    expect(historySource).toContain("This result is not an audit or");
     expect(historySource).toContain("safety verdict");
     expect(historySource).not.toContain("Review required");
     expect(historySource).not.toContain("Platform review required");
     expect(historySource).not.toContain("needs platform review");
     expect(historySource).toContain(
-      'launch.failure && launch.status !== "action_required"',
+      'reviewLaunch.failure\n                  && reviewLaunch.status !== "action_required"',
     );
     expect(historySource).toContain(
       "When an API error includes a request ID and retrying does not",
@@ -473,7 +529,7 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("Load funding review");
     expect(historySource).toContain("Load Router review");
     expect(historySource).toContain("Review and sign USDC authorization");
-    expect(historySource).toContain("Review and sign in wallet");
+    expect(historySource).toContain("Review and send launch transaction");
     expect(historySource).not.toContain("Send reviewed Router transaction");
     expect(historySource).toContain(
       "onClick={() => void loadWalletReview(launch)}",
@@ -521,6 +577,108 @@ describe("developer launch history interface", () => {
     expect(routerBoundary.indexOf("sendCustomLaunchWalletAction(action)")).toBeGreaterThan(
       routerBoundary.indexOf("sameRouterReview("),
     );
+  });
+
+  it("accepts only an exact same-origin launch handoff", () => {
+    const launchId = "60000000-0000-4000-8000-000000000006";
+    const valid = {
+      walletHandoffUrl: `/developers/api-keys?launchId=${launchId}`,
+      expiresAt: "2026-08-25T10:10:00.000Z",
+      secondsRemaining: 600,
+    };
+    expect(parseCustomLaunchWalletHandoffV1(valid, launchId)).toEqual(valid);
+    expect(parseCustomLaunchWalletHandoffV1({
+      ...valid,
+      walletHandoffUrl: `https://evil.example/developers/api-keys?launchId=${launchId}`,
+    }, launchId)).toBeNull();
+    expect(parseCustomLaunchWalletHandoffV1({
+      ...valid,
+      walletHandoffUrl: `/developers/api-keys?launchId=${launchId}&next=https://evil.example`,
+    }, launchId)).toBeNull();
+    expect(parseCustomLaunchWalletHandoffV1({
+      ...valid,
+      secondsRemaining: -1,
+    }, launchId)).toBeNull();
+    expect(historySource).toContain("Wallet handoff expired");
+    expect(historySource).toContain("An expired handoff never opens a stale");
+    expect(historySource).toContain("|| handoffExpired");
+  });
+
+  it("renders six independent proof states without promoting finality", () => {
+    const sourceVerification = parseSourceVerificationStatusV1({
+      schemaVersion: "programmable.source-verification-status.v1",
+      status: "queued",
+      components: [{
+        targetId: "token",
+        address: "0x1111111111111111111111111111111111111111",
+        status: "queued",
+        provider: null,
+      }],
+      updatedAt: "2026-08-25T10:10:00.000Z",
+    });
+    expect(sourceVerification).not.toBeNull();
+    const rows = customLaunchTruthRowsV1({
+      status: "finalized",
+      sourceVerification,
+      liquidityIntent: {
+        model: "external-concentrated-liquidity",
+        declaredLaunchState: "liquidity_required",
+        binding: "explicit-request-hash",
+      },
+    });
+    expect(rows.map((row) => row.id)).toEqual([
+      "finality",
+      "source",
+      "liquidity",
+      "lp-custody",
+      "trading",
+      "authority",
+    ]);
+    expect(rows[0]?.value).toBe("Finalized · 64+ confirmations");
+    expect(rows[1]?.value).toBe("Queued after finality");
+    expect(rows[2]?.value).toBe("Liquidity still required");
+    expect(rows[3]?.value).toBe("Not verified by this record");
+    expect(rows[4]?.value).toBe("Not established by finality");
+    expect(historySource).toContain("What this record proves");
+  });
+
+  it("copies typed remediation without copying credentials", () => {
+    const remediation = parseCustomLaunchRemediationV1({
+      schemaVersion: "programmable.custom-launch-remediation.v1",
+      remediationId: "PLATFORM_ADMISSION_FINDING",
+      code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+      stage: "admission",
+      targetId: "token",
+      targetRole: "token",
+      sourcePath: "src/Token.sol",
+      expected: "No mutable transfer restriction",
+      observed: "Owner can change transfer state",
+      requiredChange: "Remove the mutable restriction and rebuild the bundle.",
+      catalogUrl: "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+      guideUrl: "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+      retryable: false,
+      requiresNewRequest: true,
+      resumeAt: "pack",
+    });
+    expect(remediation).not.toBeNull();
+    const copied = buildCustomLaunchAgentFixV1({
+      requestId: "60000000-0000-4000-8000-000000000006",
+      routeId: "custom-launch:create:v3",
+      remediations: [remediation!],
+    });
+    expect(copied).toContain("Required change: Remove the mutable restriction");
+    expect(copied).toContain("do not sign or retry this immutable request");
+    expect(copied).not.toContain("pm_live_");
+    expect(copied).not.toContain("0xprivate");
+  });
+
+  it("opens an exact launch deep link and focuses its current record", () => {
+    expect(apiKeysSource).toContain('searchParams.get("launchId")');
+    expect(apiKeysSource).toContain('setActiveSection("history")');
+    expect(historySource).toContain("readV3LaunchById(initialLaunchId");
+    expect(historySource).toContain("Loading the exact wallet handoff.");
+    expect(historySource).toContain("focusLaunchCard(launch.requestId)");
+    expect(historySource).toContain("tabIndex={-1}");
   });
 
   it("never lets a stale list regress a single-resource launch status", () => {

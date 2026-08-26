@@ -10,7 +10,7 @@ Public V3 general-hook creation and lifecycle reads are live on Ethereum Mainnet
 
 Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.
 
-The 3.2.1 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
+The 3.3.0 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
 compiles real project-owned token, hook and initializer targets with exact
 `solc 0.8.26+commit.8a97fa7a`, then runs deterministic `pack` and `validate` without submitting, signing, broadcasting
 or creating a Mainnet coin.
@@ -34,9 +34,12 @@ The key is bound to its controller wallet and API scopes. It is not a wallet key
 Run `programmable-launch pack`, `validate`, `submit` and then `status`. Submit the bundle to `POST https://api.programmable.market/v3/custom-launches` with the CLI. Preserve the exact request bytes and idempotency key across timeout, `429` and `503` retries and honor `Retry-After`. Follow the [Custom Launch API guide](../developers/custom-launch.md) for the exact public contract.
 
 The default direct-native profile uses `programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
-`profileVersion: 3.0.0`. Revision 2 remains compatible. Revision 3 runs role-aware exact-source static admission. Every
-finding remains bound and visible: a configured blocking code and target-role match moves the request to
-`action_required`; other findings remain warnings. A final Router simulation is mandatory before authorization.
+`profileVersion: 3.1.0`. Exact `3.0.0` requests remain readable and byte-identical retryable under their original
+policy; revision 2 also remains compatible. Profile 3.1.0 runs role-aware exact-source static admission with exactly
+seven objective hard-block rules. Proxy/delegatecall, mint/tax/pause controls, liquidity custody and return-delta
+custom accounting require evidence instead of categorical rejection. A hard-block match moves the request to
+`action_required`; other findings remain visible needs-evidence or warning conditions. There is no manual project
+allowlist. A final Router simulation is mandatory before authorization.
 Each enabled v4 permission must have a concrete reachable callback implementation; an interface declaration or
 fallback-only route does not qualify.
 

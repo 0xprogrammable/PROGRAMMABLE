@@ -59,7 +59,9 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/prepared[\s\S]{0,240}(?:no wallet transaction|walletTransaction[^\n]{0,80}(?:null|both null))/i);
       expect(source).toMatch(/authorized[\s\S]{0,240}(?:walletTransaction|wallet transaction)/i);
     }
-    expect(createGuide).toContain("pack, validate, submit and status");
+    expect(createGuide).toContain(
+      "pack -> validate --remote -> submit -> wallet -> status",
+    );
     expect(createGuide).toContain("/openapi/custom-launch-v3.json");
     expect(createGuide).toContain("awaiting_funding_authorization");
     expect(createGuide).toContain("EIP-3009 funding signature");
@@ -107,7 +109,7 @@ describe("Custom Launch API documentation", () => {
 
   it("publishes the exact-source and no-broadcast cold-agent path", () => {
     for (const source of [gitBookGuide, rawGuide, developerDocsMarkdown]) {
-      expect(source).toContain("programmable-launch-3.2.1.tgz");
+      expect(source).toContain("programmable-launch-3.3.0.tgz");
       expect(source).toContain("verificationBundle");
       expect(source).toContain("exact_match");
       expect(source).toContain("PROGRAMMABLE_API_KEY");
@@ -119,8 +121,33 @@ describe("Custom Launch API documentation", () => {
   });
 
   it("keeps the website agent prompt on the current public CLI release", () => {
-    expect(createGuide).toContain("public CLI 3.2.1 flow");
+    expect(createGuide).toContain("public CLI 3.3.0 quickstart");
     expect(createGuide).not.toContain("public CLI 3.1.0 flow");
+  });
+
+  it("publishes capabilities, side-effect-free preflight and separate truth axes", () => {
+    for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
+      expect(source).toContain("/v3/capabilities");
+      expect(source).toContain("/v3/custom-launches/preflight");
+      expect(source).toContain("validate --remote");
+      expect(source).toContain("walletHandoffUrl");
+      expect(source).toContain("expiresAt");
+      expect(source).toContain("platform_fee_evidence");
+      expect(source).toContain("behaviorEvidence");
+      expect(source).toContain("lifecycleQueue");
+      expect(source).toMatch(/no (?:launch )?quota|quotaConsumed: false/i);
+      expect(source).toMatch(/(?:allocates\s+no nonce|nonceAllocated: false)/i);
+      expect(source).toMatch(/(?:persists no launch|persisted: false)/i);
+    }
+    expect(v3OpenApi.paths["/v3/capabilities"].get.security).toEqual([]);
+    expect(v3OpenApi.paths["/v3/custom-launches/preflight"].post.security)
+      .toEqual([{ CustomLaunchApiKey: [] }]);
+    expect(v3OpenApi.components.schemas.CustomLaunchPreflightV1.required)
+      .toEqual(expect.arrayContaining([
+        "riskClassification",
+        "behaviorEvidence",
+        "productTruthAxes",
+      ]));
   });
 
   it("publishes public V3 while retaining the exact V1 write fence", () => {
@@ -134,7 +161,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/V1[\s\S]{0,200}(?:read-only|read only|write fence)/i);
       expect(source).toMatch(/Public V3/i);
     }
-    expect(createGuide).toMatch(/submit the byte-identical request/i);
+    expect(createGuide).toMatch(/submit\s+the byte-identical request/i);
     for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
       expect(source).toContain("Retry-After");
       expect(source).toMatch(/V3[^\n]{0,120}(?:public|live)/i);
@@ -166,7 +193,7 @@ describe("Custom Launch API documentation", () => {
           status: "live",
           profileId: "programmable.direct-native-hook-graph.v1",
           profileRevision: 3,
-          profileVersion: "3.0.0",
+          profileVersion: "3.1.0",
           productionLaunchAuthorized: true,
           createHttpStatus: 202,
           replayHttpStatus: 200,
@@ -181,7 +208,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("productionLaunchAuthorized: true");
       expect(source).toContain("1,000 ppm = 0.10% = 10 bps");
       expect(source).toContain("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
-      expect(source).toContain("programmable-launch-3.2.1.tgz.sha256");
+      expect(source).toContain("programmable-launch-3.3.0.tgz.sha256");
       expect(source).toContain("shasum -a 256 -c");
       expect(source).toMatch(/platform admission|admission receipt|static admission/i);
       expect(source).toMatch(/concrete reachable\s+callback implementation/i);
@@ -195,7 +222,7 @@ describe("Custom Launch API documentation", () => {
     expect(v3OpenApi["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 3,
-      profileVersion: "3.0.0",
+      profileVersion: "3.1.0",
       productionLaunchAuthorized: true,
       projectOwnedToken: true,
       projectOwnedHook: true,

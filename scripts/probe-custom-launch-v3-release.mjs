@@ -10,14 +10,23 @@ const MAX_LAUNCH_CHECKSUM_BYTES = 256;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const COMMIT = /^[0-9a-f]{40}$/u;
 const CURSOR = /^[A-Za-z0-9_-]{16,512}$/u;
+const HARD_BLOCK_FINDING_RULES = Object.freeze([
+  Object.freeze({ code: "RUNTIME_CALLCODE", targetRoles: Object.freeze(["any"]) }),
+  Object.freeze({ code: "RUNTIME_SELFDESTRUCT", targetRoles: Object.freeze(["any"]) }),
+  Object.freeze({ code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: Object.freeze(["any"]) }),
+  Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
+]);
 const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
-  version: "3.2.1",
+  version: "3.3.0",
   tarballUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
   checksumUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
   tarballSha256:
-    "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+    "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
 });
 
 function canonicalize(value) {
@@ -133,6 +142,7 @@ export async function probeCustomLaunchV3Release(input) {
     manifestResult,
     remediationCatalogResult,
     readinessResult,
+    capabilitiesResult,
     launchTarballResult,
     launchChecksumResult,
   ] = await Promise.all([
@@ -149,6 +159,9 @@ export async function probeCustomLaunchV3Release(input) {
       method: "GET", headers: websiteHeaders,
     }, fetchImpl),
     fetchBytes(new URL("/readyz", apiOrigin), {
+      method: "GET", headers: headers(),
+    }, fetchImpl),
+    fetchBytes(new URL("/v3/capabilities", apiOrigin), {
       method: "GET", headers: headers(),
     }, fetchImpl),
     fetchReleaseAssetBytes(
@@ -169,19 +182,29 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.2.1"
+    openApi?.info?.version !== "3.3.0"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
-    || openApi?.["x-programmable-profile"]?.profileVersion !== "3.0.0"
+    || openApi?.["x-programmable-profile"]?.profileVersion !== "3.1.0"
     || openApi?.["x-programmable-profile"]?.profileRevision !== 3
     || openApi?.["x-programmable-profile"]?.productionLaunchAuthorized !== true
     || openApi?.["x-programmable-profile"]?.platformAdmissionReceiptRequired !== true
     || openApi?.["x-programmable-profile"]?.routerSimulationRequiredBeforeAuthorization !== true
     || openApi?.["x-programmable-profile"]?.safetyClaim !== false
     || openApi?.["x-programmable-profile"]?.feeBehaviorClaim !== false
+    || openApi?.["x-programmable-admission-policy"]?.currentProfileVersion
+      !== "3.1.0"
+    || canonicalize(openApi?.["x-programmable-admission-policy"]
+      ?.legacyExactProfileVersions) !== canonicalize(["3.0.0"])
+    || openApi?.["x-programmable-admission-policy"]?.manualProjectAllowlist !== false
+    || canonicalize(openApi?.["x-programmable-admission-policy"]
+      ?.hardBlockFindingRules) !== canonicalize(HARD_BLOCK_FINDING_RULES)
     || openApi?.["x-programmable-availability"]?.status !== "live"
     || openApi?.["x-programmable-availability"]?.publicAuthorized !== true
-    || openApi?.paths?.["/v3/custom-launches"] === undefined
+    || openApi?.paths?.["/v3/capabilities"]?.get === undefined
+    || openApi?.paths?.["/v3/custom-launches/preflight"]?.post === undefined
+    || openApi?.paths?.["/v3/custom-launches"]?.get === undefined
+    || openApi?.paths?.["/v3/custom-launches"]?.post === undefined
   ) throw new Error("staged V3 OpenAPI contract is not the enabled profile contract");
 
   if (manifestResult.response.status !== 200) throw new Error("staged discovery manifest is unavailable");
@@ -271,6 +294,45 @@ export async function probeCustomLaunchV3Release(input) {
     || readinessIdentitySha256 !== observation.api.readinessIdentitySha256
   ) throw new Error("Custom Launch API readiness differs from the exact release binding");
 
+  if (capabilitiesResult.response.status !== 200) {
+    throw new Error("Custom Launch API V3 capabilities are unavailable");
+  }
+  const capabilities = parseJson(
+    capabilitiesResult.bytes,
+    "Custom Launch API V3 capabilities",
+  );
+  if (
+    capabilities?.schemaVersion !== "programmable.custom-launch-capabilities.v1"
+    || capabilities?.apiVersion !== "v3"
+    || capabilities?.profile?.profileId
+      !== "programmable.direct-native-hook-graph.v1"
+    || capabilities?.profile?.profileRevision !== 3
+    || capabilities?.profile?.profileVersion !== "3.1.0"
+    || capabilities?.profile?.productionLaunchAuthorized !== true
+    || capabilities?.routes?.capabilities !== "/v3/capabilities"
+    || capabilities?.routes?.preflight !== "/v3/custom-launches/preflight"
+    || capabilities?.routes?.create !== "/v3/custom-launches"
+    || capabilities?.routes?.list !== "/v3/custom-launches"
+    || capabilities?.routes?.status !== "/v3/custom-launches/{launchId}"
+    || capabilities?.preflight?.quotaConsumed !== false
+    || capabilities?.preflight?.nonceAllocated !== false
+    || capabilities?.preflight?.persisted !== false
+    || capabilities?.preflight?.walletSignatureProduced !== false
+    || capabilities?.preflight?.transactionBroadcast !== false
+    || capabilities?.preflight?.exactProductionAdmissionEngine !== true
+    || canonicalize(capabilities?.productTruthAxes) !== canonicalize([
+      "deployment",
+      "trading",
+      "platform_fee_evidence",
+      "source_verification",
+      "indexing",
+      "featured",
+    ])
+    || capabilities?.safetyClaim !== false
+    || capabilities?.auditClaim !== false
+    || capabilities?.universalCompatibilityClaim !== false
+  ) throw new Error("Custom Launch API V3 capabilities differ from the public contract");
+
   const listResult = await fetchBytes(new URL("/v3/custom-launches?limit=1", apiOrigin), {
     method: "GET",
     headers: headers(undefined, input.apiKey),
@@ -312,6 +374,8 @@ export async function probeCustomLaunchV3Release(input) {
       sourceCommit: readiness.sourceCommit,
       sourceTree: readiness.sourceTree,
       readinessIdentitySha256,
+      capabilitiesStatus: capabilitiesResult.response.status,
+      capabilitiesSchemaVersion: capabilities.schemaVersion,
       listStatus: listResult.response.status,
       listSchemaVersion: list.schemaVersion,
     }),

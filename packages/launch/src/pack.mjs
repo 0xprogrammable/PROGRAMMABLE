@@ -70,7 +70,7 @@ const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
-export async function buildLaunch({ configPath }) {
+export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const absoluteConfig = path.resolve(configPath);
   const { config, apiVersion } = await readPackConfig(absoluteConfig);
   const launchProfileSelection = apiVersion === "v2"
@@ -81,6 +81,9 @@ export async function buildLaunch({ configPath }) {
   const permitWindow = apiVersion === "v3"
     ? validateDirectNativePermitWindow(config.permitWindow)
     : null;
+  if (directNativeProfileVersion !== undefined && apiVersion !== "v3") {
+    throw new TypeError("directNativeProfileVersion is available only for V3 exact retries");
+  }
   const configDirectory = path.dirname(absoluteConfig);
   const sourceRoot = resolveSourceRoot(configDirectory, config.source.root);
   const launchWallet = getAddress(config.launchWallet);
@@ -276,7 +279,9 @@ export async function buildLaunch({ configPath }) {
         ...(fundingSignaturePatch === undefined ? {} : { fundingSignaturePatch }),
       },
     );
-    const launchProfile = resolveDirectNativeProfile(launchProfileSelection);
+    const launchProfile = resolveDirectNativeProfile(launchProfileSelection, {
+      profileVersion: directNativeProfileVersion,
+    });
     validateDirectNativeProfileGraph(launchProfile, launchProfileBinding, graphBundle);
     validateDirectNativeProfileBuilds(
       launchProfileBinding,

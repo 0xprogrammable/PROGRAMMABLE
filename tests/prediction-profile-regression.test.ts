@@ -547,7 +547,7 @@ describe("prediction profile regression contract", () => {
   it("labels live reads honestly and progressively reveals long activity lists", () => {
     expect(portfolioSource).toContain('timeLabel: "Observed onchain"');
     expect(portfolioSource).toMatch(
-      /PORTFOLIO_INITIAL_VISIBLE_ITEMS\s*=\s*12/u,
+      /PORTFOLIO_INITIAL_VISIBLE_ITEMS\s*=\s*2/u,
     );
     expect(portfolioSource).toMatch(
       /activeItems\.slice\(0,\s*visibleCounts\[activeTab\]\)/u,
