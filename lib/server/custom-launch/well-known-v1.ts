@@ -108,7 +108,7 @@ export function programmableWellKnownDocumentV1(
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
         tarballSha256:
-          "sha256:f2c7eece46a682f5e65a27ba85644b2cb36a8ccbe5953531a6cb1ee1971e7c32",
+          "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
       }),
       compatibility: Object.freeze({
         v1: Object.freeze({
@@ -141,7 +141,7 @@ export function programmableWellKnownDocumentV1(
           checksumUrl:
             "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
           tarballSha256:
-            "sha256:f2c7eece46a682f5e65a27ba85644b2cb36a8ccbe5953531a6cb1ee1971e7c32",
+            "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
         }),
       }),
       generalHookProfile: Object.freeze({
@@ -271,7 +271,7 @@ export function programmableWellKnownDocumentV1(
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
         tarballSha256:
-          "sha256:f2c7eece46a682f5e65a27ba85644b2cb36a8ccbe5953531a6cb1ee1971e7c32",
+          "sha256:9df577e133bc01d6a569554fcaa4dbd793a0f560df30f830bee40c78f227dac8",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({
