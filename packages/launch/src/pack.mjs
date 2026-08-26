@@ -262,6 +262,8 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
         },
         observed: { schemaVersion: fundingSignaturePatch.schemaVersion },
       }));
+    }
+    if (fundingSignaturePatch !== undefined) {
       diagnostics.push(...inspectEip3009FundingCompatibility({
         launchProfileSelection,
         targets,

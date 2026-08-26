@@ -6,6 +6,7 @@ import test from "node:test";
 
 import solc from "solc";
 
+import { submitLaunch } from "../src/api-client.mjs";
 import {
   HOOK_PERMISSION_BITS,
   MAINNET_USDC,
@@ -157,7 +158,81 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
   }
 });
 
-async function materializeGeneralGraphFixture() {
+test("V2 authorization patch preserves final-graph nonce diagnostics through submit before wallet handoff", {
+  timeout: 120_000,
+}, async () => {
+  const fixture = await materializeGeneralGraphFixture({
+    authorizationPatchV2: true,
+  });
+  try {
+    const launchPath = path.join(fixture.root, "v2-conflict-launch.json");
+    const packed = await packLaunch({
+      configPath: fixture.configPath,
+      outputPath: launchPath,
+    });
+    const validation = await validateLaunchFile({
+      launchPath,
+      configPath: fixture.configPath,
+    });
+    const conflict = packed.diagnostics?.find(
+      ({ code }) => code === "FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED",
+    );
+    assert.equal(conflict?.severity, "warning");
+    assert.equal(conflict?.observed.blocking, false);
+    assert.match(conflict?.observed.indicators[0].observedDomain, /graphCommitment/u);
+    assert.equal(
+      packed.diagnostics.some(({ code }) => code === "FUNDING_SIGNATURE_PATCH_V1_LEGACY"),
+      false,
+    );
+    assert.deepEqual(validation.diagnostics, packed.diagnostics);
+
+    const apiOrigin = "http://127.0.0.1:43211";
+    const requestId = "9c2f751c-d7cf-4288-8de8-9c39d85f0e31";
+    const walletHandoffUrl = `${apiOrigin}/wallet/${requestId}`;
+    let networkCalls = 0;
+    const submitted = await submitLaunch({
+      launchPath,
+      configPath: fixture.configPath,
+      idempotencyKey: "v2-funding-diagnostic-submit-0001",
+      apiOrigin,
+      stateDirectory: path.join(fixture.root, "state"),
+      maxAttempts: 1,
+      fetchImpl: async () => {
+        networkCalls += 1;
+        return new Response(JSON.stringify({
+          schemaVersion: "programmable.custom-launch.v3",
+          requestId,
+          launchId: requestId,
+          status: "awaiting_funding_authorization",
+          output: {
+            actionRequired: {
+              kind: "funding-signature-required",
+              message: "Review the exact EIP-3009 authorization in the wallet handoff.",
+            },
+            walletHandoffUrl,
+          },
+        }), { status: 202, headers: { "content-type": "application/json" } });
+      },
+      loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
+    });
+
+    assert.equal(networkCalls, 1);
+    assert.deepEqual(submitted.diagnostics, validation.diagnostics);
+    assert.equal(submitted.walletHandoffUrl, walletHandoffUrl);
+    assert.ok(
+      Object.keys(submitted).indexOf("diagnostics") < Object.keys(submitted).indexOf("resource"),
+    );
+    assert.ok(
+      Object.keys(submitted).indexOf("diagnostics") < Object.keys(submitted).indexOf("walletHandoffUrl"),
+    );
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+async function materializeGeneralGraphFixture({
+  authorizationPatchV2 = false,
+} = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "programmable-general-v3-matrix-"));
   await Promise.all([
     mkdir(path.join(root, "src"), { recursive: true }),
@@ -248,7 +323,24 @@ contract ProjectHook {
 `,
     },
     "src/FundingInitializer.sol": {
-      content: `// SPDX-License-Identifier: MIT
+      content: authorizationPatchV2 ? `// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
+
+contract FundingInitializer {
+    bytes32 internal constant AUTHORIZATION_NONCE_DOMAIN =
+        keccak256("HookemonAuthorizationNonce(bytes32 graphCommitment)");
+
+    event AuthorizationWords(bytes32 nonce, bytes32 r, bytes32 s, uint8 v);
+
+    function authorizationNonce(bytes32 graphCommitment) external pure returns (bytes32) {
+        return keccak256(abi.encode(AUTHORIZATION_NONCE_DOMAIN, graphCommitment));
+    }
+
+    function initialize(bytes32 nonce, bytes32 r, bytes32 s, uint8 v) external {
+        emit AuthorizationWords(nonce, r, s, v);
+    }
+}
+` : `// SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
 contract FundingInitializer {
@@ -382,7 +474,9 @@ contract AuxiliaryComponent {
         applicantSalt: `0x${"02".repeat(32)}`,
         initializer: {
           function: "initialize",
-          arguments: [ZERO_BYTES32, ZERO_BYTES32, 0],
+          arguments: authorizationPatchV2
+            ? [ZERO_BYTES32, ZERO_BYTES32, ZERO_BYTES32, 0]
+            : [ZERO_BYTES32, ZERO_BYTES32, 0],
         },
       },
       ...Array.from({ length: 6 }, (_, index) => ({
@@ -425,12 +519,20 @@ contract AuxiliaryComponent {
       validAfter: "1000",
       validBefore: "2000",
     },
-    fundingSignaturePatch: {
-      targetId: "funding-initializer",
-      rOffsetBytes: 4,
-      sOffsetBytes: 36,
-      vOffsetBytes: 68,
-    },
+    fundingSignaturePatch: authorizationPatchV2
+      ? {
+          targetId: "funding-initializer",
+          nonceArgumentPath: [0],
+          rArgumentPath: [1],
+          sArgumentPath: [2],
+          vArgumentPath: [3],
+        }
+      : {
+          targetId: "funding-initializer",
+          rOffsetBytes: 4,
+          sOffsetBytes: 36,
+          vOffsetBytes: 68,
+        },
     agentAttestation: {
       agentId: "general-v3-regression",
       checkedAt: "2026-08-26T12:00:00.000Z",

@@ -462,7 +462,7 @@ test("Fly readback accepts the real tag-only release ref and exact machine diges
 test("stage probe is GET-only and returns redacted no-broadcast evidence", async () => {
   const { observation } = await stagingFixture();
   const openApi = {
-    info: { version: "3.3.0" },
+    info: { version: "3.3.1" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileVersion: "3.1.0",
@@ -519,15 +519,15 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   const launchTarballBytes = Buffer.from("fixture programmable launch package", "utf8");
   const launchTarballSha256 = digest(launchTarballBytes);
   const expectedLaunchPackageRelease = {
-    version: "3.3.0",
+    version: "3.3.1",
     tarballUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz",
     checksumUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
     tarballSha256: launchTarballSha256,
   };
   const launchChecksumBytes = Buffer.from(
-    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.3.0.tgz\n`,
+    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.3.1.tgz\n`,
     "utf8",
   );
   let launchTarballBody = launchTarballBytes;
@@ -642,7 +642,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     calls.find(({ url }) => url.includes("/v3/custom-launches?limit=1"))?.authorization,
     "Bearer canary-secret-value",
   );
-  assert.equal(evidence.website.cli.releaseVersion, "3.3.0");
+  assert.equal(evidence.website.cli.releaseVersion, "3.3.1");
   assert.equal(evidence.website.cli.tarballSha256, launchTarballSha256);
   assert.equal(evidence.api.capabilitiesStatus, 200);
   assert.equal(evidence.api.capabilitiesSchemaVersion,

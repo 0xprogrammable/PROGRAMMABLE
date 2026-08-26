@@ -19,7 +19,7 @@ description: Official Programmable product, source, community and analytics link
 | Custom Launch V3 OpenAPI | [live general-hook creation and lifecycle contract](https://programmable.market/openapi/custom-launch-v3.json)     |
 | Custom Launch API      | [api.programmable.market](https://api.programmable.market)                                                         |
 | Custom API readiness    | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                           |
-| Custom Launch CLI 3.3.0 | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz) |
+| Custom Launch CLI 3.3.1 | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz) |
 | Custom Launch CLI 1.0.1 | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Launch policy           | [github.com/0xprogrammable/launch-policy](https://github.com/0xprogrammable/launch-policy)                         |
 | Read-only developer API | [developers.programmable.family](https://developers.programmable.family)                                           |

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
   "title": "Programmable Custom Launch V3 pack config",
-  "description": "Closed public input contract for @programmable/launch 3.3.0. Derived hashes, CREATE2 predictions, byte offsets, signatures, and wallet transactions are not applicant inputs.",
+  "description": "Closed public input contract for @programmable/launch 3.3.1. Derived hashes, CREATE2 predictions, byte offsets, signatures, and wallet transactions are not applicant inputs.",
   "type": "object",
   "additionalProperties": false,
   "required": [
