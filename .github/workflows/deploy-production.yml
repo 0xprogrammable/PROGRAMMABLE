@@ -23,6 +23,21 @@ on:
         required: false
         default: ""
         type: string
+      custom_launch_v3_release:
+        description: Stage the exact Custom Launch API V3 release subject; never promotes or signs
+        required: true
+        default: false
+        type: boolean
+      custom_launch_v3_release_record_commit_sha:
+        description: Exact commit containing release-records/custom-launch-v2/release-record.json
+        required: false
+        default: ""
+        type: string
+      custom_launch_v3_release_record_sha256:
+        description: Canonical SHA-256 of the detached Custom Launch V2 release record
+        required: false
+        default: ""
+        type: string
       custom_v2_registry_live:
         description: Expect Registry V2 to be live in the staged candidate; this does not change configuration
         required: true
@@ -75,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      PRODUCTION_VERIFY_MODE: ${{ (inputs.custom_v2_registry_live || inputs.custom_v2_generic_public_read_enabled || inputs.custom_v2_detail_record_hash != '' || inputs.custom_v2_authenticated_ingress_evidence_sha256 != '' || inputs.custom_v2_generic_signer_probe_expected_json != '' || inputs.custom_v2_generic_signer_probe_expected_sha256 != '') && 'custom-v2-release' || 'change' }}
+      PRODUCTION_VERIFY_MODE: ${{ (inputs.custom_launch_v3_release || inputs.custom_v2_registry_live || inputs.custom_v2_generic_public_read_enabled || inputs.custom_v2_detail_record_hash != '' || inputs.custom_v2_authenticated_ingress_evidence_sha256 != '' || inputs.custom_v2_generic_signer_probe_expected_json != '' || inputs.custom_v2_generic_signer_probe_expected_sha256 != '') && 'custom-v2-release' || 'change' }}
     outputs:
       verified_sha: ${{ steps.verify-proof.outputs.verified_sha }}
       verified_tree: ${{ steps.verify-proof.outputs.verified_tree }}
@@ -273,6 +288,22 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
+      - name: Reject mixed legacy and V3 Custom Launch release authority
+        if: >-
+          inputs.custom_launch_v3_release &&
+          (inputs.custom_launch_public_enablement || inputs.custom_launch_dark_release)
+        run: |
+          echo "The V3 release record cannot be combined with the retired V1 release lane" >&2
+          exit 1
+
+      - name: Require the exact Custom V2 production Verify lane for V3
+        if: >-
+          inputs.custom_launch_v3_release &&
+          needs.release-gate.outputs.verified_custom_v2 != 'true'
+        run: |
+          echo "Custom Launch V3 requires the exact Custom V2 production Verify proof" >&2
+          exit 1
+
       - name: Resolve Custom Launch release-record policy
         id: custom-launch-policy
         env:
@@ -337,7 +368,8 @@ jobs:
           git fetch --no-tags origin \
             "+refs/heads/command-center-release-records:$record_ref"
           git cat-file -e "$RECORD_COMMIT_SHA^{commit}"
-          git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"
+          git merge-base --is-ancestor \
+            "$RECORD_COMMIT_SHA" "refs/remotes/origin/command-center-release-records"
           test "$(git show -s --format=%ae "$RECORD_COMMIT_SHA")" = \
             "309941960+0xprogrammable@users.noreply.github.com"
           record_commit_json="$RUNNER_TEMP/custom-launch-release-record-commit.json"
@@ -385,6 +417,122 @@ jobs:
           path: |
             ${{ runner.temp }}/custom-launch-release-record.json
             ${{ runner.temp }}/custom-launch-cross-repository-attestation.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Verify detached Custom Launch V3 release record
+        id: custom-launch-v3-record
+        if: inputs.custom_launch_v3_release
+        env:
+          RECORD_COMMIT_SHA: ${{ inputs.custom_launch_v3_release_record_commit_sha }}
+          EXPECTED_RECORD_SHA256: ${{ inputs.custom_launch_v3_release_record_sha256 }}
+          EXPECTED_API_ATTESTATION_COMMIT_SHA: ${{ vars.PROGRAMMABLE_CUSTOM_LAUNCH_API_RELEASE_ATTESTATION_COMMIT_SHA }}
+          EXPECTED_API_BINDING_DOCUMENT_SHA256: ${{ vars.PROGRAMMABLE_CUSTOM_LAUNCH_API_RELEASE_BINDING_DOCUMENT_SHA256 }}
+          PROGRAMMABLE_CUSTOM_LAUNCH_API_RELEASE_READ_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_API_RELEASE_READ_TOKEN }}
+          COMMAND_CENTER_GITHUB_TOKEN: ${{ github.token }}
+          ROLLBACK_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
+          ROLLBACK_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
+          ROLLBACK_WEBSITE_COMMIT_SHA: ${{ steps.production-before.outputs.git_head }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RECORD_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Custom Launch V3 requires one exact detached-record commit" >&2
+            exit 1
+          fi
+          if [[ "$RECORD_COMMIT_SHA" == "$GITHUB_SHA" ]]; then
+            echo "The detached record must not be stored in its Website subject commit" >&2
+            exit 1
+          fi
+          record_ref="refs/remotes/origin/command-center-release-records"
+          record_path="release-records/custom-launch-v2/release-record.json"
+          record_file="$RUNNER_TEMP/custom-launch-v3-release-record.json"
+          api_summary="$RUNNER_TEMP/custom-launch-v3-api-release-observation.json"
+          test ! -e "$record_file"
+          test ! -e "$api_summary"
+          umask 077
+          git fetch --no-tags origin \
+            "+refs/heads/command-center-release-records:$record_ref"
+          git cat-file -e "$RECORD_COMMIT_SHA^{commit}"
+          git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"
+          test "$(git show -s --format=%ae "$RECORD_COMMIT_SHA")" = \
+            "309941960+0xprogrammable@users.noreply.github.com"
+          record_commit_json="$RUNNER_TEMP/custom-launch-v3-release-record-commit.json"
+          test ! -e "$record_commit_json"
+          curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $COMMAND_CENTER_GITHUB_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --output "$record_commit_json" \
+            "https://api.github.com/repos/0xprogrammable/programmable/commits/$RECORD_COMMIT_SHA"
+          RECORD_COMMIT_JSON="$record_commit_json" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const commit = JSON.parse(readFileSync(process.env.RECORD_COMMIT_JSON, "utf8"));
+          if (
+            commit.sha !== process.env.RECORD_COMMIT_SHA
+            || commit.author?.login !== "0xprogrammable"
+            || commit.committer?.login !== "0xprogrammable"
+            || commit.commit?.verification?.verified !== Boolean(true)
+          ) throw new Error("detached V3 record commit lacks verified Programmable provenance");
+          NODE
+          git show "$RECORD_COMMIT_SHA:$record_path" > "$record_file"
+          node scripts/verify-custom-launch-release-record-v2.mjs "$record_file" \
+            --require staging \
+            --verify-api-release-binding \
+            --api-release-summary "$api_summary" \
+            --expect-website-commit "$GITHUB_SHA" \
+            --expect-website-tree "${{ needs.release-gate.outputs.verified_tree }}" \
+            --expect-api-attestation-commit "$EXPECTED_API_ATTESTATION_COMMIT_SHA" \
+            --expect-api-binding-document-sha256 "$EXPECTED_API_BINDING_DOCUMENT_SHA256" \
+            --expect-rollback-deployment-id "$ROLLBACK_DEPLOYMENT_ID" \
+            --expect-rollback-deployment-url "$ROLLBACK_DEPLOYMENT_URL" \
+            --expect-rollback-website-commit "$ROLLBACK_WEBSITE_COMMIT_SHA" \
+            --expect-detached-record-sha256="$EXPECTED_RECORD_SHA256" \
+            --github-output "$GITHUB_OUTPUT"
+          echo "record_path=$record_file" >> "$GITHUB_OUTPUT"
+          echo "api_release_summary_path=$api_summary" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Fly CLI for read-only release verification
+        if: inputs.custom_launch_v3_release
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+
+      - name: Verify exact Custom Launch API Fly release
+        id: custom-launch-v3-fly
+        if: inputs.custom_launch_v3_release
+        env:
+          FLY_API_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_API_FLY_READ_TOKEN }}
+          EXPECTED_RELEASE_VERSION: ${{ steps.custom-launch-v3-record.outputs.api_fly_release_version }}
+          EXPECTED_IMAGE_DIGEST: ${{ steps.custom-launch-v3-record.outputs.api_image_digest }}
+          EXPECTED_IMAGE_TAG: ${{ steps.custom-launch-v3-record.outputs.api_image_tag }}
+          EXPECTED_MACHINE_COUNT: ${{ steps.custom-launch-v3-record.outputs.api_machine_count }}
+        run: |
+          set -euo pipefail
+          releases="$RUNNER_TEMP/custom-launch-v3-fly-releases.json"
+          machines="$RUNNER_TEMP/custom-launch-v3-fly-machines.json"
+          images="$RUNNER_TEMP/custom-launch-v3-fly-images.json"
+          evidence="$RUNNER_TEMP/custom-launch-v3-fly-readback.json"
+          flyctl releases --app programmable-custom-launch-api --json > "$releases"
+          flyctl machine list --app programmable-custom-launch-api --json > "$machines"
+          flyctl image show --app programmable-custom-launch-api --json > "$images"
+          node scripts/verify-custom-launch-api-fly-release.mjs \
+            --releases "$releases" \
+            --machines "$machines" \
+            --images "$images" \
+            --expected-release-version "$EXPECTED_RELEASE_VERSION" \
+            --expected-image-digest "$EXPECTED_IMAGE_DIGEST" \
+            --expected-image-tag "$EXPECTED_IMAGE_TAG" \
+            --expected-machine-count "$EXPECTED_MACHINE_COUNT" \
+            --output "$evidence"
+          echo "evidence_path=$evidence" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve exact Custom Launch V3 release gate
+        if: inputs.custom_launch_v3_release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: custom-launch-v3-release-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.custom-launch-v3-record.outputs.record_path }}
+            ${{ steps.custom-launch-v3-record.outputs.api_release_summary_path }}
+            ${{ steps.custom-launch-v3-fly.outputs.evidence_path }}
           if-no-files-found: error
           retention-days: 90
 
@@ -663,6 +811,39 @@ jobs:
           npm run perf:read-model:staged-deployment --
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Probe exact staged Custom Launch V3 release
+        id: custom-launch-v3-stage
+        if: inputs.custom_launch_v3_release
+        env:
+          PROGRAMMABLE_CUSTOM_LAUNCH_V3_CANARY_API_KEY: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_V3_CANARY_API_KEY }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/custom-launch-v3-stage-evidence.json"
+          node scripts/probe-custom-launch-v3-release.mjs \
+            --website-url "${{ steps.staged-deployment.outputs.target_url }}" \
+            --website-deployment-id "${{ steps.staged-deployment.outputs.deployment_id }}" \
+            --expected-website-commit "$GITHUB_SHA" \
+            --api-release-summary "${{ steps.custom-launch-v3-record.outputs.api_release_summary_path }}" \
+            --output "$evidence"
+          echo "evidence_path=$evidence" >> "$GITHUB_OUTPUT"
+          evidence_sha256="$(node --input-type=module -e '
+            import { createHash } from "node:crypto";
+            import { readFileSync } from "node:fs";
+            process.stdout.write(`sha256:${createHash("sha256")
+              .update(readFileSync(process.argv[1])).digest("hex")}`);
+          ' "$evidence")"
+          echo "evidence_sha256=$evidence_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve redacted Custom Launch V3 staged evidence
+        if: inputs.custom_launch_v3_release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: custom-launch-v3-stage-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.custom-launch-v3-stage.outputs.evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Probe exact staged Envio Classic V3 catalog
         id: envio-catalog-probe
@@ -1190,6 +1371,7 @@ jobs:
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
+          CUSTOM_LAUNCH_V3_RELEASE: ${{ inputs.custom_launch_v3_release }}
           MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
           DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
@@ -1214,6 +1396,12 @@ jobs:
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then
               echo "- Custom V2 evidence: \`${{ steps.custom-v2-stage.outputs.evidence_sha256 }}\`"
+            fi
+            if [ "$CUSTOM_LAUNCH_V3_RELEASE" = true ]; then
+              echo "- Custom Launch V3 release subject: \`${{ steps.custom-launch-v3-record.outputs.release_subject_sha256 }}\`"
+              echo "- Custom Launch API image: \`${{ steps.custom-launch-v3-record.outputs.api_image_digest }}\`"
+              echo "- Custom Launch V3 read-only stage evidence: \`${{ steps.custom-launch-v3-stage.outputs.evidence_sha256 }}\`"
+              echo "- Safety: no wallet signature and no transaction broadcast"
             fi
             echo
             echo "Stage-only: no production promotion was attempted."
