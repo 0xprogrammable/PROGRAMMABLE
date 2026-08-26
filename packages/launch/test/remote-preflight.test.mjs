@@ -22,14 +22,21 @@ import { sha256Digest } from "../src/io.mjs";
 const API_KEY = "pm_live_remote_preflight_test_secret";
 const API_ORIGIN = "http://127.0.0.1:43210";
 const REQUEST_ID = "8ad84ddb-9453-4264-87fe-bb18a9f80bf0";
+const CANONICAL_REQUEST_VECTOR_BYTES = Buffer.from(
+  "{\n  \"z\":\"last\",\n  \"schemaVersion\":\"programmable.custom-launch-create-request.v3\",\n  \"a\":{\"value\":1}\n}\n",
+  "utf8",
+);
+const CANONICAL_REQUEST_VECTOR_HASH =
+  "sha256:7c0a12cdec841fa5c256d0f9887382166b6dcfef6002ccee955120f5f16690d8";
 
 test("remote validate discovers public capabilities then runs authenticated side-effect-free preflight", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "programmable-remote-preflight-"));
   try {
     const launchPath = path.join(root, "launch.json");
-    const requestBytes = Buffer.from('{"schemaVersion":"programmable.custom-launch-create-request.v3"}\n');
+    const requestBytes = CANONICAL_REQUEST_VECTOR_BYTES;
     await writeFile(launchPath, requestBytes);
-    const requestHash = sha256Digest(requestBytes);
+    const requestSha256 = sha256Digest(requestBytes);
+    assert.notEqual(requestSha256, CANONICAL_REQUEST_VECTOR_HASH);
     const calls = [];
     const capabilities = {
       schemaVersion: "programmable.custom-launch-capabilities.v1",
@@ -39,7 +46,7 @@ test("remote validate discovers public capabilities then runs authenticated side
       walletHandoffBaseUrl: `${API_ORIGIN}/wallet/`,
       futureAdditiveCapability: { preserved: true },
     };
-    const preflight = validPreflight(requestHash, {
+    const preflight = validPreflight(CANONICAL_REQUEST_VECTOR_HASH, {
       disposition: "needs_evidence",
       needsEvidenceFindingCodes: ["CUSTOM_EVIDENCE_UNPROVEN"],
       remediations: [remediation()],
@@ -52,7 +59,7 @@ test("remote validate discovers public capabilities then runs authenticated side
       maxAttempts: 1,
       validateLaunchFileImpl: async () => ({
         schemaVersion: CREATE_REQUEST_SCHEMA_V3,
-        requestSha256: requestHash,
+        requestSha256,
         byteLength: requestBytes.byteLength,
         reproducedFromConfig: true,
         exactSourceIncluded: true,
@@ -77,6 +84,8 @@ test("remote validate discovers public capabilities then runs authenticated side
     assert.deepEqual(Buffer.from(calls[1].options.body), requestBytes);
 
     assert.equal(result.remoteValidation, true);
+    assert.equal(result.requestSha256, requestSha256);
+    assert.equal(result.preflight.requestHash, CANONICAL_REQUEST_VECTOR_HASH);
     assert.equal(result.reproducedFromConfig, true);
     assert.equal(result.disposition, "needs_evidence");
     assert.equal(result.capabilities.futureAdditiveCapability.preserved, true);
@@ -97,7 +106,7 @@ test("remote validate discovers public capabilities then runs authenticated side
       maxAttempts: 1,
       validateLaunchFileImpl: async () => ({
         schemaVersion: CREATE_REQUEST_SCHEMA_V3,
-        requestSha256: requestHash,
+        requestSha256,
       }),
       fetchImpl: async (_url, options) => {
         submitBody = Buffer.from(options.body);
@@ -117,7 +126,7 @@ test("remote validate discovers public capabilities then runs authenticated side
 });
 
 test("remote validate rejects a response that contradicts the no-side-effects contract", async () => {
-  const requestBytes = Buffer.from("{}\n");
+  const requestBytes = CANONICAL_REQUEST_VECTOR_BYTES;
   let calls = 0;
   await assert.rejects(
     validateLaunchRemote({
@@ -134,7 +143,7 @@ test("remote validate rejects a response that contradicts the no-side-effects co
         calls += 1;
         return calls === 1
           ? jsonResponse({ walletHandoffBaseUrl: `${API_ORIGIN}/wallet/` })
-          : jsonResponse(validPreflight(sha256Digest(requestBytes), { quotaConsumed: true }));
+          : jsonResponse(validPreflight(CANONICAL_REQUEST_VECTOR_HASH, { quotaConsumed: true }));
       },
       loadApiKeyImpl: async () => API_KEY,
     }),
@@ -142,6 +151,38 @@ test("remote validate rejects a response that contradicts the no-side-effects co
       assert.ok(error instanceof ProgrammableApiError);
       assert.equal(error.details.code, "PREFLIGHT_CONTRACT_INVALID");
       assert.deepEqual(error.details.serverDetails, { field: "quotaConsumed" });
+      return true;
+    },
+  );
+});
+
+test("remote validate rejects the raw launch-file digest as the server requestHash", async () => {
+  const rawRequestSha256 = sha256Digest(CANONICAL_REQUEST_VECTOR_BYTES);
+  assert.notEqual(rawRequestSha256, CANONICAL_REQUEST_VECTOR_HASH);
+  let calls = 0;
+  await assert.rejects(
+    validateLaunchRemote({
+      launchPath: "/does/not/need/to/exist.json",
+      configPath: "/does/not/need/to/exist.config.json",
+      apiOrigin: API_ORIGIN,
+      maxAttempts: 1,
+      readLaunchBytesImpl: async () => CANONICAL_REQUEST_VECTOR_BYTES,
+      validateLaunchFileImpl: async () => ({
+        schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+        requestSha256: rawRequestSha256,
+      }),
+      fetchImpl: async () => {
+        calls += 1;
+        return calls === 1
+          ? jsonResponse({ walletHandoffBaseUrl: `${API_ORIGIN}/wallet/` })
+          : jsonResponse(validPreflight(rawRequestSha256));
+      },
+      loadApiKeyImpl: async () => API_KEY,
+    }),
+    (error) => {
+      assert.ok(error instanceof ProgrammableApiError);
+      assert.equal(error.details.code, "PREFLIGHT_CONTRACT_INVALID");
+      assert.deepEqual(error.details.serverDetails, { field: "requestHash" });
       return true;
     },
   );

@@ -62,7 +62,7 @@ npm run release:custom-launch:v2:binding:generate -- \
 ```
 
 The generator derives both Git commit/tree identities, hashes the exact Website
-artifacts, recreates the backend migration inventory, checks all ten local and
+artifacts, recreates the backend migration inventory, checks all eleven local and
 remote Supabase migration versions, proves every runtime/Supabase migration
 mirror byte-equal, checks the API contract and JCS profile/readiness identities,
 and binds the active Fly machines to the same tag and digest. The exact retained

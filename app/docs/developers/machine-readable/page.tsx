@@ -119,8 +119,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz">
-              <code>@programmable/launch 3.3.2</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz">
+              <code>@programmable/launch 3.3.3</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and

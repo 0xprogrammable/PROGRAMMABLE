@@ -10,6 +10,7 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  MAX_REQUEST_BYTES,
   PREFLIGHT_PATH_V3,
   PREFLIGHT_SCHEMA_V1,
   TERMINAL_STATUSES,
@@ -19,13 +20,14 @@ import {
 import {
   atomicCreate,
   atomicWrite,
+  decodeExactUtf8,
   defaultStateDirectory,
   loadApiKey,
   readStrictJsonFile,
   sha256Digest,
   sha256Hex,
 } from "./io.mjs";
-import { canonicalizeJson } from "./canonical-json.mjs";
+import { canonicalizeJson, parseStrictJson } from "./canonical-json.mjs";
 import { validateLaunchFile } from "./validate.mjs";
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
@@ -74,8 +76,8 @@ export async function validateLaunchRemote(options) {
     configPath: options.configPath,
   });
   const requestBytes = Buffer.from(await (options.readLaunchBytesImpl ?? readFile)(launchPath));
-  const requestHash = sha256Digest(requestBytes);
-  if (requestHash !== validation.requestSha256) {
+  const requestSha256 = sha256Digest(requestBytes);
+  if (requestSha256 !== validation.requestSha256) {
     throw new TypeError(
       "REMOTE_VALIDATION_BYTES_CHANGED: launch.json changed after exact local validation",
     );
@@ -83,6 +85,7 @@ export async function validateLaunchRemote(options) {
   if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3) {
     throw new TypeError("remote preflight is available only for V3 Custom launch requests");
   }
+  const serverRequestHash = customLaunchRequestHashV3(requestBytes);
 
   const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
   const capabilities = await getLaunchCapabilities({
@@ -107,7 +110,7 @@ export async function validateLaunchRemote(options) {
     fetchImpl: options.fetchImpl,
     sleepImpl: options.sleepImpl,
   });
-  assertPreflightResponse(result.body, requestHash);
+  assertPreflightResponse(result.body, serverRequestHash);
   const action = resourceActionSummary(result.body, {
     apiOrigin,
     walletHandoffBaseUrl: capabilities.resource.walletHandoffBaseUrl,
@@ -128,6 +131,19 @@ export async function validateLaunchRemote(options) {
     remediations: result.body.remediations,
     ...action,
   };
+}
+
+function customLaunchRequestHashV3(requestBytes) {
+  const source = decodeExactUtf8(requestBytes, "V3 launch request");
+  const request = parseStrictJson(source, { maximumBytes: MAX_REQUEST_BYTES });
+  if (!isPlainObject(request) || request.schemaVersion !== CREATE_REQUEST_SCHEMA_V3) {
+    throw new TypeError(`request schemaVersion must be ${CREATE_REQUEST_SCHEMA_V3}`);
+  }
+  return sha256Digest(Buffer.concat([
+    Buffer.from(request.schemaVersion, "utf8"),
+    Buffer.from([0]),
+    Buffer.from(canonicalizeJson(request), "utf8"),
+  ]));
 }
 
 export async function submitLaunch(options) {
