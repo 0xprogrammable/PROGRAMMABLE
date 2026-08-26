@@ -136,6 +136,22 @@ describe("My projects editor opening", () => {
     );
   });
 
+  it("returns a stalled launch refresh to an actionable error state", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("creatorProjectRefreshTimeoutMs = 12_000");
+    expect(source).toContain(
+      "controller.abort(creatorProjectRefreshTimeoutReason)",
+    );
+    expect(source).toContain(
+      "Launch refresh took too long. Select Refresh to try again.",
+    );
+    expect(source).toContain("onClick={refreshProjects}");
+  });
+
   it("reserves a complete first page while keeping warm launch actions visible", () => {
     const source = readFileSync(
       join(process.cwd(), "components/profile-projects.tsx"),

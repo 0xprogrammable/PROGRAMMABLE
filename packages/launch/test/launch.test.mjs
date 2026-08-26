@@ -826,6 +826,7 @@ test("V2 submit and status use the schema-selected path and bind it in the journ
 
   const statusResult = await statusLaunch({
     requestId: "515a4b20-a7bd-40e1-8cfa-f6da5457036b",
+    apiVersion: 2,
     apiOrigin: "http://127.0.0.1:43194",
     maxAttempts: 1,
     fetchImpl: async (url) => {

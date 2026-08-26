@@ -53,7 +53,7 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Create and track wallet-bound V2 launches, verify Router-stamped tokens and pools, or index new launches."
+      description="Create and track wallet-bound V3 general-hook launches, verify Router-stamped tokens and pools, or index new launches."
       kicker="Developer integration"
       sections={developerSections}
       title="Integrate Programmable launches"
@@ -62,9 +62,10 @@ export default function DeveloperDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Choose a path</h2>
           <p>
-            Start with the task your product needs. Public V2 launch creation
-            and lifecycle reads use a wallet-bound API key. Verification and
-            indexing remain public read paths.
+            Start with the task your product needs. Public V3 general-hook
+            creation and lifecycle reads use a wallet-bound API key. Funding
+            and Router wallet actions remain separate from API authorization.
+            Verification and indexing remain public read paths.
           </p>
         </div>
 
@@ -77,8 +78,11 @@ export default function DeveloperDocsPage() {
             </h3>
             <p>
               Package and validate one deterministic graph locally, then use a
-              wallet-bound key to submit and track the exact V2 request. Wallet
-              review and signing remain separate.
+              wallet-bound key to submit and track the exact V3 request. Wallet
+              review and signing remain separate. EIP-3009 funding adds one
+              explicit typed-data signature; native-value and no-funding modes
+              do not. The exact Router transaction always requires its own
+              explicit wallet review and send.
             </p>
             <Link
               className={styles.textLink}

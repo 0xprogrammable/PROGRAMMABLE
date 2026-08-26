@@ -19,6 +19,8 @@ export const CUSTOM_LAUNCH_LIST_SCHEMA_V1 =
   "programmable.custom-launch-list.v1" as const;
 export const CUSTOM_LAUNCH_LIST_SCHEMA_V2 =
   "programmable.custom-launch-list.v2" as const;
+export const CUSTOM_LAUNCH_LIST_SCHEMA_V3 =
+  "programmable.custom-launch-list.v3" as const;
 export const CUSTOM_LAUNCH_HISTORY_SCHEMA_V1 =
   "programmable.custom-launch-history.v1" as const;
 
@@ -27,6 +29,7 @@ export const CUSTOM_LAUNCH_HISTORY_SCHEMA_V1 =
 // 128 KiB because initcode is bound in both the artifact and calldata.
 const MAXIMUM_BACKEND_LIST_BODY_BYTES = 262_144;
 const MAXIMUM_BACKEND_RESOURCE_BODY_BYTES = 1_048_576;
+const MAXIMUM_BROWSER_FUNDING_BODY_BYTES = 1_024;
 const DEFAULT_BACKEND_TIMEOUT_MS = 5_000;
 const DEFAULT_PAGE_SIZE = 5;
 const MAXIMUM_PAGE_SIZE = 10;
@@ -45,6 +48,16 @@ const STATUSES_V1 = new Set([
   "cancelled",
 ]);
 const STATUSES_V2 = new Set([...STATUSES_V1, "simulating"]);
+const STATUSES_V3 = new Set([
+  ...STATUSES_V2,
+  "awaiting_funding_authorization",
+  "funding_authorization_verified",
+]);
+const FUNDING_SIGNATURE_SCHEMA_V1 =
+  "programmable.custom-launch-funding-authorization-signature.v1" as const;
+const LOWER_BYTES32 = /^0x[0-9a-f]{64}$/u;
+const LOWER_SIGNATURE = /^0x[0-9a-f]{130}$/u;
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/u;
 const RESPONSE_HEADERS = Object.freeze({
   "Cache-Control": "no-store",
   "Content-Type": "application/json; charset=utf-8",
@@ -88,12 +101,36 @@ export type DeveloperCustomLaunchV2 = Readonly<{
   failure: DeveloperCustomLaunchV1["failure"];
 }>;
 
-type DeveloperCustomLaunch = DeveloperCustomLaunchV1 | DeveloperCustomLaunchV2;
-type BackendHistoryVersion = "v1" | "v2";
+export type DeveloperCustomLaunchV3 = Readonly<{
+  schemaVersion: "programmable.custom-launch.v3";
+  launchId: string;
+  requestId: string;
+  onchainLaunchId: `0x${string}` | null;
+  routeId: "custom-launch:create:v3";
+  ownerWallet: `0x${string}`;
+  status: string;
+  requestHash: string;
+  launchProfileHash: `sha256:${string}`;
+  launchIntentHash: `sha256:${string}`;
+  fundingIntentHash: `0x${string}`;
+  createdAt: string;
+  updatedAt: string;
+  output: Readonly<Record<string, JsonValue>> | null;
+  failure: DeveloperCustomLaunchV1["failure"];
+}>;
+
+type DeveloperCustomLaunch = DeveloperCustomLaunchV1
+  | DeveloperCustomLaunchV2
+  | DeveloperCustomLaunchV3;
+type BackendHistoryVersion = "v1" | "v2" | "v3";
 
 export interface DeveloperLaunchHistoryBridgeV1 {
   list(request: Request): Promise<Response>;
   get(request: Request, launchId: string): Promise<Response>;
+  submitFundingAuthorization(
+    request: Request,
+    launchId: string,
+  ): Promise<Response>;
 }
 
 export type DeveloperLaunchHistoryBackendFetchV1 = (
@@ -164,15 +201,31 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
               AbortSignal.timeout(timeoutMs),
             ]),
           });
-          // During the route-isolated rollout, a missing V2 list is an empty
-          // lane. V1 history must remain available until V2 is deployed.
-          if (version === "v2" && backend.status === 404) {
+          // During route-isolated rollouts, a missing additive list is an
+          // empty lane. Earlier history must remain available independently.
+          if (version !== "v1" && backend.status === 404) {
             return Object.freeze({
               version,
               launches: Object.freeze([] as DeveloperCustomLaunch[]),
               nextCursor: null,
               done: true,
             });
+          }
+          if (version === "v3" && backend.status === 503) {
+            const pending = await readPreservedBackendPublicErrorV1(
+              backend.clone(),
+            );
+            if (
+              pending?.code === "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING"
+              && pending.retryAfter === "30"
+            ) {
+              return Object.freeze({
+                version,
+                launches: Object.freeze([] as DeveloperCustomLaunch[]),
+                nextCursor: null,
+                done: true,
+              });
+            }
           }
           if (!backend.ok) throw await mappedBackendError(backend);
           const record = jsonRecord(await readBoundedBackendJson(
@@ -181,7 +234,9 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           ));
           const expectedSchema = version === "v1"
             ? CUSTOM_LAUNCH_LIST_SCHEMA_V1
-            : CUSTOM_LAUNCH_LIST_SCHEMA_V2;
+            : version === "v2"
+              ? CUSTOM_LAUNCH_LIST_SCHEMA_V2
+              : CUSTOM_LAUNCH_LIST_SCHEMA_V3;
           if (
             record.schemaVersion !== expectedSchema ||
             !Array.isArray(record.launches) ||
@@ -200,15 +255,20 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
             done: nextCursor === null,
           });
         };
-        const [v1, v2] = await Promise.all([
+        const [v1, v2, v3] = await Promise.all([
           readVersion("v1"),
           readVersion("v2"),
+          readVersion("v3"),
         ]);
-        const launches = Object.freeze([...v1.launches, ...v2.launches]
+        const launches = Object.freeze([
+          ...v1.launches,
+          ...v2.launches,
+          ...v3.launches,
+        ]
           .sort(compareLaunchHistoryEntries));
-        const nextCursor = v1.done && v2.done
+        const nextCursor = v1.done && v2.done && v3.done
           ? null
-          : encodeCombinedHistoryCursor({ v1, v2 });
+          : encodeCombinedHistoryCursor({ v1, v2, v3 });
         return jsonResponse(200, {
           schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
           launches,
@@ -272,13 +332,86 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
         if (walletInput.version) {
           launch = await readVersion(walletInput.version);
         } else {
-          launch = await readVersion("v1") ?? await readVersion("v2");
+          launch = await readVersion("v1")
+            ?? await readVersion("v2")
+            ?? await readVersion("v3");
         }
         if (!launch) throw new BrowserRequestErrorV1(404, "launch_not_found");
         if (launch.requestId !== launchId.toLowerCase()) {
           throw new BackendContractErrorV1();
         }
         return jsonResponse(200, { ...launch });
+      } catch (error) {
+        return mappedError(error);
+      }
+    },
+
+    async submitFundingAuthorization(request: Request, launchId: string) {
+      if (request.method !== "POST") {
+        return errorResponse(405, "method_not_allowed", "POST");
+      }
+      try {
+        requireJsonRequest(request);
+        if (!UUID.test(launchId)) {
+          throw new BrowserRequestErrorV1(404, "launch_not_found");
+        }
+        const walletInput = exactWalletQuery(request);
+        if (walletInput.version !== "v3") {
+          throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+        }
+        const body = parseFundingSignatureSubmission(
+          await readBoundedBrowserJson(request),
+        );
+        const idempotencyKey = request.headers.get("idempotency-key");
+        if (!idempotencyKey || !IDEMPOTENCY_KEY.test(idempotencyKey)) {
+          throw new BrowserRequestErrorV1(400, "idempotency_key_invalid");
+        }
+        const principal = await input.authenticator.authenticate(request);
+        const walletAddress = requireLinkedWallet(
+          principal,
+          walletInput.walletAddress,
+        );
+        const headers = new Headers({
+          Accept: "application/json",
+          Authorization: `Bearer ${websiteToken}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+          "X-Programmable-Privy-User-Id": principal.privyUserId,
+          "X-Programmable-Wallet-Address": walletAddress,
+        });
+        const backendUrl = new URL(
+          `/v3/wallet-admin/custom-launches/${
+            encodeURIComponent(launchId.toLowerCase())
+          }/funding-authorization`,
+          backendBaseUrl,
+        );
+        const backend = await input.fetchBackend(backendUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          cache: "no-store",
+          redirect: "error",
+          signal: AbortSignal.any([
+            request.signal,
+            AbortSignal.timeout(timeoutMs),
+          ]),
+        });
+        if (!backend.ok) throw await mappedBackendError(backend);
+        if (backend.status !== 200 && backend.status !== 202) {
+          throw new BackendContractErrorV1();
+        }
+        const launch = parseLaunch(
+          await readBoundedBackendJson(
+            backend,
+            MAXIMUM_BACKEND_RESOURCE_BODY_BYTES,
+          ),
+          walletAddress.toLowerCase(),
+          "v3",
+        );
+        if (launch.requestId !== launchId.toLowerCase()) {
+          throw new BackendContractErrorV1();
+        }
+        return jsonResponse(backend.status, { ...launch });
       } catch (error) {
         return mappedError(error);
       }
@@ -344,7 +477,10 @@ function exactWalletQuery(request: Request) {
   const versionValue = search.get("version");
   if (
     !walletAddress ||
-    (versionValue !== null && versionValue !== "v1" && versionValue !== "v2")
+    (versionValue !== null
+      && versionValue !== "v1"
+      && versionValue !== "v2"
+      && versionValue !== "v3")
   ) throw new BrowserRequestErrorV1(400, "request_schema_invalid");
   return Object.freeze({
     walletAddress,
@@ -371,6 +507,7 @@ type CombinedHistoryCursorLane = Readonly<{
 type CombinedHistoryCursor = Readonly<{
   v1: CombinedHistoryCursorLane;
   v2: CombinedHistoryCursorLane;
+  v3: CombinedHistoryCursorLane;
 }>;
 
 function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
@@ -399,13 +536,18 @@ function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
       return Object.freeze({
         v1: Object.freeze({ cursor: legacy, done: false }),
         v2: Object.freeze({ cursor: null, done: false }),
+        v3: Object.freeze({ cursor: null, done: false }),
       });
     }
-    if (
-      Object.keys(decoded).length !== 2 ||
-      !("v1" in decoded) ||
-      !("v2" in decoded)
-    ) return invalid();
+    const decodedKeys = Object.keys(decoded);
+    const twoLaneCursor = decodedKeys.length === 2
+      && "v1" in decoded
+      && "v2" in decoded;
+    const threeLaneCursor = decodedKeys.length === 3
+      && "v1" in decoded
+      && "v2" in decoded
+      && "v3" in decoded;
+    if (!twoLaneCursor && !threeLaneCursor) return invalid();
     const lane = (candidate: JsonValue | undefined) => {
       if (
         candidate === null ||
@@ -428,9 +570,15 @@ function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
     const result = Object.freeze({
       v1: lane(decoded.v1),
       v2: lane(decoded.v2),
+      v3: threeLaneCursor
+        ? lane(decoded.v3)
+        : Object.freeze({ cursor: null, done: false }),
     });
-    if (result.v1.done && result.v2.done) return invalid();
-    const canonical = Buffer.from(JSON.stringify(result), "utf8")
+    if (result.v1.done && result.v2.done && result.v3.done) return invalid();
+    const canonicalValue = twoLaneCursor
+      ? Object.freeze({ v1: result.v1, v2: result.v2 })
+      : result;
+    const canonical = Buffer.from(JSON.stringify(canonicalValue), "utf8")
       .toString("base64url");
     if (canonical !== value) return invalid();
     return result;
@@ -443,6 +591,7 @@ function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
 function encodeCombinedHistoryCursor(input: Readonly<{
   v1: Readonly<{ done: boolean; nextCursor: string | null }>;
   v2: Readonly<{ done: boolean; nextCursor: string | null }>;
+  v3: Readonly<{ done: boolean; nextCursor: string | null }>;
 }>) {
   const lane = (value: Readonly<{ done: boolean; nextCursor: string | null }>) =>
     Object.freeze({
@@ -454,6 +603,7 @@ function encodeCombinedHistoryCursor(input: Readonly<{
   return Buffer.from(JSON.stringify(Object.freeze({
     v1: lane(input.v1),
     v2: lane(input.v2),
+    v3: lane(input.v3),
   })), "utf8").toString("base64url");
 }
 
@@ -524,11 +674,19 @@ function parseLaunch(
   const record = jsonRecord(value);
   const expectedSchema = version === "v1"
     ? "programmable.custom-launch.v1"
-    : "programmable.custom-launch.v2";
+    : version === "v2"
+      ? "programmable.custom-launch.v2"
+      : "programmable.custom-launch.v3";
   const expectedRoute = version === "v1"
     ? "custom-launch:create:v1"
-    : "custom-launch:create:v2";
-  const statuses = version === "v1" ? STATUSES_V1 : STATUSES_V2;
+    : version === "v2"
+      ? "custom-launch:create:v2"
+      : "custom-launch:create:v3";
+  const statuses = version === "v1"
+    ? STATUSES_V1
+    : version === "v2"
+      ? STATUSES_V2
+      : STATUSES_V3;
   if (
     record.schemaVersion !== expectedSchema
     || typeof record.launchId !== "string"
@@ -548,11 +706,15 @@ function parseLaunch(
     || !statuses.has(record.status)
     || typeof record.requestHash !== "string"
     || !REQUEST_HASH.test(record.requestHash)
-    || (version === "v2" && (
+    || (version !== "v1" && (
       typeof record.launchProfileHash !== "string"
       || !REQUEST_HASH.test(record.launchProfileHash)
       || typeof record.launchIntentHash !== "string"
       || !REQUEST_HASH.test(record.launchIntentHash)
+    ))
+    || (version === "v3" && (
+      typeof record.fundingIntentHash !== "string"
+      || !LOWER_BYTES32.test(record.fundingIntentHash)
     ))
   ) throw new BackendContractErrorV1();
   const output = record.output === null
@@ -573,18 +735,29 @@ function parseLaunch(
     output,
     failure,
   };
-  return version === "v1"
+  if (version === "v1") {
+    return Object.freeze({
+      ...base,
+      schemaVersion: "programmable.custom-launch.v1" as const,
+      routeId: "custom-launch:create:v1" as const,
+    });
+  }
+  const profileBase = {
+    ...base,
+    launchProfileHash: record.launchProfileHash as `sha256:${string}`,
+    launchIntentHash: record.launchIntentHash as `sha256:${string}`,
+  };
+  return version === "v2"
     ? Object.freeze({
-        ...base,
-        schemaVersion: "programmable.custom-launch.v1" as const,
-        routeId: "custom-launch:create:v1" as const,
-      })
-    : Object.freeze({
-        ...base,
+        ...profileBase,
         schemaVersion: "programmable.custom-launch.v2" as const,
         routeId: "custom-launch:create:v2" as const,
-        launchProfileHash: record.launchProfileHash as `sha256:${string}`,
-        launchIntentHash: record.launchIntentHash as `sha256:${string}`,
+      })
+    : Object.freeze({
+        ...profileBase,
+        schemaVersion: "programmable.custom-launch.v3" as const,
+        routeId: "custom-launch:create:v3" as const,
+        fundingIntentHash: record.fundingIntentHash as `0x${string}`,
       });
 }
 
@@ -603,6 +776,33 @@ function parseFailure(value: JsonValue) {
     code: record.code,
     message: record.message,
     retryable: record.retryable,
+  });
+}
+
+function parseFundingSignatureSubmission(value: JsonValue) {
+  const record = jsonRecord(value);
+  const keys = Object.keys(record);
+  if (
+    keys.length !== 4
+    || !keys.every((key) => [
+      "schemaVersion",
+      "fundingIntentHash",
+      "typedDataDigest",
+      "signature",
+    ].includes(key))
+    || record.schemaVersion !== FUNDING_SIGNATURE_SCHEMA_V1
+    || typeof record.fundingIntentHash !== "string"
+    || !LOWER_BYTES32.test(record.fundingIntentHash)
+    || typeof record.typedDataDigest !== "string"
+    || !LOWER_BYTES32.test(record.typedDataDigest)
+    || typeof record.signature !== "string"
+    || !LOWER_SIGNATURE.test(record.signature)
+  ) throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+  return Object.freeze({
+    schemaVersion: FUNDING_SIGNATURE_SCHEMA_V1,
+    fundingIntentHash: record.fundingIntentHash,
+    typedDataDigest: record.typedDataDigest,
+    signature: record.signature,
   });
 }
 
@@ -666,6 +866,30 @@ async function readBoundedBackendJson(
   }
 }
 
+async function readBoundedBrowserJson(request: Request): Promise<JsonValue> {
+  const contentLength = request.headers.get("content-length");
+  const declaredLength = contentLength === null ? null : Number(contentLength);
+  if (
+    declaredLength !== null
+    && (!Number.isSafeInteger(declaredLength)
+      || declaredLength < 1
+      || declaredLength > MAXIMUM_BROWSER_FUNDING_BODY_BYTES)
+  ) throw new BrowserRequestErrorV1(413, "request_too_large");
+  const text = await request.text();
+  if (
+    !text
+    || Buffer.byteLength(text, "utf8") > MAXIMUM_BROWSER_FUNDING_BODY_BYTES
+  ) throw new BrowserRequestErrorV1(413, "request_too_large");
+  try {
+    return parseStrictJson(text, {
+      maximumBytes: MAXIMUM_BROWSER_FUNDING_BODY_BYTES,
+      maximumDepth: 4,
+    });
+  } catch {
+    throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+  }
+}
+
 function jsonRecord(value: JsonValue | undefined): Readonly<Record<string, JsonValue>> {
   if (
     value === null
@@ -690,6 +914,14 @@ function requireJsonResponse(request: Request) {
   const accept = request.headers.get("accept")?.toLowerCase();
   if (accept && !accept.includes("application/json") && !accept.includes("*/*")) {
     throw new BrowserRequestErrorV1(406, "json_response_required");
+  }
+}
+
+function requireJsonRequest(request: Request) {
+  requireJsonResponse(request);
+  const contentType = request.headers.get("content-type")?.toLowerCase();
+  if (!contentType || !contentType.startsWith("application/json")) {
+    throw new BrowserRequestErrorV1(415, "json_request_required");
   }
 }
 

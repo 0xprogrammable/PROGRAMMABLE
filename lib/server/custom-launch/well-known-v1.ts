@@ -18,7 +18,7 @@ export function programmableWellKnownDocumentV1(
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
     description:
-      "Canonical discovery for Programmable Classic and Custom launches. Public V2 launch creation and wallet-owned lifecycle reads are live on Ethereum Mainnet.",
+      "Canonical discovery for Programmable Classic and Custom launches. Public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet.",
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -35,72 +35,125 @@ export function programmableWellKnownDocumentV1(
     customLaunchApi: Object.freeze({
       status: "live" as const,
       readStatus: "live" as const,
+      apiVersion: "3" as const,
       apiBaseUrl: "https://api.programmable.market",
       readyzUrl: "https://api.programmable.market/readyz",
-      openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
+      openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       apiKeysUrl: "https://programmable.market/developers/api-keys",
       guideUrl: "https://programmable.market/docs/developers/custom-launch",
       cli: Object.freeze({
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "1.0.1",
+        releaseVersion: "3.0.0",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v1.0.1",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+      }),
+      compatibility: Object.freeze({
+        v1: Object.freeze({
+          openApiUrl:
+            "https://programmable.market/openapi/custom-launch-v1.json",
+          cliReleaseVersion: "1.0.1" as const,
+          cliTarballUrl:
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
+        }),
+        v2: Object.freeze({
+          openApiUrl:
+            "https://programmable.market/openapi/custom-launch-v2.json",
+        }),
       }),
       publicRelease: Object.freeze({
         status: "live" as const,
-        apiVersion: "2" as const,
+        apiVersion: "3" as const,
         guideUrl: "https://programmable.market/docs/developers/custom-launch",
-        openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         authentication: "wallet-bound-api-key" as const,
         walletBoundary: "separate-wallet-signature" as const,
         cli: Object.freeze({
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "2.0.1",
+          releaseVersion: "3.0.0",
           releaseUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.0.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
         }),
+      }),
+      generalHookProfile: Object.freeze({
+        status: "live" as const,
+        apiVersion: "3" as const,
+        profileId: "programmable.direct-native-hook-graph.v1" as const,
+        profileRevision: 2 as const,
+        productionLaunchAuthorized: true as const,
+        createPath: "/v3/custom-launches" as const,
+        openApiUrl:
+          "https://programmable.market/openapi/custom-launch-v3.json",
+        cliReleaseVersion: "3.0.0" as const,
+      }),
+      integrationPreview: Object.freeze({
+        status: "live" as const,
+        apiVersion: "3" as const,
+        publicAuthorization: true as const,
+        createPath: "/v3/custom-launches" as const,
+        openApiUrl:
+          "https://programmable.market/openapi/custom-launch-v3.json",
+        profileId: "programmable.direct-native-hook-graph.v1" as const,
+        profileRevision: 2 as const,
+        requestSchemaVersion:
+          "programmable.custom-launch-create-request.v3" as const,
+        minimumTargets: 3 as const,
+        maximumTargets: 16 as const,
+        projectOwnedToken: true as const,
+        projectOwnedHook: true as const,
+        hookPermissionMaskRange: Object.freeze({
+          minimum: 0 as const,
+          maximum: 16_383 as const,
+        }),
+        exactGraphReceiptRequired: true as const,
+        fundingAuthorization: Object.freeze({
+          modes: Object.freeze([
+            "none",
+            "wallet-transaction-value",
+            "eip-3009-receive-with-authorization",
+          ] as const),
+          createRequestSignatureIncluded: false as const,
+          fundingIntentStage: "pre-signature" as const,
+        }),
+        activationBlockers: Object.freeze([] as const),
+        errorCode: null,
       }),
       releaseCandidate: Object.freeze({
         status: "promoted-to-public" as const,
         publicAuthorization: true as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "2.0.1",
-        releaseTag: "programmable-launch-v2.0.1",
+        releaseVersion: "3.0.0",
+        releaseTag: "programmable-launch-v3.0.0",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
         openApiUrl:
-          "https://programmable.market/openapi/custom-launch-v2.json",
+          "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({
-          profileId:
-            "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-          profileRevision: 3 as const,
-          launchProfileHash:
-            "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+          profileId: "programmable.direct-native-hook-graph.v1",
+          profileRevision: 2 as const,
           productionLaunchAuthorized: true as const,
           chainId: "1" as const,
           network: "Ethereum Mainnet" as const,
           chargeTrigger: "successful-swap" as const,
-          basis: "gross-unspecified-pool-currency-amount" as const,
-          assetMode: "unspecified-pool-currency-per-swap" as const,
+          basis: "per-launch-declared-conformance-basis" as const,
+          accountingModes: Object.freeze([
+            "additive-platform-share",
+            "inclusive-selected-total",
+          ] as const),
           ratePpm: 1_000 as const,
           denominatorPpm: 1_000_000 as const,
           ratePercent: "0.10%" as const,
           rateBps: 10 as const,
           recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          enforcement: Object.freeze({
-            frozenProfile: true as const,
-            customModuleMayReduce: false as const,
-            customModuleMayRedirect: false as const,
-          }),
+          enforcement: "platform-signed-exact-graph-conformance-receipt" as const,
           lpFee: "separate-from-platform-fee" as const,
           genericFeeClaiming: "not-live" as const,
           genericBuybackManagement: "not-live" as const,
@@ -110,6 +163,8 @@ export function programmableWellKnownDocumentV1(
       walletAuthority: "separate-review-and-sign" as const,
       versions: Object.freeze({
         v1: Object.freeze({
+          openApiUrl:
+            "https://programmable.market/openapi/custom-launch-v1.json",
           reads: "live" as const,
           create: "read-only" as const,
           createHttpStatus: 409 as const,
@@ -117,7 +172,18 @@ export function programmableWellKnownDocumentV1(
           retryable: false as const,
         }),
         v2: Object.freeze({
+          openApiUrl:
+            "https://programmable.market/openapi/custom-launch-v2.json",
           status: "live" as const,
+          createHttpStatus: 202 as const,
+          replayHttpStatus: 200 as const,
+          retryAfter: "honor-on-429-or-503" as const,
+        }),
+        v3: Object.freeze({
+          openApiUrl:
+            "https://programmable.market/openapi/custom-launch-v3.json",
+          status: "live" as const,
+          publicAuthorization: true as const,
           createHttpStatus: 202 as const,
           replayHttpStatus: 200 as const,
           retryAfter: "honor-on-429-or-503" as const,
@@ -140,6 +206,8 @@ export function programmableWellKnownDocumentV1(
       custom: Object.freeze({
         discoveryStatus: "live" as const,
         publicSubmissionStatus: "closed" as const,
+        publicSubmissionStatusScope: "legacy-registry-intake" as const,
+        publicApiCreateStatus: "live" as const,
         customLaunchApiStatus: "live" as const,
         registryDiscoveryStatus: manifest.status === "live"
           ? "live" as const
@@ -152,8 +220,8 @@ export function programmableWellKnownDocumentV1(
           ? "1"
           : null,
         note: manifest.status === "live"
-          ? "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live and V1 creation is read-only. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
-          : "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live and V1 creation is read-only. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
+          ? "Public V3 general-hook launch creation and lifecycle reads are live on Ethereum Mainnet. Earlier history remains readable and V1 creation is read-only. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
+          : "Public V3 general-hook launch creation and lifecycle reads are live on Ethereum Mainnet. Earlier history remains readable and V1 creation is read-only. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
       }),
     }),
     compatibility: Object.freeze({

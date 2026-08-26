@@ -40,6 +40,18 @@ const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
 const ROUTE_NAMESPACE_TYPEHASH = keccak256(stringToHex(API_ROUTE_NAMESPACE_TYPE));
 const TARGET_SALT_TYPEHASH = keccak256(stringToHex(GRAPH_TARGET_SALT_TYPE));
 
+export function deriveRouteNamespace(sourceBundleSha256, launchWallet) {
+  if (typeof sourceBundleSha256 !== "string"
+    || !/^sha256:[0-9a-f]{64}$/.test(sourceBundleSha256)) {
+    throw new TypeError("sourceBundleSha256 is invalid");
+  }
+  const sourceHash = `0x${sourceBundleSha256.slice("sha256:".length)}`;
+  return keccak256(encodeAbiParameters(
+    parseAbiParameters("bytes32,bytes32,address,address,address"),
+    [ROUTE_NAMESPACE_TYPEHASH, sourceHash, getAddress(launchWallet), ROUTER, GRAPH_FACTORY],
+  ));
+}
+
 export function buildGraphBundle({
   targets,
   pool,
@@ -47,9 +59,10 @@ export function buildGraphBundle({
   launchWallet,
   nonce,
   noDelegationRuntimeTargetIds = [],
+  enforceV4PermissionDependencies = false,
 }) {
-  if (!Array.isArray(targets) || targets.length === 0 || targets.length > MAX_GRAPH_TARGETS) {
-    throw new TypeError("targets must contain between 1 and 16 targets");
+  if (!Array.isArray(targets) || targets.length < 2 || targets.length > MAX_GRAPH_TARGETS) {
+    throw new TypeError("targets must contain between 2 and 16 targets");
   }
   const parsed = targets.map((target, index) => buildTargetInput(target, index));
   const ordered = topologicalTargetOrder(parsed);
@@ -85,6 +98,13 @@ export function buildGraphBundle({
     throw new TypeError("the graph requires exactly one token target and one hook target");
   }
   const normalizedPool = normalizePool(pool, tokenTargets[0].targetId, hookTargets[0].targetId);
+  if (enforceV4PermissionDependencies) {
+    validateHookPermissionDependencies(
+      hookTargets[0].declaredHookPermissions,
+      normalizedPool.fee,
+      hookTargets[0].targetId,
+    );
+  }
   const { predictions, resolvedTargets, runtimeCodes } = predictGraph({
     ordered,
     sourceBundleSha256,
@@ -102,7 +122,12 @@ export function buildGraphBundle({
   return { graphBundle, graphBundleHash, predictions, runtimeCodes };
 }
 
-export function normalizeAndPredictSubmittedGraph(graphInput, launchWallet, nonce) {
+export function normalizeAndPredictSubmittedGraph(
+  graphInput,
+  launchWallet,
+  nonce,
+  { enforceV4PermissionDependencies = false } = {},
+) {
   assertObjectKeys(graphInput, ["schemaVersion", "sourceBundleSha256", "targets", "pool"], "graphBundle");
   if (graphInput.schemaVersion !== GRAPH_BUNDLE_SCHEMA) {
     throw new TypeError(`graphBundle.schemaVersion must be ${GRAPH_BUNDLE_SCHEMA}`);
@@ -111,9 +136,9 @@ export function normalizeAndPredictSubmittedGraph(graphInput, launchWallet, nonc
     || !/^sha256:[0-9a-f]{64}$/.test(graphInput.sourceBundleSha256)) {
     throw new TypeError("graphBundle.sourceBundleSha256 is invalid");
   }
-  if (!Array.isArray(graphInput.targets) || graphInput.targets.length === 0
+  if (!Array.isArray(graphInput.targets) || graphInput.targets.length < 2
     || graphInput.targets.length > MAX_GRAPH_TARGETS) {
-    throw new TypeError("graphBundle targets must contain between 1 and 16 entries");
+    throw new TypeError("graphBundle targets must contain between 2 and 16 entries");
   }
   const parsed = graphInput.targets.map((target, index) => normalizeSubmittedTarget(target, index));
   const ordered = topologicalTargetOrder(parsed);
@@ -128,11 +153,23 @@ export function normalizeAndPredictSubmittedGraph(graphInput, launchWallet, nonc
   if (tokenTargets.length !== 1 || hookTargets.length !== 1) {
     throw new TypeError("graph requires exactly one token and one hook target");
   }
+  const normalizedPool = normalizePool(
+    graphInput.pool,
+    tokenTargets[0].targetId,
+    hookTargets[0].targetId,
+  );
+  if (enforceV4PermissionDependencies) {
+    validateHookPermissionDependencies(
+      hookTargets[0].declaredHookPermissions,
+      normalizedPool.fee,
+      hookTargets[0].targetId,
+    );
+  }
   const normalized = {
     schemaVersion: GRAPH_BUNDLE_SCHEMA,
     sourceBundleSha256: graphInput.sourceBundleSha256,
     targets: ordered.map(({ saltSelection, ...target }) => target),
-    pool: normalizePool(graphInput.pool, tokenTargets[0].targetId, hookTargets[0].targetId),
+    pool: normalizedPool,
   };
   const graphBundleHash = sha256Digest(Buffer.from(canonicalizeJson(normalized), "utf8"));
   const { predictions } = predictGraph({
@@ -477,11 +514,7 @@ function predictGraph({
   nonce,
   noDelegationTargets = new Set(),
 }) {
-  const sourceHash = `0x${sourceBundleSha256.slice("sha256:".length)}`;
-  const routeNamespace = keccak256(encodeAbiParameters(
-    parseAbiParameters("bytes32,bytes32,address,address,address"),
-    [ROUTE_NAMESPACE_TYPEHASH, sourceHash, launchWallet, ROUTER, GRAPH_FACTORY],
-  ));
+  const routeNamespace = deriveRouteNamespace(sourceBundleSha256, launchWallet);
   const identities = new Map();
   const predictions = [];
   const resolvedTargets = [];
@@ -692,6 +725,28 @@ function normalizeHookPermissions(value, targetId) {
     throw new TypeError(`hook target ${targetId} permissions contain an unknown or duplicate value`);
   }
   return HOOK_PERMISSIONS.filter((permission) => values.has(permission));
+}
+
+function validateHookPermissionDependencies(permissions, poolFee, targetId) {
+  const values = new Set(permissions);
+  const dependencies = [
+    ["beforeSwapReturnDelta", "beforeSwap"],
+    ["afterSwapReturnDelta", "afterSwap"],
+    ["afterAddLiquidityReturnDelta", "afterAddLiquidity"],
+    ["afterRemoveLiquidityReturnDelta", "afterRemoveLiquidity"],
+  ];
+  for (const [returnDelta, action] of dependencies) {
+    if (values.has(returnDelta) && !values.has(action)) {
+      throw new TypeError(
+        `hook target ${targetId} permission ${returnDelta} requires ${action}`,
+      );
+    }
+  }
+  if (values.size === 0 && poolFee !== 0x800000) {
+    throw new TypeError(
+      `hook target ${targetId} may declare no callback flags only for a dynamic-fee pool`,
+    );
+  }
 }
 
 function normalizeNonHookPermissions(value, targetId) {

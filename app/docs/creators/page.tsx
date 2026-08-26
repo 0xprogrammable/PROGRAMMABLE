@@ -32,7 +32,7 @@ export default function CreatorsDocsPage() {
       <section id="paths">
         <h2>Choose a creator path</h2>
         <p>
-          Public V2 Custom launch creation and lifecycle reads are live on
+          Public V3 general-hook creation and lifecycle reads are live on
           Ethereum Mainnet. Wallet review and signing remain separate.
           Reusable-template intake is closed.
         </p>
@@ -62,7 +62,7 @@ export default function CreatorsDocsPage() {
         <p>
           Build and test the project, then create a deterministic source and
           graph bundle with project-specific tooling. Package and validate it
-          locally, then submit and track the byte-identical public V2 request.
+          locally, then submit and track the byte-identical public V3 request.
         </p>
         <p>
           A prepared result contains the artifact but no wallet transaction.

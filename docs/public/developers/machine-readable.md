@@ -1,12 +1,12 @@
 ---
-description: Developer API reference and public wallet-owned V2 Custom launch resources
+description: Developer API reference and public wallet-owned V3 Custom launch resources
 ---
 
 # API reference
 
-The Developer API version 2 at `https://developers.programmable.family` is read only, requires no API key and publishes stable discovery, manifest, launch and compatibility responses. At `https://api.programmable.market`, wallet-bound V2 creation and lifecycle reads are public on Ethereum Mainnet. V1 history remains readable while V1 POST remains read only. Start with the [Custom Launch API guide](custom-launch.md), then use the [public V2 OpenAPI contract](https://programmable.market/openapi/custom-launch-v2.json) for the normative request, lifecycle and wallet handoff contract. The [V1 OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json) remains available for compatibility. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is executable by agents and scripts.
+The Developer API version 2 at `https://developers.programmable.family` is read only, requires no API key and publishes stable discovery, manifest, launch and compatibility responses. At `https://api.programmable.market`, wallet-bound V3 general-hook creation and lifecycle reads are public on Ethereum Mainnet. V2 and V1 history remain readable while V1 POST remains read only. Start with the [Custom Launch API guide](custom-launch.md), then use the [public V3 OpenAPI contract](https://programmable.market/openapi/custom-launch-v3.json) for the normative production request, lifecycle and wallet handoff contract. The [V2 OpenAPI contract](https://programmable.market/openapi/custom-launch-v2.json) and [V1 OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json) remain available for compatibility. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is executable by agents and scripts.
 
-The public-read OpenAPI below describes the Developer API. The standalone V2 Custom Launch API contract defines authenticated public creation, reads and separate wallet handoff. The V1 contract retains its authenticated reads and explicit `409 CUSTOM_LAUNCH_V1_READ_ONLY` write fence.
+The public-read OpenAPI below describes the Developer API. The standalone V3 Custom Launch API contract defines authenticated public creation, reads and separate wallet handoff for project-owned tokens, hooks and exact multi-contract graphs. The V2 contract remains a compatibility surface. The V1 contract retains its authenticated reads and explicit `409 CUSTOM_LAUNCH_V1_READ_ONLY` write fence.
 
 ## Service status
 

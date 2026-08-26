@@ -18,6 +18,8 @@ import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
   "@/lib/custom-launch/agent-setup-v1";
 import type { CustomLaunchWalletActionV1 } from
   "@/lib/custom-launch/wallet-handoff-v1";
+import type { CustomLaunchFundingAuthorizationV3 } from
+  "@/lib/custom-launch/wallet-handoff-v3";
 
 export type ApiKeySummary = Readonly<{
   id: string;
@@ -48,6 +50,9 @@ type DeveloperApiKeysViewProps = Readonly<{
   openWallet: () => void;
   sendCustomLaunchWalletAction: (
     input: CustomLaunchWalletActionV1,
+  ) => Promise<`0x${string}`>;
+  signCustomLaunchFundingAuthorization: (
+    input: CustomLaunchFundingAuthorizationV3,
   ) => Promise<`0x${string}`>;
 }>;
 
@@ -426,6 +431,7 @@ export function DeveloperApiKeys() {
     getIdentityToken,
     openWallet,
     sendCustomLaunchWalletAction,
+    signCustomLaunchFundingAuthorization,
     wallet,
   } = useWallet();
   const account = wallet?.account ?? null;
@@ -441,6 +447,9 @@ export function DeveloperApiKeys() {
       getIdentityToken={getIdentityToken}
       openWallet={openWallet}
       sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
+      signCustomLaunchFundingAuthorization={
+        signCustomLaunchFundingAuthorization
+      }
     />
   );
 }
@@ -453,6 +462,7 @@ function DeveloperApiKeysView({
   getIdentityToken,
   openWallet,
   sendCustomLaunchWalletAction,
+  signCustomLaunchFundingAuthorization,
 }: DeveloperApiKeysViewProps) {
   const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
   const [listState, setListState] = useState<ListState>(() =>
@@ -1215,6 +1225,9 @@ function DeveloperApiKeysView({
               getAccessToken={getAccessToken}
               getIdentityToken={getIdentityToken}
               sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
+              signCustomLaunchFundingAuthorization={
+                signCustomLaunchFundingAuthorization
+              }
             />
           )}
         </>

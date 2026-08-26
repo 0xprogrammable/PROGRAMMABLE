@@ -41,8 +41,8 @@ contract workspace, the public read model and the evidence that binds what the p
 
 Classic is the direct launch model for a fixed supply token, a permanently locked ETH pool and configurable creator
 rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or
-execution graph. Public Custom creation is currently held: V1 reads remain live, V1 POST is read-only and V2 awaits
-canary and explicit public activation.
+execution graph. Public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and
+V1 history remain readable, and V1 POST is read-only.
 Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
 capabilities, contracts and release evidence live in the public
 [`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets) repository.
@@ -137,9 +137,11 @@ provider availability or onchain lifecycle completion.
 | Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
 | Wallet-owned V1 launch reads | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
 | Custom Launch API readiness  | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                  |
-| Custom Launch CLI 1.0.1      | [versioned GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
+| Custom Launch CLI 3.0.0      | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz) |
+| Custom Launch CLI 1.0.1      | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Custom Launch V1 OpenAPI     | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
-| Custom Launch V2 RC OpenAPI  | [held/private-canary contract](https://programmable.market/openapi/custom-launch-v2.json)                  |
+| Custom Launch V2 OpenAPI     | [V2 request and read compatibility](https://programmable.market/openapi/custom-launch-v2.json)             |
+| Custom Launch V3 OpenAPI     | [live general-hook creation and lifecycle contract](https://programmable.market/openapi/custom-launch-v3.json) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
@@ -149,9 +151,10 @@ token names or third-party metadata. For Prediction Markets, use the canonical r
 supported market types, economics, resolution rules, contract addresses and release evidence.
 
 V1 list and single-resource launch reads remain live for existing wallet-owned requests. V1 POST is read-only and
-returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. The fee-enforced V2 release candidate remains held until canary
-and explicit public activation; unavailable V2 requests return `503 CUSTOM_LAUNCH_V2_UNAVAILABLE` with `Retry-After`.
-There is currently no public Custom launch-creation route. Legacy Registry and GitHub submission intake is closed.
+returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Public V3 creation, list and single-resource reads are the
+current production contract; V2 remains available for existing resources. Runtime trust roots, exact-source
+reconstruction, fee conformance and simulation still fail closed per request. Legacy Registry and GitHub submission
+intake is closed.
 
 ## Related repositories
 

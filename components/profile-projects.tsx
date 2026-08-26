@@ -36,6 +36,8 @@ const CreatorArticleEditor = dynamic(
 );
 
 export const creatorProjectPageSize = 5;
+const creatorProjectRefreshTimeoutMs = 12_000;
+const creatorProjectRefreshTimeoutReason = "creator-project-refresh-timeout";
 const emptyCreatorProjectsV1: readonly CreatorProjectSummaryV1[] =
   Object.freeze([]);
 
@@ -115,6 +117,7 @@ export function ProfileProjects({
   const editorTriggerRef = useRef<HTMLButtonElement | null>(null);
   const openRequestRef = useRef(0);
   const projectRequestRef = useRef(0);
+  const projectRefreshControllerRef = useRef<AbortController | null>(null);
 
   const scopedProjectOwnerState = scopeCreatorProjectOwnerStateV1(
     projectOwnerState,
@@ -163,14 +166,23 @@ export function ProfileProjects({
         projects: nextProjects,
       });
       editorRequestsRef.current.clear();
-    } catch {
-      if (
-        signal?.aborted ||
-        projectRequestRef.current !== requestId
-      ) return;
+    } catch (error) {
+      const refreshTimedOut =
+        signal?.aborted
+        && signal.reason === creatorProjectRefreshTimeoutReason;
+      if (projectRequestRef.current !== requestId) return;
+      if (signal?.aborted && !refreshTimedOut) return;
       setProjectOwnerState((current) => current?.ownerAccount === requestedAccount
         ? { ...current, phase: "error" }
         : current);
+      setProjectError({
+        ownerAccount: requestedAccount,
+        message: refreshTimedOut
+          ? "Launch refresh took too long. Select Refresh to try again."
+          : error instanceof Error
+            ? error.message
+            : "Launch details could not be refreshed.",
+      });
     }
   }, [
     getAuthHeaders,
@@ -188,6 +200,29 @@ export function ProfileProjects({
       controller.abort();
     };
   }, [loadProjects, walletAccount]);
+
+  useEffect(() => () => {
+    projectRefreshControllerRef.current?.abort();
+    projectRefreshControllerRef.current = null;
+  }, []);
+
+  const refreshProjects = useCallback(() => {
+    if (phase === "loading") return;
+    const controller = new AbortController();
+    projectRefreshControllerRef.current?.abort();
+    projectRefreshControllerRef.current = controller;
+    const timeout = window.setTimeout(
+      () => controller.abort(creatorProjectRefreshTimeoutReason),
+      creatorProjectRefreshTimeoutMs,
+    );
+    onRefresh?.();
+    void loadProjects(controller.signal).finally(() => {
+      window.clearTimeout(timeout);
+      if (projectRefreshControllerRef.current === controller) {
+        projectRefreshControllerRef.current = null;
+      }
+    });
+  }, [loadProjects, onRefresh, phase]);
 
   const visibleProjects = useMemo(
     () => mergeCreatorWalletProjectsV1(walletProjects, projects),
@@ -294,10 +329,7 @@ export function ProfileProjects({
               ? "Refreshing launches"
               : "Refresh launches"}
             data-loading={phase === "loading"}
-            onClick={() => {
-              onRefresh?.();
-              void loadProjects();
-            }}
+            onClick={refreshProjects}
             disabled={phase === "loading"}
           >
             <span className={styles.refreshIcon} aria-hidden="true">
@@ -339,10 +371,10 @@ export function ProfileProjects({
         {phase === "loading" ? "Refreshing launches" : ""}
       </span>
 
-      {scopedProjectError ? (
+      {scopedProjectError && visibleProjects.length > 0 ? (
         <p className={styles.error} role="alert">{scopedProjectError}</p>
       ) : null}
-      {phase === "error" && visibleProjects.length > 0 ? (
+      {phase === "error" && visibleProjects.length > 0 && !scopedProjectError ? (
         <p className={styles.error} role="alert">
           Launch details could not be refreshed. The current list is still shown.
         </p>
@@ -352,7 +384,8 @@ export function ProfileProjects({
         <ProfileProjectsSkeleton />
       ) : phase === "error" && visibleProjects.length === 0 ? (
         <p className={styles.error} role="alert">
-          Launches could not be refreshed. Select Refresh to try again.
+          {scopedProjectError
+            || "Launches could not be refreshed. Select Refresh to try again."}
         </p>
       ) : visibleProjects.length === 0 ? (
         <p className={styles.empty}>Your finalized launches will appear here.</p>

@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
@@ -13,7 +15,7 @@ import { programmableWellKnownDocumentV1 } from
 const root = process.cwd();
 
 describe("public Custom Launch CLI surface", () => {
-  it("advertises public V2 creation and retained V1 reads", () => {
+  it("advertises public V3 general-hook creation and retained earlier reads", () => {
     const document = programmableWellKnownDocumentV1(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
     );
@@ -23,62 +25,101 @@ describe("public Custom Launch CLI surface", () => {
     expect(document.customLaunchApi).toMatchObject({
       status: "live",
       readStatus: "live",
+      apiVersion: "3",
       readyzUrl: "https://api.programmable.market/readyz",
-      openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
+      openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       legacyIntake: { registry: "closed", github: "closed" },
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "1.0.1",
+        releaseVersion: "3.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+      },
+      compatibility: {
+        v1: {
+          openApiUrl: "https://programmable.market/openapi/custom-launch-v1.json",
+          cliReleaseVersion: "1.0.1",
+        },
+        v2: {
+          openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+        },
       },
       publicRelease: {
         status: "live",
-        apiVersion: "2",
+        apiVersion: "3",
         guideUrl: "https://programmable.market/docs/developers/custom-launch",
-        openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         authentication: "wallet-bound-api-key",
         walletBoundary: "separate-wallet-signature",
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "2.0.1",
+          releaseVersion: "3.0.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
         },
+      },
+      generalHookProfile: {
+        status: "live",
+        apiVersion: "3",
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileRevision: 2,
+        productionLaunchAuthorized: true,
+        createPath: "/v3/custom-launches",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
+        cliReleaseVersion: "3.0.0",
+      },
+      integrationPreview: {
+        status: "live",
+        apiVersion: "3",
+        publicAuthorization: true,
+        createPath: "/v3/custom-launches",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileRevision: 2,
+        requestSchemaVersion: "programmable.custom-launch-create-request.v3",
+        minimumTargets: 3,
+        maximumTargets: 16,
+        projectOwnedToken: true,
+        projectOwnedHook: true,
+        hookPermissionMaskRange: { minimum: 0, maximum: 16_383 },
+        exactGraphReceiptRequired: true,
+        fundingAuthorization: {
+          modes: [
+            "none",
+            "wallet-transaction-value",
+            "eip-3009-receive-with-authorization",
+          ],
+          createRequestSignatureIncluded: false,
+          fundingIntentStage: "pre-signature",
+        },
+        activationBlockers: [],
+        errorCode: null,
       },
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "2.0.1",
-        releaseTag: "programmable-launch-v2.0.1",
+        releaseVersion: "3.0.0",
+        releaseTag: "programmable-launch-v3.0.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
         openApiUrl:
-          "https://programmable.market/openapi/custom-launch-v2.json",
+          "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
-          profileId:
-            "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-          profileRevision: 3,
-          launchProfileHash:
-            "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+          profileId: "programmable.direct-native-hook-graph.v1",
+          profileRevision: 2,
           productionLaunchAuthorized: true,
           chainId: "1",
           network: "Ethereum Mainnet",
           chargeTrigger: "successful-swap",
-          basis: "gross-unspecified-pool-currency-amount",
-          assetMode: "unspecified-pool-currency-per-swap",
+          basis: "per-launch-declared-conformance-basis",
           ratePpm: 1_000,
           denominatorPpm: 1_000_000,
           ratePercent: "0.10%",
           rateBps: 10,
           recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          enforcement: {
-            frozenProfile: true,
-            customModuleMayReduce: false,
-            customModuleMayRedirect: false,
-          },
+          enforcement: "platform-signed-exact-graph-conformance-receipt",
           lpFee: "separate-from-platform-fee",
           genericFeeClaiming: "not-live",
           genericBuybackManagement: "not-live",
@@ -98,11 +139,19 @@ describe("public Custom Launch CLI surface", () => {
           replayHttpStatus: 200,
           retryAfter: "honor-on-429-or-503",
         },
+        v3: {
+          status: "live",
+          publicAuthorization: true,
+          createHttpStatus: 202,
+          replayHttpStatus: 200,
+        },
       },
     });
     expect(document.publicCategories.custom).toMatchObject({
       discoveryStatus: "live",
       publicSubmissionStatus: "closed",
+      publicSubmissionStatusScope: "legacy-registry-intake",
+      publicApiCreateStatus: "live",
       customLaunchApiStatus: "live",
       registryDiscoveryStatus: "legacy-closed",
       legacyRegistrySubmissionStatus: "closed",
@@ -294,6 +343,283 @@ describe("public Custom Launch CLI surface", () => {
     visit(v2);
   });
 
+  it("publishes the live general V3 profile without changing V2 compatibility", () => {
+    const v2 = JSON.parse(readFileSync(
+      join(root, "public/openapi/custom-launch-v2.json"),
+      "utf8",
+    ));
+    const v3 = JSON.parse(readFileSync(
+      join(root, "public/openapi/custom-launch-v3.json"),
+      "utf8",
+    ));
+
+    expect(v3.openapi).toBe("3.1.0");
+    expect(v3["x-programmable-availability"]).toMatchObject({
+      status: "live",
+      publicAuthorized: true,
+      publicCreate: {
+        status: "live",
+        path: "/v3/custom-launches",
+        httpStatus: 202,
+        replayHttpStatus: 200,
+      },
+      stableProductionVersion: "3",
+      stableOpenApiUrl:
+        "https://programmable.market/openapi/custom-launch-v3.json",
+      activationBlockers: [],
+    });
+    expect(Object.keys(v3.paths).sort()).toEqual([
+      "/v3/custom-launches",
+      "/v3/custom-launches/{launchId}",
+      "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization",
+    ]);
+    expect(v3.paths["/v3/custom-launches"].post
+      ["x-programmable-public-availability"]).toBe("live");
+    expect(v3.paths["/v3/custom-launches"].post.responses["503"]
+      .headers["Retry-After"].schema.pattern).toBe("^[1-9][0-9]*$");
+    expect(Object.keys(v3.paths["/v3/custom-launches"].post.responses))
+      .toEqual([
+        "200", "202", "400", "401", "403", "409", "413", "415", "422", "429", "500", "503",
+      ]);
+    expect(v3.paths["/v3/custom-launches"].post.responses["202"])
+      .toBeDefined();
+    expect(v3.paths["/v3/custom-launches"].get.responses["200"])
+      .toBeDefined();
+    expect(v3.paths["/v3/custom-launches/{launchId}"].get.responses["200"])
+      .toBeDefined();
+    const fundingSubmission = v3.paths[
+      "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization"
+    ].post;
+    expect(fundingSubmission.security).toEqual([
+      { CustomLaunchWebsiteToken: [] },
+    ]);
+    expect(fundingSubmission.parameters.map((parameter: { name: string }) =>
+      parameter.name)).toEqual([
+      "launchId",
+      "Idempotency-Key",
+      "X-Programmable-Privy-User-Id",
+      "X-Programmable-Wallet-Address",
+    ]);
+    expect(fundingSubmission.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/FundingAuthorizationSubmissionV1");
+    expect(Object.keys(fundingSubmission.responses).sort()).toEqual([
+      "200", "202", "400", "401", "403", "404", "409", "413", "415", "422", "429", "500", "503",
+    ]);
+    expect(v3["x-programmable-funding-boundary"]
+      .excludedFromFundingIntentHash).toEqual([
+      "signature",
+      "initializerCalldataHash",
+      "graphCommitment",
+      "permitDigest",
+    ]);
+
+    const request = v3.components.schemas.CustomLaunchCreateRequestV3;
+    expect(request.additionalProperties).toBe(false);
+    expect(request.required).toEqual([
+      "schemaVersion",
+      "launchWallet",
+      "chainId",
+      "nonce",
+      "permitWindow",
+      "sourceDescriptor",
+      "sourceBundleManifest",
+      "graphBundle",
+      "launchProfile",
+      "launchProfileSelection",
+      "launchProfileHash",
+      "launchIntentHash",
+      "agentAttestation",
+      "verificationBundle",
+    ]);
+    expect(request.properties.schemaVersion.const)
+      .toBe("programmable.custom-launch-create-request.v3");
+    expect(request.allOf[0].then.required)
+      .toEqual(["fundingAuthorization", "fundingIntentHash"]);
+    expect(request.properties.permitWindow.$ref)
+      .toBe("#/components/schemas/DirectNativePermitWindowV1");
+    expect(Object.keys(request.properties)).not.toContain("signature");
+
+    const graph = v3.components.schemas.CustomGraphBundleV3;
+    expect(graph.allOf[1].properties.targets).toMatchObject({
+      minItems: 3,
+      maxItems: 16,
+    });
+    expect(v3["x-programmable-profile"]).toMatchObject({
+      profileId: "programmable.direct-native-hook-graph.v1",
+      profileRevision: 2,
+      productionLaunchAuthorized: true,
+      minimumHookPermissionMask: 0,
+      maximumHookPermissionMask: 16383,
+      projectOwnedToken: true,
+      projectOwnedHook: true,
+      exactGraphReceiptRequired: true,
+    });
+    expect(v3.components.schemas.DirectNativeHookPermissionPolicyV1.properties)
+      .toMatchObject({
+        minimumMask: { const: 0 },
+        maximumMask: { const: 16383 },
+        requireHookMinerAddressMaskMatch: { const: true },
+      });
+
+    const profile = v3.components.schemas.DirectNativeHookGraphProfileV1;
+    expect(profile.required).toEqual(expect.arrayContaining([
+      "permitAuthority",
+      "permitAuthorityRuntimeCodeHash",
+      "platformFeePolicy",
+      "platformFeeProofPolicy",
+    ]));
+    expect(profile.properties.permitAuthority.const)
+      .toBe("0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b");
+    expect(profile.properties).toMatchObject({
+      profileVersion: { const: "2.0.0" },
+      productionLaunchAuthorized: { const: true },
+      routerRuntimeCodeHash: {
+        const:
+          "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+      },
+      permitAuthorityRuntimeCodeHash: {
+        const:
+          "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+      },
+      graphFactoryRuntimeCodeHash: {
+        const:
+          "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+      },
+      poolManagerRuntimeCodeHash: {
+        const:
+          "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      },
+      fundingTokenRuntimeCodeHash: {
+        const:
+          "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+      },
+    });
+    expect(profile.properties.platformFeePolicy.$ref)
+      .toBe("#/components/schemas/PlatformFeePolicyV1");
+    expect(v3.components.schemas.PlatformFeePolicyV1.properties)
+      .toMatchObject({
+        accountingMode: {
+          enum: ["additive-platform-share", "inclusive-selected-total"],
+        },
+        rateDenominator: { const: "1000000" },
+        programmableFeeHundredthsOfBip: { const: "1000" },
+      });
+    expect(v3.components.schemas.SelectedFeeHundredthsOfBipV1.pattern)
+      .toBe("^(?:0|[1-9][0-9]{0,5})$");
+    expect(v3.components.schemas.DirectNativeTargetRolesV1.properties
+      .initializerTargetId.description).toContain("componentKind is other");
+
+    const binding = v3.components.schemas.DirectNativeProfileSelectionBindingV1;
+    expect(binding.required).toEqual(expect.arrayContaining([
+      "expectedPoolId",
+      "platformFeeBinding",
+    ]));
+    const patch = v3.components.schemas.FundingSignaturePatchDescriptorV1;
+    expect(patch.required).toEqual([
+      "schemaVersion",
+      "targetId",
+      "unsignedInitializerCalldataSha256",
+      "initializerCalldataLengthBytes",
+      "signatureEncoding",
+      "rOffsetBytes",
+      "sOffsetBytes",
+      "vOffsetBytes",
+    ]);
+    expect(patch.properties.signatureEncoding.const)
+      .toBe("eip3009-r-s-v-abi-words");
+    expect(v3.components.schemas.DirectNativePoolKeyV1.properties.fee.oneOf)
+      .toEqual([
+        { type: "integer", minimum: 0, maximum: 999999 },
+        { const: 8388608 },
+      ]);
+    expect(v3.components.schemas.DirectNativePoolKeyV1.properties.tickSpacing)
+      .toMatchObject({ type: "integer", minimum: 1, maximum: 32767 });
+    const funding = v3.components.schemas.Eip3009FundingAuthorizationDescriptorV1;
+    expect(funding.required).toEqual([
+      "schemaVersion",
+      "method",
+      "token",
+      "from",
+      "to",
+      "value",
+      "validAfter",
+      "validBefore",
+      "nonce",
+    ]);
+    expect(Object.keys(funding.properties)).not.toEqual(
+      expect.arrayContaining(["signature", "v", "r", "s"]),
+    );
+    expect(v3.components.schemas.FundingAuthorizationSubmissionV1
+      .properties.signature.pattern).toBe("^0x[0-9a-f]{130}$");
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties.status.enum)
+      .toEqual(expect.arrayContaining([
+        "pending_review",
+        "action_required",
+        "awaiting_funding_authorization",
+        "funding_authorization_verified",
+        "authorized",
+      ]));
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[0]
+      .properties.stage.const).toBe("platform-review-pending");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[1]
+      .properties.stage.const).toBe("funding-signature-required");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[3]
+      .properties.stage.const).toBe("router-transaction-required");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
+      .properties.stage.const).toBe("platform-review-action-required");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
+      .properties.actionRequired.properties.kind.const).toBe("security-review");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
+      .required).toContain("staticBaseline");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf.every(
+      (variant: { required: string[] }) =>
+        variant.required.includes("fundingBoundary"),
+    )).toBe(true);
+    expect(v3.components.schemas.FundingBoundaryV3.properties).toMatchObject({
+      approvalTransactionRequired: { const: false },
+      permit2Used: { const: false },
+      fundingSignatureProducedByService: { const: false },
+      walletTransactionBroadcastByService: { const: false },
+    });
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[3]
+      .properties.actionRequired.required).toEqual(expect.arrayContaining([
+      "permitDigest",
+      "initializerCalldataHash",
+    ]));
+
+    const serialized = JSON.stringify(v3);
+    expect(serialized).not.toContain('"additive":true');
+
+    const documents = new Map<string, unknown>([
+      ["", v3],
+      ["./custom-launch-v2.json", v2],
+    ]);
+    const resolvePointer = (document: unknown, pointer: string): unknown =>
+      pointer.slice(2).split("/").reduce<unknown>((current, segment) => {
+        expect(current).toBeTypeOf("object");
+        expect(current).not.toBeNull();
+        const key = segment.replaceAll("~1", "/").replaceAll("~0", "~");
+        return (current as Record<string, unknown>)[key];
+      }, document);
+    const visit = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (value === null || typeof value !== "object") return;
+      const record = value as Record<string, unknown>;
+      if (typeof record.$ref === "string") {
+        const [documentPath = "", fragment = ""] = record.$ref.split("#");
+        const document = documents.get(documentPath);
+        expect(document, `unknown OpenAPI document ${documentPath}`).toBeDefined();
+        expect(fragment.startsWith("/")).toBe(true);
+        expect(resolvePointer(document, `#${fragment}`)).toBeDefined();
+      }
+      Object.values(record).forEach(visit);
+    };
+    visit(v3);
+  });
+
   it("ships the executable no-broadcast example in the public package", () => {
     const packageJson = JSON.parse(readFileSync(
       join(root, "packages/launch/package.json"),
@@ -312,6 +638,84 @@ describe("public Custom Launch CLI surface", () => {
     expect(guide).toContain("`submit: false`");
     expect(guide).toContain('`stopAt: "pre-submit"`');
   });
+
+  it("builds, packs, and validates the direct-native V3 no-broadcast example", () => {
+    const exampleRoot = join(
+      root,
+      "packages/launch/examples/direct-native-v3-no-broadcast/project",
+    );
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "programmable-direct-native-v3-"));
+    const projectRoot = join(temporaryRoot, "project");
+    const cli = join(root, "packages/launch/bin/programmable-launch.mjs");
+    const environment = {
+      ...process.env,
+      PROGRAMMABLE_LAUNCH_WALLET: "0x1111111111111111111111111111111111111111",
+      PROGRAMMABLE_SOURCE_REVISION: "1111111111111111111111111111111111111111",
+      PROGRAMMABLE_LAUNCH_NONCE: `0x${"22".repeat(32)}`,
+    };
+
+    try {
+      cpSync(exampleRoot, projectRoot, { recursive: true });
+      execFileSync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], {
+        cwd: projectRoot,
+        env: environment,
+        stdio: "pipe",
+      });
+      execFileSync("npm", ["run", "build"], {
+        cwd: projectRoot,
+        env: environment,
+        stdio: "pipe",
+      });
+      const packOutput = JSON.parse(execFileSync(process.execPath, [
+        cli,
+        "pack",
+        "--config",
+        join(projectRoot, "programmable-launch.config.json"),
+        "--output",
+        join(projectRoot, "launch.json"),
+      ], {
+        cwd: projectRoot,
+        env: environment,
+        encoding: "utf8",
+      }));
+      const validateOutput = JSON.parse(execFileSync(process.execPath, [
+        cli,
+        "validate",
+        join(projectRoot, "launch.json"),
+        "--config",
+        join(projectRoot, "programmable-launch.config.json"),
+      ], {
+        cwd: projectRoot,
+        env: environment,
+        encoding: "utf8",
+      }));
+      const request = JSON.parse(readFileSync(join(projectRoot, "launch.json"), "utf8"));
+
+      expect(packOutput.requestSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(packOutput.fundingIntentHash).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(validateOutput).toMatchObject({
+        schemaVersion: "programmable.custom-launch-create-request.v3",
+        productionLaunchAuthorized: true,
+        reproducedFromConfig: true,
+        requestSha256: packOutput.requestSha256,
+      });
+      expect(request).toMatchObject({
+        schemaVersion: "programmable.custom-launch-create-request.v3",
+        launchProfile: {
+          profileVersion: "2.0.0",
+          profileRevision: 2,
+          productionLaunchAuthorized: true,
+        },
+        launchProfileSelection: {
+          profileRevision: 2,
+          fundingMode: "eip-3009-receive-with-authorization",
+        },
+      });
+      expect(JSON.stringify(request)).not.toContain('"signature"');
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  }, 180_000);
 
   it("keeps V1 reads live while documenting the exact non-retryable write fence", () => {
     const openApi = JSON.parse(readFileSync(
@@ -350,6 +754,16 @@ describe("public Custom Launch CLI surface", () => {
         replayHttpStatus: 200,
         retryAfter: "honor-on-429-or-503",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v2.json",
+      },
+      v3: {
+        status: "live",
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileRevision: 2,
+        productionLaunchAuthorized: true,
+        createHttpStatus: 202,
+        replayHttpStatus: 200,
+        retryAfter: "honor-on-429-or-503",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       },
       legacyIntake: { registry: "closed", github: "closed" },
     });

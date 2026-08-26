@@ -18,7 +18,7 @@ Prediction Markets is available from [Create](https://programmable.market/launch
 
 Build and test the exact hook project. Use the versioned public `programmable-launch` CLI to derive the deterministic source manifest, graph bundle, address locators, evidence digests and exact-source verification metadata described by the [Custom Launch API schema](../developers/custom-launch.md).
 
-Pack and validate locally, then submit the byte identical V2 request with a [wallet-bound API key](https://programmable.market/developers/api-keys). Keep the key in an encrypted environment or secret store, never in chat or prompts. At `authorized`, stop for separate controller wallet review and signing.
+Run `pack`, `validate`, `submit` and `status` for the byte identical V3 request with a [wallet-bound API key](https://programmable.market/developers/api-keys). Keep the key in an encrypted environment or secret store, never in chat or prompts. Stop for every explicit wallet handoff; at `authorized`, the controller reviews and signs the exact Router transaction separately.
 
 ## Reusable work
 

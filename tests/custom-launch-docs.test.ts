@@ -17,7 +17,7 @@ const summary = read("docs/public/SUMMARY.md");
 const createGuide = read("components/create-guide.tsx");
 const rawGuide = read("public/developers/custom-launch-api-v1.md");
 const cliGuide = read("packages/launch/README.md");
-const v2OpenApi = JSON.parse(read("public/openapi/custom-launch-v2.json"));
+const v3OpenApi = JSON.parse(read("public/openapi/custom-launch-v3.json"));
 const machineReadableGuide = read(
   "app/docs/developers/machine-readable/page.tsx",
 );
@@ -52,15 +52,23 @@ describe("Custom Launch API documentation", () => {
     ).not.toContain("publish reusable hook logic");
   });
 
-  it("keeps prepared artifacts separate from authorized wallet transactions", () => {
+  it("keeps V3 preparation and every wallet handoff explicit", () => {
     for (const source of [gitBookGuide, websiteGuide, developerDocsMarkdown]) {
       expect(source).toContain("prepared");
       expect(source).toContain("authorized");
       expect(source).toMatch(/prepared[\s\S]{0,240}(?:no wallet transaction|walletTransaction[^\n]{0,80}(?:null|both null))/i);
       expect(source).toMatch(/authorized[\s\S]{0,240}(?:walletTransaction|wallet transaction)/i);
     }
-    expect(createGuide).toContain("Stop at authorized");
+    expect(createGuide).toContain("pack, validate, submit and status");
+    expect(createGuide).toContain("/openapi/custom-launch-v3.json");
+    expect(createGuide).toContain("awaiting_funding_authorization");
+    expect(createGuide).toContain("EIP-3009 funding signature");
+    expect(createGuide).toContain("fresh, separate review");
+    expect(createGuide).not.toContain("integration-pending");
     expect(createGuide).toContain("Never sign or broadcast automatically");
+    for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
+      expect(source).toMatch(/action_required[\s\S]{0,300}(?:platform review|not a wallet)/i);
+    }
   });
 
   it("documents the real packager and schema boundary without invented checks", () => {
@@ -71,7 +79,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("programmable-launch");
       expect(source).toMatch(/do not (?:copy test-only hashes|enter\s+derived hashes by hand)/i);
     }
-    expect(createGuide).toContain("/openapi/custom-launch-v2.json");
+    expect(createGuide).toContain("/openapi/custom-launch-v3.json");
     expect(createGuide).not.toMatch(/Hookbuilder-Skill|Hook Builder packages/);
   });
 
@@ -98,18 +106,18 @@ describe("Custom Launch API documentation", () => {
 
   it("publishes the exact-source and no-broadcast cold-agent path", () => {
     for (const source of [gitBookGuide, rawGuide, developerDocsMarkdown]) {
-      expect(source).toContain("programmable-launch-2.0.1.tgz");
+      expect(source).toContain("programmable-launch-3.0.0.tgz");
       expect(source).toContain("verificationBundle");
       expect(source).toContain("exact_match");
       expect(source).toContain("PROGRAMMABLE_API_KEY");
       expect(source).toMatch(/(?:without (?:signing|a wallet signature).{0,40}(?:or|and) broadcast(?:ing)?|never[^\n]{0,80}sign[^\n]{0,40}broadcast)/i);
     }
-    expect(gitBookGuide).toContain("examples/fee-enforced-v2-no-broadcast/README.md");
+    expect(gitBookGuide).toContain("examples/direct-native-v3-no-broadcast/README.md");
     expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
     expect(gitBookGuide).toContain("programmable-launch submit ./launch.json");
   });
 
-  it("publishes public V2 while retaining the exact V1 write fence", () => {
+  it("publishes public V3 while retaining the exact V1 write fence", () => {
     for (const source of [
       gitBookGuide,
       websiteGuide,
@@ -118,13 +126,13 @@ describe("Custom Launch API documentation", () => {
     ]) {
       expect(source).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
       expect(source).toMatch(/V1[\s\S]{0,200}(?:read-only|read only|write fence)/i);
-      expect(source).toMatch(/Public V2/i);
+      expect(source).toMatch(/Public V3/i);
     }
-    expect(createGuide).toContain("submit the byte-identical request");
+    expect(createGuide).toMatch(/submit the byte-identical request/i);
     for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
       expect(source).toContain("Retry-After");
-      expect(source).toMatch(/V2[^\n]{0,120}(?:public|live)/i);
-      expect(source).toContain("/openapi/custom-launch-v2.json");
+      expect(source).toMatch(/V3[^\n]{0,120}(?:public|live)/i);
+      expect(source).toContain("/openapi/custom-launch-v3.json");
     }
 
     const combinedPost =
@@ -148,49 +156,67 @@ describe("Custom Launch API documentation", () => {
           createHttpStatus: 202,
           replayHttpStatus: 200,
         },
+        v3: {
+          status: "live",
+          profileId: "programmable.direct-native-hook-graph.v1",
+          profileRevision: 2,
+          productionLaunchAuthorized: true,
+          createHttpStatus: 202,
+          replayHttpStatus: 200,
+        },
         legacyIntake: { registry: "closed", github: "closed" },
       });
   });
 
-  it("discloses the exact public Rev3 fee without conflating LP fees or future operations", () => {
+  it("discloses the exact public V3 fee without conflating LP fees or future operations", () => {
     for (const source of [gitBookGuide, websiteGuide, rawGuide, cliGuide]) {
       expect(source).toContain("Ethereum Mainnet");
       expect(source).toContain("productionLaunchAuthorized: true");
-      expect(source).toContain("gross-unspecified-pool-currency-amount");
       expect(source).toContain("1,000 ppm = 0.10% = 10 bps");
       expect(source).toContain("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
-      expect(source).toContain("cannot reduce or redirect");
+      expect(source).toMatch(/conformance receipt|platform-signed receipt/i);
       expect(source).toContain("LP fee is separate");
       expect(source).toMatch(/Generic fee claiming and\s+buyback/);
-      expect(source).toMatch(/Rev3/i);
+      expect(source).toMatch(/V3/i);
     }
 
-    expect(v2OpenApi["x-programmable-fee-policy"]).toEqual({
-      profileId:
-        "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
-      profileRevision: 3,
-      launchProfileHash:
-        "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
+    expect(v3OpenApi["x-programmable-profile"]).toMatchObject({
+      profileId: "programmable.direct-native-hook-graph.v1",
+      profileRevision: 2,
       productionLaunchAuthorized: true,
-      chainId: "1",
-      network: "Ethereum Mainnet",
-      chargeTrigger: "successful-swap",
-      basis: "gross-unspecified-pool-currency-amount",
-      assetMode: "unspecified-pool-currency-per-swap",
-      ratePpm: 1_000,
-      denominatorPpm: 1_000_000,
-      ratePercent: "0.10%",
-      rateBps: 10,
-      recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-      enforcement: {
-        frozenProfile: true,
-        customModuleMayReduce: false,
-        customModuleMayRedirect: false,
-      },
-      lpFee: "separate-from-platform-fee",
-      genericFeeClaiming: "not-live",
-      genericBuybackManagement: "not-live",
+      projectOwnedToken: true,
+      projectOwnedHook: true,
     });
+    expect(v3OpenApi["x-programmable-fee-accounting"]).toEqual({
+      accountingModes: [
+        "additive-platform-share",
+        "inclusive-selected-total",
+      ],
+      rateDenominator: "1000000",
+      programmableFeeHundredthsOfBip: "1000",
+      invariants: {
+        "additive-platform-share":
+          "effectiveTotal=selected+1000; projectShare=selected",
+        "inclusive-selected-total":
+          "effectiveTotal=max(selected,1000); projectShare=effectiveTotal-1000",
+      },
+      derivedResultsAreRecomputedByServer: true,
+    });
+  });
+
+  it("states the normal LP and zero-classical-LP boundary without inventing liquidity", () => {
+    for (const source of [
+      gitBookGuide,
+      websiteGuide,
+      rawGuide,
+      cliGuide,
+      developerDocsMarkdown,
+    ]) {
+      expect(source).toMatch(/(?:normal )?(?:Uniswap v4 )?(?:pool )?initializ/i);
+      expect(source).toMatch(/volume cannot create (?:(?:that|the) )?initial\s+liquidity\s+from\s+nothing/i);
+      expect(source).toMatch(/zero classical LP/i);
+      expect(source).toMatch(/custom accounting|hold launch inventory|hold inventory/i);
+    }
   });
 
   it("describes request-driven reconciliation consistently", () => {

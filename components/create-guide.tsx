@@ -11,7 +11,7 @@ import { ArrowRight, Check, CircleHelp, Copy, X } from "lucide-react";
 
 import styles from "@/components/create-guide.module.css";
 
-const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Follow https://programmable.market/docs/developers/custom-launch and the public V2 contract at https://programmable.market/openapi/custom-launch-v2.json. Derive the request and evidence digests from the exact artifacts, never expose an API key, and never invent check results. Run local pack and validate, then submit the byte-identical request with $PROGRAMMABLE_API_KEY. Stop at authorized so the connected controller can review and sign the exact transaction separately. Never sign or broadcast automatically.`;
+const BUILD_PROMPT = `Build and test a Programmable Uniswap v4 hook for this behavior: [describe the behavior in plain words]. Follow https://programmable.market/docs/developers/custom-launch and the live public V3 contract at https://programmable.market/openapi/custom-launch-v3.json. Derive every request and evidence digest from exact source and build artifacts, never expose an API key, and never invent check results. Use the public CLI 3.0.0 flow pack, validate, submit and status with $PROGRAMMABLE_API_KEY. Submit the byte-identical request produced by pack. If status is awaiting_funding_authorization, stop so the connected controller can review and sign the exact EIP-3009 funding signature in the website. At authorized, stop again for a fresh, separate review and wallet signature of the exact Router transaction. Never sign or broadcast automatically. Treat V2 and V1 as read compatibility only and never use the closed GitHub intake.`;
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -188,11 +188,14 @@ export function CreateGuide() {
               <div>
                 <h3>Package, validate and submit</h3>
                 <p>
-                  Package the request with project-specific tooling that follows
-                  the public V2 API schema, validate it locally, then submit the
-                  byte-identical request. Stop at <code>authorized</code> for
-                  separate controller-wallet review and signing. An API key
-                  never authorizes, signs or broadcasts.
+                  Use the live V3 contract for current production creation.
+                  Package and validate the exact project locally, then submit
+                  the byte-identical request and track its single resource.
+                  EIP-3009 funding first requires a separate review and
+                  signature for the exact funding authorization. Only
+                  after backend verification and simulation does the wallet
+                  separately review and sign the exact Router transaction. An
+                  API key never authorizes, signs or broadcasts.
                 </p>
                 <div className={styles.links}>
                   <Link href="/developers/api-keys">
@@ -201,6 +204,10 @@ export function CreateGuide() {
                   </Link>
                   <Link href="/docs/developers/custom-launch">
                     Read the Custom Launch API guide
+                    <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />
+                  </Link>
+                  <Link href="/openapi/custom-launch-v3.json">
+                    Inspect the live V3 contract
                     <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />
                   </Link>
                 </div>

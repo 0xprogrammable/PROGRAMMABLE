@@ -72,6 +72,7 @@ function launch(
     status,
     launchProfileHash: null,
     launchIntentHash: null,
+    fundingIntentHash: null,
     createdAt: "2026-08-25T10:00:00.000Z",
     updatedAt,
     output: null,
@@ -155,11 +156,21 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApi,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV2Compatibility,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "Stop at authorized",
+      "pack, then validate, submit, and status",
     );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "awaiting_funding_authorization",
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "review and sign the exact Router transaction",
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("integration-pending");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
   });
 
@@ -241,7 +252,7 @@ describe("developer launch history interface", () => {
       launches: [resource],
       nextCursor: null,
     }, resource.ownerWallet)).toEqual({
-      launches: [projectedResource],
+      launches: [{ ...projectedResource, fundingIntentHash: null }],
       nextCursor: null,
     });
     expect(historySource).toContain(
@@ -283,6 +294,77 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('aria-live="polite"');
     expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
+  });
+
+  it("releases a stalled history refresh with a clear retry state", () => {
+    expect(historySource).toContain("launchHistoryRefreshTimeoutMs = 12_000");
+    expect(historySource).toContain(
+      "controller.abort(launchHistoryRefreshTimeoutReason)",
+    );
+    expect(historySource).toContain(
+      "Launch history refresh took too long. Try again.",
+    );
+    expect(historySource).toContain(
+      "Launch history refresh timed out.",
+    );
+    expect(historySource).toContain("setRefreshing(false)");
+  });
+
+  it("hydrates compact V3 rows and rechecks the reviewed bytes before either wallet action", () => {
+    expect(historySource).toContain(
+      "const reviewLaunch = reviewResourceForLaunch(",
+    );
+    expect(historySource).toContain("Load funding review");
+    expect(historySource).toContain("Load Router review");
+    expect(historySource).toContain("Review and sign USDC authorization");
+    expect(historySource).toContain("Review and sign in wallet");
+    expect(historySource).not.toContain("Send reviewed Router transaction");
+    expect(historySource).toContain(
+      "onClick={() => void loadWalletReview(launch)}",
+    );
+    expect(historySource).toContain("reviewLaunch.output !== null");
+
+    const hydrationStart = historySource.indexOf(
+      "const loadWalletReview = async",
+    );
+    const hydrationEnd = historySource.indexOf(
+      "const startV3PreparationPolling",
+      hydrationStart,
+    );
+    const hydrationBoundary = historySource.slice(hydrationStart, hydrationEnd);
+    const validatedHydrationWrite = hydrationBoundary.indexOf(
+      "setHydratedReviews((reviews) => Object.freeze({",
+    );
+    expect(validatedHydrationWrite).toBeGreaterThan(
+      hydrationBoundary.indexOf("fundingAuthorizationReview(current)"),
+    );
+    expect(validatedHydrationWrite).toBeGreaterThan(
+      hydrationBoundary.indexOf("routerTransactionReview(current)"),
+    );
+    expect(historySource).toContain(
+      '? routerReview?.walletAction ?? null\n              : walletTransaction(reviewLaunch)',
+    );
+
+    const fundingStart = historySource.indexOf(
+      "const submitFundingAuthorization = async",
+    );
+    const fundingEnd = historySource.indexOf(
+      "const submitWalletTransaction = async",
+      fundingStart,
+    );
+    const fundingBoundary = historySource.slice(fundingStart, fundingEnd);
+    expect(fundingBoundary.indexOf("sameFundingAuthorization(")).toBeGreaterThan(-1);
+    expect(fundingBoundary.indexOf("signCustomLaunchFundingAuthorization(")).toBeGreaterThan(
+      fundingBoundary.indexOf("sameFundingAuthorization("),
+    );
+
+    const routerStart = fundingEnd;
+    const routerEnd = historySource.indexOf("return (", routerStart);
+    const routerBoundary = historySource.slice(routerStart, routerEnd);
+    expect(routerBoundary.indexOf("sameRouterReview(")).toBeGreaterThan(-1);
+    expect(routerBoundary.indexOf("sendCustomLaunchWalletAction(action)")).toBeGreaterThan(
+      routerBoundary.indexOf("sameRouterReview("),
+    );
   });
 
   it("never lets a stale list regress a single-resource launch status", () => {

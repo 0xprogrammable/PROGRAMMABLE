@@ -10,6 +10,18 @@ export {
   validateLaunchProfileBinding,
   validateLaunchProfileSelection,
 } from "./profile-v2.mjs";
+export {
+  buildDirectNativeLaunchIntentHash,
+  buildDirectNativeProfileBinding,
+  buildFundingAuthorization,
+  buildFundingSignaturePatch,
+  hashDirectNativeProfile,
+  resolveDirectNativeProfile,
+  validateDirectNativeProfileBinding,
+  validateDirectNativePermitWindow,
+  validateDirectNativeProfileSelection,
+  validateFundingAuthorizationInput,
+} from "./profile-direct-native-v1.mjs";
 export { validateLaunchFile, validateLaunchRequest } from "./validate.mjs";
 export {
   API_KEYS_URL,
@@ -18,14 +30,20 @@ export {
   OPENAPI_URL,
   OPENAPI_URL_V1,
   OPENAPI_URL_V2,
+  OPENAPI_URL_V3,
   PACKAGE_VERSION,
   PACK_CONFIG_SCHEMA_V1,
   PACK_CONFIG_SCHEMA_V2,
+  PACK_CONFIG_SCHEMA_V3,
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
+  CREATE_REQUEST_SCHEMA_V3,
   LAUNCH_PROFILE_ID,
   LAUNCH_PROFILE_REVISION,
   LAUNCH_PROFILE_VERSION,
+  DIRECT_NATIVE_PROFILE_ID,
+  DIRECT_NATIVE_PROFILE_REVISION,
+  DIRECT_NATIVE_PROFILE_VERSION,
   RELEASE_URL,
   RELEASE_URL_V1,
 } from "./constants.mjs";
