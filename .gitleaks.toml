@@ -91,6 +91,13 @@ paths = ['''lib/profile/router-custom-creator-claim\.ts''']
 regexes = ['''(?i)tokenAddress:\s*"0x69d278968abf120f878f2e1e016ab615d3686c19"''']
 
 [[allowlists]]
+description = "Custom launch policy pins the public Ethereum USDC contract address"
+condition = "AND"
+regexTarget = "match"
+paths = ['''public/policies/custom-launch-agent-remediation-v1\.json''']
+regexes = ['''(?i)0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48''']
+
+[[allowlists]]
 description = "FADE trade capability pins public onchain identifiers and runtime hashes"
 condition = "AND"
 regexTarget = "match"
