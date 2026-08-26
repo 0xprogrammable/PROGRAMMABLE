@@ -24,6 +24,12 @@ advertised machine-readable remediation catalog:
 the pinned CLI release are the complete public integration path. There is no project allowlist or private approval
 step.
 
+Fetch public `GET https://api.programmable.market/v3/capabilities`, then use the exact quickstart
+`pack -> validate --remote -> submit -> wallet -> status`. `validate --remote` first repeats local byte-identical
+validation and then posts those same bytes to Bearer-authenticated `POST /v3/custom-launches/preflight`. The preflight
+uses scope `custom-launch:create`, consumes no launch quota, allocates no nonce, persists no launch, requires a later
+wallet signature and never broadcasts. `wallet` is a separate connected-controller action, not a CLI command.
+
 For an existing repository, pin the exact public source object, compile every direct graph target with
 `solc 0.8.26+commit.8a97fa7a`, map the distinct token, hook and initializer roles plus all address dependencies, declare
 the exact permission mask, and choose the real funding, liquidity, fee, custody and withdrawal behavior. Create
@@ -60,8 +66,9 @@ contract. The default profile uses `schemaVersion: programmable.direct-native-ho
 `programmable.direct-native-hook-graph-profile-selection-binding.v3`. Revision 2 remains a
 compatible profile contract for existing clients and resources. The Router primitive supports 2-16 targets; the direct
 native profile requires 3-16 because token, hook and initializer roles are distinct. It accepts a project-owned token,
-a project-owned hook, every valid Uniswap v4 permission mask and an exact multi-contract graph. It does not substitute
-a Programmable-owned hook. Every enabled v4 permission must resolve to a concrete reachable callback implementation;
+a project-owned hook, native or ERC-20 quote currency, all fourteen Uniswap v4 permission bits across masks `0` through
+`16383`, and an exact multi-contract graph. It does not substitute a Programmable-owned hook. Every enabled v4
+permission must resolve to a concrete reachable callback implementation;
 an interface declaration or fallback-only route does not qualify.
 
 Every V3 request must bind and disclose a 1,000-hundredths-of-a-bip Programmable share, declared as an additive
@@ -123,29 +130,37 @@ or economic risk. They are not an audit or a guarantee of safety, liquidity, tra
 must disclose transfer restrictions, pause or upgrade controls, liquidity custody, withdrawal behavior and buy/sell
 conditions.
 
+Capabilities keeps six product-truth axes independent: `deployment`, `trading`, `platform_fee_evidence`,
+`source_verification`, `indexing` and `featured`. Preflight `launchEligibility.deployable`, `routable` and `featured`
+are bounded classifications at the returned `evidenceTier`; they do not prove a deployment occurred, live trading or
+liquidity exists, platform-fee behavior was proven, source verification reached `exact_match`, indexing refreshed, or
+feature placement happened. The response disposition is `supported`, `supported_with_warnings`, `needs_evidence` or
+`unsupported` and includes typed finding-code arrays, `staticBaseline` and `remediations`. None is an audit, universal
+compatibility statement or safety guarantee.
+
 ## Install the public CLI
 
 Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.1.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.2.1.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.0.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.2.1`. The package name is
+Continue only after the checksum command reports `OK` and the version command prints `3.3.0`. The package name is
 `@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:
 
 ```sh
 programmable-launch pack --config programmable-launch.config.json --output launch.json
-programmable-launch validate launch.json --config programmable-launch.config.json
+programmable-launch validate launch.json --config programmable-launch.config.json --remote
 programmable-launch submit launch.json --config programmable-launch.config.json
 programmable-launch status REQUEST_UUID --watch --until authorized
 ```
@@ -221,7 +236,8 @@ public error code. Never send the API key. Nonblocking findings remain bound and
 `--until authorized`, the CLI also stops at
 `awaiting_funding_authorization`; complete the exact typed-data signature in the website, then run status again.
 `prepared` has no wallet transaction. `authorized` contains the exact Router transaction for separate controller
-wallet review, signing and broadcast. The API and CLI never sign or broadcast. After the wallet broadcasts, run:
+wallet review, signing and broadcast. When present, follow only the HTTPS `walletHandoffUrl` before its `expiresAt`;
+refetch status after expiry. The API and CLI never sign or broadcast. After the wallet broadcasts, run:
 
 ```sh
 programmable-launch status REQUEST_UUID --watch --until finalized

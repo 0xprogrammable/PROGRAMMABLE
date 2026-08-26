@@ -86,8 +86,8 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v3.json</code>
             </a>
             <span>
-              Live V3 general-hook request, funding challenge, lifecycle and
-              separate Router-transaction schemas.
+              Live V3 capabilities, side-effect-free preflight, general-hook
+              request, lifecycle and separate Router-transaction schemas.
             </span>
           </li>
           <li>
@@ -119,12 +119,13 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz">
-              <code>@programmable/launch 3.2.1</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz">
+              <code>@programmable/launch 3.3.0</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and
-              status.
+              status; validate --remote adds public capabilities and
+              non-persisting preflight.
             </span>
           </li>
           <li>

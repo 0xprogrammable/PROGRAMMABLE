@@ -40,6 +40,16 @@ For an existing project, the agent must inspect the exact repository rather than
    exact static report. `action_required` means change the reported source or config, rebuild, repack and submit a new
    immutable request. It is not a request for manual approval and cannot be bypassed by retrying unchanged bytes.
 
+Before submission, fetch unauthenticated `GET https://api.programmable.market/v3/capabilities`, then run
+`programmable-launch validate launch.json --config programmable-launch.config.json --remote`. Remote validation first
+repeats the exact local validation and byte reproduction, then sends those same request bytes to authenticated
+`POST /v3/custom-launches/preflight` with the wallet-bound Bearer API key. Preflight consumes no launch quota, allocates
+no nonce and persists no launch. It never signs or broadcasts. A successful response is
+`programmable.custom-launch-preflight.v1` and carries the exact `requestHash`, `profileRevision`, `serverTime`,
+`disposition`, `launchEligibility`, `evidenceTier`, hard-block, needs-evidence and warning code arrays, the bounded
+`staticBaseline`, typed `remediations`, and the five fixed side-effect fields. Unknown additive fields may be preserved;
+they never relax a required false or true invariant.
+
 For USDC EIP-3009 funding, the CLI is the derivation authority. Project code must accept and forward the exact
 `from`, predicted-initializer `to`, `value`, validity window and nonce. It must not substitute an application-specific
 funding domain or nonce. The published domains are
@@ -74,9 +84,11 @@ contract for existing clients and resources. Discovery reports `productionLaunch
 to a different create version.
 
 The Router primitive supports 2–16 targets; this V3 profile requires 3–16 direct CREATE2 graph targets because its
-token, hook and initializer roles are distinct. The token, hook and all other targets are project-owned exact artifacts.
-All valid v4 permission masks are supported; return-delta permissions require their matching action permissions, and
-the compiled declaration must match the hook-address low bits. The request binds exact source, compiler,
+token, hook and initializer roles are distinct. The primary token and hook are project-owned exact artifacts, as are all
+other direct targets. Native and ERC-20 quote currencies are structurally supported. All fourteen Uniswap v4 permission
+bits are structurally supported across masks `0` through `16383`; return-delta permissions require their matching action
+permissions, every enabled callback must have concrete reachable code, and the compiled declaration must match the
+hook-address low bits. Structural support is not a universal behavior or safety promise. The request binds exact source, compiler,
 creation bytecode, runtime, pool key, predicted initializer, expected pool ID and a
 `programmable.eip3009-authorization-patch.v2` descriptor. The patch names the initializer target, unsigned calldata
 hash, calldata length, authorization encoding and numeric ABI paths for the zero `nonce`, `r`, `s` and `v` leaves. The
@@ -166,22 +178,40 @@ The pool's LP fee is separate from this platform charge and must be disclosed se
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
 disabled.
 
+## Product-truth axes stay separate
+
+Capabilities publishes six independent `productTruthAxes`: `deployment`, `trading`, `platform_fee_evidence`,
+`source_verification`, `indexing` and `featured`. Evidence on one axis never proves another. In particular:
+
+- preflight `launchEligibility.deployable` means the exact request clears the bounded deployment-mechanics preflight;
+  it does not mean a transaction was signed, broadcast or finalized;
+- `routable` is a current evidence classification, not proof of live trading, liquidity, price quality or economic
+  safety;
+- request-bound platform-fee declarations and static admission do not replace separate platform-fee behavior evidence;
+- only server-authored `sourceVerification.status: exact_match` for every required component means source verified;
+- Router finality does not itself prove an indexing refresh, and indexing does not prove trading or source verification;
+- `featured` is a separate placement decision and must never be inferred from deployment, routing or indexing.
+
+The four preflight dispositions are `supported`, `supported_with_warnings`, `needs_evidence` and `unsupported`. They
+classify the exact submitted bytes at the stated evidence tier. None is an audit, universal compatibility statement or
+safety guarantee.
+
 ## Cold-agent quickstart
 
 Install the pinned public GitHub Release asset. Do not substitute an unverified npm-registry package with the same name.
 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.1.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.2.1.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.0.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.2.1`.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.0`.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
 matching solc artifacts. Its generated evidence is limited to `pre-submit`. The deterministic permission salt grind
@@ -204,15 +234,23 @@ programmable-launch pack \
   --config programmable-launch.config.json \
   --output launch.json
 programmable-launch validate launch.json \
-  --config programmable-launch.config.json
+  --config programmable-launch.config.json \
+  --remote
 programmable-launch submit ./launch.json \
   --config programmable-launch.config.json
 programmable-launch status REQUEST_UUID --watch --until authorized
 ```
 
+The agent quickstart is `pack -> validate --remote -> submit -> wallet -> status`. `wallet` means stop for the connected
+controller to review and sign; it is not a fifth CLI command. Remote validation and later submission use the same exact
+request bytes. Preflight has no Idempotency-Key because it creates no durable resource; `submit` keeps its existing
+durable idempotency and retry rules.
+
 With `--until authorized`, the status command stops at either the EIP-3009 funding handoff or the Router handoff. In
 EIP-3009 mode, first complete the exact funding signature in the website, then run the same status command again. At
-`authorized`, stop again so the connected controller can review and sign the exact Router transaction separately.
+`authorized`, stop again so the connected controller can review and sign the exact Router transaction separately. When
+present, use only the resource's HTTPS `walletHandoffUrl` before its `expiresAt`; refetch the single-resource status after
+expiry rather than signing stale material.
 After the wallet broadcasts, continue with `--until finalized`; terminal failures always stop polling.
 
 Manage a wallet-bound key at [API keys](https://programmable.market/developers/api-keys). Store it in an encrypted

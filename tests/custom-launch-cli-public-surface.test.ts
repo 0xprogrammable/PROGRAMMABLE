@@ -28,18 +28,20 @@ describe("public Custom Launch CLI surface", () => {
       readStatus: "live",
       apiVersion: "3",
       readyzUrl: "https://api.programmable.market/readyz",
+      capabilitiesUrl: "https://api.programmable.market/v3/capabilities",
+      preflightUrl: "https://api.programmable.market/v3/custom-launches/preflight",
       openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       legacyIntake: { registry: "closed", github: "closed" },
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.2.1",
+        releaseVersion: "3.3.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
         tarballSha256:
-          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+          "sha256:f2c7eece46a682f5e65a27ba85644b2cb36a8ccbe5953531a6cb1ee1971e7c32",
       },
       compatibility: {
         v1: {
@@ -60,13 +62,13 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.2.1",
+          releaseVersion: "3.3.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
           tarballSha256:
-            "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+            "sha256:f2c7eece46a682f5e65a27ba85644b2cb36a8ccbe5953531a6cb1ee1971e7c32",
         },
       },
       generalHookProfile: {
@@ -77,14 +79,18 @@ describe("public Custom Launch CLI surface", () => {
         profileVersion: "3.0.0",
         productionLaunchAuthorized: true,
         createPath: "/v3/custom-launches",
+        capabilitiesPath: "/v3/capabilities",
+        preflightPath: "/v3/custom-launches/preflight",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.2.1",
+        cliReleaseVersion: "3.3.0",
       },
       integrationPreview: {
         status: "live",
         apiVersion: "3",
         publicAuthorization: true,
         createPath: "/v3/custom-launches",
+        capabilitiesPath: "/v3/capabilities",
+        preflightPath: "/v3/custom-launches/preflight",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
@@ -94,6 +100,21 @@ describe("public Custom Launch CLI surface", () => {
         projectOwnedToken: true,
         projectOwnedHook: true,
         hookPermissionMaskRange: { minimum: 0, maximum: 16_383 },
+        allFourteenHookPermissionsStructurallySupported: true,
+        quoteCurrencies: ["native", "erc20"],
+        liquidityModels: [
+          "external-concentrated-liquidity",
+          "launch-seeded-concentrated-liquidity",
+          "hook-inventory-custom-accounting",
+        ],
+        productTruthAxes: [
+          "deployment",
+          "trading",
+          "platform_fee_evidence",
+          "source_verification",
+          "indexing",
+          "featured",
+        ],
         platformAdmissionReceiptRequired: true,
         routerSimulationRequiredBeforeAuthorization: true,
         safetyClaim: false,
@@ -113,14 +134,14 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "3.2.1",
-        releaseTag: "programmable-launch-v3.2.1",
+        releaseVersion: "3.3.0",
+        releaseTag: "programmable-launch-v3.3.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256",
         tarballSha256:
-          "sha256:f86aa6f65f3ddae7eb5a6b49dc960b0fbdbb853920fb997018d36851db985807",
+          "sha256:f2c7eece46a682f5e65a27ba85644b2cb36a8ccbe5953531a6cb1ee1971e7c32",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -164,6 +185,11 @@ describe("public Custom Launch CLI surface", () => {
           publicAuthorization: true,
           createHttpStatus: 202,
           replayHttpStatus: 200,
+          capabilitiesPath: "/v3/capabilities",
+          preflightPath: "/v3/custom-launches/preflight",
+          preflightQuotaConsumed: false,
+          preflightNonceAllocated: false,
+          preflightPersisted: false,
         },
       },
     });
@@ -193,14 +219,14 @@ describe("public Custom Launch CLI surface", () => {
         "--json",
       ], { cwd: root, stdio: "pipe" });
       const tarball = readFileSync(
-        join(temporaryRoot, "programmable-launch-3.2.1.tgz"),
+        join(temporaryRoot, "programmable-launch-3.3.0.tgz"),
       );
       const digest = `sha256:${createHash("sha256").update(tarball).digest("hex")}`;
       const document = programmableWellKnownDocumentV1(
         PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
       );
       expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
-      expect(tarball.byteLength).toBe(245_763);
+      expect(tarball.byteLength).toBe(250_910);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -403,6 +429,7 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v3.openapi).toBe("3.1.0");
+    expect(v3.info.version).toBe("3.3.0");
     expect(v3["x-programmable-availability"]).toMatchObject({
       status: "live",
       publicAuthorized: true,
@@ -412,15 +439,107 @@ describe("public Custom Launch CLI surface", () => {
         httpStatus: 202,
         replayHttpStatus: 200,
       },
+      publicCapabilities: {
+        status: "live",
+        path: "/v3/capabilities",
+        authentication: "none",
+      },
+      publicPreflight: {
+        status: "live",
+        path: "/v3/custom-launches/preflight",
+        httpStatus: 200,
+        authentication: "wallet-bound-api-key",
+        requiredScope: "custom-launch:create",
+        quotaConsumed: false,
+        nonceAllocated: false,
+        persisted: false,
+      },
       stableProductionVersion: "3",
       stableOpenApiUrl:
         "https://programmable.market/openapi/custom-launch-v3.json",
       activationBlockers: [],
     });
     expect(Object.keys(v3.paths).sort()).toEqual([
+      "/v3/capabilities",
       "/v3/custom-launches",
+      "/v3/custom-launches/preflight",
       "/v3/custom-launches/{launchId}",
       "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization",
+    ]);
+    const capabilities = v3.paths["/v3/capabilities"].get;
+    expect(capabilities.security).toEqual([]);
+    expect(capabilities.responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CustomLaunchCapabilitiesV1");
+    const preflight = v3.paths["/v3/custom-launches/preflight"].post;
+    expect(preflight.security).toEqual([{ CustomLaunchApiKey: [] }]);
+    expect(preflight.parameters).toBeUndefined();
+    expect(preflight.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CustomLaunchCreateRequestV3");
+    expect(preflight.responses["200"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CustomLaunchPreflightV1");
+    expect(Object.keys(preflight.responses)).toEqual([
+      "200", "400", "401", "403", "413", "415", "422", "500", "503",
+    ]);
+    expect(preflight.responses["503"].$ref)
+      .toBe("#/components/responses/V3Unavailable");
+    expect(v3.components.responses.V3Unavailable.headers["Retry-After"]
+      .schema.pattern).toBe("^[1-9][0-9]*$");
+    expect(preflight["x-programmable-side-effects"]).toEqual({
+      quotaConsumed: false,
+      nonceAllocated: false,
+      persisted: false,
+      walletSignatureRequiredLater: true,
+      walletBroadcastByService: false,
+    });
+    const preflightSchema = v3.components.schemas.CustomLaunchPreflightV1;
+    expect(preflightSchema.properties).toMatchObject({
+      schemaVersion: { const: "programmable.custom-launch-preflight.v1" },
+      requestHash: {
+        $ref: "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+      },
+      disposition: {
+        enum: [
+          "supported",
+          "supported_with_warnings",
+          "needs_evidence",
+          "unsupported",
+        ],
+      },
+      quotaConsumed: { const: false },
+      nonceAllocated: { const: false },
+      persisted: { const: false },
+      walletSignatureRequiredLater: { const: true },
+      walletBroadcastByService: { const: false },
+    });
+    expect(preflightSchema.properties.launchEligibility.required).toEqual([
+      "deployable", "routable", "featured",
+    ]);
+    expect(preflightSchema.properties.evidenceTier.enum).toEqual([
+      "launch_mechanics_verified",
+      "standard_swap_compatible",
+      "advanced_custom_accounting",
+      "governed_external_trust",
+    ]);
+    expect(preflightSchema.properties.hardBlockFindingCodes.$ref)
+      .toBe("#/components/schemas/CustomLaunchFindingCodeListV1");
+    expect(preflightSchema.properties.needsEvidenceFindingCodes.$ref)
+      .toBe("#/components/schemas/CustomLaunchFindingCodeListV1");
+    expect(preflightSchema.properties.warningFindingCodes.$ref)
+      .toBe("#/components/schemas/CustomLaunchFindingCodeListV1");
+    expect(preflightSchema.properties.staticBaseline.oneOf).toEqual([
+      { $ref: "#/components/schemas/StaticBaselineReportV1" },
+      { type: "null" },
+    ]);
+    expect(preflightSchema.properties.remediations.items.$ref)
+      .toBe("#/components/schemas/CustomLaunchRemediationV1");
+    expect(v3.components.schemas.CustomLaunchCapabilitiesV1.properties
+      .productTruthAxes.const).toEqual([
+      "deployment",
+      "trading",
+      "platform_fee_evidence",
+      "source_verification",
+      "indexing",
+      "featured",
     ]);
     expect(v3.paths["/v3/custom-launches"].post
       ["x-programmable-public-availability"]).toBe("live");
@@ -668,6 +787,16 @@ describe("public Custom Launch CLI surface", () => {
         "funding_authorization_verified",
         "authorized",
       ]));
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties
+      .walletHandoffUrl.oneOf).toEqual([
+      { type: "string", format: "uri" },
+      { type: "null" },
+    ]);
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties
+      .expiresAt.oneOf).toEqual([
+      { type: "string", format: "date-time" },
+      { type: "null" },
+    ]);
     const outputVariants = v3.components.schemas.CustomLaunchOutputV3.oneOf;
     const outputForStage = (stage: string) => outputVariants.find(
       (variant: { properties: { stage: { const?: string } } }) =>
@@ -923,7 +1052,7 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "Package `3.2.1` supports production general profile",
+      "Package `3.3.0` supports production general profile",
     );
     expect(packageGuide).toContain(
       "`programmable.direct-native-hook-graph.v1` version `3.0.0`",

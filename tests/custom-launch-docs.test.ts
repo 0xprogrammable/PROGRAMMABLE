@@ -59,7 +59,9 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/prepared[\s\S]{0,240}(?:no wallet transaction|walletTransaction[^\n]{0,80}(?:null|both null))/i);
       expect(source).toMatch(/authorized[\s\S]{0,240}(?:walletTransaction|wallet transaction)/i);
     }
-    expect(createGuide).toContain("pack, validate, submit and status");
+    expect(createGuide).toContain(
+      "pack -> validate --remote -> submit -> wallet -> status",
+    );
     expect(createGuide).toContain("/openapi/custom-launch-v3.json");
     expect(createGuide).toContain("awaiting_funding_authorization");
     expect(createGuide).toContain("EIP-3009 funding signature");
@@ -107,7 +109,7 @@ describe("Custom Launch API documentation", () => {
 
   it("publishes the exact-source and no-broadcast cold-agent path", () => {
     for (const source of [gitBookGuide, rawGuide, developerDocsMarkdown]) {
-      expect(source).toContain("programmable-launch-3.2.1.tgz");
+      expect(source).toContain("programmable-launch-3.3.0.tgz");
       expect(source).toContain("verificationBundle");
       expect(source).toContain("exact_match");
       expect(source).toContain("PROGRAMMABLE_API_KEY");
@@ -119,8 +121,25 @@ describe("Custom Launch API documentation", () => {
   });
 
   it("keeps the website agent prompt on the current public CLI release", () => {
-    expect(createGuide).toContain("public CLI 3.2.1 flow");
+    expect(createGuide).toContain("public CLI 3.3.0 quickstart");
     expect(createGuide).not.toContain("public CLI 3.1.0 flow");
+  });
+
+  it("publishes capabilities, side-effect-free preflight and separate truth axes", () => {
+    for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
+      expect(source).toContain("/v3/capabilities");
+      expect(source).toContain("/v3/custom-launches/preflight");
+      expect(source).toContain("validate --remote");
+      expect(source).toContain("walletHandoffUrl");
+      expect(source).toContain("expiresAt");
+      expect(source).toContain("platform_fee_evidence");
+      expect(source).toMatch(/no (?:launch )?quota|quotaConsumed: false/i);
+      expect(source).toMatch(/(?:allocates no nonce|nonceAllocated: false)/i);
+      expect(source).toMatch(/(?:persists no launch|persisted: false)/i);
+    }
+    expect(v3OpenApi.paths["/v3/capabilities"].get.security).toEqual([]);
+    expect(v3OpenApi.paths["/v3/custom-launches/preflight"].post.security)
+      .toEqual([{ CustomLaunchApiKey: [] }]);
   });
 
   it("publishes public V3 while retaining the exact V1 write fence", () => {
@@ -181,7 +200,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("productionLaunchAuthorized: true");
       expect(source).toContain("1,000 ppm = 0.10% = 10 bps");
       expect(source).toContain("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
-      expect(source).toContain("programmable-launch-3.2.1.tgz.sha256");
+      expect(source).toContain("programmable-launch-3.3.0.tgz.sha256");
       expect(source).toContain("shasum -a 256 -c");
       expect(source).toMatch(/platform admission|admission receipt|static admission/i);
       expect(source).toMatch(/concrete reachable\s+callback implementation/i);

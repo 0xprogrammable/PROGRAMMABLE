@@ -96,19 +96,19 @@ const cliInstallCommands = [
     "Create an isolated download directory.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz',
     "Download the pinned release asset.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256',
     "Download its checksum sidecar.",
   ],
   [
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.1.tgz.sha256)',
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.0.tgz.sha256)',
     "Continue only after this reports OK.",
   ],
   [
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.2.1.tgz"',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.0.tgz"',
     "Install the verified local bytes.",
   ],
 ] as const;
@@ -189,15 +189,15 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> 3.2.1 from the{" "}
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz">
+            Install <code>@programmable/launch</code> 3.3.0 from the{" "}
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz">
               immutable GitHub Release asset
             </a>
             . The binary is{" "}
             <code>programmable-launch</code>.
           </li>
           <li>
-            Run <code>pack</code> and <code>validate</code> against exact
+            Run <code>pack</code> and <code>validate --remote</code> against exact
             Standard JSON, compiler artifacts and evidence files. Never enter
             derived hashes by hand.
           </li>
@@ -208,7 +208,8 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             Run <code>submit ./launch.json --config programmable-launch.config.json</code>.
-            At <code>authorized</code>, stop for exact wallet review and signing,
+            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; wallet -&gt; status</code>.
+            Wallet is a separate controller action, not a CLI command. At <code>authorized</code>, stop for exact wallet review and signing,
             then run <code>status REQUEST_UUID --watch --until finalized</code>.
           </li>
         </ol>
@@ -320,6 +321,13 @@ export default function CustomLaunchApiDocsPage() {
             byte. Never copy or invent them.
           </li>
           <li>
+            Fetch public <code>GET /v3/capabilities</code>, then run the exact
+            request through <code>validate --remote</code>. The authenticated
+            <code> POST /v3/custom-launches/preflight</code> uses those same bytes,
+            consumes no launch quota, allocates no nonce, persists no launch and
+            never signs or broadcasts.
+          </li>
+          <li>
             In EIP-3009 mode, accept the exact CLI-derived funding descriptor.
             Do not replace its funding intent or nonce domain. Current V2
             authorization patching binds four zero ABI leaves:{" "}
@@ -401,10 +409,11 @@ export default function CustomLaunchApiDocsPage() {
             <code>0x800000</code> dynamic-fee sentinel are supported.
           </li>
           <li>
+            Native and ERC-20 quote currencies are structurally supported.
             Funding can be absent, carried as the exact native value of the
             separately reviewed Router transaction, or use an unsigned USDC
             EIP-3009 descriptor. Only the EIP-3009 mode contains a funding
-            challenge and authorization patch. CLI 3.2.1 uses{" "}
+            challenge and authorization patch. CLI 3.3.0 uses{" "}
             <code>programmable.eip3009-authorization-patch.v2</code> to bind
             the zero nonce, r, s and v ABI leaves before any wallet signature.
           </li>
@@ -633,6 +642,11 @@ export default function CustomLaunchApiDocsPage() {
             Stop at <code>authorized</code>. The API and CLI never sign or
             broadcast the returned transaction.
           </li>
+          <li>
+            Keep deployment, trading, platform-fee evidence, source verification,
+            indexing and featured placement as independent product-truth axes.
+            Preflight eligibility does not prove any later external state.
+          </li>
         </ul>
 
         <p className={styles.bodyCopy}>
@@ -682,8 +696,10 @@ export default function CustomLaunchApiDocsPage() {
           <strong>API access is not wallet authorization</strong>
           <p>
             At <code>authorized</code>, review and sign in the connected
-            controller wallet. The API and CLI never auto-sign or
-            auto-broadcast. The API key is never proof of wallet approval.
+            controller wallet. Follow only the HTTPS <code>walletHandoffUrl</code>
+            before its <code>expiresAt</code>; refetch status after expiry. The API
+            and CLI never auto-sign or auto-broadcast. The API key is never proof
+            of wallet approval.
           </p>
         </aside>
       </section>
