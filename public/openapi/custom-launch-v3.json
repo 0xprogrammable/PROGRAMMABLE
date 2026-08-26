@@ -2645,6 +2645,150 @@
         "description": "Deterministic bounded exact-source and runtime indicator report. It is neither approval nor a safety claim.",
         "additionalProperties": false
       },
+      "CustomLaunchRemediationV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "remediationId",
+          "code",
+          "stage",
+          "targetId",
+          "targetRole",
+          "sourcePath",
+          "expected",
+          "observed",
+          "requiredChange",
+          "catalogUrl",
+          "guideUrl",
+          "retryable",
+          "requiresNewRequest",
+          "resumeAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-remediation.v1"
+          },
+          "remediationId": {
+            "enum": [
+              "PLATFORM_ADMISSION_FINDING",
+              "PROFILE_INVALID",
+              "ROUTER_SIMULATION_REVERTED",
+              "ROUTER_SIMULATION_UNAVAILABLE"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "enum": [
+              "admission",
+              "validation-or-admission",
+              "simulation"
+            ]
+          },
+          "targetId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetRole": {
+            "oneOf": [
+              {
+                "enum": [
+                  "token",
+                  "hook",
+                  "initializer",
+                  "platform-fee-binding",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourcePath": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observed": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requiredChange": {
+            "type": "string",
+            "minLength": 1
+          },
+          "catalogUrl": {
+            "const": "https://programmable.market/policies/custom-launch-agent-remediation-v1.json"
+          },
+          "guideUrl": {
+            "const": "https://programmable.market/docs/developers/custom-launch#existing-project-integration"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "requiresNewRequest": {
+            "type": "boolean"
+          },
+          "resumeAt": {
+            "enum": [
+              "pack",
+              "inspect-project",
+              "status"
+            ]
+          }
+        },
+        "description": "Bounded machine-readable project remediation. It never contains credentials, signatures, source excerpts or provider diagnostics.",
+        "additionalProperties": false
+      },
+      "CustomLaunchFailureV3": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "remediations"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "remediations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomLaunchRemediationV1"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomLaunchOutputV3": {
         "oneOf": [
           {
@@ -2941,7 +3085,8 @@
                   "kind",
                   "reportSha256",
                   "findingCodes",
-                  "message"
+                  "message",
+                  "remediations"
                 ],
                 "properties": {
                   "kind": {
@@ -2959,6 +3104,13 @@
                   },
                   "message": {
                     "const": "Automatic static admission found a blocking target-role condition. Follow the bound remediation before wallet authorization."
+                  },
+                  "remediations": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CustomLaunchRemediationV1"
+                    },
+                    "minItems": 1
                   }
                 },
                 "additionalProperties": false
@@ -3100,7 +3252,7 @@
           "failure": {
             "oneOf": [
               {
-                "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchFailureV2"
+                "$ref": "#/components/schemas/CustomLaunchFailureV3"
               },
               {
                 "type": "null"

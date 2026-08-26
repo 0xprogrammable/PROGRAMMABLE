@@ -764,6 +764,39 @@ describe("public Custom Launch CLI surface", () => {
     const actionRequiredOutput = outputForStage("platform-review-action-required");
     expect(actionRequiredOutput.properties.actionRequired.properties.kind.const)
       .toBe("security-review");
+    expect(actionRequiredOutput.properties.actionRequired.required)
+      .toContain("remediations");
+    expect(actionRequiredOutput.properties.actionRequired.properties.remediations)
+      .toMatchObject({
+        minItems: 1,
+        items: { $ref: "#/components/schemas/CustomLaunchRemediationV1" },
+      });
+    expect(v3.components.schemas.CustomLaunchRemediationV1).toMatchObject({
+      required: expect.arrayContaining([
+        "schemaVersion",
+        "remediationId",
+        "code",
+        "stage",
+        "requiredChange",
+        "retryable",
+        "requiresNewRequest",
+        "resumeAt",
+      ]),
+      properties: {
+        schemaVersion: { const: "programmable.custom-launch-remediation.v1" },
+        catalogUrl: {
+          const: "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+        },
+        guideUrl: {
+          const: "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+        },
+      },
+      additionalProperties: false,
+    });
+    expect(v3.components.schemas.CustomLaunchFailureV3.required)
+      .toEqual(["code", "message", "retryable", "remediations"]);
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties.failure.oneOf[0])
+      .toEqual({ $ref: "#/components/schemas/CustomLaunchFailureV3" });
     expect(actionRequiredOutput.required).toContain("staticBaseline");
     expect(outputVariants.every(
       (variant: { required: string[] }) =>

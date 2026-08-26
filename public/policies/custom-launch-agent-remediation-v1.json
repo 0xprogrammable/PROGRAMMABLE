@@ -264,6 +264,7 @@
     "fields": [
       "schemaVersion",
       "remediationId",
+      "code",
       "stage",
       "targetId",
       "targetRole",

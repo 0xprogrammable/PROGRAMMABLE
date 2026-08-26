@@ -270,6 +270,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         requiresNewRequest: true,
       },
     });
+    expect(catalog.runtimeRemediationPayload.fields).toContain("code");
   });
 
   it("publishes the same public contract on every agent-facing surface", () => {
