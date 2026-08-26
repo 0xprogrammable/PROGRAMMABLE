@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const COMMIT = /^[0-9a-f]{40}$/u;
+const CURSOR = /^[A-Za-z0-9_-]{16,512}$/u;
 
 function canonicalize(value) {
   if (value === null || ["boolean", "number", "string"].includes(typeof value)) {
@@ -171,10 +172,17 @@ export async function probeCustomLaunchV3Release(input) {
     headers: headers(undefined, input.apiKey),
   }, fetchImpl);
   const list = parseJson(listResult.bytes, "Custom Launch API V3 list");
+  if (listResult.response.status !== 200) {
+    throw new Error("authenticated V3 list canary failed");
+  }
+  exactKeys(list, ["schemaVersion", "launches", "nextCursor"],
+    "Custom Launch API V3 list");
   if (
-    listResult.response.status !== 200
-    || list?.schemaVersion !== "programmable.custom-launch-list.v3"
-    || !Array.isArray(list.items)
+    list.schemaVersion !== "programmable.custom-launch-list.v3"
+    || !Array.isArray(list.launches)
+    || (list.nextCursor !== null && (
+      typeof list.nextCursor !== "string" || !CURSOR.test(list.nextCursor)
+    ))
   ) throw new Error("authenticated V3 list canary failed");
 
   return Object.freeze({
