@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,6 +7,7 @@ import test from "node:test";
 import { encodeFunctionData } from "viem";
 
 import { main } from "../src/cli.mjs";
+import { remediationUrlFor } from "../src/diagnostics.mjs";
 import { inspectEip3009FundingCompatibility } from "../src/funding-compatibility.mjs";
 import { buildLaunch } from "../src/pack.mjs";
 import { buildFundingSignaturePatch } from "../src/profile-direct-native-v1.mjs";
@@ -38,6 +39,29 @@ const NESTED_INITIALIZER_ABI = [{
   outputs: [],
 }];
 
+test("local remediation links resolve as JSON Pointers in the public catalog", async () => {
+  const catalog = JSON.parse(await readFile(
+    new URL("../../../public/policies/custom-launch-agent-remediation-v1.json", import.meta.url),
+    "utf8",
+  ));
+  for (const code of [
+    "PACK_CONFIG_V3_MISSING",
+    "PACK_CONFIG_V3_INVALID",
+    "FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL",
+    "FUNDING_AUTHORIZATION_PATCH_PATH_INVALID",
+    "FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED",
+    "FUNDING_NONCE_CONFORMANCE_UNPROVEN",
+  ]) {
+    const url = new URL(remediationUrlFor(code));
+    assert.ok(url.hash.startsWith("#/"));
+    const resolved = decodeURIComponent(url.hash.slice(2))
+      .split("/")
+      .map((token) => token.replaceAll("~1", "/").replaceAll("~0", "~"))
+      .reduce((value, token) => value[token], catalog);
+    assert.equal(typeof resolved.requiredChange, "string", code);
+  }
+});
+
 test("pack and submit expose a stable machine-readable missing V3 config diagnostic", async () => {
   for (const command of [["pack"], ["submit", "launch.json"]]) {
     await assert.rejects(
@@ -46,7 +70,9 @@ test("pack and submit expose a stable machine-readable missing V3 config diagnos
         assert.equal(error.code, "PACK_CONFIG_V3_MISSING");
         assert.equal(error.diagnostic.schemaVersion, "programmable.launch-cli-diagnostic.v1");
         assert.equal(error.diagnostic.expected.schemaVersion, "programmable.launch-pack-config.v3");
-        assert.match(error.diagnostic.remediationUrl, /#PACK_CONFIG_V3_MISSING$/u);
+        assert.match(error.diagnostic.remediationUrl, /#\/remediations\/0$/u);
+        assert.equal(typeof error.diagnostic.requiredChange, "string");
+        assert.equal(error.diagnostic.resumeAt, "pack");
         return true;
       },
     );
@@ -134,7 +160,9 @@ test("v2 rejects dynamic or wrong-type paths with one stable actionable code", (
     }, fixture.graphBundle, fixture.initializerArtifact),
     (error) => {
       assert.equal(error.code, "FUNDING_AUTHORIZATION_PATCH_PATH_INVALID");
-      assert.match(error.diagnostic.remediationUrl, /#FUNDING_AUTHORIZATION_PATCH_PATH_INVALID$/u);
+      assert.match(error.diagnostic.remediationUrl, /#\/remediations\/4$/u);
+      assert.equal(typeof error.diagnostic.requiredChange, "string");
+      assert.equal(error.diagnostic.resumeAt, "pack");
       return true;
     },
   );

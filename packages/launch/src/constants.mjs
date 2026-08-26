@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "3.2.1";
+export const PACKAGE_VERSION = "3.3.0";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -106,12 +106,16 @@ export const CREATE_PATH_V1 = "/v1/custom-launches";
 export const CREATE_PATH_V2 = "/v2/custom-launches";
 export const CREATE_PATH_V3 = "/v3/custom-launches";
 export const CREATE_PATH = CREATE_PATH_V3;
+export const CAPABILITIES_PATH_V3 = "/v3/capabilities";
+export const PREFLIGHT_PATH_V3 = "/v3/custom-launches/preflight";
+export const PREFLIGHT_SCHEMA_V1 = "programmable.custom-launch-preflight.v1";
 export const READY_PATH = "/readyz";
 export const OPENAPI_URL_V1 = "https://programmable.market/openapi/custom-launch-v1.json";
 export const OPENAPI_URL_V2 = "https://programmable.market/openapi/custom-launch-v2.json";
 export const OPENAPI_URL_V3 = "https://programmable.market/openapi/custom-launch-v3.json";
 export const OPENAPI_URL = OPENAPI_URL_V3;
 export const GUIDE_URL = "https://programmable.market/docs/developers/custom-launch";
+export const WALLET_HANDOFF_BASE_URL = "https://programmable.market/";
 export const EXISTING_PROJECT_INTEGRATION_GUIDE_URL =
   `${GUIDE_URL}#existing-project-integration`;
 export const AGENT_REMEDIATION_CATALOG_URL =
@@ -122,8 +126,8 @@ export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.2.1";
-export const RELEASE_TARBALL = "programmable-launch-3.2.1.tgz";
+export const RELEASE_TAG = "programmable-launch-v3.3.0";
+export const RELEASE_TARBALL = "programmable-launch-3.3.0.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =

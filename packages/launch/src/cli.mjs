@@ -13,7 +13,12 @@ import {
 import { createCliDiagnosticError } from "./diagnostics.mjs";
 import { packLaunch } from "./pack.mjs";
 import { validateLaunchFile } from "./validate.mjs";
-import { ProgrammableApiError, statusLaunch, submitLaunch } from "./api-client.mjs";
+import {
+  ProgrammableApiError,
+  statusLaunch,
+  submitLaunch,
+  validateLaunchRemote,
+} from "./api-client.mjs";
 
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SAFE_ERROR_REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -45,6 +50,23 @@ export function formatCliError(error) {
       if (Number.isFinite(retryAt)) safeDetails.retryAfter = new Date(retryAt).toUTCString();
     }
   }
+  const serverDetails = safeServerDetails(details.serverDetails);
+  if (serverDetails !== null) safeDetails.serverDetails = serverDetails;
+  const remediations = safeRemediations(details.remediations);
+  if (remediations !== null) safeDetails.remediations = remediations;
+  if (Object.hasOwn(details, "actionRequired")) {
+    const actionRequired = safeActionRequired(details.actionRequired);
+    if (actionRequired !== undefined) safeDetails.actionRequired = actionRequired;
+  }
+  if (typeof details.walletHandoffUrl === "string") {
+    safeDetails.walletHandoffUrl = details.walletHandoffUrl;
+  }
+  if (typeof details.expiresAt === "string" && Number.isFinite(Date.parse(details.expiresAt))) {
+    safeDetails.expiresAt = details.expiresAt;
+  }
+  if (Number.isSafeInteger(details.secondsRemaining) && details.secondsRemaining >= 0) {
+    safeDetails.secondsRemaining = details.secondsRemaining;
+  }
   return Object.keys(safeDetails).length === 0
     ? message
     : `${message}\nProgrammable API error details: ${JSON.stringify(safeDetails)}`;
@@ -75,10 +97,16 @@ export async function main(argv) {
     });
   } else if (command === "validate") {
     rejectPositionals(parsed, 1, "validate");
-    result = await validateLaunchFile({
+    const validateOptions = {
       launchPath: parsed.positionals[0],
       configPath: parsed.flags.config,
-    });
+      apiOrigin: parsed.flags["api-origin"],
+      maxAttempts: integerFlag(parsed, "max-attempts"),
+      timeoutMs: integerFlag(parsed, "timeout-ms"),
+    };
+    result = parsed.booleans.has("remote")
+      ? await validateLaunchRemote(validateOptions)
+      : await validateLaunchFile(validateOptions);
   } else if (command === "submit") {
     rejectPositionals(parsed, 1, "submit");
     result = await submitLaunch({
@@ -112,7 +140,7 @@ function parseArguments(argv) {
   const flags = {};
   const booleans = new Set();
   const positionals = [];
-  const booleanFlags = new Set(["help", "watch"]);
+  const booleanFlags = new Set(["help", "remote", "watch"]);
   const valueFlags = new Set([
     "config",
     "output",
@@ -194,7 +222,11 @@ function usage(command) {
       "Usage: programmable-launch pack --config <programmable-launch.config.json> [--output launch.json] [--receipt receipt.json]",
     ],
     validate: [
-      "Usage: programmable-launch validate <launch.json> [--config programmable-launch.config.json]",
+      "Usage: programmable-launch validate <launch.json> [--config programmable-launch.config.json] [--remote]",
+      "--remote runs the public capabilities check and authenticated, quota-free V3 preflight after exact local validation.",
+      "Preflight requires an API key with custom-launch:create, read only from the environment or OS secret store.",
+      "V3 validation requires --config so launch.json remains bound to fresh source and build artifacts.",
+      "Remote validation never allocates a nonce, persists a launch, signs, or broadcasts.",
     ],
     submit: [
       "Usage: programmable-launch submit <launch.json> --config <programmable-launch.config.json> [--idempotency-key key]",
@@ -216,4 +248,118 @@ function usage(command) {
     `Stable V1 release: ${RELEASE_URL_V1}`,
     `Public V3 release: ${RELEASE_URL}`,
   ].join("\n");
+}
+
+function safeServerDetails(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const result = {};
+  for (const field of [
+    "field",
+    "path",
+    "stage",
+    "scope",
+    "requiredScope",
+    "requiredChange",
+    "resumeAt",
+  ]) {
+    if (typeof value[field] === "string" && value[field].length <= 2_048) {
+      result[field] = value[field];
+    }
+  }
+  for (const field of ["retryable", "requiresNewRequest"]) {
+    if (typeof value[field] === "boolean") result[field] = value[field];
+  }
+  const remediations = safeRemediations(value.remediations);
+  if (remediations !== null) result.remediations = remediations;
+  return Object.keys(result).length === 0 ? null : result;
+}
+
+function safeRemediations(value) {
+  if (!Array.isArray(value)) return null;
+  const result = [];
+  for (const remediation of value) {
+    if (typeof remediation !== "object" || remediation === null || Array.isArray(remediation)
+      || remediation.schemaVersion !== "programmable.custom-launch-remediation.v1"
+      || typeof remediation.remediationId !== "string"
+      || typeof remediation.code !== "string"
+      || typeof remediation.stage !== "string"
+      || typeof remediation.requiredChange !== "string"
+      || typeof remediation.catalogUrl !== "string"
+      || typeof remediation.guideUrl !== "string"
+      || typeof remediation.retryable !== "boolean"
+      || typeof remediation.requiresNewRequest !== "boolean"
+      || typeof remediation.resumeAt !== "string") {
+      return null;
+    }
+    const safe = {
+      schemaVersion: remediation.schemaVersion,
+      remediationId: remediation.remediationId,
+      code: remediation.code,
+      stage: remediation.stage,
+      targetId: safeNullableString(remediation.targetId),
+      targetRole: safeNullableString(remediation.targetRole),
+      sourcePath: safeNullableString(remediation.sourcePath),
+      expected: boundedDiagnosticValue(remediation.expected),
+      observed: boundedDiagnosticValue(remediation.observed),
+      requiredChange: remediation.requiredChange,
+      catalogUrl: remediation.catalogUrl,
+      guideUrl: remediation.guideUrl,
+      retryable: remediation.retryable,
+      requiresNewRequest: remediation.requiresNewRequest,
+      resumeAt: remediation.resumeAt,
+    };
+    if (Object.values(safe).includes(undefined)) return null;
+    result.push(safe);
+  }
+  return result;
+}
+
+function safeNullableString(value) {
+  return value === null || (typeof value === "string" && value.length <= 2_048)
+    ? value
+    : undefined;
+}
+
+function boundedDiagnosticValue(value, depth = 0) {
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (typeof value === "string") return value.length <= 2_048 ? value : undefined;
+  if (depth >= 4) return undefined;
+  if (Array.isArray(value)) {
+    if (value.length > 64) return undefined;
+    const entries = value.map((entry) => boundedDiagnosticValue(entry, depth + 1));
+    return entries.includes(undefined) ? undefined : entries;
+  }
+  if (typeof value !== "object" || value === null) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length > 64) return undefined;
+  const result = {};
+  for (const [key, entry] of entries) {
+    if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(key)
+      || /(?:api.?key|authorization|private|request.?body|secret|signature|source)/iu.test(key)) {
+      return undefined;
+    }
+    const safe = boundedDiagnosticValue(entry, depth + 1);
+    if (safe === undefined) return undefined;
+    result[key] = safe;
+  }
+  return result;
+}
+
+function safeActionRequired(value) {
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "string" && value.length <= 2_048) return value;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const result = {};
+  for (const field of ["kind", "message", "reportSha256"]) {
+    if (typeof value[field] === "string" && value[field].length <= 2_048) {
+      result[field] = value[field];
+    }
+  }
+  if (Array.isArray(value.findingCodes)
+    && value.findingCodes.every((code) => typeof code === "string" && SAFE_API_CODE.test(code))) {
+    result.findingCodes = value.findingCodes;
+  }
+  const remediations = safeRemediations(value.remediations);
+  if (remediations !== null) result.remediations = remediations;
+  return Object.keys(result).length === 0 ? undefined : result;
 }

@@ -8,16 +8,16 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.1.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.1/programmable-launch-3.2.1.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.1.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.2.1.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.0/programmable-launch-3.3.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.0.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.2.1`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.3.0`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
 The immutable V1 package remains available only for compatibility preparation and reads. New V1 submissions are
@@ -35,7 +35,7 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-Package `3.2.1` supports production general profile
+Package `3.3.0` supports production general profile
 `programmable.direct-native-hook-graph.v1` version `3.0.0`. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
 
@@ -94,6 +94,28 @@ programmable-launch pack --config programmable-launch.config.json --output launc
 programmable-launch validate launch.json --config programmable-launch.config.json
 ```
 
+Before `submit`, run the same validation with `--remote`:
+
+```sh
+programmable-launch validate launch.json \
+  --config programmable-launch.config.json \
+  --remote
+```
+
+Remote validation first reads public, unauthenticated `GET /v3/capabilities`, including the advertised profile,
+supported shapes and limits, finding classes, scopes, fee-claim boundary, and website wallet-handoff base. It then
+sends the byte-identical V3 request to authenticated `POST /v3/custom-launches/preflight`. The API key still comes
+only from `PROGRAMMABLE_API_KEY` or the supported OS secret store and must include `custom-launch:create`; the CLI has
+no key-valued flag.
+
+Preflight is a support and evidence classification, not a launch. A conforming
+`programmable.custom-launch-preflight.v1` response binds `requestHash`, profile revision and server time and reports
+one of `supported`, `supported_with_warnings`, `needs_evidence`, or `unsupported`. It exposes separate
+`launchEligibility.deployable`, `routable`, and `featured` decisions, the evidence tier, finding-code arrays, static
+baseline and typed remediation. The CLI rejects a response unless it explicitly confirms `quotaConsumed: false`,
+`nonceAllocated: false`, `persisted: false`, `walletSignatureRequiredLater: true`, and
+`walletBroadcastByService: false`. Unknown additive capability and preflight fields remain present in CLI JSON.
+
 Use `examples/direct-native-v3-no-broadcast/README.md` shipped with the release for a no-broadcast cold-room
 rehearsal. It invokes real solc, uses exact sources and artifacts, and stops after byte-reproducible `pack` and
 `validate`.
@@ -107,6 +129,10 @@ idempotency key across timeout, `429`, or `503` retries and honor `Retry-After`.
 the controller reviews the exact `walletTransaction` and signs it in a separate wallet flow. After a human broadcast,
 use `status REQUEST_UUID --watch --until finalized`. V3 is the default status route; use `--api-version 1` or
 `--api-version 2` only when reading a legacy request. `finalized`, `failed`, and `cancelled` always stop polling.
+
+When the API returns them, `submit` and `status` promote `actionRequired`, the safe `walletHandoffUrl`, `expiresAt`,
+and `secondsRemaining` alongside the complete resource. Open the handoff in the separate website wallet flow. These
+fields do not give the CLI signer or broadcaster authority, and an expired handoff must not be reused.
 
 ```sh
 programmable-launch submit launch.json --config programmable-launch.config.json
@@ -169,7 +195,7 @@ For new requests the patch input contains exactly `targetId`, `nonceArgumentPath
 and `vArgumentPath`. Each path is a non-empty array of zero-based ABI indices: its first index selects a top-level
 initializer input and later indices descend only static tuples or fixed-size static arrays. The four distinct zero
 leaves must resolve to `bytes32`, `bytes32`, `bytes32`, and `uint8`. The CLI derives and proves them from the compiled
-ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.2.1
+ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.0
 schema. Legacy r/s/v-only v1 descriptors remain readable for exact retries and emit
 `FUNDING_SIGNATURE_PATCH_V1_LEGACY`, but new integrations must use v2.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
@@ -210,7 +236,9 @@ hand-written runtime hash.
 
 Local integration failures expose `programmable.launch-cli-diagnostic.v1` on the thrown error and as canonical JSON
 after `Programmable CLI diagnostic:` on stderr. The object includes a stable code, stage, expected and observed values,
-and public documentation/catalog URLs. Stable local repair codes include `PACK_CONFIG_V3_MISSING`,
+typed `requiredChange` and `resumeAt` instructions, and public documentation/catalog URLs. Catalog fragments are
+resolvable JSON Pointers such as `#/remediations/0`, rather than non-resolving code-shaped anchors. Stable local repair
+codes include `PACK_CONFIG_V3_MISSING`,
 `PACK_CONFIG_V3_INVALID`, `FUNDING_AUTHORIZATION_PATCH_PATH_INVALID`, and the legacy migration code
 `FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL`. Raw source-string indicators never become hard safety findings; a legacy
 descriptor may instead return nonblocking `FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED` or
@@ -238,6 +266,11 @@ before the first network call. State defaults to the OS application state direct
 
 The API key is never written to the journal or output. For support, send only the response `requestId`, HTTP status,
 UTC time, and the public error code. Never send the API key.
+
+API errors retain the server's structured `error.details` on `ProgrammableApiError.details.serverDetails` for
+programmatic diagnosis and expose validated `programmable.custom-launch-remediation.v1` objects separately. CLI
+stderr renders only bounded typed fields; arbitrary request, source, authorization, and signature echoes are not
+printed.
 
 ## Scope boundary
 
