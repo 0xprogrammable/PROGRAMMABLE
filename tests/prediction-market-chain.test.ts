@@ -31,14 +31,51 @@ describe("prediction market RPC policy", () => {
     expect(secondary.batch?.multicall).toEqual({ batchSize: 64, wait: 0 });
   });
 
+  it("coalesces concurrent JSON-RPC reads into one bounded provider request", async () => {
+    const requestBodies: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as
+          | Readonly<{ id: number; method: string }>
+          | readonly Readonly<{ id: number; method: string }>[];
+        requestBodies.push(body);
+        const requests = Array.isArray(body) ? body : [body];
+        return new Response(
+          JSON.stringify(requests.map((request) => ({
+            id: request.id,
+            jsonrpc: "2.0",
+            result: request.method === "eth_chainId" ? "0x1237" : "0x1",
+          }))),
+          { headers: { "content-type": "application/json" }, status: 200 },
+        );
+      }),
+    );
+    const primary = createPredictionMarketPublicClients(config)[0];
+
+    await Promise.all([primary.getBlockNumber(), primary.getChainId()]);
+
+    expect(requestBodies).toHaveLength(1);
+    expect(requestBodies[0]).toBeInstanceOf(Array);
+    expect(requestBodies[0]).toHaveLength(2);
+  });
+
   it("binds the secondary client to the configured Alchemy endpoint", async () => {
     const requests: string[] = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input) => {
+      vi.fn(async (input, init) => {
         requests.push(String(input));
+        const body = JSON.parse(String(init?.body)) as
+          | Readonly<{ id: number }>
+          | readonly Readonly<{ id: number }>[];
+        const batch = Array.isArray(body) ? body : [body];
         return new Response(
-          JSON.stringify({ id: 0, jsonrpc: "2.0", result: "0x1" }),
+          JSON.stringify(batch.map((request) => ({
+            id: request.id,
+            jsonrpc: "2.0",
+            result: "0x1",
+          }))),
           { headers: { "content-type": "application/json" }, status: 200 },
         );
       }),

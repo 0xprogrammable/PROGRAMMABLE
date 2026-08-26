@@ -189,6 +189,15 @@
   z-index: 1;
 }
 
+.marketCardPrices > span {
+  min-width: 0;
+  width: 50%;
+}
+
+.marketCardPrices > span:last-child {
+  text-align: right;
+}
+
 .marketCardBody {
   display: block;
   min-height: 118px;
@@ -293,6 +302,14 @@
   cursor: wait;
 }
 
+.retryMarkets {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  justify-content: center;
+  margin-top: 14px;
+}
+
 .detailBack {
   align-items: center;
   color: var(--webde-muted);
@@ -370,6 +387,7 @@
 }
 
 .heroProbability > div {
+  align-content: center;
   background: color-mix(in srgb, var(--market-green) 10%, var(--webde-surface));
   border: 1px solid
     color-mix(in srgb, var(--market-green) 28%, var(--webde-line));
@@ -1849,13 +1867,7 @@
   }
 
   .heroProbability > div {
-    align-items: flex-start;
-    flex-direction: column;
     gap: 5px;
-  }
-
-  .heroProbability > div:nth-child(2) {
-    align-items: flex-end;
   }
 
   .tradeTerminal {

@@ -36,6 +36,7 @@ const PREDICTION_MAX_RPC_HEAD_DIVERGENCE = 300n;
 const PREDICTION_GAS_BUFFER_PERCENT = 120n;
 const PREDICTION_MAX_GAS_LIMIT = 10_000_000n;
 const PREDICTION_MULTICALL_BATCH_SIZE = 64;
+const PREDICTION_RPC_HTTP_BATCH_SIZE = 64;
 const PREDICTION_SECONDARY_RPC_HOST = "robinhood-mainnet.g.alchemy.com";
 const UINT256_MAX = (1n << 256n) - 1n;
 
@@ -454,10 +455,21 @@ export function getPredictionMarketReleaseConfig() {
 
 export function createPredictionMarketPublicClients(
   config = getPredictionMarketReleaseConfig(),
+  options: Readonly<{
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }> = {},
 ) {
   if (!config) {
     throw new Error("The prediction market release is not configured");
   }
+  const timeout = options.timeoutMs ?? 10_000;
+  if (!Number.isInteger(timeout) || timeout < 1) {
+    throw new TypeError("The prediction RPC timeout must be a positive integer");
+  }
+  const fetchOptions = options.signal
+    ? { fetchOptions: { signal: options.signal } }
+    : {};
   return [
     createPublicClient({
       batch: {
@@ -468,8 +480,10 @@ export function createPredictionMarketPublicClients(
       },
       chain: robinhoodChain,
       transport: http(ROBINHOOD_MAINNET_RPC_URL, {
+        ...fetchOptions,
+        batch: { batchSize: PREDICTION_RPC_HTTP_BATCH_SIZE, wait: 0 },
         retryCount: 1,
-        timeout: 10_000,
+        timeout,
       }),
     }),
     createPublicClient({
@@ -481,8 +495,10 @@ export function createPredictionMarketPublicClients(
       },
       chain: robinhoodChain,
       transport: http(config.secondaryRpcUrl, {
+        ...fetchOptions,
+        batch: { batchSize: PREDICTION_RPC_HTTP_BATCH_SIZE, wait: 0 },
         retryCount: 1,
-        timeout: 10_000,
+        timeout,
       }),
     }),
   ] as const;
