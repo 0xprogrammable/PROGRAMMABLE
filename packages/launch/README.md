@@ -181,7 +181,8 @@ someone adds normal v4 liquidity. `launch-seeded-concentrated-liquidity` binds t
 position and declares the required seed, custody/withdrawal, and buy/sell assessment vectors.
 `hook-inventory-custom-accounting` binds the hook inventory path and requires a swap return-delta permission plus
 buy, sell, delta-solvency, and backing/withdrawal assessment vectors. A request may only declare those vectors as
-`required` with `requestClaimsExecution: false`; the platform review supplies the evidence. Omitting this field in an
+`required` with `requestClaimsExecution: false`; it never declares the vectors executed or passed, and neither
+packaging nor Router simulation is presented as that evidence. Omitting this field in an
 older config is normalized by the CLI to the explicit external-liquidity model, so the emitted request remains fully
 hash-bound and never implies that trading volume can create liquidity from nothing.
 

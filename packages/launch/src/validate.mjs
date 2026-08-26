@@ -329,7 +329,8 @@ function validateV3LaunchRequest(request) {
   }
   // V3 binds the exact applicant runtime but does not impose the legacy V2
   // custom-module opcode profile. Upgradeable/delegating graphs remain subject
-  // to platform review instead of being silently made unpackageable.
+  // to automatic role-aware admission and exact Router simulation instead of
+  // being silently made unpackageable by the CLI.
   const launchProfileHash = hashDirectNativeProfile(launchProfile);
   if (request.launchProfileHash !== launchProfileHash) {
     throw new TypeError("launchProfileHash does not match the closed embedded V3 launchProfile");
