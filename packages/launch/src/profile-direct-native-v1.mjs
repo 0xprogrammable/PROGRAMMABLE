@@ -13,6 +13,8 @@ import { canonicalizeJson } from "./canonical-json.mjs";
 import { canonicalIdentifier } from "./build.mjs";
 import {
   DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN,
+  DIRECT_NATIVE_LIQUIDITY_MODEL_ASSESSMENT_SCHEMA,
+  DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA,
   DIRECT_NATIVE_PROFILE_BINDING_SCHEMA,
   DIRECT_NATIVE_PROFILE_HASH_DOMAIN,
   DIRECT_NATIVE_PROFILE_ID,
@@ -29,6 +31,7 @@ import {
   FUNDING_NONCE_DOMAIN,
   GRAPH_FACTORY,
   GRAPH_FACTORY_RUNTIME_CODE_HASH,
+  HOOK_INVENTORY_CUSTOM_ACCOUNTING_VECTORS,
   HOOK_PERMISSION_BITS,
   MAINNET_CHAIN_ID,
   MAINNET_USDC,
@@ -36,6 +39,7 @@ import {
   MAINNET_USDC_DOMAIN_NAME,
   MAINNET_USDC_DOMAIN_SEPARATOR,
   MAINNET_USDC_DOMAIN_VERSION,
+  LAUNCH_SEEDED_CONCENTRATED_LIQUIDITY_VECTORS,
   PLATFORM_FEE_DENOMINATOR,
   PLATFORM_FEE_BINDING_SCHEMA,
   PLATFORM_FEE_CLAIM_AUTHORITY,
@@ -97,6 +101,11 @@ const PLATFORM_FEE_PROOF_POLICY = Object.freeze({
   subject: "final-graph-commitment-and-runtime-set",
   activationStatus: "live",
 });
+const DEFAULT_EXTERNAL_LIQUIDITY_MODEL = Object.freeze({
+  schemaVersion: DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA,
+  model: "external-concentrated-liquidity",
+  declaredLaunchState: "liquidity_required",
+});
 
 export function validateDirectNativeProfileSelection(value) {
   const commonKeys = [
@@ -113,9 +122,12 @@ export function validateDirectNativeProfileSelection(value) {
     "applicantSelectedSellHundredthsOfBip",
   ];
   const claimMode = canonicalClaimMode(value?.claimMode);
+  const liquidityKeys = Object.hasOwn(value ?? {}, "liquidityModel")
+    ? ["liquidityModel"]
+    : [];
   assertExactKeys(value, claimMode === "immutable-payout-recipient"
-    ? [...commonKeys, "payoutRecipient"]
-    : commonKeys, "direct-native launchProfile");
+    ? [...commonKeys, ...liquidityKeys, "payoutRecipient"]
+    : [...commonKeys, ...liquidityKeys], "direct-native launchProfile");
   if (value.schemaVersion !== DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA
     || value.profileId !== DIRECT_NATIVE_PROFILE_ID
     || value.profileRevision !== DIRECT_NATIVE_PROFILE_REVISION) {
@@ -151,6 +163,9 @@ export function validateDirectNativeProfileSelection(value) {
     accountingMode: canonicalAccountingMode(value.accountingMode),
     ...assessment,
     claimMode,
+    liquidityModel: canonicalLiquidityModel(
+      value.liquidityModel ?? DEFAULT_EXTERNAL_LIQUIDITY_MODEL,
+    ),
     ...(claimMode === "immutable-payout-recipient"
       ? { payoutRecipient: canonicalImmutablePayoutRecipient(value.payoutRecipient) }
       : {}),
@@ -275,6 +290,7 @@ export function buildDirectNativeProfileBinding(selection, context) {
     predictedInitializer,
     poolKey,
     expectedPoolId: poolId(poolKey),
+    liquidityModel: normalized.liquidityModel,
     ...(normalized.fundingMode === FUNDING_AUTHORIZATION_METHOD
       ? {
           fundingSignaturePatch: validateFundingSignaturePatch(
@@ -318,6 +334,7 @@ export function validateDirectNativeProfileBinding(value, context) {
     assessmentBase: value?.platformFeeBinding?.assessmentBase,
     feeCurrency: value?.platformFeeBinding?.feeCurrency,
     claimMode: value?.platformFeeBinding?.claimBinding?.mode,
+    liquidityModel: value?.liquidityModel,
     ...(value?.platformFeeBinding?.claimBinding?.mode === "immutable-payout-recipient"
       ? { payoutRecipient: value?.platformFeeBinding?.claimBinding?.payoutRecipient }
       : {}),
@@ -385,6 +402,7 @@ export function validateDirectNativeProfileGraph(profile, binding, graphBundle) 
     throw new TypeError("direct-native platform fee policy must bind its selected direct target");
   }
   validateFundingGraph(binding.fundingMode, graphBundle);
+  validateLiquidityModelGraph(binding.liquidityModel, roles, byId);
   return binding;
 }
 
@@ -987,6 +1005,110 @@ function canonicalPlatformFeeAssessment(assessmentBase, feeCurrency) {
   return pair;
 }
 
+function canonicalLiquidityModel(value) {
+  if (value?.model === "external-concentrated-liquidity") {
+    assertExactKeys(value, [
+      "schemaVersion",
+      "model",
+      "declaredLaunchState",
+    ], "direct-native launchProfile.liquidityModel");
+    if (value.schemaVersion !== DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA
+      || value.declaredLaunchState !== "liquidity_required") {
+      throw new TypeError(
+        "external concentrated liquidity must declare liquidity_required",
+      );
+    }
+    return {
+      schemaVersion: DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA,
+      model: "external-concentrated-liquidity",
+      declaredLaunchState: "liquidity_required",
+    };
+  }
+  if (value?.model === "launch-seeded-concentrated-liquidity") {
+    assertExactKeys(value, [
+      "schemaVersion",
+      "model",
+      "declaredLaunchState",
+      "liquidityTargetId",
+      "assessment",
+    ], "direct-native launchProfile.liquidityModel");
+    if (value.schemaVersion !== DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA
+      || value.declaredLaunchState !== "assessment_required") {
+      throw new TypeError(
+        "launch-seeded concentrated liquidity must declare assessment_required",
+      );
+    }
+    return {
+      schemaVersion: DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA,
+      model: "launch-seeded-concentrated-liquidity",
+      declaredLaunchState: "assessment_required",
+      liquidityTargetId: canonicalIdentifier(
+        value.liquidityTargetId,
+        "direct-native launchProfile.liquidityModel.liquidityTargetId",
+      ),
+      assessment: canonicalLiquidityAssessment(
+        value.assessment,
+        LAUNCH_SEEDED_CONCENTRATED_LIQUIDITY_VECTORS,
+      ),
+    };
+  }
+  if (value?.model === "hook-inventory-custom-accounting") {
+    assertExactKeys(value, [
+      "schemaVersion",
+      "model",
+      "declaredLaunchState",
+      "inventoryTargetId",
+      "assessment",
+    ], "direct-native launchProfile.liquidityModel");
+    if (value.schemaVersion !== DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA
+      || value.declaredLaunchState !== "assessment_required") {
+      throw new TypeError(
+        "hook-inventory custom accounting must declare assessment_required",
+      );
+    }
+    return {
+      schemaVersion: DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA,
+      model: "hook-inventory-custom-accounting",
+      declaredLaunchState: "assessment_required",
+      inventoryTargetId: canonicalIdentifier(
+        value.inventoryTargetId,
+        "direct-native launchProfile.liquidityModel.inventoryTargetId",
+      ),
+      assessment: canonicalLiquidityAssessment(
+        value.assessment,
+        HOOK_INVENTORY_CUSTOM_ACCOUNTING_VECTORS,
+      ),
+    };
+  }
+  throw new TypeError(
+    "direct-native liquidityModel must be external-concentrated-liquidity, launch-seeded-concentrated-liquidity, or hook-inventory-custom-accounting",
+  );
+}
+
+function canonicalLiquidityAssessment(value, expectedVectors) {
+  assertExactKeys(value, [
+    "schemaVersion",
+    "status",
+    "requestClaimsExecution",
+    "requiredVectorIds",
+  ], "direct-native launchProfile.liquidityModel.assessment");
+  if (value.schemaVersion !== DIRECT_NATIVE_LIQUIDITY_MODEL_ASSESSMENT_SCHEMA
+    || value.status !== "required"
+    || value.requestClaimsExecution !== false
+    || !Array.isArray(value.requiredVectorIds)
+    || canonicalizeJson(value.requiredVectorIds) !== canonicalizeJson(expectedVectors)) {
+    throw new TypeError(
+      "direct-native liquidity assessment must declare the exact required vectors without claiming execution",
+    );
+  }
+  return {
+    schemaVersion: DIRECT_NATIVE_LIQUIDITY_MODEL_ASSESSMENT_SCHEMA,
+    status: "required",
+    requestClaimsExecution: false,
+    requiredVectorIds: [...expectedVectors],
+  };
+}
+
 function platformFeePolicy(accountingMode, assessmentBase, feeCurrency) {
   return {
     ...PLATFORM_FEE_POLICY_COMMON,
@@ -1072,6 +1194,24 @@ function validateFundingGraph(fundingMode, graphBundle) {
       fundingMode === "none"
         ? "direct-native fundingMode none requires zero deployment and initializer value for every target"
         : "direct-native EIP-3009 funding requires zero native deployment and initializer value for every target",
+    );
+  }
+}
+
+function validateLiquidityModelGraph(liquidityModel, roles, byId) {
+  if (liquidityModel.model === "external-concentrated-liquidity") return;
+  if (liquidityModel.model === "launch-seeded-concentrated-liquidity") {
+    requireTarget(byId, liquidityModel.liquidityTargetId, "liquidity seed");
+    return;
+  }
+  const inventory = requireTarget(byId, liquidityModel.inventoryTargetId, "hook inventory");
+  if (liquidityModel.inventoryTargetId !== roles.hookTargetId
+    || inventory.componentKind !== "hook"
+    || !Array.isArray(inventory.declaredHookPermissions)
+    || (!inventory.declaredHookPermissions.includes("beforeSwapReturnDelta")
+      && !inventory.declaredHookPermissions.includes("afterSwapReturnDelta"))) {
+    throw new TypeError(
+      "hook-inventory custom accounting must bind the graph hook and declare a swap return-delta permission",
     );
   }
 }

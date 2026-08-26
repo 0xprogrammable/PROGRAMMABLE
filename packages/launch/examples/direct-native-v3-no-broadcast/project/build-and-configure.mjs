@@ -303,6 +303,11 @@ const config = {
       initializerTargetId: "initializer",
       platformFeeBindingTargetId: "hook",
     },
+    liquidityModel: {
+      schemaVersion: "programmable.direct-native-liquidity-model-intent.v1",
+      model: "external-concentrated-liquidity",
+      declaredLaunchState: "liquidity_required",
+    },
     fundingMode: "eip-3009-receive-with-authorization",
     accountingMode: "inclusive-selected-total",
     assessmentBase: "executed-gross-declared-quote",

@@ -139,7 +139,14 @@ function bundleWithInitializer(calldata) {
 }
 
 test("V3 selection closes funding, accounting, claim, and applicant-selected rate modes", () => {
-  assert.deepEqual(validateDirectNativeProfileSelection(SELECTION), SELECTION);
+  assert.deepEqual(validateDirectNativeProfileSelection(SELECTION), {
+    ...SELECTION,
+    liquidityModel: {
+      schemaVersion: "programmable.direct-native-liquidity-model-intent.v1",
+      model: "external-concentrated-liquidity",
+      declaredLaunchState: "liquidity_required",
+    },
+  });
   assert.equal(validateDirectNativeProfileSelection({
     ...SELECTION,
     applicantSelectedBuyHundredthsOfBip: "999999",
@@ -450,6 +457,90 @@ test("V3 binding accepts applicant hook mask and discloses inclusive economics a
       invalidFeeBundle,
     ),
     /pool fee must be between 0 and 999999 or the dynamic-fee sentinel/u,
+  );
+});
+
+test("V3 binds each declared liquidity model without claiming it already passed assessment", () => {
+  const bundle = graphBundle();
+  const context = {
+    graphBundle: bundle,
+    predictions: [
+      { targetId: "token", predictedAddress: TOKEN_ADDRESS },
+      { targetId: "hook", predictedAddress: HOOK_ADDRESS },
+      { targetId: "initializer", predictedAddress: INITIALIZER_ADDRESS },
+    ],
+    routeNamespace: ROUTE_NAMESPACE,
+    routeNonce: ROUTE_NONCE,
+    quoteCurrency: ZERO_ADDRESS,
+    fundingSignaturePatch: signaturePatch(bundle),
+  };
+  const inventorySelection = {
+    ...SELECTION,
+    liquidityModel: {
+      schemaVersion: "programmable.direct-native-liquidity-model-intent.v1",
+      model: "hook-inventory-custom-accounting",
+      declaredLaunchState: "assessment_required",
+      inventoryTargetId: "hook",
+      assessment: {
+        schemaVersion: "programmable.direct-native-liquidity-model-assessment.v1",
+        status: "required",
+        requestClaimsExecution: false,
+        requiredVectorIds: [
+          "liquidity.hook-inventory.buy-settlement",
+          "liquidity.hook-inventory.sell-settlement",
+          "liquidity.hook-inventory.delta-solvency",
+          "liquidity.hook-inventory.backing-and-withdrawal",
+        ],
+      },
+    },
+  };
+  const inventoryBinding = buildDirectNativeProfileBinding(inventorySelection, context);
+  assert.equal(inventoryBinding.liquidityModel.model, "hook-inventory-custom-accounting");
+  validateDirectNativeProfileGraph(
+    resolveDirectNativeProfile(inventorySelection),
+    inventoryBinding,
+    bundle,
+  );
+
+  const seededSelection = {
+    ...SELECTION,
+    liquidityModel: {
+      schemaVersion: "programmable.direct-native-liquidity-model-intent.v1",
+      model: "launch-seeded-concentrated-liquidity",
+      declaredLaunchState: "assessment_required",
+      liquidityTargetId: "initializer",
+      assessment: {
+        schemaVersion: "programmable.direct-native-liquidity-model-assessment.v1",
+        status: "required",
+        requestClaimsExecution: false,
+        requiredVectorIds: [
+          "liquidity.seeded.pool-active-liquidity",
+          "liquidity.seeded.position-custody-and-withdrawal",
+          "liquidity.seeded.buy-and-sell",
+        ],
+      },
+    },
+  };
+  const seededBinding = buildDirectNativeProfileBinding(seededSelection, context);
+  assert.equal(seededBinding.liquidityModel.liquidityTargetId, "initializer");
+  validateDirectNativeProfileGraph(
+    resolveDirectNativeProfile(seededSelection),
+    seededBinding,
+    bundle,
+  );
+
+  assert.throws(
+    () => validateDirectNativeProfileSelection({
+      ...inventorySelection,
+      liquidityModel: {
+        ...inventorySelection.liquidityModel,
+        assessment: {
+          ...inventorySelection.liquidityModel.assessment,
+          status: "passed",
+        },
+      },
+    }),
+    /without claiming execution/u,
   );
 });
 

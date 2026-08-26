@@ -44,6 +44,21 @@ export const PLATFORM_FEE_PROOF_POLICY_SCHEMA =
   "programmable.platform-fee-conformance-policy.v1";
 export const PLATFORM_FEE_BINDING_SCHEMA =
   "programmable.platform-fee-binding.v2";
+export const DIRECT_NATIVE_LIQUIDITY_MODEL_INTENT_SCHEMA =
+  "programmable.direct-native-liquidity-model-intent.v1";
+export const DIRECT_NATIVE_LIQUIDITY_MODEL_ASSESSMENT_SCHEMA =
+  "programmable.direct-native-liquidity-model-assessment.v1";
+export const LAUNCH_SEEDED_CONCENTRATED_LIQUIDITY_VECTORS = Object.freeze([
+  "liquidity.seeded.pool-active-liquidity",
+  "liquidity.seeded.position-custody-and-withdrawal",
+  "liquidity.seeded.buy-and-sell",
+]);
+export const HOOK_INVENTORY_CUSTOM_ACCOUNTING_VECTORS = Object.freeze([
+  "liquidity.hook-inventory.buy-settlement",
+  "liquidity.hook-inventory.sell-settlement",
+  "liquidity.hook-inventory.delta-solvency",
+  "liquidity.hook-inventory.backing-and-withdrawal",
+]);
 export const FUNDING_AUTHORIZATION_INPUT_SCHEMA =
   "programmable.funding-authorization-input.v1";
 export const FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA =

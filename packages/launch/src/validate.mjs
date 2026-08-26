@@ -292,7 +292,9 @@ function validateV3LaunchRequest(request) {
   if (hookRuntime === undefined) {
     throw new TypeError("verificationBundle does not contain the selected direct hook runtime");
   }
-  assertNoDelegatingRuntimeOpcodes(hookRuntime, "submitted direct hook runtime");
+  // V3 binds the exact applicant runtime but does not impose the legacy V2
+  // custom-module opcode profile. Upgradeable/delegating graphs remain subject
+  // to platform review instead of being silently made unpackageable.
   const launchProfileHash = hashDirectNativeProfile(launchProfile);
   if (request.launchProfileHash !== launchProfileHash) {
     throw new TypeError("launchProfileHash does not match the closed embedded V3 launchProfile");

@@ -115,7 +115,7 @@ The top-level fields are:
 - `pool`: exact token/hook target IDs, fee, tick spacing, and `quoteCurrency` address; use
   `0x0000000000000000000000000000000000000000` for native ETH or the exact ERC-20 address for a token quote
 - `permitWindow`: exact `validAfter` and `deadline`, no more than one hour apart
-- `launchProfile`: target roles, funding mode, fee accounting and claim binding
+- `launchProfile`: target roles, liquidity model, funding mode, fee accounting and claim binding
 - `agentAttestation`: stable agent ID, explicit millisecond UTC `checkedAt`, and checks that point to exact evidence files
 
 Each target has exactly `targetId`, `compilationUnitId`, `artifact`, `applicantSalt`, `constructorArguments`,
@@ -145,6 +145,16 @@ must equal `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The EIP-3009 mode addit
 `fundingAuthorization` and unsigned `fundingSignaturePatch` top-level objects; the other funding modes forbid them.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
 Router transaction value, and EIP-3009 funding requires zero native deployment and initializer value.
+
+The request also binds one honest liquidity model. `external-concentrated-liquidity` declares
+`liquidity_required`: the graph may deploy and initialize the pool identity, but it is not presented as tradeable until
+someone adds normal v4 liquidity. `launch-seeded-concentrated-liquidity` binds the exact graph target that seeds the
+position and declares the required seed, custody/withdrawal, and buy/sell assessment vectors.
+`hook-inventory-custom-accounting` binds the hook inventory path and requires a swap return-delta permission plus
+buy, sell, delta-solvency, and backing/withdrawal assessment vectors. A request may only declare those vectors as
+`required` with `requestClaimsExecution: false`; the platform review supplies the evidence. Omitting this field in an
+older config is normalized by the CLI to the explicit external-liquidity model, so the emitted request remains fully
+hash-bound and never implies that trading volume can create liquidity from nothing.
 
 `applicantSalt` is either a fixed lowercase bytes32 or, for the hook only, a closed deterministic grind request:
 
