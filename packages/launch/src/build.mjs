@@ -5,6 +5,7 @@ import { getAddress, keccak256 } from "viem";
 import { canonicalizeJson } from "./canonical-json.mjs";
 import {
   MAX_STANDARD_JSON_INPUT_BYTES,
+  MAX_STANDARD_JSON_SOURCES,
   MAX_TOTAL_STANDARD_JSON_INPUT_BYTES,
 } from "./constants.mjs";
 import {
@@ -24,7 +25,11 @@ import {
 const COMPILER_VERSION = /^0\.[0-9]+\.[0-9]+\+commit\.[0-9a-f]{8}$/;
 const HEX_BYTES = /^0x(?:[0-9a-f]{2})*$/;
 
-export async function loadCompilationUnits(configuredUnits, sourceRoot) {
+export async function loadCompilationUnits(
+  configuredUnits,
+  sourceRoot,
+  { maximumSources } = {},
+) {
   if (!Array.isArray(configuredUnits) || configuredUnits.length === 0 || configuredUnits.length > 16) {
     throw new TypeError("compilationUnits must contain between 1 and 16 units");
   }
@@ -57,7 +62,7 @@ export async function loadCompilationUnits(configuredUnits, sourceRoot) {
     const standardJsonInput = (
       await readStrictJsonFile(standardJsonPath, MAX_STANDARD_JSON_INPUT_BYTES)
     ).value;
-    validateStandardJsonInput(standardJsonInput, compilationUnitId);
+    validateStandardJsonInput(standardJsonInput, compilationUnitId, { maximumSources });
     units.push({
       compilationUnitId,
       standardJsonRelativePath: configured.standardJson,
@@ -79,14 +84,23 @@ export async function loadCompilationUnits(configuredUnits, sourceRoot) {
   return units;
 }
 
-export function validateStandardJsonInput(input, label) {
+export function validateStandardJsonInput(input, label, { maximumSources } = {}) {
   assertExactKeys(input, ["language", "sources", "settings"], `Standard JSON ${label}`);
   if (input.language !== "Solidity") throw new TypeError(`Standard JSON ${label} language must be Solidity`);
   assertPlainObject(input.sources, `Standard JSON ${label}.sources`);
-  if (Object.keys(input.sources).length === 0) {
+  const sourceEntries = Object.entries(input.sources);
+  if (sourceEntries.length === 0) {
     throw new TypeError(`Standard JSON ${label}.sources must not be empty`);
   }
-  for (const [sourcePath, source] of Object.entries(input.sources)) {
+  if (maximumSources !== undefined && maximumSources !== MAX_STANDARD_JSON_SOURCES) {
+    throw new TypeError("maximumSources must use the published direct-native limit");
+  }
+  if (maximumSources !== undefined && sourceEntries.length > maximumSources) {
+    throw new TypeError(
+      `Standard JSON ${label}.sources exceeds the ${maximumSources}-source limit`,
+    );
+  }
+  for (const [sourcePath, source] of sourceEntries) {
     if (typeof sourcePath !== "string" || sourcePath.length === 0) {
       throw new TypeError(`Standard JSON ${label} contains an invalid source path`);
     }
@@ -113,7 +127,7 @@ export async function loadTargetArtifact(
   index,
   sourceRoot,
   unitsById,
-  { apiVersion = "v1" } = {},
+  { apiVersion = "v1", requiredCompilerVersion } = {},
 ) {
   if (apiVersion !== "v1" && apiVersion !== "v2") {
     throw new TypeError("target artifact apiVersion must be v1 or v2");
@@ -151,6 +165,11 @@ export async function loadTargetArtifact(
   const compilerVersion = metadata.compiler?.version;
   if (typeof compilerVersion !== "string" || !COMPILER_VERSION.test(compilerVersion)) {
     throw new TypeError(`artifact for ${targetId} does not contain an exact solc compiler version`);
+  }
+  if (requiredCompilerVersion !== undefined && compilerVersion !== requiredCompilerVersion) {
+    throw new TypeError(
+      `DIRECT_NATIVE_COMPILER_VERSION_UNSUPPORTED: artifact for ${targetId} uses ${compilerVersion}; the live profile requires ${requiredCompilerVersion}`,
+    );
   }
   const compilationTarget = metadata.settings?.compilationTarget;
   assertPlainObject(compilationTarget, `artifact ${targetId} compilationTarget`);

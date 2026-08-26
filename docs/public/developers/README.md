@@ -8,9 +8,21 @@ Programmable has two separate developer surfaces. The Developer API at `https://
 
 ## Package locally and read existing launches
 
-Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` 3.0.0 CLI to pack, validate, submit and track V3 requests, and manage a key at [Custom Launch API keys](https://programmable.market/developers/api-keys). The [public V3 contract](https://programmable.market/openapi/custom-launch-v3.json) is the normative production contract. The [V2 contract](https://programmable.market/openapi/custom-launch-v2.json) remains available for existing V2 resources. V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
+Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` 3.1.0 CLI to
+pack, validate, submit and track V3 requests, and manage a key at [Custom Launch API
+keys](https://programmable.market/developers/api-keys). The [public V3
+contract](https://programmable.market/openapi/custom-launch-v3.json) is the normative production contract. Its default
+direct-native profile is revision 3 with `profileVersion: 3.0.0`; revision 2 remains compatible. The [V2
+contract](https://programmable.market/openapi/custom-launch-v2.json) remains available for existing V2 resources. V1
+POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
 
 The key can create and read launch preparations for its wallet principal. Keep it only as `PROGRAMMABLE_API_KEY` in an encrypted secret store. It cannot authorize, sign or broadcast. A `prepared` response contains an exact artifact but no wallet transaction; only `authorized` contains the exact Router transaction for separate controller-wallet review and signing. In EIP-3009 funding mode, `awaiting_funding_authorization` first exposes exact typed data for an explicit website wallet signature. Native-value mode instead carries the exact ETH value on the Router transaction and requires no separate funding signature. Neither signing action is automatic.
+
+Revision 3 pins exact `solc 0.8.26+commit.8a97fa7a` Standard JSON, with a 5,242,880-byte limit per unit and in
+aggregate and no more than 2,048 inline sources. Its role-aware exact-source static admission binds every finding to the
+request. A configured blocking code and target-role match returns `action_required`; all other findings remain visible
+warnings. Router simulation is mandatory before authorization. Admission and simulation are not an audit or a guarantee
+of safety, honeypot resistance, liquidity, tradeability or fee behavior.
 
 ## Start with discovery
 

@@ -15,10 +15,13 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_REVISION_V3,
+  DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
   GRAPH_BUNDLE_SCHEMA,
   MAINNET_CHAIN_ID,
   MAX_REQUEST_BYTES,
   MAX_STANDARD_JSON_INPUT_BYTES,
+  MAX_STANDARD_JSON_SOURCES,
   MAX_TOTAL_STANDARD_JSON_INPUT_BYTES,
   SOURCE_DESCRIPTOR_SCHEMA,
   SOURCE_MANIFEST_SCHEMA,
@@ -259,13 +262,25 @@ function validateV3LaunchRequest(request) {
   if (canonicalizeJson(request.graphBundle) !== canonicalizeJson(common.graph.graphBundle)) {
     throw new TypeError("V3 graphBundle must use the exact canonical target order and encoding");
   }
+  const launchProfile = validateEmbeddedDirectNativeProfile(request.launchProfile);
   const verification = validateVerificationBundle(
     request.verificationBundle,
     common.graph.graphBundle,
     common.graph.predictions,
     "v2",
+    launchProfile.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V3
+      ? { maximumSources: MAX_STANDARD_JSON_SOURCES }
+      : {},
   );
-  const launchProfile = validateEmbeddedDirectNativeProfile(request.launchProfile);
+  if (launchProfile.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V3) {
+    for (const unit of request.verificationBundle.compilationUnits) {
+      if (unit.compilerVersion !== DIRECT_NATIVE_REQUIRED_SOLC_VERSION) {
+        throw new TypeError(
+          `DIRECT_NATIVE_COMPILER_VERSION_UNSUPPORTED: ${unit.compilationUnitId} uses ${unit.compilerVersion}; the live profile requires ${DIRECT_NATIVE_REQUIRED_SOLC_VERSION}`,
+        );
+      }
+    }
+  }
   const quoteCurrency = directNativeQuoteCurrency(
     request.launchProfileSelection,
     common.graph.predictions,
@@ -532,7 +547,13 @@ function validateAttestationMetadata(value) {
   }
 }
 
-function validateVerificationBundle(value, graphBundle, predictions, apiVersion) {
+function validateVerificationBundle(
+  value,
+  graphBundle,
+  predictions,
+  apiVersion,
+  { maximumSources } = {},
+) {
   assertExactKeys(value, ["schemaVersion", "compilationUnits", "components"], "verificationBundle");
   const expectedSchema = apiVersion === "v2"
     ? VERIFICATION_BUNDLE_SCHEMA_V2
@@ -578,7 +599,7 @@ function validateVerificationBundle(value, graphBundle, predictions, apiVersion)
     }
     const source = decodeExactUtf8(bytes, `${label} Standard JSON`);
     const input = parseStrictJson(source, { maximumBytes: MAX_STANDARD_JSON_INPUT_BYTES });
-    validateStandardJsonInput(input, id);
+    validateStandardJsonInput(input, id, { maximumSources });
     units.set(id, { unit, input });
   }
   if (!Array.isArray(value.components) || value.components.length === 0

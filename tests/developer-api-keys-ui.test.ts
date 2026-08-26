@@ -294,6 +294,13 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('aria-live="polite"');
     expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
+    expect(historySource).toContain("Admission checks running");
+    expect(historySource).toContain("Platform review required");
+    expect(historySource).toContain(
+      "A deterministic indicator blocked Router simulation.",
+    );
+    expect(historySource).toContain("support with request ID");
+    expect(historySource).toContain("Never send your API key.");
   });
 
   it("releases a stalled history refresh with a clear retry state", () => {

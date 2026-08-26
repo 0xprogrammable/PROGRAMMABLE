@@ -2,13 +2,13 @@
 
 This packaged fixture compiles real Solidity with exact `solc` 0.8.26, emits the Standard JSON input and selected
 compiler artifacts, then prepares and validates a three-target
-`programmable.direct-native-hook-graph.v1` revision 2 request. The hook target is the exact
+`programmable.direct-native-hook-graph.v1` revision 3 request. The hook target is the exact
 `ProgrammableVolumeFeeHookV2` reference source/build at permission mask `0x20cc`. The initializer target deliberately
 reverts if executed: it exists only to prove the compiler-ABI-validated EIP-3009 `r`/`s`/`v` patch surface without
 moving funds, signing, or broadcasting.
 
 Passing this fixture proves only local source/build reproduction plus deterministic pack and validation for the exact
-inputs. The embedded profile is the live revision 2 profile with `productionLaunchAuthorized: true`; that flag does
+inputs. The embedded profile is the live revision 3 profile with `productionLaunchAuthorized: true`; that flag does
 not turn this deliberately reverting rehearsal initializer into an approved or submitted launch. This fixture is not
 admission, deployment, a usable liquidity initializer, a wallet transaction, or a launched coin.
 
@@ -49,7 +49,7 @@ or writes a derived hash supplied by the operator.
 The default market is native ETH against the minted fixture token (`quoteCurrency` is the v4 native zero address),
 with LP fee `3000` and tick spacing `60`. Mainnet USDC is independently fixed as the funding token. Optional public
 environment overrides are documented by `npm run build -- --help`; selected buy/sell totals remain within
-`0..999999`. The live revision 2 profile supports the v4 dynamic-fee sentinel, but this fixed-fee reference fixture
+`0..999999`. The live revision 3 profile supports the v4 dynamic-fee sentinel, but this fixed-fee reference fixture
 intentionally does not select it.
 
 Run `pack` promptly after `build`: the generated unsigned funding descriptor uses a fresh, at-most-one-hour validity

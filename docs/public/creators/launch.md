@@ -10,7 +10,10 @@ Public V3 general-hook creation and lifecycle reads are live on Ethereum Mainnet
 
 Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.
 
-The 3.0.0 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` rev2 clean-room project. It compiles real project-owned token, hook and initializer targets, then runs deterministic `pack` and `validate` without submitting, signing, broadcasting or creating a Mainnet coin.
+The 3.1.0 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
+compiles real project-owned token, hook and initializer targets with exact
+`solc 0.8.26+commit.8a97fa7a`, then runs deterministic `pack` and `validate` without submitting, signing, broadcasting
+or creating a Mainnet coin.
 
 The source descriptor, manifest digest, graph bundle and agent evidence must all identify the same exact launch subject. Run the checks that apply to the project and keep their underlying evidence. The API requires check IDs and evidence digests but does not publish a universal check catalog or assess the evidence.
 
@@ -30,11 +33,25 @@ The key is bound to its controller wallet and API scopes. It is not a wallet key
 
 Run `programmable-launch pack`, `validate`, `submit` and then `status`. Submit the bundle to `POST https://api.programmable.market/v3/custom-launches` with the CLI. Preserve the exact request bytes and idempotency key across timeout, `429` and `503` retries and honor `Retry-After`. Follow the [Custom Launch API guide](../developers/custom-launch.md) for the exact public contract.
 
-Existing durable resources record the platform's manifest, graph, attestation, exact-source and permit checks. Post-finality provider verification is independent from launch finality. Programmable does not reproduce project tests, audit the project or adopt the agent's claims as a safety conclusion.
+The default direct-native profile uses `programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
+`profileVersion: 3.0.0`. Revision 2 remains compatible. Revision 3 runs role-aware exact-source static admission. Every
+finding remains bound and visible: a configured blocking code and target-role match moves the request to
+`action_required`; other findings remain warnings. A final Router simulation is mandatory before authorization.
+
+These checks do not reproduce project tests and are not an audit or a guarantee of safety, honeypot resistance,
+liquidity, tradeability or fee behavior. Post-finality provider verification is independent from launch finality.
 
 ## Launch from the bound wallet
 
-For an existing request, `pending_review` means platform conformance is still being evaluated. `action_required` means a deterministic indicator needs additional platform review; it is not a wallet-signing stage. Read the exact report and contact support with the request ID when directed. In EIP-3009 mode, `awaiting_funding_authorization` requires one explicit typed-data signature in the website; native-value and no-funding modes skip that separate signature. `prepared` means only the exact artifact exists. An `authorized` resource still requires the controller wallet to check the network, destination, calldata and value before signing and broadcasting the Router transaction. A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees with the public Router record.
+For an existing request, `pending_review` means admission work is still running. `action_required` means a blocking
+static finding matched the role named by the revision-3 policy; it is not a wallet-signing stage. Read the exact report
+and contact support with the request ID when directed. Send the request ID, status, UTC time and public error code only;
+never send the API key. In EIP-3009 mode, `awaiting_funding_authorization` requires one explicit typed-data signature in
+the website; native-value and no-funding modes skip that separate signature. `prepared` means only the exact artifact
+exists. An `authorized` resource still requires the controller wallet to check the network, destination, calldata and
+value before signing and broadcasting the Router transaction. Neither the API key nor the CLI can sign or broadcast.
+A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees
+with the public Router record.
 
 The mandatory 10 bps Programmable share may be additive to the project's selected fee or included in that selected total. The exact accounting basis, currency, claim binding and buy/sell economics are request-bound and server-recomputed. The Uniswap pool LP fee is separate. Generic fee claiming and buyback management for arbitrary hooks are not live; FADE has a specifically bound adapter only.
 

@@ -60,7 +60,12 @@
       "required": ["migrationInventorySha256", "lastMigration", "schemaEvidenceSha256"],
       "properties": {
         "migrationInventorySha256": { "$ref": "#/$defs/sha256" },
-        "lastMigration": { "const": "migrations/0007_direct_native_hook_profile_v3.sql" },
+        "lastMigration": {
+          "enum": [
+            "migrations/0007_direct_native_hook_profile_v3.sql",
+            "migrations/0008_direct_native_platform_admission_v3.sql"
+          ]
+        },
         "schemaEvidenceSha256": { "$ref": "#/$defs/sha256" }
       }
     },
@@ -73,9 +78,12 @@
         "readinessIdentitySha256": { "$ref": "#/$defs/sha256" },
         "apiContractSha256": { "$ref": "#/$defs/sha256" },
         "profileId": { "const": "programmable.direct-native-hook-graph.v1" },
-        "profileVersion": { "const": "2.0.0" },
+        "profileVersion": { "enum": ["2.0.0", "3.0.0"] },
         "publicProfilePath": {
-          "const": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json",
+          "enum": [
+            "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json",
+            "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json"
+          ],
           "description": "Repository-relative path to the checked-in public admission-profile artifact or template."
         },
         "publicProfileSha256": {
@@ -86,6 +94,56 @@
     },
     "chain": { "$ref": "#/$defs/chain" }
   },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "database": {
+              "type": "object",
+              "properties": {
+                "lastMigration": {
+                  "const": "migrations/0007_direct_native_hook_profile_v3.sql"
+                }
+              }
+            },
+            "api": {
+              "type": "object",
+              "properties": {
+                "profileVersion": { "const": "2.0.0" },
+                "publicProfilePath": {
+                  "const": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "database": {
+              "type": "object",
+              "properties": {
+                "lastMigration": {
+                  "const": "migrations/0008_direct_native_platform_admission_v3.sql"
+                }
+              }
+            },
+            "api": {
+              "type": "object",
+              "properties": {
+                "profileVersion": { "const": "3.0.0" },
+                "publicProfilePath": {
+                  "const": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
   "$defs": {
     "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },

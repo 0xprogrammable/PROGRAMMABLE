@@ -95,7 +95,16 @@ export default function MachineReadableDocsPage() {
               <code>/developers/custom-launch-api-v1.md</code>
             </a>
             <span>
-              Existing raw guide for agent and script compatibility.
+              Raw guide for agent and script compatibility.
+            </span>
+          </li>
+          <li>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz">
+              <code>@programmable/launch 3.1.0</code>
+            </a>
+            <span>
+              Immutable CLI asset with exactly pack, validate, submit and
+              status.
             </span>
           </li>
           <li>
@@ -268,14 +277,32 @@ export default function MachineReadableDocsPage() {
             non-retryable <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
           </li>
           <li>
-            V3 revision 2 supports project-owned tokens, hooks, 3–16 exact
-            direct graph targets and every valid Uniswap v4 permission mask.
+            The default V3 profile uses{" "}
+            <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
+            <code>profileRevision: 3</code> and{" "}
+            <code>profileVersion: 3.0.0</code>. It supports project-owned tokens,
+            hooks, 3–16 exact direct graph targets and every valid Uniswap v4
+            permission mask. Its selection uses{" "}
+            <code>
+              programmable.direct-native-hook-graph-profile-selection-binding.v3
+            </code>
+            . Revision 2 remains compatible.
           </li>
           <li>
-            The platform validates manifest digest, graph, attestation shape,
-            evidence digests, exact-source build inputs, the rev2 profile,
-            simulation and permit bindings. It does not audit the
-            project or attest safety.
+            Revision 3 pins exact{" "}
+            <code>solc 0.8.26+commit.8a97fa7a</code> Standard JSON, limited to
+            5,242,880 bytes per unit and in aggregate and 2,048 inline sources.
+          </li>
+          <li>
+            Role-aware exact-source static admission binds every finding. A
+            configured blocking code and target-role match returns{" "}
+            <code>action_required</code>; all other findings remain visible
+            warnings. A final Router simulation is mandatory before
+            authorization.
+          </li>
+          <li>
+            Admission and simulation are not an audit or a guarantee of safety,
+            honeypot resistance, liquidity, tradeability or fee behavior.
           </li>
           <li>
             <code>prepared</code> contains an artifact but no wallet transaction.
@@ -298,6 +325,11 @@ export default function MachineReadableDocsPage() {
             The API request UUID is returned as <code>requestId</code> and the
             legacy <code>launchId</code> alias. The distinct bytes32
             <code>onchainLaunchId</code> identifies the Router launch.
+          </li>
+          <li>
+            For <code>action_required</code>, keep the exact report and resource{" "}
+            <code>requestId</code>. Send support only that ID, status, UTC time
+            and public code. Never send the API key.
           </li>
           <li>
             Finalized Router launches are eligible for Explore and Profile

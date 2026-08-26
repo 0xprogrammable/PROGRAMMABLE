@@ -8,11 +8,11 @@ transaction.
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
 programmable-launch --version
 ```
 
-The command must print `3.0.0`. Install this immutable GitHub Release asset rather than an unverified npm-registry
+The command must print `3.1.0`. Install this immutable GitHub Release asset rather than an unverified npm-registry
 package with the same name.
 
 The immutable V1 package remains available only for compatibility preparation and reads. New V1 submissions are
@@ -42,8 +42,13 @@ and project values. Static pool fees and the `0x800000` dynamic-fee sentinel are
 
 Funding can be absent, carried as exact native value on the separately reviewed Router transaction, or use an unsigned
 USDC EIP-3009 descriptor with an exact signature patch. The connected wallet separately signs EIP-3009 data when that
-mode is selected. Only after exact graph conformance and transaction simulation does the website present the Router
+mode is selected. Only after exact-source graph admission and Router simulation does the website present the Router
 transaction. The CLI never accepts an API key argument, signs, requests approval, or broadcasts either wallet action.
+
+Revision 3 admission binds exact source, compiler output, the complete graph and a role-aware static report. Findings
+outside a blocking code and target-role pair remain bound and visible warnings; a blocking match stops before Router
+simulation with `action_required`. Admission and simulation are not an audit or a guarantee of safety, honeypot
+absence, liquidity, tradeability, or fee behavior.
 
 ## Platform fee policy
 
@@ -53,8 +58,8 @@ The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and h
 For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the request-bound declared
 assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is additive or inclusive, and the server
 recomputes both buy and sell economics. Its exact claim binding is controlled by
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. A platform-signed conformance receipt for the exact final graph is
-required before the launch permit signer can run. A reverted swap must roll back the fee with the rest of the transaction.
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The exact binding is part of the launch intent, but the revision 3
+admission receipt does not certify fee behavior. A reverted swap must roll back the fee with the rest of the transaction.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -69,7 +74,8 @@ can exchange against incoming assets. Funding mode `none` does not make an empty
 
 1. Produce exact Solidity Standard JSON input and compiler artifacts from one pinned build. Standard JSON sources must
    contain exact `content`; URL-only sources are rejected. Exact decoded Standard JSON is limited to 5,242,880 bytes
-   per compilation unit and across all units in one request.
+   per compilation unit and across all units in one request, with at most 2,048 sources per unit. Revision 3 requires
+   exact solc `0.8.26+commit.8a97fa7a`.
 2. Create `programmable-launch.config.json` using the closed config contract below. Use exact file paths, constructor
    values, initializer values, salts, public source revision, and evidence files. Do not enter derived hashes.
 3. Run the offline commands first:
@@ -139,8 +145,8 @@ runtime from those compiler ranges and values before deriving its hash; missing,
 packaging.
 
 The V3 `launchProfile` uses schema
-`programmable.direct-native-hook-graph-profile-selection.v2`, profile
-`programmable.direct-native-hook-graph.v1`, and revision `2`. It names `tokenTargetId`, `hookTargetId`,
+`programmable.direct-native-hook-graph-profile-selection.v3`, profile
+`programmable.direct-native-hook-graph.v1`, and revision `3`. It names `tokenTargetId`, `hookTargetId`,
 `initializerTargetId`, and `platformFeeBindingTargetId`; selects funding mode `none`,
 `wallet-transaction-value`, or `eip-3009-receive-with-authorization`; selects `additive-platform-share` or
 `inclusive-selected-total`; binds either `executed-gross-declared-quote` with `declared-quote-currency` or
@@ -184,8 +190,9 @@ full expected runtime hash from the compiler runtime template and the required `
 hand-written runtime hash.
 
 V3 deterministic packaging permits project-owned proxy or delegating hook runtimes. Exact source, compiler, config,
-runtime, graph, and request binding proves reproducibility, not safety approval. Platform admission, fee-conformance
-evidence, review, wallet authorization, deployment, and availability remain separate gates.
+runtime, graph, and request binding proves reproducibility, not safety approval. Role-aware platform admission,
+Router simulation, wallet authorization, deployment, and availability remain separate gates; admission does not
+certify fee behavior.
 
 The deterministic source-content digest is SHA-256 of RFC 8785/JCS bytes for
 `{schemaVersion:"programmable.source-bundle-content.v1",entries:[manifest fields plus contentBase64]}`. Entries are

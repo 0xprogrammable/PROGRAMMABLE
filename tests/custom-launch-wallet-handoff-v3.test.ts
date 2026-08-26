@@ -62,6 +62,15 @@ const FUNDING_BOUNDARY = Object.freeze({
   fundingSignatureProducedByService: false,
   walletTransactionBroadcastByService: false,
 });
+const PLATFORM_ADMISSION = Object.freeze({
+  schemaVersion: "programmable.platform-admission-status.v1",
+  disposition: "no_blocking_static_finding",
+  reportSha256: `sha256:${"77".repeat(32)}`,
+  warningFindingCodes: ["RUNTIME_CREATE2", "SOURCE_MUTABLE_ADMIN_SURFACE"],
+  routerSimulationRequiredBeforeAuthorization: true,
+  safetyClaim: false,
+  feeBehaviorClaim: false,
+});
 
 const LAUNCH_AND_STAMP_PARAMETERS = parseAbiParameters(
   "(uint256,address,address,uint8,bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint256),(bytes32,address,bytes32,(address,address,uint24,int24,address),bytes32,(uint8,address,bytes32,uint8,uint8)[]),bytes,bytes",
@@ -621,6 +630,35 @@ describe("custom launch V3 wallet handoff", () => {
     )).toThrow();
     expect(() => assertCustomLaunchFundingIdempotencyKeyV3("short"))
       .toThrow();
+  });
+
+  it("accepts only the exact server-authored revision 3 admission status", () => {
+    const fixture = routerFixture({ quote: ZERO_ADDRESS });
+    const admittedOutput = {
+      ...fixture.output,
+      platformAdmission: PLATFORM_ADMISSION,
+    };
+    expect(prepareCustomLaunchRouterReviewV3(
+      admittedOutput,
+      account.address,
+    ).graphCommitment).toBe(fixture.graphCommitment);
+
+    for (const platformAdmission of [
+      { ...PLATFORM_ADMISSION, warningFindingCodes: ["UNKNOWN_FINDING"] },
+      {
+        ...PLATFORM_ADMISSION,
+        warningFindingCodes: ["RUNTIME_CREATE2", "RUNTIME_CREATE2"],
+      },
+      { ...PLATFORM_ADMISSION, disposition: "action_required" },
+      { ...PLATFORM_ADMISSION, safetyClaim: true },
+      { ...PLATFORM_ADMISSION, feeBehaviorClaim: true },
+      { ...PLATFORM_ADMISSION, reportSha256: `0x${"77".repeat(32)}` },
+    ]) {
+      expect(() => prepareCustomLaunchRouterReviewV3({
+        ...fixture.output,
+        platformAdmission,
+      }, account.address)).toThrow();
+    }
   });
 
   it("requires more than 30 seconds before the funding authorization expires", () => {

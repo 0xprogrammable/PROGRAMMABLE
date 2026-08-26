@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,6 +7,11 @@ import test from "node:test";
 import { encodeFunctionData } from "viem";
 
 import { statusLaunch, submitLaunch } from "../src/api-client.mjs";
+import { loadTargetArtifact, validateStandardJsonInput } from "../src/build.mjs";
+import {
+  DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
+  MAX_STANDARD_JSON_SOURCES,
+} from "../src/constants.mjs";
 import { sha256Digest } from "../src/io.mjs";
 import {
   buildDirectNativeProfileBinding,
@@ -48,9 +53,9 @@ const INITIALIZER_ABI = [{
 }];
 
 const SELECTION = {
-  schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v2",
+  schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",
   profileId: "programmable.direct-native-hook-graph.v1",
-  profileRevision: 2,
+  profileRevision: 3,
   targetRoles: {
     tokenTargetId: "token",
     hookTargetId: "hook",
@@ -65,6 +70,79 @@ const SELECTION = {
   applicantSelectedBuyHundredthsOfBip: "0",
   applicantSelectedSellHundredthsOfBip: "30000",
 };
+const LEGACY_SELECTION = {
+  ...SELECTION,
+  schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v2",
+  profileRevision: 2,
+};
+
+test("revision 3 publishes a 2,048-source Standard JSON ceiling without narrowing revision 2 retries", () => {
+  const standardJson = (count) => ({
+    language: "Solidity",
+    sources: Object.fromEntries(Array.from(
+      { length: count },
+      (_, index) => [`Source${index}.sol`, { content: "contract C {}" }],
+    )),
+    settings: {},
+  });
+  assert.doesNotThrow(() => validateStandardJsonInput(
+    standardJson(MAX_STANDARD_JSON_SOURCES),
+    "rev3-boundary",
+    { maximumSources: MAX_STANDARD_JSON_SOURCES },
+  ));
+  assert.throws(
+    () => validateStandardJsonInput(
+      standardJson(MAX_STANDARD_JSON_SOURCES + 1),
+      "rev3-overflow",
+      { maximumSources: MAX_STANDARD_JSON_SOURCES },
+    ),
+    /exceeds the 2048-source limit/u,
+  );
+  assert.doesNotThrow(() => validateStandardJsonInput(
+    standardJson(MAX_STANDARD_JSON_SOURCES + 1),
+    "legacy-retry",
+  ));
+});
+
+test("revision 3 rejects an artifact from any other exact solc build before packaging", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "programmable-rev3-solc-"));
+  try {
+    await writeFile(path.join(root, "artifact.json"), JSON.stringify({
+      metadata: JSON.stringify({
+        compiler: { version: "0.8.25+commit.b61c2a91" },
+        settings: { compilationTarget: { "Target.sol": "Target" } },
+      }),
+    }));
+    const configured = {
+      targetId: "target",
+      compilationUnitId: "unit",
+      artifact: "artifact.json",
+      applicantSalt: ZERO_BYTES32,
+      constructorArguments: [],
+      initializer: null,
+      deploymentValueWei: "0",
+      initializerValueWei: "0",
+      componentKind: "other",
+      declaredHookPermissions: null,
+      runtimeImmutables: [],
+    };
+    await assert.rejects(
+      loadTargetArtifact(configured, 0, root, new Map([["unit", {
+        standardJsonInput: {
+          language: "Solidity",
+          sources: { "Target.sol": { content: "contract Target {}" } },
+          settings: {},
+        },
+      }]]), {
+        apiVersion: "v2",
+        requiredCompilerVersion: DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
+      }),
+      /DIRECT_NATIVE_COMPILER_VERSION_UNSUPPORTED/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 function unsignedInitializerCalldata() {
   return encodeFunctionData({
@@ -197,7 +275,7 @@ test("V3 selection closes funding, accounting, claim, and applicant-selected rat
   );
 });
 
-test("V3 profile binds platform-owned proof policy without pinning applicant hook code", () => {
+test("V3 profile binds static admission without claiming safety or fee behavior", () => {
   const profile = resolveDirectNativeProfile(SELECTION);
   assert.deepEqual(profile.platformFeePolicy, {
     schemaVersion: "programmable.platform-fee-policy.v1",
@@ -210,17 +288,37 @@ test("V3 profile binds platform-owned proof policy without pinning applicant hoo
     roundingMode: "floor",
     claimAuthority: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
   });
-  assert.deepEqual(profile.platformFeeProofPolicy, {
-    schemaVersion: "programmable.platform-fee-conformance-policy.v1",
-    mode: "platform-issued-exact-graph-receipt-v1",
-    receiptSchemaVersion: "programmable.platform-fee-conformance-receipt.v1",
-    runnerId: "programmable.platform-fee-conformance",
-    runnerVersion: "1.0.0",
-    vectorSetVersion: "1.0.0",
+  assert.deepEqual(profile.platformAdmissionPolicy, {
+    schemaVersion: "programmable.direct-native-platform-admission-policy.v1",
+    mode: "deterministic-exact-source-graph-static-baseline-v1",
+    receiptSchemaVersion: "programmable.platform-admission-receipt.v1",
+    engineId: "programmable.direct-native-static-admission",
+    engineVersion: "1.0.0",
+    exactSourceCompilerGraphBindingRequired: true,
+    staticBaselineGateVersion: "1.0.0",
+    blockingFindingRules: [
+      { code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: ["any"] },
+      { code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: ["hook"] },
+      { code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: ["token"] },
+      { code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: ["token"] },
+      { code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: ["token"] },
+      { code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: ["token"] },
+      { code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: ["token", "hook"] },
+      { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["token", "hook"] },
+      { code: "RUNTIME_CALLCODE", targetRoles: ["token", "hook"] },
+      { code: "RUNTIME_DELEGATECALL", targetRoles: ["token", "hook"] },
+      { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["token", "hook"] },
+    ],
+    warningDisposition: "bound-and-visible",
+    noBlockingFindingDisposition: "router-simulation-eligible",
+    blockingFindingDisposition: "action-required",
+    routerSimulationRequiredBeforeAuthorization: true,
     receiptAuthority: "platform-only",
-    subject: "final-graph-commitment-and-runtime-set",
-    activationStatus: "live",
+    assurance: "launch-admission-only",
+    safetyClaim: false,
+    feeBehaviorClaim: false,
   });
+  assert.equal(Object.hasOwn(profile, "platformFeeProofPolicy"), false);
   assert.equal(profile.productionLaunchAuthorized, true);
   assert.deepEqual(profile.graphPolicy, {
     minimumTargets: 3,
@@ -240,6 +338,19 @@ test("V3 profile binds platform-owned proof policy without pinning applicant hoo
     accountingMode: "additive-platform-share",
   });
   assert.equal(additive.platformFeePolicy.accountingMode, "additive-platform-share");
+});
+
+test("V3.1 keeps revision 2 profile and hash semantics available for exact retries", () => {
+  const legacy = resolveDirectNativeProfile(LEGACY_SELECTION);
+  assert.equal(legacy.schemaVersion, "programmable.direct-native-hook-graph-profile.v2");
+  assert.equal(legacy.profileRevision, 2);
+  assert.equal(legacy.profileVersion, "2.0.0");
+  assert.equal(Object.hasOwn(legacy, "platformAdmissionPolicy"), false);
+  assert.equal(
+    legacy.platformFeeProofPolicy.schemaVersion,
+    "programmable.platform-fee-conformance-policy.v1",
+  );
+  assert.match(hashDirectNativeProfile(legacy), /^sha256:[0-9a-f]{64}$/u);
 });
 
 test("funding signature patch derives only from aligned, distinct, zero initializer words", () => {
@@ -754,7 +865,7 @@ test("EIP-3009 intent is pre-signature, launch-intent-bound, and uses a separate
   assert.notEqual(changed.fundingAuthorization.nonce, first.fundingAuthorization.nonce);
 });
 
-test("V3 launch and funding intents match the cross-repository golden vectors", () => {
+test("V3 launch and funding intents preserve rev2 and separate rev3 hash domains", () => {
   const repeated = (character) => character.repeat(64);
   const fundingSignaturePatch = {
     schemaVersion: "programmable.eip3009-signature-patch.v1",
@@ -766,7 +877,7 @@ test("V3 launch and funding intents match the cross-repository golden vectors", 
     sOffsetBytes: 36,
     vOffsetBytes: 68,
   };
-  const launchIntentHash = buildDirectNativeLaunchIntentHash({
+  const launchIntent = {
     schemaVersion: "programmable.custom-launch-create-request.v3",
     launchWallet: "0x0000000000000000000000000000000000004000",
     chainId: "1",
@@ -778,15 +889,32 @@ test("V3 launch and funding intents match the cross-repository golden vectors", 
     launchProfileHash: `sha256:${repeated("6")}`,
     permitWindow: { validAfter: "900", deadline: "1200" },
     launchProfileSelection: {
+      schemaVersion: "programmable.direct-native-hook-graph-profile-selection-binding.v2",
+      profileId: "programmable.direct-native-hook-graph.v1",
+      profileRevision: 2,
       routeNamespace: `0x${repeated("1")}`,
       routeNonce: `0x${repeated("2")}`,
       fundingSignaturePatch,
     },
-  });
+  };
+  const launchIntentHash = buildDirectNativeLaunchIntentHash(launchIntent);
   assert.equal(
     launchIntentHash,
-    "sha256:a270e536f5c50ab56acdd1c54430e4af0e09d28a21ab88b1d779f9a5696738b2",
+    "sha256:ac825d38629a4658163fe0df38215eb7604bfb469b3100d8d5be84cd236e0786",
   );
+  const rev3LaunchIntentHash = buildDirectNativeLaunchIntentHash({
+    ...launchIntent,
+    launchProfileSelection: {
+      ...launchIntent.launchProfileSelection,
+      schemaVersion: "programmable.direct-native-hook-graph-profile-selection-binding.v3",
+      profileRevision: 3,
+    },
+  });
+  assert.equal(
+    rev3LaunchIntentHash,
+    "sha256:6e137eb82ea6ef4e6abcb26e293fec761e8ad0dd3a44d0e7c4a4df5de7342e85",
+  );
+  assert.notEqual(rev3LaunchIntentHash, launchIntentHash);
 
   const context = {
     launchWallet: "0x0000000000000000000000000000000000004000",
@@ -806,11 +934,11 @@ test("V3 launch and funding intents match the cross-repository golden vectors", 
   const funding = buildFundingAuthorization(input, context);
   assert.equal(
     funding.fundingIntentHash,
-    "0x3351010e63b1b31609097e2464672d91275516c0dc961d062db04888ddd6d88a",
+    "0xaf182039cf2b46a9105af333262ff0dcb36104d5fe05f3148021a75e75468549",
   );
   assert.equal(
     funding.fundingAuthorization.nonce,
-    "0x966166a956309504f2643039a56712990a82680b9048e0fcd7a1c16a5897eaca",
+    "0xd518e54ff8850ac64c6f2ef191e91b19c0785fcc80f5d10eb071075cc1dfa18b",
   );
 
   const excludedFinalState = buildFundingAuthorization(input, {

@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "This document freezes revision 2 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt from exact Standard JSON and materialized runtime bytes. A platform-issued receipt must bind the final graph and prove the declared 10 bps Programmable fee before the permit authority signs; the exact Router transaction is then simulated before it is returned for separate wallet review. Funding may be absent, carried as the exact native value of that Router transaction, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction.",
+    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. It accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction. Revision 2 requests remain readable and retryable with their original exact bytes.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -42,7 +42,8 @@
   },
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
-    "profileRevision": 2,
+    "profileRevision": 3,
+    "profileVersion": "3.0.0",
     "productionLaunchAuthorized": true,
     "minimumTargets": 3,
     "maximumTargets": 16,
@@ -50,7 +51,10 @@
     "maximumHookPermissionMask": 16383,
     "projectOwnedToken": true,
     "projectOwnedHook": true,
-    "exactGraphReceiptRequired": true
+    "platformAdmissionReceiptRequired": true,
+    "routerSimulationRequiredBeforeAuthorization": true,
+    "safetyClaim": false,
+    "feeBehaviorClaim": false
   },
   "x-programmable-funding-boundary": {
     "modes": [
@@ -94,7 +98,7 @@
       "post": {
         "operationId": "createDirectNativeCustomLaunchV3",
         "summary": "Submit an exact V3 general-hook request",
-        "description": "Submit the byte-identical CLI-derived request. Every target remains per-launch bound to exact source, build, creation/runtime bytes, final calldata and simulation evidence. The permit signer is blocked until the exact final graph has a valid platform conformance receipt.",
+        "description": "Submit the byte-identical CLI-derived request. Every target remains per-launch bound to exact source, compiler, build, creation/runtime bytes, final calldata and simulation evidence. Role-aware blocking indicators stop before wallet authorization; bound warnings remain visible and continue to exact Router simulation. Admission is not an audit or a safety, liquidity, tradeability, honeypot, or fee-behavior guarantee.",
         "tags": [
           "V3 general hooks"
         ],
@@ -571,7 +575,7 @@
         }
       },
       "Unprocessable": {
-        "description": "The request parsed but failed source, graph, hook-permission, fee-conformance, funding, profile or exact-simulation validation.",
+        "description": "The request parsed but failed source, graph, hook-permission, admission, funding, profile or exact-simulation validation.",
         "content": {
           "application/json": {
             "schema": {
@@ -782,6 +786,61 @@
         },
         "additionalProperties": false
       },
+      "PlatformAdmissionPolicyV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "mode",
+          "receiptSchemaVersion",
+          "engineId",
+          "engineVersion",
+          "exactSourceCompilerGraphBindingRequired",
+          "staticBaselineGateVersion",
+          "blockingFindingRules",
+          "warningDisposition",
+          "noBlockingFindingDisposition",
+          "blockingFindingDisposition",
+          "routerSimulationRequiredBeforeAuthorization",
+          "receiptAuthority",
+          "assurance",
+          "safetyClaim",
+          "feeBehaviorClaim"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.direct-native-platform-admission-policy.v1" },
+          "mode": { "const": "deterministic-exact-source-graph-static-baseline-v1" },
+          "receiptSchemaVersion": { "const": "programmable.platform-admission-receipt.v1" },
+          "engineId": { "const": "programmable.direct-native-static-admission" },
+          "engineVersion": { "const": "1.0.0" },
+          "exactSourceCompilerGraphBindingRequired": { "const": true },
+          "staticBaselineGateVersion": { "const": "1.0.0" },
+          "blockingFindingRules": {
+            "const": [
+              { "code": "SOURCE_TARGET_ANALYSIS_INCOMPLETE", "targetRoles": ["any"] },
+              { "code": "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", "targetRoles": ["hook"] },
+              { "code": "SOURCE_MUTABLE_BLOCKLIST_SURFACE", "targetRoles": ["token"] },
+              { "code": "SOURCE_MUTABLE_TRANSFER_RESTRICTION", "targetRoles": ["token"] },
+              { "code": "SOURCE_PUBLIC_MINT_SURFACE", "targetRoles": ["token"] },
+              { "code": "SOURCE_MUTABLE_PAUSE_SURFACE", "targetRoles": ["token"] },
+              { "code": "SOURCE_PROXY_OR_UPGRADE_SURFACE", "targetRoles": ["token", "hook"] },
+              { "code": "SOURCE_SELFDESTRUCT_SURFACE", "targetRoles": ["token", "hook"] },
+              { "code": "RUNTIME_CALLCODE", "targetRoles": ["token", "hook"] },
+              { "code": "RUNTIME_DELEGATECALL", "targetRoles": ["token", "hook"] },
+              { "code": "RUNTIME_SELFDESTRUCT", "targetRoles": ["token", "hook"] }
+            ]
+          },
+          "warningDisposition": { "const": "bound-and-visible" },
+          "noBlockingFindingDisposition": { "const": "router-simulation-eligible" },
+          "blockingFindingDisposition": { "const": "action-required" },
+          "routerSimulationRequiredBeforeAuthorization": { "const": true },
+          "receiptAuthority": { "const": "platform-only" },
+          "assurance": { "const": "launch-admission-only" },
+          "safetyClaim": { "const": false },
+          "feeBehaviorClaim": { "const": false }
+        },
+        "description": "Immutable role-aware launch-admission policy. Findings outside a blocking code and target-role pair remain bound and visible warnings. Admission is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "additionalProperties": false
+      },
       "DirectNativeGraphPolicyV1": {
         "type": "object",
         "required": [
@@ -909,25 +968,27 @@
           "currencyPolicy",
           "hookPermissionPolicy",
           "fundingPolicy",
-          "platformFeePolicy",
-          "platformFeeProofPolicy"
+          "platformFeePolicy"
         ],
         "properties": {
           "schemaVersion": {
-            "const": "programmable.direct-native-hook-graph-profile.v2"
+            "enum": [
+              "programmable.direct-native-hook-graph-profile.v2",
+              "programmable.direct-native-hook-graph-profile.v3"
+            ]
           },
           "profileId": {
             "const": "programmable.direct-native-hook-graph.v1"
           },
           "profileRevision": {
-            "const": 2
+            "enum": [2, 3]
           },
           "profileVersion": {
-            "const": "2.0.0"
+            "enum": ["2.0.0", "3.0.0"]
           },
           "productionLaunchAuthorized": {
             "const": true,
-            "description": "The V3 general profile is production authorized; runtime trust roots and conformance receipts still fail closed independently."
+            "description": "The V3 general profile is production authorized; runtime trust roots, role-aware admission and Router simulation still fail closed independently."
           },
           "chainId": {
             "const": "1"
@@ -977,11 +1038,36 @@
           "platformFeePolicy": {
             "$ref": "#/components/schemas/PlatformFeePolicyV1"
           },
+          "platformAdmissionPolicy": {
+            "$ref": "#/components/schemas/PlatformAdmissionPolicyV1"
+          },
           "platformFeeProofPolicy": {
-            "$ref": "#/components/schemas/PlatformFeeProofPolicyV1"
+            "$ref": "#/components/schemas/PlatformFeeProofPolicyV1",
+            "deprecated": true,
+            "description": "Revision 2 compatibility field. New revision 3 requests use platformAdmissionPolicy."
           }
         },
-        "description": "Production-authorized general direct-graph profile. Runtime trust roots, exact-source reconstruction, the platform fee-conformance receipt and exact simulation still fail closed for every request; request bytes cannot bypass those checks.",
+        "oneOf": [
+          {
+            "required": ["platformAdmissionPolicy"],
+            "properties": {
+              "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+              "profileRevision": { "const": 3 },
+              "profileVersion": { "const": "3.0.0" }
+            },
+            "not": { "required": ["platformFeeProofPolicy"] }
+          },
+          {
+            "required": ["platformFeeProofPolicy"],
+            "properties": {
+              "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v2" },
+              "profileRevision": { "const": 2 },
+              "profileVersion": { "const": "2.0.0" }
+            },
+            "not": { "required": ["platformAdmissionPolicy"] }
+          }
+        ],
+        "description": "Production-authorized revision 3 direct-graph profile. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Warnings stay bound and visible; blocking role matches stop before wallet authorization. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "DirectNativePoolKeyV1": {
@@ -1311,13 +1397,16 @@
         ],
         "properties": {
           "schemaVersion": {
-            "const": "programmable.direct-native-hook-graph-profile-selection-binding.v2"
+            "enum": [
+              "programmable.direct-native-hook-graph-profile-selection-binding.v2",
+              "programmable.direct-native-hook-graph-profile-selection-binding.v3"
+            ]
           },
           "profileId": {
             "const": "programmable.direct-native-hook-graph.v1"
           },
           "profileRevision": {
-            "const": 2
+            "enum": [2, 3]
           },
           "targetRoles": {
             "$ref": "#/components/schemas/DirectNativeTargetRolesV1"
@@ -1353,10 +1442,26 @@
           },
           "liquidityModel": {
             "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
-            "description": "Current CLI 3.0.0 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
+            "description": "Current CLI 3.1.0 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
           }
         },
         "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v3" },
+                  "profileRevision": { "const": 3 }
+                }
+              },
+              {
+                "properties": {
+                  "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v2" },
+                  "profileRevision": { "const": 2 }
+                }
+              }
+            ]
+          },
           {
             "if": {
               "properties": {
@@ -1502,6 +1607,37 @@
         "description": "Exact Router permit validity window. deadline must be after validAfter and no more than 3600 seconds later.",
         "additionalProperties": false
       },
+      "DirectNativeExactSourceVerificationBundleV3": {
+        "allOf": [
+          {
+            "$ref": "./custom-launch-v2.json#/components/schemas/ExactSourceVerificationBundleV2"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "compilationUnits": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "./custom-launch-v2.json#/components/schemas/ExactSourceCompilationUnitV1"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "compilerVersion": {
+                          "const": "0.8.26+commit.8a97fa7a"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "description": "Revision 3 exact-source bundle. Every compilation unit uses solc 0.8.26+commit.8a97fa7a. Decoded Standard JSON is limited to 5,242,880 bytes per unit and in aggregate, with at most 2,048 sources per unit. Revision 2 compatibility requests retain their prior compiler contract."
+      },
       "CustomLaunchCreateRequestV3": {
         "type": "object",
         "required": [
@@ -1572,6 +1708,56 @@
           }
         },
         "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "launchProfile": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+                      "profileRevision": { "const": 3 },
+                      "profileVersion": { "const": "3.0.0" }
+                    }
+                  },
+                  "launchProfileSelection": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v3" },
+                      "profileRevision": { "const": 3 }
+                    }
+                  },
+                  "verificationBundle": {
+                    "$ref": "#/components/schemas/DirectNativeExactSourceVerificationBundleV3"
+                  }
+                },
+                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"]
+              },
+              {
+                "properties": {
+                  "launchProfile": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v2" },
+                      "profileRevision": { "const": 2 },
+                      "profileVersion": { "const": "2.0.0" }
+                    }
+                  },
+                  "launchProfileSelection": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v2" },
+                      "profileRevision": { "const": 2 }
+                    }
+                  },
+                  "verificationBundle": {
+                    "$ref": "./custom-launch-v2.json#/components/schemas/ExactSourceVerificationBundleV2"
+                  }
+                },
+                "required": ["launchProfile", "launchProfileSelection", "verificationBundle"]
+              }
+            ]
+          },
           {
             "if": {
               "properties": {
@@ -1886,6 +2072,47 @@
         "description": "Closed wallet-authority boundary repeated on every V3 output stage. No mode uses an approval transaction or Permit2. Only EIP-3009 mode adds a separate typed-data funding signature; native-value mode carries exact msg.value on the Router transaction and none mode carries no funding. The service never produces a wallet signature or broadcasts the Router transaction.",
         "additionalProperties": false
       },
+      "PlatformAdmissionStatusV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "disposition",
+          "reportSha256",
+          "warningFindingCodes",
+          "routerSimulationRequiredBeforeAuthorization",
+          "safetyClaim",
+          "feeBehaviorClaim"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.platform-admission-status.v1"
+          },
+          "disposition": {
+            "const": "no_blocking_static_finding"
+          },
+          "reportSha256": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "warningFindingCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaticBaselineFindingV1/properties/code"
+            },
+            "uniqueItems": true
+          },
+          "routerSimulationRequiredBeforeAuthorization": {
+            "const": true
+          },
+          "safetyClaim": {
+            "const": false
+          },
+          "feeBehaviorClaim": {
+            "const": false
+          }
+        },
+        "description": "Revision 3 admission classification after the exact-source static baseline found no blocking code and target-role pair. All other indicators remain bound and visible warnings. Router simulation is still required. This is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "additionalProperties": false
+      },
       "StaticBaselineSourceLocationV1": {
         "type": "object",
         "required": [
@@ -2115,6 +2342,9 @@
               },
               "fundingBoundary": {
                 "$ref": "#/components/schemas/FundingBoundaryV3"
+              },
+              "platformAdmission": {
+                "$ref": "#/components/schemas/PlatformAdmissionStatusV1"
               }
             },
             "additionalProperties": false
@@ -2143,6 +2373,9 @@
               },
               "fundingBoundary": {
                 "$ref": "#/components/schemas/FundingBoundaryV3"
+              },
+              "platformAdmission": {
+                "$ref": "#/components/schemas/PlatformAdmissionStatusV1"
               }
             },
             "additionalProperties": false
@@ -2174,6 +2407,9 @@
               },
               "fundingBoundary": {
                 "$ref": "#/components/schemas/FundingBoundaryV3"
+              },
+              "platformAdmission": {
+                "$ref": "#/components/schemas/PlatformAdmissionStatusV1"
               }
             },
             "additionalProperties": false
@@ -2235,6 +2471,9 @@
               },
               "fundingBoundary": {
                 "$ref": "#/components/schemas/FundingBoundaryV3"
+              },
+              "platformAdmission": {
+                "$ref": "#/components/schemas/PlatformAdmissionStatusV1"
               }
             },
             "additionalProperties": false

@@ -15,7 +15,7 @@ const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
   { id: "authentication", label: "Authentication" },
   { id: "v3-general", label: "V3 general hooks" },
-  { id: "liquidity", label: "Liquidity and safety" },
+  { id: "liquidity", label: "Liquidity and limits" },
   { id: "request", label: "Request contract" },
   { id: "fees", label: "Platform fee policy" },
   { id: "verification", label: "Exact-source verification" },
@@ -52,11 +52,11 @@ const lifecycle = [
   ["validating", "Request and graph validation are running."],
   [
     "pending_review",
-    "The exact graph is waiting for platform fee-conformance review. No wallet transaction exists.",
+    "Exact-source admission or Router preparation is still running. No wallet transaction exists.",
   ],
   [
     "action_required",
-    "A deterministic indicator requires additional platform review. Read the exact report and contact support with the request ID when directed. This is not a wallet-signing stage.",
+    "A configured static finding code matched its blocking target role. Read the exact bound report and contact support with the request ID when directed. This is not a wallet-signing stage.",
   ],
   [
     "awaiting_funding_authorization",
@@ -165,8 +165,11 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> from the versioned GitHub
-            Release asset linked in the raw guide. The binary is{" "}
+            Install <code>@programmable/launch</code> 3.1.0 from the{" "}
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz">
+              immutable GitHub Release asset
+            </a>
+            . The binary is{" "}
             <code>programmable-launch</code>.
           </li>
           <li>
@@ -249,8 +252,15 @@ export default function CustomLaunchApiDocsPage() {
               direct-native V3 OpenAPI document
             </a>{" "}
             is the production contract for project-owned tokens, hooks and
-            multi-contract launch graphs. V2 remains readable for its existing
-            fixed-profile resources.
+            multi-contract launch graphs. The default profile uses{" "}
+            <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
+            <code>profileRevision: 3</code> and{" "}
+            <code>profileVersion: 3.0.0</code>. Its selection uses{" "}
+            <code>
+              programmable.direct-native-hook-graph-profile-selection-binding.v3
+            </code>
+            . Revision 2 remains compatible; do not reinterpret its receipt as
+            revision-3 admission.
           </p>
         </div>
 
@@ -264,10 +274,11 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             The 10 bps Programmable share may be additive or included in the
-            selected total. The server recomputes the economics and requires a
-            signed conformance receipt for the exact final graph before its
-            permit signer is called. Static fees and the <code>0x800000</code>
-            dynamic-fee sentinel are supported.
+            selected total. The declared economics are bound to the launch
+            intent. Revision 3 does not issue a fee-conformance certification;
+            it requires role-aware static admission and final Router simulation
+            before its permit signer is called. Static fees and the{" "}
+            <code>0x800000</code> dynamic-fee sentinel are supported.
           </li>
           <li>
             Funding can be absent, carried as the exact native value of the
@@ -286,6 +297,20 @@ export default function CustomLaunchApiDocsPage() {
             Initializer source, build, runtime, unsigned patch, final calldata
             and simulation are exact per-launch bindings. There is no separate
             global initializer trust root.
+          </li>
+          <li>
+            Revision 3 binds every static finding. A configured blocking code
+            blocks only its configured target role, except incomplete target
+            analysis which blocks every role. Blocking matches return{" "}
+            <code>action_required</code>; all other findings remain visible
+            warnings.
+          </li>
+          <li>
+            With no blocking match, server-authored{" "}
+            <code>platformAdmission</code> binds the report hash and warning
+            codes with <code>no_blocking_static_finding</code>, requires Router
+            simulation and carries <code>safetyClaim: false</code> and{" "}
+            <code>feeBehaviorClaim: false</code>.
           </li>
         </ul>
       </section>
@@ -320,10 +345,10 @@ export default function CustomLaunchApiDocsPage() {
             make an empty ordinary pool liquid.
           </li>
           <li>
-            Exact source, permission, runtime, fee-conformance and simulation
-            checks do not prove arbitrary custom logic is free of honeypot
-            behavior, privileged controls or economic risk. Disclose transfer,
-            pause, upgrade, mint, liquidity-custody and buy/sell controls.
+            Exact-source static admission and Router simulation are not an audit
+            or a guarantee of safety, honeypot resistance, liquidity,
+            tradeability or fee behavior. Disclose transfer, pause, upgrade,
+            mint, liquidity-custody and buy/sell controls.
           </li>
         </ul>
       </section>
@@ -374,7 +399,7 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Review the V3 platform fee policy</h2>
           <p>
-            The general rev2 profile is public on Ethereum Mainnet only
+            The general revision-3 profile is public on Ethereum Mainnet only
             (<code>chainId: &quot;1&quot;</code>) and has{" "}
             <code>productionLaunchAuthorized: true</code>.
           </p>
@@ -385,11 +410,12 @@ export default function CustomLaunchApiDocsPage() {
           <code>1,000 ppm = 0.10% = 10 bps</code> of the request-bound
           assessment basis. It may be additive to the selected fee or included
           in that selected total. The server recomputes buy and sell project
-          share, effective total, fee currency and rounding, then requires a
-          platform-signed receipt for the exact graph and claim binding
-          controlled by{" "}
+          share, effective total, fee currency and rounding. The request-bound
+          claim destination is controlled by{" "}
           <code>0x4957f49620AFf3Adbbe8195a4f633E49cc93376c</code>.
-          A reverted swap rolls the fee back with the transaction.
+          Revision-3 static admission and simulation do not certify the fee
+          behavior of arbitrary custom code. A reverted swap is expected to roll
+          the fee back with the transaction; inspect the exact implementation.
         </p>
 
         <aside className={styles.callout}>
@@ -418,8 +444,12 @@ export default function CustomLaunchApiDocsPage() {
         <p className={styles.bodyCopy}>
           Standard JSON sources contain inline <code>content</code>; URL-only
           sources fail. Compilation units and components are uniquely UTF-8
-          sorted, and components exactly cover the graph. Existing legacy
-          resources without a bundle remain readable and unverified.
+          sorted, and components exactly cover the graph. The default revision-3
+          profile pins <code>solc 0.8.26+commit.8a97fa7a</code>. Decoded Standard
+          JSON is limited to 5,242,880 bytes per unit and in aggregate, with at
+          most 2,048 inline sources. Revision-2 requests retain their
+          compatibility contract. Existing legacy resources without a bundle
+          remain readable and unverified.
         </p>
 
         <aside className={styles.callout}>
@@ -587,8 +617,11 @@ export default function CustomLaunchApiDocsPage() {
 
         <p className={styles.bodyCopy}>
           Check <a href="https://api.programmable.market/readyz">API readiness</a>.
-          For support, send only the public request ID, HTTP status, UTC time and
-          error code. Never send the API key.
+          For <code>action_required</code>, preserve the resource{" "}
+          <code>requestId</code> and exact static report. For HTTP errors,
+          preserve <code>error.requestId</code>. For support, send only that
+          request ID, HTTP status, UTC time and error code. Never send the API
+          key.
         </p>
       </section>
 

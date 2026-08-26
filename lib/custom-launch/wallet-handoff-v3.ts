@@ -69,6 +69,32 @@ const OUTPUT_KEYS = Object.freeze([
   "actionRequired",
   "fundingBoundary",
 ]);
+const PLATFORM_ADMISSION_KEYS = Object.freeze([
+  "schemaVersion",
+  "disposition",
+  "reportSha256",
+  "warningFindingCodes",
+  "routerSimulationRequiredBeforeAuthorization",
+  "safetyClaim",
+  "feeBehaviorClaim",
+]);
+const PLATFORM_ADMISSION_WARNING_CODES = new Set([
+  "RUNTIME_CALLCODE",
+  "RUNTIME_CREATE",
+  "RUNTIME_CREATE2",
+  "RUNTIME_DELEGATECALL",
+  "RUNTIME_SELFDESTRUCT",
+  "SOURCE_PROXY_OR_UPGRADE_SURFACE",
+  "SOURCE_SELFDESTRUCT_SURFACE",
+  "SOURCE_MUTABLE_PAUSE_SURFACE",
+  "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
+  "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
+  "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+  "SOURCE_MUTABLE_ADMIN_SURFACE",
+  "SOURCE_PUBLIC_MINT_SURFACE",
+  "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+  "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+]);
 const FUNDING_BOUNDARY_KEYS = Object.freeze([
   "approvalTransactionRequired",
   "permit2Used",
@@ -260,7 +286,7 @@ export function prepareCustomLaunchFundingAuthorizationV3(
 ): CustomLaunchFundingAuthorizationV3 {
   const controller = requiredAddress(connectedController);
   if (!UUID.test(launchId)) return invalid();
-  const outputRecord = exactRecord(output, OUTPUT_KEYS);
+  const outputRecord = authorizationOutputRecord(output);
   assertFundingBoundaryV3(outputRecord.fundingBoundary);
   if (
     outputRecord.schemaVersion !== CUSTOM_LAUNCH_AUTHORIZATION_RESULT_SCHEMA_V3
@@ -504,7 +530,7 @@ export function prepareCustomLaunchRouterReviewV3(
   output: unknown,
   connectedController: string,
 ): CustomLaunchRouterReviewV3 {
-  const outputRecord = exactRecord(output, OUTPUT_KEYS);
+  const outputRecord = authorizationOutputRecord(output);
   assertFundingBoundaryV3(outputRecord.fundingBoundary);
   if (
     outputRecord.schemaVersion !== CUSTOM_LAUNCH_AUTHORIZATION_RESULT_SCHEMA_V3
@@ -988,6 +1014,37 @@ function assertFundingBoundaryV3(value: unknown) {
     || boundary.fundingSignatureProducedByService !== false
     || boundary.walletTransactionBroadcastByService !== false
   ) return invalid();
+}
+
+function authorizationOutputRecord(value: unknown) {
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    return invalid();
+  }
+  const candidate = value as Readonly<Record<string, unknown>>;
+  const expectedKeys = Object.hasOwn(candidate, "platformAdmission")
+    ? [...OUTPUT_KEYS, "platformAdmission"]
+    : OUTPUT_KEYS;
+  const output = exactRecord(candidate, expectedKeys);
+  if (Object.hasOwn(output, "platformAdmission")) {
+    assertPlatformAdmissionStatusV1(output.platformAdmission);
+  }
+  return output;
+}
+
+function assertPlatformAdmissionStatusV1(value: unknown) {
+  const status = exactRecord(value, PLATFORM_ADMISSION_KEYS);
+  if (!Array.isArray(status.warningFindingCodes)
+    || status.warningFindingCodes.some((code) =>
+      typeof code !== "string" || !PLATFORM_ADMISSION_WARNING_CODES.has(code))
+    || new Set(status.warningFindingCodes).size !== status.warningFindingCodes.length
+    || status.schemaVersion !== "programmable.platform-admission-status.v1"
+    || status.disposition !== "no_blocking_static_finding"
+    || exactSha256(status.reportSha256) !== status.reportSha256
+    || status.routerSimulationRequiredBeforeAuthorization !== true
+    || status.safetyClaim !== false
+    || status.feeBehaviorClaim !== false) {
+    return invalid();
+  }
 }
 
 function exactRecord(

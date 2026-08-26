@@ -32,9 +32,9 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.0.0",
+        releaseVersion: "3.1.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
       },
       compatibility: {
         v1: {
@@ -55,20 +55,21 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.0.0",
+          releaseVersion: "3.1.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
         },
       },
       generalHookProfile: {
         status: "live",
         apiVersion: "3",
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileRevision: 2,
+        profileRevision: 3,
+        profileVersion: "3.0.0",
         productionLaunchAuthorized: true,
         createPath: "/v3/custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.0.0",
+        cliReleaseVersion: "3.1.0",
       },
       integrationPreview: {
         status: "live",
@@ -77,14 +78,17 @@ describe("public Custom Launch CLI surface", () => {
         createPath: "/v3/custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileRevision: 2,
+        profileRevision: 3,
         requestSchemaVersion: "programmable.custom-launch-create-request.v3",
         minimumTargets: 3,
         maximumTargets: 16,
         projectOwnedToken: true,
         projectOwnedHook: true,
         hookPermissionMaskRange: { minimum: 0, maximum: 16_383 },
-        exactGraphReceiptRequired: true,
+        platformAdmissionReceiptRequired: true,
+        routerSimulationRequiredBeforeAuthorization: true,
+        safetyClaim: false,
+        feeBehaviorClaim: false,
         fundingAuthorization: {
           modes: [
             "none",
@@ -100,15 +104,15 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "3.0.0",
-        releaseTag: "programmable-launch-v3.0.0",
+        releaseVersion: "3.1.0",
+        releaseTag: "programmable-launch-v3.1.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
           profileId: "programmable.direct-native-hook-graph.v1",
-          profileRevision: 2,
+          profileRevision: 3,
           productionLaunchAuthorized: true,
           chainId: "1",
           network: "Ethereum Mainnet",
@@ -119,7 +123,10 @@ describe("public Custom Launch CLI surface", () => {
           ratePercent: "0.10%",
           rateBps: 10,
           recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          enforcement: "platform-signed-exact-graph-conformance-receipt",
+          enforcement: "role-aware-static-admission-plus-router-simulation",
+          admissionAssurance: "launch-admission-only",
+          safetyClaim: false,
+          feeBehaviorClaim: false,
           lpFee: "separate-from-platform-fee",
           genericFeeClaiming: "not-live",
           genericBuybackManagement: "not-live",
@@ -433,7 +440,29 @@ describe("public Custom Launch CLI surface", () => {
     ]);
     expect(request.properties.schemaVersion.const)
       .toBe("programmable.custom-launch-create-request.v3");
-    expect(request.allOf[0].then.required)
+    expect(request.allOf[0].oneOf).toHaveLength(2);
+    expect(request.allOf[0].oneOf[0].properties.launchProfile.properties)
+      .toMatchObject({
+        schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v3" },
+        profileRevision: { const: 3 },
+        profileVersion: { const: "3.0.0" },
+      });
+    expect(request.allOf[0].oneOf[0].properties.launchProfileSelection
+      .properties).toMatchObject({
+        schemaVersion: {
+          const: "programmable.direct-native-hook-graph-profile-selection-binding.v3",
+        },
+        profileRevision: { const: 3 },
+      });
+    expect(request.allOf[0].oneOf[0].properties.verificationBundle.$ref)
+      .toBe("#/components/schemas/DirectNativeExactSourceVerificationBundleV3");
+    expect(request.allOf[0].oneOf[1].properties.launchProfile.properties)
+      .toMatchObject({
+        schemaVersion: { const: "programmable.direct-native-hook-graph-profile.v2" },
+        profileRevision: { const: 2 },
+        profileVersion: { const: "2.0.0" },
+      });
+    expect(request.allOf[1].then.required)
       .toEqual(["fundingAuthorization", "fundingIntentHash"]);
     expect(request.properties.permitWindow.$ref)
       .toBe("#/components/schemas/DirectNativePermitWindowV1");
@@ -446,13 +475,17 @@ describe("public Custom Launch CLI surface", () => {
     });
     expect(v3["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileRevision: 2,
+      profileRevision: 3,
+      profileVersion: "3.0.0",
       productionLaunchAuthorized: true,
       minimumHookPermissionMask: 0,
       maximumHookPermissionMask: 16383,
       projectOwnedToken: true,
       projectOwnedHook: true,
-      exactGraphReceiptRequired: true,
+      platformAdmissionReceiptRequired: true,
+      routerSimulationRequiredBeforeAuthorization: true,
+      safetyClaim: false,
+      feeBehaviorClaim: false,
     });
     expect(v3.components.schemas.DirectNativeHookPermissionPolicyV1.properties)
       .toMatchObject({
@@ -466,12 +499,12 @@ describe("public Custom Launch CLI surface", () => {
       "permitAuthority",
       "permitAuthorityRuntimeCodeHash",
       "platformFeePolicy",
-      "platformFeeProofPolicy",
     ]));
+    expect(profile.oneOf).toHaveLength(2);
     expect(profile.properties.permitAuthority.const)
       .toBe("0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b");
     expect(profile.properties).toMatchObject({
-      profileVersion: { const: "2.0.0" },
+      profileVersion: { enum: ["2.0.0", "3.0.0"] },
       productionLaunchAuthorized: { const: true },
       routerRuntimeCodeHash: {
         const:
@@ -496,6 +529,27 @@ describe("public Custom Launch CLI surface", () => {
     });
     expect(profile.properties.platformFeePolicy.$ref)
       .toBe("#/components/schemas/PlatformFeePolicyV1");
+    expect(profile.properties.platformAdmissionPolicy.$ref)
+      .toBe("#/components/schemas/PlatformAdmissionPolicyV1");
+    expect(v3.components.schemas.PlatformAdmissionPolicyV1.properties)
+      .toMatchObject({
+        warningDisposition: { const: "bound-and-visible" },
+        noBlockingFindingDisposition: { const: "router-simulation-eligible" },
+        blockingFindingDisposition: { const: "action-required" },
+        routerSimulationRequiredBeforeAuthorization: { const: true },
+        assurance: { const: "launch-admission-only" },
+        safetyClaim: { const: false },
+        feeBehaviorClaim: { const: false },
+      });
+    expect(v3.components.schemas.PlatformAdmissionPolicyV1.properties
+      .blockingFindingRules.const[0]).toEqual({
+        code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+        targetRoles: ["any"],
+      });
+    expect(v3.components.schemas.DirectNativeExactSourceVerificationBundleV3
+      .allOf[1].properties.compilationUnits.items.allOf[1]
+      .properties.compilerVersion.const)
+      .toBe("0.8.26+commit.8a97fa7a");
     expect(v3.components.schemas.PlatformFeePolicyV1.properties)
       .toMatchObject({
         accountingMode: {
@@ -575,6 +629,17 @@ describe("public Custom Launch CLI surface", () => {
       (variant: { required: string[] }) =>
         variant.required.includes("fundingBoundary"),
     )).toBe(true);
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf.slice(0, 4).every(
+      (variant: { properties: Record<string, unknown> }) =>
+        Object.hasOwn(variant.properties, "platformAdmission"),
+    )).toBe(true);
+    expect(v3.components.schemas.PlatformAdmissionStatusV1.properties)
+      .toMatchObject({
+        disposition: { const: "no_blocking_static_finding" },
+        routerSimulationRequiredBeforeAuthorization: { const: true },
+        safetyClaim: { const: false },
+        feeBehaviorClaim: { const: false },
+      });
     expect(v3.components.schemas.FundingBoundaryV3.properties).toMatchObject({
       approvalTransactionRequired: { const: false },
       permit2Used: { const: false },
@@ -702,12 +767,15 @@ describe("public Custom Launch CLI surface", () => {
       expect(request).toMatchObject({
         schemaVersion: "programmable.custom-launch-create-request.v3",
         launchProfile: {
-          profileVersion: "2.0.0",
-          profileRevision: 2,
+          schemaVersion: "programmable.direct-native-hook-graph-profile.v3",
+          profileVersion: "3.0.0",
+          profileRevision: 3,
           productionLaunchAuthorized: true,
         },
         launchProfileSelection: {
-          profileRevision: 2,
+          schemaVersion:
+            "programmable.direct-native-hook-graph-profile-selection-binding.v3",
+          profileRevision: 3,
           fundingMode: "eip-3009-receive-with-authorization",
         },
       });
@@ -758,7 +826,8 @@ describe("public Custom Launch CLI surface", () => {
       v3: {
         status: "live",
         profileId: "programmable.direct-native-hook-graph.v1",
-        profileRevision: 2,
+        profileRevision: 3,
+        profileVersion: "3.0.0",
         productionLaunchAuthorized: true,
         createHttpStatus: 202,
         replayHttpStatus: 200,
@@ -782,5 +851,9 @@ describe("public Custom Launch CLI surface", () => {
     expect(constants).toContain("MAX_REQUEST_BYTES = 8_388_608");
     expect(constants).toContain("MAX_STANDARD_JSON_INPUT_BYTES = 5_242_880");
     expect(constants).toContain("MAX_TOTAL_STANDARD_JSON_INPUT_BYTES = 5_242_880");
+    expect(constants).toContain("MAX_STANDARD_JSON_SOURCES = 2_048");
+    expect(constants).toContain(
+      'DIRECT_NATIVE_REQUIRED_SOLC_VERSION = "0.8.26+commit.8a97fa7a"',
+    );
   });
 });

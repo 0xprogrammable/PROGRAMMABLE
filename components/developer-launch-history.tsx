@@ -35,6 +35,8 @@ type JsonValue =
 export type LaunchStatus =
   | "received"
   | "validating"
+  | "pending_review"
+  | "action_required"
   | "prepared"
   | "awaiting_funding_authorization"
   | "funding_authorization_verified"
@@ -99,6 +101,8 @@ const pageSize = 5;
 const statuses = new Set<LaunchStatus>([
   "received",
   "validating",
+  "pending_review",
+  "action_required",
   "prepared",
   "awaiting_funding_authorization",
   "funding_authorization_verified",
@@ -122,6 +126,8 @@ const sha256Pattern = /^sha256:[0-9a-f]{64}$/u;
 const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
   received: 0,
   validating: 1,
+  pending_review: 2,
+  action_required: 2,
   prepared: 2,
   awaiting_funding_authorization: 3,
   funding_authorization_verified: 4,
@@ -188,7 +194,6 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     && /^0x[0-9a-f]{64}$/u.test(value.fundingIntentHash)
     ? value.fundingIntentHash as `0x${string}`
     : null;
-  if (v3 && !fundingIntentHash) return null;
   let failure: LaunchResource["failure"] = null;
   if (value.failure !== null) {
     if (
@@ -303,6 +308,8 @@ function statusCopy(status: LaunchStatus) {
   switch (status) {
     case "received": return "Received";
     case "validating": return "Validating";
+    case "pending_review": return "Admission checks running";
+    case "action_required": return "Review required";
     case "prepared": return "Prepared";
     case "awaiting_funding_authorization": return "Funding signature required";
     case "funding_authorization_verified": return "Funding verified";
@@ -319,6 +326,8 @@ function statusDescription(status: LaunchStatus) {
   switch (status) {
     case "received": return "The API accepted this request.";
     case "validating": return "The API is validating the request.";
+    case "pending_review": return "Exact-source checks and the bounded static baseline are still running.";
+    case "action_required": return "A blocking static indicator needs platform review before Router simulation.";
     case "prepared": return "The launch transaction has been prepared.";
     case "awaiting_funding_authorization": return "Review and sign the exact USDC funding authorization. This does not send a transaction.";
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
@@ -1347,6 +1356,24 @@ export function DeveloperLaunchHistory({
                   <p className={styles.failure} role="alert">
                     {launch.failure.message}
                   </p>
+                ) : null}
+                {launch.status === "action_required" ? (
+                  <div className={styles.admissionNotice} role="status">
+                    <strong>Platform review required</strong>
+                    <p>
+                      A deterministic indicator blocked Router simulation. This
+                      is not a wallet action, audit, or safety verdict. Contact
+                      support with request ID <code>{launch.requestId}</code>.
+                      Never send your API key.
+                    </p>
+                    <a
+                      href="https://discord.com/invite/programmable"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Open Programmable support
+                    </a>
+                  </div>
                 ) : null}
                 {fundingReview ? (
                   <div className={styles.fundingReview}>

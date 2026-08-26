@@ -164,6 +164,44 @@
   margin-top: 14px;
 }
 
+.admissionNotice {
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--webde-line));
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.admissionNotice strong {
+  color: var(--webde-ink);
+  display: block;
+  font-weight: 650;
+}
+
+.admissionNotice p {
+  margin-top: 6px;
+}
+
+.admissionNotice code {
+  color: var(--webde-ink);
+  font-family: var(--font-plex-mono), monospace;
+  overflow-wrap: anywhere;
+}
+
+.admissionNotice a {
+  color: var(--webde-ink);
+  display: inline-flex;
+  font-weight: 650;
+  margin-top: 8px;
+  min-height: 44px;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
 .transaction {
   border-top: 1px solid var(--webde-line);
   margin-top: 16px;

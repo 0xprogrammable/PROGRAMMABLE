@@ -171,11 +171,11 @@ for (const [targetId, bytes] of artifactBytes) {
 }
 
 const evidence = {
-  schemaVersion: "programmable.direct-native-v3-no-broadcast-evidence.v2",
+  schemaVersion: "programmable.direct-native-v3-no-broadcast-evidence.v3",
   profile: {
     profileId: "programmable.direct-native-hook-graph.v1",
     profileVersion: "2.0.0",
-    profileRevision: 2,
+    profileRevision: 3,
     productionLaunchAuthorized: true,
   },
   scope: {
@@ -294,9 +294,9 @@ const config = {
     quoteCurrency,
   },
   launchProfile: {
-    schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v2",
+    schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileRevision: 2,
+    profileRevision: 3,
     targetRoles: {
       tokenTargetId: "token",
       hookTargetId: "hook",
@@ -348,7 +348,7 @@ await writeFile(
 );
 
 process.stdout.write(`${JSON.stringify({
-  schemaVersion: "programmable.direct-native-v3-config-result.v2",
+  schemaVersion: "programmable.direct-native-v3-config-result.v3",
   profileId: config.launchProfile.profileId,
   profileVersion: "2.0.0",
   profileRevision: config.launchProfile.profileRevision,

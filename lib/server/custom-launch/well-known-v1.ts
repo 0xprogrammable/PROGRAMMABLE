@@ -44,11 +44,11 @@ export function programmableWellKnownDocumentV1(
       cli: Object.freeze({
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.0.0",
+        releaseVersion: "3.1.0",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.0.0",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.1.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
       }),
       compatibility: Object.freeze({
         v1: Object.freeze({
@@ -73,23 +73,24 @@ export function programmableWellKnownDocumentV1(
         cli: Object.freeze({
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.0.0",
+          releaseVersion: "3.1.0",
           releaseUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.0.0",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.1.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
         }),
       }),
       generalHookProfile: Object.freeze({
         status: "live" as const,
         apiVersion: "3" as const,
         profileId: "programmable.direct-native-hook-graph.v1" as const,
-        profileRevision: 2 as const,
+        profileRevision: 3 as const,
+        profileVersion: "3.0.0" as const,
         productionLaunchAuthorized: true as const,
         createPath: "/v3/custom-launches" as const,
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.0.0" as const,
+        cliReleaseVersion: "3.1.0" as const,
       }),
       integrationPreview: Object.freeze({
         status: "live" as const,
@@ -99,7 +100,7 @@ export function programmableWellKnownDocumentV1(
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1" as const,
-        profileRevision: 2 as const,
+        profileRevision: 3 as const,
         requestSchemaVersion:
           "programmable.custom-launch-create-request.v3" as const,
         minimumTargets: 3 as const,
@@ -110,7 +111,10 @@ export function programmableWellKnownDocumentV1(
           minimum: 0 as const,
           maximum: 16_383 as const,
         }),
-        exactGraphReceiptRequired: true as const,
+        platformAdmissionReceiptRequired: true as const,
+        routerSimulationRequiredBeforeAuthorization: true as const,
+        safetyClaim: false as const,
+        feeBehaviorClaim: false as const,
         fundingAuthorization: Object.freeze({
           modes: Object.freeze([
             "none",
@@ -128,17 +132,17 @@ export function programmableWellKnownDocumentV1(
         publicAuthorization: true as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.0.0",
-        releaseTag: "programmable-launch-v3.0.0",
+        releaseVersion: "3.1.0",
+        releaseTag: "programmable-launch-v3.1.0",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.0.0",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.1.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({
           profileId: "programmable.direct-native-hook-graph.v1",
-          profileRevision: 2 as const,
+          profileRevision: 3 as const,
           productionLaunchAuthorized: true as const,
           chainId: "1" as const,
           network: "Ethereum Mainnet" as const,
@@ -153,7 +157,10 @@ export function programmableWellKnownDocumentV1(
           ratePercent: "0.10%" as const,
           rateBps: 10 as const,
           recipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-          enforcement: "platform-signed-exact-graph-conformance-receipt" as const,
+          enforcement: "role-aware-static-admission-plus-router-simulation" as const,
+          admissionAssurance: "launch-admission-only" as const,
+          safetyClaim: false as const,
+          feeBehaviorClaim: false as const,
           lpFee: "separate-from-platform-fee" as const,
           genericFeeClaiming: "not-live" as const,
           genericBuybackManagement: "not-live" as const,

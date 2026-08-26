@@ -12,9 +12,23 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## Local packaging and API availability
 
-Build and test the exact project. The public `programmable-launch` 3.0.0 CLI derives the deterministic source manifest, graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API schema](../developers/custom-launch.md). Run `pack`, `validate`, `submit` and `status` for the byte-identical public V3 request. Stop for every explicit wallet handoff and never sign or broadcast automatically.
+Build and test the exact project. The public `programmable-launch` 3.1.0 CLI derives the deterministic source manifest,
+graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API
+schema](../developers/custom-launch.md). The default `programmable.direct-native-hook-graph-profile.v3` profile uses
+`profileRevision: 3`, `profileVersion: 3.0.0` and exact `solc 0.8.26+commit.8a97fa7a`; revision 2 remains compatible.
+Run `pack`, `validate`, `submit` and `status` for the byte-identical public V3 request. Stop for every explicit wallet
+handoff. The API key and CLI never sign or broadcast.
 
-Existing durable resources record the API's declared bundle checks. `prepared` means the exact artifact exists while the signed permit and wallet transaction remain null. An already `authorized` resource supplies the permit-attached transaction for separate controller-wallet review. Exact-source provider status begins only after finality and never revises it. The API does not audit the project, sign the transaction or broadcast it, and the API key is not wallet authority.
+Revision 3 applies role-aware exact-source static admission. Every finding remains bound and visible. A configured
+blocking code and target-role match moves the request to `action_required`; other findings remain warnings. A final
+Router simulation is mandatory before authorization. If action is required, keep the request ID and contact support
+without sending the API key.
+
+Existing durable resources record the API's declared bundle checks. `prepared` means the exact artifact exists while the
+signed permit and wallet transaction remain null. An already `authorized` resource supplies the permit-attached
+transaction for separate controller-wallet review. Exact-source provider status begins only after finality and never
+revises it. Static admission and simulation are not an audit or a guarantee of safety, honeypot resistance, liquidity,
+tradeability or fee behavior. The API does not sign or broadcast, and the API key is not wallet authority.
 
 ## Release binding
 

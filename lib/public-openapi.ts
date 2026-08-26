@@ -1674,7 +1674,8 @@ export const programmablePublicOpenApi = {
     v3: {
       status: "live",
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileRevision: 2,
+      profileRevision: 3,
+      profileVersion: "3.0.0",
       productionLaunchAuthorized: true,
       createHttpStatus: 202,
       replayHttpStatus: 200,

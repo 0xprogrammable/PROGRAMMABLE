@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  parseDeterministicCustomLaunchApiReleaseBindingV1,
   verifyCustomLaunchApiReleaseBindingV1,
 } from "../verify-custom-launch-api-release-binding-v1.mjs";
 import {
@@ -132,7 +133,7 @@ async function stagingFixture() {
     },
     database: {
       migrationInventorySha256: record.subject.apiService.migrationInventorySha256,
-      lastMigration: "migrations/0007_direct_native_hook_profile_v3.sql",
+      lastMigration: "migrations/0008_direct_native_platform_admission_v3.sql",
       schemaEvidenceSha256: hashes.nine,
     },
     api: {
@@ -140,9 +141,9 @@ async function stagingFixture() {
       readinessIdentitySha256: record.subject.apiService.readinessIdentitySha256,
       apiContractSha256: record.subject.apiService.apiContractSha256,
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "2.0.0",
+      profileVersion: "3.0.0",
       publicProfilePath:
-        "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json",
+        "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json",
       publicProfileSha256: hashes.nine,
     },
     chain: clone(record.subject.chain),
@@ -172,6 +173,36 @@ test("V2 template validates without granting staging authority", async () => {
   const result = verifyCustomLaunchReleaseRecordV2(record, { require: "template" });
   assert.equal(result.ok, true, result.errors.join("\n"));
   assert.equal(record.recordStatus, "draft");
+});
+
+test("backend binding schema pairs current revision 3 and historical revision 2 evidence", async () => {
+  const currentBytes = await readFile(new URL(
+    "../../docs/operations/releases/custom-launch-v2/backend-release-binding.template.json",
+    import.meta.url,
+  ));
+  const current = parseDeterministicCustomLaunchApiReleaseBindingV1(currentBytes);
+  assert.equal(current.api.profileVersion, "3.0.0");
+  assert.match(current.api.publicProfilePath, /admission-profile\.v3\.json$/u);
+  assert.match(current.database.lastMigration, /0008_direct_native_platform_admission_v3/u);
+
+  const historical = clone(current);
+  historical.api.profileVersion = "2.0.0";
+  historical.api.publicProfilePath =
+    "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json";
+  historical.database.lastMigration = "migrations/0007_direct_native_hook_profile_v3.sql";
+  const historicalBytes = Buffer.from(`${JSON.stringify(historical, null, 2)}\n`);
+  assert.equal(
+    parseDeterministicCustomLaunchApiReleaseBindingV1(historicalBytes).api.profileVersion,
+    "2.0.0",
+  );
+
+  const mixed = clone(current);
+  mixed.api.publicProfilePath = historical.api.publicProfilePath;
+  const mixedBytes = Buffer.from(`${JSON.stringify(mixed, null, 2)}\n`);
+  assert.throws(
+    () => parseDeterministicCustomLaunchApiReleaseBindingV1(mixedBytes),
+    /binding schema is invalid/u,
+  );
 });
 
 test("V2 record advances through exact staging, candidate, promotion and live states", async () => {
@@ -264,7 +295,7 @@ function commitResponse(sha, tree) {
   };
 }
 
-test("backend binding verifies Git provenance and the checked-in public profile", async () => {
+test("backend binding preserves historical revision 2 profile evidence", async () => {
   const publicProfile = {
     schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v2",
     profileId: "programmable.direct-native-hook-graph.v1",
@@ -421,10 +452,16 @@ test("Fly readback accepts the real tag-only release ref and exact machine diges
 test("stage probe is GET-only and returns redacted no-broadcast evidence", async () => {
   const { observation } = await stagingFixture();
   const openApi = {
-    info: { version: "3.0.0" },
+    info: { version: "3.1.0" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
+      profileVersion: "3.0.0",
+      profileRevision: 3,
       productionLaunchAuthorized: true,
+      platformAdmissionReceiptRequired: true,
+      routerSimulationRequiredBeforeAuthorization: true,
+      safetyClaim: false,
+      feeBehaviorClaim: false,
     },
     "x-programmable-availability": {
       status: "live",

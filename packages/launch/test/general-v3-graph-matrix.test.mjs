@@ -385,9 +385,9 @@ contract AuxiliaryComponent {
       quoteCurrency: MAINNET_USDC,
     },
     launchProfile: {
-      schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v2",
+      schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileRevision: 2,
+      profileRevision: 3,
       targetRoles: {
         tokenTargetId: "project-token",
         hookTargetId: "project-hook",

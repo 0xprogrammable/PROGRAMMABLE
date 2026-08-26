@@ -18,14 +18,19 @@ Readiness: <https://api.programmable.market/readyz>
 ## V3 general hook boundary
 
 The `programmable.direct-native-hook-graph.v1` document is the V3 production request, resource and wallet-handoff
-contract. The Router primitive supports 2-16 targets; this profile requires 3-16 because token,
-hook and initializer roles are distinct. Revision 2 accepts a project-owned token, a project-owned hook, every valid
-Uniswap v4 permission mask and an exact multi-contract graph. It does not substitute a Programmable-owned hook.
+contract. The default profile uses `schemaVersion: programmable.direct-native-hook-graph-profile.v3`,
+`profileRevision: 3` and `profileVersion: 3.0.0`; its selection binding uses
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Revision 2 remains a
+compatible profile contract for existing clients and resources. The Router primitive supports 2-16 targets; the direct
+native profile requires 3-16 because token, hook and initializer roles are distinct. It accepts a project-owned token,
+a project-owned hook, every valid Uniswap v4 permission mask and an exact multi-contract graph. It does not substitute
+a Programmable-owned hook.
 
 Its mandatory 1,000-hundredths-of-a-bip Programmable share may be declared as an additive platform share or included
-inside the selected total. The server recomputes both buy and sell economics. Before the permit authority can sign, a
-platform-issued conformance receipt must bind the final graph commitment, exact runtime set, fee semantics and claim
-destination. Source, compiler settings, constructor arguments, final calldata and simulation are bound per launch.
+inside the selected total. The request binds the selected buy and sell economics. Revision 3 does not issue a
+fee-conformance certification. It runs role-aware exact-source static admission, binds the resulting report and
+warnings, and requires a final Router simulation before the permit authority can sign. Source, compiler settings,
+constructor arguments, final calldata and simulation are bound per launch.
 The pool may use a static fee or the Uniswap v4 dynamic-fee sentinel. Funding may be absent, carried as the exact
 native value of the separately reviewed Router transaction, or use an unsigned USDC EIP-3009 descriptor. Any later
 funding signature and the Router transaction remain separate explicit wallet actions and are never produced or sent
@@ -40,8 +45,9 @@ For each successful swap, the mandatory platform charge is 1,000 parts per 1,000
 assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is either `additive-platform-share` or
 `inclusive-selected-total`; the server recomputes buy and sell project share, effective total, fee currency and
 rounding. It accrues under the exact claim binding controlled by
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The server requires an exact-graph conformance receipt before signing
-the launch permit. A reverted swap must roll back the fee with the rest of the transaction.
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. These declared bindings do not certify the behavior of arbitrary custom
+code. Revision-3 admission and the mandatory Router simulation are not a fee-behavior guarantee. A reverted swap is
+expected to roll the fee back with the rest of the transaction; inspect the exact project implementation.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -63,10 +69,21 @@ inventory that can exchange against incoming assets. Buys may then grow assets h
 inventory and the buy, sell, redemption and withdrawal paths still come from the exact project graph. Funding mode
 `none` does not make an empty ordinary pool liquid.
 
-Programmable checks exact source/build bindings, hook permissions and address bits, runtime trust roots, the declared
-10 bps conformance receipt and the final Router simulation. Those checks do not prove that arbitrary custom code has
-no honeypot behavior, privileged controls or economic risk. A project must disclose transfer restrictions, pause or
-upgrade controls, liquidity custody, withdrawal behavior and buy/sell conditions.
+Revision 3 checks exact source/build bindings, hook permissions and address bits, then applies a role-aware static
+baseline. Every finding remains bound and visible. A configured blocking finding code blocks only its configured target
+role, except analysis-incomplete findings which block any role. A blocking code and role match returns
+`action_required`; findings outside those pairs remain warnings. A final Router simulation is mandatory before
+authorization.
+
+When no blocking pair matches, the server-authored `platformAdmission` status binds the report SHA-256 and warning
+codes with disposition `no_blocking_static_finding`, while requiring Router simulation and explicitly setting
+`safetyClaim: false` and `feeBehaviorClaim: false`. A blocking match instead exposes the exact static report through
+`action_required`.
+
+Static admission and simulation do not prove that arbitrary custom code has no honeypot behavior, privileged controls
+or economic risk. They are not an audit or a guarantee of safety, liquidity, tradeability or fee behavior. A project
+must disclose transfer restrictions, pause or upgrade controls, liquidity custody, withdrawal behavior and buy/sell
+conditions.
 
 ## Install the public CLI
 
@@ -74,7 +91,7 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
 programmable-launch --version
 ```
 
@@ -117,10 +134,11 @@ validates every required field, including the exact source descriptor and manife
 selection, canonical profile and intent hashes, agent attestation and `verificationBundle` exact source material. Use
 the normative V3 OpenAPI for every nested field, enum and size bound.
 
-The complete request is limited to 8,388,608 bytes. Decoded Standard JSON is limited to 5,242,880 bytes per
-compilation unit and across all units in one request. Sources use exact inline UTF 8 content. Compiler version,
-settings, libraries, constructor arguments, runtime materialization and every exclusive graph component are bound to
-the launch intent.
+The complete request is limited to 8,388,608 bytes. For the default revision-3 profile, every compilation unit uses
+exact `solc 0.8.26+commit.8a97fa7a`. Decoded Standard JSON is limited to 5,242,880 bytes per compilation unit and
+across all units in one request, with at most 2,048 inline sources. Compiler version, settings, libraries, constructor
+arguments, runtime materialization and every exclusive graph component are bound to the launch intent. Revision-2
+requests retain their compatibility contract.
 
 ## Idempotent submission
 
@@ -153,9 +171,11 @@ validating or funding_authorization_verified -> pending_review <-> action_requir
 pending_review -> prepared -> simulating -> authorized -> submitted -> finalized
 ```
 
-`failed` and `cancelled` are terminal alternatives. `pending_review` has no wallet action. `action_required` tells the
-agent that a deterministic indicator requires additional platform review. Inspect the exact report and contact
-support with the request ID when directed; it is not a wallet-signing stage. With `--until authorized`, the CLI also stops at
+`failed` and `cancelled` are terminal alternatives. `pending_review` has no wallet action. `action_required` means a
+configured static finding code matched its blocking target role. Inspect the exact bound report and contact support
+with the request ID when directed; it is not a wallet-signing stage. Send only the request ID, status, UTC time and
+public error code. Never send the API key. Nonblocking findings remain bound and visible as warnings. With
+`--until authorized`, the CLI also stops at
 `awaiting_funding_authorization`; complete the exact typed-data signature in the website, then run status again.
 `prepared` has no wallet transaction. `authorized` contains the exact Router transaction for separate controller
 wallet review, signing and broadcast. The API and CLI never sign or broadcast. After the wallet broadcasts, run:
