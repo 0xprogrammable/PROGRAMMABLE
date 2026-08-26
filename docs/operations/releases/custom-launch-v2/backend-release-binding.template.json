@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "programmable.custom-launch-api-release-binding.v1",
+  "materializationState": "materialized",
+  "backend": {
+    "repository": "0xprogrammable/programmable-open-hook-v2-internal",
+    "servicePath": "services/custom-launch-api-v1",
+    "candidateCommitSha": "0000000000000000000000000000000000000000",
+    "candidateTreeSha": "0000000000000000000000000000000000000000"
+  },
+  "website": {
+    "repository": "0xprogrammable/programmable",
+    "candidateCommitSha": "0000000000000000000000000000000000000000",
+    "candidateTreeSha": "0000000000000000000000000000000000000000",
+    "publicOpenApiSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "launchPackageManifestSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "fly": {
+    "app": "programmable-custom-launch-api",
+    "origin": "https://programmable-custom-launch-api.fly.dev",
+    "region": "fra",
+    "releaseVersion": 1,
+    "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "imageTag": "main-000000000000",
+    "machineCount": 2
+  },
+  "database": {
+    "migrationInventorySha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "lastMigration": "migrations/0007_direct_native_hook_profile_v3.sql",
+    "schemaEvidenceSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "api": {
+    "readinessSchemaVersion": "programmable.custom-launch-api-readiness.v2",
+    "readinessIdentitySha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "apiContractSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "profileId": "programmable.direct-native-hook-graph.v1",
+    "profileVersion": "1.0.0",
+    "publicProfilePath": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v1.json",
+    "publicProfileSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "chain": {
+    "chainId": "1",
+    "router": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+    "routerRuntimeCodeHash": "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+    "graphFactory": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+    "graphFactoryRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+    "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    "poolManagerRuntimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+    "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+    "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+  }
+}

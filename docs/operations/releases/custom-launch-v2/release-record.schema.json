@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch-release-record-v2.json",
+  "title": "Programmable Custom Launch API detached release record V2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "recordStatus", "createdAt", "releaseIntent", "subject", "releaseApproval", "validation", "rollback", "candidate", "promotionApproval", "promoted", "canary", "liveDeclaration"],
+  "properties": {
+    "schemaVersion": { "const": "programmable.custom-launch-release-record.v2" },
+    "recordStatus": { "enum": ["draft", "staging_approved", "candidate_verified", "promotion_approved", "promoted", "live"] },
+    "createdAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "releaseIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["releaseId", "product", "chainId", "targetMode"],
+      "properties": {
+        "releaseId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "product": { "const": "custom_launch_api_v3" },
+        "chainId": { "const": "1" },
+        "targetMode": { "const": "enabled" }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["website", "apiService", "chain", "releaseSubjectSha256"],
+      "properties": {
+        "website": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository", "commitSha", "treeSha", "reviewedDiffBaseSha", "reviewedDiffSha256", "publicOpenApiSha256", "launchPackageManifestSha256"],
+          "properties": {
+            "repository": { "const": "0xprogrammable/programmable" },
+            "commitSha": { "$ref": "#/$defs/nullableCommit" },
+            "treeSha": { "$ref": "#/$defs/nullableCommit" },
+            "reviewedDiffBaseSha": { "$ref": "#/$defs/nullableCommit" },
+            "reviewedDiffSha256": { "$ref": "#/$defs/nullableSha256" },
+            "publicOpenApiSha256": { "$ref": "#/$defs/nullableSha256" },
+            "launchPackageManifestSha256": { "$ref": "#/$defs/nullableSha256" }
+          }
+        },
+        "apiService": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository", "servicePath", "bindingAttestationCommitSha", "bindingDocumentPath", "bindingDocumentSha256", "candidateCommitSha", "candidateTreeSha", "imageDigest", "flyReleaseVersion", "migrationInventorySha256", "apiContractSha256", "readinessIdentitySha256"],
+          "properties": {
+            "repository": { "const": "0xprogrammable/programmable-open-hook-v2-internal" },
+            "servicePath": { "const": "services/custom-launch-api-v1" },
+            "bindingAttestationCommitSha": { "$ref": "#/$defs/nullableCommit" },
+            "bindingDocumentPath": { "const": "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json" },
+            "bindingDocumentSha256": { "$ref": "#/$defs/nullableSha256" },
+            "candidateCommitSha": { "$ref": "#/$defs/nullableCommit" },
+            "candidateTreeSha": { "$ref": "#/$defs/nullableCommit" },
+            "imageDigest": { "$ref": "#/$defs/nullableSha256" },
+            "flyReleaseVersion": { "type": ["integer", "null"], "minimum": 1 },
+            "migrationInventorySha256": { "$ref": "#/$defs/nullableSha256" },
+            "apiContractSha256": { "$ref": "#/$defs/nullableSha256" },
+            "readinessIdentitySha256": { "$ref": "#/$defs/nullableSha256" }
+          }
+        },
+        "chain": { "$ref": "#/$defs/chain" },
+        "releaseSubjectSha256": { "$ref": "#/$defs/nullableSha256" }
+      }
+    },
+    "releaseApproval": { "$ref": "#/$defs/decision" },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gates"],
+      "properties": {
+        "gates": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": { "$ref": "#/$defs/gate" }
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["website", "apiService"],
+      "properties": {
+        "website": { "$ref": "#/$defs/websiteDeployment" },
+        "apiService": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["flyReleaseVersion", "imageDigest", "candidateCommitSha", "capturedAt"],
+          "properties": {
+            "flyReleaseVersion": { "type": ["integer", "null"], "minimum": 1 },
+            "imageDigest": { "$ref": "#/$defs/nullableSha256" },
+            "candidateCommitSha": { "$ref": "#/$defs/nullableCommit" },
+            "capturedAt": { "$ref": "#/$defs/nullableTimestamp" }
+          }
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowRunId", "workflowRunAttempt", "workflowRunUrl", "websiteDeploymentId", "immutableWebsiteUrl", "websiteCommitSha", "apiOrigin", "apiReadinessIdentitySha256", "verificationEvidenceSha256", "verifiedAt"],
+      "properties": {
+        "workflowRunId": { "type": ["integer", "null"], "minimum": 1 },
+        "workflowRunAttempt": { "type": ["integer", "null"], "minimum": 1 },
+        "workflowRunUrl": { "$ref": "#/$defs/nullableString" },
+        "websiteDeploymentId": { "$ref": "#/$defs/nullableString" },
+        "immutableWebsiteUrl": { "$ref": "#/$defs/nullableString" },
+        "websiteCommitSha": { "$ref": "#/$defs/nullableCommit" },
+        "apiOrigin": { "$ref": "#/$defs/nullableString" },
+        "apiReadinessIdentitySha256": { "$ref": "#/$defs/nullableSha256" },
+        "verificationEvidenceSha256": { "$ref": "#/$defs/nullableSha256" },
+        "verifiedAt": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    },
+    "promotionApproval": { "$ref": "#/$defs/promotionDecision" },
+    "promoted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["websiteDeploymentId", "immutableWebsiteUrl", "productionAlias", "evidenceSha256", "promotedAt"],
+      "properties": {
+        "websiteDeploymentId": { "$ref": "#/$defs/nullableString" },
+        "immutableWebsiteUrl": { "$ref": "#/$defs/nullableString" },
+        "productionAlias": { "$ref": "#/$defs/nullableString" },
+        "evidenceSha256": { "$ref": "#/$defs/nullableSha256" },
+        "promotedAt": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    },
+    "canary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "mode", "evidenceSha256", "evidenceLocator", "completedAt", "walletSignatureObserved", "transactionBroadcastObserved"],
+      "properties": {
+        "status": { "enum": ["pending", "passed"] },
+        "mode": { "const": "public-cli-wallet-handoff-no-broadcast" },
+        "evidenceSha256": { "$ref": "#/$defs/nullableSha256" },
+        "evidenceLocator": { "$ref": "#/$defs/nullableString" },
+        "completedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "walletSignatureObserved": { "const": false },
+        "transactionBroadcastObserved": { "const": false }
+      }
+    },
+    "liveDeclaration": { "$ref": "#/$defs/decision" }
+  },
+  "$defs": {
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "timestamp": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+    "nullableCommit": { "anyOf": [{ "$ref": "#/$defs/commit" }, { "type": "null" }] },
+    "nullableSha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+    "nullableTimestamp": { "anyOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }] },
+    "nullableString": { "type": ["string", "null"] },
+    "address": { "type": "string", "pattern": "^0x[0-9A-Fa-f]{40}$" },
+    "codeHash": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+    "chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainId", "router", "routerRuntimeCodeHash", "graphFactory", "graphFactoryRuntimeCodeHash", "poolManager", "poolManagerRuntimeCodeHash", "permitAuthority", "permitAuthorityRuntimeCodeHash"],
+      "properties": {
+        "chainId": { "const": "1" },
+        "router": { "$ref": "#/$defs/address" },
+        "routerRuntimeCodeHash": { "$ref": "#/$defs/codeHash" },
+        "graphFactory": { "$ref": "#/$defs/address" },
+        "graphFactoryRuntimeCodeHash": { "$ref": "#/$defs/codeHash" },
+        "poolManager": { "$ref": "#/$defs/address" },
+        "poolManagerRuntimeCodeHash": { "$ref": "#/$defs/codeHash" },
+        "permitAuthority": { "$ref": "#/$defs/address" },
+        "permitAuthorityRuntimeCodeHash": { "$ref": "#/$defs/codeHash" }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "status", "decisionId", "immutableReference", "decidedAt", "statementSha256", "releaseSubjectSha256"],
+      "properties": {
+        "authority": { "const": "release_owner" },
+        "status": { "enum": ["pending", "approved", "declared_live"] },
+        "decisionId": { "$ref": "#/$defs/nullableString" },
+        "immutableReference": { "$ref": "#/$defs/nullableString" },
+        "decidedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "statementSha256": { "$ref": "#/$defs/nullableSha256" },
+        "releaseSubjectSha256": { "$ref": "#/$defs/nullableSha256" }
+      }
+    },
+    "promotionDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "status", "decisionId", "immutableReference", "decidedAt", "statementSha256", "releaseSubjectSha256", "candidateEvidenceSha256"],
+      "properties": {
+        "authority": { "const": "release_owner" },
+        "status": { "enum": ["pending", "approved"] },
+        "decisionId": { "$ref": "#/$defs/nullableString" },
+        "immutableReference": { "$ref": "#/$defs/nullableString" },
+        "decidedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "statementSha256": { "$ref": "#/$defs/nullableSha256" },
+        "releaseSubjectSha256": { "$ref": "#/$defs/nullableSha256" },
+        "candidateEvidenceSha256": { "$ref": "#/$defs/nullableSha256" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "result", "evidenceSha256", "evidenceLocator", "completedAt"],
+      "properties": {
+        "id": { "enum": ["website_release", "custom_launch_api_release", "database_migrations", "security", "public_contract", "source_verification_pipeline", "browser_qa", "rollback_snapshot", "clean_room_no_broadcast"] },
+        "result": { "enum": ["pending", "passed", "failed"] },
+        "evidenceSha256": { "$ref": "#/$defs/nullableSha256" },
+        "evidenceLocator": { "$ref": "#/$defs/nullableString" },
+        "completedAt": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    },
+    "websiteDeployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deploymentId", "immutableDeploymentUrl", "commitSha", "configurationSnapshotSha256", "capturedAt"],
+      "properties": {
+        "deploymentId": { "$ref": "#/$defs/nullableString" },
+        "immutableDeploymentUrl": { "$ref": "#/$defs/nullableString" },
+        "commitSha": { "$ref": "#/$defs/nullableCommit" },
+        "configurationSnapshotSha256": { "$ref": "#/$defs/nullableSha256" },
+        "capturedAt": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    }
+  }
+}
