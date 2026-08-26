@@ -117,9 +117,7 @@ export async function buildLaunch({ configPath }) {
     nonce,
     noDelegationRuntimeTargetIds: apiVersion === "v2"
       ? [launchProfileSelection.targetRoles.customModuleTargetId]
-      : apiVersion === "v3"
-        ? [launchProfileSelection.targetRoles.hookTargetId]
-        : [],
+      : [],
     enforceV4PermissionDependencies: apiVersion === "v3",
   });
   const { verificationBundle, verificationBundleHash } = buildVerificationBundle(

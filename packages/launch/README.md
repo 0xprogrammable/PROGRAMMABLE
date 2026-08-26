@@ -8,19 +8,19 @@ transaction.
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz
 programmable-launch --version
 ```
 
-That immutable release remains the V1 compatibility package. V1 request preparation and status reads remain valid,
-but new V1 submissions are read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`.
+The command must print `3.0.0`. Install this immutable GitHub Release asset rather than an unverified npm-registry
+package with the same name.
 
-For public V3 general-hook preparation and submission, install the immutable `3.0.0` GitHub Release asset rather than an
-unverified npm-registry package with the same name:
+The immutable V1 package remains available only for compatibility preparation and reads. New V1 submissions are
+read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`:
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.0.0/programmable-launch-3.0.0.tgz
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz
 programmable-launch --version
 ```
 
@@ -83,7 +83,22 @@ secret-store lookup is the Keychain service `api.programmable.market`, account `
 V3 `submit` routes only to `/v3/custom-launches`. It never falls back to an older create route. Preserve the exact request bytes and
 idempotency key across timeout, `429`, or `503` retries and honor `Retry-After`. At `authorized`, stop the agent flow:
 the controller reviews the exact `walletTransaction` and signs it in a separate wallet flow. After a human broadcast,
-use `status REQUEST_UUID --watch --until finalized`. `finalized`, `failed`, and `cancelled` always stop polling.
+use `status REQUEST_UUID --watch --until finalized`. V3 is the default status route; use `--api-version 1` or
+`--api-version 2` only when reading a legacy request. `finalized`, `failed`, and `cancelled` always stop polling.
+
+```sh
+programmable-launch submit launch.json --config programmable-launch.config.json
+programmable-launch status REQUEST_UUID --watch --until authorized
+```
+
+For `eip-3009-receive-with-authorization`, the first status command can stop at
+`awaiting_funding_authorization`. The controller signs that exact funding authorization in the website wallet flow,
+never in the CLI, then runs the same status command again. At `authorized`, the controller separately reviews and
+broadcasts the exact Router transaction from the website. The agent can then track finality:
+
+```sh
+programmable-launch status REQUEST_UUID --watch --until finalized
+```
 
 The included rehearsal proves only offline pack and validation. It does not submit, poll, sign, or broadcast.
 
@@ -97,16 +112,39 @@ The top-level fields are:
   public HTTPS `url` plus the exact lowercase merged production Git `revision` used for the release
 - `compilationUnits`: unique `{ compilationUnitId, standardJson }` entries
 - `targets`: 3–16 target definitions
-- `pool`: exact token/hook target IDs, fee, and tick spacing
+- `pool`: exact token/hook target IDs, fee, tick spacing, and `quoteCurrency` address; use
+  `0x0000000000000000000000000000000000000000` for native ETH or the exact ERC-20 address for a token quote
 - `permitWindow`: exact `validAfter` and `deadline`, no more than one hour apart
 - `launchProfile`: target roles, funding mode, fee accounting and claim binding
 - `agentAttestation`: stable agent ID, explicit millisecond UTC `checkedAt`, and checks that point to exact evidence files
 
 Each target has exactly `targetId`, `compilationUnitId`, `artifact`, `applicantSalt`, `constructorArguments`,
-`initializer`, `deploymentValueWei`, `initializerValueWei`, `componentKind`, and `declaredHookPermissions`.
+`initializer`, `deploymentValueWei`, `initializerValueWei`, `componentKind`, `declaredHookPermissions`, and
+`runtimeImmutables`.
 Constructor arguments are JSON ABI values. Use `{ "target": "another-target-id" }` in an ABI `address` slot; `pack`
 encodes a zero placeholder and derives the locator and resolved CREATE2 address. `initializer` is either `null` or
 `{ "function": "functionName", "arguments": [...] }`.
+
+`runtimeImmutables` is always an array. Use `[]` when the compiler artifact has no immutable references. Otherwise it
+must cover every compiler immutable ID exactly once with its ABI type and either a literal or a target reference, for
+example `{ "immutableId": "0", "abiType": "address", "target": "token" }`. `pack` materializes the exact deployed
+runtime from those compiler ranges and values before deriving its hash; missing, duplicate, or extra bindings stop
+packaging.
+
+The V3 `launchProfile` uses schema
+`programmable.direct-native-hook-graph-profile-selection.v2`, profile
+`programmable.direct-native-hook-graph.v1`, and revision `2`. It names `tokenTargetId`, `hookTargetId`,
+`initializerTargetId`, and `platformFeeBindingTargetId`; selects funding mode `none`,
+`wallet-transaction-value`, or `eip-3009-receive-with-authorization`; selects `additive-platform-share` or
+`inclusive-selected-total`; binds either `executed-gross-declared-quote` with `declared-quote-currency` or
+`settled-input-before-platform-fee` with `input-currency`; selects
+`immutable-payout-recipient` or `claim-authority-selected-recipient`; and supplies both applicant-selected fee values.
+Those fee values are decimal hundredths of a bip from `0` through `999999`; additive mode stops at `998999` so the
+additional `1000` platform units fit the denominator. `payoutRecipient` is present only for the immutable mode and
+must equal `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The EIP-3009 mode additionally requires the exact
+`fundingAuthorization` and unsigned `fundingSignaturePatch` top-level objects; the other funding modes forbid them.
+`none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
+Router transaction value, and EIP-3009 funding requires zero native deployment and initializer value.
 
 `applicantSalt` is either a fixed lowercase bytes32 or, for the hook only, a closed deterministic grind request:
 
@@ -125,8 +163,12 @@ bounded search stops with `HOOK_SALT_GRIND_EXHAUSTED`; it never substitutes diff
 `pack` derives bytecode and the exact solc build from the artifact, exact Standard JSON bytes and SHA-256, sorted source
 manifest, source descriptor, graph bundle, address locators, CREATE2 predictions, agent evidence hashes, verification
 bundle, graph hash, verification hash, and exact request-byte hash. It rejects unresolved libraries. It derives the
-full expected runtime hash only when the compiler artifact has no unresolved immutable references. Otherwise it stops
-with `RUNTIME_MATERIALIZATION_REQUIRED`; it never accepts a hand-written runtime hash.
+full expected runtime hash from the compiler runtime template and the required `runtimeImmutables`; it never accepts a
+hand-written runtime hash.
+
+V3 deterministic packaging permits project-owned proxy or delegating hook runtimes. Exact source, compiler, config,
+runtime, graph, and request binding proves reproducibility, not safety approval. Platform admission, fee-conformance
+evidence, review, wallet authorization, deployment, and availability remain separate gates.
 
 The deterministic source-content digest is SHA-256 of RFC 8785/JCS bytes for
 `{schemaVersion:"programmable.source-bundle-content.v1",entries:[manifest fields plus contentBase64]}`. Entries are

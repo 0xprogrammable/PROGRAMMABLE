@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
@@ -604,6 +606,84 @@ describe("public Custom Launch CLI surface", () => {
     expect(guide).toContain("`submit: false`");
     expect(guide).toContain('`stopAt: "pre-submit"`');
   });
+
+  it("builds, packs, and validates the direct-native V3 no-broadcast example", () => {
+    const exampleRoot = join(
+      root,
+      "packages/launch/examples/direct-native-v3-no-broadcast/project",
+    );
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "programmable-direct-native-v3-"));
+    const projectRoot = join(temporaryRoot, "project");
+    const cli = join(root, "packages/launch/bin/programmable-launch.mjs");
+    const environment = {
+      ...process.env,
+      PROGRAMMABLE_LAUNCH_WALLET: "0x1111111111111111111111111111111111111111",
+      PROGRAMMABLE_SOURCE_REVISION: "1111111111111111111111111111111111111111",
+      PROGRAMMABLE_LAUNCH_NONCE: `0x${"22".repeat(32)}`,
+    };
+
+    try {
+      cpSync(exampleRoot, projectRoot, { recursive: true });
+      execFileSync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], {
+        cwd: projectRoot,
+        env: environment,
+        stdio: "pipe",
+      });
+      execFileSync("npm", ["run", "build"], {
+        cwd: projectRoot,
+        env: environment,
+        stdio: "pipe",
+      });
+      const packOutput = JSON.parse(execFileSync(process.execPath, [
+        cli,
+        "pack",
+        "--config",
+        join(projectRoot, "programmable-launch.config.json"),
+        "--output",
+        join(projectRoot, "launch.json"),
+      ], {
+        cwd: projectRoot,
+        env: environment,
+        encoding: "utf8",
+      }));
+      const validateOutput = JSON.parse(execFileSync(process.execPath, [
+        cli,
+        "validate",
+        join(projectRoot, "launch.json"),
+        "--config",
+        join(projectRoot, "programmable-launch.config.json"),
+      ], {
+        cwd: projectRoot,
+        env: environment,
+        encoding: "utf8",
+      }));
+      const request = JSON.parse(readFileSync(join(projectRoot, "launch.json"), "utf8"));
+
+      expect(packOutput.requestSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(packOutput.fundingIntentHash).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(validateOutput).toMatchObject({
+        schemaVersion: "programmable.custom-launch-create-request.v3",
+        productionLaunchAuthorized: true,
+        reproducedFromConfig: true,
+        requestSha256: packOutput.requestSha256,
+      });
+      expect(request).toMatchObject({
+        schemaVersion: "programmable.custom-launch-create-request.v3",
+        launchProfile: {
+          profileVersion: "2.0.0",
+          profileRevision: 2,
+          productionLaunchAuthorized: true,
+        },
+        launchProfileSelection: {
+          profileRevision: 2,
+          fundingMode: "eip-3009-receive-with-authorization",
+        },
+      });
+      expect(JSON.stringify(request)).not.toContain('"signature"');
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  }, 180_000);
 
   it("keeps V1 reads live while documenting the exact non-retryable write fence", () => {
     const openApi = JSON.parse(readFileSync(

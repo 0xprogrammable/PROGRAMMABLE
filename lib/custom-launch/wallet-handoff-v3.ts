@@ -50,6 +50,8 @@ const SECP256K1_HALF_ORDER =
   0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0n;
 const MAXIMUM_FUNDING_VALIDITY_SECONDS = 3_600n;
 const MINIMUM_WALLET_SUBMISSION_WINDOW_SECONDS = 30n;
+const V4_MAXIMUM_STATIC_FEE = 999_999n;
+const V4_DYNAMIC_FEE_SENTINEL = 0x800000n;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
@@ -847,7 +849,7 @@ function assertExactCustomGraphRouterCalldataV3(
   if (
     BigInt(currency0.toLowerCase()) >= BigInt(currency1.toLowerCase())
     || fee < 0n
-    || fee > 999_999n
+    || (fee > V4_MAXIMUM_STATIC_FEE && fee !== V4_DYNAMIC_FEE_SENTINEL)
     || tickSpacing < 1n
     || tickSpacing > 32_767n
     || (!sameAddress(currency0, token) && !sameAddress(currency1, token))

@@ -556,6 +556,53 @@ test("V3 binds native launch value to the separately reviewed Router transaction
   });
   assert.equal(Object.hasOwn(binding, "fundingSignaturePatch"), false);
   validateDirectNativeProfileGraph(resolveDirectNativeProfile(selection), binding, bundle);
+
+  const zeroValueBundle = graphBundle();
+  const zeroValueBinding = buildDirectNativeProfileBinding(selection, {
+    graphBundle: zeroValueBundle,
+    predictions: [
+      { targetId: "token", predictedAddress: TOKEN_ADDRESS },
+      { targetId: "hook", predictedAddress: HOOK_ADDRESS },
+      { targetId: "initializer", predictedAddress: INITIALIZER_ADDRESS },
+    ],
+    routeNamespace: ROUTE_NAMESPACE,
+    routeNonce: ROUTE_NONCE,
+    quoteCurrency: ZERO_ADDRESS,
+  });
+  assert.throws(
+    () => validateDirectNativeProfileGraph(
+      resolveDirectNativeProfile(selection),
+      zeroValueBinding,
+      zeroValueBundle,
+    ),
+    /wallet-transaction-value requires a nonzero exact Router transaction value/u,
+  );
+});
+
+test("V3 EIP-3009 funding excludes native Router transaction value", () => {
+  const bundle = graphBundle();
+  const binding = buildDirectNativeProfileBinding(SELECTION, {
+    graphBundle: bundle,
+    predictions: [
+      { targetId: "token", predictedAddress: TOKEN_ADDRESS },
+      { targetId: "hook", predictedAddress: HOOK_ADDRESS },
+      { targetId: "initializer", predictedAddress: INITIALIZER_ADDRESS },
+    ],
+    routeNamespace: ROUTE_NAMESPACE,
+    routeNonce: ROUTE_NONCE,
+    quoteCurrency: ZERO_ADDRESS,
+    fundingSignaturePatch: signaturePatch(bundle),
+  });
+  const nativeValueBundle = structuredClone(bundle);
+  nativeValueBundle.targets[2].initializerValueWei = "1";
+  assert.throws(
+    () => validateDirectNativeProfileGraph(
+      resolveDirectNativeProfile(SELECTION),
+      binding,
+      nativeValueBundle,
+    ),
+    /EIP-3009 funding requires zero native deployment and initializer value/u,
+  );
 });
 
 test("V3 additive accounting preserves the applicant project rate and adds exactly 1000 ppm", () => {

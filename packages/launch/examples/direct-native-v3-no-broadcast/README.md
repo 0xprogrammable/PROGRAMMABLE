@@ -2,14 +2,15 @@
 
 This packaged fixture compiles real Solidity with exact `solc` 0.8.26, emits the Standard JSON input and selected
 compiler artifacts, then prepares and validates a three-target
-`programmable.direct-native-hook-graph.v1` request. The hook target is the exact frozen
+`programmable.direct-native-hook-graph.v1` revision 2 request. The hook target is the exact
 `ProgrammableVolumeFeeHookV2` reference source/build at permission mask `0x20cc`. The initializer target deliberately
 reverts if executed: it exists only to prove the compiler-ABI-validated EIP-3009 `r`/`s`/`v` patch surface without
 moving funds, signing, or broadcasting.
 
 Passing this fixture proves only local source/build reproduction plus deterministic pack and validation for the exact
-inputs. Profile `1.0.0` has `productionLaunchAuthorized: false`. It is not approval, admission, deployment, a live
-route, a usable liquidity initializer, or a launched coin.
+inputs. The embedded profile is the live revision 2 profile with `productionLaunchAuthorized: true`; that profile
+flag does not turn this deliberately non-executable fixture into an approved or submitted launch. This example is not
+deployment, a usable liquidity initializer, a wallet transaction, or a launched coin.
 
 ## Install, build, pack, validate
 
@@ -48,7 +49,8 @@ or writes a derived hash supplied by the operator.
 The default market is native ETH against the minted fixture token (`quoteCurrency` is the v4 native zero address),
 with LP fee `3000` and tick spacing `60`. Mainnet USDC is independently fixed as the funding token. Optional public
 environment overrides are documented by `npm run build -- --help`; selected buy/sell totals remain within
-`0..999999`, and this V3 fixture does not accept the dynamic-fee sentinel.
+`0..999999`. The live revision 2 profile supports the v4 dynamic-fee sentinel, but this fixed-fee reference fixture
+intentionally does not select it.
 
 Run `pack` promptly after `build`: the generated unsigned funding descriptor uses a fresh, at-most-one-hour validity
 window. Re-run `npm run build` to refresh an expired window. The packed request contains the nine-field unsigned
@@ -58,8 +60,8 @@ EIP-3009 descriptor and zero `r`/`s`/`v` initializer words only—never a signat
 
 The optional wrapper is intentionally one-shot. If and only if the V3 backend route is available, it submits the exact
 unsigned request and accepts only `awaiting_funding_authorization`. It never calls a wallet provider, submits a funding
-signature, requests the Router transaction, polls status, or broadcasts. The current integration-pending route may
-return a fail-closed `503`; that is not launch evidence.
+signature, requests the Router transaction, polls status, or broadcasts. A temporary service failure may return a
+fail-closed `503`; that is not launch evidence.
 
 Keep the API key in the encrypted `PROGRAMMABLE_API_KEY` environment secret or supported OS secret store. Never put
 the key in a config, command argument, log, or chat.

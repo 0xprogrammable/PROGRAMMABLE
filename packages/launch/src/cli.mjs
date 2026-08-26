@@ -187,7 +187,7 @@ function usage(command) {
     ],
     status: [
       "Usage: programmable-launch status <request-id> [--api-version 1|2|3] [--watch] [--until authorized|finalized]",
-      "V2 remains the default. Use --api-version 3 for a direct-native graph request.",
+      "V3 is the default. Use --api-version 1 or 2 only to read a legacy request.",
       "This command never signs or broadcasts a wallet transaction.",
     ],
   };
@@ -199,6 +199,6 @@ function usage(command) {
     `OpenAPI V2 (public create): ${OPENAPI_URL_V2}`,
     `OpenAPI V3 general hook profile: ${OPENAPI_URL_V3}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,
-    `Public V2 release: ${RELEASE_URL}`,
+    `Public V3 release: ${RELEASE_URL}`,
   ].join("\n");
 }

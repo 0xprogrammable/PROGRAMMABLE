@@ -11,7 +11,7 @@ const EXPECTED_HOOK_SHA256 =
 const EXPECTED_FACTORY_SHA256 =
   "sha256:aa2673f4635543b5c24b140030461fe3161138d2d02d24c1c8c1830c13d60145";
 const EXPECTED_LOCK_SHA256 =
-  "sha256:e73b8f213af284c54550e7bdf5416e9bf1f17774b4f6e23d3bb8f6a150ede759";
+  "sha256:5c9d041849aab4d1ec61249f7dab773058ee374c5282bb38145d4b67554498dc";
 const POOL_MANAGER = "0x000000000004444c5dc75cB358380D2e3dE08A90";
 const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000";
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
@@ -171,12 +171,12 @@ for (const [targetId, bytes] of artifactBytes) {
 }
 
 const evidence = {
-  schemaVersion: "programmable.direct-native-v3-no-broadcast-evidence.v1",
+  schemaVersion: "programmable.direct-native-v3-no-broadcast-evidence.v2",
   profile: {
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "1.0.0",
-    profileRevision: 1,
-    productionLaunchAuthorized: false,
+    profileVersion: "2.0.0",
+    profileRevision: 2,
+    productionLaunchAuthorized: true,
   },
   scope: {
     compile: true,
@@ -186,7 +186,7 @@ const evidence = {
     fundingSignature: false,
     routerTransaction: false,
     walletBroadcast: false,
-    stopAt: "offline-validate",
+    stopAt: "pre-pack",
   },
   compilerVersion,
   compilerSettings: {
@@ -205,7 +205,7 @@ const evidence = {
   standardJsonSha256: sha256(standardJsonBytes),
   artifacts: Object.fromEntries([...artifactBytes].map(([targetId, bytes]) => [targetId, sha256(bytes)])),
   targetCount: 3,
-  requiredHookPermissionMask: "0x20cc",
+  declaredHookPermissionMask: "0x20cc",
   fundingSignaturePatch: {
     targetId: "initializer",
     rOffsetBytes: 4,
@@ -294,17 +294,26 @@ const config = {
     quoteCurrency,
   },
   launchProfile: {
-    schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v1",
+    schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v2",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileRevision: 1,
+    profileRevision: 2,
     targetRoles: {
       tokenTargetId: "token",
       hookTargetId: "hook",
       initializerTargetId: "initializer",
       platformFeeBindingTargetId: "hook",
     },
-    selectedBuyHundredthsOfBip: selectedBuy,
-    selectedSellHundredthsOfBip: selectedSell,
+    fundingMode: "eip-3009-receive-with-authorization",
+    accountingMode: "inclusive-selected-total",
+    assessmentBase: "executed-gross-declared-quote",
+    feeCurrency: "declared-quote-currency",
+    claimMode: "claim-authority-selected-recipient",
+    applicantSelectedBuyHundredthsOfBip: selectedBuy,
+    applicantSelectedSellHundredthsOfBip: selectedSell,
+  },
+  permitWindow: {
+    validAfter: fundingWindow.validAfter,
+    deadline: fundingWindow.validBefore,
   },
   fundingAuthorization: {
     schemaVersion: "programmable.funding-authorization-input.v1",
@@ -334,10 +343,11 @@ await writeFile(
 );
 
 process.stdout.write(`${JSON.stringify({
-  schemaVersion: "programmable.direct-native-v3-config-result.v1",
+  schemaVersion: "programmable.direct-native-v3-config-result.v2",
   profileId: config.launchProfile.profileId,
-  profileVersion: "1.0.0",
-  productionLaunchAuthorized: false,
+  profileVersion: "2.0.0",
+  profileRevision: config.launchProfile.profileRevision,
+  productionLaunchAuthorized: true,
   configPath: path.join(root, "programmable-launch.config.json"),
   standardJsonPath: path.join(root, "standard-json/direct-native-v3.json"),
   evidencePath: path.join(root, "evidence/rehearsal.json"),

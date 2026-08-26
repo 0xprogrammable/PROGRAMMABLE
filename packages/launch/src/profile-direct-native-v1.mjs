@@ -384,7 +384,7 @@ export function validateDirectNativeProfileGraph(profile, binding, graphBundle) 
   if (binding.platformFeeBinding.targetId !== roles.platformFeeBindingTargetId) {
     throw new TypeError("direct-native platform fee policy must bind its selected direct target");
   }
-  if (binding.fundingMode === "none") validateZeroFundingGraph(graphBundle);
+  validateFundingGraph(binding.fundingMode, graphBundle);
   return binding;
 }
 
@@ -1056,13 +1056,23 @@ function platformFeeEconomics(applicantSelectedHundredthsOfBip, accountingMode) 
   };
 }
 
-function validateZeroFundingGraph(graphBundle) {
-  for (const target of graphBundle.targets) {
-    if (target.deploymentValueWei !== "0" || target.initializerValueWei !== "0") {
+function validateFundingGraph(fundingMode, graphBundle) {
+  const hasNativeValue = graphBundle.targets.some((target) =>
+    target.deploymentValueWei !== "0" || target.initializerValueWei !== "0");
+  if (fundingMode === FUNDING_WALLET_TRANSACTION_VALUE_METHOD) {
+    if (!hasNativeValue) {
       throw new TypeError(
-        "direct-native fundingMode none requires zero deployment and initializer value for every target",
+        "direct-native fundingMode wallet-transaction-value requires a nonzero exact Router transaction value",
       );
     }
+    return;
+  }
+  if (hasNativeValue) {
+    throw new TypeError(
+      fundingMode === "none"
+        ? "direct-native fundingMode none requires zero deployment and initializer value for every target"
+        : "direct-native EIP-3009 funding requires zero native deployment and initializer value for every target",
+    );
   }
 }
 

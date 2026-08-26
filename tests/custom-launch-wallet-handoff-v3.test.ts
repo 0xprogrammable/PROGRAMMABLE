@@ -194,12 +194,14 @@ function routerFixture({
   quote,
   targetCount = 3,
   hookApplicantSalt = VALID_HOOK_APPLICANT_SALT,
+  stampHook,
   fee = 3_000,
   tickSpacing = 60,
 }: Readonly<{
   quote: Address;
   targetCount?: 2 | 3;
   hookApplicantSalt?: Hex;
+  stampHook?: Address;
   fee?: number;
   tickSpacing?: number;
 }>) {
@@ -343,6 +345,7 @@ function routerFixture({
 
   const token = targets[0]!.account;
   const hook = targets[1]!.account;
+  const poolHook = stampHook ?? hook;
   const [currency0, currency1] = [quote, token]
     .sort((left, right) => BigInt(left) < BigInt(right) ? -1 : 1) as [
       Address,
@@ -361,7 +364,7 @@ function routerFixture({
     "bytes32,uint8,address,bytes32,uint8,uint8",
     [COMPONENT_TYPEHASH, ...component],
   ));
-  const poolKey = [currency0, currency1, fee, tickSpacing, hook] as const;
+  const poolKey = [currency0, currency1, fee, tickSpacing, poolHook] as const;
   const poolKeyHash = abiHash(
     "bytes32,address,address,uint24,int24,address",
     [POOL_KEY_TYPEHASH, ...poolKey],
@@ -723,7 +726,7 @@ describe("custom launch V3 wallet handoff", () => {
     expect(fixture.token).not.toBe(quote);
   });
 
-  it.each([0, 999_999])(
+  it.each([0, 999_999, 0x800000])(
     "accepts the exact V3 pool fee mode %i",
     (fee) => {
       const fixture = routerFixture({ quote: ZERO_ADDRESS, fee });
@@ -737,8 +740,8 @@ describe("custom launch V3 wallet handoff", () => {
   it.each([
     ["fee at the excluded profile boundary", { fee: 1_000_000 }],
     ["fee above the static bound", { fee: 1_000_001 }],
-    ["dynamic-fee sentinel", { fee: 0x800000 }],
     ["unknown dynamic-fee flag", { fee: 0x800001 }],
+    ["maximum uint24 value", { fee: 0xffffff }],
     ["zero tick spacing", { tickSpacing: 0 }],
     ["negative tick spacing", { tickSpacing: -1 }],
     ["tick spacing above the bound", { tickSpacing: 32_768 }],
@@ -750,12 +753,33 @@ describe("custom launch V3 wallet handoff", () => {
     )).toThrow();
   });
 
-  it("rejects a graph with the wrong V3 hook permission mask", () => {
-    const fixture = routerFixture({
+  it("accepts exact graph-bound hooks with multiple V3 permission masks", () => {
+    const fixedProfileFixture = routerFixture({
+      quote: ZERO_ADDRESS,
+      hookApplicantSalt: VALID_HOOK_APPLICANT_SALT,
+    });
+    const alternateMaskFixture = routerFixture({
       quote: ZERO_ADDRESS,
       hookApplicantSalt: ZERO_BYTES32,
     });
-    expect(BigInt(fixture.hook) & 0x3fffn).not.toBe(0x20ccn);
+
+    expect(BigInt(fixedProfileFixture.hook) & 0x3fffn).toBe(0x20ccn);
+    expect(BigInt(alternateMaskFixture.hook) & 0x3fffn).not.toBe(0x20ccn);
+    expect(prepareCustomLaunchRouterReviewV3(
+      fixedProfileFixture.output,
+      account.address,
+    ).graphCommitment).toBe(fixedProfileFixture.graphCommitment);
+    expect(prepareCustomLaunchRouterReviewV3(
+      alternateMaskFixture.output,
+      account.address,
+    ).graphCommitment).toBe(alternateMaskFixture.graphCommitment);
+  });
+
+  it("rejects a pool hook that does not match the exact graph hook", () => {
+    const fixture = routerFixture({
+      quote: ZERO_ADDRESS,
+      stampHook: other.address,
+    });
     expect(() => prepareCustomLaunchRouterReviewV3(
       fixture.output,
       account.address,
