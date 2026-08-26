@@ -8,7 +8,11 @@ Programmable has two separate developer surfaces. The Developer API at `https://
 
 ## Package locally and read existing launches
 
-Start with the [Custom Launch API guide](custom-launch.md). Install the pinned public `programmable-launch` 3.1.0 CLI to
+Start at [Programmable discovery](https://programmable.market/.well-known/programmable.json), follow
+`customLaunchApi.agentIntegration`, and fetch the advertised [agent remediation
+catalog](https://programmable.market/policies/custom-launch-agent-remediation-v1.json). Then use the [Custom Launch API
+guide](custom-launch.md) and [pack-config schema](https://programmable.market/schemas/custom-launch/v3/pack-config.json).
+Install the pinned public `programmable-launch` 3.2.0 CLI to
 pack, validate, submit and track V3 requests, and manage a key at [Custom Launch API
 keys](https://programmable.market/developers/api-keys). The [public V3
 contract](https://programmable.market/openapi/custom-launch-v3.json) is the normative production contract. Its default

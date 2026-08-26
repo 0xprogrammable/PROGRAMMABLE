@@ -17,6 +17,52 @@ and current resources. The [V2 OpenAPI document](https://programmable.market/ope
 compatibility contracts. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is
 executable by a cold external agent.
 
+## Existing-project integration
+
+An API key authorizes API operations for its bound wallet; it does not contain integration instructions. A cold agent
+must start at [`/.well-known/programmable.json`](https://programmable.market/.well-known/programmable.json), select
+`customLaunchApi.agentIntegration`, then fetch the advertised
+[`programmable.custom-launch-agent-remediation-catalog.v1`](https://programmable.market/policies/custom-launch-agent-remediation-v1.json),
+this guide, the V3 OpenAPI contract and the pinned CLI release. That public chain is the integration contract for every
+project. There is no project-specific allowlist or private approval path.
+
+For an existing project, the agent must inspect the exact repository rather than guess a profile:
+
+1. Pin the public source repository and exact immutable Git object containing every submitted source byte.
+2. Compile every direct graph target with `solc 0.8.26+commit.8a97fa7a`; preserve exact Standard JSON, artifacts,
+   libraries, constructor values and runtime immutables.
+3. Identify the distinct token, hook and initializer targets, map all address dependencies, declare the exact hook
+   permission mask, and select the real pool, funding, liquidity, fee, custody and withdrawal behavior.
+4. Create `programmable-launch.config.json` with `schemaVersion: programmable.launch-pack-config.v3` and validate it
+   against the [machine-readable pack-config schema](https://programmable.market/schemas/custom-launch/v3/pack-config.json).
+   Use exact source, build and ABI values only; the CLI owns every digest, locator, CREATE2 prediction and request byte.
+5. Follow machine-readable local diagnostics. After submission, follow the single-resource remediation payload and
+   exact static report. `action_required` means change the reported source or config, rebuild, repack and submit a new
+   immutable request. It is not a request for manual approval and cannot be bypassed by retrying unchanged bytes.
+
+For USDC EIP-3009 funding, the CLI is the derivation authority. Project code must accept and forward the exact
+`from`, predicted-initializer `to`, `value`, validity window and nonce. It must not substitute an application-specific
+funding domain or nonce. The published domains are
+`programmable.direct-native-hook-graph.funding-intent.v1` and
+`programmable.direct-native-hook-graph.funding-nonce.v1`. Current authorization patch V2 binds four distinct zero ABI
+leaves: `bytes32 nonce`, `bytes32 r`, `bytes32 s` and `uint8 v`. Configure only
+`nonceArgumentPath`, `rArgumentPath`, `sArgumentPath` and `vArgumentPath`; each has 1–16 zero-based indices from 0
+through 255. The first index selects a top-level initializer input and later indices may descend static tuple components
+or fixed arrays. Dynamic parents are not supported. The CLI derives the exact calldata offsets from the compiled ABI and proves
+canonical decode and re-encode; applicants do not submit offsets. The backend later inserts only the derived nonce and
+verified signature. The create request still contains no wallet signature.
+
+When exact source, ABI and compiler artifacts do not contain enough AST or IR evidence to prove the initializer's nonce
+dataflow offline, tooling may report the nonblocking warnings `FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED` or
+`FUNDING_NONCE_CONFORMANCE_UNPROVEN`. Inspect and fix a real conflict before submitting. The mandatory exact Router
+simulation is the final execution-compatibility detector for the prepared transaction; neither a warning nor a
+successful simulation is a safety, admission, liquidity, fee-behavior or economic-solvency claim.
+
+The catalog also makes the liquidity boundary explicit. Pool initialization does not add liquidity, volume cannot
+create initial liquidity from nothing, and V3 does not inject the Classic liquidity engine. Select and fully bind one
+of `external-concentrated-liquidity`, `launch-seeded-concentrated-liquidity` or
+`hook-inventory-custom-accounting` according to the project's actual implementation.
+
 ## V3 general hook profile
 
 The versioned [`programmable.direct-native-hook-graph.v1` OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
@@ -31,11 +77,12 @@ The Router primitive supports 2–16 targets; this V3 profile requires 3–16 di
 token, hook and initializer roles are distinct. The token, hook and all other targets are project-owned exact artifacts.
 All valid v4 permission masks are supported; return-delta permissions require their matching action permissions, and
 the compiled declaration must match the hook-address low bits. The request binds exact source, compiler,
-creation bytecode, runtime, pool key, predicted initializer, expected pool ID and a flat
-`programmable.eip3009-signature-patch.v1` descriptor. The patch names the initializer target, unsigned calldata hash,
-calldata length and distinct selector-relative ABI-word offsets for `r`, `s` and `v`; those words must be zero before
-the wallet signature exists and is present only in EIP-3009 mode. The initializer has per-launch exact source, build,
-runtime, final-calldata and simulation evidence. There is no separate global initializer trust root.
+creation bytecode, runtime, pool key, predicted initializer, expected pool ID and a
+`programmable.eip3009-authorization-patch.v2` descriptor. The patch names the initializer target, unsigned calldata
+hash, calldata length, authorization encoding and numeric ABI paths for the zero `nonce`, `r`, `s` and `v` leaves. The
+CLI derives their offsets from the exact compiled ABI; the backend patches only those proven leaves. Existing exact V1
+requests retain their original descriptor semantics. The initializer has per-launch exact source, build, runtime,
+final-calldata and simulation evidence. There is no separate global initializer trust root.
 
 The V3 platform share may be additive or included inside the selected buy or sell total. The backend derives and
 discloses the exact effective, project and Programmable shares; the request never self-declares those results. The fixed
@@ -45,9 +92,10 @@ Programmable share is therefore `1,000 / 1,000,000 = 0.10% = 10 bps` of the docu
 Funding may be absent, carried as exact native Router-transaction value, or use an unsigned nine-field
 `programmable.funding-authorization-descriptor.v1` for USDC EIP-3009
 `receiveWithAuthorization`. Its separate `fundingIntentHash` is derived before a signature from the fixed route, launch
-intent, wallet, predicted initializer, amount and validity window; it does not hash a final graph commitment containing
-signature-bearing calldata. It also excludes the signature itself, `initializerCalldataHash` and `permitDigest`.
-The create request contains no signature, `v`, `r` or `s`.
+intent with four zero authorization leaves, wallet, predicted initializer, amount and validity window. The funding nonce
+is then derived from that intent. It does not hash the final graph containing the patched nonce or signature. It also
+excludes the signature itself, `initializerCalldataHash` and `permitDigest`. The create request contains the derived
+funding descriptor and authorization patch, but no signature, `v`, `r` or `s` value.
 
 For EIP-3009 funding, one single-resource flow keeps the two wallet actions separate:
 
@@ -124,16 +172,16 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.0.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.2.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.2.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.2.0.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.1.0`.
+Continue only after the checksum command reports `OK` and the version command prints `3.2.0`.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
 matching solc artifacts. Its generated evidence is limited to `pre-submit`. The deterministic permission salt grind

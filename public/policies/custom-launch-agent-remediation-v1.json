@@ -1,0 +1,397 @@
+{
+  "schemaVersion": "programmable.custom-launch-agent-remediation-catalog.v1",
+  "catalogVersion": "1.0.0",
+  "status": "live",
+  "profile": {
+    "profileId": "programmable.direct-native-hook-graph.v1",
+    "profileRevision": 3,
+    "profileVersion": "3.0.0",
+    "chainId": "1",
+    "network": "Ethereum Mainnet",
+    "productionLaunchAuthorized": true
+  },
+  "authoritativeSources": {
+    "discoveryUrl": "https://programmable.market/.well-known/programmable.json",
+    "catalogUrl": "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+    "packConfigSchemaUrl": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
+    "guideUrl": "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+    "openApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
+    "cliReleaseVersion": "3.2.0",
+    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.2.0",
+    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz"
+  },
+  "agentContract": {
+    "coldStartUrl": "https://programmable.market/.well-known/programmable.json",
+    "apiKeyEnvironmentVariable": "PROGRAMMABLE_API_KEY",
+    "apiKeyPlaceholder": "$PROGRAMMABLE_API_KEY",
+    "apiKeyContainsPolicy": false,
+    "manualProjectAllowlist": false,
+    "projectSpecificApprovalPath": false,
+    "automaticAdmission": true,
+    "automaticRouterSimulation": true,
+    "automaticWalletSigning": false,
+    "automaticBroadcast": false,
+    "instruction": "Fetch discovery, this catalog and the advertised pack-config schema before inspecting or changing the project. Never expect the API key itself to contain instructions. Never place the secret value in source, config, prompts, chat, logs, screenshots or command history."
+  },
+  "workflow": [
+    {
+      "step": 1,
+      "id": "discover",
+      "action": "Fetch authoritativeSources.discoveryUrl without authentication, require customLaunchApi.status=live, select customLaunchApi.generalHookProfile, then fetch the advertised remediation catalog, pack-config schema, guide, OpenAPI and pinned CLI release."
+    },
+    {
+      "step": 2,
+      "id": "inspect-project",
+      "action": "Pin one public exact source revision, compile every graph target with the required compiler, identify token, hook, initializer and supporting targets, and classify funding, liquidity, hook permissions, fee accounting, custody and withdrawal behavior."
+    },
+    {
+      "step": 3,
+      "id": "create-pack-config",
+      "action": "Create programmable-launch.config.json with schemaVersion programmable.launch-pack-config.v3 from exact source, Standard JSON, compiler artifacts and structured ABI values. Do not hand-write any derived hash, address, locator or request field."
+    },
+    {
+      "step": 4,
+      "id": "pack",
+      "action": "Run the exact pack command. Fix local diagnostics against this catalog before continuing."
+    },
+    {
+      "step": 5,
+      "id": "validate",
+      "action": "Run the exact validate command with the same config and require byte-identical reproduction of launch.json."
+    },
+    {
+      "step": 6,
+      "id": "submit",
+      "action": "Read PROGRAMMABLE_API_KEY only from the environment or supported secret store, then submit the byte-identical request. Preserve the journal, request bytes and Idempotency-Key for retries."
+    },
+    {
+      "step": 7,
+      "id": "track",
+      "action": "Poll the single resource. At action_required fix the bound source or config finding and create a new exact request. At awaiting_funding_authorization or authorized stop for separate controller-wallet review and signing."
+    }
+  ],
+  "commands": [
+    "programmable-launch pack --config programmable-launch.config.json --output launch.json",
+    "programmable-launch validate launch.json --config programmable-launch.config.json",
+    "programmable-launch submit launch.json --config programmable-launch.config.json",
+    "programmable-launch status REQUEST_UUID --watch --until authorized"
+  ],
+  "existingProjectInspection": {
+    "requiredCompilerVersion": "0.8.26+commit.8a97fa7a",
+    "minimumTargets": 3,
+    "maximumTargets": 16,
+    "deploymentModel": "direct-create2-graph",
+    "requiredDistinctRoles": [
+      "token",
+      "hook",
+      "initializer"
+    ],
+    "checklist": [
+      "Pin a credential-free public HTTPS source repository and the exact lowercase Git object containing every submitted source byte.",
+      "Generate exact Solidity Standard JSON with inline source content and preserve matching ABI, creation bytecode, deployed bytecode, metadata, libraries and immutable references.",
+      "Map every deployment and initializer address dependency to a target reference so the CLI derives locators and CREATE2 predictions.",
+      "Declare the hook's complete 14-bit permission mask and implement every enabled callback as concrete reachable code authenticated to the canonical PoolManager.",
+      "Choose one funding mode, one liquidity model, exact pool key, fee accounting mode, platform fee binding, custody path and withdrawal disclosure.",
+      "Preserve project-specific check evidence and attest only checks that actually ran."
+    ]
+  },
+  "packConfig": {
+    "schemaVersion": "programmable.launch-pack-config.v3",
+    "schemaUrl": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
+    "defaultFileName": "programmable-launch.config.json",
+    "requiredTopLevelFields": [
+      "schemaVersion",
+      "launchWallet",
+      "chainId",
+      "nonce",
+      "source",
+      "compilationUnits",
+      "targets",
+      "pool",
+      "permitWindow",
+      "launchProfile",
+      "agentAttestation"
+    ],
+    "sourceRevisionMustContainSubmittedBytes": true,
+    "derivedValuesAreCliOwned": true,
+    "derivedValuesMustNotBeCopiedOrHandWritten": [
+      "source descriptor",
+      "manifest digest",
+      "address locators",
+      "CREATE2 addresses",
+      "runtime hashes",
+      "graph hash",
+      "launch profile hash",
+      "launch intent hash",
+      "funding intent hash",
+      "funding nonce",
+      "verification bundle hash",
+      "request bytes"
+    ]
+  },
+  "funding": {
+    "modes": [
+      "none",
+      "wallet-transaction-value",
+      "eip-3009-receive-with-authorization"
+    ],
+    "eip3009": {
+      "token": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenName": "USD Coin",
+      "tokenVersion": "2",
+      "fundingIntentDomain": "programmable.direct-native-hook-graph.funding-intent.v1",
+      "fundingNonceDomain": "programmable.direct-native-hook-graph.funding-nonce.v1",
+      "fundingIntentAbiTypes": "bytes32,uint256,address,address,address,bytes32,bytes32,bytes32,address,address,uint256,uint256,uint256",
+      "fundingIntentFields": [
+        "keccak256(fundingIntentDomain)",
+        "chainId",
+        "USDC",
+        "Router",
+        "GraphFactory",
+        "routeNamespace",
+        "routeNonce",
+        "launchIntentHash",
+        "from",
+        "predictedInitializer",
+        "value",
+        "validAfter",
+        "validBefore"
+      ],
+      "nonceFormula": "keccak256(abi.encode(keccak256(bytes(fundingNonceDomain)), fundingIntentHash))",
+      "compatibilityRule": "The initializer must forward the exact CLI-derived from, predicted-initializer to, value, validity window and nonce to USDC receiveWithAuthorization. The backend inserts the derived nonce and verified wallet signature only into the four bound ABI leaves. Project code must not replace them with an application-specific signature domain or nonce.",
+      "fundingSignaturePatch": {
+        "schemaVersion": "programmable.eip3009-authorization-patch.v2",
+        "configKey": "fundingSignaturePatch",
+        "configInputFields": [
+          "targetId",
+          "nonceArgumentPath",
+          "rArgumentPath",
+          "sArgumentPath",
+          "vArgumentPath"
+        ],
+        "derivedDescriptorFields": [
+          "schemaVersion",
+          "targetId",
+          "unsignedInitializerCalldataSha256",
+          "initializerCalldataLengthBytes",
+          "authorizationEncoding",
+          "nonceArgumentPath",
+          "rArgumentPath",
+          "sArgumentPath",
+          "vArgumentPath"
+        ],
+        "authorizationEncoding": "eip3009-nonce-r-s-v-abi-leaves",
+        "requiredAuthorizationLeaves": [
+          {
+            "name": "nonce",
+            "pathField": "nonceArgumentPath",
+            "solidityType": "bytes32",
+            "unsignedValue": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          {
+            "name": "r",
+            "pathField": "rArgumentPath",
+            "solidityType": "bytes32",
+            "unsignedValue": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          {
+            "name": "s",
+            "pathField": "sArgumentPath",
+            "solidityType": "bytes32",
+            "unsignedValue": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          {
+            "name": "v",
+            "pathField": "vArgumentPath",
+            "solidityType": "uint8",
+            "unsignedValue": 0
+          }
+        ],
+        "argumentPathRule": "Each path contains 1 through 16 zero-based integer indices from 0 through 255. The first index selects a top-level initializer input; later indices descend only static tuple components or fixed-array elements.",
+        "staticNestedTupleOrFixedArraySupported": true,
+        "dynamicParentSupported": false,
+        "pathsMustResolveToDistinctLeaves": true,
+        "applicantOffsetsAccepted": false,
+        "offsetsAreCliDerivedFromExactAbi": true,
+        "canonicalDecodeReencodeProofRequired": true,
+        "createRequestContainsSignature": false,
+        "legacyV1": {
+          "schemaVersion": "programmable.eip3009-signature-patch.v1",
+          "status": "preserved-for-existing-exact-requests",
+          "newIntegrationDefault": false
+        },
+        "instruction": "Expose zero bytes32 nonce, bytes32 r, bytes32 s and uint8 v leaves in the initializer ABI. Configure only their four numeric ABI argument paths. Static tuple and fixed-array descendants are supported; dynamic parents are not. The CLI derives and proves exact calldata offsets from the compiled ABI, and the backend inserts the derived nonce and verified signature after the unsigned launch intent is bound."
+      }
+    }
+  },
+  "liquidity": {
+    "poolInitializationAddsLiquidity": false,
+    "tradingVolumeCreatesInitialLiquidity": false,
+    "classicLiquidityIsInjectedAutomatically": false,
+    "models": [
+      {
+        "id": "external-concentrated-liquidity",
+        "meaning": "The launch may initialize the pool, but someone must fund and create the v4 position separately before ordinary trading.",
+        "assessment": "liquidity_required"
+      },
+      {
+        "id": "launch-seeded-concentrated-liquidity",
+        "meaning": "A named graph target funds and creates the initial position. Seed assets, position custody, withdrawal path, lock or burn and buy/sell behavior must be exact and disclosed.",
+        "assessment": "assessment_required"
+      },
+      {
+        "id": "hook-inventory-custom-accounting",
+        "meaning": "The hook owns inventory or backing and implements the buy, sell, return-delta, solvency, redemption and withdrawal behavior. Zero classical LP is possible only because that graph supplies the exchange path.",
+        "assessment": "assessment_required"
+      }
+    ]
+  },
+  "automaticAdmission": {
+    "manualAllowlist": false,
+    "manualProjectApproval": false,
+    "staticAdmission": "automatic-role-aware-exact-source",
+    "routerSimulationBeforeAuthorization": true,
+    "routerSimulationRole": "Final execution-compatibility detector for the exact prepared Router transaction. It is not a safety, fee-behavior, liquidity or economic-solvency claim.",
+    "blockingStatus": "action_required",
+    "warningDisposition": "continue-to-router-simulation",
+    "warningMeaning": "A nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. It is not an admission, conformance or safety claim.",
+    "actionRequiredInstruction": "Read the exact single-resource report, match each blocking finding to its target and role, change the exact source or config, rebuild, repack and validate, then submit a new immutable request. Do not retry unchanged and do not ask for an allowlist bypass.",
+    "supportInstruction": "When the resource directs you to support, send only requestId, status, UTC time and the public finding or error code. Never send the API key."
+  },
+  "runtimeRemediationPayload": {
+    "schemaVersion": "programmable.custom-launch-remediation.v1",
+    "additiveToExistingErrorOrFindingCode": true,
+    "fields": [
+      "schemaVersion",
+      "remediationId",
+      "stage",
+      "targetId",
+      "targetRole",
+      "sourcePath",
+      "expected",
+      "observed",
+      "requiredChange",
+      "catalogUrl",
+      "guideUrl",
+      "retryable",
+      "requiresNewRequest",
+      "resumeAt"
+    ],
+    "catalogUrl": "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
+    "guideUrl": "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
+    "privacyRule": "Observed values must be bounded and safe for the wallet owner. Never include the API key, wallet signature or unrelated source bytes.",
+    "actionRequiredSemantics": {
+      "retryable": false,
+      "requiresNewRequest": true
+    }
+  },
+  "remediations": [
+    {
+      "remediationId": "PACK_CONFIG_V3_MISSING",
+      "stage": "before-pack",
+      "condition": "The project has source and artifacts but no programmable.launch-pack-config.v3 input.",
+      "requiredChange": "Inspect the exact project and create programmable-launch.config.json from the packConfig and existingProjectInspection contracts in this catalog.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "PACK_CONFIG_V3_INVALID",
+      "stage": "before-pack",
+      "condition": "The configured file is not the closed programmable.launch-pack-config.v3 object required by the installed CLI.",
+      "requiredChange": "Use only the published V3 top-level fields and exact nested shapes, remove unknown fields, then regenerate structured values from exact source and build artifacts.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "SOURCE_REVISION_NOT_EXACT",
+      "stage": "pack",
+      "condition": "The configured public source revision is not an exact immutable object containing the submitted source bytes.",
+      "requiredChange": "Publish or select the exact source commit, set source.publicOrigin.url and source.publicOrigin.revision, then regenerate Standard JSON and artifacts from those bytes.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL",
+      "stage": "legacy-v1-pack-or-validate",
+      "condition": "A legacy programmable.eip3009-signature-patch.v1 config points r, s or v at a non-top-level ABI word.",
+      "requiredChange": "Migrate the config to programmable.eip3009-authorization-patch.v2 and name the zero nonce, r, s and v leaves with numeric ABI argument paths. V2 supports static tuple and fixed-array descendants and derives offsets itself.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "FUNDING_AUTHORIZATION_PATCH_PATH_INVALID",
+      "stage": "pack-or-validate",
+      "condition": "A V2 nonce, r, s or v argument path is empty, invalid, dynamic, overlapping, nonzero, has the wrong leaf type or cannot pass canonical ABI decode and re-encode proof.",
+      "requiredChange": "Configure four distinct nonempty numeric paths to zero bytes32 nonce, bytes32 r, bytes32 s and uint8 v leaves. Descend only static tuples or fixed arrays; do not supply calldata offsets.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "LIQUIDITY_MODEL_NOT_EXACT",
+      "stage": "pack-or-admission",
+      "condition": "The request omits the real initial liquidity, inventory, custody or withdrawal path, or assumes pool initialization or volume creates liquidity.",
+      "requiredChange": "Choose the matching published liquidity model, bind its exact target and disclose seed assets, inventory, custody, withdrawal, lock or burn behavior.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "HOOK_PERMISSION_OR_CALLBACK_MISMATCH",
+      "stage": "pack-validate-or-admission",
+      "condition": "The declared mask, hook address bits, compiled permissions or reachable callbacks disagree.",
+      "requiredChange": "Declare the exact 14-bit mask, implement every enabled callback as reachable code, authenticate PoolManager entry and rerun the deterministic hook-address grind if the address bits differ.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "PROFILE_INVALID",
+      "stage": "validation-or-admission",
+      "condition": "The request profile, role binding, funding, liquidity, fee, pool or target graph violates the published V3 profile contract.",
+      "requiredChange": "Compare the exact field and expected value with the catalog and OpenAPI, fix the source or pack config, then rebuild, repack and validate.",
+      "resumeAt": "pack"
+    },
+    {
+      "remediationId": "PLATFORM_ADMISSION_FINDING",
+      "stage": "admission",
+      "condition": "The resource enters action_required with a bound role-aware static finding.",
+      "requiredChange": "Fix the exact reported target and source surface, preserve the report as evidence, then rebuild, repack, validate and submit a new request. There is no project allowlist or manual approval shortcut.",
+      "resumeAt": "inspect-project"
+    },
+    {
+      "remediationId": "ROUTER_SIMULATION_REVERTED",
+      "stage": "simulation",
+      "condition": "The exact prepared Router transaction reverts during pinned Mainnet simulation.",
+      "requiredChange": "Reproduce the exact calldata and state assumptions, fix graph order, initializer behavior, funding, pool, permission or postcondition mismatch, then create a new exact request.",
+      "resumeAt": "inspect-project"
+    },
+    {
+      "remediationId": "ROUTER_SIMULATION_UNAVAILABLE",
+      "stage": "simulation",
+      "condition": "The pinned Mainnet simulation provider is temporarily unavailable and no execution verdict exists.",
+      "requiredChange": "Keep the existing immutable request and poll the single resource with Retry-After or the reported retry guidance. Do not change source, bytes, nonce or Idempotency-Key solely because the provider is unavailable.",
+      "resumeAt": "status"
+    },
+    {
+      "remediationId": "FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED",
+      "severity": "warning",
+      "stage": "pack-or-validate",
+      "condition": "Bound source or ABI evidence suggests the project may derive an application-specific funding nonce that conflicts with the published descriptor, but offline artifacts cannot prove the complete dataflow.",
+      "requiredChange": "Inspect the initializer and adapters. Accept and forward the exact CLI-derived EIP-3009 descriptor and remove any conflicting funding domain or nonce derivation before submitting when the warning applies.",
+      "resumeAt": "validate"
+    },
+    {
+      "remediationId": "FUNDING_NONCE_CONFORMANCE_UNPROVEN",
+      "severity": "warning",
+      "stage": "pack-or-validate",
+      "condition": "The available exact source, ABI and compiler artifacts do not include enough AST or IR evidence to prove funding nonce dataflow offline.",
+      "requiredChange": "Treat nonce conformance as unproven, inspect the implementation, preserve the warning and rely on the mandatory exact Router simulation only for execution compatibility. Do not present the warning or a successful simulation as a safety or admission claim.",
+      "resumeAt": "validate"
+    }
+  ],
+  "safetyBoundary": {
+    "staticAdmissionIsAudit": false,
+    "routerSimulationIsAudit": false,
+    "safetyClaim": false,
+    "feeBehaviorClaim": false,
+    "guaranteesNotMade": [
+      "honeypot resistance",
+      "economic solvency",
+      "liquidity",
+      "tradeability",
+      "future fee behavior",
+      "permanent liquidity lock"
+    ]
+  }
+}

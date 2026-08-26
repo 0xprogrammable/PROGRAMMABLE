@@ -169,6 +169,15 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.discovery,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.packConfigSchema,
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.guide,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
@@ -183,6 +192,10 @@ describe("developer API key interface", () => {
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "pack, then validate, submit, and status",
     );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "There is no project allowlist or private approval path.",
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("action_required");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "awaiting_funding_authorization",
     );

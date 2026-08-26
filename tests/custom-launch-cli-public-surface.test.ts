@@ -32,9 +32,9 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.1.0",
+        releaseVersion: "3.2.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz",
       },
       compatibility: {
         v1: {
@@ -55,9 +55,9 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.1.0",
+          releaseVersion: "3.2.0",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz",
         },
       },
       generalHookProfile: {
@@ -69,7 +69,7 @@ describe("public Custom Launch CLI surface", () => {
         productionLaunchAuthorized: true,
         createPath: "/v3/custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.1.0",
+        cliReleaseVersion: "3.2.0",
       },
       integrationPreview: {
         status: "live",
@@ -104,10 +104,10 @@ describe("public Custom Launch CLI surface", () => {
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
-        releaseVersion: "3.1.0",
-        releaseTag: "programmable-launch-v3.1.0",
+        releaseVersion: "3.2.0",
+        releaseTag: "programmable-launch-v3.2.0",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.2.0/programmable-launch-3.2.0.tgz",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -852,7 +852,7 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "Package `3.1.0` supports production general profile",
+      "Package `3.2.0` supports production general profile",
     );
     expect(packageGuide).toContain(
       "`programmable.direct-native-hook-graph.v1` version `3.0.0`",
