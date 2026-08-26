@@ -35,7 +35,8 @@ For an existing project, the agent must inspect the exact repository rather than
    permission mask, and select the real pool, funding, liquidity, fee, custody and withdrawal behavior.
 4. Create `programmable-launch.config.json` with `schemaVersion: programmable.launch-pack-config.v3` and validate it
    against the [machine-readable pack-config schema](https://programmable.market/schemas/custom-launch/v3/pack-config.json).
-   Use exact source, build and ABI values only; the CLI owns every digest, locator, CREATE2 prediction and request byte.
+   Ask for the public token name and symbol plus description, image choice and social links. Use exact source, build,
+   ABI and owner-supplied presentation values only; the CLI owns every digest, locator, CREATE2 prediction and request byte.
 5. Follow machine-readable local diagnostics. After submission, follow the single-resource remediation payload and
    exact static report. `action_required` means change the reported source or config, rebuild, repack and submit a new
    immutable request. It is not a request for manual approval and cannot be bypassed by retrying unchanged bytes.
@@ -79,8 +80,8 @@ of `external-concentrated-liquidity`, `launch-seeded-concentrated-liquidity` or
 The versioned [`programmable.direct-native-hook-graph.v1` OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 defines the live create, list and single-resource shapes. The default profile uses
 `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
-`profileVersion: 3.1.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact `3.0.0` requests remain readable and
+`profileVersion: 3.2.0`; its selection binding uses
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact metadata-absent `3.1.0` and `3.0.0` requests remain readable and
 byte-identical retryable under their original immutable policy; revision 2 also remains a compatible profile contract
 for existing clients and resources. Discovery reports `productionLaunchAuthorized: true`. Do not fall back
 to a different create version.
@@ -145,7 +146,7 @@ or hold launch inventory that can exchange against incoming assets. Buys can the
 but the token inventory, accounting and redemption or sell path still come from the project graph. `fundingMode: none`
 only means the Router transfers no launch funding; it does not make an empty ordinary pool liquid.
 
-Profile `3.1.0` checks exact source/build bindings and hook permission consistency, then applies role-aware static admission.
+Profiles `3.1.0` and `3.2.0` check exact source/build bindings and hook permission consistency, then apply role-aware static admission.
 Every enabled Uniswap v4 permission must resolve to a concrete reachable callback implementation; an interface
 declaration or fallback-only route does not qualify.
 Every finding remains bound and visible. Exactly seven objective code-and-role rules hard-block deployment: runtime
@@ -212,16 +213,16 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.1.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.1.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.2.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.2.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.1`.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.2`.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
 matching solc artifacts. Its generated evidence is limited to `pre-submit`. The deterministic permission salt grind
@@ -322,6 +323,8 @@ are:
 | `sourceDescriptor` | One `DeterministicSourceBundleV2` descriptor |
 | `sourceBundleManifest` | One complete, non-empty, UTF-8 path-sorted manifest |
 | `graphBundle` | One executable `CustomGraphBundleV1` |
+| `projectMetadata` | Canonical token declaration and presentation, required by current profile `3.2.0` |
+| `projectMetadataHash` | Domain-framed SHA-256 bound into the graph hash and launch identity |
 | `agentAttestation` | One self-attestation for the exact graph subject |
 | `permitWindow` | The exact bounded Router permit window |
 | `launchProfile` | The complete general V3 production profile |
@@ -329,6 +332,20 @@ are:
 | `launchProfileHash` | CLI derived canonical profile digest |
 | `launchIntentHash` | CLI derived exact request intent digest |
 | `verificationBundle` | Exact source, compiler, runtime and constructor bindings |
+
+The pack config asks explicitly for `token.name`, `token.symbol`, `presentation.description`,
+`presentation.image`, and `presentation.links`. Name and symbol are owner-supplied canonical public text bounded to 64
+and 16 UTF-8 bytes. Image is either an explicit `null` or exact local PNG/JPEG/WebP/GIF bytes paired with a canonical
+public HTTPS, `ipfs://`, or `ar://` URI; links are at most 32 canonical public HTTPS entries. The packer includes image
+bytes in the source manifest, sorts links and derives `projectMetadata`, `projectMetadataHash` and the metadata-bound
+`graphBundleHash`. It statically compares an unambiguous constructor or initializer name/symbol argument when one
+exists, without forcing arbitrary tokens into a specific constructor. Finalized launches expose the declaration plus
+server-authored onchain name/symbol readback through the public finalized-metadata endpoint.
+
+Use a stable content URI and enable browser-readable CORS for HTTPS image bytes. Wallet review verifies raw bytes
+against the bound SHA-256, length, media type and dimensions before rendering; IPFS and Arweave use fixed public
+gateways. If the bytes cannot be read or do not match, the review uses the digest and a placeholder. It never uploads
+or substitutes content, mutates the launch, or signs automatically.
 
 `verificationBundle` is required in V3. Its compilation units
 are uniquely UTF-8 sorted by `compilationUnitId`; its components are uniquely UTF-8 sorted by `targetId` and exactly

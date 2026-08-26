@@ -119,8 +119,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz">
-              <code>@programmable/launch 3.3.1</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz">
+              <code>@programmable/launch 3.3.2</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and
@@ -301,14 +301,16 @@ export default function MachineReadableDocsPage() {
             The default V3 profile uses{" "}
             <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
             <code>profileRevision: 3</code> and{" "}
-            <code>profileVersion: 3.1.0</code>. It supports project-owned tokens,
+            <code>profileVersion: 3.2.0</code>. It supports project-owned tokens,
             hooks, 3–16 exact direct graph targets and every valid Uniswap v4
-            permission mask. Its selection uses{" "}
+            permission mask. Profile 3.2.0 also binds canonical project name,
+            symbol, presentation and image bytes into the launch identity. Its selection uses{" "}
             <code>
               programmable.direct-native-hook-graph-profile-selection-binding.v3
             </code>
-            . Exact 3.0.0 requests remain readable and byte-identical retryable
-            under their original policy. Revision 2 also remains compatible.
+            . Exact metadata-absent 3.1.0 and 3.0.0 requests remain readable and
+            byte-identical retryable under their original policies. Revision 2
+            also remains compatible.
           </li>
           <li>
             Revision 3 pins exact{" "}
@@ -317,7 +319,7 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             Role-aware exact-source static admission binds every finding.
-            Profile 3.1.0 has exactly seven objective hard-block rules. Proxy,
+            Profile 3.2.0 has exactly seven objective hard-block rules. Proxy,
             delegatecall, mint, tax, pause, liquidity and return-delta surfaces
             require evidence instead of categorical rejection. A hard-block
             code-and-role match returns <code>action_required</code>; other

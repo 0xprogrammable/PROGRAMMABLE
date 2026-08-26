@@ -9,6 +9,11 @@ export { canonicalizeJson, parseStrictJson, StrictJsonError } from "./canonical-
 export { ProgrammableCliDiagnosticError } from "./diagnostics.mjs";
 export { buildLaunch, packLaunch } from "./pack.mjs";
 export {
+  buildProjectMetadata,
+  hashProjectMetadata,
+  validateProjectMetadata,
+} from "./project-metadata.mjs";
+export {
   buildLaunchProfileBinding,
   buildLaunchIntentHash,
   hashLaunchProfile,
@@ -48,6 +53,11 @@ export {
   PACK_CONFIG_SCHEMA_V3,
   PACK_CONFIG_V3_CONTRACT_URL,
   PACK_CONFIG_V3_EXAMPLE_URL,
+  PROJECT_METADATA_GRAPH_HASH_DOMAIN,
+  PROJECT_METADATA_HASH_DOMAIN,
+  PROJECT_METADATA_INPUT_SCHEMA,
+  PROJECT_METADATA_SCHEMA,
+  PROJECT_TOKEN_METADATA_BINDING_SCHEMA,
   PREFLIGHT_PATH_V3,
   PREFLIGHT_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V1,
@@ -64,6 +74,7 @@ export {
   DIRECT_NATIVE_PROFILE_VERSION_V2,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA,
   DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V2,
   DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_BINDING_SCHEMA_V2,

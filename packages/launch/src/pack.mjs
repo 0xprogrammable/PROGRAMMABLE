@@ -11,6 +11,7 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
   DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
   MAINNET_CHAIN_ID,
@@ -43,6 +44,7 @@ import {
   sha256Digest,
 } from "./io.mjs";
 import { buildSourceBundle } from "./source-bundle.mjs";
+import { buildProjectMetadata } from "./project-metadata.mjs";
 import { buildVerificationBundle } from "./verification.mjs";
 import {
   buildLaunchProfileBinding,
@@ -81,6 +83,11 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const permitWindow = apiVersion === "v3"
     ? validateDirectNativePermitWindow(config.permitWindow)
     : null;
+  const directNativeProfile = apiVersion === "v3"
+    ? resolveDirectNativeProfile(launchProfileSelection, {
+        profileVersion: directNativeProfileVersion,
+      })
+    : null;
   if (directNativeProfileVersion !== undefined && apiVersion !== "v3") {
     throw new TypeError("directNativeProfileVersion is available only for V3 exact retries");
   }
@@ -107,6 +114,20 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     }));
   }
   const diagnostics = [];
+  const metadataRequired = directNativeProfile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
+  if (metadataRequired !== Object.hasOwn(config, "projectMetadata")) {
+    throw new TypeError(metadataRequired
+      ? `current direct-native ${DIRECT_NATIVE_PROFILE_VERSION_V3} launches require projectMetadata`
+      : "legacy exact retries must not add projectMetadata");
+  }
+  const metadata = metadataRequired
+    ? await buildProjectMetadata(config.projectMetadata, {
+        sourceRoot,
+        tokenTarget: targets.find(
+          ({ targetId }) => targetId === launchProfileSelection.targetRoles.tokenTargetId,
+        ),
+      })
+    : null;
 
   const attestationEvidence = await buildAttestationEvidence(
     config.agentAttestation,
@@ -117,6 +138,9 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     ...units.map(({ standardJsonRelativePath }) => standardJsonRelativePath),
     ...targets.map(({ artifactRelativePath }) => artifactRelativePath),
     ...attestationEvidence.map(({ evidencePath }) => evidencePath),
+    ...(metadata?.imageSourcePath === null || metadata?.imageSourcePath === undefined
+      ? []
+      : [metadata.imageSourcePath]),
   ]);
   const sourceBundle = await buildSourceBundle(sourceRoot, [...sourcePaths]);
   const publicOriginCommitment = publicOriginCommitmentV1(config.source.publicOrigin);
@@ -132,12 +156,19 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     bundleContentSha256: sourceBundle.bundleContentSha256,
     publicOriginCommitment,
   };
-  const { graphBundle, graphBundleHash, predictions, runtimeCodes } = buildGraphBundle({
+  const {
+    graphBundle,
+    graphBundleHash,
+    unboundGraphBundleHash,
+    predictions,
+    runtimeCodes,
+  } = buildGraphBundle({
     targets,
     pool: apiVersion === "v3" ? graphPoolFromV3Config(config.pool) : config.pool,
     sourceBundleSha256: sourceBundle.bundleContentSha256,
     launchWallet,
     nonce,
+    ...(metadata === null ? {} : { projectMetadataHash: metadata.projectMetadataHash }),
     noDelegationRuntimeTargetIds: apiVersion === "v2"
       ? [launchProfileSelection.targetRoles.customModuleTargetId]
       : [],
@@ -281,9 +312,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
         ...(fundingSignaturePatch === undefined ? {} : { fundingSignaturePatch }),
       },
     );
-    const launchProfile = resolveDirectNativeProfile(launchProfileSelection, {
-      profileVersion: directNativeProfileVersion,
-    });
+    const launchProfile = directNativeProfile;
     validateDirectNativeProfileGraph(launchProfile, launchProfileBinding, graphBundle);
     validateDirectNativeProfileBuilds(
       launchProfileBinding,
@@ -299,6 +328,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
       sourceDescriptor,
       sourceBundleManifest: sourceBundle.manifest,
       graphBundleHash,
+      ...(metadata === null ? {} : { projectMetadataHash: metadata.projectMetadataHash }),
       verificationBundleHash,
       launchProfileHash,
       launchProfileSelection: launchProfileBinding,
@@ -338,6 +368,12 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
       sourceDescriptor,
       sourceBundleManifest: sourceBundle.manifest,
       graphBundle,
+      ...(metadata === null
+        ? {}
+        : {
+            projectMetadata: metadata.projectMetadata,
+            projectMetadataHash: metadata.projectMetadataHash,
+          }),
       launchProfile,
       launchProfileSelection: launchProfileBinding,
       launchProfileHash,
@@ -374,6 +410,12 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     sourceBundleDigest: sourceBundle.sourceBundleDigest,
     bundleContentSha256: sourceBundle.bundleContentSha256,
     graphBundleHash,
+    ...(metadata === null
+      ? {}
+      : {
+          unboundGraphBundleHash,
+          projectMetadataHash: metadata.projectMetadataHash,
+        }),
     verificationBundleHash,
     launchProfileHash,
     launchIntentHash,
@@ -399,6 +441,12 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     receiptBytes,
     requestSha256,
     graphBundleHash,
+    ...(metadata === null
+      ? {}
+      : {
+          unboundGraphBundleHash,
+          projectMetadataHash: metadata.projectMetadataHash,
+        }),
     verificationBundleHash,
     predictions,
     ...(diagnostics.length === 0 ? {} : { diagnostics }),
@@ -427,6 +475,10 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
     verificationBundleHash: built.verificationBundleHash,
     predictions: built.predictions,
   };
+  if (built.projectMetadataHash !== undefined) {
+    result.unboundGraphBundleHash = built.unboundGraphBundleHash;
+    result.projectMetadataHash = built.projectMetadataHash;
+  }
   if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V2
     || built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
     result.launchProfileHash = built.launchProfileHash;
@@ -500,6 +552,7 @@ function assertPackConfig(config) {
       ...commonKeys,
       "launchProfile",
       "permitWindow",
+      ...(Object.hasOwn(config, "projectMetadata") ? ["projectMetadata"] : []),
       ...(launchProfile.fundingMode === "eip-3009-receive-with-authorization"
         ? ["fundingAuthorization", "fundingSignaturePatch"]
         : []),

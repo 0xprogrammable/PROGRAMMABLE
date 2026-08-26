@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   readAlchemyExploreModel: vi.fn(),
   readAlchemyRouterCustomIdentitySourceV1: vi.fn(),
+  enrichRouterCustomSnapshotWithFinalizedMetadataV1: vi.fn(),
 }));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
@@ -12,6 +13,14 @@ vi.mock("../lib/alchemy/explore.server", () => ({
   readAlchemyRouterCustomIdentitySourceV1:
     mocks.readAlchemyRouterCustomIdentitySourceV1,
 }));
+
+vi.mock(
+  "../lib/server/custom-launch/finalized-custom-launch-metadata-feed-v1",
+  () => ({
+    enrichRouterCustomSnapshotWithFinalizedMetadataV1:
+      mocks.enrichRouterCustomSnapshotWithFinalizedMetadataV1,
+  }),
+);
 
 import {
   assertBoundedRouterCustomSnapshotBlobSizeV1,
@@ -124,6 +133,8 @@ describe("finalized Router Custom public projection", () => {
     vi.clearAllMocks();
     mocks.readAlchemyExploreModel.mockResolvedValue(model());
     mocks.readAlchemyRouterCustomIdentitySourceV1.mockResolvedValue(source());
+    mocks.enrichRouterCustomSnapshotWithFinalizedMetadataV1
+      .mockImplementation(async (snapshot) => snapshot);
   });
 
   it("projects only fully verified Custom Graph stamps", async () => {
@@ -133,6 +144,9 @@ describe("finalized Router Custom public projection", () => {
     await expect(readFinalizedRouterCustomExploreEntriesV1()).resolves.toEqual([
       customGraphExploreEntry,
     ]);
+    expect(
+      mocks.enrichRouterCustomSnapshotWithFinalizedMetadataV1,
+    ).toHaveBeenCalledOnce();
   });
 
   it("owns the exact Router cursor independently of the Classic snapshot", () => {

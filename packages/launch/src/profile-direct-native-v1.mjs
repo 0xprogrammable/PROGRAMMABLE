@@ -30,6 +30,7 @@ import {
   DIRECT_NATIVE_PROFILE_VERSION_V2,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA,
   DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA,
   FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA,
   FUNDING_AUTHORIZATION_INPUT_SCHEMA,
@@ -1791,6 +1792,7 @@ function directNativeProfileVersion(profileContract, requestedVersion) {
     return profileVersion;
   }
   if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
+    && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY) {
     throw new TypeError("direct-native embedded launchProfile version is not supported");
   }

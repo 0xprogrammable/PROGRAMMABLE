@@ -12,12 +12,13 @@ Start at [Programmable discovery](https://programmable.market/.well-known/progra
 `customLaunchApi.agentIntegration`, and fetch the advertised [agent remediation
 catalog](https://programmable.market/policies/custom-launch-agent-remediation-v1.json). Then use the [Custom Launch API
 guide](custom-launch.md) and [pack-config schema](https://programmable.market/schemas/custom-launch/v3/pack-config.json).
-Install the pinned public `programmable-launch` 3.3.1 CLI to
+Install the pinned public `programmable-launch` 3.3.2 CLI to
 pack, validate, submit and track V3 requests, and manage a key at [Custom Launch API
 keys](https://programmable.market/developers/api-keys). The [public V3
 contract](https://programmable.market/openapi/custom-launch-v3.json) is the normative production contract. Its default
-direct-native profile is revision 3 with `profileVersion: 3.1.0`; exact `3.0.0` requests remain readable and
-byte-identical retryable, and revision 2 remains compatible. The [V2
+direct-native profile is revision 3 with `profileVersion: 3.2.0`; it binds canonical project name, symbol,
+description, optional image and links into the launch hashes. Exact `3.1.0` and `3.0.0` requests remain readable and
+byte-identical retryable under their original immutable policies, and revision 2 remains compatible. The [V2
 contract](https://programmable.market/openapi/custom-launch-v2.json) remains available for existing V2 resources. V1
 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
 
@@ -25,7 +26,7 @@ The key can create and read launch preparations for its wallet principal. Keep i
 
 Revision 3 pins exact `solc 0.8.26+commit.8a97fa7a` Standard JSON, with a 5,242,880-byte limit per unit and in
 aggregate and no more than 2,048 inline sources. Its role-aware exact-source static admission binds every finding to the
-request. Exactly seven objective code-and-role rules hard-block profile 3.1.0; proxy/delegatecall, mint/tax/pause,
+request. Exactly seven objective code-and-role rules hard-block profile 3.2.0; proxy/delegatecall, mint/tax/pause,
 liquidity and return-delta surfaces remain evidence duties. A hard-block match returns `action_required`; all other
 findings remain visible needs-evidence or warning conditions. No manual project allowlist exists. Router simulation is mandatory before authorization. Admission and simulation are not an audit or a guarantee
 of safety, honeypot resistance, liquidity, tradeability or fee behavior.

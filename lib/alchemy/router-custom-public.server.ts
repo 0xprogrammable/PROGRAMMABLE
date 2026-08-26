@@ -26,6 +26,8 @@ import { suppressRouterBoundCustomProjectDuplicates } from
   "./router-custom-collision";
 import { enrichRouterCustomSnapshotWithFeePolicyV2 } from
   "../server/custom-launch/platform-fee-policy-readback-v2";
+import { enrichRouterCustomSnapshotWithFinalizedMetadataV1 } from
+  "../server/custom-launch/finalized-custom-launch-metadata-feed-v1";
 
 export const ROUTER_CUSTOM_LAUNCH_SOURCE =
   "canonical-launch-stamp-router" as const;
@@ -723,10 +725,12 @@ export async function readFinalizedRouterCustomIdentitySnapshotV1(
   const snapshot = await readFinalizedRouterCustomIdentitySnapshotCoreV1(
     options,
   );
+  const metadataEnriched =
+    await enrichRouterCustomSnapshotWithFinalizedMetadataV1(snapshot);
   // Fee policy evidence is deliberately derived after the durable identity
   // commitment. A fee-provider failure can therefore remove only the optional
   // evidence block; it can never hide a finalized Router identity.
-  return await enrichRouterCustomSnapshotWithFeePolicyV2(snapshot);
+  return await enrichRouterCustomSnapshotWithFeePolicyV2(metadataEnriched);
 }
 
 export async function readFinalizedRouterCustomExploreEntriesV1(

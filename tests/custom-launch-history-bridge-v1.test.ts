@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -9,6 +11,8 @@ import {
   CUSTOM_LAUNCH_LIST_SCHEMA_V2,
   CUSTOM_LAUNCH_LIST_SCHEMA_V3,
 } from "../lib/server/custom-launch/launch-history-bridge-v1";
+import { canonicalizeJson } from
+  "../lib/server/projection-target/canonical-json";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
@@ -18,6 +22,8 @@ const V3_LAUNCH_ID = "60000000-0000-4000-8000-000000000006";
 const V3_NATIVE_LAUNCH_ID = "70000000-0000-4000-8000-000000000007";
 const V3_ACTION_REQUIRED_LAUNCH_ID = "80000000-0000-4000-8000-000000000008";
 const WEBSITE_TOKEN = "w".repeat(43);
+const RAW_PROGRAMMABLE_API_KEY =
+  `pm_live_${"a".repeat(22)}_${"b".repeat(43)}`;
 
 const EXTERNAL_LIQUIDITY_INTENT = Object.freeze({
   model: "external-concentrated-liquidity",
@@ -34,6 +40,75 @@ const INVENTORY_LIQUIDITY_INTENT = Object.freeze({
   declaredLaunchState: "assessment_required",
   binding: "explicit-request-hash",
 });
+
+const PROJECT_METADATA = Object.freeze({
+  schemaVersion: "programmable.project-metadata.v1",
+  token: Object.freeze({ name: "Example Hook", symbol: "HOOK" }),
+  presentation: Object.freeze({
+    schemaVersion: "programmable.launch-presentation-draft.v1",
+    description: "A project-owned Uniswap v4 hook.",
+    image: Object.freeze({
+      uri: "https://assets.example.com/hook.png",
+      contentSha256: `sha256:${"44".repeat(32)}`,
+      mediaType: "image/png",
+      byteLength: 4_096,
+      width: 512,
+      height: 512,
+    }),
+    links: Object.freeze([
+      Object.freeze({ kind: "documentation", uri: "https://docs.example.com/" }),
+      Object.freeze({ kind: "website", uri: "https://example.com/" }),
+      Object.freeze({ kind: "x", uri: "https://x.com/example" }),
+    ]),
+  }),
+  tokenMetadataBinding: Object.freeze({
+    schemaVersion: "programmable.project-token-metadata-binding.v1",
+    tokenTargetId: "token",
+    declarationBinding: "request-and-launch-id",
+    standardReadModel: Object.freeze({ name: true, symbol: true }),
+    name: Object.freeze({
+      staticSource: "constructor-argument",
+      argumentIndex: 0,
+      argumentName: "name_",
+    }),
+    symbol: Object.freeze({
+      staticSource: "constructor-argument",
+      argumentIndex: 1,
+      argumentName: "symbol_",
+    }),
+    postDeploymentReadback: "required",
+  }),
+});
+
+function projectMetadataHash(metadata: unknown) {
+  const hash = createHash("sha256");
+  hash.update("programmable.project-metadata.v1", "utf8");
+  hash.update(Buffer.from([0]));
+  hash.update(canonicalizeJson(metadata), "utf8");
+  return `sha256:${hash.digest("hex")}`;
+}
+
+const PROJECT_METADATA_HASH = projectMetadataHash(PROJECT_METADATA);
+const UNBOUND_GRAPH_BUNDLE_HASH = `sha256:${"ab".repeat(32)}` as const;
+
+function projectGraphBundleHash(
+  unboundGraphBundleHash: string,
+  metadataHash: string,
+) {
+  const hash = createHash("sha256");
+  hash.update("programmable.custom-graph-project-metadata.v1", "utf8");
+  hash.update(Buffer.from([0]));
+  hash.update(canonicalizeJson({
+    graphBundleHash: unboundGraphBundleHash,
+    projectMetadataHash: metadataHash,
+  }), "utf8");
+  return `sha256:${hash.digest("hex")}`;
+}
+
+const GRAPH_BUNDLE_HASH = projectGraphBundleHash(
+  UNBOUND_GRAPH_BUNDLE_HASH,
+  PROJECT_METADATA_HASH,
+);
 
 function launch(ownerWallet: string = WALLET) {
   return {
@@ -98,8 +173,11 @@ function launchV3(ownerWallet: string = WALLET) {
     ownerWallet,
     status: "awaiting_funding_authorization",
     requestHash: `sha256:${"55".repeat(32)}`,
+    launchProfileVersion: "3.2.0",
     launchProfileHash: `sha256:${"66".repeat(32)}`,
     launchIntentHash: `sha256:${"77".repeat(32)}`,
+    projectMetadata: PROJECT_METADATA,
+    projectMetadataHash: PROJECT_METADATA_HASH,
     fundingIntentHash: `0x${"88".repeat(32)}`,
     liquidityIntent: EXTERNAL_LIQUIDITY_INTENT,
     createdAt: "2026-08-24T12:02:00.000Z",
@@ -475,6 +553,583 @@ describe("developer launch history same-origin bridge", () => {
     });
   });
 
+  it("keeps an authorized V3 list row compact until single-resource hydration", async () => {
+    const compact = { ...launchV3(), status: "authorized", output: null };
+    fetchBackend
+      .mockResolvedValueOnce(backendJson({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV3({
+        launches: [compact],
+        nextCursor: null,
+      }));
+
+    const response = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&limit=5`,
+    ));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
+      launches: [compact],
+      nextCursor: null,
+    });
+  });
+
+  it("preserves canonical project metadata and its domain-framed digest", async () => {
+    fetchBackend.mockResolvedValueOnce(new Response(
+      JSON.stringify(launchV3()),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.projectMetadata).toEqual(PROJECT_METADATA);
+    expect(body.projectMetadataHash).toBe(PROJECT_METADATA_HASH);
+  });
+
+  it("accepts canonical LF-only multiline descriptions", async () => {
+    const metadata = {
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        description: "First line\nSecond line",
+      },
+      tokenMetadataBinding: {
+        ...PROJECT_METADATA.tokenMetadataBinding,
+        name: {
+          ...PROJECT_METADATA.tokenMetadataBinding.name,
+          argumentName: "é".repeat(128),
+        },
+      },
+    };
+    const resource = {
+      ...launchV3(),
+      projectMetadata: metadata,
+      projectMetadataHash: projectMetadataHash(metadata),
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).projectMetadata.presentation.description)
+      .toBe("First line\nSecond line");
+  });
+
+  it.each(["2.0.0", "3.0.0", "3.1.0"] as const)(
+    "keeps legacy V3 %s metadata absence readable only as an explicit null pair",
+    async (launchProfileVersion) => {
+    const legacy = {
+      ...launchV3(),
+      launchProfileVersion,
+      projectMetadata: null,
+      projectMetadataHash: null,
+      status: "authorized",
+      output: { artifact: { route: { routePayload: "0x" } } },
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(legacy), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(legacy);
+    },
+  );
+
+  it.each([
+    ["a missing profile version", (() => {
+      const { launchProfileVersion: _removed, ...incomplete } = launchV3();
+      void _removed;
+      return incomplete;
+    })()],
+    ["an unknown profile version", {
+      ...launchV3(),
+      launchProfileVersion: "3.3.0",
+    }],
+    ["metadata on a legacy profile", {
+      ...launchV3(),
+      launchProfileVersion: "3.1.0",
+    }],
+    ["missing metadata on the bound profile", {
+      ...launchV3(),
+      projectMetadata: null,
+      projectMetadataHash: null,
+    }],
+    ["an artifact metadata key on a legacy profile", {
+      ...launchV3(),
+      launchProfileVersion: "3.1.0",
+      projectMetadata: null,
+      projectMetadataHash: null,
+      output: { artifact: { projectMetadata: null } },
+    }],
+    ["an authorized bound profile without the artifact triple", {
+      ...launchV3(),
+      status: "authorized",
+      output: null,
+    }],
+    ["an altered digest", (() => ({
+      ...launchV3(),
+      projectMetadataHash: `sha256:${"00".repeat(32)}`,
+    }))()],
+    ["only one metadata field", (() => {
+      const { projectMetadataHash: _removed, ...incomplete } = launchV3();
+      void _removed;
+      return incomplete;
+    })()],
+    ["an extra metadata key", (() => {
+      const metadata = { ...PROJECT_METADATA, unbound: true };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["unsorted links", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [...PROJECT_METADATA.presentation.links].reverse(),
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a credential-like project link", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{
+            kind: "website",
+            uri: "https://example.com/?api_key=should-never-cross-this-boundary",
+          }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a credential-like description", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: "api_key=should-never-cross-this-boundary",
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a raw Programmable API key in metadata", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: `keep ${RAW_PROGRAMMABLE_API_KEY} secret`,
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a case-insensitive API key assignment", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: "programmable_api_key=do-not-cross-this-boundary",
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a percent-encoded API key in an argument name", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          name: {
+            ...PROJECT_METADATA.tokenMetadataBinding.name,
+            argumentName: encodeURIComponent(RAW_PROGRAMMABLE_API_KEY),
+          },
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a raw API key token target", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          tokenTargetId: RAW_PROGRAMMABLE_API_KEY,
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a percent-encoded API key in a project URL", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{
+            kind: "website",
+            uri: `https://example.com/${encodeURIComponent(
+              RAW_PROGRAMMABLE_API_KEY,
+            )}`,
+          }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["symbol whitespace", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        token: { ...PROJECT_METADATA.token, symbol: "BAD SYMBOL" },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a tab in the description", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: "First line\tSecond line",
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a C1 control in the description", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: "First line\u0085Second line",
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["CRLF in the description", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: "First line\r\nSecond line",
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a path on a content-addressed image URI", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          image: {
+            ...PROJECT_METADATA.presentation.image,
+            uri: "ar://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/image.png",
+          },
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a local project link", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{ kind: "website", uri: "https://project.local/" }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["the exact local hostname", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{ kind: "website", uri: "https://local/" }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["the trailing-dot exact local hostname", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{ kind: "website", uri: "https://local./" }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a trailing-dot localhost project link", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{ kind: "website", uri: "https://localhost./" }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a trailing-dot localhost subdomain project link", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{ kind: "website", uri: "https://project.localhost./" }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["an overlong UTF-8 argument name", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          name: {
+            ...PROJECT_METADATA.tokenMetadataBinding.name,
+            argumentName: "é".repeat(129),
+          },
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a control character in an argument name", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          name: {
+            ...PROJECT_METADATA.tokenMetadataBinding.name,
+            argumentName: "bad\tname",
+          },
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a C1 control in an argument name", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          name: {
+            ...PROJECT_METADATA.tokenMetadataBinding.name,
+            argumentName: "bad\u0085name",
+          },
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a percent-encoded C1 control in a project URL", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{
+            kind: "website",
+            uri: "https://example.com/%C2%85hidden",
+          }],
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: projectMetadataHash(metadata),
+      };
+    })()],
+    ["a lone surrogate in project text", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: "bad\ud800text",
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: PROJECT_METADATA_HASH,
+      };
+    })()],
+    ["a lone surrogate in an argument name", (() => {
+      const metadata = {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          name: {
+            ...PROJECT_METADATA.tokenMetadataBinding.name,
+            argumentName: "bad\ud800name",
+          },
+        },
+      };
+      return {
+        ...launchV3(),
+        projectMetadata: metadata,
+        projectMetadataHash: PROJECT_METADATA_HASH,
+      };
+    })()],
+  ])("fails closed on %s", async (_label, resource) => {
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe(
+      "launch_history_unavailable",
+    );
+  });
+
+  it("fails closed when an artifact carries a different metadata binding", async () => {
+    const resource = {
+      ...launchV3(),
+      status: "authorized",
+      output: {
+        artifact: {
+          projectMetadata: PROJECT_METADATA,
+          projectMetadataHash: `sha256:${"00".repeat(32)}`,
+        },
+      },
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe(
+      "launch_history_unavailable",
+    );
+  });
+
+  it("fails closed when the artifact graph hash is not metadata-bound", async () => {
+    const resource = {
+      ...launchV3(),
+      status: "authorized",
+      output: {
+        artifact: {
+          projectMetadata: PROJECT_METADATA,
+          projectMetadataHash: PROJECT_METADATA_HASH,
+          unboundGraphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+          graphBundleHash: `sha256:${"ff".repeat(32)}`,
+        },
+      },
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe(
+      "launch_history_unavailable",
+    );
+  });
+
   it("preserves exact V3 liquidity intent projections in compact list rows", async () => {
     fetchBackend
       .mockResolvedValueOnce(backendJson({ launches: [], nextCursor: null }))
@@ -520,7 +1175,14 @@ describe("developer launch history same-origin bridge", () => {
     const resource = {
       ...launchV3Native(),
       status: "authorized",
-      output: null,
+      output: {
+        artifact: {
+          unboundGraphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+          graphBundleHash: GRAPH_BUNDLE_HASH,
+          projectMetadata: PROJECT_METADATA,
+          projectMetadataHash: PROJECT_METADATA_HASH,
+        },
+      },
       walletHandoffUrl:
         `/developers/api-keys?launchId=${V3_NATIVE_LAUNCH_ID}`,
       expiresAt: "2026-08-24T12:15:00.000Z",
@@ -563,7 +1225,14 @@ describe("developer launch history same-origin bridge", () => {
     fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify({
       ...launchV3Native(),
       status: "authorized",
-      output: null,
+      output: {
+        artifact: {
+          unboundGraphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+          graphBundleHash: GRAPH_BUNDLE_HASH,
+          projectMetadata: PROJECT_METADATA,
+          projectMetadataHash: PROJECT_METADATA_HASH,
+        },
+      },
       walletHandoffUrl:
         `https://evil.example/developers/api-keys?launchId=${V3_NATIVE_LAUNCH_ID}`,
       expiresAt: "2026-08-24T12:15:00.000Z",
@@ -886,6 +1555,10 @@ describe("developer launch history same-origin bridge", () => {
         },
         fundingBoundary: FUNDING_BOUNDARY,
         artifact: {
+          projectMetadata: PROJECT_METADATA,
+          projectMetadataHash: PROJECT_METADATA_HASH,
+          unboundGraphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+          graphBundleHash: GRAPH_BUNDLE_HASH,
           route: { routePayload: repeatedGraphBytes },
           unsignedRouterTransaction: {
             calldataWithEmptySignature: repeatedGraphBytes,

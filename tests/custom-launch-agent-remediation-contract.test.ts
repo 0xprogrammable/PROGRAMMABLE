@@ -60,6 +60,8 @@ describe("Custom Launch cold-agent remediation contract", () => {
       openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       capabilitiesUrl: "https://api.programmable.market/v3/capabilities",
       preflightUrl: "https://api.programmable.market/v3/custom-launches/preflight",
+      finalizedMetadataUrl:
+        "https://api.programmable.market/v3/finalized-custom-launches",
       apiKeyEnvironmentVariable: "PROGRAMMABLE_API_KEY",
       apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY",
       apiKeyContainsPolicy: false,
@@ -120,17 +122,17 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.3.1",
+        cliReleaseVersion: "3.3.2",
         cliChecksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256",
         cliTarballSha256:
-          "sha256:1d5a2649c899b85512bdeca160fd24998b2f0898c042deecb3c5d43e4ae60da2",
+          "sha256:096b2e09514437907c50fd3f7dc9415c426f4496d65572316d208f22a7ef389f",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.1.0",
-        compatibleProfileVersions: ["3.0.0"],
+        profileVersion: "3.2.0",
+        compatibleProfileVersions: ["3.1.0", "3.0.0"],
         chainId: "1",
         productionLaunchAuthorized: true,
       },
@@ -237,7 +239,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.3.1");
+    expect(openApi.info.version).toBe("3.3.2");
     const v2Patch =
       openApi.components.schemas.FundingAuthorizationPatchDescriptorV2;
     expect(v2Patch.required).toEqual([
@@ -285,8 +287,8 @@ describe("Custom Launch cold-agent remediation contract", () => {
     expect(catalog.automaticAdmission).toMatchObject({
       manualAllowlist: false,
       manualProjectApproval: false,
-      currentProfileVersion: "3.1.0",
-      legacyExactProfileVersions: ["3.0.0"],
+      currentProfileVersion: "3.2.0",
+      legacyExactProfileVersions: ["3.1.0", "3.0.0"],
       routerSimulationBeforeAuthorization: true,
       blockingStatus: "action_required",
       warningDisposition: "continue-to-router-simulation",

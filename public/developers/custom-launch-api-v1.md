@@ -62,8 +62,8 @@ Retrying unchanged bytes or asking for a manual allowlist cannot bypass it.
 
 The `programmable.direct-native-hook-graph.v1` document is the V3 production request, resource and wallet-handoff
 contract. The default profile uses `schemaVersion: programmable.direct-native-hook-graph-profile.v3`,
-`profileRevision: 3` and `profileVersion: 3.1.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact `3.0.0` requests remain readable and
+`profileRevision: 3` and `profileVersion: 3.2.0`; its selection binding uses
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact metadata-absent `3.1.0` and `3.0.0` requests remain readable and
 byte-identical retryable under their original immutable policy; revision 2 also remains a compatible profile contract
 for existing clients and resources. The Router primitive supports 2-16 targets; the direct
 native profile requires 3-16 because token, hook and initializer roles are distinct. It accepts a project-owned token,
@@ -115,7 +115,7 @@ inventory that can exchange against incoming assets. Buys may then grow assets h
 inventory and the buy, sell, redemption and withdrawal paths still come from the exact project graph. Funding mode
 `none` does not make an empty ordinary pool liquid.
 
-Profile `3.1.0` checks exact source/build bindings, hook permissions and address bits, then applies a role-aware static
+Profiles `3.1.0` and `3.2.0` check exact source/build bindings, hook permissions and address bits, then apply a role-aware static
 baseline. Exactly seven objective code-and-role rules hard-block deployment: runtime `CALLCODE`, runtime or source
 `SELFDESTRUCT`, a definitively missing or invalid callback authentication guard, a literal noncanonical PoolManager,
 or a missing enabled callback implementation. Proxy or delegatecall use, mint/tax/pause/transfer controls, liquidity
@@ -149,16 +149,16 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.1.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.1.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.2.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.2.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.1`. The package name is
+Continue only after the checksum command reports `OK` and the version command prints `3.3.2`. The package name is
 `@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:
@@ -174,6 +174,25 @@ programmable-launch status REQUEST_UUID --watch --until authorized
 predictions, evidence digests, canonical hashes and exact source verification bundle from exact source, Standard JSON,
 compiler artifacts and evidence files. It accepts no hand written derived hashes. `validate` recomputes those
 commitments and, with `--config`, requires byte identical reproduction of `launch.json`.
+
+Current profile `3.2.0` also requires `projectMetadata`. The pack input contains `token.name`, `token.symbol` and
+`presentation` with required `description`, `image` and `links` keys. Image is deliberately `null` when the project
+has no image; otherwise it names a local PNG, JPEG, WebP or GIF plus the matching canonical HTTPS, `ipfs://`, or
+`ar://` public URI. Links are public canonical HTTPS and use `website`, `documentation`, `x`, `telegram`, `discord`,
+`github`, or `other`. Use at most 64 UTF-8 bytes for the NFC trimmed name, 16 for the whitespace-free symbol, 4096 for
+the description, 20 MiB and 8192 pixels per image dimension, and 32 links. The CLI sorts links, includes image bytes
+in the source manifest and derives all metadata hashes.
+
+Use a stable content URI and make HTTPS image bytes browser-readable with CORS. Wallet review fetches the raw bytes
+and checks the bound SHA-256, length, type and dimensions before rendering; IPFS and Arweave use fixed public gateways.
+An unavailable or mismatched remote image remains a digest plus placeholder. The platform does not upload or replace
+the image, mutate the launch, or sign automatically.
+
+When the selected token ABI and exact constructor or initializer values expose one unambiguous name or symbol string,
+the declaration must match. Arbitrary tokens are not forced into one constructor shape: non-extractable declarations
+are request-and-launch-ID bound and require post-deployment `name()` / `symbol()` readback where supported. The wallet
+reviews the same canonical `programmable.project-metadata.v1` and `projectMetadataHash`; neither the client nor the
+API can substitute display metadata after packaging.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`. It compiles real project-owned token, hook and
 initializer targets, then stops after deterministic `pack` and `validate`. It never submits, polls, signs,

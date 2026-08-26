@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   mergeApiKeySummaries,
@@ -8,9 +8,16 @@ import {
 } from "../components/developer-api-keys";
 import {
   launchPollingRetryAfterMs,
+  fetchVerifiedProjectImageV1,
   mergeLaunchResources,
+  parseCustomLaunchProjectMetadataV1,
   parseHistoryPage,
+  projectImageFetchUrlV1,
   selectMonotonicLaunchResource,
+  walletProjectMetadataBindingV1,
+  walletProjectMetadataSummaryV1,
+  walletProjectRequestBindingV1,
+  type CustomLaunchProjectMetadataV1,
   type LaunchResource,
   type LaunchStatus,
 } from "../components/developer-launch-history";
@@ -26,6 +33,8 @@ import {
   parseCustomLaunchWalletHandoffV1,
   parseSourceVerificationStatusV1,
 } from "../lib/custom-launch/developer-launch-truth-v1";
+import { canonicalBrowserSha256V2, fileSha256V2 } from
+  "../lib/custom-launch/browser-authority-v2";
 
 const apiKeysSource = readFileSync(
   new URL("../components/developer-api-keys.tsx", import.meta.url),
@@ -46,6 +55,58 @@ const historyStyles = readFileSync(
 const walletProviderSource = readFileSync(
   new URL("../components/wallet-provider.tsx", import.meta.url),
   "utf8",
+);
+
+const PROJECT_METADATA = Object.freeze({
+  schemaVersion: "programmable.project-metadata.v1",
+  token: Object.freeze({ name: "Example Hook", symbol: "HOOK" }),
+  presentation: Object.freeze({
+    schemaVersion: "programmable.launch-presentation-draft.v1",
+    description: "A project-owned Uniswap v4 hook.",
+    image: Object.freeze({
+      uri: "https://assets.example.com/hook.png",
+      contentSha256: `sha256:${"44".repeat(32)}`,
+      mediaType: "image/png",
+      byteLength: 4_096,
+      width: 512,
+      height: 512,
+    }),
+    links: Object.freeze([
+      Object.freeze({ kind: "documentation", uri: "https://docs.example.com/" }),
+      Object.freeze({ kind: "website", uri: "https://example.com/" }),
+      Object.freeze({ kind: "x", uri: "https://x.com/example" }),
+    ]),
+  }),
+  tokenMetadataBinding: Object.freeze({
+    schemaVersion: "programmable.project-token-metadata-binding.v1",
+    tokenTargetId: "token",
+    declarationBinding: "request-and-launch-id",
+    standardReadModel: Object.freeze({ name: true, symbol: true }),
+    name: Object.freeze({
+      staticSource: "constructor-argument",
+      argumentIndex: 0,
+      argumentName: "name_",
+    }),
+    symbol: Object.freeze({
+      staticSource: "constructor-argument",
+      argumentIndex: 1,
+      argumentName: "symbol_",
+    }),
+    postDeploymentReadback: "required",
+  }),
+}) satisfies CustomLaunchProjectMetadataV1;
+
+const PROJECT_METADATA_HASH = canonicalBrowserSha256V2(
+  "programmable.project-metadata.v1",
+  PROJECT_METADATA,
+);
+const UNBOUND_GRAPH_BUNDLE_HASH = `sha256:${"77".repeat(32)}` as const;
+const GRAPH_BUNDLE_HASH = canonicalBrowserSha256V2(
+  "programmable.custom-graph-project-metadata.v1",
+  {
+    graphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+    projectMetadataHash: PROJECT_METADATA_HASH,
+  },
 );
 
 function apiKey(
@@ -78,8 +139,12 @@ function launch(
     routeId: "custom-launch:create:v1",
     ownerWallet: "0x0000000000000000000000000000000000000001",
     status,
+    requestHash: `sha256:${"00".repeat(32)}`,
+    launchProfileVersion: null,
     launchProfileHash: null,
     launchIntentHash: null,
+    projectMetadata: null,
+    projectMetadataHash: null,
     fundingIntentHash: null,
     liquidityIntent: null,
     sourceVerification: null,
@@ -105,8 +170,11 @@ function v3Launch(
     ),
     schemaVersion: "programmable.custom-launch.v3",
     routeId: "custom-launch:create:v3",
+    launchProfileVersion: "3.2.0",
     launchProfileHash: `sha256:${"11".repeat(32)}`,
     launchIntentHash: `sha256:${"22".repeat(32)}`,
+    projectMetadata: PROJECT_METADATA,
+    projectMetadataHash: PROJECT_METADATA_HASH,
     fundingIntentHash: `0x${"33".repeat(32)}`,
     liquidityIntent: {
       model: "external-concentrated-liquidity",
@@ -225,6 +293,18 @@ describe("developer API key interface", () => {
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "pack -> validate --remote -> submit -> wallet -> status",
     );
+    expect(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli).toContain(
+      "programmable-launch-v3.3.2",
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "Before pack, collect the project name and symbol",
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "local source file and its canonical public HTTPS, IPFS or Arweave URI",
+    );
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
+      "website shows the same metadata read-only",
+    );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "There is no project allowlist or private approval path.",
     );
@@ -318,15 +398,16 @@ describe("developer launch history interface", () => {
       output: null,
       failure: null,
     } as const;
-    const { requestHash: _requestHash, ...projectedResource } = resource;
-    void _requestHash;
     expect(parseHistoryPage({
       schemaVersion: "programmable.custom-launch-history.v1",
       launches: [resource],
       nextCursor: null,
     }, resource.ownerWallet)).toEqual({
       launches: [{
-        ...projectedResource,
+        ...resource,
+        launchProfileVersion: null,
+        projectMetadata: null,
+        projectMetadataHash: null,
         fundingIntentHash: null,
         liquidityIntent: null,
         sourceVerification: null,
@@ -566,17 +647,442 @@ describe("developer launch history interface", () => {
     );
     const fundingBoundary = historySource.slice(fundingStart, fundingEnd);
     expect(fundingBoundary.indexOf("sameFundingAuthorization(")).toBeGreaterThan(-1);
+    expect(fundingBoundary.indexOf("sameProjectRequestBindingV1(")).toBeGreaterThan(-1);
     expect(fundingBoundary.indexOf("signCustomLaunchFundingAuthorization(")).toBeGreaterThan(
       fundingBoundary.indexOf("sameFundingAuthorization("),
+    );
+    expect(fundingBoundary.indexOf("signCustomLaunchFundingAuthorization(")).toBeGreaterThan(
+      fundingBoundary.indexOf("sameProjectRequestBindingV1("),
     );
 
     const routerStart = fundingEnd;
     const routerEnd = historySource.indexOf("return (", routerStart);
     const routerBoundary = historySource.slice(routerStart, routerEnd);
     expect(routerBoundary.indexOf("sameRouterReview(")).toBeGreaterThan(-1);
+    expect(routerBoundary.indexOf("sameProjectRequestBindingV1(")).toBeGreaterThan(-1);
     expect(routerBoundary.indexOf("sendCustomLaunchWalletAction(action)")).toBeGreaterThan(
       routerBoundary.indexOf("sameRouterReview("),
     );
+    expect(routerBoundary.indexOf("sendCustomLaunchWalletAction(action)")).toBeGreaterThan(
+      routerBoundary.indexOf("sameProjectRequestBindingV1("),
+    );
+  });
+
+  it("renders and freezes the canonical project identity before either wallet step", () => {
+    expect(parseCustomLaunchProjectMetadataV1(PROJECT_METADATA)).toEqual(
+      PROJECT_METADATA,
+    );
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        description: "First line\nSecond line",
+      },
+    })).not.toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      token: { ...PROJECT_METADATA.token, symbol: "BAD SYMBOL" },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      tokenMetadataBinding: {
+        ...PROJECT_METADATA.tokenMetadataBinding,
+        name: {
+          ...PROJECT_METADATA.tokenMetadataBinding.name,
+          argumentName: "é".repeat(128),
+        },
+      },
+    })).not.toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      tokenMetadataBinding: {
+        ...PROJECT_METADATA.tokenMetadataBinding,
+        name: {
+          ...PROJECT_METADATA.tokenMetadataBinding.name,
+          argumentName: "é".repeat(129),
+        },
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      tokenMetadataBinding: {
+        ...PROJECT_METADATA.tokenMetadataBinding,
+        name: {
+          ...PROJECT_METADATA.tokenMetadataBinding.name,
+          argumentName: "bad\ud800name",
+        },
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      tokenMetadataBinding: {
+        ...PROJECT_METADATA.tokenMetadataBinding,
+        name: {
+          ...PROJECT_METADATA.tokenMetadataBinding.name,
+          argumentName: "bad\nname",
+        },
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        description: "First line\tSecond line",
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        description: "First line\u0085Second line",
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      tokenMetadataBinding: {
+        ...PROJECT_METADATA.tokenMetadataBinding,
+        name: {
+          ...PROJECT_METADATA.tokenMetadataBinding.name,
+          argumentName: "bad\u0085name",
+        },
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        description: "First line\r\nSecond line",
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        description: "bad\ud800text",
+      },
+    })).toBeNull();
+    for (const uri of [
+      "https://local/",
+      "https://local./",
+      "https://project.local/",
+      "https://localhost./",
+      "https://project.localhost./",
+      "https://bad_host.example/",
+    ]) {
+      expect(parseCustomLaunchProjectMetadataV1({
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{ kind: "website", uri }],
+        },
+      })).toBeNull();
+    }
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        links: [{ kind: "website", uri: "https://fc.example.com/" }],
+      },
+    })).not.toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        links: [...PROJECT_METADATA.presentation.links].reverse(),
+      },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      token: { ...PROJECT_METADATA.token, unexpected: true },
+    })).toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        image: {
+          ...PROJECT_METADATA.presentation.image!,
+          uri: "ipfs://QmYwAPJzv5CZsnAzt8auVZRnGiRA7MCLGTMonGSQH9sV5v",
+        },
+      },
+    })).not.toBeNull();
+    expect(parseCustomLaunchProjectMetadataV1({
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        image: {
+          ...PROJECT_METADATA.presentation.image!,
+          uri: "ipfs://QmYwAPJzv5CZsnAzt8auVZRnGiRA7MCLGTMonGSQH9sV5v/image.png",
+        },
+      },
+    })).toBeNull();
+
+    const rawApiKey = `pm_live_${"a".repeat(22)}_${"b".repeat(43)}`;
+    for (const metadata of [
+      {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: `keep ${rawApiKey} secret`,
+        },
+      },
+      {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          description: "programmable_api_key=do-not-cross-this-boundary",
+        },
+      },
+      {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          name: {
+            ...PROJECT_METADATA.tokenMetadataBinding.name,
+            argumentName: encodeURIComponent(rawApiKey),
+          },
+        },
+      },
+      {
+        ...PROJECT_METADATA,
+        tokenMetadataBinding: {
+          ...PROJECT_METADATA.tokenMetadataBinding,
+          tokenTargetId: rawApiKey,
+        },
+      },
+      {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{
+            kind: "website",
+            uri: `https://example.com/${encodeURIComponent(rawApiKey)}`,
+          }],
+        },
+      },
+      {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{
+            kind: "website",
+            uri: "https://example.com/%C2%85hidden",
+          }],
+        },
+      },
+      {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{
+            kind: "website",
+            uri: "https://example.com/%20hidden",
+          }],
+        },
+      },
+      {
+        ...PROJECT_METADATA,
+        presentation: {
+          ...PROJECT_METADATA.presentation,
+          links: [{
+            kind: "website",
+            uri: "https://example.com/\ud800hidden",
+          }],
+        },
+      },
+    ]) {
+      expect(parseCustomLaunchProjectMetadataV1(metadata)).toBeNull();
+    }
+
+    const launch = {
+      ...v3Launch("authorized", 7),
+      output: {
+        artifact: {
+          unboundGraphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+          graphBundleHash: GRAPH_BUNDLE_HASH,
+          projectMetadata: JSON.parse(JSON.stringify(PROJECT_METADATA)),
+          projectMetadataHash: PROJECT_METADATA_HASH,
+        },
+      },
+    } satisfies LaunchResource;
+    expect(walletProjectMetadataBindingV1(launch)).toEqual({
+      mode: "bound-metadata",
+      requestHash: launch.requestHash,
+      launchIntentHash: launch.launchIntentHash,
+      projectMetadata: PROJECT_METADATA,
+      projectMetadataHash: PROJECT_METADATA_HASH,
+    });
+    expect(walletProjectMetadataSummaryV1({
+      ...launch,
+      output: null,
+    })).toEqual({
+      mode: "bound-metadata",
+      requestHash: launch.requestHash,
+      launchIntentHash: launch.launchIntentHash,
+      projectMetadata: PROJECT_METADATA,
+      projectMetadataHash: PROJECT_METADATA_HASH,
+    });
+    expect(walletProjectMetadataBindingV1({
+      ...launch,
+      output: {
+        artifact: {
+          unboundGraphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+          graphBundleHash: `sha256:${"99".repeat(32)}`,
+          projectMetadata: JSON.parse(JSON.stringify(PROJECT_METADATA)),
+          projectMetadataHash: PROJECT_METADATA_HASH,
+        },
+      },
+    })).toBeNull();
+    expect(walletProjectMetadataBindingV1({
+      ...launch,
+      output: {
+        artifact: {
+          unboundGraphBundleHash: UNBOUND_GRAPH_BUNDLE_HASH,
+          graphBundleHash: GRAPH_BUNDLE_HASH,
+          projectMetadata: JSON.parse(JSON.stringify(PROJECT_METADATA)),
+          projectMetadataHash: `sha256:${"66".repeat(32)}`,
+        },
+      },
+    })).toBeNull();
+    expect(walletProjectMetadataBindingV1({
+      ...launch,
+      projectMetadataHash: null,
+    })).toBeNull();
+
+    const legacy = {
+      ...v3Launch("authorized", 7),
+      launchProfileVersion: "3.0.0" as const,
+      projectMetadata: null,
+      projectMetadataHash: null,
+      output: { artifact: { route: { routePayload: "0x" } } },
+    } satisfies LaunchResource;
+    expect(walletProjectMetadataBindingV1(legacy)).toBeNull();
+    expect(walletProjectRequestBindingV1(legacy)).toEqual({
+      mode: "legacy-exact-retry",
+      launchProfileVersion: "3.0.0",
+      requestHash: legacy.requestHash,
+      launchIntentHash: legacy.launchIntentHash,
+    });
+    for (const launchProfileVersion of ["2.0.0", "3.1.0"] as const) {
+      expect(walletProjectRequestBindingV1({
+        ...legacy,
+        launchProfileVersion,
+      })).toEqual({
+        mode: "legacy-exact-retry",
+        launchProfileVersion,
+        requestHash: legacy.requestHash,
+        launchIntentHash: legacy.launchIntentHash,
+      });
+    }
+    expect(walletProjectRequestBindingV1({
+      ...legacy,
+      output: {
+        artifact: {
+          route: { routePayload: "0x" },
+          projectMetadata: null,
+        },
+      },
+    })).toBeNull();
+    expect(walletProjectRequestBindingV1({
+      ...launch,
+      output: {
+        artifact: {
+          unboundGraphBundleHash: `sha256:${"77".repeat(32)}`,
+          projectMetadata: JSON.parse(JSON.stringify(PROJECT_METADATA)),
+        },
+      },
+    })).toBeNull();
+    expect(walletProjectRequestBindingV1({
+      ...launch,
+      projectMetadata: null,
+      projectMetadataHash: null,
+    })).toBeNull();
+
+    expect(historySource).toContain("Included in this launch");
+    expect(historySource).toContain('referrerPolicy="no-referrer"');
+    expect(historySource).toContain('credentials: "omit"');
+    expect(historySource).toContain('redirect: "error"');
+    expect(historySource).toContain("fileSha256V2(bytes)");
+    expect(historySource).toContain("URL.createObjectURL(blob)");
+    expect(historySource).toContain("The bound GIF bytes and dimensions are verified");
+    expect(historySource).not.toContain("src={presentation.image.uri}");
+    expect(projectImageFetchUrlV1("https://assets.example.com/hook.png"))
+      .toBe("https://assets.example.com/hook.png");
+    expect(projectImageFetchUrlV1(
+      "ipfs://QmYwAPJzv5CZsnAzt8auVZRnGiRA7MCLGTMonGSQH9sV5v",
+    )).toBe(
+      "https://ipfs.io/ipfs/QmYwAPJzv5CZsnAzt8auVZRnGiRA7MCLGTMonGSQH9sV5v",
+    );
+    expect(projectImageFetchUrlV1(
+      "ar://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )).toBe(
+      "https://arweave.net/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+    expect(historySource).toContain("Bound project metadata unavailable");
+    expect(historySource).toContain("Legacy launch identity");
+    expect(historySource).toContain(
+      "Declared identity is bound now. Onchain ERC-20 name and symbol",
+    );
+    expect(historySource).toContain(
+      "Changing any\n        field requires a newly packed request.",
+    );
+    expect(historySource).not.toContain("Edit project metadata");
+    expect(historyStyles).toContain(".projectReview");
+    expect(historyStyles).toContain(".metadataUnavailable");
+    expect(historyStyles).toMatch(
+      /\.projectIdentity strong\s*\{[^}]*white-space:\s*nowrap;/su,
+    );
+    expect(historySource).toContain("launchErrors[key]");
+    expect(historyStyles).toMatch(
+      /\.projectLinks a\s*\{[^}]*min-height:\s*44px;/su,
+    );
+    expect(historyStyles).toContain("@media (max-width: 600px)");
+  });
+
+  it("renders project artwork only after exact response bytes verify", async () => {
+    const bytes = Uint8Array.from([
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00,
+    ]);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(bytes, {
+        status: 200,
+        headers: {
+          "content-length": String(bytes.byteLength),
+          "content-type": "image/gif",
+        },
+      }),
+    );
+    try {
+      const verified = await fetchVerifiedProjectImageV1({
+        uri: "https://assets.example.com/hook.gif",
+        contentSha256: fileSha256V2(bytes),
+        mediaType: "image/gif",
+        byteLength: bytes.byteLength,
+        width: 1,
+        height: 1,
+      }, new AbortController().signal);
+      expect(verified.mediaType).toBe("image/gif");
+      expect(verified.blob.size).toBe(bytes.byteLength);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://assets.example.com/hook.gif",
+        expect.objectContaining({
+          credentials: "omit",
+          redirect: "error",
+          referrerPolicy: "no-referrer",
+        }),
+      );
+      await expect(fetchVerifiedProjectImageV1({
+        uri: "https://assets.example.com/hook.gif",
+        contentSha256: `sha256:${"00".repeat(32)}`,
+        mediaType: "image/gif",
+        byteLength: bytes.byteLength,
+        width: 1,
+        height: 1,
+      }, new AbortController().signal)).rejects.toThrow(
+        "Project image bytes changed",
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it("accepts only an exact same-origin launch handoff", () => {

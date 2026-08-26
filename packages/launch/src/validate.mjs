@@ -15,6 +15,7 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
   DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
   GRAPH_BUNDLE_SCHEMA,
@@ -40,6 +41,7 @@ import {
   sha256Digest,
 } from "./io.mjs";
 import { buildLaunch } from "./pack.mjs";
+import { hashProjectMetadata, validateProjectMetadata } from "./project-metadata.mjs";
 import {
   assertDeployableRuntimeCode,
   assertNoDelegatingRuntimeOpcodes,
@@ -263,6 +265,7 @@ function validateV2LaunchRequest(request) {
 
 function validateV3LaunchRequest(request) {
   const fundingMode = request?.launchProfile?.fundingPolicy?.mode;
+  const metadataRequired = request?.launchProfile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
   assertExactKeys(request, [
     "schemaVersion",
     "launchWallet",
@@ -272,6 +275,7 @@ function validateV3LaunchRequest(request) {
     "sourceDescriptor",
     "sourceBundleManifest",
     "graphBundle",
+    ...(metadataRequired ? ["projectMetadata", "projectMetadataHash"] : []),
     "launchProfile",
     "launchProfileSelection",
     "launchProfileHash",
@@ -282,7 +286,26 @@ function validateV3LaunchRequest(request) {
     "agentAttestation",
     "verificationBundle",
   ], "launch request");
-  const common = validateCommonRequest(request);
+  const projectMetadata = metadataRequired
+    ? validateProjectMetadata(request.projectMetadata)
+    : null;
+  const projectMetadataHash = projectMetadata === null
+    ? null
+    : hashProjectMetadata(projectMetadata);
+  if (projectMetadata !== null && request.projectMetadataHash !== projectMetadataHash) {
+    throw new TypeError("projectMetadataHash does not match canonical projectMetadata");
+  }
+  const common = validateCommonRequest(request, {
+    ...(projectMetadataHash === null ? {} : { projectMetadataHash }),
+  });
+  if (projectMetadata !== null && projectMetadata.presentation.image !== null) {
+    const image = projectMetadata.presentation.image;
+    if (!common.manifest.entries.some((entry) => entry.kind === "file"
+      && entry.contentSha256 === image.contentSha256
+      && entry.byteLength === String(image.byteLength))) {
+      throw new TypeError("projectMetadata presentation image bytes are absent from sourceBundleManifest");
+    }
+  }
   const permitWindow = validateDirectNativePermitWindow(request.permitWindow);
   if (canonicalizeJson(request.graphBundle) !== canonicalizeJson(common.graph.graphBundle)) {
     throw new TypeError("V3 graphBundle must use the exact canonical target order and encoding");
@@ -326,6 +349,11 @@ function validateV3LaunchRequest(request) {
         : {}),
     },
   );
+  if (projectMetadata !== null
+    && projectMetadata.tokenMetadataBinding.tokenTargetId
+      !== launchProfileSelection.targetRoles.tokenTargetId) {
+    throw new TypeError("projectMetadata token binding does not name the selected token target");
+  }
   const hookRuntime = verification.runtimeCodes.get(
     launchProfileSelection.targetRoles.hookTargetId,
   );
@@ -358,6 +386,7 @@ function validateV3LaunchRequest(request) {
     sourceDescriptor: common.sourceDescriptor,
     sourceBundleManifest: common.manifest,
     graphBundleHash: common.graph.graphBundleHash,
+    ...(projectMetadataHash === null ? {} : { projectMetadataHash }),
     verificationBundleHash: verification.verificationBundleHash,
     launchProfileHash,
     launchProfileSelection,
@@ -388,6 +417,12 @@ function validateV3LaunchRequest(request) {
   return {
     schemaVersion: request.schemaVersion,
     graphBundleHash: common.graph.graphBundleHash,
+    ...(projectMetadataHash === null
+      ? {}
+      : {
+          unboundGraphBundleHash: common.graph.unboundGraphBundleHash,
+          projectMetadataHash,
+        }),
     verificationBundleHash: verification.verificationBundleHash,
     launchProfileHash,
     launchIntentHash,
@@ -417,7 +452,7 @@ function directNativeQuoteCurrency(binding, predictions) {
   return normalizedCurrencies[tokenIndex === 0 ? 1 : 0];
 }
 
-function validateCommonRequest(request) {
+function validateCommonRequest(request, { projectMetadataHash } = {}) {
   const launchWallet = getAddress(request.launchWallet);
   if (request.chainId !== MAINNET_CHAIN_ID) throw new TypeError("chainId must be string 1");
   if (typeof request.nonce !== "string" || !NONZERO_HEX32.test(request.nonce)) {
@@ -443,7 +478,10 @@ function validateCommonRequest(request) {
     request.graphBundle,
     launchWallet,
     request.nonce,
-    { enforceV4PermissionDependencies: request.schemaVersion === CREATE_REQUEST_SCHEMA_V3 },
+    {
+      enforceV4PermissionDependencies: request.schemaVersion === CREATE_REQUEST_SCHEMA_V3,
+      ...(projectMetadataHash === undefined ? {} : { projectMetadataHash }),
+    },
   );
   return {
     launchWallet,

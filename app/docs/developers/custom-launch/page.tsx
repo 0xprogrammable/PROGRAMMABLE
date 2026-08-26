@@ -96,19 +96,19 @@ const cliInstallCommands = [
     "Create an isolated download directory.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz',
     "Download the pinned release asset.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.1.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz.sha256',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.2.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz.sha256',
     "Download its checksum sidecar.",
   ],
   [
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.1.tgz.sha256)',
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.2.tgz.sha256)',
     "Continue only after this reports OK.",
   ],
   [
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.1.tgz"',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.2.tgz"',
     "Install the verified local bytes.",
   ],
 ] as const;
@@ -189,8 +189,8 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> 3.3.1 from the{" "}
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.1/programmable-launch-3.3.1.tgz">
+            Install <code>@programmable/launch</code> 3.3.2 from the{" "}
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.2/programmable-launch-3.3.2.tgz">
               immutable GitHub Release asset
             </a>
             . The binary is{" "}
@@ -390,13 +390,15 @@ export default function CustomLaunchApiDocsPage() {
             multi-contract launch graphs. The default profile uses{" "}
             <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
             <code>profileRevision: 3</code> and{" "}
-            <code>profileVersion: 3.1.0</code>. Its selection uses{" "}
+            <code>profileVersion: 3.2.0</code>. It binds canonical project name,
+            symbol, presentation and image bytes into the launch identity. Its selection uses{" "}
             <code>
               programmable.direct-native-hook-graph-profile-selection-binding.v3
             </code>
-            . Exact 3.0.0 requests remain readable and byte-identical retryable
-            under their original immutable policy. Revision 2 also remains
-            compatible; do not reinterpret its receipt as revision-3 admission.
+            . Exact metadata-absent 3.1.0 and 3.0.0 requests remain readable and
+            byte-identical retryable under their original immutable policies.
+            Revision 2 also remains compatible; do not reinterpret its receipt
+            as revision-3 admission.
           </p>
         </div>
 
@@ -421,7 +423,7 @@ export default function CustomLaunchApiDocsPage() {
             Funding can be absent, carried as the exact native value of the
             separately reviewed Router transaction, or use an unsigned USDC
             EIP-3009 descriptor. Only the EIP-3009 mode contains a funding
-            challenge and authorization patch. CLI 3.3.1 uses{" "}
+            challenge and authorization patch. CLI 3.3.2 uses{" "}
             <code>programmable.eip3009-authorization-patch.v2</code> to bind
             the zero nonce, r, s and v ABI leaves before any wallet signature.
           </li>
@@ -438,7 +440,7 @@ export default function CustomLaunchApiDocsPage() {
             global initializer trust root.
           </li>
           <li>
-            Profile 3.1.0 binds every static finding but hard-blocks only seven
+            Profile 3.2.0 binds every static finding but hard-blocks only seven
             objective code-and-role conditions: CALLCODE, source or runtime
             SELFDESTRUCT, definitively missing or invalid callback authentication,
             a literal wrong PoolManager, or a missing enabled callback. Proxy,

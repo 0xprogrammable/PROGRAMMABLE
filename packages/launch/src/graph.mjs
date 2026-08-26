@@ -24,6 +24,7 @@ import {
   MAX_GRAPH_TARGETS,
   MAX_TARGET_INITIALIZER_BYTES,
   MAX_TARGET_INIT_CODE_BYTES,
+  PROJECT_METADATA_GRAPH_HASH_DOMAIN,
   ROUTER,
 } from "./constants.mjs";
 import { canonicalIdentifier } from "./build.mjs";
@@ -58,6 +59,7 @@ export function buildGraphBundle({
   sourceBundleSha256,
   launchWallet,
   nonce,
+  projectMetadataHash,
   noDelegationRuntimeTargetIds = [],
   enforceV4PermissionDependencies = false,
 }) {
@@ -118,15 +120,24 @@ export function buildGraphBundle({
     targets: resolvedTargets.map(({ internal, saltSelection, ...target }) => target),
     pool: normalizedPool,
   };
-  const graphBundleHash = sha256Digest(Buffer.from(canonicalizeJson(graphBundle), "utf8"));
-  return { graphBundle, graphBundleHash, predictions, runtimeCodes };
+  const { graphBundleHash, unboundGraphBundleHash } = hashGraphBundle(
+    graphBundle,
+    projectMetadataHash,
+  );
+  return {
+    graphBundle,
+    graphBundleHash,
+    unboundGraphBundleHash,
+    predictions,
+    runtimeCodes,
+  };
 }
 
 export function normalizeAndPredictSubmittedGraph(
   graphInput,
   launchWallet,
   nonce,
-  { enforceV4PermissionDependencies = false } = {},
+  { enforceV4PermissionDependencies = false, projectMetadataHash } = {},
 ) {
   assertObjectKeys(graphInput, ["schemaVersion", "sourceBundleSha256", "targets", "pool"], "graphBundle");
   if (graphInput.schemaVersion !== GRAPH_BUNDLE_SCHEMA) {
@@ -171,14 +182,49 @@ export function normalizeAndPredictSubmittedGraph(
     targets: ordered.map(({ saltSelection, ...target }) => target),
     pool: normalizedPool,
   };
-  const graphBundleHash = sha256Digest(Buffer.from(canonicalizeJson(normalized), "utf8"));
+  const { graphBundleHash, unboundGraphBundleHash } = hashGraphBundle(
+    normalized,
+    projectMetadataHash,
+  );
   const { predictions } = predictGraph({
     ordered,
     sourceBundleSha256: normalized.sourceBundleSha256,
     launchWallet: getAddress(launchWallet),
     nonce,
   });
-  return { graphBundle: normalized, graphBundleHash, predictions };
+  return {
+    graphBundle: normalized,
+    graphBundleHash,
+    unboundGraphBundleHash,
+    predictions,
+  };
+}
+
+export function hashGraphBundle(graphBundle, projectMetadataHash) {
+  const unboundGraphBundleHash = sha256Digest(
+    Buffer.from(canonicalizeJson(graphBundle), "utf8"),
+  );
+  if (projectMetadataHash === undefined) {
+    return {
+      graphBundleHash: unboundGraphBundleHash,
+      unboundGraphBundleHash,
+    };
+  }
+  if (typeof projectMetadataHash !== "string"
+    || !/^sha256:[0-9a-f]{64}$/.test(projectMetadataHash)) {
+    throw new TypeError("projectMetadataHash is invalid");
+  }
+  return {
+    graphBundleHash: sha256Digest(Buffer.concat([
+      Buffer.from(PROJECT_METADATA_GRAPH_HASH_DOMAIN, "utf8"),
+      Buffer.from([0]),
+      Buffer.from(canonicalizeJson({
+        graphBundleHash: unboundGraphBundleHash,
+        projectMetadataHash,
+      }), "utf8"),
+    ])),
+    unboundGraphBundleHash,
+  };
 }
 
 function normalizeSubmittedTarget(target, index) {

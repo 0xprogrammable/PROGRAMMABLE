@@ -7,8 +7,11 @@ import {
   useState,
 } from "react";
 import { RefreshCw } from "lucide-react";
+import NextImage from "next/image";
 
 import styles from "@/components/developer-launch-history.module.css";
+import { canonicalBrowserSha256V2, fileSha256V2 } from
+  "@/lib/custom-launch/browser-authority-v2";
 import {
   prepareCustomLaunchWalletActionV1,
   type CustomLaunchWalletActionV1,
@@ -47,6 +50,68 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+type ProjectMetadataLinkKind =
+  | "website"
+  | "documentation"
+  | "x"
+  | "telegram"
+  | "discord"
+  | "github"
+  | "other";
+
+type ProjectMetadataImageMediaType =
+  | "image/png"
+  | "image/jpeg"
+  | "image/webp"
+  | "image/gif";
+
+type ProjectMetadataStaticSource =
+  | "constructor-argument"
+  | "initializer-argument"
+  | "not-deterministically-extractable";
+
+type ProjectTokenMetadataFieldBindingV1 = Readonly<{
+  staticSource: ProjectMetadataStaticSource;
+  argumentIndex: number | null;
+  argumentName: string | null;
+}>;
+
+export type CustomLaunchProjectMetadataV1 = Readonly<{
+  schemaVersion: "programmable.project-metadata.v1";
+  token: Readonly<{
+    name: string;
+    symbol: string;
+  }>;
+  presentation: Readonly<{
+    schemaVersion: "programmable.launch-presentation-draft.v1";
+    description: string;
+    image: Readonly<{
+      uri: string;
+      contentSha256: `sha256:${string}`;
+      mediaType: ProjectMetadataImageMediaType;
+      byteLength: number;
+      width: number;
+      height: number;
+    }> | null;
+    links: readonly Readonly<{
+      kind: ProjectMetadataLinkKind;
+      uri: string;
+    }>[];
+  }>;
+  tokenMetadataBinding: Readonly<{
+    schemaVersion: "programmable.project-token-metadata-binding.v1";
+    tokenTargetId: string;
+    declarationBinding: "request-and-launch-id";
+    standardReadModel: Readonly<{
+      name: boolean;
+      symbol: boolean;
+    }>;
+    name: ProjectTokenMetadataFieldBindingV1;
+    symbol: ProjectTokenMetadataFieldBindingV1;
+    postDeploymentReadback: "required";
+  }>;
+}>;
+
 export type LaunchStatus =
   | "received"
   | "validating"
@@ -76,8 +141,12 @@ export type LaunchResource = Readonly<{
     | "custom-launch:create:v3";
   ownerWallet: `0x${string}`;
   status: LaunchStatus;
+  requestHash: `sha256:${string}`;
+  launchProfileVersion: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0" | null;
   launchProfileHash: `sha256:${string}` | null;
   launchIntentHash: `sha256:${string}` | null;
+  projectMetadata: CustomLaunchProjectMetadataV1 | null;
+  projectMetadataHash: `sha256:${string}` | null;
   fundingIntentHash: `0x${string}` | null;
   liquidityIntent: CustomLaunchLiquidityIntentV3 | null;
   sourceVerification: SourceVerificationStatusV1 | null;
@@ -167,6 +236,369 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasExactKeys(
+  value: Readonly<Record<string, unknown>>,
+  expected: readonly string[],
+) {
+  const keys = Object.keys(value);
+  return keys.length === expected.length
+    && keys.every((key) => expected.includes(key));
+}
+
+function hasLoneUtf16Surrogate(value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+      index += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const projectMetadataSecretPatterns = Object.freeze([
+  /(?:^|[^A-Za-z0-9_-])pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}(?=$|[^A-Za-z0-9_-])/u,
+  /(?:^|[^A-Za-z0-9_])PROGRAMMABLE_API_KEY\s*[:=]\s*["']?[^\s"'&?#]{8,}/iu,
+] as const);
+
+function fullyDecodeProjectMetadataText(value: string) {
+  let current = value;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const next = decodeURIComponent(current);
+      if (next === current) return current;
+      current = next;
+    } catch {
+      return current;
+    }
+  }
+  return current;
+}
+
+function containsProjectMetadataSecret(value: string) {
+  const decoded = fullyDecodeProjectMetadataText(value);
+  return projectMetadataSecretPatterns.some((pattern) => pattern.test(decoded));
+}
+
+function canonicalText(
+  value: unknown,
+  minimumCodePoints: number,
+  maximumCodePoints: number,
+  maximumBytes: number,
+  options: Readonly<{
+    allowLineFeed?: boolean;
+    forbidWhitespace?: boolean;
+  }> = {},
+) {
+  const unsafeText = options.allowLineFeed
+    ? /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u
+    : /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u;
+  return typeof value === "string"
+    && !hasLoneUtf16Surrogate(value)
+    && !containsProjectMetadataSecret(value)
+    && value === value.normalize("NFC")
+    && value === value.trim()
+    && [...value].length >= minimumCodePoints
+    && [...value].length <= maximumCodePoints
+    && new TextEncoder().encode(value).byteLength <= maximumBytes
+    && !unsafeText.test(value)
+    && (!options.forbidWhitespace || !/\s/u.test(value));
+}
+
+function publicCanonicalHttpsUrl(
+  value: unknown,
+  options: Readonly<{ allowQuery: boolean }>,
+) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 2_048) {
+    return null;
+  }
+  if (
+    containsProjectMetadataSecret(value)
+    || hasLoneUtf16Surrogate(value)
+    || hasLoneUtf16Surrogate(fullyDecodeProjectMetadataText(value))
+    || /[\u0000-\u0020\u007f-\u009f]/u.test(value)
+    || /[\u0000-\u0020\u007f-\u009f]/u.test(
+      fullyDecodeProjectMetadataText(value),
+    )
+  ) return null;
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/gu, "");
+    const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(hostname);
+    const privateHostname = hostname === "localhost"
+      || hostname === "localhost."
+      || hostname === "local"
+      || hostname === "local."
+      || hostname.endsWith(".localhost")
+      || hostname.endsWith(".localhost.")
+      || hostname.endsWith(".local")
+      || hostname.endsWith(".local.");
+    const credentialQuery = [...url.searchParams.keys()].some((key) =>
+      /(?:api[_-]?key|auth|credential|password|secret|signature|token)/iu.test(key));
+    if (
+      url.protocol !== "https:"
+      || url.username !== ""
+      || url.password !== ""
+      || url.hostname === ""
+      || url.hash !== ""
+      || (!options.allowQuery && url.search !== "")
+      || credentialQuery
+      || ipv4 !== null
+      || hostname.includes(":")
+      || !/^[a-z0-9.-]+$/u.test(hostname)
+      || privateHostname
+      || url.href !== value
+    ) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function canonicalProjectImageUri(value: unknown) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 2_048) {
+    return null;
+  }
+  if (
+    hasLoneUtf16Surrogate(value)
+    || hasLoneUtf16Surrogate(fullyDecodeProjectMetadataText(value))
+    || /[\u0000-\u0020\u007f-\u009f]/u.test(value)
+    || /[\u0000-\u0020\u007f-\u009f]/u.test(
+      fullyDecodeProjectMetadataText(value),
+    )
+  ) return null;
+  const https = publicCanonicalHttpsUrl(value, { allowQuery: false });
+  if (https !== null) return https;
+  try {
+    const url = new URL(value);
+    if (
+      url.username !== ""
+      || url.password !== ""
+      || url.port !== ""
+      || url.pathname !== ""
+      || url.search !== ""
+      || url.hash !== ""
+      || url.href !== value
+    ) return null;
+    if (
+      url.protocol === "ipfs:"
+      && /^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|[bB][a-zA-Z2-7]{31,127})$/u
+        .test(url.hostname)
+    ) return value;
+    if (
+      url.protocol === "ar:"
+      && /^[A-Za-z0-9_-]{43}$/u.test(url.hostname)
+    ) return value;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function parseProjectMetadataFieldBindingV1(
+  value: unknown,
+): ProjectTokenMetadataFieldBindingV1 | null {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["staticSource", "argumentIndex", "argumentName"])
+    || (
+      value.staticSource !== "constructor-argument"
+      && value.staticSource !== "initializer-argument"
+      && value.staticSource !== "not-deterministically-extractable"
+    )
+    || (value.argumentName !== null && (
+      typeof value.argumentName !== "string"
+      || value.argumentName === ""
+      || new TextEncoder().encode(value.argumentName).byteLength > 256
+      || value.argumentName !== value.argumentName.normalize("NFC")
+      || value.argumentName !== value.argumentName.trim()
+      || hasLoneUtf16Surrogate(value.argumentName)
+      || containsProjectMetadataSecret(value.argumentName)
+      || /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u
+        .test(value.argumentName)
+    ))
+  ) return null;
+  const deterministic = value.staticSource !== "not-deterministically-extractable";
+  if (
+    deterministic !== (
+      typeof value.argumentIndex === "number"
+      && Number.isSafeInteger(value.argumentIndex)
+      && value.argumentIndex >= 0
+    )
+    || (!deterministic && value.argumentName !== null)
+  ) return null;
+  return Object.freeze({
+    staticSource: value.staticSource,
+    argumentIndex: value.argumentIndex as number | null,
+    argumentName: value.argumentName as string | null,
+  });
+}
+
+export function parseCustomLaunchProjectMetadataV1(
+  value: unknown,
+): CustomLaunchProjectMetadataV1 | null {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, [
+      "schemaVersion",
+      "token",
+      "presentation",
+      "tokenMetadataBinding",
+    ])
+    || value.schemaVersion !== "programmable.project-metadata.v1"
+    || !isRecord(value.token)
+    || !hasExactKeys(value.token, ["name", "symbol"])
+    || !canonicalText(value.token.name, 1, 64, 64)
+    || !canonicalText(value.token.symbol, 1, 16, 16, {
+      forbidWhitespace: true,
+    })
+    || !isRecord(value.presentation)
+    || !hasExactKeys(value.presentation, [
+      "schemaVersion",
+      "description",
+      "image",
+      "links",
+    ])
+    || value.presentation.schemaVersion
+      !== "programmable.launch-presentation-draft.v1"
+    || !canonicalText(value.presentation.description, 0, 4_096, 4_096, {
+      allowLineFeed: true,
+    })
+    || !Array.isArray(value.presentation.links)
+    || value.presentation.links.length > 32
+    || !isRecord(value.tokenMetadataBinding)
+    || !hasExactKeys(value.tokenMetadataBinding, [
+      "schemaVersion",
+      "tokenTargetId",
+      "declarationBinding",
+      "standardReadModel",
+      "name",
+      "symbol",
+      "postDeploymentReadback",
+    ])
+    || value.tokenMetadataBinding.schemaVersion
+      !== "programmable.project-token-metadata-binding.v1"
+    || typeof value.tokenMetadataBinding.tokenTargetId !== "string"
+    || !/^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,255}$/u
+      .test(value.tokenMetadataBinding.tokenTargetId)
+    || containsProjectMetadataSecret(value.tokenMetadataBinding.tokenTargetId)
+    || value.tokenMetadataBinding.declarationBinding !== "request-and-launch-id"
+    || !isRecord(value.tokenMetadataBinding.standardReadModel)
+    || !hasExactKeys(value.tokenMetadataBinding.standardReadModel, ["name", "symbol"])
+    || typeof value.tokenMetadataBinding.standardReadModel.name !== "boolean"
+    || typeof value.tokenMetadataBinding.standardReadModel.symbol !== "boolean"
+    || value.tokenMetadataBinding.postDeploymentReadback !== "required"
+  ) return null;
+
+  const fieldName = parseProjectMetadataFieldBindingV1(
+    value.tokenMetadataBinding.name,
+  );
+  const fieldSymbol = parseProjectMetadataFieldBindingV1(
+    value.tokenMetadataBinding.symbol,
+  );
+  if (!fieldName || !fieldSymbol) return null;
+
+  let image: CustomLaunchProjectMetadataV1["presentation"]["image"] = null;
+  if (value.presentation.image !== null) {
+    if (
+      !isRecord(value.presentation.image)
+      || !hasExactKeys(value.presentation.image, [
+        "uri",
+        "contentSha256",
+        "mediaType",
+        "byteLength",
+        "width",
+        "height",
+      ])
+      || canonicalProjectImageUri(value.presentation.image.uri) === null
+      || typeof value.presentation.image.contentSha256 !== "string"
+      || !sha256Pattern.test(value.presentation.image.contentSha256)
+      || ![
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+      ].includes(String(value.presentation.image.mediaType))
+      || typeof value.presentation.image.byteLength !== "number"
+      || !Number.isSafeInteger(value.presentation.image.byteLength)
+      || value.presentation.image.byteLength < 1
+      || value.presentation.image.byteLength > 20 * 1_024 * 1_024
+      || typeof value.presentation.image.width !== "number"
+      || !Number.isSafeInteger(value.presentation.image.width)
+      || value.presentation.image.width < 1
+      || value.presentation.image.width > 8_192
+      || typeof value.presentation.image.height !== "number"
+      || !Number.isSafeInteger(value.presentation.image.height)
+      || value.presentation.image.height < 1
+      || value.presentation.image.height > 8_192
+    ) return null;
+    image = Object.freeze({
+      uri: value.presentation.image.uri as string,
+      contentSha256: value.presentation.image.contentSha256 as `sha256:${string}`,
+      mediaType: value.presentation.image.mediaType as ProjectMetadataImageMediaType,
+      byteLength: value.presentation.image.byteLength,
+      width: value.presentation.image.width,
+      height: value.presentation.image.height,
+    });
+  }
+
+  const links: Array<Readonly<{ kind: ProjectMetadataLinkKind; uri: string }>> = [];
+  let priorSortKey: string | null = null;
+  for (const candidate of value.presentation.links) {
+    if (
+      !isRecord(candidate)
+      || !hasExactKeys(candidate, ["kind", "uri"])
+      || ![
+        "website",
+        "documentation",
+        "x",
+        "telegram",
+        "discord",
+        "github",
+        "other",
+      ].includes(String(candidate.kind))
+    ) return null;
+    const uri = publicCanonicalHttpsUrl(candidate.uri, { allowQuery: true });
+    if (uri === null) return null;
+    const sortKey = `${String(candidate.kind)}\u0000${uri}`;
+    if (priorSortKey !== null && sortKey <= priorSortKey) return null;
+    priorSortKey = sortKey;
+    links.push(Object.freeze({
+      kind: candidate.kind as ProjectMetadataLinkKind,
+      uri,
+    }));
+  }
+
+  return Object.freeze({
+    schemaVersion: "programmable.project-metadata.v1",
+    token: Object.freeze({
+      name: value.token.name as string,
+      symbol: value.token.symbol as string,
+    }),
+    presentation: Object.freeze({
+      schemaVersion: "programmable.launch-presentation-draft.v1",
+      description: value.presentation.description as string,
+      image,
+      links: Object.freeze(links),
+    }),
+    tokenMetadataBinding: Object.freeze({
+      schemaVersion: "programmable.project-token-metadata-binding.v1",
+      tokenTargetId: value.tokenMetadataBinding.tokenTargetId,
+      declarationBinding: "request-and-launch-id",
+      standardReadModel: Object.freeze({
+        name: value.tokenMetadataBinding.standardReadModel.name,
+        symbol: value.tokenMetadataBinding.standardReadModel.symbol,
+      }),
+      name: fieldName,
+      symbol: fieldSymbol,
+      postDeploymentReadback: "required",
+    }),
+  });
+}
+
 function parseLaunch(value: unknown, account: string): LaunchResource | null {
   const v1 = isRecord(value)
     && value.schemaVersion === "programmable.custom-launch.v1"
@@ -191,6 +623,8 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     || value.ownerWallet.toLowerCase() !== account.toLowerCase()
     || typeof value.status !== "string"
     || !statuses.has(value.status as LaunchStatus)
+    || typeof value.requestHash !== "string"
+    || !sha256Pattern.test(value.requestHash)
     || (v1 && [
       "simulating",
       "awaiting_funding_authorization",
@@ -215,6 +649,46 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     ? value.launchIntentHash as `sha256:${string}`
     : null;
   if ((v2 || v3) && (!launchProfileHash || !launchIntentHash)) return null;
+  const launchProfileVersion = v3
+    && (value.launchProfileVersion === "2.0.0"
+      || value.launchProfileVersion === "3.0.0"
+      || value.launchProfileVersion === "3.1.0"
+      || value.launchProfileVersion === "3.2.0")
+    ? value.launchProfileVersion
+    : null;
+  if (v3 && launchProfileVersion === null) return null;
+  const projectMetadata = v3 && value.projectMetadata !== null
+    ? parseCustomLaunchProjectMetadataV1(value.projectMetadata)
+    : null;
+  const projectMetadataHash = v3
+    && typeof value.projectMetadataHash === "string"
+    && sha256Pattern.test(value.projectMetadataHash)
+    ? value.projectMetadataHash as `sha256:${string}`
+    : null;
+  if (
+    v3
+    && (
+      !Object.hasOwn(value, "projectMetadata")
+      || !Object.hasOwn(value, "projectMetadataHash")
+      || (value.projectMetadata === null) !== (value.projectMetadataHash === null)
+      || (value.projectMetadata !== null && !projectMetadata)
+      || (value.projectMetadataHash !== null && !projectMetadataHash)
+      || ((launchProfileVersion === "2.0.0"
+        || launchProfileVersion === "3.0.0"
+        || launchProfileVersion === "3.1.0") && (
+        projectMetadata !== null || projectMetadataHash !== null
+      ))
+      || (launchProfileVersion === "3.2.0" && (
+        projectMetadata === null || projectMetadataHash === null
+      ))
+    )
+  ) return null;
+  if (
+    launchProfileVersion === "3.2.0"
+    && projectMetadata
+    && projectMetadataHash
+    && browserProjectMetadataHashV1(projectMetadata) !== projectMetadataHash
+  ) return null;
   const fundingIntentHash = v3
     && typeof value.fundingIntentHash === "string"
     && /^0x[0-9a-f]{64}$/u.test(value.fundingIntentHash)
@@ -265,8 +739,12 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     routeId: value.routeId as LaunchResource["routeId"],
     ownerWallet: value.ownerWallet as `0x${string}`,
     status: value.status as LaunchStatus,
+    requestHash: value.requestHash as `sha256:${string}`,
+    launchProfileVersion,
     launchProfileHash,
     launchIntentHash,
+    projectMetadata,
+    projectMetadataHash,
     fundingIntentHash,
     liquidityIntent,
     sourceVerification,
@@ -491,6 +969,184 @@ function sameRouterReview(
     && JSON.stringify(left.walletAction) === JSON.stringify(right.walletAction);
 }
 
+type WalletProjectMetadataBindingV1 = Readonly<{
+  mode: "bound-metadata";
+  requestHash: `sha256:${string}`;
+  launchIntentHash: `sha256:${string}`;
+  projectMetadata: CustomLaunchProjectMetadataV1;
+  projectMetadataHash: `sha256:${string}`;
+}>;
+
+type WalletLegacyProjectBindingV1 = Readonly<{
+  mode: "legacy-exact-retry";
+  launchProfileVersion: "2.0.0" | "3.0.0" | "3.1.0";
+  requestHash: `sha256:${string}`;
+  launchIntentHash: `sha256:${string}`;
+}>;
+
+type WalletProjectRequestBindingV1 = WalletProjectMetadataBindingV1
+  | WalletLegacyProjectBindingV1;
+
+const artifactProjectMetadataKeys = Object.freeze([
+  "unboundGraphBundleHash",
+  "projectMetadata",
+  "projectMetadataHash",
+] as const);
+
+const projectMetadataHashDomain = "programmable.project-metadata.v1";
+const projectGraphMetadataHashDomain =
+  "programmable.custom-graph-project-metadata.v1";
+
+function browserProjectMetadataHashV1(
+  projectMetadata: CustomLaunchProjectMetadataV1,
+) {
+  try {
+    return canonicalBrowserSha256V2(
+      projectMetadataHashDomain,
+      projectMetadata,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function browserProjectGraphBundleHashV1(
+  unboundGraphBundleHash: `sha256:${string}`,
+  projectMetadataHash: `sha256:${string}`,
+) {
+  try {
+    return canonicalBrowserSha256V2(
+      projectGraphMetadataHashDomain,
+      { graphBundleHash: unboundGraphBundleHash, projectMetadataHash },
+    );
+  } catch {
+    return null;
+  }
+}
+
+function artifactProjectMetadataKeyCount(
+  artifact: Readonly<Record<string, unknown>>,
+) {
+  return artifactProjectMetadataKeys.filter((key) =>
+    Object.hasOwn(artifact, key)).length;
+}
+
+export function walletProjectMetadataSummaryV1(
+  launch: LaunchResource,
+): WalletProjectMetadataBindingV1 | null {
+  if (
+    launch.routeId !== "custom-launch:create:v3"
+    || launch.launchProfileVersion !== "3.2.0"
+    || !launch.launchIntentHash
+    || !launch.projectMetadata
+    || !launch.projectMetadataHash
+    || browserProjectMetadataHashV1(launch.projectMetadata)
+      !== launch.projectMetadataHash
+  ) return null;
+  return Object.freeze({
+    mode: "bound-metadata",
+    requestHash: launch.requestHash,
+    launchIntentHash: launch.launchIntentHash,
+    projectMetadata: launch.projectMetadata,
+    projectMetadataHash: launch.projectMetadataHash,
+  });
+}
+
+export function walletProjectMetadataBindingV1(
+  launch: LaunchResource,
+): WalletProjectMetadataBindingV1 | null {
+  const summary = walletProjectMetadataSummaryV1(launch);
+  if (!summary) return null;
+  const artifact = launch.output?.artifact;
+  if (artifact !== undefined) {
+    if (!isRecord(artifact)) return null;
+    const embeddedKeyCount = artifactProjectMetadataKeyCount(artifact);
+    if (embeddedKeyCount !== artifactProjectMetadataKeys.length) return null;
+    if (embeddedKeyCount === artifactProjectMetadataKeys.length) {
+      const embeddedMetadata = parseCustomLaunchProjectMetadataV1(
+        artifact.projectMetadata,
+      );
+      if (
+        !embeddedMetadata
+        || typeof artifact.unboundGraphBundleHash !== "string"
+        || !sha256Pattern.test(artifact.unboundGraphBundleHash)
+        || typeof artifact.graphBundleHash !== "string"
+        || !sha256Pattern.test(artifact.graphBundleHash)
+        || artifact.projectMetadataHash !== summary.projectMetadataHash
+        || browserProjectMetadataHashV1(embeddedMetadata)
+          !== summary.projectMetadataHash
+        || browserProjectGraphBundleHashV1(
+          artifact.unboundGraphBundleHash as `sha256:${string}`,
+          summary.projectMetadataHash,
+        ) !== artifact.graphBundleHash
+        || JSON.stringify(embeddedMetadata)
+          !== JSON.stringify(summary.projectMetadata)
+      ) return null;
+    }
+  } else if (launch.status === "authorized") {
+    return null;
+  }
+  return summary;
+}
+
+function walletLegacyProjectBindingV1(
+  launch: LaunchResource,
+): WalletLegacyProjectBindingV1 | null {
+  if (
+    launch.routeId !== "custom-launch:create:v3"
+    || (
+      launch.launchProfileVersion !== "2.0.0"
+      && launch.launchProfileVersion !== "3.0.0"
+      && launch.launchProfileVersion !== "3.1.0"
+    )
+    || !launch.launchIntentHash
+    || launch.projectMetadata !== null
+    || launch.projectMetadataHash !== null
+  ) return null;
+  const artifact = launch.output?.artifact;
+  if (artifact !== undefined) {
+    if (
+      !isRecord(artifact)
+      || artifactProjectMetadataKeyCount(artifact) !== 0
+    ) return null;
+  }
+  return Object.freeze({
+    mode: "legacy-exact-retry",
+    launchProfileVersion: launch.launchProfileVersion,
+    requestHash: launch.requestHash,
+    launchIntentHash: launch.launchIntentHash,
+  });
+}
+
+export function walletProjectRequestBindingV1(
+  launch: LaunchResource,
+): WalletProjectRequestBindingV1 | null {
+  return walletProjectMetadataBindingV1(launch)
+    ?? walletLegacyProjectBindingV1(launch);
+}
+
+function sameProjectRequestBindingV1(
+  left: WalletProjectRequestBindingV1,
+  right: WalletProjectRequestBindingV1,
+) {
+  if (left.mode !== right.mode) return false;
+  if (
+    left.mode === "legacy-exact-retry"
+    && right.mode === "legacy-exact-retry"
+  ) {
+    return left.launchProfileVersion === right.launchProfileVersion
+      && left.requestHash === right.requestHash
+      && left.launchIntentHash === right.launchIntentHash;
+  }
+  if (left.mode !== "bound-metadata" || right.mode !== "bound-metadata") {
+    return false;
+  }
+  return left.requestHash === right.requestHash
+    && left.launchIntentHash === right.launchIntentHash
+    && left.projectMetadataHash === right.projectMetadataHash
+    && JSON.stringify(left.projectMetadata) === JSON.stringify(right.projectMetadata);
+}
+
 function reviewResourceForLaunch(
   launch: LaunchResource,
   hydrated: LaunchResource | undefined,
@@ -656,6 +1312,317 @@ function HistorySkeleton() {
   );
 }
 
+type ProjectMetadataImageV1 = NonNullable<
+  CustomLaunchProjectMetadataV1["presentation"]["image"]
+>;
+
+type VerifiedProjectImageStateV1 = Readonly<{
+  state: "none" | "verifying" | "verified" | "verified-gif" | "unavailable";
+  objectUrl: string | null;
+  imageKey: string | null;
+}>;
+
+const projectImageVerificationTimeoutMs = 8_000;
+const projectImageMaximumBytes = 20 * 1_024 * 1_024;
+
+export function projectImageFetchUrlV1(uri: string) {
+  const url = new URL(uri);
+  if (url.protocol === "https:") return url.href;
+  if (url.protocol === "ipfs:") {
+    return `https://ipfs.io/ipfs/${url.hostname}`;
+  }
+  if (url.protocol === "ar:") {
+    return `https://arweave.net/${url.hostname}`;
+  }
+  throw new TypeError("Unsupported project image URI");
+}
+
+async function verifiedProjectImageDimensionsV1(
+  blob: Blob,
+  bytes: Uint8Array,
+  mediaType: ProjectMetadataImageMediaType,
+  signal: AbortSignal,
+) {
+  if (mediaType === "image/gif") {
+    const signature = String.fromCharCode(...bytes.subarray(0, 6));
+    if (
+      bytes.byteLength < 10
+      || (signature !== "GIF87a" && signature !== "GIF89a")
+    ) throw new TypeError("Invalid GIF bytes");
+    return Object.freeze({
+      width: bytes[6]! | (bytes[7]! << 8),
+      height: bytes[8]! | (bytes[9]! << 8),
+    });
+  }
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  if (typeof createImageBitmap === "function") {
+    const bitmap = await createImageBitmap(blob);
+    try {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      return Object.freeze({ width: bitmap.width, height: bitmap.height });
+    } finally {
+      bitmap.close();
+    }
+  }
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const dimensions = await new Promise<Readonly<{ width: number; height: number }>>(
+      (resolve, reject) => {
+        const image = new window.Image();
+        const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+        signal.addEventListener("abort", onAbort, { once: true });
+        image.onload = () => {
+          signal.removeEventListener("abort", onAbort);
+          resolve(Object.freeze({
+            width: image.naturalWidth,
+            height: image.naturalHeight,
+          }));
+        };
+        image.onerror = () => {
+          signal.removeEventListener("abort", onAbort);
+          reject(new TypeError("Project image could not be decoded"));
+        };
+        image.referrerPolicy = "no-referrer";
+        image.src = objectUrl;
+      },
+    );
+    return dimensions;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+export async function fetchVerifiedProjectImageV1(
+  image: ProjectMetadataImageV1,
+  signal: AbortSignal,
+) {
+  const response = await fetch(projectImageFetchUrlV1(image.uri), {
+    cache: "no-store",
+    credentials: "omit",
+    headers: { Accept: image.mediaType },
+    redirect: "error",
+    referrerPolicy: "no-referrer",
+    signal,
+  });
+  if (!response.ok || response.redirected || response.body === null) {
+    throw new TypeError("Project image response is unavailable");
+  }
+  if (response.headers.get("content-type") !== image.mediaType) {
+    throw new TypeError("Project image media type changed");
+  }
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    const parsedLength = Number(declaredLength);
+    if (
+      !Number.isSafeInteger(parsedLength)
+      || parsedLength < 0
+      || parsedLength > projectImageMaximumBytes
+    ) throw new TypeError("Project image response is too large");
+  }
+  const bytes = new Uint8Array(image.byteLength);
+  const reader = response.body.getReader();
+  let offset = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      if (
+        offset + chunk.value.byteLength > image.byteLength
+        || offset + chunk.value.byteLength > projectImageMaximumBytes
+      ) throw new TypeError("Project image byte length changed");
+      bytes.set(chunk.value, offset);
+      offset += chunk.value.byteLength;
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  }
+  if (offset !== image.byteLength || fileSha256V2(bytes) !== image.contentSha256) {
+    throw new TypeError("Project image bytes changed");
+  }
+  const blob = new Blob([bytes], { type: image.mediaType });
+  const dimensions = await verifiedProjectImageDimensionsV1(
+    blob,
+    bytes,
+    image.mediaType,
+    signal,
+  );
+  if (dimensions.width !== image.width || dimensions.height !== image.height) {
+    throw new TypeError("Project image dimensions changed");
+  }
+  return Object.freeze({ blob, mediaType: image.mediaType });
+}
+
+function useVerifiedProjectImageV1(image: ProjectMetadataImageV1 | null) {
+  const imageKey = image
+    ? `${image.uri}\u0000${image.contentSha256}`
+    : null;
+  const [preview, setPreview] = useState<VerifiedProjectImageStateV1>(() =>
+    Object.freeze({ state: "none", objectUrl: null, imageKey: null }));
+  useEffect(() => {
+    if (!image || !imageKey) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    let active = true;
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      projectImageVerificationTimeoutMs,
+    );
+    void fetchVerifiedProjectImageV1(image, controller.signal)
+      .then(({ blob, mediaType }) => {
+        if (!active) return;
+        if (mediaType === "image/gif") {
+          setPreview(Object.freeze({
+            state: "verified-gif",
+            objectUrl: null,
+            imageKey,
+          }));
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setPreview(Object.freeze({ state: "verified", objectUrl, imageKey }));
+      })
+      .catch(() => {
+        if (active) setPreview(Object.freeze({
+          state: "unavailable",
+          objectUrl: null,
+          imageKey,
+        }));
+      })
+      .finally(() => window.clearTimeout(timeout));
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timeout);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [image, imageKey]);
+  if (!imageKey) {
+    return Object.freeze({ state: "none", objectUrl: null, imageKey: null });
+  }
+  return preview.imageKey === imageKey
+    ? preview
+    : Object.freeze({ state: "verifying", objectUrl: null, imageKey });
+}
+
+const projectMetadataLinkLabels: Readonly<Record<ProjectMetadataLinkKind, string>> =
+  Object.freeze({
+    website: "Website",
+    documentation: "Docs",
+    x: "X",
+    telegram: "Telegram",
+    discord: "Discord",
+    github: "GitHub",
+    other: "Project link",
+  });
+
+function projectMetadataLinkDisplayLabels(
+  links: CustomLaunchProjectMetadataV1["presentation"]["links"],
+) {
+  const bases = links.map((link) => {
+    const hostname = new URL(link.uri).hostname.replace(/^www\./u, "");
+    return `${projectMetadataLinkLabels[link.kind]} · ${hostname}`;
+  });
+  const totals = new Map<string, number>();
+  for (const base of bases) totals.set(base, (totals.get(base) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return bases.map((base) => {
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    return (totals.get(base) ?? 0) > 1 ? `${base} ${count}` : base;
+  });
+}
+
+function ProjectMetadataReview({
+  launch,
+  binding,
+}: Readonly<{
+  launch: LaunchResource;
+  binding: WalletProjectMetadataBindingV1;
+}>) {
+  const { projectMetadata, projectMetadataHash } = binding;
+  const { token, presentation } = projectMetadata;
+  const initials = [...token.symbol].slice(0, 2).join("").toUpperCase();
+  const imagePreview = useVerifiedProjectImageV1(presentation.image);
+  const linkLabels = projectMetadataLinkDisplayLabels(presentation.links);
+  return (
+    <section
+      className={styles.projectReview}
+      aria-labelledby={`project-metadata-${launch.requestId}`}
+    >
+      <div className={styles.projectReviewHeading}>
+        <div className={styles.projectArtwork}>
+          {imagePreview.state === "verified" && imagePreview.objectUrl ? (
+            <NextImage
+              alt={`${token.name} artwork`}
+              height={72}
+              referrerPolicy="no-referrer"
+              src={imagePreview.objectUrl}
+              unoptimized
+              width={72}
+            />
+          ) : (
+            <span aria-hidden="true">{initials}</span>
+          )}
+        </div>
+        <div className={styles.projectIdentity}>
+          <span>Included in this launch</span>
+          <h4 id={`project-metadata-${launch.requestId}`}>{token.name}</h4>
+          <strong>${token.symbol}</strong>
+        </div>
+      </div>
+      {presentation.description ? (
+        <p className={styles.projectDescription}>{presentation.description}</p>
+      ) : null}
+      {presentation.image && imagePreview.state !== "verified" ? (
+        <p className={styles.projectAssetNote} role="status">
+          {imagePreview.state === "verifying"
+            ? "Verifying the bound image bytes before preview."
+            : imagePreview.state === "verified-gif"
+              ? "The bound GIF bytes and dimensions are verified. Animated previews are not shown in wallet review."
+              : "Image preview unavailable. Wallet review continues with the bound image reference."}
+          <span>
+            URI <code>{presentation.image.uri}</code>
+            {" · digest "}<code>{presentation.image.contentSha256}</code>
+          </span>
+        </p>
+      ) : null}
+      {presentation.links.length > 0 ? (
+        <nav className={styles.projectLinks} aria-label={`${token.name} links`}>
+          {presentation.links.map((link, index) => (
+            <a
+              href={link.uri}
+              key={`${link.kind}:${link.uri}`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {linkLabels[index]}
+              <span className={styles.visuallyHidden}>, opens in a new tab</span>
+            </a>
+          ))}
+        </nav>
+      ) : null}
+      <dl className={styles.projectBinding}>
+        <div>
+          <dt>Metadata digest</dt>
+          <dd><code>{projectMetadataHash}</code></dd>
+        </div>
+        <div>
+          <dt>Identity check</dt>
+          <dd>
+            Declared identity is bound now. Onchain ERC-20 name and symbol
+            readback is required after deployment.
+          </dd>
+        </div>
+      </dl>
+      <p className={styles.projectBoundary}>
+        Review this immutable summary before either wallet step. Changing any
+        field requires a newly packed request.
+      </p>
+    </section>
+  );
+}
+
 function LaunchTruthLedger({ launch }: Readonly<{ launch: LaunchResource }>) {
   const rows = customLaunchTruthRowsV1({
     status: launch.status,
@@ -815,6 +1782,9 @@ export function DeveloperLaunchHistory({
   const [fixCopyState, setFixCopyState] = useState<
     Readonly<Record<string, "copied" | "error">>
   >({});
+  const [launchErrors, setLaunchErrors] = useState<
+    Readonly<Record<string, string>>
+  >({});
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const requestSequenceRef = useRef(0);
@@ -832,6 +1802,26 @@ export function DeveloperLaunchHistory({
     idempotencyKey: string;
   }>>());
   const pollControllersRef = useRef(new Map<string, AbortController>());
+
+  const clearLaunchError = useCallback((key: string) => {
+    setLaunchErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return Object.freeze(next);
+    });
+  }, []);
+
+  const reportLaunchError = useCallback((
+    key: string,
+    cause: unknown,
+    fallback: string,
+  ) => {
+    const message = cause instanceof Error ? cause.message : fallback;
+    setLaunchErrors((current) => current[key] === message
+      ? current
+      : Object.freeze({ ...current, [key]: message }));
+  }, []);
 
   const rememberPendingFunding = useCallback((
     key: string,
@@ -1134,15 +2124,15 @@ export function DeveloperLaunchHistory({
     if (checkInFlightRef.current || pollingIds[key]) return;
     checkInFlightRef.current = true;
     setCheckingId(key);
+    clearLaunchError(key);
     setError("");
     try {
       const updated = await readLaunchResource(launch);
       updateLaunch(updated);
+      clearLaunchError(key);
       setStatusMessage("Launch status updated.");
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Unable to check launch status.",
-      );
+      reportLaunchError(key, cause, "Unable to check launch status.");
     } finally {
       checkInFlightRef.current = false;
       setCheckingId(null);
@@ -1154,6 +2144,7 @@ export function DeveloperLaunchHistory({
     if (hydrateInFlightRef.current || hydratingId !== null) return;
     hydrateInFlightRef.current = true;
     setHydratingId(key);
+    clearLaunchError(key);
     setError("");
     setStatusMessage("Loading the exact launch findings and evidence.");
     try {
@@ -1163,6 +2154,7 @@ export function DeveloperLaunchHistory({
         ...reviews,
         [key]: current,
       }));
+      clearLaunchError(key);
       setStatusMessage(
         current.status === "action_required"
           ? "Exact remediation loaded. Fix every listed item before creating a new request."
@@ -1170,11 +2162,7 @@ export function DeveloperLaunchHistory({
       );
       focusLaunchCard(current.requestId);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to load the exact launch details.",
-      );
+      reportLaunchError(key, cause, "Unable to load the exact launch details.");
     } finally {
       hydrateInFlightRef.current = false;
       setHydratingId(null);
@@ -1221,6 +2209,7 @@ export function DeveloperLaunchHistory({
     ) return;
     hydrateInFlightRef.current = true;
     setHydratingId(key);
+    clearLaunchError(key);
     setError("");
     setStatusMessage(
       launch.status === "awaiting_funding_authorization"
@@ -1242,6 +2231,24 @@ export function DeveloperLaunchHistory({
         });
         throw new Error(
           "This launch changed while its wallet review was loading. Review its current status.",
+        );
+      }
+      const currentProjectBinding = walletProjectRequestBindingV1(current);
+      if (!currentProjectBinding) {
+        throw new Error(
+          "The launch metadata or its request binding is unavailable. No wallet action was opened.",
+        );
+      }
+      const priorProjectBinding = walletProjectRequestBindingV1(launch);
+      if (
+        priorProjectBinding
+        && !sameProjectRequestBindingV1(
+          priorProjectBinding,
+          currentProjectBinding,
+        )
+      ) {
+        throw new Error(
+          "The launch metadata changed while its wallet review was loading. Review the current immutable request; no wallet action was opened.",
         );
       }
       if (current.status === "awaiting_funding_authorization") {
@@ -1267,12 +2274,9 @@ export function DeveloperLaunchHistory({
         ...reviews,
         [key]: current,
       }));
+      clearLaunchError(key);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to load the wallet review.",
-      );
+      reportLaunchError(key, cause, "Unable to load the wallet review.");
     } finally {
       hydrateInFlightRef.current = false;
       setHydratingId(null);
@@ -1296,6 +2300,7 @@ export function DeveloperLaunchHistory({
         try {
           const updated = await readLaunchResource(launch, controller.signal);
           updateLaunch(updated);
+          clearLaunchError(key);
           setError("");
           if (terminalStatus(updated.status)) {
             setStatusMessage(
@@ -1318,10 +2323,10 @@ export function DeveloperLaunchHistory({
             : authorizedPollIntervalMs;
         } catch (cause) {
           if (controller.signal.aborted) return;
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Unable to track the submitted transaction.",
+          reportLaunchError(
+            key,
+            cause,
+            "Unable to track the submitted transaction.",
           );
           if (cause instanceof LaunchHistoryRequestError) {
             const retryAfterMs = launchPollingRetryAfterMs(
@@ -1346,7 +2351,7 @@ export function DeveloperLaunchHistory({
         });
       }
     });
-  }, [readLaunchResource, updateLaunch]);
+  }, [clearLaunchError, readLaunchResource, reportLaunchError, updateLaunch]);
 
   const startV3PreparationPolling = useCallback((launch: LaunchResource) => {
     const key = launchResourceKey(launch);
@@ -1364,6 +2369,7 @@ export function DeveloperLaunchHistory({
         try {
           const updated = await readLaunchResource(launch, controller.signal);
           updateLaunch(updated);
+          clearLaunchError(key);
           setError("");
           if (updated.status === "authorized") {
             setStatusMessage(
@@ -1407,10 +2413,10 @@ export function DeveloperLaunchHistory({
           waitMs = authorizedPollIntervalMs;
         } catch (cause) {
           if (controller.signal.aborted) return;
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Unable to prepare the Router transaction.",
+          reportLaunchError(
+            key,
+            cause,
+            "Unable to prepare the Router transaction.",
           );
           if (cause instanceof LaunchHistoryRequestError) {
             const retryAfterMs = launchPollingRetryAfterMs(
@@ -1435,7 +2441,7 @@ export function DeveloperLaunchHistory({
         });
       }
     });
-  }, [readLaunchResource, updateLaunch]);
+  }, [clearLaunchError, readLaunchResource, reportLaunchError, updateLaunch]);
 
   const submitFundingAuthorization = async (launch: LaunchResource) => {
     if (
@@ -1446,8 +2452,15 @@ export function DeveloperLaunchHistory({
     const key = launchResourceKey(launch);
     fundingInFlightRef.current = true;
     setFundingId(key);
+    clearLaunchError(key);
     setError("");
     try {
+      const reviewedProjectBinding = walletProjectRequestBindingV1(launch);
+      if (!reviewedProjectBinding) {
+        throw new Error(
+          "Load and review the bound project metadata before opening the wallet.",
+        );
+      }
       const reviewedAuthorization = fundingAuthorizationReview(launch);
       if (!reviewedAuthorization) {
         throw new Error(
@@ -1456,6 +2469,19 @@ export function DeveloperLaunchHistory({
       }
       const current = await readLaunchResource(launch);
       updateLaunch(current);
+      const currentProjectBinding = walletProjectRequestBindingV1(current);
+      if (
+        !currentProjectBinding
+        || !sameProjectRequestBindingV1(
+          reviewedProjectBinding,
+          currentProjectBinding,
+        )
+      ) {
+        forgetPendingFunding(key);
+        throw new Error(
+          "The project metadata or request binding changed after review. No wallet signature was requested.",
+        );
+      }
       if (!sameWalletHandoff(launch, current)) {
         forgetPendingFunding(key);
         throw new Error(
@@ -1555,10 +2581,23 @@ export function DeveloperLaunchHistory({
         || updated.routeId !== "custom-launch:create:v3"
         || updated.requestId !== current.requestId
       ) throw new Error("The API returned an invalid V3 launch status.");
+      const updatedProjectBinding = walletProjectRequestBindingV1(updated);
+      if (
+        !updatedProjectBinding
+        || !sameProjectRequestBindingV1(
+          currentProjectBinding,
+          updatedProjectBinding,
+        )
+      ) {
+        throw new Error(
+          "The project metadata binding changed after funding authorization. Stop and review the launch again.",
+        );
+      }
       forgetPendingFunding(key);
       setFundingRetryDelayMs(null);
       updateLaunch(updated);
       if (updated.status === "authorized") {
+        clearLaunchError(key);
         setStatusMessage(
           "Funding verified. Step 2 of 2 is ready for separate Router review.",
         );
@@ -1583,10 +2622,10 @@ export function DeveloperLaunchHistory({
         && cause.status < 500
         && cause.status !== 429
       ) forgetPendingFunding(key);
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The funding authorization could not be submitted.",
+      reportLaunchError(
+        key,
+        cause,
+        "The funding authorization could not be submitted.",
       );
     } finally {
       fundingInFlightRef.current = false;
@@ -1602,8 +2641,21 @@ export function DeveloperLaunchHistory({
     const key = launchResourceKey(launch);
     sendInFlightRef.current = true;
     setSubmittingId(key);
+    clearLaunchError(key);
     setError("");
     try {
+      const reviewedProjectBinding = launch.routeId
+        === "custom-launch:create:v3"
+        ? walletProjectRequestBindingV1(launch)
+        : null;
+      if (
+        launch.routeId === "custom-launch:create:v3"
+        && !reviewedProjectBinding
+      ) {
+        throw new Error(
+          "Load and review the bound project metadata before opening the wallet.",
+        );
+      }
       const reviewedRouter = launch.routeId === "custom-launch:create:v3"
         ? routerTransactionReview(launch)
         : null;
@@ -1622,6 +2674,21 @@ export function DeveloperLaunchHistory({
         throw new Error(
           "This launch is no longer awaiting a wallet signature. Review its current status.",
         );
+      }
+      if (current.routeId === "custom-launch:create:v3") {
+        const currentProjectBinding = walletProjectRequestBindingV1(current);
+        if (
+          !reviewedProjectBinding
+          || !currentProjectBinding
+          || !sameProjectRequestBindingV1(
+            reviewedProjectBinding,
+            currentProjectBinding,
+          )
+        ) {
+          throw new Error(
+            "The project metadata or request binding changed after review. No transaction was requested from the wallet.",
+          );
+        }
       }
       if (!sameWalletHandoff(launch, current)) {
         throw new Error(
@@ -1662,15 +2729,16 @@ export function DeveloperLaunchHistory({
         ...currentHashes,
         [key]: transactionHash,
       }));
+      clearLaunchError(key);
       setStatusMessage(
         "Transaction submitted from the wallet. Tracking its Router status.",
       );
       startStatusPolling(current);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The wallet transaction could not be submitted.",
+      reportLaunchError(
+        key,
+        cause,
+        "The wallet transaction could not be submitted.",
       );
     } finally {
       sendInFlightRef.current = false;
@@ -1759,6 +2827,15 @@ export function DeveloperLaunchHistory({
               launch,
               hydratedReviews[key],
             );
+            const projectMetadataSummary = walletProjectMetadataSummaryV1(
+              reviewLaunch,
+            );
+            const projectMetadataBinding = walletProjectMetadataBindingV1(
+              reviewLaunch,
+            );
+            const projectRequestBinding = walletProjectRequestBindingV1(
+              reviewLaunch,
+            );
             const fundingReview = fundingAuthorizationReview(reviewLaunch);
             const routerReview = routerTransactionReview(reviewLaunch);
             const transaction = reviewLaunch.routeId
@@ -1836,6 +2913,43 @@ export function DeveloperLaunchHistory({
                     </div>
                   ) : null}
                 </dl>
+                {projectMetadataSummary ? (
+                  <ProjectMetadataReview
+                    binding={projectMetadataSummary}
+                    launch={reviewLaunch}
+                  />
+                ) : projectRequestBinding?.mode === "legacy-exact-retry" ? (
+                  <div className={styles.metadataUnavailable} role="status">
+                    <strong>Legacy launch identity</strong>
+                    <p>
+                      This immutable {projectRequestBinding.launchProfileVersion}
+                      {" request predates bound project metadata. Exact retries remain available, but no project name, symbol, image or links can be reviewed for this record."}
+                    </p>
+                  </div>
+                ) : reviewLaunch.routeId === "custom-launch:create:v3" ? (
+                  <div className={styles.metadataUnavailable} role="status">
+                    <strong>Bound project metadata unavailable</strong>
+                    <p>
+                      This record remains visible, but no funding signature or
+                      Router transaction can open until the current metadata,
+                      digest and immutable request binding are returned together.
+                      Repack this current-profile request with the latest CLI.
+                    </p>
+                  </div>
+                ) : null}
+                {projectMetadataSummary
+                  && !projectMetadataBinding
+                  && ["awaiting_funding_authorization", "authorized"]
+                    .includes(reviewLaunch.status) ? (
+                    <div className={styles.metadataUnavailable} role="status">
+                      <strong>Load the exact wallet review</strong>
+                      <p>
+                        The project identity and digest are valid. Load the
+                        current single-resource artifact before a funding
+                        signature or Router transaction can open.
+                      </p>
+                    </div>
+                  ) : null}
                 <AdmissionWarnings codes={warningFindingCodes} />
                 {reviewLaunch.failure
                   && reviewLaunch.status !== "action_required" ? (
@@ -2060,6 +3174,11 @@ export function DeveloperLaunchHistory({
                 {showTruthLedger ? (
                   <LaunchTruthLedger launch={reviewLaunch} />
                 ) : null}
+                {launchErrors[key] ? (
+                  <p className={styles.inlineError} role="alert">
+                    {launchErrors[key]}
+                  </p>
+                ) : null}
                 {[
                   "awaiting_funding_authorization",
                   "funding_authorization_verified",
@@ -2070,7 +3189,7 @@ export function DeveloperLaunchHistory({
                   <div className={styles.launchActions}>
                     {launch.status === "awaiting_funding_authorization"
                       && launch.routeId === "custom-launch:create:v3" ? (
-                        fundingReview ? (
+                        fundingReview && projectRequestBinding ? (
                           <button
                             className={styles.walletButton}
                             disabled={
@@ -2093,7 +3212,9 @@ export function DeveloperLaunchHistory({
                                 ? "Retry funding submission"
                                 : "Review and sign USDC authorization"}
                           </button>
-                        ) : (
+                        ) : projectMetadataSummary
+                          || projectRequestBinding?.mode
+                            === "legacy-exact-retry" ? (
                           <button
                             className={styles.walletButton}
                             disabled={
@@ -2113,11 +3234,11 @@ export function DeveloperLaunchHistory({
                                 ? "Load funding review"
                                 : "Reload funding review"}
                           </button>
-                        )
+                        ) : null
                       ) : null}
                     {launch.status === "authorized" ? (
                       launch.routeId !== "custom-launch:create:v3"
-                        || routerReview ? (
+                        || (routerReview && projectRequestBinding) ? (
                           <button
                             className={styles.walletButton}
                             disabled={
@@ -2139,7 +3260,9 @@ export function DeveloperLaunchHistory({
                               ? "Opening wallet transaction review"
                               : "Review and send launch transaction"}
                           </button>
-                        ) : (
+                        ) : projectMetadataSummary
+                          || projectRequestBinding?.mode
+                            === "legacy-exact-retry" ? (
                           <button
                             className={styles.walletButton}
                             disabled={
@@ -2158,7 +3281,7 @@ export function DeveloperLaunchHistory({
                                 ? "Load Router review"
                                 : "Reload Router review"}
                           </button>
-                        )
+                        ) : null
                     ) : null}
                     <button
                       className={styles.checkButton}

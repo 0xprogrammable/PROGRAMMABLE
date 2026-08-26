@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "3.3.1";
+export const PACKAGE_VERSION = "3.3.2";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -10,6 +10,13 @@ export const CREATE_REQUEST_SCHEMA = CREATE_REQUEST_SCHEMA_V3;
 export const SOURCE_DESCRIPTOR_SCHEMA = "2.0.0";
 export const SOURCE_MANIFEST_SCHEMA = "2.0.0";
 export const GRAPH_BUNDLE_SCHEMA = "programmable.custom-graph-bundle.v1";
+export const PROJECT_METADATA_INPUT_SCHEMA = "programmable.project-metadata-input.v1";
+export const PROJECT_METADATA_SCHEMA = "programmable.project-metadata.v1";
+export const PROJECT_TOKEN_METADATA_BINDING_SCHEMA =
+  "programmable.project-token-metadata-binding.v1";
+export const PROJECT_METADATA_HASH_DOMAIN = PROJECT_METADATA_SCHEMA;
+export const PROJECT_METADATA_GRAPH_HASH_DOMAIN =
+  "programmable.custom-graph-project-metadata.v1";
 export const AGENT_ATTESTATION_SCHEMA_V1 = "programmable.agent-launch-attestation.v1";
 export const AGENT_ATTESTATION_SCHEMA_V2 = "programmable.agent-launch-attestation.v2";
 export const AGENT_ATTESTATION_SCHEMA = AGENT_ATTESTATION_SCHEMA_V2;
@@ -48,7 +55,8 @@ export const DIRECT_NATIVE_PROFILE_REVISION_V3 = 3;
 export const DIRECT_NATIVE_PROFILE_REVISION = DIRECT_NATIVE_PROFILE_REVISION_V3;
 export const DIRECT_NATIVE_PROFILE_VERSION_V2 = "2.0.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY = "3.0.0";
-export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.1.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA = "3.1.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.2.0";
 export const DIRECT_NATIVE_PROFILE_VERSION = DIRECT_NATIVE_PROFILE_VERSION_V3;
 export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2 =
   "programmable.direct-native-hook-graph-profile.v2";
@@ -127,8 +135,8 @@ export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.3.1";
-export const RELEASE_TARBALL = "programmable-launch-3.3.1.tgz";
+export const RELEASE_TAG = "programmable-launch-v3.3.2";
+export const RELEASE_TARBALL = "programmable-launch-3.3.2.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =
