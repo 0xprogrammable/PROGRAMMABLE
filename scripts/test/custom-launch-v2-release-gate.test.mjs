@@ -140,9 +140,9 @@ async function stagingFixture() {
       readinessIdentitySha256: record.subject.apiService.readinessIdentitySha256,
       apiContractSha256: record.subject.apiService.apiContractSha256,
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "1.0.0",
+      profileVersion: "2.0.0",
       publicProfilePath:
-        "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v1.json",
+        "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json",
       publicProfileSha256: hashes.nine,
     },
     chain: clone(record.subject.chain),
@@ -266,9 +266,9 @@ function commitResponse(sha, tree) {
 
 test("backend binding verifies Git provenance and the checked-in public profile", async () => {
   const publicProfile = {
-    schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v1",
+    schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v2",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "1.0.0",
+    profileVersion: "2.0.0",
   };
   const publicProfileBytes = Buffer.from(`${JSON.stringify(publicProfile, null, 2)}\n`);
   const publicProfileSha256 = digest(Buffer.from(canonicalize(publicProfile)));
@@ -309,9 +309,9 @@ test("backend binding verifies Git provenance and the checked-in public profile"
       readinessIdentitySha256: hashes.six,
       apiContractSha256: hashes.seven,
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "1.0.0",
+      profileVersion: "2.0.0",
       publicProfilePath:
-        "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v1.json",
+        "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json",
       publicProfileSha256,
     },
     chain: (await stagingFixture()).record.subject.chain,
@@ -340,7 +340,7 @@ test("backend binding verifies Git provenance and the checked-in public profile"
       type: "file", path: attestation.files[0].filename, encoding: "base64",
       content: bindingBytes.toString("base64"), size: bindingBytes.length, sha: bindingBlob,
     };
-    else if (url.pathname.includes("direct-native-hook-graph-admission-profile.v1.json")) body = {
+    else if (url.pathname.includes("direct-native-hook-graph-admission-profile.v2.json")) body = {
       type: "file", path: binding.api.publicProfilePath, encoding: "base64",
       content: publicProfileBytes.toString("base64"), size: publicProfileBytes.length,
       sha: profileBlob,
@@ -372,9 +372,9 @@ test("backend binding verifies Git provenance and the checked-in public profile"
   assert.equal(result.commitSignatureVerified, true);
 });
 
-test("Fly readback accepts only the exact successful release and started FRA image", () => {
+test("Fly readback accepts the real tag-only release ref and exact machine digest", () => {
   const result = verifyCustomLaunchApiFlyRelease({
-    releases: [{ Version: 9, Status: "succeeded", ImageRef: `registry.fly.io/programmable-custom-launch-api:main-aaaaaaaaaaaa@${hashes.one}` }],
+    releases: [{ Version: 9, Status: "succeeded", ImageRef: "registry.fly.io/programmable-custom-launch-api:main-aaaaaaaaaaaa" }],
     machines: [
       { id: "one", state: "started", region: "fra", host_status: "ok", image_ref: { registry: "registry.fly.io", repository: "programmable-custom-launch-api", tag: "main-aaaaaaaaaaaa", digest: hashes.one } },
       { id: "two", state: "started", region: "fra", host_status: "ok", image_ref: { registry: "registry.fly.io", repository: "programmable-custom-launch-api", tag: "main-aaaaaaaaaaaa", digest: hashes.one } },
@@ -390,9 +390,27 @@ test("Fly readback accepts only the exact successful release and started FRA ima
   });
   assert.equal(result.status, "passed");
   assert.throws(() => verifyCustomLaunchApiFlyRelease({
-    releases: [{ Version: 9, Status: "succeeded", ImageRef: `registry.fly.io/programmable-custom-launch-api:main-aaaaaaaaaaaa@${hashes.one}` }],
+    releases: [{ Version: 9, Status: "succeeded", ImageRef: "registry.fly.io/programmable-custom-launch-api:main-aaaaaaaaaaaa" }],
     machines: [{ id: "one", state: "stopped", region: "fra", host_status: "ok", image_ref: { registry: "registry.fly.io", repository: "programmable-custom-launch-api", tag: "main-aaaaaaaaaaaa", digest: hashes.one } }],
     images: [{ MachineID: "one", Registry: "registry.fly.io", Repository: "programmable-custom-launch-api", Tag: "main-aaaaaaaaaaaa", Digest: hashes.one }],
+    expectedReleaseVersion: 9,
+    expectedImageDigest: hashes.one,
+    expectedImageTag: "main-aaaaaaaaaaaa",
+    expectedMachineCount: 1,
+  }), /machine differs/u);
+  assert.throws(() => verifyCustomLaunchApiFlyRelease({
+    releases: [{ Version: 9, Status: "succeeded", ImageRef: "registry.fly.io/programmable-custom-launch-api:main-bbbbbbbbbbbb" }],
+    machines: [{ id: "one", state: "started", region: "fra", host_status: "ok", image_ref: { registry: "registry.fly.io", repository: "programmable-custom-launch-api", tag: "main-aaaaaaaaaaaa", digest: hashes.one } }],
+    images: [{ MachineID: "one", Registry: "registry.fly.io", Repository: "programmable-custom-launch-api", Tag: "main-aaaaaaaaaaaa", Digest: hashes.one }],
+    expectedReleaseVersion: 9,
+    expectedImageDigest: hashes.one,
+    expectedImageTag: "main-aaaaaaaaaaaa",
+    expectedMachineCount: 1,
+  }), /release image differs/u);
+  assert.throws(() => verifyCustomLaunchApiFlyRelease({
+    releases: [{ Version: 9, Status: "succeeded", ImageRef: "registry.fly.io/programmable-custom-launch-api:main-aaaaaaaaaaaa" }],
+    machines: [{ id: "one", state: "started", region: "fra", host_status: "ok", image_ref: { registry: "registry.fly.io", repository: "programmable-custom-launch-api", tag: "main-aaaaaaaaaaaa", digest: hashes.one } }],
+    images: [{ MachineID: "one", Registry: "registry.fly.io", Repository: "programmable-custom-launch-api", Tag: "main-aaaaaaaaaaaa", Digest: hashes.two }],
     expectedReleaseVersion: 9,
     expectedImageDigest: hashes.one,
     expectedImageTag: "main-aaaaaaaaaaaa",
@@ -485,8 +503,23 @@ test("production workflow has an additive V3 stage lane and no promotion mutatio
     "PROGRAMMABLE_CUSTOM_LAUNCH_V3_CANARY_API_KEY",
     "superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1",
     "probe-custom-launch-v3-release.mjs",
+    '--expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256"',
     "Stage-only: no production promotion was attempted.",
   ]) assert.ok(workflow.includes(required), `missing ${required}`);
+  assert.equal(
+    workflow.includes('--expect-detached-record-sha256="$EXPECTED_RECORD_SHA256"'),
+    false,
+  );
+  const v3RecordStart = workflow.indexOf(
+    "      - name: Verify detached Custom Launch V3 release record",
+  );
+  const v3RecordEnd = workflow.indexOf(
+    "      - name: Set up Fly CLI for read-only release verification",
+  );
+  assert.ok(v3RecordStart >= 0 && v3RecordEnd > v3RecordStart);
+  assert.ok(workflow.slice(v3RecordStart, v3RecordEnd).includes(
+    '--expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256"',
+  ));
   assert.equal(workflow.includes("vercel promote"), false);
   assert.equal(workflow.includes("vercel rollback"), false);
   assert.equal(workflow.includes("flyctl deploy"), false);

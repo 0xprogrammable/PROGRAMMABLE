@@ -263,10 +263,9 @@ function workflowFailures(source) {
     "record-rollback-commit-binding",
     '--expect-rollback-website-commit "$ROLLBACK_WEBSITE_COMMIT_SHA"',
   );
-  requireText(
-    "record-digest-binding",
+  if (!recordGateBlock.includes(
     '--expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256"',
-  );
+  )) failures.push("record-digest-binding");
   requireText(
     "record-artifact-retention",
     "custom-launch-release-record-${{ github.run_id }}-${{ github.run_attempt }}",

@@ -73,9 +73,9 @@
         "readinessIdentitySha256": { "$ref": "#/$defs/sha256" },
         "apiContractSha256": { "$ref": "#/$defs/sha256" },
         "profileId": { "const": "programmable.direct-native-hook-graph.v1" },
-        "profileVersion": { "const": "1.0.0" },
+        "profileVersion": { "const": "2.0.0" },
         "publicProfilePath": {
-          "const": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v1.json",
+          "const": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json",
           "description": "Repository-relative path to the checked-in public admission-profile artifact or template."
         },
         "publicProfileSha256": {

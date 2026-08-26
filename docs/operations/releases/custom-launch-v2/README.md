@@ -9,9 +9,10 @@ Ethereum deployment identity.
 
 The profile digest is release-scoped: `api.publicProfileSha256` is the lowercase
 SHA-256 of the RFC 8785/JCS bytes of
-`services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v1.json`.
+`services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json`.
 It is never a per-launch hook runtime hash. Each launch keeps its own
-request-bound `launchProfileHash`.
+request-bound `launchProfileHash`. This V2 profile binding is additive; the
+immutable V1 release-record history and V1 API compatibility remain unchanged.
 
 ## Detached records
 
@@ -36,6 +37,62 @@ services/custom-launch-api-v1/release/public-v3-release-binding-v1.json
 Generate that file from exact artifacts. Do not hand-type hashes. The backend
 candidate is deployed first, then the binding records the observed Fly release
 version and immutable image digest. The binding commit does not deploy code.
+
+### Deterministic binding materialization
+
+Capture the three unmodified `flyctl --json` readbacks, the public `/readyz`
+JSON response and `supabase migration list --linked --output-format json`
+outside both repositories. Then run the generator from a clean checkout of the
+reviewed Website commit:
+
+```bash
+npm run release:custom-launch:v2:binding:generate -- \
+  --website-root /absolute/path/to/clean-programmable-production \
+  --backend-root /absolute/path/to/clean-backend-candidate \
+  --fly-releases /absolute/path/to/fly-releases.json \
+  --fly-machines /absolute/path/to/fly-machines.json \
+  --fly-images /absolute/path/to/fly-images.json \
+  --api-readiness /absolute/path/to/readyz.json \
+  --supabase-migration-list /absolute/path/to/supabase-migration-list.json \
+  --database-schema-evidence-output /absolute/path/to/database-schema-evidence.json
+```
+
+The generator derives both Git commit/tree identities, hashes the exact Website
+artifacts, recreates the backend migration inventory, checks all seven local and
+remote Supabase migration versions, proves every runtime/Supabase migration
+mirror byte-equal, checks the API contract and JCS profile/readiness identities,
+and binds the active Fly machines to the same tag and digest. The exact retained
+redacted database evidence bytes are the sole preimage of
+`database.schemaEvidenceSha256`. The generator writes the canonical backend
+binding and the explicitly named external evidence output with exclusive-create
+semantics. Dirty or unexpected repositories, stale readbacks, unknown
+profile/API facts, mismatched Fly state and an existing output all fail closed.
+It neither reads nor prints credentials.
+
+Before creating the staging record, materialize the rollback configuration
+snapshot from the already verified prior production binding and a fresh Vercel
+production environment listing. Pipe the environment JSON directly into the
+snapshot generator so provider-returned values are never retained:
+
+```bash
+node scripts/perf/read-model-production-binding.mjs \
+  --target-url https://programmable.market \
+  --github-output /absolute/path/to/prior-production-binding.outputs \
+  > /absolute/path/to/prior-production-binding.json
+
+vercel env list production --format=json --scope aficialais-projects \
+  | npm run release:custom-launch:v2:rollback-snapshot:generate -- \
+      --production-binding /absolute/path/to/prior-production-binding.json \
+      --output /absolute/path/to/rollback-configuration-snapshot.json
+```
+
+The retained snapshot contains only the exact prior deployment ID, immutable
+deployment URL, commit, production alias, and sorted environment variable
+name/type/target metadata. The SHA-256 of those deterministic pretty-JSON bytes
+is the sole value permitted for
+`rollback.website.configurationSnapshotSha256`. Raw provider values are
+discarded in memory, never written or printed. Duplicate names, an unexpected
+deployment/alias, malformed metadata or an existing output fails closed.
 
 ## Protected GitHub configuration
 
