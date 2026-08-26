@@ -1130,6 +1130,169 @@
         },
         "additionalProperties": false
       },
+      "LaunchSeededLiquidityAssessmentV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "status",
+          "requestClaimsExecution",
+          "requiredVectorIds"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.direct-native-liquidity-model-assessment.v1"
+          },
+          "status": {
+            "const": "required"
+          },
+          "requestClaimsExecution": {
+            "const": false
+          },
+          "requiredVectorIds": {
+            "type": "array",
+            "prefixItems": [
+              { "const": "liquidity.seeded.pool-active-liquidity" },
+              { "const": "liquidity.seeded.position-custody-and-withdrawal" },
+              { "const": "liquidity.seeded.buy-and-sell" }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "description": "Declares the exact seeded-liquidity checks still required. It is not evidence that they ran or passed.",
+        "additionalProperties": false
+      },
+      "HookInventoryLiquidityAssessmentV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "status",
+          "requestClaimsExecution",
+          "requiredVectorIds"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.direct-native-liquidity-model-assessment.v1"
+          },
+          "status": {
+            "const": "required"
+          },
+          "requestClaimsExecution": {
+            "const": false
+          },
+          "requiredVectorIds": {
+            "type": "array",
+            "prefixItems": [
+              { "const": "liquidity.hook-inventory.buy-settlement" },
+              { "const": "liquidity.hook-inventory.sell-settlement" },
+              { "const": "liquidity.hook-inventory.delta-solvency" },
+              { "const": "liquidity.hook-inventory.backing-and-withdrawal" }
+            ],
+            "minItems": 4,
+            "maxItems": 4
+          }
+        },
+        "description": "Declares the exact custom-accounting checks still required. It is not evidence that they ran or passed.",
+        "additionalProperties": false
+      },
+      "DirectNativeLiquidityModelIntentV1": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["schemaVersion", "model", "declaredLaunchState"],
+            "properties": {
+              "schemaVersion": {
+                "const": "programmable.direct-native-liquidity-model-intent.v1"
+              },
+              "model": {
+                "const": "external-concentrated-liquidity"
+              },
+              "declaredLaunchState": {
+                "const": "liquidity_required"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "model",
+              "declaredLaunchState",
+              "liquidityTargetId",
+              "assessment"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": "programmable.direct-native-liquidity-model-intent.v1"
+              },
+              "model": {
+                "const": "launch-seeded-concentrated-liquidity"
+              },
+              "declaredLaunchState": {
+                "const": "assessment_required"
+              },
+              "liquidityTargetId": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+              },
+              "assessment": {
+                "$ref": "#/components/schemas/LaunchSeededLiquidityAssessmentV1"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "model",
+              "declaredLaunchState",
+              "inventoryTargetId",
+              "assessment"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": "programmable.direct-native-liquidity-model-intent.v1"
+              },
+              "model": {
+                "const": "hook-inventory-custom-accounting"
+              },
+              "declaredLaunchState": {
+                "const": "assessment_required"
+              },
+              "inventoryTargetId": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+              },
+              "assessment": {
+                "$ref": "#/components/schemas/HookInventoryLiquidityAssessmentV1"
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "description": "Hash-bound liquidity intent. External concentrated liquidity remains liquidity_required; seeded and hook-inventory models require exact later assessment and cannot self-declare a pass."
+      },
+      "DirectNativeLiquidityIntentProjectionV3": {
+        "type": "object",
+        "required": ["model", "declaredLaunchState", "binding"],
+        "properties": {
+          "model": {
+            "enum": [
+              "external-concentrated-liquidity",
+              "launch-seeded-concentrated-liquidity",
+              "hook-inventory-custom-accounting"
+            ]
+          },
+          "declaredLaunchState": {
+            "enum": ["liquidity_required", "assessment_required"]
+          },
+          "binding": {
+            "enum": ["explicit-request-hash", "legacy-v3-default"]
+          }
+        },
+        "description": "Server readback of the declared liquidity model. This is not current liquidity or tradeability evidence.",
+        "additionalProperties": false
+      },
       "DirectNativeProfileSelectionBindingV1": {
         "type": "object",
         "required": [
@@ -1187,6 +1350,9 @@
           },
           "platformFeeBinding": {
             "$ref": "#/components/schemas/DirectNativePlatformFeeBindingV1"
+          },
+          "liquidityModel": {
+            "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1"
           }
         },
         "allOf": [
@@ -1769,6 +1935,8 @@
           "opcode": {
             "enum": [
               "CALLCODE",
+              "CREATE",
+              "CREATE2",
               "DELEGATECALL",
               "SELFDESTRUCT"
             ]
@@ -1791,6 +1959,8 @@
           "code": {
             "enum": [
               "RUNTIME_CALLCODE",
+              "RUNTIME_CREATE",
+              "RUNTIME_CREATE2",
               "RUNTIME_DELEGATECALL",
               "RUNTIME_SELFDESTRUCT",
               "SOURCE_PROXY_OR_UPGRADE_SURFACE",
@@ -2157,6 +2327,7 @@
           "launchProfileHash",
           "launchIntentHash",
           "fundingIntentHash",
+          "liquidityIntent",
           "createdAt",
           "updatedAt",
           "output",
@@ -2227,6 +2398,9 @@
                 "type": "null"
               }
             ]
+          },
+          "liquidityIntent": {
+            "$ref": "#/components/schemas/DirectNativeLiquidityIntentProjectionV3"
           },
           "createdAt": {
             "type": "string",
