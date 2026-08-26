@@ -1,6 +1,6 @@
 {
   "schemaVersion": "programmable.custom-launch-release-record.v2",
-  "recordStatus": "promotion_approved",
+  "recordStatus": "live",
   "createdAt": "2026-08-26T08:45:33Z",
   "releaseIntent": {
     "releaseId": "custom-launch-api-v3-20260826-001",
@@ -159,28 +159,28 @@
     "candidateEvidenceSha256": "sha256:84f6de16708f513d46a9d5744eb71b68864ccf7edd96bebfd053fda92f54f61c"
   },
   "promoted": {
-    "websiteDeploymentId": null,
-    "immutableWebsiteUrl": null,
-    "productionAlias": null,
-    "evidenceSha256": null,
-    "promotedAt": null
+    "websiteDeploymentId": "dpl_8bxHJdhraJqadQEEp9cDhQcgDFtR",
+    "immutableWebsiteUrl": "https://launcher-v4-5sdyznchd-aficialais-projects.vercel.app",
+    "productionAlias": "https://programmable.market",
+    "evidenceSha256": "sha256:eb8fbed2eb01da7bc7c9ca55879d1a3685250860ea634c157dc3fff7e6662618",
+    "promotedAt": "2026-08-26T09:59:21Z"
   },
   "canary": {
-    "status": "pending",
+    "status": "passed",
     "mode": "public-cli-wallet-handoff-no-broadcast",
-    "evidenceSha256": null,
-    "evidenceLocator": null,
-    "completedAt": null,
+    "evidenceSha256": "sha256:f259928c37a59393e6e237f53688e28d4ba67c415ec284b48d919cf905d3c788",
+    "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/clean-room-post-promotion-no-broadcast-v3.1.0.json",
+    "completedAt": "2026-08-26T10:03:48Z",
     "walletSignatureObserved": false,
     "transactionBroadcastObserved": false
   },
   "liveDeclaration": {
     "authority": "release_owner",
-    "status": "pending",
-    "decisionId": null,
-    "immutableReference": null,
-    "decidedAt": null,
-    "statementSha256": null,
-    "releaseSubjectSha256": null
+    "status": "declared_live",
+    "decisionId": "custom-launch-v3-live-01a03762-20260826t100524z",
+    "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
+    "decidedAt": "2026-08-26T10:05:24Z",
+    "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
+    "releaseSubjectSha256": "sha256:f3baa2f6a00718f7bda7b0d9815931a85c51fcb93adc57f4be0c5c5f3bda44ce"
   }
 }
