@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
   { id: "authentication", label: "Authentication" },
+  { id: "v3-preview", label: "V3 integration preview" },
   { id: "request", label: "Request contract" },
   { id: "fees", label: "Rev3 fee policy" },
   { id: "verification", label: "Exact-source verification" },
@@ -213,6 +214,62 @@ export default function CustomLaunchApiDocsPage() {
           The V1 contract states a 90-day default expiry, a 366-day maximum and
           no more than 10 active keys per wallet.
         </p>
+      </section>
+
+      <section id="v3-preview">
+        <div className={styles.sectionIntro}>
+          <h2>Keep V3 integration-pending</h2>
+          <p>
+            The versioned{" "}
+            <a href="/openapi/custom-launch-v3.json">
+              direct-native V3 OpenAPI document
+            </a>{" "}
+            freezes its request and wallet-handoff schemas without activating
+            them. Public V2 remains the stable production creation contract.
+            Discovery reports V3 as <code>integration-pending</code> until the
+            routes and existing permit-authority admission binding are verified
+            end to end.
+          </p>
+        </div>
+
+        <ul className={styles.checkList}>
+          <li>
+            The Router supports 2–16 targets, while this profile requires 3–16
+            because token, hook and initializer roles are distinct. It binds the
+            exact <code>ProgrammableVolumeFeeHookV2</code> source and build
+            with permission mask <code>0x20cc</code>. It does not authorize
+            arbitrary self-reported hook code.
+          </li>
+          <li>
+            Selected buy and sell totals range from 0 through 999999 hundredths
+            of a bip. The 1000 Programmable share is inclusive:{" "}
+            <code>effectiveTotal = max(selectedTotal, 1000)</code> and{" "}
+            <code>projectShare = effectiveTotal - 1000</code>. Derived results
+            are not request fields. The V3 pool fee is a static integer from 0
+            through 999999; the <code>0x800000</code> dynamic-fee sentinel is
+            not accepted.
+          </li>
+          <li>
+            The create request contains an unsigned USDC EIP-3009 descriptor,
+            a pre-signature <code>fundingIntentHash</code> and an exact zero-word
+            signature patch. It contains no signature, approval or Permit2
+            shortcut. The funding intent excludes the signature,{" "}
+            <code>initializerCalldataHash</code>, final graph commitment and{" "}
+            <code>permitDigest</code>.
+          </li>
+          <li>
+            After activation, the website first validates and explicitly asks
+            for <code>eth_signTypedData_v4</code>. Only after backend signature
+            verification, final calldata construction and simulation does it
+            present a separately reviewed Router transaction. Neither action
+            is auto-signed or auto-broadcast.
+          </li>
+          <li>
+            Initializer source, build, runtime, unsigned patch, final calldata
+            and simulation are exact per-launch bindings. There is no separate
+            global initializer trust root.
+          </li>
+        </ul>
       </section>
 
       <section id="request">

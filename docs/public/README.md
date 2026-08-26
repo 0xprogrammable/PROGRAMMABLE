@@ -8,7 +8,7 @@ coverY: 0
 
 Programmable is a launch platform for Uniswap v4 products. Classic turns a focused set of choices into a fixed supply token, a permanently locked ETH pool and creator rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or execution graph. Prediction Markets is the separately versioned launch model for onchain outcome markets.
 
-Classic and Prediction Markets are available from Create. Public V2 Custom launch creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live, while authenticated V1 POST returns the nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the wallet reviews and signs its own transaction on the required network.
+Classic and Prediction Markets are available from Create. Public V2 Custom launch creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. The V3 direct-native contract is an `integration-pending` schema preview, not a live launch capability. V1 history reads remain live, while authenticated V1 POST returns the nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the wallet reviews and signs its own transaction on the required network.
 
 {% hint style="info" %}
 These docs describe current public products and the evidence available for them. A successful check, prepared artifact, authorized transaction or visible token page is not a guarantee of safety, liquidity or future value.

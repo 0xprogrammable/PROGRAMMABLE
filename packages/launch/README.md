@@ -28,6 +28,32 @@ The V2 Rev3 profile is the public production profile. Package installation is no
 the exact Router transaction, then the connected controller reviews and signs it separately. The human guide is
 <https://programmable.market/docs/developers/custom-launch>.
 
+## V3 direct-native integration preview
+
+The unreleased `3.0.0-rc.1` source adds offline pack and validation support for the versioned profile
+`programmable.direct-native-hook-graph.v1`. It does not replace the immutable V2 release and is not a production launch
+capability. The [V3 OpenAPI preview](https://programmable.market/openapi/custom-launch-v3.json) is
+`integration-pending` until the V3 routes and existing permit-authority admission binding are implemented and verified.
+No V3 GitHub Release asset is advertised.
+
+The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook
+and initializer roles are distinct, and it is restricted to the exact canonical
+`ProgrammableVolumeFeeHookV2` source/build with hook mask `0x20cc`; it does not treat arbitrary hook code as safe. The
+V3 pack config carries selected buy and sell totals from `0` through `999999` hundredths of a bip. The fixed
+Programmable share of `1000` is inclusive: `effectiveTotal = max(selectedTotal, 1000)`,
+`programmableShare = 1000`, and `projectShare = effectiveTotal - 1000`. Pack derives the effective and project values;
+they are not user-supplied request fields. Its Uniswap pool fee is a static integer from `0` through `999999`; the
+`0x800000` dynamic-fee sentinel is not accepted by this frozen V3 profile.
+
+The packed request contains an unsigned nine-field USDC EIP-3009 descriptor, its pre-signature `fundingIntentHash`,
+and a derived flat signature-patch descriptor binding the initializer target, unsigned calldata hash and exact zero
+ABI-word offsets for `r`, `s` and `v`. It contains no signature. The funding intent deliberately excludes the wallet
+signature, `initializerCalldataHash`, final `graphCommitment` and `permitDigest`; those are derived later. When the
+service is activated, the connected wallet
+must separately review and sign the exact typed data in the website; only after backend verification and simulation
+does the website present a separately reviewed Router transaction. The CLI never accepts an API key argument, signs,
+requests approval, or broadcasts either wallet action.
+
 ## Rev3 fee policy
 
 The frozen Rev3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has

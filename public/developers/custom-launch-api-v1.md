@@ -7,11 +7,30 @@ GitHub submission intake is closed.
 
 Normative public V2 OpenAPI: <https://programmable.market/openapi/custom-launch-v2.json>
 
+Integration-pending V3 profile preview: <https://programmable.market/openapi/custom-launch-v3.json>
+
 V1 compatibility OpenAPI: <https://programmable.market/openapi/custom-launch-v1.json>
 
 Human guide: <https://programmable.market/docs/developers/custom-launch>
 
 Readiness: <https://api.programmable.market/readyz>
+
+## V3 preview boundary
+
+The `programmable.direct-native-hook-graph.v1` document freezes V3 request, resource and two-action wallet
+handoff schemas but does not activate them. Discovery remains `integration-pending`; Public V2 stays the stable
+production creation contract. The Router primitive supports 2-16 targets; this profile requires 3-16 because token,
+hook and initializer roles are distinct. It remains restricted to the exact canonical
+`ProgrammableVolumeFeeHookV2` kernel with mask `0x20cc`, not arbitrary self-reported hooks.
+
+Its 1,000-hundredths-of-a-bip Programmable share is inside the selected total, not added on top:
+`effectiveTotal = max(selectedTotal, 1000)` and `projectShare = effectiveTotal - 1000`. The create request carries an
+unsigned USDC EIP-3009 descriptor, pre-signature `fundingIntentHash` and exact zero-word signature patch, never a
+signature. Funding typed-data signing and the later Router send are separate explicit website wallet actions; neither
+is automatic. Initializer source, build, runtime, final calldata and simulation are bound exactly per launch, with no
+separate global initializer trust root. The pool fee is restricted to static integers from 0 through 999999; the
+dynamic-fee sentinel is not accepted. The funding intent excludes the signature, `initializerCalldataHash`, final
+graph commitment and `permitDigest`.
 
 ## Rev3 fee policy
 

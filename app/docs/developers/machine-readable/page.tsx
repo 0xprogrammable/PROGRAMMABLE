@@ -83,6 +83,16 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
+            <a href="/openapi/custom-launch-v3.json">
+              <code>/openapi/custom-launch-v3.json</code>
+            </a>
+            <span>
+              Integration-pending V3 direct-native request, funding challenge
+              and separate Router-transaction schemas. Public V2 remains the
+              stable production contract.
+            </span>
+          </li>
+          <li>
             <a href="/developers/custom-launch-api-v1.md">
               <code>/developers/custom-launch-api-v1.md</code>
             </a>
@@ -258,6 +268,11 @@ export default function MachineReadableDocsPage() {
             Public V2 creation, list and single-resource reads are live. V1
             history remains readable, while authenticated V1 POST returns
             non-retryable <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+          </li>
+          <li>
+            V3 direct-native routes remain <code>integration-pending</code>.
+            Their OpenAPI document freezes the exact canonical-kernel and
+            unsigned EIP-3009 handoff shapes without activating them.
           </li>
           <li>
             The platform validates manifest digest, graph, attestation shape,

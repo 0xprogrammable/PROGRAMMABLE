@@ -2,6 +2,7 @@ import {
   GUIDE_URL,
   OPENAPI_URL_V1,
   OPENAPI_URL_V2,
+  OPENAPI_URL_V3,
   PACKAGE_VERSION,
   RELEASE_URL,
   RELEASE_URL_V1,
@@ -185,8 +186,8 @@ function usage(command) {
       "The API key is read only from PROGRAMMABLE_API_KEY or the OS secret store.",
     ],
     status: [
-      "Usage: programmable-launch status <request-id> [--api-version 1|2] [--watch] [--until authorized|finalized]",
-      "V2 is the default. Use --api-version 1 only for retained V1 history.",
+      "Usage: programmable-launch status <request-id> [--api-version 1|2|3] [--watch] [--until authorized|finalized]",
+      "V2 remains the default. Use --api-version 3 for a direct-native graph request.",
       "This command never signs or broadcasts a wallet transaction.",
     ],
   };
@@ -196,6 +197,7 @@ function usage(command) {
     `Guide: ${GUIDE_URL}`,
     `OpenAPI V1 (read-only create): ${OPENAPI_URL_V1}`,
     `OpenAPI V2 (public create): ${OPENAPI_URL_V2}`,
+    `OpenAPI V3 (integration-pending profile): ${OPENAPI_URL_V3}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,
     `Public V2 release: ${RELEASE_URL}`,
   ].join("\n");

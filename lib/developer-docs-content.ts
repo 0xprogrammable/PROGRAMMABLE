@@ -17,6 +17,8 @@ const customLaunchApiOpenApiUrl =
   "https://programmable.market/openapi/custom-launch-v2.json";
 const customLaunchApiV2OpenApiUrl =
   "https://programmable.market/openapi/custom-launch-v2.json";
+const customLaunchApiV3OpenApiUrl =
+  "https://programmable.market/openapi/custom-launch-v3.json";
 const customLaunchApiGuideUrl =
   "https://programmable.market/developers/custom-launch-api-v1.md";
 const customLaunchHumanGuideUrl =
@@ -52,6 +54,7 @@ export function buildDeveloperDocsMarkdown(): string {
     `Manage API keys: ${apiKeysUrl}`,
     `Custom Launch API OpenAPI: ${customLaunchApiOpenApiUrl}`,
     `Public V2 OpenAPI: ${customLaunchApiV2OpenApiUrl}`,
+    `V3 integration-preview OpenAPI: ${customLaunchApiV3OpenApiUrl}`,
     "V1 compatibility OpenAPI: https://programmable.market/openapi/custom-launch-v1.json",
     `Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `Raw Custom Launch API guide: ${customLaunchApiGuideUrl}`,
@@ -71,6 +74,7 @@ export function buildDeveloperDocsMarkdown(): string {
     `Public V2 creation, list and single-resource reads are live for wallet-bound requests on Ethereum Mainnet at ${customLaunchApiOrigin}/v2/custom-launches. V1 history reads remain live and V1 creation stays read-only with non-retryable \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. Legacy Registry and GitHub submission intake is closed.`,
     `Custom launch preparation is the separate authenticated write path at ${customLaunchApiOrigin}/v2/custom-launches; the retained ${customLaunchApiOrigin}/v1/custom-launches endpoint remains read-only.`,
     `The exact public request, lifecycle, idempotency and wallet-handoff contract is ${customLaunchApiV2OpenApiUrl}.`,
+    `The direct-native V3 schema preview is ${customLaunchApiV3OpenApiUrl}. It remains integration-pending and does not replace or activate V2. The Router primitive supports 2-16 targets; this profile requires 3-16 distinct-role targets and binds them to the exact ProgrammableVolumeFeeHookV2 kernel and mask 0x20cc, an inclusive 1000-hundredths-of-a-bip Programmable share, an unsigned EIP-3009 descriptor, a pre-signature fundingIntentHash and exact zero-word signature patch. Funding signing and Router sending remain two separate explicit wallet actions; neither is automatic.`,
     "",
     `Install the pinned public CLI with \`npm install --global ${customLaunchCliReleaseUrl}\`. The package is \`@programmable/launch\` and the binary is \`programmable-launch\`.`,
     "",
@@ -381,6 +385,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- OpenAPI: https://programmable.market/openapi.json",
     `- Custom Launch OpenAPI: ${customLaunchApiOpenApiUrl}`,
     `- Public V2 OpenAPI: ${customLaunchApiV2OpenApiUrl}`,
+    `- V3 integration-preview OpenAPI: ${customLaunchApiV3OpenApiUrl}`,
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Custom Launch API readiness: ${customLaunchReadyzUrl}`,
@@ -388,6 +393,7 @@ export function buildProgrammableLlmsIndex(): string {
     `- V1 write fence: POST ${customLaunchApiOrigin}/v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY`,
     `- Create or list wallet-owned Custom launches: POST or GET ${customLaunchApiOrigin}/v2/custom-launches`,
     `- Read a Custom launch: GET ${customLaunchApiOrigin}/v2/custom-launches/{launchId}`,
+    `- V3 schema preview only: ${customLaunchApiOrigin}/v3/custom-launches returns CUSTOM_LAUNCH_V3_INTEGRATION_PENDING until discovery advertises activation`,
     "- API index: https://programmable.market/api",
     "- Explore catalog: https://programmable.market/api/explore",
     "- Prediction Markets: https://programmable.market/markets",

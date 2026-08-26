@@ -49,6 +49,8 @@ export async function readPreservedBackendPublicErrorV1(
       && value.schemaVersion !== "programmable.custom-launch-list.v1"
       && value.schemaVersion !== "programmable.custom-launch-list.v2"
       && value.schemaVersion !== "programmable.custom-launch.v2"
+      && value.schemaVersion !== "programmable.custom-launch-list.v3"
+      && value.schemaVersion !== "programmable.custom-launch.v3"
     ) return null;
     const error = value.error;
     if (error === null || Array.isArray(error) || typeof error !== "object") {
@@ -65,6 +67,7 @@ export async function readPreservedBackendPublicErrorV1(
     if (
       response.status === 503
       && error.code !== "CUSTOM_LAUNCH_V2_UNAVAILABLE"
+      && error.code !== "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING"
     ) return null;
 
     const bodyRequestId = error.requestId;

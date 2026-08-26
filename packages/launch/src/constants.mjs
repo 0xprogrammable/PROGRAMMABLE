@@ -1,9 +1,11 @@
-export const PACKAGE_VERSION = "2.0.1";
+export const PACKAGE_VERSION = "3.0.0-rc.1";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
+export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
 export const PACK_CONFIG_SCHEMA = PACK_CONFIG_SCHEMA_V1;
 export const CREATE_REQUEST_SCHEMA_V1 = "programmable.custom-launch-create-request.v1";
 export const CREATE_REQUEST_SCHEMA_V2 = "programmable.custom-launch-create-request.v2";
+export const CREATE_REQUEST_SCHEMA_V3 = "programmable.custom-launch-create-request.v3";
 export const CREATE_REQUEST_SCHEMA = CREATE_REQUEST_SCHEMA_V1;
 export const SOURCE_DESCRIPTOR_SCHEMA = "2.0.0";
 export const SOURCE_MANIFEST_SCHEMA = "2.0.0";
@@ -23,14 +25,41 @@ export const LAUNCH_PROFILE_REVISION = 3;
 export const LAUNCH_PROFILE_VERSION = "2.0.0";
 export const LAUNCH_PROFILE_HASH_DOMAIN = "programmable.fee-enforced-launch-profile.v2";
 export const LAUNCH_INTENT_HASH_DOMAIN = "programmable.custom-launch-intent.v2";
+export const DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA =
+  "programmable.direct-native-hook-graph-profile-selection.v1";
+export const DIRECT_NATIVE_PROFILE_BINDING_SCHEMA =
+  "programmable.direct-native-hook-graph-profile-selection-binding.v1";
+export const DIRECT_NATIVE_PROFILE_SCHEMA =
+  "programmable.direct-native-hook-graph-profile.v1";
+export const DIRECT_NATIVE_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
+export const DIRECT_NATIVE_PROFILE_REVISION = 1;
+export const DIRECT_NATIVE_PROFILE_VERSION = "1.0.0";
+export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN =
+  "programmable.direct-native-hook-graph-profile.v1";
+export const DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN =
+  "programmable.direct-native-hook-graph-launch-intent.v1";
+export const FUNDING_AUTHORIZATION_INPUT_SCHEMA =
+  "programmable.funding-authorization-input.v1";
+export const FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA =
+  "programmable.funding-authorization-descriptor.v1";
+export const FUNDING_SIGNATURE_PATCH_SCHEMA =
+  "programmable.eip3009-signature-patch.v1";
+export const FUNDING_AUTHORIZATION_METHOD =
+  "eip-3009-receive-with-authorization";
+export const FUNDING_INTENT_HASH_DOMAIN =
+  "programmable.direct-native-hook-graph.funding-intent.v1";
+export const FUNDING_NONCE_DOMAIN =
+  "programmable.direct-native-hook-graph.funding-nonce.v1";
 
 export const API_ORIGIN = "https://api.programmable.market";
 export const CREATE_PATH_V1 = "/v1/custom-launches";
 export const CREATE_PATH_V2 = "/v2/custom-launches";
+export const CREATE_PATH_V3 = "/v3/custom-launches";
 export const CREATE_PATH = CREATE_PATH_V1;
 export const READY_PATH = "/readyz";
 export const OPENAPI_URL_V1 = "https://programmable.market/openapi/custom-launch-v1.json";
 export const OPENAPI_URL_V2 = "https://programmable.market/openapi/custom-launch-v2.json";
+export const OPENAPI_URL_V3 = "https://programmable.market/openapi/custom-launch-v3.json";
 export const OPENAPI_URL = OPENAPI_URL_V2;
 export const GUIDE_URL = "https://programmable.market/docs/developers/custom-launch";
 export const API_KEYS_URL = "https://programmable.market/developers/api-keys";
@@ -45,8 +74,31 @@ export const RELEASE_URL =
 
 export const MAINNET_CHAIN_ID = "1";
 export const ROUTER = "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56";
+export const PERMIT_AUTHORITY = "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b";
 export const GRAPH_FACTORY = "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887";
 export const POOL_MANAGER = "0x000000000004444c5dc75cB358380D2e3dE08A90";
+export const ROUTER_RUNTIME_CODE_HASH =
+  "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546";
+export const PERMIT_AUTHORITY_RUNTIME_CODE_HASH =
+  "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c";
+export const GRAPH_FACTORY_RUNTIME_CODE_HASH =
+  "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8";
+export const POOL_MANAGER_RUNTIME_CODE_HASH =
+  "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293";
+export const MAINNET_USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+export const MAINNET_USDC_RUNTIME_CODE_HASH =
+  "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505";
+export const MAINNET_USDC_DOMAIN_NAME = "USD Coin";
+export const MAINNET_USDC_DOMAIN_VERSION = "2";
+export const MAINNET_USDC_DOMAIN_SEPARATOR =
+  "0x06c37168a7db5138defc7866392bb87a741f9b3d104deb5094588ce041cae335";
+export const RECEIVE_WITH_AUTHORIZATION_PRIMARY_TYPE =
+  "ReceiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)";
+export const RECEIVE_WITH_AUTHORIZATION_TYPEHASH =
+  "0xd099cc98ef71107a616c4f0f941f04c322d8e254fe26b3c6668db87aae413de8";
+export const PLATFORM_FEE_RATE_PPM = "1000";
+export const PLATFORM_FEE_DENOMINATOR = "1000000";
+export const PLATFORM_FEE_RECIPIENT = "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 export const GRAPH_TARGET_SALT_TYPE =
   "ProgrammableCreate2GraphTargetSaltV1(uint256 chainId,address factory,bytes32 routeNamespace,bytes32 routeNonce,bytes32 targetIdHash,bytes32 applicantSalt,address authorizedLauncher)";
 export const API_ROUTE_NAMESPACE_TYPE =

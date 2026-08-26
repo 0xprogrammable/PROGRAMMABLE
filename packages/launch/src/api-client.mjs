@@ -5,8 +5,10 @@ import {
   API_ORIGIN,
   CREATE_PATH_V1,
   CREATE_PATH_V2,
+  CREATE_PATH_V3,
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
+  CREATE_REQUEST_SCHEMA_V3,
   TERMINAL_STATUSES,
   WALLET_HANDOFF_STATUS,
 } from "./constants.mjs";
@@ -40,7 +42,10 @@ export async function submitLaunch(options) {
   if (typeof options.configPath !== "string" || options.configPath.length === 0) {
     throw new TypeError("submit requires --config so exact source and build artifacts are freshly repacked");
   }
-  const validation = await validateLaunchFile({ launchPath, configPath: options.configPath });
+  const validation = await (options.validateLaunchFileImpl ?? validateLaunchFile)({
+    launchPath,
+    configPath: options.configPath,
+  });
   const requestPath = createPathForRequestSchema(validation.schemaVersion);
   const requestBytes = Buffer.from(await (options.readLaunchBytesImpl ?? readFile)(launchPath));
   const requestSha256 = sha256Digest(requestBytes);
@@ -128,15 +133,22 @@ export async function statusLaunch(options) {
         requestId: errorRequestId(resource),
       });
     }
+    const walletHandoffReady = status === WALLET_HANDOFF_STATUS
+      || (requestPath === CREATE_PATH_V3 && status === "awaiting_funding_authorization");
     const stopped = TERMINAL_STATUSES.has(status)
-      || (until === WALLET_HANDOFF_STATUS && status === WALLET_HANDOFF_STATUS)
+      || (until === WALLET_HANDOFF_STATUS && walletHandoffReady)
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
       return {
         httpStatus: result.status,
         stopped,
         terminal: TERMINAL_STATUSES.has(status),
-        walletHandoffReady: status === WALLET_HANDOFF_STATUS,
+        walletHandoffReady,
+        walletHandoffStage: status === "awaiting_funding_authorization"
+          ? "funding-signature-required"
+          : status === WALLET_HANDOFF_STATUS
+            ? "router-transaction-required"
+            : null,
         resource,
       };
     }
@@ -317,13 +329,15 @@ function normalizeApiOrigin(value) {
 function createPathForRequestSchema(schemaVersion) {
   if (schemaVersion === CREATE_REQUEST_SCHEMA_V1) return CREATE_PATH_V1;
   if (schemaVersion === CREATE_REQUEST_SCHEMA_V2) return CREATE_PATH_V2;
+  if (schemaVersion === CREATE_REQUEST_SCHEMA_V3) return CREATE_PATH_V3;
   throw new TypeError("launch request schema does not map to a Custom Launch API route");
 }
 
 function createPathForApiVersion(value) {
   if (value === 1 || value === "1" || value === "v1") return CREATE_PATH_V1;
   if (value === 2 || value === "2" || value === "v2") return CREATE_PATH_V2;
-  throw new TypeError("apiVersion must be 1 or 2");
+  if (value === 3 || value === "3" || value === "v3") return CREATE_PATH_V3;
+  throw new TypeError("apiVersion must be 1, 2, or 3");
 }
 
 function errorRequestId(body) {

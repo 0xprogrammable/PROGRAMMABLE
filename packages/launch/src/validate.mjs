@@ -14,6 +14,7 @@ import {
   AGENT_ATTESTATION_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
+  CREATE_REQUEST_SCHEMA_V3,
   GRAPH_BUNDLE_SCHEMA,
   MAINNET_CHAIN_ID,
   MAX_REQUEST_BYTES,
@@ -22,7 +23,7 @@ import {
   SOURCE_DESCRIPTOR_SCHEMA,
   SOURCE_MANIFEST_SCHEMA,
 } from "./constants.mjs";
-import { normalizeAndPredictSubmittedGraph } from "./graph.mjs";
+import { deriveRouteNamespace, normalizeAndPredictSubmittedGraph } from "./graph.mjs";
 import {
   assertAllowedKeys,
   assertExactKeys,
@@ -47,6 +48,15 @@ import {
   validateLaunchProfileBinding,
 } from "./profile-v2.mjs";
 import {
+  buildDirectNativeLaunchIntentHash,
+  hashDirectNativeProfile,
+  validateDirectNativeProfileBinding,
+  validateDirectNativeProfileBuilds,
+  validateDirectNativeProfileGraph,
+  validateEmbeddedDirectNativeProfile,
+  validateFundingAuthorization,
+} from "./profile-direct-native-v1.mjs";
+import {
   VERIFICATION_BUNDLE_SCHEMA_V1,
   VERIFICATION_BUNDLE_SCHEMA_V2,
 } from "./verification.mjs";
@@ -66,7 +76,9 @@ export async function validateLaunchFile({ launchPath, configPath }) {
   }
   const source = decodeExactUtf8(bytes, absolute);
   const request = parseStrictJson(source, { maximumBytes: MAX_REQUEST_BYTES });
-  const result = validateLaunchRequest(request);
+  const isV3 = request?.schemaVersion === CREATE_REQUEST_SCHEMA_V3;
+  if (isV3 && configPath === undefined) throw v3ArtifactConfigRequired();
+  const result = isV3 ? validateV3LaunchRequest(request) : validateLaunchRequest(request);
   if (configPath !== undefined) {
     const rebuilt = await buildLaunch({ configPath });
     if (!bytes.equals(rebuilt.requestBytes)) {
@@ -90,8 +102,17 @@ export function validateLaunchRequest(request) {
   if (request?.schemaVersion === CREATE_REQUEST_SCHEMA_V2) {
     return validateV2LaunchRequest(request);
   }
+  if (request?.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
+    throw v3ArtifactConfigRequired();
+  }
   throw new TypeError(
-    `schemaVersion must be ${CREATE_REQUEST_SCHEMA_V1} or ${CREATE_REQUEST_SCHEMA_V2}`,
+    `schemaVersion must be ${CREATE_REQUEST_SCHEMA_V1}, ${CREATE_REQUEST_SCHEMA_V2}, or ${CREATE_REQUEST_SCHEMA_V3}`,
+  );
+}
+
+function v3ArtifactConfigRequired() {
+  return new TypeError(
+    "V3_ARTIFACT_CONFIG_REQUIRED: V3 validation requires exact config/build artifacts so the initializer ABI and signature patch are reproduced",
   );
 }
 
@@ -211,6 +232,135 @@ function validateV2LaunchRequest(request) {
   };
 }
 
+function validateV3LaunchRequest(request) {
+  assertExactKeys(request, [
+    "schemaVersion",
+    "launchWallet",
+    "chainId",
+    "nonce",
+    "sourceDescriptor",
+    "sourceBundleManifest",
+    "graphBundle",
+    "launchProfile",
+    "launchProfileSelection",
+    "launchProfileHash",
+    "launchIntentHash",
+    "fundingAuthorization",
+    "fundingIntentHash",
+    "agentAttestation",
+    "verificationBundle",
+  ], "launch request");
+  const common = validateCommonRequest(request);
+  if (canonicalizeJson(request.graphBundle) !== canonicalizeJson(common.graph.graphBundle)) {
+    throw new TypeError("V3 graphBundle must use the exact canonical target order and encoding");
+  }
+  const verification = validateVerificationBundle(
+    request.verificationBundle,
+    common.graph.graphBundle,
+    common.graph.predictions,
+    "v2",
+  );
+  const launchProfile = validateEmbeddedDirectNativeProfile(request.launchProfile);
+  const quoteCurrency = directNativeQuoteCurrency(
+    request.launchProfileSelection,
+    common.graph.predictions,
+  );
+  const launchProfileSelection = validateDirectNativeProfileBinding(
+    request.launchProfileSelection,
+    {
+      graphBundle: common.graph.graphBundle,
+      predictions: common.graph.predictions,
+      routeNamespace: deriveRouteNamespace(
+        common.sourceDescriptor.bundleContentSha256,
+        common.launchWallet,
+      ),
+      routeNonce: request.nonce,
+      quoteCurrency,
+      fundingSignaturePatch: request.launchProfileSelection.fundingSignaturePatch,
+    },
+  );
+  const hookRuntime = verification.runtimeCodes.get(
+    launchProfileSelection.targetRoles.hookTargetId,
+  );
+  if (hookRuntime === undefined) {
+    throw new TypeError("verificationBundle does not contain the selected direct hook runtime");
+  }
+  assertNoDelegatingRuntimeOpcodes(hookRuntime, "submitted direct hook runtime");
+  const launchProfileHash = hashDirectNativeProfile(launchProfile);
+  if (request.launchProfileHash !== launchProfileHash) {
+    throw new TypeError("launchProfileHash does not match the closed embedded V3 launchProfile");
+  }
+  validateDirectNativeProfileGraph(
+    launchProfile,
+    launchProfileSelection,
+    common.graph.graphBundle,
+  );
+  validateDirectNativeProfileBuilds(
+    launchProfile,
+    launchProfileSelection,
+    common.graph.graphBundle,
+    request.verificationBundle,
+    common.manifest,
+  );
+  const launchIntentHash = buildDirectNativeLaunchIntentHash({
+    schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+    launchWallet: common.launchWallet,
+    chainId: request.chainId,
+    nonce: request.nonce,
+    sourceDescriptor: common.sourceDescriptor,
+    sourceBundleManifest: common.manifest,
+    graphBundleHash: common.graph.graphBundleHash,
+    verificationBundleHash: verification.verificationBundleHash,
+    launchProfileHash,
+    launchProfileSelection,
+  });
+  if (request.launchIntentHash !== launchIntentHash) {
+    throw new TypeError("launchIntentHash does not match the normalized V3 launch intent");
+  }
+  const funding = validateFundingAuthorization(
+    request.fundingAuthorization,
+    request.fundingIntentHash,
+    {
+      launchWallet: common.launchWallet,
+      predictedInitializer: launchProfileSelection.predictedInitializer,
+      routeNamespace: launchProfileSelection.routeNamespace,
+      routeNonce: launchProfileSelection.routeNonce,
+      launchIntentHash,
+    },
+  );
+  validateAttestationV2(request.agentAttestation, launchIntentHash);
+  return {
+    schemaVersion: request.schemaVersion,
+    graphBundleHash: common.graph.graphBundleHash,
+    verificationBundleHash: verification.verificationBundleHash,
+    launchProfileHash,
+    launchIntentHash,
+    fundingIntentHash: funding.fundingIntentHash,
+    productionLaunchAuthorized: launchProfile.productionLaunchAuthorized,
+    exactSourceIncluded: true,
+    predictions: common.graph.predictions,
+  };
+}
+
+function directNativeQuoteCurrency(binding, predictions) {
+  const token = predictions.find(
+    ({ targetId }) => targetId === binding?.targetRoles?.tokenTargetId,
+  )?.predictedAddress;
+  if (typeof token !== "string") {
+    throw new TypeError("direct-native token prediction is absent");
+  }
+  const currencies = [binding?.poolKey?.currency0, binding?.poolKey?.currency1];
+  const normalizedToken = getAddress(token);
+  const normalizedCurrencies = currencies.map((currency) => getAddress(currency));
+  const tokenIndex = normalizedCurrencies.findIndex(
+    (currency) => currency.toLowerCase() === normalizedToken.toLowerCase(),
+  );
+  if (tokenIndex === -1) {
+    throw new TypeError("direct-native PoolKey does not bind predicted token");
+  }
+  return normalizedCurrencies[tokenIndex === 0 ? 1 : 0];
+}
+
 function validateCommonRequest(request) {
   const launchWallet = getAddress(request.launchWallet);
   if (request.chainId !== MAINNET_CHAIN_ID) throw new TypeError("chainId must be string 1");
@@ -233,7 +383,12 @@ function validateCommonRequest(request) {
   if (request.graphBundle.sourceBundleSha256 !== sourceDescriptor.bundleContentSha256) {
     throw new TypeError("graphBundle.sourceBundleSha256 does not match sourceDescriptor.bundleContentSha256");
   }
-  const graph = normalizeAndPredictSubmittedGraph(request.graphBundle, launchWallet, request.nonce);
+  const graph = normalizeAndPredictSubmittedGraph(
+    request.graphBundle,
+    launchWallet,
+    request.nonce,
+    { enforceV4PermissionDependencies: request.schemaVersion === CREATE_REQUEST_SCHEMA_V3 },
+  );
   return {
     launchWallet,
     manifest,

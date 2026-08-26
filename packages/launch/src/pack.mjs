@@ -10,16 +10,19 @@ import {
   AGENT_ATTESTATION_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
+  CREATE_REQUEST_SCHEMA_V3,
   MAINNET_CHAIN_ID,
   MAX_REQUEST_BYTES,
   OPENAPI_URL_V1,
   OPENAPI_URL_V2,
+  OPENAPI_URL_V3,
   PACK_CONFIG_SCHEMA_V1,
   PACK_CONFIG_SCHEMA_V2,
+  PACK_CONFIG_SCHEMA_V3,
   PACKAGE_VERSION,
   SOURCE_DESCRIPTOR_SCHEMA,
 } from "./constants.mjs";
-import { buildGraphBundle } from "./graph.mjs";
+import { buildGraphBundle, deriveRouteNamespace } from "./graph.mjs";
 import {
   assertExactKeys,
   atomicWrite,
@@ -39,6 +42,18 @@ import {
   validateFeeEnforcedProfileGraph,
   validateLaunchProfileSelection,
 } from "./profile-v2.mjs";
+import {
+  buildDirectNativeFeeEnforcement,
+  buildDirectNativeLaunchIntentHash,
+  buildDirectNativeProfileBinding,
+  buildFundingAuthorization,
+  buildFundingSignaturePatch,
+  hashDirectNativeProfile,
+  resolveDirectNativeProfile,
+  validateDirectNativeProfileBuilds,
+  validateDirectNativeProfileGraph,
+  validateDirectNativeProfileSelection,
+} from "./profile-direct-native-v1.mjs";
 
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
@@ -50,7 +65,9 @@ export async function buildLaunch({ configPath }) {
   const apiVersion = assertPackConfig(config);
   const launchProfileSelection = apiVersion === "v2"
     ? validateLaunchProfileSelection(config.launchProfile)
-    : null;
+    : apiVersion === "v3"
+      ? validateDirectNativeProfileSelection(config.launchProfile)
+      : null;
   const configDirectory = path.dirname(absoluteConfig);
   const sourceRoot = resolveSourceRoot(configDirectory, config.source.root);
   const launchWallet = getAddress(config.launchWallet);
@@ -60,7 +77,9 @@ export async function buildLaunch({ configPath }) {
   const unitsById = new Map(units.map((unit) => [unit.compilationUnitId, unit]));
   const targets = [];
   for (const [index, target] of config.targets.entries()) {
-    targets.push(await loadTargetArtifact(target, index, sourceRoot, unitsById, { apiVersion }));
+    targets.push(await loadTargetArtifact(target, index, sourceRoot, unitsById, {
+      apiVersion: apiVersion === "v1" ? "v1" : "v2",
+    }));
   }
 
   const attestationEvidence = await buildAttestationEvidence(
@@ -89,19 +108,22 @@ export async function buildLaunch({ configPath }) {
   };
   const { graphBundle, graphBundleHash, predictions, runtimeCodes } = buildGraphBundle({
     targets,
-    pool: config.pool,
+    pool: apiVersion === "v3" ? graphPoolFromV3Config(config.pool) : config.pool,
     sourceBundleSha256: sourceBundle.bundleContentSha256,
     launchWallet,
     nonce,
-    noDelegationRuntimeTargetIds: launchProfileSelection === null
-      ? []
-      : [launchProfileSelection.targetRoles.customModuleTargetId],
+    noDelegationRuntimeTargetIds: apiVersion === "v2"
+      ? [launchProfileSelection.targetRoles.customModuleTargetId]
+      : apiVersion === "v3"
+        ? [launchProfileSelection.targetRoles.hookTargetId]
+        : [],
+    enforceV4PermissionDependencies: apiVersion === "v3",
   });
   const { verificationBundle, verificationBundleHash } = buildVerificationBundle(
     units,
     targets,
     predictions,
-    { apiVersion, runtimeCodes },
+    { apiVersion: apiVersion === "v1" ? "v1" : "v2", runtimeCodes },
   );
   const checks = attestationEvidence.map(({ checkId, evidenceSha256 }) => ({
     checkId,
@@ -110,6 +132,7 @@ export async function buildLaunch({ configPath }) {
   let request;
   let launchProfileHash = null;
   let launchIntentHash = null;
+  let fundingIntentHash = null;
   if (apiVersion === "v1") {
     const agentAttestation = {
       schemaVersion: AGENT_ATTESTATION_SCHEMA_V1,
@@ -129,7 +152,7 @@ export async function buildLaunch({ configPath }) {
       agentAttestation,
       verificationBundle,
     };
-  } else {
+  } else if (apiVersion === "v2") {
     const launchProfile = resolveLaunchProfile(launchProfileSelection);
     const launchProfileBinding = buildLaunchProfileBinding(launchProfileSelection, {
       graphBundle,
@@ -181,6 +204,90 @@ export async function buildLaunch({ configPath }) {
       agentAttestation,
       verificationBundle,
     };
+  } else {
+    const routeNamespace = deriveRouteNamespace(
+      sourceBundle.bundleContentSha256,
+      launchWallet,
+    );
+    const fundingSignaturePatch = buildFundingSignaturePatch(
+      config.fundingSignaturePatch,
+      graphBundle,
+      targets.find(({ targetId }) => targetId === config.fundingSignaturePatch.targetId),
+    );
+    const launchProfileBinding = buildDirectNativeProfileBinding(
+      launchProfileSelection,
+      {
+        graphBundle,
+        predictions,
+        routeNamespace,
+        routeNonce: nonce,
+        quoteCurrency: getAddress(config.pool.quoteCurrency),
+        fundingSignaturePatch,
+      },
+    );
+    const feeEnforcement = buildDirectNativeFeeEnforcement(
+      launchProfileBinding,
+      graphBundle,
+      verificationBundle,
+      sourceBundle.manifest,
+    );
+    const launchProfile = resolveDirectNativeProfile(
+      launchProfileSelection,
+      feeEnforcement,
+    );
+    validateDirectNativeProfileGraph(launchProfile, launchProfileBinding, graphBundle);
+    validateDirectNativeProfileBuilds(
+      launchProfile,
+      launchProfileBinding,
+      graphBundle,
+      verificationBundle,
+      sourceBundle.manifest,
+    );
+    launchProfileHash = hashDirectNativeProfile(launchProfile);
+    launchIntentHash = buildDirectNativeLaunchIntentHash({
+      schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+      launchWallet,
+      chainId: MAINNET_CHAIN_ID,
+      nonce,
+      sourceDescriptor,
+      sourceBundleManifest: sourceBundle.manifest,
+      graphBundleHash,
+      verificationBundleHash,
+      launchProfileHash,
+      launchProfileSelection: launchProfileBinding,
+    });
+    const funding = buildFundingAuthorization(config.fundingAuthorization, {
+      launchWallet,
+      predictedInitializer: launchProfileBinding.predictedInitializer,
+      routeNamespace,
+      routeNonce: nonce,
+      launchIntentHash,
+    });
+    fundingIntentHash = funding.fundingIntentHash;
+    const agentAttestation = {
+      schemaVersion: AGENT_ATTESTATION_SCHEMA_V2,
+      subjectLaunchIntentHash: launchIntentHash,
+      agentId: canonicalIdentifier(config.agentAttestation.agentId, "agentAttestation.agentId"),
+      checkedAt: canonicalCheckedAt(config.agentAttestation.checkedAt),
+      checks,
+    };
+    request = {
+      schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+      launchWallet,
+      chainId: MAINNET_CHAIN_ID,
+      nonce,
+      sourceDescriptor,
+      sourceBundleManifest: sourceBundle.manifest,
+      graphBundle,
+      launchProfile,
+      launchProfileSelection: launchProfileBinding,
+      launchProfileHash,
+      launchIntentHash,
+      fundingAuthorization: funding.fundingAuthorization,
+      fundingIntentHash,
+      agentAttestation,
+      verificationBundle,
+    };
   }
   const requestBytes = Buffer.from(`${canonicalizeJson(request)}\n`, "utf8");
   if (requestBytes.byteLength > MAX_REQUEST_BYTES) {
@@ -190,9 +297,15 @@ export async function buildLaunch({ configPath }) {
   const receipt = {
     schemaVersion: apiVersion === "v1"
       ? "programmable.launch-pack-receipt.v1"
-      : "programmable.launch-pack-receipt.v2",
+      : apiVersion === "v2"
+        ? "programmable.launch-pack-receipt.v2"
+        : "programmable.launch-pack-receipt.v3",
     package: { name: "@programmable/launch", version: PACKAGE_VERSION },
-    openapi: apiVersion === "v1" ? OPENAPI_URL_V1 : OPENAPI_URL_V2,
+    openapi: apiVersion === "v1"
+      ? OPENAPI_URL_V1
+      : apiVersion === "v2"
+        ? OPENAPI_URL_V2
+        : OPENAPI_URL_V3,
     apiVersion,
     requestSha256,
     sourceBundleDigest: sourceBundle.sourceBundleDigest,
@@ -201,12 +314,16 @@ export async function buildLaunch({ configPath }) {
     verificationBundleHash,
     launchProfileHash,
     launchIntentHash,
+    fundingIntentHash,
     predictions,
   };
   if (apiVersion === "v1") {
     delete receipt.apiVersion;
     delete receipt.launchProfileHash;
     delete receipt.launchIntentHash;
+    delete receipt.fundingIntentHash;
+  } else if (apiVersion === "v2") {
+    delete receipt.fundingIntentHash;
   }
   const receiptBytes = Buffer.from(`${canonicalizeJson(receipt)}\n`, "utf8");
   const result = {
@@ -220,10 +337,11 @@ export async function buildLaunch({ configPath }) {
     verificationBundleHash,
     predictions,
   };
-  if (apiVersion === "v2") {
+  if (apiVersion !== "v1") {
     result.launchProfileHash = launchProfileHash;
     result.launchIntentHash = launchIntentHash;
   }
+  if (apiVersion === "v3") result.fundingIntentHash = fundingIntentHash;
   return result;
 }
 
@@ -241,9 +359,13 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
     verificationBundleHash: built.verificationBundleHash,
     predictions: built.predictions,
   };
-  if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V2) {
+  if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V2
+    || built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
     result.launchProfileHash = built.launchProfileHash;
     result.launchIntentHash = built.launchIntentHash;
+  }
+  if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
+    result.fundingIntentHash = built.fundingIntentHash;
   }
   return result;
 }
@@ -268,14 +390,36 @@ function assertPackConfig(config) {
     apiVersion = "v2";
     assertExactKeys(config, [...commonKeys, "launchProfile"], "pack config");
     validateLaunchProfileSelection(config.launchProfile);
+  } else if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V3) {
+    apiVersion = "v3";
+    assertExactKeys(config, [
+      ...commonKeys,
+      "launchProfile",
+      "fundingAuthorization",
+      "fundingSignaturePatch",
+    ], "pack config");
+    validateDirectNativeProfileSelection(config.launchProfile);
   } else {
     throw new TypeError(
-      `pack config schemaVersion must be ${PACK_CONFIG_SCHEMA_V1} or ${PACK_CONFIG_SCHEMA_V2}`,
+      `pack config schemaVersion must be ${PACK_CONFIG_SCHEMA_V1}, ${PACK_CONFIG_SCHEMA_V2}, or ${PACK_CONFIG_SCHEMA_V3}`,
     );
   }
   if (config.chainId !== MAINNET_CHAIN_ID) throw new TypeError("pack config chainId must be string 1");
-  if (!Array.isArray(config.targets) || config.targets.length === 0 || config.targets.length > 16) {
-    throw new TypeError("pack config targets must contain between 1 and 16 entries");
+  if (!Array.isArray(config.targets) || config.targets.length < 2 || config.targets.length > 16) {
+    throw new TypeError("pack config targets must contain between 2 and 16 entries");
+  }
+  if (apiVersion === "v3" && config.targets.length < 3) {
+    throw new TypeError("direct-native V3 pack config targets must contain between 3 and 16 entries");
+  }
+  if (apiVersion === "v3") {
+    assertExactKeys(config.pool, [
+      "tokenTargetId",
+      "hookTargetId",
+      "fee",
+      "tickSpacing",
+      "quoteCurrency",
+    ], "pack config pool");
+    getAddress(config.pool.quoteCurrency);
   }
   assertExactKeys(config.source, [
     "root",
@@ -307,6 +451,15 @@ function assertPackConfig(config) {
     throw new TypeError("agentAttestation.checks must contain between 1 and 64 checks");
   }
   return apiVersion;
+}
+
+function graphPoolFromV3Config(pool) {
+  return {
+    tokenTargetId: pool.tokenTargetId,
+    hookTargetId: pool.hookTargetId,
+    fee: pool.fee,
+    tickSpacing: pool.tickSpacing,
+  };
 }
 
 async function buildAttestationEvidence(attestation, sourceRoot) {

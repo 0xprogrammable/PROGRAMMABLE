@@ -52,14 +52,19 @@ describe("Custom Launch API documentation", () => {
     ).not.toContain("publish reusable hook logic");
   });
 
-  it("keeps prepared artifacts separate from authorized wallet transactions", () => {
+  it("keeps V2 preparation and the V3 two-action wallet handoff explicit", () => {
     for (const source of [gitBookGuide, websiteGuide, developerDocsMarkdown]) {
       expect(source).toContain("prepared");
       expect(source).toContain("authorized");
       expect(source).toMatch(/prepared[\s\S]{0,240}(?:no wallet transaction|walletTransaction[^\n]{0,80}(?:null|both null))/i);
       expect(source).toMatch(/authorized[\s\S]{0,240}(?:walletTransaction|wallet transaction)/i);
     }
-    expect(createGuide).toContain("Stop at authorized");
+    expect(createGuide).toContain("For V2, submit the byte-identical request");
+    expect(createGuide).toContain("/openapi/custom-launch-v3.json");
+    expect(createGuide).toContain("awaiting_funding_authorization");
+    expect(createGuide).toContain("EIP-3009 funding authorization");
+    expect(createGuide).toContain("fresh, separate review");
+    expect(createGuide).toContain("do not submit until discovery marks it");
     expect(createGuide).toContain("Never sign or broadcast automatically");
   });
 
@@ -72,6 +77,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/do not (?:copy test-only hashes|enter\s+derived hashes by hand)/i);
     }
     expect(createGuide).toContain("/openapi/custom-launch-v2.json");
+    expect(createGuide).toContain("/openapi/custom-launch-v3.json");
     expect(createGuide).not.toMatch(/Hookbuilder-Skill|Hook Builder packages/);
   });
 

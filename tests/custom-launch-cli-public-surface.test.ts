@@ -48,6 +48,31 @@ describe("public Custom Launch CLI surface", () => {
             "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
         },
       },
+      integrationPreview: {
+        status: "integration-pending",
+        apiVersion: "3",
+        publicAuthorization: false,
+        createPath: "/v3/custom-launches",
+        openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
+        profileId: "programmable.direct-native-hook-graph.v1",
+        profileRevision: 1,
+        requestSchemaVersion: "programmable.custom-launch-create-request.v3",
+        minimumTargets: 3,
+        maximumTargets: 16,
+        referenceKernel: "ProgrammableVolumeFeeHookV2",
+        hookPermissionMask: "0x20cc",
+        fundingAuthorization: {
+          method: "eip-3009-receive-with-authorization",
+          createRequestSignatureIncluded: false,
+          fundingIntentStage: "pre-signature",
+        },
+        activationBlockers: [
+          "v3-route-implementation",
+          "permit-authority-admission-binding",
+          "end-to-end-wallet-handoff-verification",
+        ],
+        errorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
+      },
       releaseCandidate: {
         status: "promoted-to-public",
         publicAuthorization: true,
@@ -97,6 +122,13 @@ describe("public Custom Launch CLI surface", () => {
           createHttpStatus: 202,
           replayHttpStatus: 200,
           retryAfter: "honor-on-429-or-503",
+        },
+        v3: {
+          status: "integration-pending",
+          publicAuthorization: false,
+          createHttpStatus: 503,
+          createErrorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
+          retryable: false,
         },
       },
     });
@@ -292,6 +324,270 @@ describe("public Custom Launch CLI surface", () => {
       Object.values(record).forEach(visit);
     };
     visit(v2);
+  });
+
+  it("publishes a parallel fail-closed V3 profile contract without changing V2", () => {
+    const v2 = JSON.parse(readFileSync(
+      join(root, "public/openapi/custom-launch-v2.json"),
+      "utf8",
+    ));
+    const v3 = JSON.parse(readFileSync(
+      join(root, "public/openapi/custom-launch-v3.json"),
+      "utf8",
+    ));
+
+    expect(v3.openapi).toBe("3.1.0");
+    expect(v3["x-programmable-availability"]).toMatchObject({
+      status: "integration-pending",
+      publicAuthorized: false,
+      publicCreate: {
+        status: "integration-pending",
+        path: "/v3/custom-launches",
+        httpStatus: 503,
+        errorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
+      },
+      stableProductionVersion: "2",
+      stableOpenApiUrl:
+        "https://programmable.market/openapi/custom-launch-v2.json",
+      activationBlockers: [
+        "v3-route-implementation",
+        "permit-authority-admission-binding",
+        "end-to-end-wallet-handoff-verification",
+      ],
+    });
+    expect(Object.keys(v3.paths).sort()).toEqual([
+      "/v3/custom-launches",
+      "/v3/custom-launches/{launchId}",
+      "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization",
+    ]);
+    expect(v3.paths["/v3/custom-launches"].post
+      ["x-programmable-public-availability"]).toBe("integration-pending");
+    expect(v3.paths["/v3/custom-launches"].post.responses["503"]
+      .headers["Retry-After"].schema.const).toBe("30");
+    expect(v3.paths["/v3/custom-launches"].post.responses["202"])
+      .toBeDefined();
+    expect(v3.paths["/v3/custom-launches"].get.responses["200"])
+      .toBeDefined();
+    expect(v3.paths["/v3/custom-launches/{launchId}"].get.responses["200"])
+      .toBeDefined();
+    const fundingSubmission = v3.paths[
+      "/v3/wallet-admin/custom-launches/{launchId}/funding-authorization"
+    ].post;
+    expect(fundingSubmission.security).toEqual([
+      { CustomLaunchWebsiteToken: [] },
+    ]);
+    expect(fundingSubmission.parameters.map((parameter: { name: string }) =>
+      parameter.name)).toEqual([
+      "launchId",
+      "Idempotency-Key",
+      "X-Programmable-Privy-User-Id",
+      "X-Programmable-Wallet-Address",
+    ]);
+    expect(fundingSubmission.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/FundingAuthorizationSubmissionV1");
+    expect(Object.keys(fundingSubmission.responses).sort()).toEqual([
+      "200", "202", "400", "401", "403", "404", "409", "503",
+    ]);
+    expect(v3["x-programmable-funding-boundary"]
+      .excludedFromFundingIntentHash).toEqual([
+      "signature",
+      "initializerCalldataHash",
+      "graphCommitment",
+      "permitDigest",
+    ]);
+
+    const request = v3.components.schemas.CustomLaunchCreateRequestV3;
+    expect(request.additionalProperties).toBe(false);
+    expect(request.required).toEqual([
+      "schemaVersion",
+      "launchWallet",
+      "chainId",
+      "nonce",
+      "sourceDescriptor",
+      "sourceBundleManifest",
+      "graphBundle",
+      "launchProfile",
+      "launchProfileSelection",
+      "launchProfileHash",
+      "launchIntentHash",
+      "fundingAuthorization",
+      "fundingIntentHash",
+      "agentAttestation",
+      "verificationBundle",
+    ]);
+    expect(request.properties.schemaVersion.const)
+      .toBe("programmable.custom-launch-create-request.v3");
+    expect(request.properties.fundingIntentHash.$ref)
+      .toBe("./custom-launch-v2.json#/components/schemas/LowerHex32");
+    expect(Object.keys(request.properties)).not.toContain("signature");
+
+    const graph = v3.components.schemas.CustomGraphBundleV3;
+    expect(graph.allOf[1].properties.targets).toMatchObject({
+      minItems: 3,
+      maxItems: 16,
+    });
+    expect(v3["x-programmable-profile"]).toMatchObject({
+      profileId: "programmable.direct-native-hook-graph.v1",
+      profileRevision: 1,
+      productionLaunchAuthorized: false,
+      requiredHookPermissionMask: 8396,
+      requiredHookPermissionMaskHex: "0x20cc",
+      arbitraryHookCodeAuthorized: false,
+    });
+    expect(v3.components.schemas.CanonicalVolumeFeeEnforcementV1.properties)
+      .toMatchObject({
+        mode: { const: "canonical-volume-fee-v2" },
+        requiredHookPermissionMask: { const: 8396 },
+        hookSourceSha256: {
+          const:
+            "sha256:41294f0701d3911b740a0cea160b936cb0eea4bdf2a664e7c6674a1c1e1b519d",
+        },
+      });
+
+    const profile = v3.components.schemas.DirectNativeHookGraphProfileV1;
+    expect(profile.required).toEqual(expect.arrayContaining([
+      "permitAuthority",
+      "permitAuthorityRuntimeCodeHash",
+      "feeEnforcement",
+      "platformFee",
+    ]));
+    expect(profile.properties.permitAuthority.const)
+      .toBe("0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b");
+    expect(profile.properties).toMatchObject({
+      profileVersion: { const: "1.0.0" },
+      productionLaunchAuthorized: { const: false },
+      routerRuntimeCodeHash: {
+        const:
+          "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546",
+      },
+      permitAuthorityRuntimeCodeHash: {
+        const:
+          "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+      },
+      graphFactoryRuntimeCodeHash: {
+        const:
+          "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+      },
+      poolManagerRuntimeCodeHash: {
+        const:
+          "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+      },
+      fundingTokenRuntimeCodeHash: {
+        const:
+          "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+      },
+    });
+    expect(profile.properties.platformFee.$ref)
+      .toBe("#/components/schemas/InclusivePlatformFeeV1");
+    expect(v3.components.schemas.InclusivePlatformFeeV1.properties)
+      .toMatchObject({
+        accountingMode: { const: "inclusive-selected-total" },
+        rateDenominator: { const: "1000000" },
+        programmableFeeHundredthsOfBip: { const: "1000" },
+        minimumEffectiveSelectedHundredthsOfBip: { const: "1000" },
+      });
+    expect(v3.components.schemas.SelectedFeeHundredthsOfBipV1.pattern)
+      .toBe("^(?:0|[1-9][0-9]{0,5})$");
+    expect(v3.components.schemas.DirectNativeTargetRolesV1.properties
+      .initializerTargetId.description).toContain("componentKind is other");
+
+    const binding = v3.components.schemas.DirectNativeProfileSelectionBindingV1;
+    expect(binding.required).toEqual(expect.arrayContaining([
+      "expectedPoolId",
+      "fundingSignaturePatch",
+      "platformFeeBinding",
+    ]));
+    const patch = v3.components.schemas.FundingSignaturePatchDescriptorV1;
+    expect(patch.required).toEqual([
+      "schemaVersion",
+      "targetId",
+      "unsignedInitializerCalldataSha256",
+      "initializerCalldataLengthBytes",
+      "signatureEncoding",
+      "rOffsetBytes",
+      "sOffsetBytes",
+      "vOffsetBytes",
+    ]);
+    expect(patch.properties.signatureEncoding.const)
+      .toBe("eip3009-r-s-v-abi-words");
+    expect(v3.components.schemas.DirectNativePoolKeyV1.properties.fee)
+      .toMatchObject({ type: "integer", minimum: 0, maximum: 999999 });
+    expect(v3.components.schemas.DirectNativePoolKeyV1.properties.tickSpacing)
+      .toMatchObject({ type: "integer", minimum: 1, maximum: 32767 });
+    const funding = v3.components.schemas.Eip3009FundingAuthorizationDescriptorV1;
+    expect(funding.required).toEqual([
+      "schemaVersion",
+      "method",
+      "token",
+      "from",
+      "to",
+      "value",
+      "validAfter",
+      "validBefore",
+      "nonce",
+    ]);
+    expect(Object.keys(funding.properties)).not.toEqual(
+      expect.arrayContaining(["signature", "v", "r", "s"]),
+    );
+    expect(v3.components.schemas.FundingAuthorizationSubmissionV1
+      .properties.signature.pattern).toBe("^0x[0-9a-f]{130}$");
+    expect(v3.components.schemas.CustomLaunchResourceV3.properties.status.enum)
+      .toEqual(expect.arrayContaining([
+        "awaiting_funding_authorization",
+        "funding_authorization_verified",
+        "authorized",
+      ]));
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[0]
+      .properties.stage.const).toBe("funding-signature-required");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[2]
+      .properties.stage.const).toBe("router-transaction-required");
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf.every(
+      (variant: { required: string[] }) =>
+        variant.required.includes("fundingBoundary"),
+    )).toBe(true);
+    expect(v3.components.schemas.FundingBoundaryV3.properties).toMatchObject({
+      approvalTransactionRequired: { const: false },
+      permit2Used: { const: false },
+      fundingSignatureProducedByService: { const: false },
+      walletTransactionBroadcastByService: { const: false },
+    });
+    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[2]
+      .properties.actionRequired.required).toEqual(expect.arrayContaining([
+      "permitDigest",
+      "initializerCalldataHash",
+    ]));
+
+    const serialized = JSON.stringify(v3);
+    expect(serialized).not.toContain('"additive":true');
+
+    const documents = new Map<string, unknown>([
+      ["", v3],
+      ["./custom-launch-v2.json", v2],
+    ]);
+    const resolvePointer = (document: unknown, pointer: string): unknown =>
+      pointer.slice(2).split("/").reduce<unknown>((current, segment) => {
+        expect(current).toBeTypeOf("object");
+        expect(current).not.toBeNull();
+        const key = segment.replaceAll("~1", "/").replaceAll("~0", "~");
+        return (current as Record<string, unknown>)[key];
+      }, document);
+    const visit = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (value === null || typeof value !== "object") return;
+      const record = value as Record<string, unknown>;
+      if (typeof record.$ref === "string") {
+        const [documentPath = "", fragment = ""] = record.$ref.split("#");
+        const document = documents.get(documentPath);
+        expect(document, `unknown OpenAPI document ${documentPath}`).toBeDefined();
+        expect(fragment.startsWith("/")).toBe(true);
+        expect(resolvePointer(document, `#${fragment}`)).toBeDefined();
+      }
+      Object.values(record).forEach(visit);
+    };
+    visit(v3);
   });
 
   it("ships the executable no-broadcast example in the public package", () => {

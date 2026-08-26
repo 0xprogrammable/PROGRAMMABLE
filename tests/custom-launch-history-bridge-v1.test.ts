@@ -7,12 +7,14 @@ import {
   CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
   CUSTOM_LAUNCH_LIST_SCHEMA_V1,
   CUSTOM_LAUNCH_LIST_SCHEMA_V2,
+  CUSTOM_LAUNCH_LIST_SCHEMA_V3,
 } from "../lib/server/custom-launch/launch-history-bridge-v1";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
 const LAUNCH_ID = "40000000-0000-4000-8000-000000000004";
 const V2_LAUNCH_ID = "50000000-0000-4000-8000-000000000005";
+const V3_LAUNCH_ID = "60000000-0000-4000-8000-000000000006";
 const WEBSITE_TOKEN = "w".repeat(43);
 
 function launch(ownerWallet: string = WALLET) {
@@ -68,6 +70,26 @@ function launchV2(ownerWallet: string = WALLET) {
   };
 }
 
+function launchV3(ownerWallet: string = WALLET) {
+  return {
+    schemaVersion: "programmable.custom-launch.v3",
+    launchId: V3_LAUNCH_ID,
+    requestId: V3_LAUNCH_ID,
+    onchainLaunchId: null,
+    routeId: "custom-launch:create:v3",
+    ownerWallet,
+    status: "awaiting_funding_authorization",
+    requestHash: `sha256:${"55".repeat(32)}`,
+    launchProfileHash: `sha256:${"66".repeat(32)}`,
+    launchIntentHash: `sha256:${"77".repeat(32)}`,
+    fundingIntentHash: `0x${"88".repeat(32)}`,
+    createdAt: "2026-08-24T12:02:00.000Z",
+    updatedAt: "2026-08-24T12:02:01.000Z",
+    output: null,
+    failure: null,
+  };
+}
+
 function backendJson(body: Readonly<Record<string, unknown>>) {
   return new Response(JSON.stringify({
     schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V1,
@@ -88,8 +110,34 @@ function backendJsonV2(body: Readonly<Record<string, unknown>>) {
   });
 }
 
+function backendJsonV3(body: Readonly<Record<string, unknown>>) {
+  return new Response(JSON.stringify({
+    schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V3,
+    ...body,
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 function missingV2() {
   return new Response(null, { status: 404 });
+}
+
+function v3IntegrationPending() {
+  return new Response(JSON.stringify({
+    schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V3,
+    error: {
+      code: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
+      message: "V3 launch integration is not active yet.",
+    },
+  }), {
+    status: 503,
+    headers: {
+      "content-type": "application/json",
+      "retry-after": "30",
+    },
+  });
 }
 
 describe("developer launch history same-origin bridge", () => {
@@ -98,12 +146,15 @@ describe("developer launch history same-origin bridge", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    authenticate.mockReset();
+    fetchBackend.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     authenticate.mockResolvedValue({
       privyUserId: "did:privy:test-user",
       privySessionId: "session-1",
       wallets: [WALLET],
     });
+    fetchBackend.mockResolvedValue(new Response(null, { status: 404 }));
   });
 
   function bridge() {
@@ -148,6 +199,9 @@ describe("developer launch history same-origin bridge", () => {
     );
     expect((fetchBackend.mock.calls[1]![0] as URL).toString()).toBe(
       "https://custom-launch-api.example/v2/wallet-admin/custom-launches?limit=5",
+    );
+    expect((fetchBackend.mock.calls[2]![0] as URL).toString()).toBe(
+      "https://custom-launch-api.example/v3/wallet-admin/custom-launches?limit=5",
     );
     const headers = new Headers(init.headers);
     expect(headers.get("authorization")).toBe(`Bearer ${WEBSITE_TOKEN}`);
@@ -291,6 +345,118 @@ describe("developer launch history same-origin bridge", () => {
     });
   });
 
+  it("merges the additive compact V3 wallet lane without exposing output", async () => {
+    fetchBackend
+      .mockResolvedValueOnce(backendJson({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV3({
+        launches: [launchV3()],
+        nextCursor: null,
+      }));
+
+    const response = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&limit=5`,
+    ));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
+      launches: [launchV3()],
+      nextCursor: null,
+    });
+  });
+
+  it("keeps V1 and V2 history available during exact V3 integration pending", async () => {
+    fetchBackend
+      .mockResolvedValueOnce(backendJson({ launches: [launch()], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV2({
+        launches: [launchV2()],
+        nextCursor: null,
+      }))
+      .mockResolvedValueOnce(v3IntegrationPending());
+
+    const response = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&limit=5`,
+    ));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
+      launches: [launchV2(), launch()],
+      nextCursor: null,
+    });
+  });
+
+  it("forwards one exact V3 funding signature without echoing it", async () => {
+    const signature = `0x${"11".repeat(64)}1b`;
+    const resource = {
+      ...launchV3(),
+      status: "funding_authorization_verified",
+      output: {
+        schemaVersion: "programmable.custom-launch-authorization-result.v3",
+        integrationState: "ready",
+        stage: "funding-signature-verified",
+        actionRequired: null,
+      },
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 202,
+      headers: { "content-type": "application/json" },
+    }));
+    const submission = {
+      schemaVersion: "programmable.custom-launch-funding-authorization-signature.v1",
+      fundingIntentHash: launchV3().fundingIntentHash,
+      typedDataDigest: `0x${"99".repeat(32)}`,
+      signature,
+    };
+    const response = await bridge().submitFundingAuthorization(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}/funding-authorization?walletAddress=${WALLET}&version=v3`,
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: "Bearer browser-privy-token",
+          "content-type": "application/json",
+          "idempotency-key": "60000000-0000-4000-8000-000000000006",
+        },
+        body: JSON.stringify(submission),
+      },
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body).toEqual(resource);
+    expect(JSON.stringify(body)).not.toContain(signature);
+    const [url, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      `https://custom-launch-api.example/v3/wallet-admin/custom-launches/${V3_LAUNCH_ID}/funding-authorization`,
+    );
+    expect(new Headers(init.headers).get("idempotency-key")).toBe(
+      "60000000-0000-4000-8000-000000000006",
+    );
+    expect(JSON.parse(String(init.body))).toEqual(submission);
+  });
+
+  it("rejects a funding signature without exact V3 binding before backend access", async () => {
+    const response = await bridge().submitFundingAuthorization(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}/funding-authorization?walletAddress=${WALLET}&version=v3`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          schemaVersion: "programmable.custom-launch-funding-authorization-signature.v1",
+          fundingIntentHash: launchV3().fundingIntentHash,
+          typedDataDigest: `0x${"99".repeat(32)}`,
+          signature: `0x${"11".repeat(64)}1b`,
+        }),
+      },
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe("idempotency_key_invalid");
+    expect(fetchBackend).not.toHaveBeenCalled();
+  });
+
   it("keeps each backend cursor in its own route lane", async () => {
     const v1Cursor = cursor();
     const v2Cursor = cursor(V2_LAUNCH_ID, "2026-08-24T12:01:00.000Z");
@@ -303,8 +469,10 @@ describe("developer launch history same-origin bridge", () => {
         launches: [launchV2()],
         nextCursor: v2Cursor,
       }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(backendJson({ launches: [], nextCursor: null }))
-      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }));
+      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     const first = await bridge().list(new Request(
       `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&limit=5`,
@@ -317,9 +485,9 @@ describe("developer launch history same-origin bridge", () => {
     ));
 
     expect(second.status).toBe(200);
-    expect((fetchBackend.mock.calls[2]![0] as URL).searchParams.get("cursor"))
-      .toBe(v1Cursor);
     expect((fetchBackend.mock.calls[3]![0] as URL).searchParams.get("cursor"))
+      .toBe(v1Cursor);
+    expect((fetchBackend.mock.calls[4]![0] as URL).searchParams.get("cursor"))
       .toBe(v2Cursor);
     expect(await second.json()).toEqual({
       schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,

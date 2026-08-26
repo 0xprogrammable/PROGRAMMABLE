@@ -66,6 +66,33 @@ export function programmableWellKnownDocumentV1(
             "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
         }),
       }),
+      integrationPreview: Object.freeze({
+        status: "integration-pending" as const,
+        apiVersion: "3" as const,
+        publicAuthorization: false as const,
+        createPath: "/v3/custom-launches" as const,
+        openApiUrl:
+          "https://programmable.market/openapi/custom-launch-v3.json",
+        profileId: "programmable.direct-native-hook-graph.v1" as const,
+        profileRevision: 1 as const,
+        requestSchemaVersion:
+          "programmable.custom-launch-create-request.v3" as const,
+        minimumTargets: 3 as const,
+        maximumTargets: 16 as const,
+        referenceKernel: "ProgrammableVolumeFeeHookV2" as const,
+        hookPermissionMask: "0x20cc" as const,
+        fundingAuthorization: Object.freeze({
+          method: "eip-3009-receive-with-authorization" as const,
+          createRequestSignatureIncluded: false as const,
+          fundingIntentStage: "pre-signature" as const,
+        }),
+        activationBlockers: Object.freeze([
+          "v3-route-implementation",
+          "permit-authority-admission-binding",
+          "end-to-end-wallet-handoff-verification",
+        ] as const),
+        errorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING" as const,
+      }),
       releaseCandidate: Object.freeze({
         status: "promoted-to-public" as const,
         publicAuthorization: true as const,
@@ -122,6 +149,13 @@ export function programmableWellKnownDocumentV1(
           replayHttpStatus: 200 as const,
           retryAfter: "honor-on-429-or-503" as const,
         }),
+        v3: Object.freeze({
+          status: "integration-pending" as const,
+          publicAuthorization: false as const,
+          createHttpStatus: 503 as const,
+          createErrorCode: "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING" as const,
+          retryable: false as const,
+        }),
       }),
       legacyIntake: Object.freeze({
         registry: "closed" as const,
@@ -152,8 +186,8 @@ export function programmableWellKnownDocumentV1(
           ? "1"
           : null,
         note: manifest.status === "live"
-          ? "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live and V1 creation is read-only. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
-          : "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. V1 history reads remain live and V1 creation is read-only. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
+          ? "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. The V3 direct-native profile is an integration-pending schema preview, not a live launch capability. V1 history reads remain live and V1 creation is read-only. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
+          : "Public V2 launch creation and lifecycle reads are live on Ethereum Mainnet. The V3 direct-native profile is an integration-pending schema preview, not a live launch capability. V1 history reads remain live and V1 creation is read-only. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
       }),
     }),
     compatibility: Object.freeze({

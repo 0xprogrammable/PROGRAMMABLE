@@ -16,6 +16,56 @@ and current resources. The [V1 OpenAPI document](https://programmable.market/ope
 compatibility contract. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is
 executable by a cold external agent.
 
+## V3 direct-native integration preview
+
+The versioned [`programmable.direct-native-hook-graph.v1` OpenAPI
+preview](https://programmable.market/openapi/custom-launch-v3.json) freezes the V3 create, list and single-resource
+shapes without activating them. Public V2 remains the stable production creation contract. Discovery reports V3 as
+`integration-pending`, `productionLaunchAuthorized: false`; V3 calls fail closed with `503 CUSTOM_LAUNCH_V3_INTEGRATION_PENDING` and
+`Retry-After: 30` until the V3 routes and existing permit-authority admission binding have been implemented and
+verified end to end. Do not loop create attempts or fall back to a different create version.
+
+The Router primitive supports 2–16 targets; this V3 profile requires 3–16 direct CREATE2 graph targets because its
+token, hook and initializer roles are distinct. It currently authorizes only the exact canonical
+`ProgrammableVolumeFeeHookV2` kernel, not arbitrary self-reported hook code. Its exact hook mask is `0x20cc` (8,396),
+and return-delta permissions require the matching action permissions. The request binds exact source, compiler,
+creation bytecode, runtime, pool key, predicted initializer, expected pool ID and a flat
+`programmable.eip3009-signature-patch.v1` descriptor. The patch names the initializer target, unsigned calldata hash,
+calldata length and distinct selector-relative ABI-word offsets for `r`, `s` and `v`; those words must be zero before
+the wallet signature exists. The initializer has per-launch exact source, build, runtime, final-calldata and simulation
+evidence. There is no separate global initializer trust root.
+
+The V3 platform share is inclusive inside the selected buy or sell total, never added on top. Selected totals are
+canonical decimal strings from 0 through 999,999 hundredths of a bip. For each direction the backend derives and
+discloses `effectiveTotal = max(selectedTotal, 1000)`, `programmableShare = 1000` and
+`projectShare = effectiveTotal - 1000`. The request never self-declares the effective or project result. The fixed
+Programmable share is therefore `1,000 / 1,000,000 = 0.10% = 10 bps` of the documented kernel basis, paid to
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The V3 pool fee is a static integer from 0 through 999,999; this
+profile rejects the `0x800000` dynamic-fee sentinel.
+
+Funding uses an unsigned nine-field `programmable.funding-authorization-descriptor.v1` for USDC EIP-3009
+`receiveWithAuthorization`. Its separate `fundingIntentHash` is derived before a signature from the fixed route, launch
+intent, wallet, predicted initializer, amount and validity window; it does not hash a final graph commitment containing
+signature-bearing calldata. It also excludes the signature itself, `initializerCalldataHash` and `permitDigest`.
+The create request contains no signature, `v`, `r` or `s`.
+
+After activation, one single-resource flow keeps the two wallet actions separate:
+
+1. The API-key request reaches `awaiting_funding_authorization` and returns the exact `ReceiveWithAuthorization`
+   typed data and digest.
+2. The website checks the connected wallet, chain, USDC domain, `to`, value, nonce and
+   `validAfter < now < validBefore`, then requests `eth_signTypedData_v4` only after an explicit user action. The
+   65-byte lower-case `r || s || v` signature is posted once to the resource-specific wallet-admin URL. The CLI does
+   not accept or submit this wallet signature.
+3. The backend verifies and inserts the signature only at the bound zero ABI words, derives the final graph commitment,
+   permit, artifact and Router transaction, and requires the exact simulation postconditions.
+4. The website revalidates the exact Router transaction and asks for a second explicit wallet send. Nothing
+   auto-signs or auto-broadcasts.
+
+The public API key remains available only through `PROGRAMMABLE_API_KEY` or the supported operating-system secret
+store. There is no key argument or prompt. The V3 preview includes no ERC-20 approval, Permit2 approval, signer or
+platform-approval shortcut.
+
 ## Rev3 fee policy
 
 The frozen Rev3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
