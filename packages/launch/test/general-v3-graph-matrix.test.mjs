@@ -11,7 +11,7 @@ import {
   MAINNET_USDC,
   POOL_MANAGER,
 } from "../src/constants.mjs";
-import { packLaunch } from "../src/pack.mjs";
+import { buildLaunch, packLaunch } from "../src/pack.mjs";
 import { validateLaunchFile } from "../src/validate.mjs";
 
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
@@ -41,6 +41,7 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
 
     assert.equal(fixedValidation.reproducedFromConfig, true);
     assert.equal(fixedValidation.requestSha256, fixedPack.requestSha256);
+    assert.equal(fixedRequest.launchProfile.profileVersion, "3.1.0");
     assert.equal(fixedRequest.graphBundle.targets.length, 9);
     assert.equal(fixedRequest.verificationBundle.components.length, 9);
     assert.deepEqual(fixedRequest.launchProfileSelection.targetRoles, {
@@ -105,6 +106,20 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
       vOffsetBytes: 68,
     });
     assert.equal(Object.hasOwn(fixedRequest, "signature"), false);
+
+    const legacyBuilt = await buildLaunch({
+      configPath: fixture.configPath,
+      directNativeProfileVersion: "3.0.0",
+    });
+    const legacyLaunchPath = path.join(fixture.root, "legacy-launch.json");
+    await writeFile(legacyLaunchPath, legacyBuilt.requestBytes);
+    const legacyValidation = await validateLaunchFile({
+      launchPath: legacyLaunchPath,
+      configPath: fixture.configPath,
+    });
+    assert.equal(legacyBuilt.request.launchProfile.profileVersion, "3.0.0");
+    assert.equal(legacyValidation.reproducedFromConfig, true);
+    assert.equal(legacyValidation.requestSha256, legacyBuilt.requestSha256);
 
     const dynamicConfig = structuredClone(fixture.config);
     dynamicConfig.nonce = `0x${"33".repeat(32)}`;

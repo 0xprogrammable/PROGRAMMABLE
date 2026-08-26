@@ -89,7 +89,12 @@ export async function validateLaunchFile({ launchPath, configPath }) {
   const result = isV3 ? validateV3LaunchRequest(request) : validateLaunchRequest(request);
   let diagnostics = [];
   if (configPath !== undefined) {
-    const rebuilt = await buildLaunch({ configPath });
+    const rebuilt = await buildLaunch({
+      configPath,
+      ...(isV3
+        ? { directNativeProfileVersion: request?.launchProfile?.profileVersion }
+        : {}),
+    });
     diagnostics = rebuilt.diagnostics ?? [];
     if (!bytes.equals(rebuilt.requestBytes)) {
       throw new TypeError(

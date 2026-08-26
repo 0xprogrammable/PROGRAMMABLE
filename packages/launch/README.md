@@ -36,7 +36,8 @@ the exact Router transaction, then the connected controller reviews and signs it
 ## V3 general hook profile
 
 Package `3.3.0` supports production general profile
-`programmable.direct-native-hook-graph.v1` version `3.0.0`. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
+`programmable.direct-native-hook-graph.v1` version `3.1.0`. New packs use `3.1.0`; exact `3.0.0` requests remain
+reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
 
 The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook

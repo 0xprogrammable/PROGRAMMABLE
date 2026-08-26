@@ -29,6 +29,7 @@ import {
   DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V2,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY,
   DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA,
   FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA,
   FUNDING_AUTHORIZATION_INPUT_SCHEMA,
@@ -111,7 +112,7 @@ const PLATFORM_FEE_PROOF_POLICY = Object.freeze({
   subject: "final-graph-commitment-and-runtime-set",
   activationStatus: "live",
 });
-const PLATFORM_ADMISSION_BLOCKING_FINDING_RULES = Object.freeze([
+const LEGACY_PLATFORM_ADMISSION_BLOCKING_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: Object.freeze(["any"]) }),
   Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: Object.freeze(["hook"]) }),
   Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
@@ -126,24 +127,42 @@ const PLATFORM_ADMISSION_BLOCKING_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "RUNTIME_DELEGATECALL", targetRoles: Object.freeze(["token", "hook"]) }),
   Object.freeze({ code: "RUNTIME_SELFDESTRUCT", targetRoles: Object.freeze(["token", "hook"]) }),
 ]);
-const PLATFORM_ADMISSION_POLICY = Object.freeze({
-  schemaVersion: DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA,
-  mode: "deterministic-exact-source-graph-static-baseline-v1",
-  receiptSchemaVersion: "programmable.platform-admission-receipt.v1",
-  engineId: "programmable.direct-native-static-admission",
-  engineVersion: "1.0.0",
-  exactSourceCompilerGraphBindingRequired: true,
-  staticBaselineGateVersion: "1.0.0",
-  blockingFindingRules: PLATFORM_ADMISSION_BLOCKING_FINDING_RULES,
-  warningDisposition: "bound-and-visible",
-  noBlockingFindingDisposition: "router-simulation-eligible",
-  blockingFindingDisposition: "action-required",
-  routerSimulationRequiredBeforeAuthorization: true,
-  receiptAuthority: "platform-only",
-  assurance: "launch-admission-only",
-  safetyClaim: false,
-  feeBehaviorClaim: false,
-});
+const PLATFORM_ADMISSION_BLOCKING_FINDING_RULES = Object.freeze([
+  Object.freeze({ code: "RUNTIME_CALLCODE", targetRoles: Object.freeze(["any"]) }),
+  Object.freeze({ code: "RUNTIME_SELFDESTRUCT", targetRoles: Object.freeze(["any"]) }),
+  Object.freeze({ code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: Object.freeze(["any"]) }),
+  Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_INVALID", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
+]);
+const PLATFORM_ADMISSION_POLICY = platformAdmissionPolicy(
+  PLATFORM_ADMISSION_BLOCKING_FINDING_RULES,
+);
+const LEGACY_PLATFORM_ADMISSION_POLICY = platformAdmissionPolicy(
+  LEGACY_PLATFORM_ADMISSION_BLOCKING_FINDING_RULES,
+);
+
+function platformAdmissionPolicy(blockingFindingRules) {
+  return Object.freeze({
+    schemaVersion: DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA,
+    mode: "deterministic-exact-source-graph-static-baseline-v1",
+    receiptSchemaVersion: "programmable.platform-admission-receipt.v1",
+    engineId: "programmable.direct-native-static-admission",
+    engineVersion: "1.0.0",
+    exactSourceCompilerGraphBindingRequired: true,
+    staticBaselineGateVersion: "1.0.0",
+    blockingFindingRules,
+    warningDisposition: "bound-and-visible",
+    noBlockingFindingDisposition: "router-simulation-eligible",
+    blockingFindingDisposition: "action-required",
+    routerSimulationRequiredBeforeAuthorization: true,
+    receiptAuthority: "platform-only",
+    assurance: "launch-admission-only",
+    safetyClaim: false,
+    feeBehaviorClaim: false,
+  });
+}
 const DIRECT_NATIVE_PROFILE_CONTRACTS = Object.freeze({
   [DIRECT_NATIVE_PROFILE_REVISION_V2]: Object.freeze({
     selectionSchema: DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V2,
@@ -245,18 +264,22 @@ export function validateDirectNativeProfileSelection(value) {
   };
 }
 
-export function resolveDirectNativeProfile(selection) {
+export function resolveDirectNativeProfile(selection, options = {}) {
   const normalized = validateDirectNativeProfileSelection(selection);
   const profileContract = directNativeProfileContract(
     normalized,
     "selectionSchema",
     "direct-native launchProfile identity is not supported",
   );
+  const profileVersion = directNativeProfileVersion(
+    profileContract,
+    options.profileVersion,
+  );
   return {
     schemaVersion: profileContract.profileSchema,
     profileId: DIRECT_NATIVE_PROFILE_ID,
     profileRevision: profileContract.profileRevision,
-    profileVersion: profileContract.profileVersion,
+    profileVersion,
     productionLaunchAuthorized: true,
     chainId: MAINNET_CHAIN_ID,
     router: ROUTER,
@@ -291,7 +314,7 @@ export function resolveDirectNativeProfile(selection) {
     ),
     ...(profileContract.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V2
       ? { platformFeeProofPolicy: PLATFORM_FEE_PROOF_POLICY }
-      : { platformAdmissionPolicy: PLATFORM_ADMISSION_POLICY }),
+      : { platformAdmissionPolicy: platformAdmissionPolicyForVersion(profileVersion) }),
   };
 }
 
@@ -318,7 +341,7 @@ export function validateEmbeddedDirectNativeProfile(value) {
     claimMode: "claim-authority-selected-recipient",
     applicantSelectedBuyHundredthsOfBip: "0",
     applicantSelectedSellHundredthsOfBip: "0",
-  });
+  }, { profileVersion: value?.profileVersion });
   if (canonicalizeJson(value) !== canonicalizeJson(expected)) {
     throw new TypeError("direct-native request does not contain the closed embedded launchProfile");
   }
@@ -331,6 +354,7 @@ export function hashDirectNativeProfile(profile) {
     "profileSchema",
     "direct-native embedded launchProfile identity is not supported",
   );
+  directNativeProfileVersion(profileContract, profile?.profileVersion);
   return framedSha256(profileContract.profileHashDomain, profile);
 }
 
@@ -1756,6 +1780,27 @@ function directNativeProfileContract(value, schemaField, message) {
     throw new TypeError(message);
   }
   return candidate;
+}
+
+function directNativeProfileVersion(profileContract, requestedVersion) {
+  const profileVersion = requestedVersion ?? profileContract.profileVersion;
+  if (profileContract.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V2) {
+    if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V2) {
+      throw new TypeError("direct-native embedded launchProfile version is not supported");
+    }
+    return profileVersion;
+  }
+  if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
+    && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY) {
+    throw new TypeError("direct-native embedded launchProfile version is not supported");
+  }
+  return profileVersion;
+}
+
+function platformAdmissionPolicyForVersion(profileVersion) {
+  return profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY
+    ? LEGACY_PLATFORM_ADMISSION_POLICY
+    : PLATFORM_ADMISSION_POLICY;
 }
 
 for (const digest of [MAINNET_USDC_DOMAIN_SEPARATOR, RECEIVE_WITH_AUTHORIZATION_TYPEHASH]) {
