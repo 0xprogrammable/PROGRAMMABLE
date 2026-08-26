@@ -2178,10 +2178,12 @@ function resultRangeLabel(payload: ExplorePayload | null) {
 
 export function ExploreView({
   initialResponse,
+  initialModelFilter = "all",
   loadingOnly = false,
   embedded = false,
 }: Readonly<{
   initialResponse?: ExploreInitialResponse;
+  initialModelFilter?: ExploreModelFilter;
   loadingOnly?: boolean;
   embedded?: boolean;
 }> = {}) {
@@ -2194,7 +2196,9 @@ export function ExploreView({
   );
   const [ageSort, setAgeSort] = useState<ExploreAgeSort>("none");
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
-  const [modelFilter, setModelFilter] = useState<ExploreModelFilter>("all");
+  const [modelFilter, setModelFilter] = useState<ExploreModelFilter>(
+    initialModelFilter,
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = useExploreTokensPerPage();
   const [retryKey, setRetryKey] = useState(0);
@@ -2211,8 +2215,7 @@ export function ExploreView({
   const filterRef = useRef<HTMLDetailsElement>(null);
   const sort = resolveExploreServerSort(valuationSort, ageSort);
   const requiresCompleteDataset =
-    modelFilter !== "all" ||
-    (valuationSort !== "none" && ageSort !== "none");
+    valuationSort !== "none" && ageSort !== "none";
   const contentKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
   const requestKey = `${contentKey}\u0000${retryKey}`;
   const modelDatasetKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
@@ -2341,7 +2344,7 @@ export function ExploreView({
       valuationSort === initialValuationSort &&
       ageSort === "none" &&
       socialFilter === "all" &&
-      modelFilter === "all" &&
+      modelFilter === initialModelFilter &&
       currentPage === 1 &&
       retryKey === 0;
     const responsiveInitialState = createResponsiveExploreInitialState(
@@ -2369,17 +2372,6 @@ export function ExploreView({
       return;
     }
 
-    if (handledRequestKey.current === requestKey) {
-      activeExploreContentKey.current = activeRequestContentKey;
-      if (initialState?.phase === "ready") {
-        cacheResolvedExplorePayload(
-          activeRequestContentKey,
-          initialState.payload,
-        );
-      }
-      return;
-    }
-
     initialResponseReuseAvailable.current = false;
 
     let ignore = false;
@@ -2396,6 +2388,12 @@ export function ExploreView({
     });
     if (socialFilter !== "all") {
       search.set("socials", socialFilter);
+    }
+    if (modelFilter !== "all") {
+      search.set(
+        "model",
+        modelFilter === "custom-hook" ? "custom" : "classic",
+      );
     }
 
     async function loadTokens() {
@@ -2475,6 +2473,7 @@ export function ExploreView({
     modelFilter,
     pageSize,
     initialResponse,
+    initialModelFilter,
     initialState,
     loadingOnly,
     preview,
@@ -2581,10 +2580,26 @@ export function ExploreView({
     setRetryKey((value) => value + 1);
   }
 
+  function updateModelFilter(next: ExploreModelFilter) {
+    setModelFilter(next);
+    setCurrentPage(1);
+    const url = new URL(window.location.href);
+    if (next === "all") {
+      url.searchParams.delete("model");
+    } else {
+      url.searchParams.set(
+        "model",
+        next === "custom-hook" ? "custom" : "classic",
+      );
+    }
+    window.history.replaceState(window.history.state, "", url);
+  }
+
   function renderTokenState() {
     if (
       displayState.phase === "loading" ||
-      (displayState.phase === "error" && displayState.requestKey !== requestKey)
+      ("requestKey" in displayState &&
+        displayState.requestKey !== requestKey)
     ) {
       return (
         <div className={styles.loadingState} aria-busy="true">
@@ -2641,10 +2656,9 @@ export function ExploreView({
               onClick={() => {
                 setQuery("");
                 setSocialFilter("all");
-                setModelFilter("all");
+                updateModelFilter("all");
                 setValuationSort("highest");
                 setAgeSort("none");
-                setCurrentPage(1);
                 searchInputRef.current?.focus();
               }}
             >
@@ -2934,10 +2948,9 @@ export function ExploreView({
                             type="button"
                             aria-pressed={modelFilter === option.id}
                             onClick={() => {
-                              setModelFilter((current) =>
-                                current === option.id ? "all" : option.id,
+                              updateModelFilter(
+                                modelFilter === option.id ? "all" : option.id,
                               );
-                              setCurrentPage(1);
                             }}
                           >
                             <span>{option.label}</span>
