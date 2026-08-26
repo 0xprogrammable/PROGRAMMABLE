@@ -1,9 +1,9 @@
 {
   "schemaVersion": "programmable.custom-launch-release-record.v2",
-  "recordStatus": "live",
-  "createdAt": "2026-08-26T08:45:33Z",
+  "recordStatus": "staging_approved",
+  "createdAt": "2026-08-26T22:39:26Z",
   "releaseIntent": {
-    "releaseId": "custom-launch-api-v3-20260826-001",
+    "releaseId": "custom-launch-api-v3-20260826-002",
     "product": "custom_launch_api_v3",
     "chainId": "1",
     "targetMode": "enabled"
@@ -11,26 +11,26 @@
   "subject": {
     "website": {
       "repository": "0xprogrammable/programmable",
-      "commitSha": "96ae149591ed27bce366d6d7d423ed307ced2cdc",
-      "treeSha": "af4d3887bb69427d7ab5900013cf9e28854ab480",
-      "reviewedDiffBaseSha": "77a8826128950d8863d5ed463539337f9a692533",
-      "reviewedDiffSha256": "sha256:527a5c171d5158ea5698275a70ebd996e71d61f5416c52a4bd09344d37c4f081",
-      "publicOpenApiSha256": "sha256:5c54548daa58437ccae6962b5f07d4dc28db7ceacaaf298d94c9057438eb31e1",
-      "launchPackageManifestSha256": "sha256:49e140908c16f548b88b52cf908be1af384d0d86358f8503f5c4c4465ec2efa9"
+      "commitSha": "04c74d9f4a4cfc733d84bb5f6f8d28189ae4766a",
+      "treeSha": "c6c6ca65a3b02938ddf3c34bc208a7eedd158b68",
+      "reviewedDiffBaseSha": "96ae149591ed27bce366d6d7d423ed307ced2cdc",
+      "reviewedDiffSha256": "sha256:3a70dde1065f45c47e16bf375b54964b29218ae7e7bb920c6069c18510d581e8",
+      "publicOpenApiSha256": "sha256:7d36a08b2a37b5afd5279e65e0bcf211c1ed32a3b6d4e51fb8e520897075e259",
+      "launchPackageManifestSha256": "sha256:9cfd7c71b51f0bfdeabfab7c0457a4b2494c69f6d9bd8f4aca3fe5eebe6d332d"
     },
     "apiService": {
       "repository": "0xprogrammable/programmable-open-hook-v2-internal",
       "servicePath": "services/custom-launch-api-v1",
-      "bindingAttestationCommitSha": "bba958d712e1bd8616074a0767d647b3858844c4",
+      "bindingAttestationCommitSha": "6fc73ff0ac11bec4f34619a4a575ec472fa2cb94",
       "bindingDocumentPath": "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json",
-      "bindingDocumentSha256": "sha256:08633718b675472a4766a02647633083eb766ecd0bdfe2b4ec27ae7441cd8b86",
-      "candidateCommitSha": "d229fc49d9e41b4a22cd6dade57fd15a9ba2c55b",
-      "candidateTreeSha": "389fd3c709f5a67534f4b337e70616eac650c856",
-      "imageDigest": "sha256:4cb3dce8016ae097ee66ad9d184bdc3960d243e91704d65c4d10514ef77818ca",
-      "flyReleaseVersion": 14,
-      "migrationInventorySha256": "sha256:0e0e26c9e3646a6f710bdd75bf6947c1dbb298f8ef7e6dce3bf4ce8b61d1b4a5",
-      "apiContractSha256": "sha256:fcb34c44c86a833618449700d5eb4ab7b5c5b5a7b34d88dfdbacbb46e216f5e9",
-      "readinessIdentitySha256": "sha256:7098aa8155e3fc16408f2232aa8f28db530643bf1152155c171474e02a6c777c"
+      "bindingDocumentSha256": "sha256:a44520285f5210d9d134ca7517a6437c7b69213f4ae6b57b7da2f84b998c598e",
+      "candidateCommitSha": "5d712fabd7eeb8f9d7bb07f9e4ae320ce2b6bce5",
+      "candidateTreeSha": "69bcd752483a14f3c1a49474358dd868683afbf5",
+      "imageDigest": "sha256:559d6a5fca26bcad167c33f85947177c7c17010ef99319550d4a0aeda295306e",
+      "flyReleaseVersion": 17,
+      "migrationInventorySha256": "sha256:1f96a2cbc749b1e7869a3ff192fe4a2613e619b197283c727da2c5d04f8ca425",
+      "apiContractSha256": "sha256:e71f50646f2f2e7c28f0768d8d2ab17db49b447d4e683faf467fc589f8e58377",
+      "readinessIdentitySha256": "sha256:82c21ceb1f7e648e5481f5885686108663e63b1f6c47a80df8ee8f70a16aeb2d"
     },
     "chain": {
       "chainId": "1",
@@ -43,144 +43,144 @@
       "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
       "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
     },
-    "releaseSubjectSha256": "sha256:f3baa2f6a00718f7bda7b0d9815931a85c51fcb93adc57f4be0c5c5f3bda44ce"
+    "releaseSubjectSha256": "sha256:005c94a32f15662956ac1377c4abdd10c19db3fee1d9b017e02785422e2893a7"
   },
   "releaseApproval": {
     "authority": "release_owner",
     "status": "approved",
-    "decisionId": "custom-launch-v3-owner-authorization-01a03762",
+    "decisionId": "custom-launch-v3-owner-authorization-002-01a03762-20260826t173616z",
     "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
-    "decidedAt": "2026-08-26T07:56:26Z",
+    "decidedAt": "2026-08-26T17:36:16Z",
     "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
-    "releaseSubjectSha256": "sha256:f3baa2f6a00718f7bda7b0d9815931a85c51fcb93adc57f4be0c5c5f3bda44ce"
+    "releaseSubjectSha256": "sha256:005c94a32f15662956ac1377c4abdd10c19db3fee1d9b017e02785422e2893a7"
   },
   "validation": {
     "gates": [
       {
         "id": "website_release",
         "result": "passed",
-        "evidenceSha256": "sha256:0b7fa5ab9ba075018020ea616a01500ed2e1e04228d647d5fcb01975cc0ccf4e",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/website_release.json",
-        "completedAt": "2026-08-26T09:43:22Z"
+        "evidenceSha256": "sha256:3ec3ff187ed973625da8b4cd0d3ce258d180b757c97a7ad92684811b2ecac641",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/website_release.json",
+        "completedAt": "2026-08-26T22:39:26Z"
       },
       {
         "id": "custom_launch_api_release",
         "result": "passed",
-        "evidenceSha256": "sha256:0245c292a297bf27bb6274122efdb1369a661770c1469d400fb01bf31d2f1182",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/custom_launch_api_release.json",
-        "completedAt": "2026-08-26T08:45:33Z"
+        "evidenceSha256": "sha256:bae19664ed815b2a91e509685d123e5c5bfad3359787a2fb60fe4cd2d1911752",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/custom_launch_api_release.json",
+        "completedAt": "2026-08-26T22:28:16Z"
       },
       {
         "id": "database_migrations",
         "result": "passed",
-        "evidenceSha256": "sha256:cd7f33050e1f2cb4da8488fdc07a652f010f6537889677a4cd6470230bb87ea2",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/database_migrations.json",
-        "completedAt": "2026-08-26T08:44:38Z"
+        "evidenceSha256": "sha256:2f2a50261d5de72f22b22251c47dcd0ca109cf600a632e5c30d03238f62b7902",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/database_migrations.json",
+        "completedAt": "2026-08-26T21:29:43Z"
       },
       {
         "id": "security",
         "result": "passed",
-        "evidenceSha256": "sha256:8aad82a94199e8a6da416cf4cd0d97628d0e36412a1d11443871dcbaaca97ac2",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/security.json",
-        "completedAt": "2026-08-26T09:43:22Z"
+        "evidenceSha256": "sha256:58023d9cf88a497561b4816a458b4d2fc18dfe7356341d19e2a91cd9c449f263",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/security.json",
+        "completedAt": "2026-08-26T22:32:20Z"
       },
       {
         "id": "public_contract",
         "result": "passed",
-        "evidenceSha256": "sha256:34bb48605f9bef3d8cd248cc57cbd52b25e74a0bc2fcc3694b5990c29d29dec7",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/public_contract.json",
-        "completedAt": "2026-08-26T08:45:33Z"
+        "evidenceSha256": "sha256:b1f880c6077772196c94f339b83df5b4fa22612f0cbad6b245cc8573e11ccfc6",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/public_contract.json",
+        "completedAt": "2026-08-26T22:27:47Z"
       },
       {
         "id": "source_verification_pipeline",
         "result": "passed",
-        "evidenceSha256": "sha256:b8166db0160a63fb84e25c64f48dc64a898f504ce18fa8d4b8bf4498bcfd792b",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/source_verification_pipeline.json",
-        "completedAt": "2026-08-26T08:08:35Z"
+        "evidenceSha256": "sha256:113c0364583e0af59ee9d8b28b00f1b8a048b59a396e460b40ddc5e17936737e",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/source_verification_pipeline.json",
+        "completedAt": "2026-08-26T22:33:00Z"
       },
       {
         "id": "browser_qa",
         "result": "passed",
-        "evidenceSha256": "sha256:860015969d0fd568fa5f35522b6acc550781683be55c981b033280011629e030",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/browser_qa.json",
-        "completedAt": "2026-08-26T09:28:23Z"
+        "evidenceSha256": "sha256:3a4c2531d7615d28537a6bda7785bae721697e9505c208536338226a0463ccf1",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/browser_qa.json",
+        "completedAt": "2026-08-26T21:05:52Z"
       },
       {
         "id": "rollback_snapshot",
         "result": "passed",
-        "evidenceSha256": "sha256:32ef9a8de5aa2d92d78f11c91e52be0a4a6d728c308097f3d0adf66e8561adb8",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/rollback_snapshot.json",
-        "completedAt": "2026-08-26T07:52:32Z"
+        "evidenceSha256": "sha256:8c80f4d350b46c048b10df53183d407a493be5346b0e51afa587cccc3f991587",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/rollback_snapshot.json",
+        "completedAt": "2026-08-26T21:33:24Z"
       },
       {
         "id": "clean_room_no_broadcast",
         "result": "passed",
-        "evidenceSha256": "sha256:340eddc0a5157605620b297243d4ee321f1a2742e1ca36c3ecb689494cc44f1a",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/clean_room_no_broadcast.json",
-        "completedAt": "2026-08-26T08:49:55Z"
+        "evidenceSha256": "sha256:0911133c937d371dd590dae8b54ec365207b1f0255ce6b833f782f8f72de33b3",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/clean_room_no_broadcast.json",
+        "completedAt": "2026-08-26T22:32:20Z"
       }
     ]
   },
   "rollback": {
     "website": {
-      "deploymentId": "dpl_CAHEMcmzwLvATDzbGqugKDa4hnUE",
-      "immutableDeploymentUrl": "https://launcher-v4-pmagl3j8r-aficialais-projects.vercel.app",
-      "commitSha": "9e03874fd1c019452fde1af75e113a7651137216",
-      "configurationSnapshotSha256": "sha256:88cd0f9257a6f98920f3e4c2a15da5171e5c2aeb6bc7fcf82fbbd89b6d977cfc",
-      "capturedAt": "2026-08-26T04:28:51Z"
+      "deploymentId": "dpl_ERJ5ZzYfSVkpobiTQT86A9CHLmn9",
+      "immutableDeploymentUrl": "https://launcher-v4-5jvietpvl-aficialais-projects.vercel.app",
+      "commitSha": "42cae21534de5d8e73db8c9c75d9a075797d773f",
+      "configurationSnapshotSha256": "sha256:4c916da9fb9990ba9af5b53ebac71af62ccfb29f93baf80e39a0db47be93966d",
+      "capturedAt": "2026-08-26T17:29:15Z"
     },
     "apiService": {
-      "flyReleaseVersion": 13,
-      "imageDigest": "sha256:f064d62c8b1df05f4a22c079f15a8ea9c0d10e727ea7045857290e90ba31bb73",
-      "candidateCommitSha": "2a9763b77c1af3cf9d12c1777eb28957c0543fa5",
-      "capturedAt": "2026-08-26T07:52:32Z"
+      "flyReleaseVersion": 16,
+      "imageDigest": "sha256:042c1a0741f8de7e54be9f68938f477842a986dfa5dd385b23724a0c821a8a28",
+      "candidateCommitSha": "ff129bb0d3b2d0e22e0eb1b60c17af5d1419e920",
+      "capturedAt": "2026-08-26T21:33:24Z"
     }
   },
   "candidate": {
-    "workflowRunId": 32955073181,
-    "workflowRunAttempt": 1,
-    "workflowRunUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/32955073181",
-    "websiteDeploymentId": "dpl_8bxHJdhraJqadQEEp9cDhQcgDFtR",
-    "immutableWebsiteUrl": "https://launcher-v4-5sdyznchd-aficialais-projects.vercel.app",
-    "websiteCommitSha": "96ae149591ed27bce366d6d7d423ed307ced2cdc",
-    "apiOrigin": "https://programmable-custom-launch-api.fly.dev",
-    "apiReadinessIdentitySha256": "sha256:7098aa8155e3fc16408f2232aa8f28db530643bf1152155c171474e02a6c777c",
-    "verificationEvidenceSha256": "sha256:84f6de16708f513d46a9d5744eb71b68864ccf7edd96bebfd053fda92f54f61c",
-    "verifiedAt": "2026-08-26T09:54:06Z"
+    "workflowRunId": null,
+    "workflowRunAttempt": null,
+    "workflowRunUrl": null,
+    "websiteDeploymentId": null,
+    "immutableWebsiteUrl": null,
+    "websiteCommitSha": null,
+    "apiOrigin": null,
+    "apiReadinessIdentitySha256": null,
+    "verificationEvidenceSha256": null,
+    "verifiedAt": null
   },
   "promotionApproval": {
     "authority": "release_owner",
-    "status": "approved",
-    "decisionId": "custom-launch-v3-promotion-01a03762-20260826t095645z",
-    "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
-    "decidedAt": "2026-08-26T09:56:45Z",
-    "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
-    "releaseSubjectSha256": "sha256:f3baa2f6a00718f7bda7b0d9815931a85c51fcb93adc57f4be0c5c5f3bda44ce",
-    "candidateEvidenceSha256": "sha256:84f6de16708f513d46a9d5744eb71b68864ccf7edd96bebfd053fda92f54f61c"
+    "status": "pending",
+    "decisionId": null,
+    "immutableReference": null,
+    "decidedAt": null,
+    "statementSha256": null,
+    "releaseSubjectSha256": null,
+    "candidateEvidenceSha256": null
   },
   "promoted": {
-    "websiteDeploymentId": "dpl_8bxHJdhraJqadQEEp9cDhQcgDFtR",
-    "immutableWebsiteUrl": "https://launcher-v4-5sdyznchd-aficialais-projects.vercel.app",
-    "productionAlias": "https://programmable.market",
-    "evidenceSha256": "sha256:eb8fbed2eb01da7bc7c9ca55879d1a3685250860ea634c157dc3fff7e6662618",
-    "promotedAt": "2026-08-26T09:59:21Z"
+    "websiteDeploymentId": null,
+    "immutableWebsiteUrl": null,
+    "productionAlias": null,
+    "evidenceSha256": null,
+    "promotedAt": null
   },
   "canary": {
-    "status": "passed",
+    "status": "pending",
     "mode": "public-cli-wallet-handoff-no-broadcast",
-    "evidenceSha256": "sha256:f259928c37a59393e6e237f53688e28d4ba67c415ec284b48d919cf905d3c788",
-    "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/clean-room-post-promotion-no-broadcast-v3.1.0.json",
-    "completedAt": "2026-08-26T10:03:48Z",
+    "evidenceSha256": null,
+    "evidenceLocator": null,
+    "completedAt": null,
     "walletSignatureObserved": false,
     "transactionBroadcastObserved": false
   },
   "liveDeclaration": {
     "authority": "release_owner",
-    "status": "declared_live",
-    "decisionId": "custom-launch-v3-live-01a03762-20260826t100524z",
-    "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
-    "decidedAt": "2026-08-26T10:05:24Z",
-    "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
-    "releaseSubjectSha256": "sha256:f3baa2f6a00718f7bda7b0d9815931a85c51fcb93adc57f4be0c5c5f3bda44ce"
+    "status": "pending",
+    "decisionId": null,
+    "immutableReference": null,
+    "decidedAt": null,
+    "statementSha256": null,
+    "releaseSubjectSha256": null
   }
 }
