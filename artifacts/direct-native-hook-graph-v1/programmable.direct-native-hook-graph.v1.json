@@ -1,0 +1,248 @@
+{
+  "artifactId": "programmable.direct-native-hook-graph.v1",
+  "artifactVersion": "1.0.0",
+  "sourceBaseRevision": "1788cf3e32116059a714d7574421cb8459a80f2b",
+  "status": "SOURCE_SCHEMA_READY_ADMISSION_INTEGRATION_PENDING",
+  "profile": {
+    "id": "programmable.direct-native-hook-graph.v1",
+    "idHash": "0xdb366f62283bb42d153b9e7d6b5bb27ee1d7fc2af866c0722d20041927fd143a",
+    "version": "1.0.0",
+    "versionHash": "0x06c015bd22b4c69690933c1058878ebdfef31f9aaae40bbe86d8a09fe1b2972c",
+    "schema": "spec/programmable.direct-native-hook-graph.v1.schema.json",
+    "schemaSha256": "ff0015b192663c469f9db836c27d644f62a8da3fe6aca4aac2a11bff9b624097"
+  },
+  "executionCompatibility": {
+    "router": "ProgrammableLaunchStampRouterV1.CustomGraph",
+    "graphFactory": "ProgrammableCreate2GraphDeployerV1",
+    "graphFactoryTargetRange": {
+      "minimum": 1,
+      "maximum": 16
+    },
+    "routerMarketTargetRange": {
+      "minimum": 2,
+      "maximum": 16,
+      "reason": "Router V1 requires distinct direct token and hook outputs and one exclusive component per target."
+    },
+    "profileTargetRange": {
+      "minimum": 3,
+      "maximum": 16,
+      "reason": "This profile additionally requires one distinct direct terminal initializer target."
+    },
+    "deployAllTargetsBeforeInitializers": true,
+    "poolMustBeInitializedBeforeRouterStamp": true,
+    "singleLaunchTransactionSupported": true,
+    "routerContractChangeRequired": false,
+    "routerDeploymentRequired": false,
+    "graphFactoryContractChangeRequired": false,
+    "graphFactoryDeploymentRequired": false,
+    "profileHelperDeploymentRequired": false
+  },
+  "admissionTrustRoot": {
+    "kind": "EXISTING_IMMUTABLE_PERMIT_AUTHORITY",
+    "defaultAction": "DENY",
+    "perLaunchExactReviewRequired": true,
+    "universalHookApproval": false,
+    "selfReportedHookConfigurationSufficient": false,
+    "admissionRule": "The permit authority must reproduce every typed hash from exact reviewed source, compiler input/output, init code, final runtime, graph calldata, fee conformance evidence and the current deployed Router/GraphFactory bindings before issuing a permit."
+  },
+  "exactReviewBinding": {
+    "requiredFields": [
+      "sourceRepositoryHash",
+      "sourceCommitHash",
+      "sourceTreeHash",
+      "compilerInputHash",
+      "compilerOutputHash",
+      "targetManifestHash",
+      "hookCreationCodeHash",
+      "hookRuntimeCodeHash",
+      "initializerCreationCodeHash",
+      "initializerRuntimeCodeHash",
+      "feeConformanceEvidenceHash",
+      "securityReviewHash"
+    ],
+    "targetFields": [
+      "targetIndex",
+      "role",
+      "targetIdHash",
+      "expectedAddress",
+      "sourceArtifactHash",
+      "compilerBuildHash",
+      "initCodeHash",
+      "initializerAbiHash",
+      "runtimeCodeHash"
+    ],
+    "requiredDistinctTargetRoles": [
+      "TOKEN",
+      "HOOK",
+      "INITIALIZER"
+    ],
+    "finalBindingChain": [
+      "targetManifestHash",
+      "reviewAdmissionHash",
+      "feePolicyHash",
+      "fundingIntentHash",
+      "topologyHash",
+      "graphCommitment",
+      "routePayloadHash",
+      "permitDigest",
+      "expectedGraphDeploymentHash",
+      "observedRuntimeCodeHashes",
+      "poolInitializedState"
+    ],
+    "graphCommitmentExcludedFromTopologyHash": true,
+    "exclusionReason": "GraphDeployer already includes topologyHash in graphCommitment; the reverse inclusion would be circular.",
+    "routeNamespaceRule": "Bind the exact nonzero namespace derived by the public API from sourceBundleSha256, launch wallet, Router and GraphFactory; it is not PROFILE_ID_HASH."
+  },
+  "feeAccounting": {
+    "policyId": "programmable-volume-fee-v2@2.0.0",
+    "policyHash": "0x03cd386824b1c0aa152200e0a470aa0c885f802e257f0f46066de508d241811e",
+    "collectionProfile": "standard-amm",
+    "collectionProfileHash": "0xc1ae9fad5634af359a750783d3d7ff8a8c7c0e8b91cf27f82ed9e812501f83d3",
+    "accountingMode": "inclusive-selected-total",
+    "accountingModeHash": "0xc6521a0f4308a151b0f39b457fce0af8df05c6c5a5f10095f38cc5f1a5e06707",
+    "feeBase": "executed-gross-quote-volume",
+    "rateDenominator": 1000000,
+    "programmableFeeOwner": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "programmableHundredthsOfBip": 1000,
+    "programmablePercent": "0.1",
+    "minimumEffectiveHundredthsOfBip": 1000,
+    "maximumSelectedHundredthsOfBip": 999999,
+    "invariant": "effectiveTotal=max(selectedTotal,1000); programmableShare=1000; projectShare=effectiveTotal-1000",
+    "threePercentExample": {
+      "selectedTotalHundredthsOfBip": 30000,
+      "effectiveTotalHundredthsOfBip": 30000,
+      "projectHundredthsOfBip": 29000,
+      "programmableHundredthsOfBip": 1000,
+      "effectiveTotalPercent": "3.0"
+    },
+    "additive": false,
+    "requiredBehaviorEvidence": [
+      "buy exact-input executed gross quote",
+      "buy exact-output executed gross quote with witness",
+      "sell exact-input executed gross quote",
+      "sell exact-output executed gross quote with witness",
+      "partial-fill and no-fill treatment",
+      "independent lifetime rounding remainders",
+      "separate project and Programmable liabilities",
+      "owner-authenticated claims in the exact quote currency"
+    ],
+    "selfReportedGetterIsProof": false,
+    "referenceKernel": {
+      "path": "skills/programmable-v4-hook-builder/assets/reference-kernels/programmable-volume-fee-v2/src/ProgrammableVolumeFeeHookV2.sol",
+      "permissionMask": "0x20cc",
+      "status": "UNAUDITED_UNDEPLOYED_REFERENCE_ONLY",
+      "rule": "A different permission mask or runtime is a different exact review admission, never an automatic variant of this reference."
+    }
+  },
+  "hookPermissions": {
+    "variablePerExactReview": true,
+    "allHookMask": "0x3fff",
+    "addressLowBitsMustEqualMask": true,
+    "feeCapablePathRequired": "(beforeSwap && beforeSwapReturnDelta) || (afterSwap && afterSwapReturnDelta)",
+    "dependencies": {
+      "beforeSwapReturnDelta": "beforeSwap",
+      "afterSwapReturnDelta": "afterSwap",
+      "afterAddLiquidityReturnDelta": "afterAddLiquidity",
+      "afterRemoveLiquidityReturnDelta": "afterRemoveLiquidity"
+    },
+    "zeroMaskAllowed": false,
+    "unreviewedMaskVariantAllowed": false
+  },
+  "market": {
+    "currencyOrdering": "currency0 < currency1",
+    "nativeCurrencyEncoding": "0x0000000000000000000000000000000000000000",
+    "supportedPairs": [
+      "native/ERC20",
+      "ERC20/ERC20"
+    ],
+    "tokenMustBeOnePoolCurrency": true,
+    "quoteMustBeOnePoolCurrency": true,
+    "tokenHookAndInitializerMustBeDistinctDirectTargets": true,
+    "lpFeePipsRange": [
+      0,
+      999999
+    ],
+    "tickSpacingRange": [
+      1,
+      32767
+    ],
+    "poolInitializationMustCompleteInsideGraphTransaction": true
+  },
+  "funding": {
+    "nativeValueBinding": "Router permit value, GraphAuthorization.totalValue and per-target deploymentValue/initializerValue sums",
+    "eip3009": {
+      "maximumIntents": 1,
+      "method": "receiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce,uint8 v,bytes32 r,bytes32 s)",
+      "toRule": "to is the reviewed terminal initializer that directly calls the currency contract",
+      "fundingIntentDomain": "programmable.direct-native-hook-graph.funding-intent.v1",
+      "fundingIntentDomainHash": "0xa511b4d24d73d4905b0a9b50873a89978bd950d8bac23485ec98a43a0dd4c85c",
+      "fundingIntentRule": "fundingIntentHash=keccak256(abi.encode(domainHash,chainId,token,router,graphFactory,routeNamespace,routeNonce,rawBytes32Sha256LaunchIntentCommitment,from,to,value,validAfter,validBefore))",
+      "fundingNonceDomain": "programmable.direct-native-hook-graph.funding-nonce.v1",
+      "fundingNonceDomainHash": "0xe64de4316449729c8e063e150d279ac2c159605f54d1ecbe52687fd4c639eb04",
+      "nonceRule": "nonce=keccak256(abi.encode(fundingNonceDomainHash,fundingIntentHash))",
+      "excludedFromNonce": [
+        "v",
+        "r",
+        "s",
+        "initializerCalldataHash",
+        "graphCommitment",
+        "permitDigest"
+      ],
+      "launchIntentBinding": "The raw bytes32 form of the canonical sha256: launchIntent is included before signing; launchIntent binds the exact reviewed initializer target, compiler ABI and unsigned patch descriptor.",
+      "signaturePatchDescriptor": {
+        "schemaVersion": "programmable.eip3009-signature-patch.v1",
+        "fields": [
+          "targetId",
+          "unsignedInitializerCalldataSha256",
+          "initializerCalldataLengthBytes",
+          "signatureEncoding",
+          "rOffsetBytes",
+          "sOffsetBytes",
+          "vOffsetBytes"
+        ],
+        "signatureEncoding": "eip3009-r-s-v-abi-words",
+        "offsetOrigin": "calldata byte zero including the four-byte selector",
+        "offsetRules": "r/s/v offsets are distinct, at least 4, (offset-4)%32==0, and each full word is in bounds and all zero in the unsigned template",
+        "abiRules": "The reviewed compiler ABI proves r and s are distinct static bytes32 parameters and v is a static uint8 parameter for the exact target/function.",
+        "patchRules": "Patch r and s as full 32-byte words and only the final byte of the v word; its first 31 bytes remain zero.",
+        "postPatchProof": "Decode/re-encode, or an equivalent deterministic proof, must show byte equality to a complete compiler-ABI encoding before hashing final calldata.",
+        "unvalidatedRawOffsetsAllowed": false
+      },
+      "finalBinding": "GraphDeployer graphCommitment binds the post-validation final initializer calldata including exact v/r/s bytes."
+    }
+  },
+  "helperBuild": {
+    "source": "src/ProgrammableDirectNativeHookGraphProfileV1.sol",
+    "sourceSha256": "f92f9773234f5f96317399bd22601b4780571b6c1ffc821639b74699e036dcf7",
+    "compiler": "solc 0.8.26",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "bytecodeHashMetadata": "none",
+    "cborMetadata": false,
+    "creationCodeHash": "0x58fe238fd5afa570c8eaf3b1a210b062442f1f02e66ae4f9ae946098e7841440",
+    "runtimeCodeHash": "0xafef5a35fb0e3cf1029df3efa9df08e484dabd212152ab8cc11021d89177d28d",
+    "abiSha256": "a49ca0c4ef000dc459edc3b543a704bb9e1911cf43f56b63673216e6d205093e",
+    "productionDeployment": null,
+    "productionDependency": false
+  },
+  "activationBoundary": {
+    "contractSourceCommitted": false,
+    "permitAuthorityPolicyIntegrated": false,
+    "applicantSourceReviewed": false,
+    "applicantBuildReproduced": false,
+    "feeConformanceReviewed": false,
+    "permitIssued": false,
+    "transactionSigned": false,
+    "transactionBroadcast": false,
+    "onchainLaunchObserved": false,
+    "publicApiAdmissionEnabled": false
+  },
+  "hardLimits": [
+    "The helper proves typed hash and shape consistency, not arbitrary EVM fee behavior.",
+    "The immutable permit authority must independently admit each exact hook source/build/runtime and evidence set.",
+    "The existing Router and GraphFactory need no code change or redeployment for an admitted CustomGraph launch.",
+    "No profile helper, Router, GraphFactory, hook, initializer or applicant graph was deployed by this artifact.",
+    "No wallet transaction, signature, permit, broadcast, stamp, index or public API activation is evidenced."
+  ]
+}

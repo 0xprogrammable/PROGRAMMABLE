@@ -1,0 +1,686 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/0xprogrammable/programmable/spec/programmable.direct-native-hook-graph.v1.schema.json",
+  "title": "Programmable direct native hook graph v1 admission artifact",
+  "description": "Exact per-launch review, fee-policy, graph and runtime bindings consumed by the immutable Router V1 permit authority. This schema never grants universal hook approval.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaId",
+    "profileId",
+    "profileVersion",
+    "admission",
+    "reviewAdmission",
+    "targets",
+    "market",
+    "feePolicy",
+    "funding",
+    "topology",
+    "finalGraph"
+  ],
+  "properties": {
+    "schemaId": {
+      "const": "programmable.direct-native-hook-graph.v1"
+    },
+    "profileId": {
+      "const": "programmable.direct-native-hook-graph.v1"
+    },
+    "profileVersion": {
+      "const": "1.0.0"
+    },
+    "admission": {
+      "$ref": "#/$defs/admission"
+    },
+    "reviewAdmission": {
+      "$ref": "#/$defs/reviewAdmission"
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/target"
+      }
+    },
+    "market": {
+      "$ref": "#/$defs/market"
+    },
+    "feePolicy": {
+      "$ref": "#/$defs/feePolicy"
+    },
+    "funding": {
+      "$ref": "#/$defs/funding"
+    },
+    "topology": {
+      "$ref": "#/$defs/topology"
+    },
+    "finalGraph": {
+      "$ref": "#/$defs/finalGraph"
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-fA-F]{64}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "nonzeroAddress": {
+      "type": "string",
+      "pattern": "^0x(?!0{40}$)[0-9a-fA-F]{40}$"
+    },
+    "uint256": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "positiveUint256": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "permitAuthorityReviewRequired",
+        "universalApproval",
+        "selfReportedConfigurationSufficient",
+        "routerContractChangeRequired",
+        "graphFactoryContractChangeRequired",
+        "helperDeploymentRequired"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "DENY_PENDING_EXACT_REVIEW",
+            "PERMIT_READY",
+            "PERMIT_ISSUED"
+          ]
+        },
+        "permitAuthorityReviewRequired": {
+          "const": true
+        },
+        "universalApproval": {
+          "const": false
+        },
+        "selfReportedConfigurationSufficient": {
+          "const": false
+        },
+        "routerContractChangeRequired": {
+          "const": false
+        },
+        "graphFactoryContractChangeRequired": {
+          "const": false
+        },
+        "helperDeploymentRequired": {
+          "const": false
+        }
+      }
+    },
+    "reviewAdmission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceRepositoryHash",
+        "sourceCommitHash",
+        "sourceTreeHash",
+        "compilerInputHash",
+        "compilerOutputHash",
+        "targetManifestHash",
+        "hookCreationCodeHash",
+        "hookRuntimeCodeHash",
+        "initializerCreationCodeHash",
+        "initializerRuntimeCodeHash",
+        "feeConformanceEvidenceHash",
+        "securityReviewHash",
+        "reviewAdmissionHash"
+      ],
+      "properties": {
+        "sourceRepositoryHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "sourceCommitHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "sourceTreeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "compilerInputHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "compilerOutputHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "targetManifestHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "hookCreationCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "hookRuntimeCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "initializerCreationCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "initializerRuntimeCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "feeConformanceEvidenceHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "securityReviewHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "reviewAdmissionHash": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetIndex",
+        "role",
+        "targetIdHash",
+        "expectedAddress",
+        "sourceArtifactHash",
+        "compilerBuildHash",
+        "initCodeHash",
+        "initializerAbiHash",
+        "runtimeCodeHash"
+      ],
+      "properties": {
+        "targetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "role": {
+          "enum": [
+            "TOKEN",
+            "HOOK",
+            "INITIALIZER",
+            "OTHER"
+          ]
+        },
+        "targetIdHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "expectedAddress": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "sourceArtifactHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "compilerBuildHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "initCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "initializerAbiHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "market": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chainId",
+        "router",
+        "routerRuntimeCodeHash",
+        "graphFactory",
+        "graphFactoryRuntimeCodeHash",
+        "poolManager",
+        "poolManagerRuntimeCodeHash",
+        "currency0",
+        "currency1",
+        "lpFeePips",
+        "tickSpacing",
+        "token",
+        "hook",
+        "quoteCurrency",
+        "hookPermissionMask",
+        "poolKeyHash",
+        "initialSqrtPriceX96"
+      ],
+      "properties": {
+        "chainId": {
+          "$ref": "#/$defs/positiveUint256"
+        },
+        "router": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "routerRuntimeCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "graphFactory": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "graphFactoryRuntimeCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "poolManager": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "poolManagerRuntimeCodeHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "currency0": {
+          "$ref": "#/$defs/address"
+        },
+        "currency1": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "lpFeePips": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "tickSpacing": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32767
+        },
+        "token": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "hook": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "quoteCurrency": {
+          "$ref": "#/$defs/address"
+        },
+        "hookPermissionMask": {
+          "type": "string",
+          "pattern": "^0x[0-3][0-9a-fA-F]{3}$"
+        },
+        "poolKeyHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "initialSqrtPriceX96": {
+          "$ref": "#/$defs/positiveUint256"
+        }
+      }
+    },
+    "feePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policyId",
+        "collectionProfile",
+        "accountingMode",
+        "feeBase",
+        "rateDenominator",
+        "programmableFeeOwner",
+        "programmableHundredthsOfBip",
+        "minimumEffectiveHundredthsOfBip",
+        "selectedBuyHundredthsOfBip",
+        "selectedSellHundredthsOfBip",
+        "projectFeeOwner",
+        "inclusiveInvariant",
+        "feePolicyHash"
+      ],
+      "properties": {
+        "policyId": {
+          "const": "programmable-volume-fee-v2@2.0.0"
+        },
+        "collectionProfile": {
+          "const": "standard-amm"
+        },
+        "accountingMode": {
+          "const": "inclusive-selected-total"
+        },
+        "feeBase": {
+          "const": "executed-gross-quote-volume"
+        },
+        "rateDenominator": {
+          "const": 1000000
+        },
+        "programmableFeeOwner": {
+          "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        },
+        "programmableHundredthsOfBip": {
+          "const": 1000
+        },
+        "minimumEffectiveHundredthsOfBip": {
+          "const": 1000
+        },
+        "selectedBuyHundredthsOfBip": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "selectedSellHundredthsOfBip": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "projectFeeOwner": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "inclusiveInvariant": {
+          "const": "effectiveTotal=max(selectedTotal,1000); programmableShare=1000; projectShare=effectiveTotal-1000"
+        },
+        "feePolicyHash": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "fundingIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "domainHash",
+        "chainId",
+        "token",
+        "router",
+        "graphFactory",
+        "routeNamespace",
+        "routeNonce",
+        "launchIntentHash",
+        "launchIntentCommitment",
+        "from",
+        "to",
+        "value",
+        "validAfter",
+        "validBefore",
+        "fundingIntentHash",
+        "nonceDomain",
+        "nonceDomainHash",
+        "nonce"
+      ],
+      "properties": {
+        "domain": {
+          "const": "programmable.direct-native-hook-graph.funding-intent.v1"
+        },
+        "domainHash": {
+          "const": "0xa511b4d24d73d4905b0a9b50873a89978bd950d8bac23485ec98a43a0dd4c85c"
+        },
+        "chainId": {
+          "const": "1"
+        },
+        "token": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "router": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "graphFactory": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "routeNamespace": {
+          "$ref": "#/$defs/hash"
+        },
+        "routeNonce": {
+          "$ref": "#/$defs/hash"
+        },
+        "launchIntentHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "launchIntentCommitment": {
+          "$ref": "#/$defs/hash"
+        },
+        "from": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "to": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "value": {
+          "$ref": "#/$defs/positiveUint256"
+        },
+        "validAfter": {
+          "$ref": "#/$defs/uint256"
+        },
+        "validBefore": {
+          "$ref": "#/$defs/positiveUint256"
+        },
+        "fundingIntentHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "nonceDomain": {
+          "const": "programmable.direct-native-hook-graph.funding-nonce.v1"
+        },
+        "nonceDomainHash": {
+          "const": "0xe64de4316449729c8e063e150d279ac2c159605f54d1ecbe52687fd4c639eb04"
+        },
+        "nonce": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "fundingSignaturePatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The targetId resolves through launchIntent to one exact reviewed initializer target and compiler ABI. The ABI must prove r and s are distinct static bytes32 words and v is a static uint8 word.",
+      "required": [
+        "schemaVersion",
+        "targetId",
+        "unsignedInitializerCalldataSha256",
+        "initializerCalldataLengthBytes",
+        "signatureEncoding",
+        "rOffsetBytes",
+        "sOffsetBytes",
+        "vOffsetBytes"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.eip3009-signature-patch.v1"
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "unsignedInitializerCalldataSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "initializerCalldataLengthBytes": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 131072
+        },
+        "signatureEncoding": {
+          "const": "eip3009-r-s-v-abi-words"
+        },
+        "rOffsetBytes": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 131040
+        },
+        "sOffsetBytes": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 131040
+        },
+        "vOffsetBytes": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 131040
+        }
+      }
+    },
+    "funding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nativeInitializerValueWei",
+        "eip3009FundingIntent",
+        "signaturePatch",
+        "signatureBytesStoredInArtifact",
+        "offsetOrigin",
+        "unsignedPatchWords",
+        "patchOperation",
+        "postPatchEncodingProof"
+      ],
+      "properties": {
+        "nativeInitializerValueWei": {
+          "$ref": "#/$defs/uint256"
+        },
+        "eip3009FundingIntent": {
+          "$ref": "#/$defs/fundingIntent"
+        },
+        "signaturePatch": {
+          "$ref": "#/$defs/fundingSignaturePatch"
+        },
+        "signatureBytesStoredInArtifact": {
+          "const": false
+        },
+        "offsetOrigin": {
+          "const": "calldata-byte-zero-including-four-byte-selector"
+        },
+        "unsignedPatchWords": {
+          "const": "three-distinct-32-byte-aligned-in-bounds-all-zero-static-abi-words"
+        },
+        "patchOperation": {
+          "const": "replace-r-and-s-full-words-then-v-final-byte-only"
+        },
+        "postPatchEncodingProof": {
+          "const": "decode-reencode-or-equivalent-proof-equals-full-compiler-abi-encoding"
+        }
+      }
+    },
+    "topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routeNamespace",
+        "routeNonce",
+        "authorizedLauncher",
+        "targetCount",
+        "tokenTargetIndex",
+        "hookTargetIndex",
+        "initializerTargetIndex",
+        "initializerTargetIdHash",
+        "targetManifestHash",
+        "reviewAdmissionHash",
+        "feePolicyHash",
+        "fundingIntentHash",
+        "topologyEdgesHash",
+        "topologyHash",
+        "graphCommitmentExcludedFromTopologyHash"
+      ],
+      "properties": {
+        "routeNamespace": {
+          "$ref": "#/$defs/hash"
+        },
+        "routeNonce": {
+          "$ref": "#/$defs/hash"
+        },
+        "authorizedLauncher": {
+          "$ref": "#/$defs/nonzeroAddress"
+        },
+        "targetCount": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 16
+        },
+        "tokenTargetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "hookTargetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "initializerTargetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "initializerTargetIdHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "targetManifestHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "reviewAdmissionHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "feePolicyHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "fundingIntentHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "topologyEdgesHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "topologyHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "graphCommitmentExcludedFromTopologyHash": {
+          "const": true
+        }
+      }
+    },
+    "finalGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "graphCommitment",
+        "expectedGraphDeploymentHash",
+        "initializerCalldataHashes",
+        "expectedRuntimeCodeHashes",
+        "poolInitializationTargetIndex",
+        "poolInitializedInSameTransaction",
+        "permitRoutePayloadHash",
+        "permitExpectedResultHash"
+      ],
+      "properties": {
+        "graphCommitment": {
+          "$ref": "#/$defs/hash"
+        },
+        "expectedGraphDeploymentHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "initializerCalldataHashes": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/hash"
+          }
+        },
+        "expectedRuntimeCodeHashes": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/hash"
+          }
+        },
+        "poolInitializationTargetIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "poolInitializedInSameTransaction": {
+          "const": true
+        },
+        "permitRoutePayloadHash": {
+          "$ref": "#/$defs/hash"
+        },
+        "permitExpectedResultHash": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    }
+  }
+}
