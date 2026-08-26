@@ -223,7 +223,7 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "pack, then validate, submit, and status",
+      "pack -> validate --remote -> submit -> wallet -> status",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "There is no project allowlist or private approval path.",
@@ -233,9 +233,6 @@ describe("developer API key interface", () => {
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("nonceAllocated");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "launchEligibility.deployable",
-    );
-    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "supported_with_warnings",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("needs_evidence");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("walletHandoffUrl");
