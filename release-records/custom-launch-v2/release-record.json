@@ -11,19 +11,19 @@
   "subject": {
     "website": {
       "repository": "0xprogrammable/programmable",
-      "commitSha": "73177e886ecbb433949a8d519aa3e250d3e36e1a",
-      "treeSha": "09987b64c5def07be842da433b52e27eb80f9009",
+      "commitSha": "96ae149591ed27bce366d6d7d423ed307ced2cdc",
+      "treeSha": "af4d3887bb69427d7ab5900013cf9e28854ab480",
       "reviewedDiffBaseSha": "77a8826128950d8863d5ed463539337f9a692533",
-      "reviewedDiffSha256": "sha256:9e15178cc9dee81624e1b3f3dc19c003034b0b0dbc4785debb8413da16194225",
+      "reviewedDiffSha256": "sha256:527a5c171d5158ea5698275a70ebd996e71d61f5416c52a4bd09344d37c4f081",
       "publicOpenApiSha256": "sha256:5c54548daa58437ccae6962b5f07d4dc28db7ceacaaf298d94c9057438eb31e1",
       "launchPackageManifestSha256": "sha256:49e140908c16f548b88b52cf908be1af384d0d86358f8503f5c4c4465ec2efa9"
     },
     "apiService": {
       "repository": "0xprogrammable/programmable-open-hook-v2-internal",
       "servicePath": "services/custom-launch-api-v1",
-      "bindingAttestationCommitSha": "1ceccd74eee66130c43256d0561dd1aa778330a9",
+      "bindingAttestationCommitSha": "bba958d712e1bd8616074a0767d647b3858844c4",
       "bindingDocumentPath": "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json",
-      "bindingDocumentSha256": "sha256:c6a4e97e93ec2b5499afb3fcd9606f044ea97445c3bca030859283d845dda2ed",
+      "bindingDocumentSha256": "sha256:08633718b675472a4766a02647633083eb766ecd0bdfe2b4ec27ae7441cd8b86",
       "candidateCommitSha": "d229fc49d9e41b4a22cd6dade57fd15a9ba2c55b",
       "candidateTreeSha": "389fd3c709f5a67534f4b337e70616eac650c856",
       "imageDigest": "sha256:4cb3dce8016ae097ee66ad9d184bdc3960d243e91704d65c4d10514ef77818ca",
@@ -43,7 +43,7 @@
       "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
       "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
     },
-    "releaseSubjectSha256": "sha256:11305fff11f590db2ad4de42efca79408b8fb4c9edba65b49a7a744316e0ed12"
+    "releaseSubjectSha256": "sha256:f3baa2f6a00718f7bda7b0d9815931a85c51fcb93adc57f4be0c5c5f3bda44ce"
   },
   "releaseApproval": {
     "authority": "release_owner",
@@ -52,71 +52,71 @@
     "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
     "decidedAt": "2026-08-26T07:56:26Z",
     "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
-    "releaseSubjectSha256": "sha256:11305fff11f590db2ad4de42efca79408b8fb4c9edba65b49a7a744316e0ed12"
+    "releaseSubjectSha256": "sha256:f3baa2f6a00718f7bda7b0d9815931a85c51fcb93adc57f4be0c5c5f3bda44ce"
   },
   "validation": {
     "gates": [
       {
         "id": "website_release",
         "result": "passed",
-        "evidenceSha256": "sha256:fdc80f4efd02aa7d6ddbf017a63cd2778c47db44c60c81252edb7d9f70565df6",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/website_release.json",
-        "completedAt": "2026-08-26T08:45:33Z"
+        "evidenceSha256": "sha256:0b7fa5ab9ba075018020ea616a01500ed2e1e04228d647d5fcb01975cc0ccf4e",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/website_release.json",
+        "completedAt": "2026-08-26T09:43:22Z"
       },
       {
         "id": "custom_launch_api_release",
         "result": "passed",
-        "evidenceSha256": "sha256:117accbdae16f542b4dae699efd2416a6246e5998cca08187a78b6c9afb2e52c",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/custom_launch_api_release.json",
+        "evidenceSha256": "sha256:0245c292a297bf27bb6274122efdb1369a661770c1469d400fb01bf31d2f1182",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/custom_launch_api_release.json",
         "completedAt": "2026-08-26T08:45:33Z"
       },
       {
         "id": "database_migrations",
         "result": "passed",
-        "evidenceSha256": "sha256:58cf5cc498599e91d739c04c09aeb99aaa4a1ae6df1560ae8e103a4fa3e35a77",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/database_migrations.json",
+        "evidenceSha256": "sha256:cd7f33050e1f2cb4da8488fdc07a652f010f6537889677a4cd6470230bb87ea2",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/database_migrations.json",
         "completedAt": "2026-08-26T08:44:38Z"
       },
       {
         "id": "security",
         "result": "passed",
-        "evidenceSha256": "sha256:ba648b560ac418aed49d8af98942fc6528d0b15ae4cffa1fb343cbedf51bfefb",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/security.json",
-        "completedAt": "2026-08-26T08:41:31Z"
+        "evidenceSha256": "sha256:8aad82a94199e8a6da416cf4cd0d97628d0e36412a1d11443871dcbaaca97ac2",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/security.json",
+        "completedAt": "2026-08-26T09:43:22Z"
       },
       {
         "id": "public_contract",
         "result": "passed",
-        "evidenceSha256": "sha256:c714f9b647086b63bc06ff130f97f8d3e9087290e669a9672cf052f6d71271b7",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/public_contract.json",
+        "evidenceSha256": "sha256:34bb48605f9bef3d8cd248cc57cbd52b25e74a0bc2fcc3694b5990c29d29dec7",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/public_contract.json",
         "completedAt": "2026-08-26T08:45:33Z"
       },
       {
         "id": "source_verification_pipeline",
         "result": "passed",
-        "evidenceSha256": "sha256:41032660db9956af9564e95924bd124dac08570ae5a99d316ec6fcb2deedc5be",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/source_verification_pipeline.json",
+        "evidenceSha256": "sha256:b8166db0160a63fb84e25c64f48dc64a898f504ce18fa8d4b8bf4498bcfd792b",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/source_verification_pipeline.json",
         "completedAt": "2026-08-26T08:08:35Z"
       },
       {
         "id": "browser_qa",
         "result": "passed",
-        "evidenceSha256": "sha256:0d090a2ba2f20668cd16603558dd00bf4c65a60c427890a55cfb00a048795421",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/browser_qa.json",
-        "completedAt": "2026-08-26T07:27:41Z"
+        "evidenceSha256": "sha256:860015969d0fd568fa5f35522b6acc550781683be55c981b033280011629e030",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/browser_qa.json",
+        "completedAt": "2026-08-26T09:28:23Z"
       },
       {
         "id": "rollback_snapshot",
         "result": "passed",
-        "evidenceSha256": "sha256:f13eba4e570af6a32fed5e01494efded7e19163e994852ed1fdb300e1903309b",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/rollback_snapshot.json",
+        "evidenceSha256": "sha256:32ef9a8de5aa2d92d78f11c91e52be0a4a6d728c308097f3d0adf66e8561adb8",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/rollback_snapshot.json",
         "completedAt": "2026-08-26T07:52:32Z"
       },
       {
         "id": "clean_room_no_broadcast",
         "result": "passed",
-        "evidenceSha256": "sha256:bfe15012b9d63a6e078723dbf31f6df30767d174c26f9cf338a922ba881926f9",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates/clean_room_no_broadcast.json",
+        "evidenceSha256": "sha256:340eddc0a5157605620b297243d4ee321f1a2742e1ca36c3ecb689494cc44f1a",
+        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-v3-staging-gates-96ae1495/clean_room_no_broadcast.json",
         "completedAt": "2026-08-26T08:49:55Z"
       }
     ]
