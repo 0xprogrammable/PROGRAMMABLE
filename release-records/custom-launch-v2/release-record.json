@@ -1,6 +1,6 @@
 {
   "schemaVersion": "programmable.custom-launch-release-record.v2",
-  "recordStatus": "staging_approved",
+  "recordStatus": "candidate_verified",
   "createdAt": "2026-08-26T08:45:33Z",
   "releaseIntent": {
     "releaseId": "custom-launch-api-v3-20260826-001",
@@ -137,16 +137,16 @@
     }
   },
   "candidate": {
-    "workflowRunId": null,
-    "workflowRunAttempt": null,
-    "workflowRunUrl": null,
-    "websiteDeploymentId": null,
-    "immutableWebsiteUrl": null,
-    "websiteCommitSha": null,
-    "apiOrigin": null,
-    "apiReadinessIdentitySha256": null,
-    "verificationEvidenceSha256": null,
-    "verifiedAt": null
+    "workflowRunId": 32955073181,
+    "workflowRunAttempt": 1,
+    "workflowRunUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/32955073181",
+    "websiteDeploymentId": "dpl_8bxHJdhraJqadQEEp9cDhQcgDFtR",
+    "immutableWebsiteUrl": "https://launcher-v4-5sdyznchd-aficialais-projects.vercel.app",
+    "websiteCommitSha": "96ae149591ed27bce366d6d7d423ed307ced2cdc",
+    "apiOrigin": "https://programmable-custom-launch-api.fly.dev",
+    "apiReadinessIdentitySha256": "sha256:7098aa8155e3fc16408f2232aa8f28db530643bf1152155c171474e02a6c777c",
+    "verificationEvidenceSha256": "sha256:84f6de16708f513d46a9d5744eb71b68864ccf7edd96bebfd053fda92f54f61c",
+    "verifiedAt": "2026-08-26T09:54:06Z"
   },
   "promotionApproval": {
     "authority": "release_owner",
