@@ -139,7 +139,7 @@ function canonicalize(value) {
     `${JSON.stringify(key)}:${canonicalize(value[key])}`).join(",")}}`;
 }
 
-function parseDeterministicJson(bytes) {
+export function parseDeterministicCustomLaunchApiReleaseBindingV1(bytes) {
   const value = JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes));
   const expected = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
   if (expected.compare(bytes) !== 0) {
@@ -215,7 +215,7 @@ export async function verifyCustomLaunchApiReleaseBindingV1(input) {
   if (documentSha256 !== input.expectedDocumentSha256) {
     throw new Error("Custom Launch API binding digest does not match");
   }
-  const binding = parseDeterministicJson(bindingRaw);
+  const binding = parseDeterministicCustomLaunchApiReleaseBindingV1(bindingRaw);
   const [
     backendCommit,
     publicProfileContents,

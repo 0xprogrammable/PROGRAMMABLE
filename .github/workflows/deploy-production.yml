@@ -486,7 +486,7 @@ jobs:
             --expect-rollback-deployment-id "$ROLLBACK_DEPLOYMENT_ID" \
             --expect-rollback-deployment-url "$ROLLBACK_DEPLOYMENT_URL" \
             --expect-rollback-website-commit "$ROLLBACK_WEBSITE_COMMIT_SHA" \
-            --expect-detached-record-sha256="$EXPECTED_RECORD_SHA256" \
+            --expect-detached-record-sha256 "$EXPECTED_RECORD_SHA256" \
             --github-output "$GITHUB_OUTPUT"
           echo "record_path=$record_file" >> "$GITHUB_OUTPUT"
           echo "api_release_summary_path=$api_summary" >> "$GITHUB_OUTPUT"

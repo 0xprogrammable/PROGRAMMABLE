@@ -33,8 +33,8 @@
     "readinessIdentitySha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "apiContractSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "profileId": "programmable.direct-native-hook-graph.v1",
-    "profileVersion": "1.0.0",
-    "publicProfilePath": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v1.json",
+    "profileVersion": "2.0.0",
+    "publicProfilePath": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v2.json",
     "publicProfileSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   },
   "chain": {
