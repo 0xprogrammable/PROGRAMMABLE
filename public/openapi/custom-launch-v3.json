@@ -203,7 +203,7 @@
                 "example": {
                   "schemaVersion": "programmable.api-error.v1",
                   "error": {
-                    "code": "CUSTOM_LAUNCH_API_UNAVAILABLE",
+                    "code": "CUSTOM_LAUNCH_V3_UNAVAILABLE",
                     "message": "A required production dependency is temporarily unavailable",
                     "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
                   }
@@ -409,7 +409,7 @@
             }
           },
           "202": {
-            "description": "First acceptance of the exact canonical signature. The resource advances to funding_authorization_verified, simulating, or authorized; the Router transaction still requires a later explicit wallet send.",
+            "description": "First acceptance of the exact canonical signature. The resource advances through funding_authorization_verified and may return pending_review, action_required, prepared, simulating, or authorized; the Router transaction still requires a later explicit wallet send.",
             "content": {
               "application/json": {
                 "schema": {
@@ -632,7 +632,7 @@
             "example": {
               "schemaVersion": "programmable.api-error.v1",
               "error": {
-                "code": "CUSTOM_LAUNCH_API_UNAVAILABLE",
+                "code": "CUSTOM_LAUNCH_V3_UNAVAILABLE",
                 "message": "A required production dependency is temporarily unavailable",
                 "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
               }
@@ -818,10 +818,12 @@
             "const": [
               { "code": "SOURCE_TARGET_ANALYSIS_INCOMPLETE", "targetRoles": ["any"] },
               { "code": "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", "targetRoles": ["hook"] },
+              { "code": "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", "targetRoles": ["hook"] },
               { "code": "SOURCE_MUTABLE_BLOCKLIST_SURFACE", "targetRoles": ["token"] },
               { "code": "SOURCE_MUTABLE_TRANSFER_RESTRICTION", "targetRoles": ["token"] },
               { "code": "SOURCE_PUBLIC_MINT_SURFACE", "targetRoles": ["token"] },
               { "code": "SOURCE_MUTABLE_PAUSE_SURFACE", "targetRoles": ["token"] },
+              { "code": "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", "targetRoles": ["token"] },
               { "code": "SOURCE_PROXY_OR_UPGRADE_SURFACE", "targetRoles": ["token", "hook"] },
               { "code": "SOURCE_SELFDESTRUCT_SURFACE", "targetRoles": ["token", "hook"] },
               { "code": "RUNTIME_CALLCODE", "targetRoles": ["token", "hook"] },
@@ -2047,6 +2049,240 @@
         "description": "Exact Router transaction for explicit wallet review and send. It is a second wallet action only for EIP-3009 funding; for native-value or no-funding mode it is the sole wallet action. It is never auto-signed or auto-broadcast.",
         "additionalProperties": false
       },
+      "PreparedLaunchArtifactV3": {
+        "allOf": [
+          {
+            "$ref": "./custom-launch-v2.json#/components/schemas/PreparedLaunchArtifactV1"
+          },
+          {
+            "type": "object",
+            "required": [
+              "verificationBundleHash"
+            ],
+            "properties": {
+              "verificationBundleHash": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+              }
+            }
+          }
+        ],
+        "description": "Prepared Router artifact with the exact-source verification bundle required by the V3 admission contract."
+      },
+      "FinalizedProviderObservationV1": {
+        "type": "object",
+        "required": [
+          "provider",
+          "finalizedBlockNumber",
+          "finalizedBlockHash",
+          "commonBlockHash"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "primary",
+              "secondary"
+            ]
+          },
+          "finalizedBlockNumber": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "finalizedBlockHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "commonBlockHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FinalizedCheckpointV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "blockNumber",
+          "blockHash",
+          "quorumSize",
+          "observations"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.ethereum-finalized-checkpoint-quorum.v1"
+          },
+          "blockNumber": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "blockHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "quorumSize": {
+            "const": 2
+          },
+          "observations": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FinalizedProviderObservationV1"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "const": "primary"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FinalizedProviderObservationV1"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "const": "secondary"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "description": "Two-provider finalized checkpoint quorum. It may coexist with submitted evidence when the agreed checkpoint still trails the launch block.",
+        "additionalProperties": false
+      },
+      "CustomLaunchOnchainEvidenceV3": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "finalityState",
+          "chainId",
+          "router",
+          "onchainLaunchId",
+          "transactionHash",
+          "blockNumber",
+          "blockHash",
+          "logIndex",
+          "token",
+          "hook",
+          "poolManager",
+          "poolId",
+          "stampHash",
+          "confirmationDepth",
+          "requiredConfirmationDepth",
+          "observedAtBlockNumber"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-onchain-evidence.v1"
+          },
+          "finalityState": {
+            "enum": [
+              "submitted",
+              "finalized"
+            ]
+          },
+          "chainId": {
+            "const": "1"
+          },
+          "router": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
+          },
+          "onchainLaunchId": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "transactionHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "blockNumber": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "blockHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "logIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "token": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
+          },
+          "hook": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
+          },
+          "poolManager": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
+          },
+          "poolId": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "stampHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "confirmationDepth": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "requiredConfirmationDepth": {
+            "const": "64"
+          },
+          "observedAtBlockNumber": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "finalizedCheckpoint": {
+            "$ref": "#/components/schemas/FinalizedCheckpointV1"
+          }
+        },
+        "description": "Canonical Router event evidence. finalizedCheckpoint is optional for legacy compatibility and may be present in either submitted or finalized evidence.",
+        "additionalProperties": false
+      },
+      "ExactSimulationEvidenceV3": {
+        "type": "object",
+        "required": [
+          "outcome",
+          "transactionPreimageHash",
+          "profileHash",
+          "blockNumber",
+          "blockHash",
+          "blockTimestamp",
+          "responseDigest",
+          "gasEstimate"
+        ],
+        "properties": {
+          "outcome": {
+            "const": "passed"
+          },
+          "transactionPreimageHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "profileHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "blockNumber": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "blockHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32"
+          },
+          "blockTimestamp": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "responseDigest": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "gasEstimate": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          }
+        },
+        "description": "Server-authored exact Router simulation evidence pinned to one canonical Mainnet block and timestamp.",
+        "additionalProperties": false
+      },
       "FundingBoundaryV3": {
         "type": "object",
         "required": [
@@ -2200,6 +2436,7 @@
               "SOURCE_MUTABLE_ADMIN_SURFACE",
               "SOURCE_PUBLIC_MINT_SURFACE",
               "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+              "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
               "SOURCE_TARGET_ANALYSIS_INCOMPLETE"
             ]
           },
@@ -2397,10 +2634,7 @@
                 "const": "ready"
               },
               "stage": {
-                "enum": [
-                  "funding-signature-verified",
-                  "simulating"
-                ]
+                "const": "funding-signature-verified"
               },
               "actionRequired": {
                 "type": "null"
@@ -2421,7 +2655,93 @@
               "integrationState",
               "stage",
               "actionRequired",
-              "fundingBoundary"
+              "fundingBoundary",
+              "launchProfileHash",
+              "initializerTargetId",
+              "fundingMode",
+              "permitWindow",
+              "artifact",
+              "signedPermit",
+              "observationWindow",
+              "onchain",
+              "walletTransaction",
+              "transactionPreimageHash",
+              "simulation"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": "programmable.custom-launch-authorization-result.v3"
+              },
+              "integrationState": {
+                "const": "ready"
+              },
+              "stage": {
+                "const": "simulating"
+              },
+              "actionRequired": {
+                "type": "null"
+              },
+              "fundingBoundary": {
+                "$ref": "#/components/schemas/FundingBoundaryV3"
+              },
+              "platformAdmission": {
+                "$ref": "#/components/schemas/PlatformAdmissionStatusV1"
+              },
+              "launchProfileHash": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+              },
+              "initializerTargetId": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+              },
+              "fundingMode": {
+                "enum": [
+                  "none",
+                  "wallet-transaction-value",
+                  "eip-3009-receive-with-authorization"
+                ]
+              },
+              "permitWindow": {
+                "$ref": "#/components/schemas/DirectNativePermitWindowV1"
+              },
+              "artifact": {
+                "$ref": "#/components/schemas/PreparedLaunchArtifactV3"
+              },
+              "signedPermit": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1"
+              },
+              "observationWindow": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1"
+              },
+              "onchain": {
+                "type": "null"
+              },
+              "walletTransaction": {
+                "$ref": "#/components/schemas/ExactWalletTransactionV3"
+              },
+              "transactionPreimageHash": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+              },
+              "simulation": {
+                "type": "null"
+              }
+            },
+            "description": "Durable exact Router simulation input. No controller-wallet action is exposed before simulation passes.",
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "integrationState",
+              "stage",
+              "actionRequired",
+              "fundingBoundary",
+              "artifact",
+              "signedPermit",
+              "observationWindow",
+              "onchain",
+              "walletTransaction",
+              "simulation"
             ],
             "properties": {
               "schemaVersion": {
@@ -2474,6 +2794,31 @@
               },
               "platformAdmission": {
                 "$ref": "#/components/schemas/PlatformAdmissionStatusV1"
+              },
+              "artifact": {
+                "$ref": "#/components/schemas/PreparedLaunchArtifactV3"
+              },
+              "signedPermit": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1"
+              },
+              "observationWindow": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1"
+              },
+              "onchain": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CustomLaunchOnchainEvidenceV3"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "walletTransaction": {
+                "$ref": "#/components/schemas/ExactWalletTransactionV3"
+              },
+              "simulation": {
+                "$ref": "#/components/schemas/ExactSimulationEvidenceV3"
               }
             },
             "additionalProperties": false
@@ -2683,6 +3028,25 @@
         },
         "additionalProperties": false
       },
+      "CustomLaunchSummaryV3": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CustomLaunchResourceV3"
+          },
+          {
+            "type": "object",
+            "required": [
+              "output"
+            ],
+            "properties": {
+              "output": {
+                "type": "null"
+              }
+            }
+          }
+        ],
+        "description": "Bounded list projection. Output is always redacted; use the single-resource GET for precise polling and wallet handoff data."
+      },
       "CustomLaunchListPageV3": {
         "type": "object",
         "required": [
@@ -2698,7 +3062,7 @@
             "type": "array",
             "maxItems": 25,
             "items": {
-              "$ref": "#/components/schemas/CustomLaunchResourceV3"
+              "$ref": "#/components/schemas/CustomLaunchSummaryV3"
             }
           },
           "nextCursor": {

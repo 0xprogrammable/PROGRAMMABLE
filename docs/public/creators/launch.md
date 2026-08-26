@@ -37,6 +37,8 @@ The default direct-native profile uses `programmable.direct-native-hook-graph-pr
 `profileVersion: 3.0.0`. Revision 2 remains compatible. Revision 3 runs role-aware exact-source static admission. Every
 finding remains bound and visible: a configured blocking code and target-role match moves the request to
 `action_required`; other findings remain warnings. A final Router simulation is mandatory before authorization.
+Each enabled v4 permission must have a concrete reachable callback implementation; an interface declaration or
+fallback-only route does not qualify.
 
 These checks do not reproduce project tests and are not an audit or a guarantee of safety, honeypot resistance,
 liquidity, tradeability or fee behavior. Post-finality provider verification is independent from launch finality.
@@ -53,7 +55,7 @@ value before signing and broadcasting the Router transaction. Neither the API ke
 A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees
 with the public Router record.
 
-The mandatory 10 bps Programmable share may be additive to the project's selected fee or included in that selected total. The exact accounting basis, currency, claim binding and buy/sell economics are request-bound and server-recomputed. The Uniswap pool LP fee is separate. Generic fee claiming and buyback management for arbitrary hooks are not live; FADE has a specifically bound adapter only.
+Every V3 request must bind and disclose a 10 bps Programmable share, additive to the project's selected fee or included in that selected total. The exact declared accounting basis, currency, claim binding and buy/sell economics are request-bound and server-recomputed. Admission carries `feeBehaviorClaim: false`; it does not certify or enforce later swap fee behavior in arbitrary custom code. The Uniswap pool LP fee is separate. Generic fee claiming and buyback management for arbitrary hooks are not live; FADE has a specifically bound adapter only.
 
 ## Keep the record useful
 

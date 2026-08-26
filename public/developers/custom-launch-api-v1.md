@@ -24,10 +24,11 @@ contract. The default profile uses `schemaVersion: programmable.direct-native-ho
 compatible profile contract for existing clients and resources. The Router primitive supports 2-16 targets; the direct
 native profile requires 3-16 because token, hook and initializer roles are distinct. It accepts a project-owned token,
 a project-owned hook, every valid Uniswap v4 permission mask and an exact multi-contract graph. It does not substitute
-a Programmable-owned hook.
+a Programmable-owned hook. Every enabled v4 permission must resolve to a concrete reachable callback implementation;
+an interface declaration or fallback-only route does not qualify.
 
-Its mandatory 1,000-hundredths-of-a-bip Programmable share may be declared as an additive platform share or included
-inside the selected total. The request binds the selected buy and sell economics. Revision 3 does not issue a
+Every V3 request must bind and disclose a 1,000-hundredths-of-a-bip Programmable share, declared as an additive
+platform share or included inside the selected total. The request binds the selected buy and sell economics. Revision 3 does not issue a
 fee-conformance certification. It runs role-aware exact-source static admission, binds the resulting report and
 warnings, and requires a final Router simulation before the permit authority can sign. Source, compiler settings,
 constructor arguments, final calldata and simulation are bound per launch.
@@ -41,13 +42,13 @@ by the API key.
 The general V3 production profile is available on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the request-bound declared
+Every V3 request must bind and disclose a Programmable share of 1,000 parts per 1,000,000 of the request-bound declared
 assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is either `additive-platform-share` or
 `inclusive-selected-total`; the server recomputes buy and sell project share, effective total, fee currency and
-rounding. It accrues under the exact claim binding controlled by
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. These declared bindings do not certify the behavior of arbitrary custom
-code. Revision-3 admission and the mandatory Router simulation are not a fee-behavior guarantee. A reverted swap is
-expected to roll the fee back with the rest of the transaction; inspect the exact project implementation.
+rounding. The exact claim binding is controlled by
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. This request-bound policy does not certify or enforce the behavior of
+arbitrary custom code. Revision-3 admission and the required Router simulation carry `feeBehaviorClaim: false`;
+inspect the exact project implementation.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -90,13 +91,18 @@ conditions.
 Install only the immutable GitHub Release asset:
 
 ```sh
-npm install --global \
+programmable_cli_dir="$(mktemp -d)"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" \
   https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"
 programmable-launch --version
 ```
 
-The package name is `@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified
-npm registry package.
+Continue only after the checksum command reports `OK` and the version command prints `3.1.0`. The package name is
+`@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:
 

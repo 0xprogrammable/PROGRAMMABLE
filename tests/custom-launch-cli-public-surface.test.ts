@@ -351,6 +351,10 @@ describe("public Custom Launch CLI surface", () => {
   });
 
   it("publishes the live general V3 profile without changing V2 compatibility", () => {
+    const v1 = JSON.parse(readFileSync(
+      join(root, "public/openapi/custom-launch-v1.json"),
+      "utf8",
+    ));
     const v2 = JSON.parse(readFileSync(
       join(root, "public/openapi/custom-launch-v2.json"),
       "utf8",
@@ -542,10 +546,23 @@ describe("public Custom Launch CLI surface", () => {
         feeBehaviorClaim: { const: false },
       });
     expect(v3.components.schemas.PlatformAdmissionPolicyV1.properties
-      .blockingFindingRules.const[0]).toEqual({
-        code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
-        targetRoles: ["any"],
-      });
+      .blockingFindingRules.const).toEqual([
+        { code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: ["any"] },
+        { code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: ["hook"] },
+        { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
+        { code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: ["token"] },
+        { code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: ["token"] },
+        { code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: ["token", "hook"] },
+        { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["token", "hook"] },
+        { code: "RUNTIME_CALLCODE", targetRoles: ["token", "hook"] },
+        { code: "RUNTIME_DELEGATECALL", targetRoles: ["token", "hook"] },
+        { code: "RUNTIME_SELFDESTRUCT", targetRoles: ["token", "hook"] },
+      ]);
+    expect(v3.components.schemas.StaticBaselineFindingV1.properties.code.enum)
+      .toContain("V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING");
     expect(v3.components.schemas.DirectNativeExactSourceVerificationBundleV3
       .allOf[1].properties.compilationUnits.items.allOf[1]
       .properties.compilerVersion.const)
@@ -613,23 +630,149 @@ describe("public Custom Launch CLI surface", () => {
         "funding_authorization_verified",
         "authorized",
       ]));
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[0]
-      .properties.stage.const).toBe("platform-review-pending");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[1]
-      .properties.stage.const).toBe("funding-signature-required");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[3]
-      .properties.stage.const).toBe("router-transaction-required");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
-      .properties.stage.const).toBe("platform-review-action-required");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
-      .properties.actionRequired.properties.kind.const).toBe("security-review");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[4]
-      .required).toContain("staticBaseline");
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf.every(
+    const outputVariants = v3.components.schemas.CustomLaunchOutputV3.oneOf;
+    const outputForStage = (stage: string) => outputVariants.find(
+      (variant: { properties: { stage: { const?: string } } }) =>
+        variant.properties.stage.const === stage,
+    );
+    expect(outputForStage("platform-review-pending")).toBeDefined();
+    expect(outputForStage("funding-signature-required")).toBeDefined();
+    expect(outputForStage("funding-signature-verified")).toBeDefined();
+
+    const simulatingOutput = outputForStage("simulating");
+    expect(simulatingOutput.required).toEqual([
+      "schemaVersion",
+      "integrationState",
+      "stage",
+      "actionRequired",
+      "fundingBoundary",
+      "launchProfileHash",
+      "initializerTargetId",
+      "fundingMode",
+      "permitWindow",
+      "artifact",
+      "signedPermit",
+      "observationWindow",
+      "onchain",
+      "walletTransaction",
+      "transactionPreimageHash",
+      "simulation",
+    ]);
+    expect(simulatingOutput.properties).toMatchObject({
+      stage: { const: "simulating" },
+      actionRequired: { type: "null" },
+      artifact: {
+        $ref: "#/components/schemas/PreparedLaunchArtifactV3",
+      },
+      signedPermit: {
+        $ref: "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1",
+      },
+      observationWindow: {
+        $ref: "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1",
+      },
+      onchain: { type: "null" },
+      walletTransaction: {
+        $ref: "#/components/schemas/ExactWalletTransactionV3",
+      },
+      transactionPreimageHash: {
+        $ref: "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+      },
+      simulation: { type: "null" },
+    });
+    expect(simulatingOutput.additionalProperties).toBe(false);
+
+    const walletOutput = outputForStage("router-transaction-required");
+    expect(walletOutput.required).toEqual([
+      "schemaVersion",
+      "integrationState",
+      "stage",
+      "actionRequired",
+      "fundingBoundary",
+      "artifact",
+      "signedPermit",
+      "observationWindow",
+      "onchain",
+      "walletTransaction",
+      "simulation",
+    ]);
+    expect(walletOutput.properties).toMatchObject({
+      artifact: {
+        $ref: "#/components/schemas/PreparedLaunchArtifactV3",
+      },
+      signedPermit: {
+        $ref: "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1",
+      },
+      observationWindow: {
+        $ref: "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1",
+      },
+      onchain: {
+        oneOf: [
+          {
+            $ref: "#/components/schemas/CustomLaunchOnchainEvidenceV3",
+          },
+          { type: "null" },
+        ],
+      },
+      walletTransaction: {
+        $ref: "#/components/schemas/ExactWalletTransactionV3",
+      },
+      simulation: {
+        $ref: "#/components/schemas/ExactSimulationEvidenceV3",
+      },
+    });
+    expect(walletOutput.additionalProperties).toBe(false);
+    expect(v3.components.schemas.ExactSimulationEvidenceV3.required).toEqual([
+      "outcome",
+      "transactionPreimageHash",
+      "profileHash",
+      "blockNumber",
+      "blockHash",
+      "blockTimestamp",
+      "responseDigest",
+      "gasEstimate",
+    ]);
+    expect(v3.components.schemas.ExactSimulationEvidenceV3.additionalProperties)
+      .toBe(false);
+    expect(v1.components.schemas.PreparedLaunchArtifactV1.properties
+      .verificationBundleHash.$ref).toBe("#/components/schemas/Sha256Digest");
+    expect(v3.components.schemas.PreparedLaunchArtifactV3.allOf[1].required)
+      .toEqual(["verificationBundleHash"]);
+    expect(v3.components.schemas.CustomLaunchOnchainEvidenceV3.properties
+      .finalizedCheckpoint.$ref)
+      .toBe("#/components/schemas/FinalizedCheckpointV1");
+    expect(v1.components.schemas.CustomLaunchOnchainEvidenceV1.properties
+      .finalizedCheckpoint.$ref)
+      .toBe("#/components/schemas/FinalizedCheckpointV1");
+    expect(v3.components.schemas.FinalizedCheckpointV1).toMatchObject({
+      required: [
+        "schemaVersion",
+        "blockNumber",
+        "blockHash",
+        "quorumSize",
+        "observations",
+      ],
+      properties: {
+        schemaVersion: {
+          const: "programmable.ethereum-finalized-checkpoint-quorum.v1",
+        },
+        quorumSize: { const: 2 },
+        observations: { minItems: 2, maxItems: 2 },
+      },
+      additionalProperties: false,
+    });
+
+    const actionRequiredOutput = outputForStage("platform-review-action-required");
+    expect(actionRequiredOutput.properties.actionRequired.properties.kind.const)
+      .toBe("security-review");
+    expect(actionRequiredOutput.required).toContain("staticBaseline");
+    expect(outputVariants.every(
       (variant: { required: string[] }) =>
         variant.required.includes("fundingBoundary"),
     )).toBe(true);
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf.slice(0, 4).every(
+    expect(outputVariants.filter(
+      (variant: { properties: { stage: { const?: string } } }) =>
+        variant.properties.stage.const !== "platform-review-action-required",
+    ).every(
       (variant: { properties: Record<string, unknown> }) =>
         Object.hasOwn(variant.properties, "platformAdmission"),
     )).toBe(true);
@@ -646,11 +789,24 @@ describe("public Custom Launch CLI surface", () => {
       fundingSignatureProducedByService: { const: false },
       walletTransactionBroadcastByService: { const: false },
     });
-    expect(v3.components.schemas.CustomLaunchOutputV3.oneOf[3]
-      .properties.actionRequired.required).toEqual(expect.arrayContaining([
+    expect(JSON.stringify(v3)).not.toContain("CUSTOM_LAUNCH_API_UNAVAILABLE");
+    expect(v3.components.responses.V3Unavailable.content["application/json"]
+      .example.error.code).toBe("CUSTOM_LAUNCH_V3_UNAVAILABLE");
+    expect(walletOutput.properties.actionRequired.required)
+      .toEqual(expect.arrayContaining([
       "permitDigest",
       "initializerCalldataHash",
     ]));
+    expect(v3.components.schemas.CustomLaunchListPageV3.properties.launches
+      .items.$ref).toBe("#/components/schemas/CustomLaunchSummaryV3");
+    expect(v3.components.schemas.CustomLaunchSummaryV3.allOf).toEqual([
+      { $ref: "#/components/schemas/CustomLaunchResourceV3" },
+      {
+        type: "object",
+        required: ["output"],
+        properties: { output: { type: "null" } },
+      },
+    ]);
 
     const serialized = JSON.stringify(v3);
     expect(serialized).not.toContain('"additive":true');
@@ -691,6 +847,16 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     ));
     expect(packageJson.files).toContain("examples");
+    const packageGuide = readFileSync(
+      join(root, "packages/launch/README.md"),
+      "utf8",
+    );
+    expect(packageGuide).toContain(
+      "Package `3.1.0` supports production general profile",
+    );
+    expect(packageGuide).toContain(
+      "`programmable.direct-native-hook-graph.v1` version `3.0.0`",
+    );
     const guide = readFileSync(
       join(root, "packages/launch/examples/no-broadcast/README.md"),
       "utf8",

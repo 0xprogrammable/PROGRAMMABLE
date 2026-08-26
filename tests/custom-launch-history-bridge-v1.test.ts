@@ -15,7 +15,25 @@ const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
 const LAUNCH_ID = "40000000-0000-4000-8000-000000000004";
 const V2_LAUNCH_ID = "50000000-0000-4000-8000-000000000005";
 const V3_LAUNCH_ID = "60000000-0000-4000-8000-000000000006";
+const V3_NATIVE_LAUNCH_ID = "70000000-0000-4000-8000-000000000007";
+const V3_ACTION_REQUIRED_LAUNCH_ID = "80000000-0000-4000-8000-000000000008";
 const WEBSITE_TOKEN = "w".repeat(43);
+
+const EXTERNAL_LIQUIDITY_INTENT = Object.freeze({
+  model: "external-concentrated-liquidity",
+  declaredLaunchState: "liquidity_required",
+  binding: "legacy-v3-default",
+});
+const SEEDED_LIQUIDITY_INTENT = Object.freeze({
+  model: "launch-seeded-concentrated-liquidity",
+  declaredLaunchState: "assessment_required",
+  binding: "explicit-request-hash",
+});
+const INVENTORY_LIQUIDITY_INTENT = Object.freeze({
+  model: "hook-inventory-custom-accounting",
+  declaredLaunchState: "assessment_required",
+  binding: "explicit-request-hash",
+});
 
 function launch(ownerWallet: string = WALLET) {
   return {
@@ -83,10 +101,73 @@ function launchV3(ownerWallet: string = WALLET) {
     launchProfileHash: `sha256:${"66".repeat(32)}`,
     launchIntentHash: `sha256:${"77".repeat(32)}`,
     fundingIntentHash: `0x${"88".repeat(32)}`,
+    liquidityIntent: EXTERNAL_LIQUIDITY_INTENT,
     createdAt: "2026-08-24T12:02:00.000Z",
     updatedAt: "2026-08-24T12:02:01.000Z",
     output: null,
     failure: null,
+  };
+}
+
+const FUNDING_BOUNDARY = Object.freeze({
+  approvalTransactionRequired: false,
+  permit2Used: false,
+  fundingSignatureProducedByService: false,
+  walletTransactionBroadcastByService: false,
+});
+
+function launchV3Native(ownerWallet: string = WALLET) {
+  return {
+    ...launchV3(ownerWallet),
+    launchId: V3_NATIVE_LAUNCH_ID,
+    requestId: V3_NATIVE_LAUNCH_ID,
+    status: "pending_review",
+    fundingIntentHash: null,
+    liquidityIntent: SEEDED_LIQUIDITY_INTENT,
+    createdAt: "2026-08-24T12:03:00.000Z",
+    updatedAt: "2026-08-24T12:03:01.000Z",
+    output: {
+      schemaVersion: "programmable.custom-launch-authorization-result.v3",
+      integrationState: "ready",
+      stage: "platform-review-pending",
+      actionRequired: null,
+      fundingBoundary: FUNDING_BOUNDARY,
+    },
+  };
+}
+
+function launchV3ActionRequired(ownerWallet: string = WALLET) {
+  const reportSha256 = `sha256:${"99".repeat(32)}`;
+  return {
+    ...launchV3Native(ownerWallet),
+    launchId: V3_ACTION_REQUIRED_LAUNCH_ID,
+    requestId: V3_ACTION_REQUIRED_LAUNCH_ID,
+    status: "action_required",
+    liquidityIntent: INVENTORY_LIQUIDITY_INTENT,
+    createdAt: "2026-08-24T12:04:00.000Z",
+    updatedAt: "2026-08-24T12:04:01.000Z",
+    output: {
+      schemaVersion: "programmable.custom-launch-authorization-result.v3",
+      integrationState: "ready",
+      stage: "platform-review-action-required",
+      actionRequired: {
+        kind: "security-review",
+        reportSha256,
+        findingCodes: ["SOURCE_MUTABLE_TRANSFER_RESTRICTION"],
+        message: "Additional platform review is required before wallet authorization.",
+      },
+      staticBaseline: {
+        schemaVersion: "programmable.custom-launch-static-baseline-report.v1",
+        gateVersion: "1.0.0",
+        reportSha256,
+        findings: [{
+          code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
+          severity: "high",
+          targetId: "token",
+        }],
+      },
+      fundingBoundary: FUNDING_BOUNDARY,
+    },
   };
 }
 
@@ -366,6 +447,83 @@ describe("developer launch history same-origin bridge", () => {
     });
   });
 
+  it("preserves exact V3 liquidity intent projections in compact list rows", async () => {
+    fetchBackend
+      .mockResolvedValueOnce(backendJson({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV3({
+        launches: [launchV3Native(), launchV3ActionRequired()],
+        nextCursor: null,
+      }));
+
+    const response = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&limit=5`,
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
+      launches: [launchV3ActionRequired(), launchV3Native()],
+      nextCursor: null,
+    });
+    expect(body.launches.map((candidate: { liquidityIntent: unknown }) =>
+      candidate.liquidityIntent
+    )).toEqual([INVENTORY_LIQUIDITY_INTENT, SEEDED_LIQUIDITY_INTENT]);
+  });
+
+  it("preserves one exact V3 liquidity intent projection on single readback", async () => {
+    fetchBackend.mockResolvedValueOnce(new Response(
+      JSON.stringify(launchV3Native()),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_NATIVE_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_NATIVE_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual(launchV3Native());
+    expect(body.liquidityIntent).toEqual(SEEDED_LIQUIDITY_INTENT);
+  });
+
+  it.each([
+    ["missing binding", {
+      model: "external-concentrated-liquidity",
+      declaredLaunchState: "liquidity_required",
+    }],
+    ["an extra property", {
+      ...SEEDED_LIQUIDITY_INTENT,
+      currentLiquidity: "unknown",
+    }],
+    ["a mismatched declared state", {
+      ...INVENTORY_LIQUIDITY_INTENT,
+      declaredLaunchState: "liquidity_required",
+    }],
+    ["an unknown binding", {
+      ...EXTERNAL_LIQUIDITY_INTENT,
+      binding: "inferred",
+    }],
+  ])("fails closed when V3 liquidity intent has %s", async (_label, liquidityIntent) => {
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify({
+      ...launchV3Native(),
+      liquidityIntent,
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_NATIVE_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_NATIVE_LAUNCH_ID);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe(
+      "launch_history_unavailable",
+    );
+  });
+
   it("keeps V1 and V2 history available during exact V3 integration pending", async () => {
     fetchBackend
       .mockResolvedValueOnce(backendJson({ launches: [launch()], nextCursor: null }))
@@ -435,6 +593,43 @@ describe("developer launch history same-origin bridge", () => {
       "60000000-0000-4000-8000-000000000006",
     );
     expect(JSON.parse(String(init.body))).toEqual(submission);
+  });
+
+  it("fails closed if an EIP-3009 funding response loses its bound intent hash", async () => {
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify({
+      ...launchV3(),
+      status: "funding_authorization_verified",
+      fundingIntentHash: null,
+      output: {
+        schemaVersion: "programmable.custom-launch-authorization-result.v3",
+        integrationState: "ready",
+        stage: "funding-signature-verified",
+        actionRequired: null,
+        fundingBoundary: FUNDING_BOUNDARY,
+      },
+    }), {
+      status: 202,
+      headers: { "content-type": "application/json" },
+    }));
+    const response = await bridge().submitFundingAuthorization(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}/funding-authorization?walletAddress=${WALLET}&version=v3`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": V3_LAUNCH_ID,
+        },
+        body: JSON.stringify({
+          schemaVersion: "programmable.custom-launch-funding-authorization-signature.v1",
+          fundingIntentHash: launchV3().fundingIntentHash,
+          typedDataDigest: `0x${"99".repeat(32)}`,
+          signature: `0x${"11".repeat(64)}1b`,
+        }),
+      },
+    ), V3_LAUNCH_ID);
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe("launch_history_unavailable");
   });
 
   it("rejects a funding signature without exact V3 binding before backend access", async () => {
@@ -543,11 +738,67 @@ describe("developer launch history same-origin bridge", () => {
     expect(await response.json()).toEqual(resource);
   });
 
-  it("stops streaming an oversized single-resource response", async () => {
+  it("streams a bounded near-limit V3 rich handoff with repeated calldata", async () => {
+    const repeatedGraphBytes = `0x${"ab".repeat(800_000)}`;
+    const transaction = {
+      schemaVersion: "programmable.exact-wallet-transaction.v3",
+      chainId: "1",
+      from: WALLET,
+      to: "0x3333333333333333333333333333333333333333",
+      valueWei: "0",
+      calldata: repeatedGraphBytes,
+    };
+    const resource = {
+      ...launchV3Native(),
+      status: "authorized",
+      output: {
+        schemaVersion: "programmable.custom-launch-authorization-result.v3",
+        integrationState: "ready",
+        stage: "router-transaction-required",
+        actionRequired: {
+          kind: "send-router-transaction",
+          transaction,
+          graphCommitment: `0x${"aa".repeat(32)}`,
+          artifactHash: `sha256:${"bb".repeat(32)}`,
+          transactionPreimageHash: `sha256:${"cc".repeat(32)}`,
+          permitDigest: `0x${"dd".repeat(32)}`,
+          initializerCalldataHash: `0x${"ee".repeat(32)}`,
+        },
+        fundingBoundary: FUNDING_BOUNDARY,
+        artifact: {
+          route: { routePayload: repeatedGraphBytes },
+          unsignedRouterTransaction: {
+            calldataWithEmptySignature: repeatedGraphBytes,
+          },
+        },
+        signedPermit: { signature: `0x${"11".repeat(65)}` },
+        observationWindow: { confirmations: 2 },
+        onchain: null,
+        walletTransaction: transaction,
+        simulation: { outcome: "passed" },
+      },
+    };
+    const serialized = JSON.stringify(resource);
+    expect(Buffer.byteLength(serialized, "utf8")).toBeGreaterThan(6_000_000);
+    expect(Buffer.byteLength(serialized, "utf8")).toBeLessThan(8_388_608);
+    fetchBackend.mockResolvedValueOnce(new Response(serialized, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_NATIVE_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_NATIVE_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(resource);
+  });
+
+  it("stops streaming a single-resource response beyond the 8 MiB bound", async () => {
     const resource = {
       ...launchV2(),
       status: "authorized",
-      output: { oversized: "a".repeat(1_050_000) },
+      output: { oversized: "a".repeat(8_390_000) },
     };
     fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
       status: 200,

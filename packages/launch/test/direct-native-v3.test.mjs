@@ -299,10 +299,12 @@ test("V3 profile binds static admission without claiming safety or fee behavior"
     blockingFindingRules: [
       { code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: ["any"] },
       { code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: ["hook"] },
+      { code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] },
       { code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: ["token"] },
       { code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: ["token"] },
       { code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: ["token"] },
       { code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: ["token"] },
+      { code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: ["token"] },
       { code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: ["token", "hook"] },
       { code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["token", "hook"] },
       { code: "RUNTIME_CALLCODE", targetRoles: ["token", "hook"] },

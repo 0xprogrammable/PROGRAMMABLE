@@ -53,6 +53,10 @@ const PLATFORM_ADMISSION_POLICY = Object.freeze({
       targetRoles: Object.freeze(["hook"]),
     }),
     Object.freeze({
+      code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
+      targetRoles: Object.freeze(["hook"]),
+    }),
+    Object.freeze({
       code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
       targetRoles: Object.freeze(["token"]),
     }),
@@ -66,6 +70,10 @@ const PLATFORM_ADMISSION_POLICY = Object.freeze({
     }),
     Object.freeze({
       code: "SOURCE_MUTABLE_PAUSE_SURFACE",
+      targetRoles: Object.freeze(["token"]),
+    }),
+    Object.freeze({
+      code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
       targetRoles: Object.freeze(["token"]),
     }),
     Object.freeze({

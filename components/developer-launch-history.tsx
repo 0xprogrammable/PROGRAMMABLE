@@ -126,17 +126,17 @@ const sha256Pattern = /^sha256:[0-9a-f]{64}$/u;
 const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
   received: 0,
   validating: 1,
-  pending_review: 2,
-  action_required: 2,
-  prepared: 2,
-  awaiting_funding_authorization: 3,
-  funding_authorization_verified: 4,
-  simulating: 5,
-  authorized: 6,
-  submitted: 7,
-  failed: 8,
-  cancelled: 8,
-  finalized: 9,
+  awaiting_funding_authorization: 2,
+  funding_authorization_verified: 3,
+  pending_review: 4,
+  action_required: 4,
+  prepared: 5,
+  simulating: 6,
+  authorized: 7,
+  submitted: 8,
+  failed: 9,
+  cancelled: 9,
+  finalized: 10,
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -259,6 +259,15 @@ class LaunchHistoryRequestError extends Error {
     super(message);
     this.name = "LaunchHistoryRequestError";
   }
+}
+
+export function launchPollingRetryAfterMs(
+  status: number,
+  retryAfterMs: number | null,
+) {
+  return (status === 429 || status === 503) && retryAfterMs !== null
+    ? retryAfterMs
+    : null;
 }
 
 function readApiError(
@@ -930,13 +939,15 @@ export function DeveloperLaunchHistory({
               ? cause.message
               : "Unable to track the submitted transaction.",
           );
-          if (
-            cause instanceof LaunchHistoryRequestError
-            && cause.status === 429
-            && cause.retryAfterMs !== null
-          ) {
-            waitMs = cause.retryAfterMs;
-            continue;
+          if (cause instanceof LaunchHistoryRequestError) {
+            const retryAfterMs = launchPollingRetryAfterMs(
+              cause.status,
+              cause.retryAfterMs,
+            );
+            if (retryAfterMs !== null) {
+              waitMs = retryAfterMs;
+              continue;
+            }
           }
           return;
         }
@@ -976,6 +987,12 @@ export function DeveloperLaunchHistory({
             );
             return;
           }
+          if (updated.status === "action_required") {
+            setStatusMessage(
+              "Platform review is required before Router simulation. No wallet action is needed.",
+            );
+            return;
+          }
           if (terminalStatus(updated.status)) {
             setStatusMessage("Launch preparation reached a terminal state.");
             return;
@@ -985,6 +1002,8 @@ export function DeveloperLaunchHistory({
             || ![
               "awaiting_funding_authorization",
               "funding_authorization_verified",
+              "pending_review",
+              "prepared",
               "simulating",
             ].includes(updated.status)
           ) {
@@ -993,7 +1012,13 @@ export function DeveloperLaunchHistory({
           setStatusMessage(
             updated.status === "simulating"
               ? "The exact Router transaction is being simulated."
-              : "The funding authorization is verified. Preparing the Router transaction.",
+              : updated.status === "pending_review"
+                ? "Admission checks are still running before Router simulation."
+                : updated.status === "prepared"
+                  ? "The exact Router transaction is prepared and waiting for simulation."
+                  : updated.status === "awaiting_funding_authorization"
+                    ? "Funding authorization acceptance is still being reconciled."
+                    : "The funding authorization is verified. Preparing the Router transaction.",
           );
           waitMs = authorizedPollIntervalMs;
         } catch (cause) {
@@ -1003,13 +1028,15 @@ export function DeveloperLaunchHistory({
               ? cause.message
               : "Unable to prepare the Router transaction.",
           );
-          if (
-            cause instanceof LaunchHistoryRequestError
-            && cause.status === 429
-            && cause.retryAfterMs !== null
-          ) {
-            waitMs = cause.retryAfterMs;
-            continue;
+          if (cause instanceof LaunchHistoryRequestError) {
+            const retryAfterMs = launchPollingRetryAfterMs(
+              cause.status,
+              cause.retryAfterMs,
+            );
+            if (retryAfterMs !== null) {
+              waitMs = retryAfterMs;
+              continue;
+            }
           }
           return;
         }

@@ -77,10 +77,12 @@ const platformAdmissionPolicy = Object.freeze({
   blockingFindingRules: Object.freeze([
     Object.freeze({ code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: ["any"] }),
     Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: ["hook"] }),
+    Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: ["hook"] }),
     Object.freeze({ code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: ["token"] }),
     Object.freeze({ code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: ["token"] }),
     Object.freeze({ code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: ["token"] }),
     Object.freeze({ code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: ["token"] }),
+    Object.freeze({ code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: ["token"] }),
     Object.freeze({ code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: ["token", "hook"] }),
     Object.freeze({ code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: ["token", "hook"] }),
     Object.freeze({ code: "RUNTIME_CALLCODE", targetRoles: ["token", "hook"] }),

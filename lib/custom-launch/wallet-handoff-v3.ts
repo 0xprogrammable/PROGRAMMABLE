@@ -61,6 +61,7 @@ const CANONICAL_UINT = /^(?:0|[1-9][0-9]*)$/u;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const FUNDING_SUBMISSION_IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/u;
+const CANONICAL_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,255}$/u;
 
 const OUTPUT_KEYS = Object.freeze([
   "schemaVersion",
@@ -68,6 +69,29 @@ const OUTPUT_KEYS = Object.freeze([
   "stage",
   "actionRequired",
   "fundingBoundary",
+]);
+const SIMULATING_OUTPUT_KEYS = Object.freeze([
+  ...OUTPUT_KEYS,
+  "launchProfileHash",
+  "initializerTargetId",
+  "fundingMode",
+  "permitWindow",
+  "artifact",
+  "signedPermit",
+  "observationWindow",
+  "onchain",
+  "walletTransaction",
+  "transactionPreimageHash",
+  "simulation",
+]);
+const AUTHORIZED_OUTPUT_KEYS = Object.freeze([
+  ...OUTPUT_KEYS,
+  "artifact",
+  "signedPermit",
+  "observationWindow",
+  "onchain",
+  "walletTransaction",
+  "simulation",
 ]);
 const PLATFORM_ADMISSION_KEYS = Object.freeze([
   "schemaVersion",
@@ -93,6 +117,7 @@ const PLATFORM_ADMISSION_WARNING_CODES = new Set([
   "SOURCE_MUTABLE_ADMIN_SURFACE",
   "SOURCE_PUBLIC_MINT_SURFACE",
   "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
+  "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
   "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
 ]);
 const FUNDING_BOUNDARY_KEYS = Object.freeze([
@@ -163,6 +188,72 @@ const EXACT_TRANSACTION_KEYS = Object.freeze([
   "to",
   "valueWei",
   "calldata",
+]);
+const SIGNED_PERMIT_KEYS = Object.freeze([
+  "schemaVersion",
+  "artifactHash",
+  "chainId",
+  "router",
+  "authoritySafe",
+  "signerAddress",
+  "permitDigest",
+  "safeMessageDigest",
+  "signature",
+  "validAfter",
+  "deadline",
+]);
+const OBSERVATION_WINDOW_KEYS = Object.freeze([
+  "schemaVersion",
+  "chainId",
+  "router",
+  "fromBlock",
+  "toBlock",
+]);
+const ONCHAIN_EVIDENCE_KEYS = Object.freeze([
+  "schemaVersion",
+  "finalityState",
+  "chainId",
+  "router",
+  "onchainLaunchId",
+  "transactionHash",
+  "blockNumber",
+  "blockHash",
+  "logIndex",
+  "token",
+  "hook",
+  "poolManager",
+  "poolId",
+  "stampHash",
+  "confirmationDepth",
+  "requiredConfirmationDepth",
+  "observedAtBlockNumber",
+]);
+const FINALIZED_CHECKPOINT_KEYS = Object.freeze([
+  "schemaVersion",
+  "blockNumber",
+  "blockHash",
+  "quorumSize",
+  "observations",
+]);
+const FINALIZED_PROVIDER_OBSERVATION_KEYS = Object.freeze([
+  "provider",
+  "finalizedBlockNumber",
+  "finalizedBlockHash",
+  "commonBlockHash",
+]);
+const SIMULATION_KEYS = Object.freeze([
+  "outcome",
+  "transactionPreimageHash",
+  "profileHash",
+  "blockNumber",
+  "blockHash",
+  "blockTimestamp",
+  "responseDigest",
+  "gasEstimate",
+]);
+const PERMIT_WINDOW_KEYS = Object.freeze([
+  "validAfter",
+  "deadline",
 ]);
 
 const RECEIVE_WITH_AUTHORIZATION_TYPES = Object.freeze([
@@ -571,6 +662,7 @@ export function prepareCustomLaunchRouterReviewV3(
     || customLaunchWalletTransactionPreimageHashV2(action)
       !== transactionPreimageHash
   ) return invalid();
+  assertAuthorizedEvidenceV3(outputRecord, required, transaction, action);
   assertExactCustomGraphRouterCalldataV3(
     action,
     graphCommitment,
@@ -1021,14 +1113,317 @@ function authorizationOutputRecord(value: unknown) {
     return invalid();
   }
   const candidate = value as Readonly<Record<string, unknown>>;
+  const stageKeys = candidate.stage === "simulating"
+    ? SIMULATING_OUTPUT_KEYS
+    : candidate.stage === "router-transaction-required"
+      ? AUTHORIZED_OUTPUT_KEYS
+      : OUTPUT_KEYS;
   const expectedKeys = Object.hasOwn(candidate, "platformAdmission")
-    ? [...OUTPUT_KEYS, "platformAdmission"]
-    : OUTPUT_KEYS;
+    ? [...stageKeys, "platformAdmission"]
+    : stageKeys;
   const output = exactRecord(candidate, expectedKeys);
   if (Object.hasOwn(output, "platformAdmission")) {
     assertPlatformAdmissionStatusV1(output.platformAdmission);
   }
+  if (output.stage === "simulating") assertSimulatingOutputV3(output);
   return output;
+}
+
+function assertSimulatingOutputV3(
+  output: Readonly<Record<string, unknown>>,
+) {
+  if (output.actionRequired !== null
+    || exactSha256(output.launchProfileHash) !== output.launchProfileHash
+    || typeof output.initializerTargetId !== "string"
+    || !CANONICAL_IDENTIFIER.test(output.initializerTargetId)
+    || ![
+      "none",
+      "wallet-transaction-value",
+      "eip-3009-receive-with-authorization",
+    ].includes(String(output.fundingMode))
+    || output.onchain !== null
+    || output.simulation !== null) {
+    return invalid();
+  }
+  const permitWindow = exactRecord(output.permitWindow, PERMIT_WINDOW_KEYS);
+  const validAfter = canonicalUint256(permitWindow.validAfter).parsed;
+  const deadline = canonicalUint256(permitWindow.deadline).parsed;
+  if (deadline <= validAfter || deadline - validAfter > MAXIMUM_FUNDING_VALIDITY_SECONDS) {
+    return invalid();
+  }
+  const transaction = assertExactWalletTransactionV3(output.walletTransaction);
+  const action = exactWalletActionV3(transaction);
+  const transactionPreimageHash = exactSha256(output.transactionPreimageHash);
+  if (customLaunchWalletTransactionPreimageHashV2(action) !== transactionPreimageHash) {
+    return invalid();
+  }
+  assertPreparedArtifactBindingsV3(output.artifact, Object.freeze({
+    artifactHash: undefined,
+    graphCommitment: undefined,
+    permitDigest: undefined,
+    initializerCalldataHash: undefined,
+    transaction,
+  }));
+  assertSignedPermitV3(output.signedPermit, Object.freeze({
+    artifactHash: undefined,
+    permitDigest: undefined,
+    router: transaction.to,
+  }));
+  assertObservationWindowV3(output.observationWindow, transaction.to);
+}
+
+function assertAuthorizedEvidenceV3(
+  output: Readonly<Record<string, unknown>>,
+  actionRequired: Readonly<Record<string, unknown>>,
+  transaction: Readonly<Record<string, unknown>>,
+  action: CustomLaunchWalletActionV1,
+) {
+  const topLevelTransaction = assertExactWalletTransactionV3(
+    output.walletTransaction,
+  );
+  assertSameExactWalletTransactionV3(transaction, topLevelTransaction);
+  const artifactHash = exactSha256(actionRequired.artifactHash);
+  const graphCommitment = exactNonzeroLowerBytes32(
+    actionRequired.graphCommitment,
+  );
+  const permitDigest = exactNonzeroLowerBytes32(actionRequired.permitDigest);
+  const initializerCalldataHash = exactNonzeroLowerBytes32(
+    actionRequired.initializerCalldataHash,
+  );
+  assertPreparedArtifactBindingsV3(output.artifact, Object.freeze({
+    artifactHash,
+    graphCommitment,
+    permitDigest,
+    initializerCalldataHash,
+    transaction,
+  }));
+  assertSignedPermitV3(output.signedPermit, Object.freeze({
+    artifactHash,
+    permitDigest,
+    router: transaction.to,
+  }));
+  assertObservationWindowV3(output.observationWindow, transaction.to);
+  if (output.onchain !== null) {
+    assertOnchainEvidenceV3(output.onchain, transaction.to);
+  }
+  assertSimulationEvidenceV3(
+    output.simulation,
+    customLaunchWalletTransactionPreimageHashV2(action),
+  );
+}
+
+function assertExactWalletTransactionV3(
+  value: unknown,
+): Readonly<Record<string, unknown>> {
+  const transaction = exactRecord(value, EXACT_TRANSACTION_KEYS);
+  if (transaction.schemaVersion !== CUSTOM_LAUNCH_EXACT_WALLET_TRANSACTION_SCHEMA_V3
+    || transaction.chainId !== "1") return invalid();
+  requiredAddress(transaction.from);
+  requiredAddress(transaction.to);
+  canonicalUint256(transaction.valueWei);
+  exactLowerHexData(transaction.calldata);
+  return transaction;
+}
+
+function exactWalletActionV3(
+  transaction: Readonly<Record<string, unknown>>,
+): CustomLaunchWalletActionV1 {
+  const valueWei = canonicalUint256(transaction.valueWei);
+  return Object.freeze({
+    chainId: "1",
+    from: requiredAddress(transaction.from),
+    to: requiredAddress(transaction.to),
+    data: exactLowerHexData(transaction.calldata),
+    value: toHex(valueWei.parsed),
+    valueWei: valueWei.source,
+  });
+}
+
+function assertSameExactWalletTransactionV3(
+  left: Readonly<Record<string, unknown>>,
+  right: Readonly<Record<string, unknown>>,
+) {
+  if (left.schemaVersion !== right.schemaVersion
+    || left.chainId !== right.chainId
+    || !sameAddress(left.from, right.from)
+    || !sameAddress(left.to, right.to)
+    || left.valueWei !== right.valueWei
+    || left.calldata !== right.calldata) return invalid();
+}
+
+function assertPreparedArtifactBindingsV3(
+  value: unknown,
+  expected: Readonly<{
+    artifactHash: `sha256:${string}` | undefined;
+    graphCommitment: Hex | undefined;
+    permitDigest: Hex | undefined;
+    initializerCalldataHash: Hex | undefined;
+    transaction: Readonly<Record<string, unknown>>;
+  }>,
+) {
+  const artifact = record(value);
+  const route = record(artifact.route);
+  const unsigned = record(artifact.unsignedRouterTransaction);
+  const artifactHash = exactSha256(artifact.artifactHash);
+  const permitDigest = exactNonzeroLowerBytes32(artifact.permitDigest);
+  const graphCommitment = exactNonzeroLowerBytes32(route.graphCommitment);
+  if (artifact.schemaVersion !== "programmable.prepared-custom-graph-launch.v1"
+    || (expected.artifactHash !== undefined && artifactHash !== expected.artifactHash)
+    || (expected.permitDigest !== undefined && permitDigest !== expected.permitDigest)
+    || (expected.graphCommitment !== undefined && graphCommitment !== expected.graphCommitment)
+    || unsigned.chainId !== "1"
+    || !sameAddress(unsigned.from, expected.transaction.from)
+    || !sameAddress(unsigned.to, expected.transaction.to)
+    || unsigned.valueWei !== expected.transaction.valueWei) return invalid();
+  if (expected.initializerCalldataHash !== undefined) {
+    if (!Array.isArray(route.targets) || !route.targets.some((target) => {
+      if (target === null || Array.isArray(target) || typeof target !== "object") {
+        return false;
+      }
+      return (target as Readonly<Record<string, unknown>>).initializerCalldataHash
+        === expected.initializerCalldataHash;
+    })) return invalid();
+  }
+}
+
+function assertSignedPermitV3(
+  value: unknown,
+  expected: Readonly<{
+    artifactHash: `sha256:${string}` | undefined;
+    permitDigest: Hex | undefined;
+    router: unknown;
+  }>,
+) {
+  const permit = exactRecord(value, SIGNED_PERMIT_KEYS);
+  const validAfter = canonicalUint256(permit.validAfter).parsed;
+  const deadline = canonicalUint256(permit.deadline).parsed;
+  if (permit.schemaVersion !== "programmable.signed-prepared-launch-permit.v1"
+    || permit.chainId !== "1"
+    || (expected.artifactHash !== undefined
+      && exactSha256(permit.artifactHash) !== expected.artifactHash)
+    || (expected.permitDigest !== undefined
+      && exactNonzeroLowerBytes32(permit.permitDigest) !== expected.permitDigest)
+    || !sameAddress(permit.router, expected.router)
+    || !isAddress(String(permit.authoritySafe))
+    || !isAddress(String(permit.signerAddress))
+    || exactLowerBytes32(permit.safeMessageDigest) !== permit.safeMessageDigest
+    || exactLowerHexData(permit.signature) !== permit.signature
+    || deadline <= validAfter
+    || deadline - validAfter > MAXIMUM_FUNDING_VALIDITY_SECONDS) return invalid();
+  exactSha256(permit.artifactHash);
+  exactNonzeroLowerBytes32(permit.permitDigest);
+}
+
+function assertObservationWindowV3(value: unknown, router: unknown) {
+  const observation = exactRecord(value, OBSERVATION_WINDOW_KEYS);
+  const fromBlock = canonicalUint256(observation.fromBlock).parsed;
+  const toBlock = canonicalUint256(observation.toBlock).parsed;
+  if (observation.schemaVersion !== "programmable.custom-launch-observation-window.v1"
+    || observation.chainId !== "1"
+    || !sameAddress(observation.router, router)
+    || toBlock < fromBlock) return invalid();
+}
+
+function assertOnchainEvidenceV3(value: unknown, router: unknown) {
+  const candidate = record(value);
+  const evidence = exactRecord(candidate, Object.hasOwn(
+    candidate,
+    "finalizedCheckpoint",
+  ) ? [...ONCHAIN_EVIDENCE_KEYS, "finalizedCheckpoint"] : ONCHAIN_EVIDENCE_KEYS);
+  const confirmationDepth = canonicalUint256(evidence.confirmationDepth).parsed;
+  const observedAt = canonicalUint256(evidence.observedAtBlockNumber).parsed;
+  const blockNumber = canonicalUint256(evidence.blockNumber).parsed;
+  if (evidence.schemaVersion !== "programmable.custom-launch-onchain-evidence.v1"
+    || !["submitted", "finalized"].includes(String(evidence.finalityState))
+    || evidence.chainId !== "1"
+    || !sameAddress(evidence.router, router)
+    || exactLowerBytes32(evidence.onchainLaunchId) !== evidence.onchainLaunchId
+    || exactLowerBytes32(evidence.transactionHash) !== evidence.transactionHash
+    || blockNumber === 0n
+    || exactLowerBytes32(evidence.blockHash) !== evidence.blockHash
+    || typeof evidence.logIndex !== "number"
+    || !Number.isSafeInteger(evidence.logIndex)
+    || evidence.logIndex < 0
+    || !isAddress(String(evidence.token))
+    || !isAddress(String(evidence.hook))
+    || !isAddress(String(evidence.poolManager))
+    || exactLowerBytes32(evidence.poolId) !== evidence.poolId
+    || exactLowerBytes32(evidence.stampHash) !== evidence.stampHash
+    || evidence.requiredConfirmationDepth !== "64"
+    || observedAt < blockNumber
+    || (evidence.finalityState === "finalized" && confirmationDepth < 64n)) {
+    return invalid();
+  }
+  if (Object.hasOwn(evidence, "finalizedCheckpoint")) {
+    assertFinalizedCheckpointV3(evidence.finalizedCheckpoint, Object.freeze({
+      launchBlockNumber: blockNumber,
+      observedAtBlockNumber: observedAt,
+      launchFinalityState: evidence.finalityState,
+    }));
+  }
+}
+
+function assertFinalizedCheckpointV3(
+  value: unknown,
+  context: Readonly<{
+    launchBlockNumber: bigint;
+    observedAtBlockNumber: bigint;
+    launchFinalityState: unknown;
+  }>,
+) {
+  const checkpoint = exactRecord(value, FINALIZED_CHECKPOINT_KEYS);
+  const blockNumber = canonicalUint256(checkpoint.blockNumber).parsed;
+  const blockHash = exactLowerBytes32(checkpoint.blockHash);
+  if (checkpoint.schemaVersion
+      !== "programmable.ethereum-finalized-checkpoint-quorum.v1"
+    || checkpoint.quorumSize !== 2
+    || blockNumber > context.observedAtBlockNumber
+    || (context.launchFinalityState === "finalized"
+      && blockNumber < context.launchBlockNumber)
+    || !Array.isArray(checkpoint.observations)
+    || checkpoint.observations.length !== 2) return invalid();
+  const observations = checkpoint.observations.map((value, index) => {
+    const observation = exactRecord(
+      value,
+      FINALIZED_PROVIDER_OBSERVATION_KEYS,
+    );
+    const finalizedBlockNumber = canonicalUint256(
+      observation.finalizedBlockNumber,
+    ).parsed;
+    const finalizedBlockHash = exactLowerBytes32(
+      observation.finalizedBlockHash,
+    );
+    if (observation.provider !== (index === 0 ? "primary" : "secondary")
+      || finalizedBlockNumber < blockNumber
+      || exactLowerBytes32(observation.commonBlockHash) !== blockHash) {
+      return invalid();
+    }
+    return Object.freeze({ finalizedBlockNumber, finalizedBlockHash });
+  });
+  const minimumProviderBlock = observations[0]!.finalizedBlockNumber
+      < observations[1]!.finalizedBlockNumber
+    ? observations[0]!
+    : observations[1]!;
+  if (blockNumber !== minimumProviderBlock.finalizedBlockNumber
+    || observations.some((observation) =>
+      observation.finalizedBlockNumber === blockNumber
+      && observation.finalizedBlockHash !== blockHash)) return invalid();
+}
+
+function assertSimulationEvidenceV3(
+  value: unknown,
+  expectedTransactionPreimageHash: `sha256:${string}`,
+) {
+  const simulation = exactRecord(value, SIMULATION_KEYS);
+  if (simulation.outcome !== "passed"
+    || exactSha256(simulation.transactionPreimageHash)
+      !== expectedTransactionPreimageHash
+    || exactSha256(simulation.profileHash) !== simulation.profileHash
+    || canonicalUint256(simulation.blockNumber).parsed === 0n
+    || exactLowerBytes32(simulation.blockHash) !== simulation.blockHash
+    || canonicalUint256(simulation.blockTimestamp).parsed === 0n
+    || exactSha256(simulation.responseDigest) !== simulation.responseDigest
+    || canonicalUint256(simulation.gasEstimate).parsed === 0n) return invalid();
 }
 
 function assertPlatformAdmissionStatusV1(value: unknown) {
@@ -1051,16 +1446,20 @@ function exactRecord(
   value: unknown,
   expectedKeys: readonly string[],
 ): Readonly<Record<string, unknown>> {
-  if (value === null || Array.isArray(value) || typeof value !== "object") {
-    return invalid();
-  }
-  const record = value as Readonly<Record<string, unknown>>;
-  const keys = Object.keys(record);
+  const result = record(value);
+  const keys = Object.keys(result);
   if (
     keys.length !== expectedKeys.length
     || keys.some((key) => !expectedKeys.includes(key))
   ) return invalid();
-  return record;
+  return result;
+}
+
+function record(value: unknown): Readonly<Record<string, unknown>> {
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    return invalid();
+  }
+  return value as Readonly<Record<string, unknown>>;
 }
 
 function tuple(value: unknown, length: number): readonly unknown[] {

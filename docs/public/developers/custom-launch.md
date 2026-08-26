@@ -84,6 +84,8 @@ but the token inventory, accounting and redemption or sell path still come from 
 only means the Router transfers no launch funding; it does not make an empty ordinary pool liquid.
 
 Revision 3 checks exact source/build bindings and hook permission consistency, then applies role-aware static admission.
+Every enabled Uniswap v4 permission must resolve to a concrete reachable callback implementation; an interface
+declaration or fallback-only route does not qualify.
 Every finding remains bound and visible. A configured blocking finding code blocks only its configured target role,
 except analysis-incomplete findings which block any role. A blocking code and role match returns `action_required`;
 findings outside those pairs remain warnings. A final Router simulation is mandatory before authorization.
@@ -103,14 +105,14 @@ and buy/sell behavior, and users must review them.
 The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the request-bound declared
-assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is either
+Every V3 request must bind and disclose a Programmable share of 1,000 parts per 1,000,000 of its declared assessment
+basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is either
 `additive-platform-share` or `inclusive-selected-total`; the server recomputes the buy and sell project share,
 effective total, fee currency and rounding from the exact binding. Its exact claim binding is controlled by
 `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. Revision 3 does not issue a fee-conformance certification. The declared
-fee bindings remain part of the exact launch intent, but static admission and Router simulation do not guarantee the
-fee behavior of arbitrary custom code. A reverted swap is expected to roll the fee back with the rest of the
-transaction; inspect the exact project implementation.
+fee bindings remain part of the exact launch intent, but `feeBehaviorClaim: false` means static admission and Router
+simulation do not certify or enforce how arbitrary custom code charges or routes fees on later swaps. Inspect the
+exact project implementation.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -121,10 +123,17 @@ disabled.
 Install the pinned public GitHub Release asset. Do not substitute an unverified npm-registry package with the same name.
 
 ```bash
-npm install --global \
+programmable_cli_dir="$(mktemp -d)"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" \
   https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"
 programmable-launch --version
 ```
+
+Continue only after the checksum command reports `OK` and the version command prints `3.1.0`.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
 matching solc artifacts. Its generated evidence is limited to `pre-submit`. The deterministic permission salt grind

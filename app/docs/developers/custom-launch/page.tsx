@@ -89,6 +89,29 @@ const lifecycle = [
   ],
 ] as const;
 
+const cliInstallCommands = [
+  [
+    'programmable_cli_dir="$(mktemp -d)"',
+    "Create an isolated download directory.",
+  ],
+  [
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz',
+    "Download the pinned release asset.",
+  ],
+  [
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256',
+    "Download its checksum sidecar.",
+  ],
+  [
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)',
+    "Continue only after this reports OK.",
+  ],
+  [
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"',
+    "Install the verified local bytes.",
+  ],
+] as const;
+
 const errors = [
   [
     "400",
@@ -188,6 +211,15 @@ export default function CustomLaunchApiDocsPage() {
             then run <code>status REQUEST_UUID --watch --until finalized</code>.
           </li>
         </ol>
+
+        <ul className={styles.codeList}>
+          {cliInstallCommands.map(([command, description]) => (
+            <li key={command}>
+              <code>{command}</code>
+              <span>{description}</span>
+            </li>
+          ))}
+        </ul>
 
         <aside className={styles.callout}>
           <strong>Generate the request from the exact project</strong>
@@ -306,6 +338,11 @@ export default function CustomLaunchApiDocsPage() {
             warnings.
           </li>
           <li>
+            Every enabled v4 permission must resolve to a concrete reachable
+            callback implementation. An interface declaration or fallback-only
+            route does not qualify.
+          </li>
+          <li>
             With no blocking match, server-authored{" "}
             <code>platformAdmission</code> binds the report hash and warning
             codes with <code>no_blocking_static_finding</code>, requires Router
@@ -406,16 +443,16 @@ export default function CustomLaunchApiDocsPage() {
         </div>
 
         <p className={styles.bodyCopy}>
-          For each successful swap, the mandatory platform charge is{" "}
-          <code>1,000 ppm = 0.10% = 10 bps</code> of the request-bound
-          assessment basis. It may be additive to the selected fee or included
-          in that selected total. The server recomputes buy and sell project
-          share, effective total, fee currency and rounding. The request-bound
+          Every V3 request must bind and disclose a Programmable share of{" "}
+          <code>1,000 ppm = 0.10% = 10 bps</code> of its declared assessment
+          basis. It may be additive to the selected fee or included in that
+          selected total. The server recomputes the declared buy and sell
+          project share, effective total, fee currency and rounding. The request-bound
           claim destination is controlled by{" "}
           <code>0x4957f49620AFf3Adbbe8195a4f633E49cc93376c</code>.
-          Revision-3 static admission and simulation do not certify the fee
-          behavior of arbitrary custom code. A reverted swap is expected to roll
-          the fee back with the transaction; inspect the exact implementation.
+          Revision-3 static admission carries <code>feeBehaviorClaim: false</code>.
+          It does not certify or enforce how arbitrary custom code charges or
+          routes fees on later swaps; inspect the exact implementation.
         </p>
 
         <aside className={styles.callout}>

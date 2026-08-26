@@ -112,10 +112,12 @@ const PLATFORM_FEE_PROOF_POLICY = Object.freeze({
 const PLATFORM_ADMISSION_BLOCKING_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "SOURCE_TARGET_ANALYSIS_INCOMPLETE", targetRoles: Object.freeze(["any"]) }),
   Object.freeze({ code: "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED", targetRoles: Object.freeze(["hook"]) }),
+  Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
   Object.freeze({ code: "SOURCE_MUTABLE_BLOCKLIST_SURFACE", targetRoles: Object.freeze(["token"]) }),
   Object.freeze({ code: "SOURCE_MUTABLE_TRANSFER_RESTRICTION", targetRoles: Object.freeze(["token"]) }),
   Object.freeze({ code: "SOURCE_PUBLIC_MINT_SURFACE", targetRoles: Object.freeze(["token"]) }),
   Object.freeze({ code: "SOURCE_MUTABLE_PAUSE_SURFACE", targetRoles: Object.freeze(["token"]) }),
+  Object.freeze({ code: "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE", targetRoles: Object.freeze(["token"]) }),
   Object.freeze({ code: "SOURCE_PROXY_OR_UPGRADE_SURFACE", targetRoles: Object.freeze(["token", "hook"]) }),
   Object.freeze({ code: "SOURCE_SELFDESTRUCT_SURFACE", targetRoles: Object.freeze(["token", "hook"]) }),
   Object.freeze({ code: "RUNTIME_CALLCODE", targetRoles: Object.freeze(["token", "hook"]) }),

@@ -464,7 +464,70 @@ function routerFixture({
     value: toHex(0n),
     valueWei: "0",
   });
+  const transaction = Object.freeze({
+    schemaVersion: "programmable.exact-wallet-transaction.v3",
+    chainId: "1",
+    from: account.address,
+    to: CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+    valueWei: "0",
+    calldata,
+  });
+  const transactionPreimageHash =
+    customLaunchWalletTransactionPreimageHashV2(walletAction);
   const artifactHash = `sha256:${sha256(stringToHex("fixture-artifact")).slice(2)}`;
+  const artifact = Object.freeze({
+    schemaVersion: "programmable.prepared-custom-graph-launch.v1",
+    artifactHash,
+    permitDigest,
+    route: Object.freeze({
+      graphCommitment,
+      targets: targets.map((target) => Object.freeze({
+        targetId: `target-${target.index}`,
+        initializerCalldataHash: target.initializerCalldataHash,
+      })),
+    }),
+    unsignedRouterTransaction: Object.freeze({
+      chainId: "1",
+      from: account.address,
+      to: CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+      valueWei: "0",
+      functionName: "launchAndStampV1",
+      selector: CUSTOM_LAUNCH_WALLET_TRANSACTION_SELECTOR_V1,
+      calldataWithEmptySignature: calldata,
+      signatureState: "permit-authority-signature-required",
+      preimageHash: transactionPreimageHash,
+    }),
+  });
+  const signedPermit = Object.freeze({
+    schemaVersion: "programmable.signed-prepared-launch-permit.v1",
+    artifactHash,
+    chainId: "1",
+    router: CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+    authoritySafe: account.address,
+    signerAddress: account.address,
+    permitDigest,
+    safeMessageDigest: `0x${"88".repeat(32)}`,
+    signature: permitSignature,
+    validAfter: String(permit[8]),
+    deadline: String(permit[9]),
+  });
+  const observationWindow = Object.freeze({
+    schemaVersion: "programmable.custom-launch-observation-window.v1",
+    chainId: "1",
+    router: CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+    fromBlock: "25832300",
+    toBlock: "25832393",
+  });
+  const simulation = Object.freeze({
+    outcome: "passed",
+    transactionPreimageHash,
+    profileHash: `sha256:${"99".repeat(32)}`,
+    blockNumber: "25832393",
+    blockHash: `0x${"aa".repeat(32)}`,
+    blockTimestamp: "2000000001",
+    responseDigest: `sha256:${"bb".repeat(32)}`,
+    gasEstimate: "500000",
+  });
   return Object.freeze({
     hook,
     token,
@@ -476,21 +539,19 @@ function routerFixture({
       fundingBoundary: FUNDING_BOUNDARY,
       actionRequired: Object.freeze({
         kind: "send-router-transaction",
-        transaction: Object.freeze({
-          schemaVersion: "programmable.exact-wallet-transaction.v3",
-          chainId: "1",
-          from: account.address,
-          to: CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
-          valueWei: "0",
-          calldata,
-        }),
+        transaction,
         graphCommitment,
         artifactHash,
-        transactionPreimageHash:
-          customLaunchWalletTransactionPreimageHashV2(walletAction),
+        transactionPreimageHash,
         permitDigest,
         initializerCalldataHash: targets.at(-1)!.initializerCalldataHash,
       }),
+      artifact,
+      signedPermit,
+      observationWindow,
+      onchain: null,
+      walletTransaction: transaction,
+      simulation,
     }),
   });
 }
@@ -642,6 +703,13 @@ describe("custom launch V3 wallet handoff", () => {
       admittedOutput,
       account.address,
     ).graphCommitment).toBe(fixture.graphCommitment);
+    expect(prepareCustomLaunchRouterReviewV3({
+      ...fixture.output,
+      platformAdmission: {
+        ...PLATFORM_ADMISSION,
+        warningFindingCodes: ["V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING"],
+      },
+    }, account.address).graphCommitment).toBe(fixture.graphCommitment);
 
     for (const platformAdmission of [
       { ...PLATFORM_ADMISSION, warningFindingCodes: ["UNKNOWN_FINDING"] },
@@ -657,6 +725,93 @@ describe("custom launch V3 wallet handoff", () => {
       expect(() => prepareCustomLaunchRouterReviewV3({
         ...fixture.output,
         platformAdmission,
+      }, account.address)).toThrow();
+    }
+  });
+
+  it("accepts only canonical submitted and finalized onchain evidence", () => {
+    const fixture = routerFixture({ quote: ZERO_ADDRESS });
+    for (const [finalityState, confirmationDepth] of [
+      ["submitted", "1"],
+      ["finalized", "64"],
+    ] as const) {
+      const onchain = {
+        schemaVersion: "programmable.custom-launch-onchain-evidence.v1",
+        finalityState,
+        chainId: "1",
+        router: CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+        onchainLaunchId: `0x${"11".repeat(32)}`,
+        transactionHash: `0x${"22".repeat(32)}`,
+        blockNumber: "25832393",
+        blockHash: `0x${"33".repeat(32)}`,
+        logIndex: 2,
+        token: fixture.token,
+        hook: fixture.hook,
+        poolManager: "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        poolId: `0x${"44".repeat(32)}`,
+        stampHash: `0x${"55".repeat(32)}`,
+        confirmationDepth,
+        requiredConfirmationDepth: "64",
+        observedAtBlockNumber: finalityState === "finalized"
+          ? "25832456"
+          : "25832393",
+        ...(finalityState === "submitted" ? {
+          finalizedCheckpoint: {
+            schemaVersion: "programmable.ethereum-finalized-checkpoint-quorum.v1",
+            blockNumber: "25832392",
+            blockHash: `0x${"66".repeat(32)}`,
+            quorumSize: 2,
+            observations: [
+              {
+                provider: "primary",
+                finalizedBlockNumber: "25832392",
+                finalizedBlockHash: `0x${"66".repeat(32)}`,
+                commonBlockHash: `0x${"66".repeat(32)}`,
+              },
+              {
+                provider: "secondary",
+                finalizedBlockNumber: "25832393",
+                finalizedBlockHash: `0x${"88".repeat(32)}`,
+                commonBlockHash: `0x${"66".repeat(32)}`,
+              },
+            ],
+          },
+        } : {}),
+      };
+      expect(prepareCustomLaunchRouterReviewV3({
+        ...fixture.output,
+        onchain,
+      }, account.address).graphCommitment).toBe(fixture.graphCommitment);
+    }
+
+    for (const onchain of [
+      {
+        ...(fixture.output.onchain ?? {}),
+        schemaVersion: "programmable.custom-launch-onchain-evidence.v1",
+      },
+      {
+        schemaVersion: "programmable.custom-launch-onchain-evidence.v1",
+        finalityState: "finalized",
+        chainId: "1",
+        router: OTHER_PRIVATE_KEY.slice(0, 42),
+        onchainLaunchId: `0x${"11".repeat(32)}`,
+        transactionHash: `0x${"22".repeat(32)}`,
+        blockNumber: "25832393",
+        blockHash: `0x${"33".repeat(32)}`,
+        logIndex: 2,
+        token: fixture.token,
+        hook: fixture.hook,
+        poolManager: "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        poolId: `0x${"44".repeat(32)}`,
+        stampHash: `0x${"55".repeat(32)}`,
+        confirmationDepth: "63",
+        requiredConfirmationDepth: "64",
+        observedAtBlockNumber: "25832456",
+      },
+    ]) {
+      expect(() => prepareCustomLaunchRouterReviewV3({
+        ...fixture.output,
+        onchain,
       }, account.address)).toThrow();
     }
   });

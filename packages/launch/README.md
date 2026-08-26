@@ -7,13 +7,18 @@ transaction.
 ## Install a versioned release
 
 ```sh
-npm install --global \
+programmable_cli_dir="$(mktemp -d)"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz" \
   https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.1.0.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.1.0/programmable-launch-3.1.0.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.1.0.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.1.0.tgz"
 programmable-launch --version
 ```
 
-The command must print `3.1.0`. Install this immutable GitHub Release asset rather than an unverified npm-registry
-package with the same name.
+The checksum command must report `OK`, and the version command must print `3.1.0`. Install this verified GitHub
+Release asset rather than an unverified npm-registry package with the same name.
 
 The immutable V1 package remains available only for compatibility preparation and reads. New V1 submissions are
 read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`:
@@ -30,14 +35,15 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-Version `3.0.0` supports the production general profile
-`programmable.direct-native-hook-graph.v1`. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
+Package `3.1.0` supports production general profile
+`programmable.direct-native-hook-graph.v1` version `3.0.0`. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
 
 The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook
 and initializer roles are distinct. The token, hook and all other targets are project-owned exact artifacts. All valid
 Uniswap v4 permission masks are supported when the source declaration, compiled permissions and hook-address low bits
-match. The 10 bps Programmable share may be additive or included in the selected total; pack derives the effective
+match. Every enabled permission must have a concrete reachable callback implementation; an interface declaration or
+fallback-only route does not qualify. The 10 bps Programmable share may be additive or included in the selected total; pack derives the effective
 and project values. Static pool fees and the `0x800000` dynamic-fee sentinel are supported.
 
 Funding can be absent, carried as exact native value on the separately reviewed Router transaction, or use an unsigned
@@ -55,11 +61,12 @@ absence, liquidity, tradeability, or fee behavior.
 The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-For each successful swap, the mandatory platform charge is 1,000 parts per 1,000,000 of the request-bound declared
-assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is additive or inclusive, and the server
-recomputes both buy and sell economics. Its exact claim binding is controlled by
+Every V3 request must bind and disclose a Programmable share of 1,000 parts per 1,000,000 of its declared assessment
+basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is additive or inclusive, and the server recomputes the
+declared buy and sell economics. Its exact claim binding is controlled by
 `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The exact binding is part of the launch intent, but the revision 3
-admission receipt does not certify fee behavior. A reverted swap must roll back the fee with the rest of the transaction.
+admission receipt carries `feeBehaviorClaim: false`: it does not certify or enforce how arbitrary custom code charges
+or routes fees on later swaps. Projects and users must inspect the exact implementation.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
