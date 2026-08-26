@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch-api-release-binding-v1.json",
+  "title": "Programmable Custom Launch API release binding V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "materializationState",
+    "backend",
+    "website",
+    "fly",
+    "database",
+    "api",
+    "chain"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "programmable.custom-launch-api-release-binding.v1" },
+    "materializationState": { "const": "materialized" },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "servicePath", "candidateCommitSha", "candidateTreeSha"],
+      "properties": {
+        "repository": { "const": "0xprogrammable/programmable-open-hook-v2-internal" },
+        "servicePath": { "const": "services/custom-launch-api-v1" },
+        "candidateCommitSha": { "$ref": "#/$defs/commit" },
+        "candidateTreeSha": { "$ref": "#/$defs/commit" }
+      }
+    },
+    "website": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "candidateCommitSha", "candidateTreeSha", "publicOpenApiSha256", "launchPackageManifestSha256"],
+      "properties": {
+        "repository": { "const": "0xprogrammable/programmable" },
+        "candidateCommitSha": { "$ref": "#/$defs/commit" },
+        "candidateTreeSha": { "$ref": "#/$defs/commit" },
+        "publicOpenApiSha256": { "$ref": "#/$defs/sha256" },
+        "launchPackageManifestSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "fly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "origin", "region", "releaseVersion", "imageDigest", "imageTag", "machineCount"],
+      "properties": {
+        "app": { "const": "programmable-custom-launch-api" },
+        "origin": { "const": "https://programmable-custom-launch-api.fly.dev" },
+        "region": { "const": "fra" },
+        "releaseVersion": { "type": "integer", "minimum": 1 },
+        "imageDigest": { "$ref": "#/$defs/sha256" },
+        "imageTag": { "type": "string", "pattern": "^main-[0-9a-f]{12}$" },
+        "machineCount": { "type": "integer", "minimum": 1, "maximum": 8 }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["migrationInventorySha256", "lastMigration", "schemaEvidenceSha256"],
+      "properties": {
+        "migrationInventorySha256": { "$ref": "#/$defs/sha256" },
+        "lastMigration": { "const": "migrations/0007_direct_native_hook_profile_v3.sql" },
+        "schemaEvidenceSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readinessSchemaVersion", "readinessIdentitySha256", "apiContractSha256", "profileId", "profileVersion", "publicProfilePath", "publicProfileSha256"],
+      "properties": {
+        "readinessSchemaVersion": { "const": "programmable.custom-launch-api-readiness.v2" },
+        "readinessIdentitySha256": { "$ref": "#/$defs/sha256" },
+        "apiContractSha256": { "$ref": "#/$defs/sha256" },
+        "profileId": { "const": "programmable.direct-native-hook-graph.v1" },
+        "profileVersion": { "const": "1.0.0" },
+        "publicProfilePath": {
+          "const": "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v1.json",
+          "description": "Repository-relative path to the checked-in public admission-profile artifact or template."
+        },
+        "publicProfileSha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the RFC 8785/JCS bytes of the checked-in public admission-profile artifact or template. This is release-scoped and MUST NOT be a per-launch hook runtime hash."
+        }
+      }
+    },
+    "chain": { "$ref": "#/$defs/chain" }
+  },
+  "$defs": {
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "address": { "type": "string", "pattern": "^0x[0-9A-Fa-f]{40}$" },
+    "codeHash": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+    "chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainId", "router", "routerRuntimeCodeHash", "graphFactory", "graphFactoryRuntimeCodeHash", "poolManager", "poolManagerRuntimeCodeHash", "permitAuthority", "permitAuthorityRuntimeCodeHash"],
+      "properties": {
+        "chainId": { "const": "1" },
+        "router": { "$ref": "#/$defs/address" },
+        "routerRuntimeCodeHash": { "$ref": "#/$defs/codeHash" },
+        "graphFactory": { "$ref": "#/$defs/address" },
+        "graphFactoryRuntimeCodeHash": { "$ref": "#/$defs/codeHash" },
+        "poolManager": { "$ref": "#/$defs/address" },
+        "poolManagerRuntimeCodeHash": { "$ref": "#/$defs/codeHash" },
+        "permitAuthority": { "$ref": "#/$defs/address" },
+        "permitAuthorityRuntimeCodeHash": { "$ref": "#/$defs/codeHash" }
+      }
+    }
+  }
+}
