@@ -301,6 +301,13 @@ export default function CustomLaunchApiDocsPage() {
 
         <ul className={styles.checkList}>
           <li>
+            The CLI binds one explicit model into the request hash: external
+            concentrated liquidity remains <code>liquidity_required</code>;
+            launch-seeded and hook-inventory custom accounting remain{" "}
+            <code>assessment_required</code> until separate exact evidence
+            exists. A project cannot declare its own pass.
+          </li>
+          <li>
             Ordinary concentrated liquidity requires the project to fund and
             create a position. Trading volume cannot create initial liquidity
             from nothing. Position custody, withdrawal and any lock or burn

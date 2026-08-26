@@ -53,6 +53,11 @@ Normal Uniswap v4 pool initialization sets the starting price but adds no liquid
 concentrated liquidity must fund and create its own position; trading volume cannot create the initial liquidity from
 nothing. Position custody, withdrawal and any lock or burn are project behavior and must be disclosed.
 
+New CLI requests bind `external-concentrated-liquidity`, `launch-seeded-concentrated-liquidity`, or
+`hook-inventory-custom-accounting` into the exact request hash. The external model remains `liquidity_required`; the
+seeded and hook-inventory models remain `assessment_required` until the platform has separate exact evidence. A
+request cannot self-declare that assessment as passed.
+
 Zero classical LP works only when the project hook and initializer implement custom accounting or hold launch
 inventory that can exchange against incoming assets. Buys may then grow assets held by the hook, but the initial token
 inventory and the buy, sell, redemption and withdrawal paths still come from the exact project graph. Funding mode

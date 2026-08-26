@@ -69,6 +69,11 @@ using ordinary concentrated liquidity must fund and create its own position. Tra
 liquidity from nothing. The exact position owner, withdrawal path and any lock or burn must be part of the project
 design and disclosed; the general profile does not silently lock a project-owned position.
 
+The current CLI binds one explicit model into the request hash: `external-concentrated-liquidity` remains
+`liquidity_required`; `launch-seeded-concentrated-liquidity` binds the exact seed target and remains
+`assessment_required`; `hook-inventory-custom-accounting` binds the exact hook inventory path and remains
+`assessment_required`. A project can request the required checks but cannot declare its own pass.
+
 A launch can start with zero classical LP only when its project-owned hook and initializer implement custom accounting
 or hold launch inventory that can exchange against incoming assets. Buys can then increase assets held by that hook,
 but the token inventory, accounting and redemption or sell path still come from the project graph. `fundingMode: none`

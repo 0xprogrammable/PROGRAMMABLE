@@ -1352,7 +1352,8 @@
             "$ref": "#/components/schemas/DirectNativePlatformFeeBindingV1"
           },
           "liquidityModel": {
-            "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1"
+            "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
+            "description": "Current CLI 3.0.0 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
           }
         },
         "allOf": [
