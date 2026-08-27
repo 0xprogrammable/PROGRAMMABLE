@@ -165,7 +165,7 @@ const hookFactoryAbi = parseAbi([
   "function deploy(bytes32 salt,address poolManager,address launcherFeeRecipient,address feeSplitVaultFactory) returns (address hook)",
 ]);
 const classicV4LauncherAbi = parseAbi([
-  "function launch((string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,uint8 liquidityPreset,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) result)",
+  "function launchFor(address launchWallet,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) result)",
 ]);
 const classicV4UniversalRouterAbi = parseAbi([
   "function execute(bytes commands,bytes[] inputs,uint256 deadline) payable",
@@ -519,11 +519,11 @@ export function computeClassicV4EconomicsCommitment() {
         1n,
         keccak256(
           stringToHex(
-            "standard-or-deep30-single-permanently-locked-official-v4-position",
+            "canonical-complete-supply-single-permanently-locked-official-v4-position",
           ),
         ),
         keccak256(
-          stringToHex("deep30-has-a-declared-reachable-liquidity-endpoint"),
+          stringToHex("canonical-range-has-a-declared-reachable-liquidity-endpoint"),
         ),
       ],
     ),
@@ -1458,14 +1458,14 @@ function assertEventIndices(events, expected, label) {
 export function expectedLifecycleLaunchCalldata(canary) {
   return encodeFunctionData({
     abi: classicV4LauncherAbi,
-    functionName: "launch",
+    functionName: "launchFor",
     args: [
+      canary.operatorWallet,
       {
         name: canary.launchFixture.name,
         symbol: canary.launchFixture.symbol,
         buySwapFeeBps: canary.launchFixture.buySwapFeeBps,
         sellSwapFeeBps: canary.launchFixture.sellSwapFeeBps,
-        liquidityPreset: canary.launchFixture.liquidityPreset,
         creatorSalt: canary.launchFixture.creatorSalt,
         metadata: canary.launchFixture.metadata,
         rewardBeneficiaries: [canary.operatorWallet],
@@ -2369,7 +2369,7 @@ export function validateClassicV4LifecycleEvidence(
       postState.positionLock.tickUpper === 204_200 &&
       decimalBigInt(postState.positionLock.timelockBlockNumber, "position timelock") ===
         (1n << 256n) - 1n,
-    "Permanent Deep30 position lock differs",
+    "Permanent Classic position lock differs",
   );
   assertExactKeys(
     postState.tokenCustody,
@@ -2702,14 +2702,13 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
         image: "",
         extraData: "0x",
       },
-      liquidityPreset: 1,
       buySwapFeeBps: 100,
       sellSwapFeeBps: 200,
       initialBuyWei: "600000000000000",
       custodyMode: "unlocked",
       beneficiarySharesBps: [10_000],
       reason:
-        "Deep30 exercises the new range and non-minimum fees make both claim paths non-zero.",
+        "The canonical deeper Classic range is fixed; non-minimum fees make both claim paths non-zero.",
     },
     swapFixture: {
       quotePolicy: "canonical-v4-quoter-at-parent-block",

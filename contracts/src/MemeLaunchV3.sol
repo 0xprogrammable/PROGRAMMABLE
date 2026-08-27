@@ -293,13 +293,25 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
             revert TokenCustodyMismatch(launcherTokenBalance, positionManagerTokenBalance);
         }
 
-        result.initialBuyCustody =
-            _deployOrReuseInitialBuyCustody(result.token, launchWallet, parameters.initialBuyCustody);
+        return _completeLaunch(launchWallet, parameters, key, position, result);
+    }
+
+    function _completeLaunch(
+        address launchWallet,
+        LaunchParameters calldata parameters,
+        PoolKey memory key,
+        Position memory position,
+        LaunchResult memory result
+    ) private returns (LaunchResult memory) {
+        result.initialBuyCustody = _deployOrReuseInitialBuyCustody(
+            result.token, launchWallet, parameters.initialBuyCustody
+        );
         address initialBuyRecipient = result.initialBuyCustody == address(0) ? launchWallet : result.initialBuyCustody;
         result.initialBuyTokenAmount = _executeInitialBuy(key, initialBuyRecipient, result.initialBuyNativeAmount);
         // ReentrancyGuardTransient protects the complete launch; Slither does not model its transient lock.
         // slither-disable-next-line reentrancy-benign
         result.launchHash = _recordLaunch(parameters, result, position, launchWallet);
+        return result;
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {

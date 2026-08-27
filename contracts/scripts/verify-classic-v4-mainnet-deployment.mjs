@@ -56,11 +56,9 @@ const hookAbi = parseAbi([
   "function TICK_SPACING() view returns (int24)",
 ]);
 const plannerAbi = parseAbi([
-  "function STANDARD_PRESET() view returns (uint8)",
-  "function DEEP30_PRESET() view returns (uint8)",
   "function TOKEN_SUPPLY() view returns (uint256)",
   "function INITIAL_TICK() view returns (int24)",
-  "function DEEP30_TICK_LOWER() view returns (int24)",
+  "function LIQUIDITY_TICK_LOWER() view returns (int24)",
   "function TICK_SPACING() view returns (int24)",
 ]);
 const launcherAbi = parseAbi([
@@ -73,8 +71,6 @@ const launcherAbi = parseAbi([
   "function initialBuyVestingWalletFactory() view returns (address)",
   "function launchPolicy() view returns (address)",
   "function positionForwarderFactory() view returns (address)",
-  "function STANDARD_LIQUIDITY_PRESET() view returns (uint8)",
-  "function DEEP30_LIQUIDITY_PRESET() view returns (uint8)",
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
   "function TOKEN_SUPPLY() view returns (uint256)",
   "function INITIAL_TICK() view returns (int24)",
@@ -342,20 +338,6 @@ function runtimeBindingChecks(plan) {
       intResult(200, "int24"),
     ),
     callCheck(
-      "planner standard preset",
-      address.positionPlanner,
-      plannerAbi,
-      "STANDARD_PRESET",
-      uintResult(0, "uint8"),
-    ),
-    callCheck(
-      "planner Deep30 preset",
-      address.positionPlanner,
-      plannerAbi,
-      "DEEP30_PRESET",
-      uintResult(1, "uint8"),
-    ),
-    callCheck(
       "planner token supply",
       address.positionPlanner,
       plannerAbi,
@@ -370,10 +352,10 @@ function runtimeBindingChecks(plan) {
       intResult(204_200, "int24"),
     ),
     callCheck(
-      "planner Deep30 lower tick",
+      "planner canonical liquidity lower tick",
       address.positionPlanner,
       plannerAbi,
-      "DEEP30_TICK_LOWER",
+      "LIQUIDITY_TICK_LOWER",
       intResult(174_800, "int24"),
     ),
     callCheck(
@@ -445,20 +427,6 @@ function runtimeBindingChecks(plan) {
       launcherAbi,
       "positionForwarderFactory",
       addressResult(shared.positionForwarderFactory.address),
-    ),
-    callCheck(
-      "launcher standard preset",
-      address.launcher,
-      launcherAbi,
-      "STANDARD_LIQUIDITY_PRESET",
-      uintResult(0, "uint8"),
-    ),
-    callCheck(
-      "launcher Deep30 preset",
-      address.launcher,
-      launcherAbi,
-      "DEEP30_LIQUIDITY_PRESET",
-      uintResult(1, "uint8"),
     ),
     callCheck(
       "launcher minimum buy",

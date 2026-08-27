@@ -159,11 +159,7 @@ abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
         assertEq(launcherFee, 10);
     }
 
-    function _parameters(address creator)
-        private
-        view
-        returns (MemeLaunchV3.LaunchParameters memory parameters)
-    {
+    function _parameters(address creator) private view returns (MemeLaunchV3.LaunchParameters memory parameters) {
         address[] memory beneficiaries = new address[](1);
         beneficiaries[0] = creator;
         uint16[] memory shares = new uint16[](1);

@@ -1678,7 +1678,7 @@ test("lifecycle receipts, calldata, quotes, claims and global baseline cannot se
         source,
         forgedLock,
       ),
-    /Permanent Deep30 position lock differs/,
+    /Permanent Classic position lock differs/,
   );
 });
 
@@ -1702,7 +1702,7 @@ test("canary preparation covers launch, all four swap quadrants and both claims"
     canary.actions.map((action) => action.key),
     CLASSIC_V4_LIFECYCLE_ACTIONS,
   );
-  assert.equal(canary.launchFixture.liquidityPreset, 1);
+  assert.equal("liquidityPreset" in canary.launchFixture, false);
   assert.equal(canary.launchFixture.name, "Programmable Classic V4 Canary");
   assert.equal(canary.swapFixture.slippageBps, 100);
   assert.equal(canary.universalRouterBinding.version, "V2_0");

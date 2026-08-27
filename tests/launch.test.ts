@@ -8,6 +8,7 @@ import {
   createEmptyDraft,
   getClassicInitialBuyCurveQuote,
   getClassicInitialBuyPreview,
+  getLegacyClassicInitialBuyPreview,
   getDraftAssetLabel,
   getInitialBuyEthLabel,
   getMemeFeeBreakdown,
@@ -116,11 +117,12 @@ describe("Classic launch plan", () => {
     expect(draft.selectedBehaviors).toEqual(["fixed-fee"]);
     expect(draft.lpFeePercent).toBe("0");
     expect(draft.initialBuyEth).toBe(MEME_MIN_INITIAL_BUY_ETH);
-    expect(draft.classicLiquidityPreset).toBe("standard");
     expect(createClassicV3Draft()).toMatchObject({
       launchModel: "classic-v3",
-      classicLiquidityPreset: "standard",
     });
+    expect(createClassicV3Draft()).not.toHaveProperty(
+      "classicLiquidityPreset",
+    );
   });
 
   it("parses Classic fee decimals exactly in 0.1% steps", () => {
@@ -200,10 +202,10 @@ describe("Classic launch plan", () => {
 
     expect(minimumBuy).not.toBeNull();
     expect(minimumBuy?.poolEthAmount).toBeCloseTo(0.000594, 12);
-    expect(minimumBuy?.tokenAmount).toBeCloseTo(437_971.7816, 3);
-    expect(minimumBuy?.supplyPercent).toBeCloseTo(0.043797, 5);
-    expect(largerBuy?.tokenAmount).toBeCloseTo(21_438_505.518, 2);
-    expect(largerBuy?.supplyPercent).toBeCloseTo(2.143851, 5);
+    expect(minimumBuy?.tokenAmount).toBeCloseTo(438_015.8934, 3);
+    expect(minimumBuy?.supplyPercent).toBeCloseTo(0.043802, 5);
+    expect(largerBuy?.tokenAmount).toBeCloseTo(21_544_712.788, 2);
+    expect(largerBuy?.supplyPercent).toBeCloseTo(2.154471, 5);
   });
 
   it("accounts for the selected buy fee in the initial buy preview", () => {
@@ -223,33 +225,35 @@ describe("Classic launch plan", () => {
     expect(getClassicInitialBuyPreview("0.03", "11")).toBeNull();
   });
 
-  it("makes the initial-buy preview aware of the bounded Deeper preset", () => {
-    const standard = getClassicInitialBuyPreview("0.03", "1", "standard");
-    const deeper = getClassicInitialBuyPreview("0.03", "1", "deep-30");
+  it("uses the one bounded Classic liquidity range", () => {
+    const preview = getClassicInitialBuyPreview("0.03", "1");
 
-    expect(standard?.tokenAmount).toBeCloseTo(21_438_505.518, 2);
-    expect(deeper?.tokenAmount).toBeCloseTo(21_544_712.788, 2);
-    expect(deeper?.tokenAmount).toBeGreaterThan(standard?.tokenAmount ?? 0);
-    expect(deeper?.poolEthAmount).toBe(standard?.poolEthAmount);
-    expect(deeper?.curveCapacityWei).toBe(5_895_641_055_945_908_140n);
-    expect(deeper?.remainingCurveCapacityWei).toBe(
+    expect(preview?.tokenAmount).toBeCloseTo(21_544_712.788, 2);
+    expect(preview?.curveCapacityWei).toBe(5_895_641_055_945_908_140n);
+    expect(preview?.remainingCurveCapacityWei).toBe(
       5_865_941_055_945_908_140n,
     );
-    expect(deeper?.endPriceMultipleWad).toBe(
+    expect(preview?.endPriceMultipleWad).toBe(
       18_913_066_072_547_532_342n,
     );
   });
 
-  it("uses exact fee rounding and rejects rather than clamps over-capacity Deeper buys", () => {
+  it("keeps the already-deployed V3 preview on its historical range", () => {
+    const preview = getLegacyClassicInitialBuyPreview("0.03", "1");
+
+    expect(preview?.tokenAmount).toBeCloseTo(21_438_505.518, 2);
+    expect(preview?.bounded).toBe(false);
+    expect(preview?.curveCapacityWei).toBeNull();
+  });
+
+  it("uses exact fee rounding and rejects rather than clamps over-capacity Classic buys", () => {
     const exact = getClassicInitialBuyCurveQuote(
       "5.901542598544452592",
       "0.1",
-      "deep-30",
     );
     const over = getClassicInitialBuyCurveQuote(
       "5.901542598544452593",
       "0.1",
-      "deep-30",
     );
 
     expect(exact.status).toBe("ready");

@@ -35,8 +35,7 @@ contract ClassicPositionPlannerV1Test is Test {
     }
 
     function test_canonicalDesignIsExactlyOneCompleteSupplyPosition() public view {
-        (Plan memory plan, Position memory position, uint256 dust) =
-            planner.buildOneSidedPlan(key, recipient);
+        (Plan memory plan, Position memory position, uint256 dust) = planner.buildOneSidedPlan(key, recipient);
 
         assertEq(position.tickLower, planner.LIQUIDITY_TICK_LOWER());
         assertEq(position.tickUpper, planner.INITIAL_TICK());
@@ -49,10 +48,8 @@ contract ClassicPositionPlannerV1Test is Test {
     function test_canonicalLiquidityIsApproximately1298604PercentOfLegacyClassic() public view {
         (, Position memory canonical,) = planner.buildOneSidedPlan(key, recipient);
         uint256 legacyLiquidity = planner.TOKEN_SUPPLY() * Q96
-            / (
-                uint256(TickMath.getSqrtPriceAtTick(planner.INITIAL_TICK()))
-                    - uint256(TickMath.getSqrtPriceAtTick(TickMath.minUsableTick(planner.TICK_SPACING())))
-            );
+            / (uint256(TickMath.getSqrtPriceAtTick(planner.INITIAL_TICK()))
+                - uint256(TickMath.getSqrtPriceAtTick(TickMath.minUsableTick(planner.TICK_SPACING()))));
 
         uint256 ratioMps = canonical.liquidity * MPS / legacyLiquidity;
         assertApproxEqAbs(ratioMps, EXPECTED_LIQUIDITY_RATIO_MPS, 2);

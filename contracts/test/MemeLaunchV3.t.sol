@@ -419,11 +419,7 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(feeHook.totalNativeFeesAccrued(), 0);
     }
 
-    function _parameters(bytes32 salt)
-        private
-        view
-        returns (MemeLaunchV3.LaunchParameters memory parameters)
-    {
+    function _parameters(bytes32 salt) private view returns (MemeLaunchV3.LaunchParameters memory parameters) {
         address[] memory beneficiaries = new address[](1);
         beneficiaries[0] = deployer;
         uint16[] memory shares = new uint16[](1);

@@ -20,8 +20,12 @@ const Q96 = 1n << 96n;
 // Exact TickMath Q64.96 outputs pinned by ClassicPositionPlannerV1.
 const MEME_INITIAL_SQRT_PRICE_X96 =
   2_151_813_121_295_408_910_812_139_624_586_144n;
+const LEGACY_CLASSIC_MIN_SQRT_PRICE_X96 = 4_310_618_292n;
 const CLASSIC_LIQUIDITY_SQRT_PRICE_X96 =
   494_793_039_472_815_777_531_937_397_972_213n;
+const LEGACY_CLASSIC_INITIAL_LIQUIDITY =
+  (MEME_TOKEN_SUPPLY_WEI * Q96) /
+  (MEME_INITIAL_SQRT_PRICE_X96 - LEGACY_CLASSIC_MIN_SQRT_PRICE_X96);
 const CLASSIC_INITIAL_LIQUIDITY =
   (MEME_TOKEN_SUPPLY_WEI * Q96) /
   (MEME_INITIAL_SQRT_PRICE_X96 - CLASSIC_LIQUIDITY_SQRT_PRICE_X96);
@@ -319,6 +323,17 @@ export function getClassicInitialBuyPreview(
   return quote.status === "ready" ? quote.preview : null;
 }
 
+export function getLegacyClassicInitialBuyPreview(
+  initialBuyEth: string,
+  buyFeePercent: string,
+): ClassicInitialBuyPreview | null {
+  const quote = getLegacyClassicInitialBuyCurveQuote(
+    initialBuyEth,
+    buyFeePercent,
+  );
+  return quote.status === "ready" ? quote.preview : null;
+}
+
 function divideRoundingUp(numerator: bigint, denominator: bigint) {
   return (numerator + denominator - 1n) / denominator;
 }
@@ -366,6 +381,29 @@ export function getClassicInitialBuyCurveQuote(
   initialBuyEth: string,
   buyFeePercent: string,
 ): ClassicInitialBuyCurveQuote {
+  return getClassicInitialBuyCurveQuoteForRange(
+    initialBuyEth,
+    buyFeePercent,
+    true,
+  );
+}
+
+export function getLegacyClassicInitialBuyCurveQuote(
+  initialBuyEth: string,
+  buyFeePercent: string,
+): ClassicInitialBuyCurveQuote {
+  return getClassicInitialBuyCurveQuoteForRange(
+    initialBuyEth,
+    buyFeePercent,
+    false,
+  );
+}
+
+function getClassicInitialBuyCurveQuoteForRange(
+  initialBuyEth: string,
+  buyFeePercent: string,
+  canonicalRange: boolean,
+): ClassicInitialBuyCurveQuote {
   const initialBuyWei = parseInitialBuyWei(initialBuyEth);
   const buyFeeBps = parseClassicFeePercentToBps(buyFeePercent);
 
@@ -376,8 +414,12 @@ export function getClassicInitialBuyCurveQuote(
   const poolEthWei =
     initialBuyWei -
     (initialBuyWei * BigInt(buyFeeBps)) / 10_000n;
-  const initialLiquidity = CLASSIC_INITIAL_LIQUIDITY;
-  const lowerSqrtPriceX96 = CLASSIC_LIQUIDITY_SQRT_PRICE_X96;
+  const initialLiquidity = canonicalRange
+    ? CLASSIC_INITIAL_LIQUIDITY
+    : LEGACY_CLASSIC_INITIAL_LIQUIDITY;
+  const lowerSqrtPriceX96 = canonicalRange
+    ? CLASSIC_LIQUIDITY_SQRT_PRICE_X96
+    : LEGACY_CLASSIC_MIN_SQRT_PRICE_X96;
   const curveCapacityWei = amount0DeltaRoundingUp(
     lowerSqrtPriceX96,
     MEME_INITIAL_SQRT_PRICE_X96,
@@ -395,8 +437,10 @@ export function getClassicInitialBuyCurveQuote(
       poolEthWei,
       curveCapacityWei,
       maximumGrossActivationBuyWei,
-      bounded: true,
-      endPriceMultipleWad: CLASSIC_END_PRICE_MULTIPLE_WAD,
+      bounded: canonicalRange,
+      endPriceMultipleWad: canonicalRange
+        ? CLASSIC_END_PRICE_MULTIPLE_WAD
+        : null,
     };
   }
 
@@ -431,11 +475,17 @@ export function getClassicInitialBuyCurveQuote(
       supplyPercent:
         Number((tokenAmountWei * 100_000_000n) / MEME_TOKEN_SUPPLY_WEI) /
         1_000_000,
-      bounded: true,
-      curveCapacityWei,
-      remainingCurveCapacityWei: curveCapacityWei - poolEthWei,
-      maximumGrossActivationBuyWei,
-      endPriceMultipleWad: CLASSIC_END_PRICE_MULTIPLE_WAD,
+      bounded: canonicalRange,
+      curveCapacityWei: canonicalRange ? curveCapacityWei : null,
+      remainingCurveCapacityWei: canonicalRange
+        ? curveCapacityWei - poolEthWei
+        : null,
+      maximumGrossActivationBuyWei: canonicalRange
+        ? maximumGrossActivationBuyWei
+        : null,
+      endPriceMultipleWad: canonicalRange
+        ? CLASSIC_END_PRICE_MULTIPLE_WAD
+        : null,
     },
   };
 }

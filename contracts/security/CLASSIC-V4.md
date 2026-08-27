@@ -9,13 +9,12 @@ production activation exists until it is independently recorded from the target 
 Classic V3 remains immutable and supported as a historical release. V4 does not replace, relabel or mutate V3 tokens,
 pools, claims or indexer records.
 
-The V4 deployment sequence creates exactly five new contracts:
+The V4 deployment sequence creates exactly four new contracts:
 
 1. `EthCreatorFeeHookFactoryV4`
 2. One CREATE2-mined `EthCreatorFeeHookV4`
 3. `ClassicPositionPlannerV1`
-4. `ClassicGraduationVaultFactoryV1`
-5. `MemeLaunchV3`
+4. `MemeLaunchV3`
 
 It reuses the already deployed V3 CTO authority, reward-vault factory, initial-buy custody factory, launch policy and
 permanent position-forwarder factory. The script accepts those five addresses as explicit `Inputs` and fails unless
@@ -45,21 +44,17 @@ Classic V4 deliberately preserves the terminal-facing Uniswap v4 shape:
 - `hooks = exact canonical Classic V4 hook`
 - Empty swap hook data
 - Existing official PositionManager, V4Quoter, Permit2 and Universal Router dependencies
-- One active position at a time: permanently locked from launch in Standard, or vault-controlled during Bonding and permanently locked after graduation
+- Exactly one complete-supply position, permanently locked from launch
 
 The hook permission mask is exactly:
 
 - `beforeInitialize`
-- `beforeAddLiquidity`
-- `afterAddLiquidity`
-- `beforeRemoveLiquidity`
-- `afterRemoveLiquidity`
 - `beforeSwap`
 - `afterSwap`
 - `beforeSwapReturnDelta`
 - `afterSwapReturnDelta`
 
-The liquidity callbacks enforce the Bonding lifecycle. No upgrade proxy, pause role, fee setter or custody withdrawal is added.
+No upgrade proxy, pause role, fee setter, migration role or custody withdrawal is added.
 
 ## Canonical Router boundary
 
@@ -68,10 +63,9 @@ Mainnet launches are router-only. `MemeLaunchV3.launchFor` accepts calls solely 
 `0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546`. The Router passes the real launch wallet
 explicitly; direct wallet calls revert and cannot create an unstamped platform launch.
 
-The canonical Router V1 parameter ABI has no liquidity-preset field. V4 therefore stores the reviewed preset selector
-in the high byte of `creatorSalt` (`0 = Standard`, `1 = Bonding`) and preserves the remaining 248 bits as creator
-entropy. Prediction, preparation and indexing must use that canonicalized salt. Any other high-byte value reverts before
-token, vault, pool or position creation.
+The canonical Router V1 parameter ABI has no liquidity-mode field, and neither does `MemeLaunchV3`. The complete
+`creatorSalt` remains creator entropy. The one reviewed liquidity range is hardwired in the pinned planner, so neither
+the UI, Router nor a caller can select a second range or migration lifecycle.
 
 ## Fee semantics
 
@@ -87,25 +81,22 @@ point steps.
 The return-delta accounting and claim surfaces remain unchanged. Every nonzero returned fee delta must remain backed by
 the hook's native PoolManager claim balance.
 
-## Liquidity presets and the Bonding endpoint
+## Canonical liquidity range
 
-`ClassicPositionPlannerV1` exposes only two reviewed presets. Creators cannot provide arbitrary ticks.
+`ClassicPositionPlannerV1` exposes no preset or arbitrary tick input. Every launch uses the full one-billion-token
+supply in one position from tick `174800` to `204200`. Compared with the previous broad Classic range, this produces
+about `29.86%` more active liquidity at launch without adding capital, changing the opening tick or creating a second
+pool.
 
-| Preset | Tick range | Meaning |
-| --- | --- | --- |
-| Standard (`0`) | `minUsableTick(200)` to `204200` | Existing broad one-sided Classic range |
-| Bonding (`1`) | `174800` to `204200` | About 29.86% more active launch liquidity; 80% curve inventory and a 20% final-pool reserve |
-
-Both presets keep the same initial tick, supply, pool shape and established launch event fields. Bonding concentration
-is not additional capital. Its lower tick is a real endpoint:
+The lower tick is a real endpoint:
 
 - The covered token-price increase is approximately `1.0001^(204200 - 174800)`, or about `18.9x`.
-- A sustained buy path can consume the 80% Bonding inventory and reach that endpoint much sooner than Standard.
-- A buy beyond the remaining range reverts atomically; `maxBuyAndGraduate` can consume the exact remainder and complete
-  the final same-pool position permissionlessly.
-- The reserved 20% is added to the final permanently locked range during graduation; it is never creator-withdrawable.
+- Complete-supply net buy capacity is approximately `5.89564 ETH`, before gross swap fees.
+- A buy beyond the remaining range reverts atomically; a sell can return token inventory to the same position.
+- There is no reserve vault, graduation, migration or creator-withdrawable LP path.
 
-Product copy must describe this option as Bonding with a finite endpoint, not as 30% more capital or 30% lower slippage.
+Product copy may say about `29.86%` more active launch liquidity. It must not claim 30% more deposited capital,
+guaranteed 30% lower slippage or deeper liquidity at every future price.
 
 ## Stable indexer event surface
 
@@ -148,14 +139,14 @@ launch environment. Before constructing V4 the script verifies:
 
 After simulation it verifies:
 
-- Deterministic five-transaction nonce plan
+- Deterministic four-transaction nonce plan
 - CREATE2 hook prediction and exact hook-address permission bits
 - Factory provenance for the mined hook
 - Exact runtime code hashes for the stateless hook factory and position planner
 - Nonempty hook and launcher runtime plus the project's `24,000`-byte launcher limit
 - Every hook and launcher constructor dependency
-- Fee, PoolKey, preset, supply and initial-tick constants
-- Captured runtime code hashes for all five new contracts
+- Fee, PoolKey, canonical range, supply and initial-tick constants
+- Captured runtime code hashes for all four new contracts
 
 Calling the deployment path requires all of the following even for a Forge simulation:
 
@@ -173,17 +164,17 @@ reads a private key. Source preparation does not authorize broadcasting.
 After an owner-authorized deployment, the contract workstream must hand the integration owner one immutable packet with:
 
 - Chain ID, `classic-v4` label and exact reviewed source revision
-- Deployer, starting nonce and five transaction hashes
-- Hook factory, hook, planner, graduation-vault factory and launcher addresses
+- Deployer, starting nonce and four transaction hashes
+- Hook factory, hook, planner and launcher addresses
 - Canonical Launch Stamp Router address, runtime hash and router-only launcher binding
 - CREATE2 hook salt and permission mask
 - Deployment block for every new address
-- Runtime byte length and code hash for all five new contracts
+- Runtime byte length and code hash for all four new contracts
 - Source commitment and compiler/settings evidence
 - Exact official and reused shared dependency addresses and runtime hashes
 - All constructor and immutable bindings
 - Event signatures and ABI artifact hashes
-- PoolKey constants and both preset tick ranges
+- PoolKey constants and the canonical tick range
 - Explorer/Sourcify source-verification evidence
 - Canary token, launch hash and PoolId
 
@@ -196,12 +187,12 @@ block before the website launch UI changes to V4.
 Sepolia should be rehearsed first. One low-value Mainnet canary is required before product activation. The canary must
 prove, independently:
 
-1. Standard and Bonding launch validation on the pinned official dependencies
+1. The one canonical Classic launch on the pinned official dependencies
 2. Exact canonical `launchAndStampV1` permit, Router stamp, launch kind `2`, component proofs and PoolId recomputation
 3. Locked NFT ownership, nonzero liquidity, zero operator and maximum timelock
 4. A `10 bps` initial buy with zero creator accrual and Programmable-only fee accrual
 5. Buy and sell quoting/routing through the official V4Quoter and Universal Router
-6. Bonding behavior directly before and beyond its endpoint, including exact max-buy graduation and atomic rollback
+6. Exact behavior directly before, at and beyond the finite range endpoint, including atomic rollback
 7. Creator-vault and Programmable claims
 8. Envio completeness/provenance under `classic-v4` without V3 duplication
 9. Exact selected external-terminal API discovery

@@ -71,10 +71,7 @@ describe("Classic V4 launch configuration", () => {
       sellCreatorFeeBps: 990,
       platformFeeBps: 10,
     });
-    expect(configuration.liquidity).toEqual({
-      preset: "standard",
-      presetCode: 0,
-    });
+    expect(configuration).not.toHaveProperty("liquidity");
     expect(
       validateClassicV4LaunchDraft(
         { ...draft(), buySwapFeePercent: "1.5" },
@@ -92,31 +89,11 @@ describe("Classic V4 launch configuration", () => {
     }
   });
 
-  it("defaults a legacy missing preset but rejects an explicit unknown preset", () => {
-    const legacyDraft = draft() as Partial<LaunchDraft>;
-    delete legacyDraft.classicLiquidityPreset;
-    expect(
-      validateClassicV4LaunchDraft(legacyDraft as LaunchDraft, account)
-        .liquidity,
-    ).toEqual({ preset: "standard", presetCode: 0 });
-
-    expect(() =>
-      validateClassicV4LaunchDraft(
-        {
-          ...draft(),
-          classicLiquidityPreset: "unknown",
-        } as unknown as LaunchDraft,
-        account,
-      ),
-    ).toThrow("valid Classic liquidity depth");
-  });
-
-  it("encodes the immutable fee, reward and Deeper preset settings", () => {
+  it("encodes the immutable fee, reward and unmodified creator salt", () => {
     const launchDraft = {
       ...draft(),
       buySwapFeePercent: "0.1",
       sellSwapFeePercent: "7",
-      classicLiquidityPreset: "deep-30" as const,
       rewardDestinationMode: "split" as const,
       rewardSplits: [
         { beneficiary: external, sharePercent: "25" },
@@ -134,8 +111,7 @@ describe("Classic V4 launch configuration", () => {
     expect(decoded.args[1]).toMatchObject({
       buySwapFeeBps: 10,
       sellSwapFeeBps: 700,
-      creatorSalt:
-        "0x01aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      creatorSalt: salt,
       rewardBeneficiaries: [external, third],
       rewardSharesBps: [2500, 7500],
     });
@@ -147,7 +123,6 @@ describe("Classic V4 launch configuration", () => {
         ...draft(),
         buySwapFeePercent: "0.1",
         sellSwapFeePercent: "7",
-        classicLiquidityPreset: "deep-30",
         rewardDestinationMode: "split",
         rewardSplits: [
           { beneficiary: external, sharePercent: "25" },
@@ -165,24 +140,23 @@ describe("Classic V4 launch configuration", () => {
         { beneficiary: third, share: "75.00%" },
       ],
       liquidity:
-        "Deeper · about 30% higher active liquidity at launch · bounded to about 18.9× the opening price and about 5.9 ETH net curve capacity · one position, permanently locked",
+        "About 29.86% more active liquidity at launch · bounded to about 18.9× the opening price and about 5.9 ETH net capacity · one position, permanently locked",
       activationBuy:
         "0.0006 ETH plus network gas · 5.895041 ETH net curve capacity remains",
       initialBuyCustody: "Available immediately",
     });
   });
 
-  it("fails closed when an Activation Buy exceeds the Deeper range", () => {
+  it("fails closed when an Activation Buy exceeds the canonical Classic range", () => {
     expect(() =>
       validateClassicV4LaunchDraft(
         {
           ...draft(),
-          classicLiquidityPreset: "deep-30",
           buySwapFeePercent: "0.1",
           initialBuyEth: "5.9016",
         },
         account,
       ),
-    ).toThrow("Activation Buy exceeds the Deeper curve");
+    ).toThrow("Activation Buy exceeds the Classic liquidity range");
   });
 });

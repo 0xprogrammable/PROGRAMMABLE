@@ -1,12 +1,11 @@
 # Classic V4 Mainnet release
 
-Classic V4 is an additive five-contract release:
+Classic V4 is an additive four-contract release:
 
 1. `EthCreatorFeeHookFactoryV4`
 2. `EthCreatorFeeHookV4`
 3. `ClassicPositionPlannerV1`
-4. `ClassicGraduationVaultFactoryV1`
-5. `MemeLaunchV3`
+4. `MemeLaunchV3`
 
 The existing Classic V3 authority, reward-vault factory, initial-buy custody factory, launch policy and permanently locked position-forwarder factory are reused only at their exact Mainnet addresses, runtime hashes and immutable bindings.
 
@@ -32,7 +31,7 @@ This command:
 - reconciles two independent Ethereum Mainnet RPCs;
 - verifies all official and reused dependency runtime hashes and bindings;
 - requires no pending deployer nonce;
-- derives the five exact transaction payloads and predicted addresses;
+- derives the four exact transaction payloads and predicted addresses;
 - mines and verifies the required hook flags;
 - binds artifact creation/runtime templates, constructor arguments, treasury, economics, Git commit and tree; and
 - prints a `simulation-only` plan without writing, signing or broadcasting.
@@ -48,23 +47,22 @@ npm run contracts:classic-v4:mainnet:prepare -- \
   --acknowledge-plan-digest <printed-plan-digest>
 ```
 
-This local write still does not authorize or perform a transaction. The owner must review the plan and explicitly sign the five transactions with their wallet. Never pass a private key or mnemonic to these tools.
+This local write still does not authorize or perform a transaction. The owner must review the plan and explicitly sign the four transactions with their wallet. Never pass a private key or mnemonic to these tools.
 
 ## 2. Read-only finalized deployment verification
 
-After the owner has submitted the reviewed transactions, create an external JSON file containing exactly these five transaction hashes:
+After the owner has submitted the reviewed transactions, create an external JSON file containing exactly these four transaction hashes:
 
 ```json
 {
   "hookFactory": "<actual-transaction-hash>",
   "feeHook": "<actual-transaction-hash>",
   "positionPlanner": "<actual-transaction-hash>",
-  "graduationVaultFactory": "<actual-transaction-hash>",
   "launcher": "<actual-transaction-hash>"
 }
 ```
 
-Choose a fixed block at least 12 confirmations after all five receipts and run:
+Choose a fixed block at least 12 confirmations after all four receipts and run:
 
 ```bash
 npm run contracts:classic-v4:mainnet:deployment:verify -- \
@@ -79,7 +77,7 @@ Evidence can be saved outside the repository only with `--write`, `--output`, th
 
 ## 3. Source verification
 
-All five new addresses must have a public source match. Exact local runtime-template and constructor checks remain mandatory independently of provider labels. Source evidence must bind:
+All four new addresses must have a public source match. Exact local runtime-template and constructor checks remain mandatory independently of provider labels. Source evidence must bind:
 
 - the preparation `planDigest` and `sourceCommitment`;
 - exact address, contract name and fully qualified source name;
@@ -124,7 +122,7 @@ npm run contracts:classic-v4:mainnet:canary:prepare -- \
   --wallet <human-canary-wallet>
 ```
 
-Before constructing a wallet-bound plan, preparation reruns the fixed-block deployment verifier on both RPCs and independently refetches the committed source-provider matches. Saved source timestamps later than the fresh replay are rejected. The preparation is read-only. It binds a small Bonding launch with non-minimum buy/sell fees so both claim paths become non-zero, then requires:
+Before constructing a wallet-bound plan, preparation reruns the fixed-block deployment verifier on both RPCs and independently refetches the committed source-provider matches. Saved source timestamps later than the fresh replay are rejected. The preparation is read-only. It binds a small canonical Classic launch with non-minimum buy/sell fees so both claim paths become non-zero, then requires:
 
 1. launch;
 2. buy exact-input;
@@ -134,7 +132,7 @@ Before constructing a wallet-bound plan, preparation reruns the fixed-block depl
 6. creator reward-vault claim; and
 7. launcher treasury claim.
 
-The plan fixes the canary name, symbol, canonicalized deterministic creator salt, metadata, `0.0006 ETH` activation buy, beneficiary, fees and Bonding preset. It also caps all four swap amounts before any signature, pins the D92 Mainnet Universal Router to its V2.0 five-field single-hop ABI, fixes 1% slippage and a five-minute deadline policy, and requires the canonical V4Quoter at each transaction's parent block.
+The plan fixes the canary name, symbol, full deterministic creator salt, metadata, `0.0006 ETH` activation buy, beneficiary and fees. The contract itself fixes the one canonical liquidity range. The plan also caps all four swap amounts before any signature, pins the D92 Mainnet Universal Router to its V2.0 five-field single-hop ABI, fixes 1% slippage and a five-minute deadline policy, and requires the canonical V4Quoter at each transaction's parent block.
 
 Save the exact plan outside the repository only through a second acknowledged run:
 
@@ -198,7 +196,7 @@ npm run contracts:classic-v4:mainnet:capture -- \
   --rpc-b <https-rpc-two>
 ```
 
-Capture first reconstructs the five deployment transaction hashes from the saved evidence, rejects duplicates, and reruns the deployment verifier against both independent RPCs at the evidence's fixed `verificationBlock`. The canonical block hash, receipts, transaction inputs, constructor/runtime bindings and hashes of the exact runtime bytes returned by `eth_getCode` must equal the saved deployment evidence. Capture then independently queries Sourcify and, when present in the saved evidence, Etherscan; the exact provider/source content must match and the saved observation time cannot be later than the fresh replay. Finally it reruns the complete seven-transaction lifecycle verifier against both RPCs and requires exact canonical equality. A locally fabricated evidence digest cannot reach manifest creation. Only a fresh second run with `--write`, the exact printed manifest digest and the matching deployment wallet may create `contracts/deployments/mainnet-classic-v4.json`. Existing manifests are never overwritten.
+Capture first reconstructs the four deployment transaction hashes from the saved evidence, rejects duplicates, and reruns the deployment verifier against both independent RPCs at the evidence's fixed `verificationBlock`. The canonical block hash, receipts, transaction inputs, constructor/runtime bindings and hashes of the exact runtime bytes returned by `eth_getCode` must equal the saved deployment evidence. Capture then independently queries Sourcify and, when present in the saved evidence, Etherscan; the exact provider/source content must match and the saved observation time cannot be later than the fresh replay. Finally it reruns the complete seven-transaction lifecycle verifier against both RPCs and requires exact canonical equality. A locally fabricated evidence digest cannot reach manifest creation. Only a fresh second run with `--write`, the exact printed manifest digest and the matching deployment wallet may create `contracts/deployments/mainnet-classic-v4.json`. Existing manifests are never overwritten.
 
 All Classic V4 artifact digests commit to a named domain and a typed canonical serialization. Preparation plan, deployment evidence, source evidence, release binding, lifecycle canary plan, lifecycle evidence and release manifest each use a different `programmable.classic-v4.*.v1` domain. Numbers, strings and big integers cannot collide, object keys are sorted, and hexadecimal values are case-canonicalized before hashing.
 

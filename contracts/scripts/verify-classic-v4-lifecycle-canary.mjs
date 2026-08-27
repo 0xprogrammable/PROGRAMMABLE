@@ -661,8 +661,9 @@ function validateLaunch(action, canary, artifacts, plan) {
     abi: artifacts.launcher.abi,
     data: action.transaction.input,
   });
-  assert(call.functionName === "launch", "Launch selector differs");
-  const input = call.args[0];
+  assert(call.functionName === "launchFor", "Launch selector differs");
+  sameAddress(call.args[0], canary.operatorWallet, "Launch wallet");
+  const input = call.args[1];
   assert(
     input.name === canary.launchFixture.name &&
       input.symbol === canary.launchFixture.symbol &&
@@ -676,10 +677,9 @@ function validateLaunch(action, canary, artifacts, plan) {
     "Launch identity or metadata differs from the canary plan",
   );
   assert(
-    Number(input.liquidityPreset) === 1 &&
-      Number(input.buySwapFeeBps) === 100 &&
+    Number(input.buySwapFeeBps) === 100 &&
       Number(input.sellSwapFeeBps) === 200,
-    "Launch Deep30 or directional fees differ",
+    "Launch directional fees differ",
   );
   assert(
     input.rewardBeneficiaries.length === 1 &&
@@ -754,7 +754,7 @@ function validateLaunch(action, canary, artifacts, plan) {
       Number(liquidity.args.tickLower) === 174_800 &&
       Number(liquidity.args.tickUpper) === 204_200 &&
       Number(liquidity.args.lpFeePips) === 0,
-    "Deep30 liquidity evidence differs",
+    "Canonical Classic liquidity evidence differs",
   );
   sameHex(liquidity.args.launchHash, launchHash, "Liquidity launch hash");
   sameAddress(initialBuy.args.deployer, canary.operatorWallet, "Initial buy deployer");
@@ -2088,7 +2088,7 @@ async function verifyFinalState(
         (BigInt(launch.poolId) & positionPoolMask) &&
       tickLower === 174_800 &&
       tickUpper === 204_200,
-    "Permanent Deep30 position lock differs",
+    "Permanent Classic position lock differs",
   );
 
   sameAddress(tokenCreator, canary.launcher, "Token creator");

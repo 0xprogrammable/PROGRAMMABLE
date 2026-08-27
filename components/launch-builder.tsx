@@ -83,6 +83,8 @@ import {
   createStockPairedDraft,
   getClassicInitialBuyCurveQuote,
   getClassicInitialBuyPreview,
+  getLegacyClassicInitialBuyCurveQuote,
+  getLegacyClassicInitialBuyPreview,
   maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
@@ -955,8 +957,12 @@ function updateDraft(
 }
 
 function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
-  return {
+  const normalizedDraft = {
     ...initialDraft,
+  } as LaunchDraft & { classicLiquidityPreset?: unknown };
+  delete normalizedDraft.classicLiquidityPreset;
+  return {
+    ...normalizedDraft,
     launchModel: "classic",
     assetMode: "new",
     tokenSupply: "1000000000",
@@ -1974,10 +1980,15 @@ function LaunchBuilderFormView({
       const hash = await sendTransaction(validatedTransaction);
       const initialBuyPreview =
         model === "classic-v3"
-          ? getClassicInitialBuyPreview(
-              checkedDraft.initialBuyEth,
-              checkedDraft.buySwapFeePercent,
-            )
+          ? classicV4UiEnabled
+            ? getClassicInitialBuyPreview(
+                checkedDraft.initialBuyEth,
+                checkedDraft.buySwapFeePercent,
+              )
+            : getLegacyClassicInitialBuyPreview(
+                checkedDraft.initialBuyEth,
+                checkedDraft.buySwapFeePercent,
+              )
           : null;
       const pendingSubmission: PendingLaunchSubmission = {
         version: 2,
@@ -2724,16 +2735,6 @@ function LaunchSuccessDialog({
                 creator · 0.10% Programmable
               </dd>
             </div>
-            {"liquidity" in classicConfiguration ? (
-              <div>
-                <dt>Liquidity</dt>
-                <dd>
-                  {classicConfiguration.liquidity.preset === "deep-30"
-                    ? "Deeper · bounded launch range"
-                    : "Standard · full launch range"}
-                </dd>
-              </div>
-            ) : null}
             <div>
               <dt>Reward owners</dt>
               <dd>{classicConfiguration.rewards.beneficiaries.length}</dd>
@@ -3564,10 +3565,15 @@ export function EnhancedClassicFeeStep({
     return Number.isFinite(share) ? total + share : total;
   }, 0);
   const splitIsComplete = Math.abs(splitTotal - 100) < 0.001;
-  const initialBuyCurveQuote = getClassicInitialBuyCurveQuote(
-    draft.initialBuyEth,
-    draft.buySwapFeePercent,
-  );
+  const initialBuyCurveQuote = enableV4
+    ? getClassicInitialBuyCurveQuote(
+        draft.initialBuyEth,
+        draft.buySwapFeePercent,
+      )
+    : getLegacyClassicInitialBuyCurveQuote(
+        draft.initialBuyEth,
+        draft.buySwapFeePercent,
+      );
   const initialBuyPreview =
     initialBuyCurveQuote.status === "ready"
       ? initialBuyCurveQuote.preview
