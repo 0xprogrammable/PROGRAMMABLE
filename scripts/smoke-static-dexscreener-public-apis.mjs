@@ -1,4 +1,5 @@
 import { appendFileSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { readBoundedResponseText } from "./read-bounded-response.mjs";
 
@@ -19,6 +20,7 @@ const MARKET_READ_STATUSES = new Set([
   "unavailable",
 ]);
 const EXPLORE_SNAPSHOT_ATTEMPTS = 3;
+const EXPLORE_SNAPSHOT_RETRY_DELAY_MS = 16_000;
 
 class ExploreCatalogBoundaryDriftError extends Error {
   constructor(message) {
@@ -549,6 +551,10 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const environment = input.environment ?? process.env;
   const fetchImpl = input.fetchImpl ?? fetch;
   const appendOutput = input.appendOutput ?? appendFileSync;
+  const waitForCatalogConvergence = input.waitForCatalogConvergence ?? sleep;
+  if (typeof waitForCatalogConvergence !== "function") {
+    throw new Error("Explore catalog convergence wait is invalid");
+  }
   const targetKind = input.targetKind ?? "staged";
   if (targetKind !== "staged" && targetKind !== "production") {
     throw new Error("Public API smoke target kind is invalid");
@@ -751,6 +757,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
           { cause: error },
         );
       }
+      await waitForCatalogConvergence(EXPLORE_SNAPSHOT_RETRY_DELAY_MS);
     }
   }
   if (exploreSnapshot === null) {

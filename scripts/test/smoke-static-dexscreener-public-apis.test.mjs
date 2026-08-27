@@ -777,6 +777,7 @@ test("staged smoke accepts monotonic Envio progress with stable identities", asy
 test("staged smoke restarts the full Explore snapshot after ranking-boundary drift", async () => {
   let exploreReads = 0;
   let detailReads = 0;
+  const waits = [];
   const advancedCommitment = `sha256:${"dd".repeat(32)}`;
   const result = await runStagedStaticDexscreenerSmokeV1({
     environment: {
@@ -810,17 +811,22 @@ test("staged smoke restarts the full Explore snapshot after ranking-boundary dri
       return body;
     }),
     appendOutput: () => undefined,
+    waitForCatalogConvergence: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
   });
 
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
   assert.equal(exploreReads, 4);
   assert.equal(detailReads, 1);
+  assert.deepEqual(waits, [16_000]);
 });
 
 test("staged smoke restarts list and detail after detail-boundary drift", async () => {
   let advanced = false;
   let exploreReads = 0;
   let detailReads = 0;
+  const waits = [];
   const advancedCommitment = `sha256:${"dd".repeat(32)}`;
   const result = await runStagedStaticDexscreenerSmokeV1({
     environment: {
@@ -855,15 +861,20 @@ test("staged smoke restarts list and detail after detail-boundary drift", async 
       return body;
     }),
     appendOutput: () => undefined,
+    waitForCatalogConvergence: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
   });
 
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
   assert.equal(exploreReads, 4);
   assert.equal(detailReads, 2);
+  assert.deepEqual(waits, [16_000]);
 });
 
 test("staged smoke rejects a mixed Explore identity commitment", async () => {
   let exploreReads = 0;
+  const waits = [];
   await assert.rejects(
     runStagedStaticDexscreenerSmokeV1({
       environment: {
@@ -885,15 +896,20 @@ test("staged smoke rejects a mixed Explore identity commitment", async () => {
           : body;
       }),
       appendOutput: () => undefined,
+      waitForCatalogConvergence: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
     }),
     /catalog changed.*3 bounded attempts/u,
   );
   assert.equal(exploreReads, 6);
+  assert.deepEqual(waits, [16_000, 16_000]);
 });
 
 test("staged smoke rejects a token detail bound to the wrong pool", async () => {
   let exploreReads = 0;
   let detailReads = 0;
+  const waits = [];
   await assert.rejects(
     runStagedStaticDexscreenerSmokeV1({
       environment: {
@@ -912,11 +928,15 @@ test("staged smoke rejects a token detail bound to the wrong pool", async () => 
           : body;
       }),
       appendOutput: () => undefined,
+      waitForCatalogConvergence: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
     }),
     /detail identity or market contract/u,
   );
   assert.equal(exploreReads, 2);
   assert.equal(detailReads, 1);
+  assert.deepEqual(waits, []);
 });
 
 test("staged smoke never retries malformed detail headers or valuation", async () => {
@@ -954,6 +974,7 @@ test("staged smoke never retries malformed detail headers or valuation", async (
   for (const scenario of scenarios) {
     let exploreReads = 0;
     let detailReads = 0;
+    const waits = [];
     await assert.rejects(
       runStagedStaticDexscreenerSmokeV1({
         environment: {
@@ -970,11 +991,15 @@ test("staged smoke never retries malformed detail headers or valuation", async (
           scenario.transformHeaders,
         ),
         appendOutput: () => undefined,
+        waitForCatalogConvergence: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
       }),
       /detail identity or market contract/u,
     );
     assert.equal(exploreReads, 2);
     assert.equal(detailReads, 1);
+    assert.deepEqual(waits, []);
   }
 });
 
