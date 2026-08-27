@@ -2,6 +2,8 @@
   "name": "programmable-fee-claim",
   "private": true,
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "test": "node --test logic.test.mjs",
+    "check": "npm test && npm run build"
   }
 }
