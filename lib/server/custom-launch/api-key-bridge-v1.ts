@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { getAddress, isAddress } from "viem";
 
 import { parseStrictJson, type JsonValue } from
@@ -506,10 +508,18 @@ function mappedError(error: unknown) {
       error.retryAfter,
     );
   }
+  const requestId = randomUUID();
   console.error("Developer API key request failed", {
     name: error instanceof Error ? error.name : "DeveloperApiKeyError",
+    requestId,
   });
-  return errorResponse(503, "api_key_service_unavailable");
+  return errorResponse(
+    503,
+    "api_key_service_unavailable",
+    undefined,
+    undefined,
+    requestId,
+  );
 }
 
 function jsonResponse(
@@ -534,6 +544,7 @@ function errorResponse(
   requestId?: string | null,
   retryAfter?: string | null,
 ) {
+  const responseRequestId = requestId ?? randomUUID();
   return jsonResponse(status, {
     schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
     error: Object.freeze({
@@ -541,9 +552,9 @@ function errorResponse(
       message: publicMessage ?? (status >= 500
         ? "The API key service is temporarily unavailable."
         : "The request could not be completed."),
-      ...(requestId ? { requestId } : {}),
+      requestId: responseRequestId,
     }),
-  }, allow, requestId, retryAfter);
+  }, allow, responseRequestId, retryAfter);
 }
 
 class BrowserRequestErrorV1 extends Error {

@@ -1,7 +1,89 @@
 import type { NextConfig } from "next";
 
+export function createContentSecurityPolicy(isDevelopment: boolean) {
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    [
+      "script-src 'self' 'unsafe-inline'",
+      isDevelopment ? "'unsafe-eval'" : "",
+      "https://auth.privy.io",
+      "https://*.privy.io",
+      "https://challenges.cloudflare.com",
+      "https://hcaptcha.com",
+      "https://*.hcaptcha.com",
+    ].filter(Boolean).join(" "),
+    "script-src-attr 'none'",
+    [
+      "style-src 'self' 'unsafe-inline'",
+      "https://hcaptcha.com",
+      "https://*.hcaptcha.com",
+    ].join(" "),
+    "img-src 'self' blob: data: https:",
+    "font-src 'self' data: https:",
+    [
+      "connect-src 'self' https: wss:",
+      isDevelopment ? "http: ws:" : "",
+    ].filter(Boolean).join(" "),
+    [
+      "frame-src 'self'",
+      "https://auth.privy.io",
+      "https://*.privy.io",
+      "https://verify.walletconnect.com",
+      "https://verify.walletconnect.org",
+      "https://*.walletconnect.com",
+      "https://*.walletconnect.org",
+      "https://challenges.cloudflare.com",
+      "https://hcaptcha.com",
+      "https://*.hcaptcha.com",
+    ].join(" "),
+    "worker-src 'self' blob:",
+    "media-src 'self' blob: data: https:",
+    "manifest-src 'self'",
+    ...(isDevelopment ? [] : ["upgrade-insecure-requests"]),
+  ].join("; ");
+}
+
+const contentSecurityPolicy = createContentSecurityPolicy(
+  process.env.NODE_ENV === "development",
+);
+
+const securityHeaders = [
+  {
+    key: "Content-Security-Policy",
+    value: contentSecurityPolicy,
+  },
+  {
+    key: "Permissions-Policy",
+    value: "browsing-topics=(), camera=(), geolocation=(), microphone=()",
+  },
+  {
+    key: "Referrer-Policy",
+    value: "strict-origin-when-cross-origin",
+  },
+  {
+    key: "X-Content-Type-Options",
+    value: "nosniff",
+  },
+  {
+    key: "X-Frame-Options",
+    value: "DENY",
+  },
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: securityHeaders,
+      },
+    ];
+  },
   async redirects() {
     return [
       {

@@ -8,6 +8,7 @@ import type {
   CanonicalTokenExploreEntry,
   TokenLink,
 } from "../../tokens";
+import { isProgrammableTokenImageUrl } from "../../token-image";
 import {
   parseStrictJson,
   type JsonValue,
@@ -52,6 +53,10 @@ const DESCRIPTION_MAXIMUM_BYTES = 4_096;
 const IMAGE_MAXIMUM_BYTES = 20 * 1_024 * 1_024;
 const IMAGE_MAXIMUM_DIMENSION = 8_192;
 const LINK_MAXIMUM_COUNT = 32;
+const TRUSTED_IPFS_PROJECT_IMAGE_GATEWAY_V1 =
+  "https://ipfs.io/ipfs/" as const;
+const TRUSTED_ARWEAVE_PROJECT_IMAGE_GATEWAY_V1 =
+  "https://arweave.net/" as const;
 const LOWER_BYTES32 = /^0x[0-9a-f]{64}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const UNSIGNED_DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
@@ -249,6 +254,16 @@ type EnrichmentDependenciesV1 = Readonly<{
   readFeed?: () => Promise<FinalizedCustomLaunchMetadataFeedV1>;
 }>;
 
+type ProjectedLaunchPresentationV1 = Readonly<{
+  description: string;
+  imageUrl: string | null;
+  links: readonly TokenLink[];
+  projectMetadataLinks: readonly Readonly<{
+    kind: LaunchPresentationLinkKindV1;
+    url: string;
+  }>[];
+}>;
+
 export function createFinalizedCustomLaunchMetadataFeedReaderV1(
   dependencies: ReaderDependenciesV1 = {},
 ) {
@@ -438,16 +453,17 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
       });
       return entry;
     }
-    const presentation = metadata.projectMetadata.presentation;
-    const links = presentation.links.flatMap((link): TokenLink[] => {
-      if (link.kind !== "website" && link.kind !== "x" && link.kind !== "telegram") {
-        return [];
-      }
-      return [{ kind: link.kind, url: link.uri }];
-    });
-    const imageUrl = presentation.image?.uri.startsWith("https:")
-      ? presentation.image.uri
-      : null;
+    let presentation: ProjectedLaunchPresentationV1;
+    try {
+      presentation = projectLaunchPresentationV1(
+        metadata.projectMetadata.presentation,
+      );
+    } catch {
+      console.warn("Finalized Custom presentation projection unavailable", {
+        launchId,
+      });
+      return entry;
+    }
     const {
       description: _priorDescription,
       imageUrl: _priorImageUrl,
@@ -481,8 +497,12 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
     return Object.freeze({
       ...identity,
       ...(presentation.description ? { description: presentation.description } : {}),
-      ...(imageUrl ? { imageUrl } : {}),
-      ...(links.length > 0 ? { links: Object.freeze(links) } : {}),
+      ...(presentation.imageUrl ? { imageUrl: presentation.imageUrl } : {}),
+      ...(presentation.links.length > 0
+        ? { links: presentation.links }
+        : {}),
+      projectMetadataLinks: presentation.projectMetadataLinks,
+      projectMetadataStatus: feed.status,
     });
   });
   if (!changed) return snapshot;
@@ -513,6 +533,77 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
     entries: Object.freeze(entries),
     metadataOverlay,
   }) as RouterCustomMetadataEnrichedSnapshotV1<Snapshot>;
+}
+
+function projectLaunchPresentationV1(
+  presentation: LaunchPresentationDraftV1,
+): ProjectedLaunchPresentationV1 {
+  const description = humanText(
+    presentation.description,
+    0,
+    DESCRIPTION_MAXIMUM_BYTES,
+    "project description",
+    true,
+  );
+  const projectMetadataLinks = presentation.links.map((link) => {
+    if (
+      link.kind !== "website"
+      && link.kind !== "documentation"
+      && link.kind !== "x"
+      && link.kind !== "telegram"
+      && link.kind !== "discord"
+      && link.kind !== "github"
+      && link.kind !== "other"
+    ) throw new Error("Launch presentation link kind is invalid");
+    return deepFreeze({
+      kind: link.kind,
+      url: normalizeHttpsUri(link.uri),
+    });
+  });
+  for (let index = 1; index < projectMetadataLinks.length; index += 1) {
+    if (
+      compareLinksV1(
+        {
+          kind: projectMetadataLinks[index - 1]!.kind,
+          uri: projectMetadataLinks[index - 1]!.url,
+        },
+        {
+          kind: projectMetadataLinks[index]!.kind,
+          uri: projectMetadataLinks[index]!.url,
+        },
+      ) >= 0
+    ) throw new Error("Launch presentation links are unsorted or duplicated");
+  }
+  const links = projectMetadataLinks.flatMap((link): TokenLink[] => {
+    if (
+      link.kind !== "website"
+      && link.kind !== "x"
+      && link.kind !== "telegram"
+    ) return [];
+    return [{ kind: link.kind, url: link.url }];
+  });
+
+  let imageUrl: string | null = null;
+  if (presentation.image !== null) {
+    const contentUri = normalizeContentUri(presentation.image.uri);
+    const url = new URL(contentUri);
+    if (url.protocol === "https:") {
+      if (isProgrammableTokenImageUrl(contentUri)) imageUrl = contentUri;
+    } else if (url.protocol === "ipfs:") {
+      imageUrl = `${TRUSTED_IPFS_PROJECT_IMAGE_GATEWAY_V1}${url.hostname}`;
+    } else if (url.protocol === "ar:") {
+      imageUrl = `${TRUSTED_ARWEAVE_PROJECT_IMAGE_GATEWAY_V1}${url.hostname}`;
+    } else {
+      throw new Error("Project metadata image URI scheme is invalid");
+    }
+  }
+
+  return deepFreeze({
+    description,
+    imageUrl,
+    links,
+    projectMetadataLinks,
+  });
 }
 
 function metadataMatchesRouterEntryV1(

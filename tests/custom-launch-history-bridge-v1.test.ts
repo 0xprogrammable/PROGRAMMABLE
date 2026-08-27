@@ -24,6 +24,16 @@ const V3_ACTION_REQUIRED_LAUNCH_ID = "80000000-0000-4000-8000-000000000008";
 const WEBSITE_TOKEN = "w".repeat(43);
 const RAW_PROGRAMMABLE_API_KEY =
   `pm_live_${"a".repeat(22)}_${"b".repeat(43)}`;
+const REQUEST_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+async function correlatedError(response: Response) {
+  const requestId = response.headers.get("x-request-id");
+  expect(requestId).toMatch(REQUEST_ID);
+  const body = await response.json();
+  expect(body.error.requestId).toBe(requestId);
+  return { body, requestId };
+}
 
 const EXTERNAL_LIQUIDITY_INTENT = Object.freeze({
   model: "external-concentrated-liquidity",
@@ -409,8 +419,16 @@ describe("developer launch history same-origin bridge", () => {
     ));
 
     expect(response.status).toBe(503);
-    expect((await response.json()).error.code).toBe(
+    const correlation = await correlatedError(response);
+    expect(correlation.body.error.code).toBe(
       "launch_history_unavailable",
+    );
+    expect(console.error).toHaveBeenCalledWith(
+      "Developer launch history request failed",
+      {
+        name: "BackendContractErrorV1",
+        requestId: correlation.requestId,
+      },
     );
   });
 
@@ -484,6 +502,24 @@ describe("developer launch history same-origin bridge", () => {
     ));
     expect(malformed.status).toBe(400);
     expect((await malformed.json()).error.code).toBe("pagination_invalid");
+    expect(fetchBackend).not.toHaveBeenCalled();
+  });
+
+  it("assigns a fresh correlation ID to every locally generated error", async () => {
+    const methodError = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}`,
+      { method: "POST" },
+    ));
+    const requestError = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&cursor=not-a-cursor`,
+    ));
+
+    expect(methodError.status).toBe(405);
+    expect(methodError.headers.get("allow")).toBe("GET");
+    expect(requestError.status).toBe(400);
+    const methodCorrelation = await correlatedError(methodError);
+    const requestCorrelation = await correlatedError(requestError);
+    expect(methodCorrelation.requestId).not.toBe(requestCorrelation.requestId);
     expect(fetchBackend).not.toHaveBeenCalled();
   });
 

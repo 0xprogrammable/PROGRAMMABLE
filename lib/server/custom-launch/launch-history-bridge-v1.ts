@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 
 import { getAddress, isAddress } from "viem";
@@ -1650,10 +1650,18 @@ function mappedError(error: unknown) {
       error.retryAfter,
     );
   }
+  const requestId = randomUUID();
   console.error("Developer launch history request failed", {
     name: error instanceof Error ? error.name : "DeveloperLaunchHistoryError",
+    requestId,
   });
-  return errorResponse(503, "launch_history_unavailable");
+  return errorResponse(
+    503,
+    "launch_history_unavailable",
+    undefined,
+    undefined,
+    requestId,
+  );
 }
 
 function jsonResponse(
@@ -1678,6 +1686,7 @@ function errorResponse(
   requestId?: string | null,
   retryAfter?: string | null,
 ) {
+  const responseRequestId = requestId ?? randomUUID();
   return jsonResponse(status, {
     schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
     error: Object.freeze({
@@ -1685,9 +1694,9 @@ function errorResponse(
       message: publicMessage ?? (status >= 500
         ? "Launch history is temporarily unavailable."
         : "The request could not be completed."),
-      ...(requestId ? { requestId } : {}),
+      requestId: responseRequestId,
     }),
-  }, allow, requestId, retryAfter);
+  }, allow, responseRequestId, retryAfter);
 }
 
 class BrowserRequestErrorV1 extends Error {

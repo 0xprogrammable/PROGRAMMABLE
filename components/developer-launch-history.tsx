@@ -825,7 +825,8 @@ function readApiError(
     && /^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,127}$/u.test(value.error.requestId)
     ? value.error.requestId
     : null;
-  const retryCopy = response.status === 429 && retryAfterSeconds !== null
+  const retryCopy = (response.status === 429 || response.status === 503)
+    && retryAfterSeconds !== null
     ? ` Try again in ${retryAfterSeconds} seconds.`
     : "";
   const requestCopy = requestId ? ` Request ID: ${requestId}.` : "";
@@ -2953,7 +2954,7 @@ export function DeveloperLaunchHistory({
                 <AdmissionWarnings codes={warningFindingCodes} />
                 {reviewLaunch.failure
                   && reviewLaunch.status !== "action_required" ? (
-                  <p className={styles.failure} role="alert">
+                  <p className={styles.failure}>
                     {reviewLaunch.failure.message}
                   </p>
                 ) : null}

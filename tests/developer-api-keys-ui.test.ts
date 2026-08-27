@@ -259,6 +259,13 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain("confirmRevokeRef.current?.focus()");
     expect(apiKeysSource).toContain("Copy agent setup");
     expect(apiKeysSource).toContain("PROGRAMMABLE_AGENT_SETUP_TEXT_V1");
+    expect(apiKeysSource).toContain(
+      "Agent setup contains the <code>$PROGRAMMABLE_API_KEY</code>",
+    );
+    expect(apiKeysSource).toContain(
+      "discovery, capabilities, preflight, remediation, pack schema,",
+    );
+    expect(apiKeysSource).not.toContain("Agent setup contains only");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("$PROGRAMMABLE_API_KEY");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli,
@@ -542,6 +549,35 @@ describe("developer launch history interface", () => {
       expect(poller).toContain("while (!controller.signal.aborted)");
       expect(poller).toContain("if (terminalStatus(updated.status))");
     }
+  });
+
+  it("shows bounded Retry-After guidance for both retryable error statuses", () => {
+    expect(apiKeysSource).toContain(
+      "(response.status === 429 || response.status === 503)",
+    );
+    expect(historySource).toContain(
+      "(response.status === 429 || response.status === 503)",
+    );
+  });
+
+  it("keeps stored launch failures out of assertive live regions", () => {
+    const storedFailureStart = historySource.indexOf("{reviewLaunch.failure");
+    const storedFailureEnd = historySource.indexOf(
+      '{reviewLaunch.status === "action_required"',
+      storedFailureStart,
+    );
+    expect(storedFailureStart).toBeGreaterThan(-1);
+    expect(storedFailureEnd).toBeGreaterThan(storedFailureStart);
+
+    const storedFailure = historySource.slice(
+      storedFailureStart,
+      storedFailureEnd,
+    );
+    expect(storedFailure).toContain("<p className={styles.failure}>");
+    expect(storedFailure).not.toContain('role="alert"');
+    expect(historySource).toContain(
+      '<p className={styles.inlineError} role="alert">',
+    );
   });
 
   it("keeps the complete EIP-3009 preparation lifecycle monotonic", () => {

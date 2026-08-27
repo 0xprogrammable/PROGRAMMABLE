@@ -13,6 +13,16 @@ const CREDENTIAL_ID = "018f3e2a-7b4c-7d5e-8f90-123456789abc";
 const KEY_ID = "A".repeat(22);
 const API_KEY_SECRET = `pm_live_${KEY_ID}_${"B".repeat(43)}`;
 const WEBSITE_TOKEN = "w".repeat(43);
+const REQUEST_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+async function correlatedError(response: Response) {
+  const requestId = response.headers.get("x-request-id");
+  expect(requestId).toMatch(REQUEST_ID);
+  const body = await response.json();
+  expect(body.error.requestId).toBe(requestId);
+  return { body, requestId };
+}
 
 function summary(extra: Readonly<Record<string, unknown>> = {}) {
   return {
@@ -192,6 +202,24 @@ describe("developer API key same-origin bridge", () => {
     expect(fetchBackend).not.toHaveBeenCalled();
   });
 
+  it("assigns a fresh correlation ID to every locally generated error", async () => {
+    const methodError = await bridge().list(new Request(
+      `https://programmable.market/api/developer/api-keys?walletAddress=${WALLET}`,
+      { method: "POST" },
+    ));
+    const requestError = await bridge().list(new Request(
+      "https://programmable.market/api/developer/api-keys",
+    ));
+
+    expect(methodError.status).toBe(405);
+    expect(methodError.headers.get("allow")).toBe("GET");
+    expect(requestError.status).toBe(400);
+    const methodCorrelation = await correlatedError(methodError);
+    const requestCorrelation = await correlatedError(requestError);
+    expect(methodCorrelation.requestId).not.toBe(requestCorrelation.requestId);
+    expect(fetchBackend).not.toHaveBeenCalled();
+  });
+
   it("revokes by credential id without exposing the internal service response", async () => {
     fetchBackend.mockResolvedValueOnce(backendJson({
       revoked: true,
@@ -268,13 +296,35 @@ describe("developer API key same-origin bridge", () => {
       `https://programmable.market/api/developer/api-keys?walletAddress=${WALLET}`,
     ));
     expect(malformed.status).toBe(503);
-    expect((await malformed.json()).error.code).toBe("api_key_service_unavailable");
+    const malformedCorrelation = await correlatedError(malformed);
+    expect(malformedCorrelation.body.error.code).toBe(
+      "api_key_service_unavailable",
+    );
+    expect(console.error).toHaveBeenNthCalledWith(
+      1,
+      "Developer API key request failed",
+      {
+        name: "BackendContractErrorV1",
+        requestId: malformedCorrelation.requestId,
+      },
+    );
 
     fetchBackend.mockRejectedValueOnce(new Error("private backend detail"));
     const unavailable = await bridge().list(new Request(
       `https://programmable.market/api/developer/api-keys?walletAddress=${WALLET}`,
     ));
     expect(unavailable.status).toBe(503);
-    expect((await unavailable.json()).error.code).toBe("api_key_service_unavailable");
+    const unavailableCorrelation = await correlatedError(unavailable);
+    expect(unavailableCorrelation.body.error.code).toBe(
+      "api_key_service_unavailable",
+    );
+    expect(console.error).toHaveBeenNthCalledWith(
+      2,
+      "Developer API key request failed",
+      {
+        name: "Error",
+        requestId: unavailableCorrelation.requestId,
+      },
+    );
   });
 });

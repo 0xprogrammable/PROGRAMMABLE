@@ -10,6 +10,9 @@ import {
 import {
   isLaunchStampProvenanceV1,
   type LaunchStampProvenanceV1,
+  type ProjectMetadataLink,
+  type ProjectMetadataLinkKind,
+  type ProjectMetadataStatus,
 } from "../tokens";
 import {
   FADE_ROUTER_CUSTOM_CREATOR_CLAIM_ADAPTER_ID,
@@ -33,13 +36,19 @@ export type ProfileInitialBuy = Readonly<{
   releaseAt: string;
 }>;
 
+export type ProfileProjectMetadataLinkKind = ProjectMetadataLinkKind;
+export type ProfileProjectMetadataLink = ProjectMetadataLink;
+
 export type ProfileToken = {
   address: Address;
   name: string;
   symbol: string;
   launchedAt: string;
   href: string;
+  description?: string;
   imageUrl?: string;
+  projectMetadataLinks?: readonly ProfileProjectMetadataLink[];
+  projectMetadataStatus?: ProjectMetadataStatus;
   marketCapEthWei?: string;
   fdvUsdWad?: string;
   marketCapQuoteWad?: string;
@@ -146,6 +155,24 @@ type FetchLike = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Pick<Response, "ok" | "status" | "json">>;
+
+const PROFILE_PROJECT_DESCRIPTION_MAXIMUM_BYTES = 4_096;
+const PROFILE_PROJECT_LINK_MAXIMUM_COUNT = 32;
+const PROFILE_PROJECT_URI_MAXIMUM_BYTES = 2_048;
+const PROFILE_DISALLOWED_DESCRIPTION_TEXT =
+  /[\u0000-\u0009\u000b-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u;
+const PROFILE_SENSITIVE_QUERY_KEY =
+  /(?:api[-_]?key|access[-_]?token|auth(?:orization)?|bearer|password|secret|signature|sig)/iu;
+const PROFILE_SECRET_PATTERNS = Object.freeze([
+  /PROGRAMMABLE_API_KEY\s*=/iu,
+  /(?:^|[^A-Za-z0-9_-])pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}(?=$|[^A-Za-z0-9_-])/u,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/iu,
+  /\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\b/u,
+  /\b(?:sk|rk|pk)-(?:live|test)?[_-]?[A-Za-z0-9_-]{20,}\b/iu,
+  /\bAKIA[0-9A-Z]{16}\b/u,
+  /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/u,
+  /\b(?:api[_-]?key|access[_-]?token|authorization|password|passwd|secret|private[_-]?key)\b\s*[:=]\s*["']?[^\s"']{8,}/iu,
+] as const);
 
 export const UNAVAILABLE_PROFILE_DATA: Readonly<ProfileOnchainData> =
   Object.freeze({
@@ -334,26 +361,167 @@ function readOptionalIntegerString(
   return value;
 }
 
-function readOptionalHttpsUrl(
-  record: Record<string, unknown>,
-  key: string,
-  label: string,
-) {
-  const value = record[key];
-  if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string") {
-    throw new ProfileResponseError(`Invalid ${label}`);
+function hasLoneUtf16Surrogate(value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return true;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function utf8ByteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function fullyDecodeProfileText(value: string) {
+  let current = value;
+  for (let index = 0; index < 4; index += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) break;
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+  return current;
+}
+
+function containsRecognizableProfileSecret(value: string) {
+  return PROFILE_SECRET_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function safePublicHttpsUrl(value: unknown) {
+  const decoded = typeof value === "string"
+    ? fullyDecodeProfileText(value)
+    : "";
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.trim() !== value ||
+    utf8ByteLength(value) > PROFILE_PROJECT_URI_MAXIMUM_BYTES ||
+    /[\u0000-\u0020\u007f]/u.test(value) ||
+    /[\u0000-\u0020\u007f]/u.test(decoded) ||
+    containsRecognizableProfileSecret(decoded)
+  ) {
+    return undefined;
   }
 
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:") {
-      throw new ProfileResponseError(`Invalid ${label}`);
+    const hostname = url.hostname.toLowerCase();
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      hostname === "" ||
+      hostname === "localhost" ||
+      hostname === "localhost." ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".localhost.") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".local.") ||
+      hostname.includes(":") ||
+      /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname) ||
+      !/^[a-z0-9.-]+$/u.test(hostname) ||
+      url.hash !== "" ||
+      url.href !== value ||
+      [...url.searchParams].some(([key, queryValue]) =>
+        PROFILE_SENSITIVE_QUERY_KEY.test(fullyDecodeProfileText(key)) ||
+        containsRecognizableProfileSecret(
+          fullyDecodeProfileText(queryValue),
+        )
+      )
+    ) {
+      return undefined;
     }
+    return value;
   } catch {
-    throw new ProfileResponseError(`Invalid ${label}`);
+    return undefined;
+  }
+}
+
+function readOptionalHttpsUrl(
+  record: Record<string, unknown>,
+  key: string,
+) {
+  const value = record[key];
+  if (value === undefined || value === null || value === "") return undefined;
+  return safePublicHttpsUrl(value);
+}
+
+function readOptionalProjectDescription(record: Record<string, unknown>) {
+  const value = record.description;
+  if (value === undefined || value === null || value === "") return undefined;
+  if (
+    typeof value !== "string" ||
+    value.normalize("NFC").replace(/\r\n?/gu, "\n").trim() !== value ||
+    utf8ByteLength(value) > PROFILE_PROJECT_DESCRIPTION_MAXIMUM_BYTES ||
+    hasLoneUtf16Surrogate(value) ||
+    PROFILE_DISALLOWED_DESCRIPTION_TEXT.test(value) ||
+    containsRecognizableProfileSecret(fullyDecodeProfileText(value))
+  ) {
+    return undefined;
   }
   return value;
+}
+
+function isProfileProjectMetadataLinkKind(
+  value: unknown,
+): value is ProfileProjectMetadataLinkKind {
+  return value === "website" ||
+    value === "documentation" ||
+    value === "x" ||
+    value === "telegram" ||
+    value === "discord" ||
+    value === "github" ||
+    value === "other";
+}
+
+function readOptionalProjectMetadataLinks(record: Record<string, unknown>) {
+  const value = record.projectMetadataLinks;
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.length > PROFILE_PROJECT_LINK_MAXIMUM_COUNT) {
+    return undefined;
+  }
+
+  const links: ProfileProjectMetadataLink[] = [];
+  let priorKey: string | null = null;
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return undefined;
+    }
+    const link = candidate as Record<string, unknown>;
+    const keys = Object.keys(link).sort();
+    if (
+      keys.length !== 2 ||
+      keys[0] !== "kind" ||
+      keys[1] !== "url" ||
+      !isProfileProjectMetadataLinkKind(link.kind)
+    ) {
+      return undefined;
+    }
+    const url = safePublicHttpsUrl(link.url);
+    if (!url) return undefined;
+    const canonicalKey = `${link.kind}\u0000${url}`;
+    if (priorKey !== null && priorKey >= canonicalKey) return undefined;
+    priorKey = canonicalKey;
+    links.push(Object.freeze({ kind: link.kind, url }));
+  }
+  return Object.freeze(links);
+}
+
+function readOptionalProjectMetadataStatus(record: Record<string, unknown>) {
+  return record.projectMetadataStatus === "current" ||
+      record.projectMetadataStatus === "last-known-good"
+    ? record.projectMetadataStatus
+    : undefined;
 }
 
 function readSafeInteger(
@@ -689,7 +857,10 @@ function parseToken(
   }
   const poolId = readHex(token, "poolId", "pool id", 32);
   const hookAddress = readAddress(token, "hookAddress", "token hook address");
-  const imageUrl = readOptionalHttpsUrl(token, "imageUrl", "token image");
+  const description = readOptionalProjectDescription(token);
+  const imageUrl = readOptionalHttpsUrl(token, "imageUrl");
+  const projectMetadataLinks = readOptionalProjectMetadataLinks(token);
+  const projectMetadataStatus = readOptionalProjectMetadataStatus(token);
   const marketCapEthWei = readOptionalIntegerString(
     token,
     "marketCapEthWei",
@@ -803,7 +974,10 @@ function parseToken(
     symbol: readString(token, "symbol", "token symbol"),
     launchedAt,
     href: tokenHref(address),
+    ...(description ? { description } : {}),
     ...(imageUrl ? { imageUrl } : {}),
+    ...(projectMetadataLinks ? { projectMetadataLinks } : {}),
+    ...(projectMetadataStatus ? { projectMetadataStatus } : {}),
     ...(marketCapEthWei ? { marketCapEthWei } : {}),
     ...(fdvUsdWad ? { fdvUsdWad } : {}),
     ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
@@ -1131,7 +1305,10 @@ export function mapCreatorProfileResponse(
       symbol,
       launchedAt,
       href,
+      description,
       imageUrl,
+      projectMetadataLinks,
+      projectMetadataStatus,
       marketCapEthWei,
       fdvUsdWad,
       marketCapQuoteWad,
@@ -1145,7 +1322,10 @@ export function mapCreatorProfileResponse(
       symbol,
       launchedAt: formatActivityDate(launchedAt),
       href,
+      ...(description ? { description } : {}),
       ...(imageUrl ? { imageUrl } : {}),
+      ...(projectMetadataLinks ? { projectMetadataLinks } : {}),
+      ...(projectMetadataStatus ? { projectMetadataStatus } : {}),
       ...(marketCapEthWei ? { marketCapEthWei } : {}),
       ...(fdvUsdWad ? { fdvUsdWad } : {}),
       ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),

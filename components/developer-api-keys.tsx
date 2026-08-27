@@ -196,7 +196,7 @@ function readApiError(response: Response, value: unknown, fallback: string) {
     ? value.error.requestId
     : null;
   const retryAfter = response.headers.get("retry-after");
-  const retryCopy = response.status === 429
+  const retryCopy = (response.status === 429 || response.status === 503)
     && retryAfter !== null
     && /^[1-9][0-9]{0,4}$/u.test(retryAfter)
     ? ` Try again in ${retryAfter} seconds.`
@@ -1018,9 +1018,10 @@ function DeveloperApiKeysView({
                 </div>
               </div>
               <p className={styles.setupNote}>
-                Agent setup contains only <code>$PROGRAMMABLE_API_KEY</code>,
-                install instructions, and public CLI, guide, and OpenAPI links.
-                It never includes this key.
+                Agent setup contains the <code>$PROGRAMMABLE_API_KEY</code>
+                placeholder, install and workflow instructions, plus public
+                discovery, capabilities, preflight, remediation, pack schema,
+                CLI, guide, and OpenAPI links. It never includes this key.
               </p>
               {keyCopyState === "error" ? (
                 <p className={styles.inlineError} role="alert">

@@ -300,6 +300,145 @@ export const EXPLORE_TOKENS_PER_PAGE = 9;
 export const EXPLORE_MOBILE_TOKENS_PER_PAGE = 4;
 export const EXPLORE_MOBILE_BREAKPOINT_PX = 700;
 export const EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE = 100;
+export const EXPLORE_REVALIDATION_INTERVAL_MS = 15_000;
+const EXPLORE_REVALIDATION_MIN_INTERVAL_MS = 1_000;
+const EXPLORE_REVALIDATION_MAX_INTERVAL_MS = 60_000;
+
+type ExploreTimestampedCacheEntry = Readonly<{
+  key: string;
+  updatedAt: number;
+}>;
+
+export function isExploreModelDatasetCacheFresh(
+  cached: ExploreTimestampedCacheEntry | null,
+  key: string,
+  now = Date.now(),
+) {
+  return (
+    cached?.key === key &&
+    Number.isFinite(cached.updatedAt) &&
+    Number.isFinite(now) &&
+    Math.max(0, now - cached.updatedAt) < EXPLORE_REVALIDATION_INTERVAL_MS
+  );
+}
+
+export function exploreRevalidationCacheTimestamp(input: Readonly<{
+  activeKey: string;
+  fallback: number;
+  resolvedUpdatedAt: number | null;
+  modelDataset: ExploreTimestampedCacheEntry | null;
+}>) {
+  const timestamps = [
+    input.resolvedUpdatedAt,
+    input.modelDataset?.key === input.activeKey
+      ? input.modelDataset.updatedAt
+      : null,
+  ].filter((value): value is number => value !== null && Number.isFinite(value));
+  return timestamps.length > 0 ? Math.min(...timestamps) : input.fallback;
+}
+
+type ExploreRevalidationScheduler = Readonly<{
+  sync: () => void;
+  dispose: () => void;
+}>;
+
+export function shouldRevalidateExplore(input: Readonly<{
+  visibilityState: DocumentVisibilityState;
+  online: boolean;
+  lastRevalidationAt: number;
+  now: number;
+  intervalMs?: number;
+}>) {
+  const intervalMs = input.intervalMs ?? EXPLORE_REVALIDATION_INTERVAL_MS;
+  return (
+    input.visibilityState === "visible" &&
+    input.online &&
+    Number.isSafeInteger(intervalMs) &&
+    intervalMs >= EXPLORE_REVALIDATION_MIN_INTERVAL_MS &&
+    intervalMs <= EXPLORE_REVALIDATION_MAX_INTERVAL_MS &&
+    Number.isFinite(input.lastRevalidationAt) &&
+    Number.isFinite(input.now) &&
+    input.now - input.lastRevalidationAt >= intervalMs
+  );
+}
+
+export function createExploreRevalidationScheduler(input: Readonly<{
+  visibilityState: () => DocumentVisibilityState;
+  online: () => boolean;
+  now: () => number;
+  setTimeout: (callback: () => void, delayMs: number) => number;
+  clearTimeout: (timer: number) => void;
+  onRevalidate: () => void;
+  intervalMs?: number;
+  lastRevalidationAt?: number;
+}>): ExploreRevalidationScheduler {
+  const intervalMs = input.intervalMs ?? EXPLORE_REVALIDATION_INTERVAL_MS;
+  if (
+    !Number.isSafeInteger(intervalMs) ||
+    intervalMs < EXPLORE_REVALIDATION_MIN_INTERVAL_MS ||
+    intervalMs > EXPLORE_REVALIDATION_MAX_INTERVAL_MS
+  ) {
+    throw new Error("Explore revalidation requires a bounded interval");
+  }
+
+  let disposed = false;
+  let timer: number | null = null;
+  const initializedAt = input.now();
+  let lastRevalidationAt = input.lastRevalidationAt ?? initializedAt;
+  if (!Number.isFinite(lastRevalidationAt)) {
+    lastRevalidationAt = initializedAt;
+  }
+
+  function clearTimer() {
+    if (timer === null) return;
+    input.clearTimeout(timer);
+    timer = null;
+  }
+
+  function sync() {
+    clearTimer();
+    if (
+      disposed ||
+      input.visibilityState() !== "visible" ||
+      !input.online()
+    ) return;
+
+    const now = input.now();
+    const elapsed = Number.isFinite(now) && Number.isFinite(lastRevalidationAt)
+      ? Math.max(0, now - lastRevalidationAt)
+      : 0;
+    const delayMs = Math.max(0, intervalMs - elapsed);
+    timer = input.setTimeout(() => {
+      timer = null;
+      if (disposed) return;
+
+      const revalidationAt = input.now();
+      if (!shouldRevalidateExplore({
+        visibilityState: input.visibilityState(),
+        online: input.online(),
+        lastRevalidationAt,
+        now: revalidationAt,
+        intervalMs,
+      })) {
+        sync();
+        return;
+      }
+
+      lastRevalidationAt = revalidationAt;
+      input.onRevalidate();
+      sync();
+    }, delayMs);
+  }
+
+  sync();
+  return {
+    sync,
+    dispose() {
+      disposed = true;
+      clearTimer();
+    },
+  };
+}
 
 const EXPLORE_MOBILE_MEDIA_QUERY = `(max-width: ${EXPLORE_MOBILE_BREAKPOINT_PX}px)`;
 
@@ -1319,7 +1458,11 @@ type PendingExploreRequest = {
 const pendingExploreRequests = new Map<string, PendingExploreRequest>();
 const resolvedExplorePayloads = new Map<
   string,
-  Readonly<{ payload: ExplorePayload; updatedAt: number }>
+  Readonly<{
+    payload: ExplorePayload;
+    updatedAt: number;
+    collectionIdentity: string;
+  }>
 >();
 const RESOLVED_EXPLORE_PAYLOAD_TTL_MS = 30_000;
 const MAX_RESOLVED_EXPLORE_PAYLOADS = 24;
@@ -1331,6 +1474,13 @@ type ExploreRequestContract = Readonly<{
 
 function canonicalExploreSearchIdentity(search: URLSearchParams) {
   const canonical = new URLSearchParams(search);
+  canonical.sort();
+  return canonical.toString();
+}
+
+function canonicalExploreCollectionIdentity(search: URLSearchParams) {
+  const canonical = new URLSearchParams(search);
+  canonical.delete("page");
   canonical.sort();
   return canonical.toString();
 }
@@ -1431,18 +1581,56 @@ function readResolvedExplorePayload(contentKey: string) {
 function cacheResolvedExplorePayload(
   contentKey: string,
   payload: ExplorePayload,
+  search: URLSearchParams,
 ) {
   resolvedExplorePayloads.delete(contentKey);
   if (payload.marketRead?.status === "unavailable") return;
   resolvedExplorePayloads.set(contentKey, {
     payload,
     updatedAt: Date.now(),
+    collectionIdentity: canonicalExploreCollectionIdentity(search),
   });
   while (resolvedExplorePayloads.size > MAX_RESOLVED_EXPLORE_PAYLOADS) {
     const oldestKey = resolvedExplorePayloads.keys().next().value;
     if (oldestKey === undefined) return;
     resolvedExplorePayloads.delete(oldestKey);
   }
+}
+
+export function expireResolvedExplorePayloadCache(contentKey: string) {
+  const modelPagePrefix = `${contentKey}\u0000model-page:`;
+  const collectionIdentities = new Set<string>();
+  for (const [key, cached] of resolvedExplorePayloads) {
+    if (key === contentKey || key.startsWith(modelPagePrefix)) {
+      collectionIdentities.add(cached.collectionIdentity);
+    }
+  }
+  for (const [key, cached] of resolvedExplorePayloads) {
+    if (
+      key === contentKey ||
+      key.startsWith(modelPagePrefix) ||
+      collectionIdentities.has(cached.collectionIdentity)
+    ) resolvedExplorePayloads.delete(key);
+  }
+}
+
+export function resolvedExplorePayloadUpdatedAt(
+  contentKey: string,
+  now = Date.now(),
+) {
+  const modelPagePrefix = `${contentKey}\u0000model-page:`;
+  let oldestUpdatedAt: number | null = null;
+  for (const [key, cached] of resolvedExplorePayloads) {
+    if (key !== contentKey && !key.startsWith(modelPagePrefix)) continue;
+    if (now - cached.updatedAt >= RESOLVED_EXPLORE_PAYLOAD_TTL_MS) {
+      resolvedExplorePayloads.delete(key);
+      continue;
+    }
+    oldestUpdatedAt = oldestUpdatedAt === null
+      ? cached.updatedAt
+      : Math.min(oldestUpdatedAt, cached.updatedAt);
+  }
+  return oldestUpdatedAt;
 }
 
 async function fetchExplorePayload(
@@ -1567,7 +1755,7 @@ export function loadExplorePayload(
       contract,
     );
     controller.signal.throwIfAborted();
-    cacheResolvedExplorePayload(contentKey, payload);
+    cacheResolvedExplorePayload(contentKey, payload, search);
     return payload;
   })();
 
@@ -1745,12 +1933,7 @@ async function loadExploreModelDatasetAttempt(
 
 function invalidateExploreModelDatasetPages(contentKey: string) {
   abortExplorePayload(contentKey);
-  const modelPagePrefix = `${contentKey}\u0000model-page:`;
-  for (const key of resolvedExplorePayloads.keys()) {
-    if (key.startsWith(modelPagePrefix)) {
-      resolvedExplorePayloads.delete(key);
-    }
-  }
+  expireResolvedExplorePayloadCache(contentKey);
 }
 
 export async function loadExploreModelDataset(
@@ -2202,6 +2385,7 @@ export function ExploreView({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = useExploreTokensPerPage();
   const [retryKey, setRetryKey] = useState(0);
+  const [revalidationKey, setRevalidationKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const activeExploreContentKey = useRef<string | null>(null);
@@ -2211,6 +2395,7 @@ export function ExploreView({
   const modelDatasetCache = useRef<{
     key: string;
     payload: ExplorePayload;
+    updatedAt: number;
   } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const sort = resolveExploreServerSort(valuationSort, ageSort);
@@ -2324,6 +2509,51 @@ export function ExploreView({
     if (
       preview ||
       loadingOnly ||
+      isInterfacePreviewHost(window.location.hostname)
+    ) return;
+
+    const schedulerStartedAt = Date.now();
+    const scheduler = createExploreRevalidationScheduler({
+      visibilityState: () => document.visibilityState,
+      online: () => navigator.onLine,
+      now: () => Date.now(),
+      setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      clearTimeout: (timer) => window.clearTimeout(timer),
+      onRevalidate: () => {
+        if (!explorePageSizeMatchesViewport(pageSize, window.innerWidth)) return;
+        modelDatasetCache.current = null;
+        expireResolvedExplorePayloadCache(activeRequestContentKey);
+        setRevalidationKey((value) => value + 1);
+      },
+      lastRevalidationAt: exploreRevalidationCacheTimestamp({
+        activeKey: activeRequestContentKey,
+        fallback: schedulerStartedAt,
+        resolvedUpdatedAt: resolvedExplorePayloadUpdatedAt(
+          activeRequestContentKey,
+          schedulerStartedAt,
+        ),
+        modelDataset: modelDatasetCache.current,
+      }),
+    });
+    const syncScheduler = () => scheduler.sync();
+
+    document.addEventListener("visibilitychange", syncScheduler);
+    window.addEventListener("focus", syncScheduler);
+    window.addEventListener("online", syncScheduler);
+    window.addEventListener("offline", syncScheduler);
+    return () => {
+      scheduler.dispose();
+      document.removeEventListener("visibilitychange", syncScheduler);
+      window.removeEventListener("focus", syncScheduler);
+      window.removeEventListener("online", syncScheduler);
+      window.removeEventListener("offline", syncScheduler);
+    };
+  }, [activeRequestContentKey, loadingOnly, pageSize, preview]);
+
+  useEffect(() => {
+    if (
+      preview ||
+      loadingOnly ||
       (typeof window !== "undefined" &&
         isInterfacePreviewHost(window.location.hostname))
     ) {
@@ -2337,6 +2567,22 @@ export function ExploreView({
       return;
     }
 
+    const search = new URLSearchParams({
+      q: debouncedQuery,
+      sort,
+      page: String(currentPage),
+      limit: String(pageSize),
+    });
+    if (socialFilter !== "all") {
+      search.set("socials", socialFilter);
+    }
+    if (modelFilter !== "all") {
+      search.set(
+        "model",
+        modelFilter === "custom-hook" ? "custom" : "classic",
+      );
+    }
+
     const initialValuationSort: ExploreValuationSort =
       DEFAULT_EXPLORE_VIEW_SORT === "market-cap" ? "highest" : "none";
     const isInitialRequest =
@@ -2346,7 +2592,8 @@ export function ExploreView({
       socialFilter === "all" &&
       modelFilter === initialModelFilter &&
       currentPage === 1 &&
-      retryKey === 0;
+      retryKey === 0 &&
+      revalidationKey === 0;
     const responsiveInitialState = createResponsiveExploreInitialState(
       initialResponse,
       {
@@ -2363,6 +2610,7 @@ export function ExploreView({
         cacheResolvedExplorePayload(
           activeRequestContentKey,
           responsiveInitialState.payload,
+          search,
         );
       }
       if (handledRequestKey.current !== requestKey) {
@@ -2380,22 +2628,6 @@ export function ExploreView({
       abortExplorePayload(previousContentKey);
     }
     activeExploreContentKey.current = activeRequestContentKey;
-    const search = new URLSearchParams({
-      q: debouncedQuery,
-      sort,
-      page: String(currentPage),
-      limit: String(pageSize),
-    });
-    if (socialFilter !== "all") {
-      search.set("socials", socialFilter);
-    }
-    if (modelFilter !== "all") {
-      search.set(
-        "model",
-        modelFilter === "custom-hook" ? "custom" : "classic",
-      );
-    }
-
     async function loadTokens() {
       try {
         let payload: ExplorePayload;
@@ -2405,10 +2637,15 @@ export function ExploreView({
             search,
           );
         } else {
-          let dataset =
-            modelDatasetCache.current?.key === modelDatasetKey
-              ? modelDatasetCache.current.payload
-              : null;
+          const cachedDataset = modelDatasetCache.current;
+          const cacheIsFresh = isExploreModelDatasetCacheFresh(
+            cachedDataset,
+            modelDatasetKey,
+          );
+          if (cachedDataset?.key === modelDatasetKey && !cacheIsFresh) {
+            modelDatasetCache.current = null;
+          }
+          let dataset = cacheIsFresh ? cachedDataset?.payload ?? null : null;
           if (!dataset) {
             dataset = await loadExploreModelDataset(
               activeRequestContentKey,
@@ -2421,6 +2658,7 @@ export function ExploreView({
                 : {
                     key: modelDatasetKey,
                     payload: dataset,
+                    updatedAt: Date.now(),
                   };
           }
           payload = paginateExploreModelDataset(
@@ -2477,6 +2715,7 @@ export function ExploreView({
     initialState,
     loadingOnly,
     preview,
+    revalidationKey,
     requestKey,
     retryKey,
     requiresCompleteDataset,
@@ -2577,6 +2816,8 @@ export function ExploreView({
 
   function retryTokens() {
     resultStatusRef.current?.focus({ preventScroll: true });
+    modelDatasetCache.current = null;
+    expireResolvedExplorePayloadCache(activeRequestContentKey);
     setRetryKey((value) => value + 1);
   }
 
@@ -2727,6 +2968,7 @@ export function ExploreView({
                   priority={eagerImage}
                   sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"
                   unoptimized={!canOptimizeTokenImage(imageSource)}
+                  referrerPolicy="no-referrer"
                   draggable={false}
                   onError={(event) => {
                     applyTokenImageFallback(

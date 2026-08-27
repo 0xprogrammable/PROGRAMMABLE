@@ -5,6 +5,22 @@ export type TokenLink = {
   url: string;
 };
 
+export type ProjectMetadataLinkKind =
+  | "website"
+  | "documentation"
+  | "x"
+  | "telegram"
+  | "discord"
+  | "github"
+  | "other";
+
+export type ProjectMetadataLink = Readonly<{
+  kind: ProjectMetadataLinkKind;
+  url: string;
+}>;
+
+export type ProjectMetadataStatus = "current" | "last-known-good";
+
 export type TokenTone = "rose" | "violet" | "mint" | "amber" | "sky" | "peach";
 
 export type LaunchStampProvenanceV1 = Readonly<{
@@ -615,6 +631,8 @@ export type LauncherToken = {
   description?: string;
   imageUrl?: string;
   links?: TokenLink[];
+  projectMetadataLinks?: readonly ProjectMetadataLink[];
+  projectMetadataStatus?: ProjectMetadataStatus;
   tokenAddress: `0x${string}`;
   hookAddress: `0x${string}`;
   poolId: `0x${string}`;
