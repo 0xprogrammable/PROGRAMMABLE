@@ -11,8 +11,12 @@ const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222" as const;
 const CREDENTIAL_ID = "018f3e2a-7b4c-7d5e-8f90-123456789abc";
 const KEY_ID = "A".repeat(22);
-const API_KEY_SECRET = `pm_live_${KEY_ID}_${"B".repeat(43)}`;
+const API_KEY_SECRET = ["pm", "live", KEY_ID, "B".repeat(43)].join("_");
 const WEBSITE_TOKEN = "w".repeat(43);
+const BFF_ASSERTION_KEY = "b".repeat(43);
+const ASSERTION_ISSUED_AT = "2026-08-27T08:00:00.000Z";
+const ASSERTION_NONCE = "AAAAAAAAAAAAAAAAAAAAAA";
+const IDEMPOTENCY_ID = "018f3e2a-7b4c-7d5e-8f90-123456789abc";
 const REQUEST_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
@@ -67,8 +71,11 @@ describe("developer API key same-origin bridge", () => {
       authenticator: { authenticate },
       backendBaseUrl: "https://custom-launch-api.example/",
       websiteToken: WEBSITE_TOKEN,
+      bffAssertionKeyV2: BFF_ASSERTION_KEY,
       fetchBackend,
       backendTimeoutMs: 1_000,
+      assertionNow: () => new Date(ASSERTION_ISSUED_AT),
+      assertionNonce: () => ASSERTION_NONCE,
     });
   }
 
@@ -108,11 +115,26 @@ describe("developer API key same-origin bridge", () => {
     );
     expect(headers.get("x-programmable-wallet-address")).toBe(WALLET);
     expect(headers.get("x-privy-identity-token")).toBeNull();
+    expect(headers.get("x-programmable-bff-assertion-version")).toBe("2");
+    expect(headers.get("x-programmable-bff-assertion-issued-at")).toBe(
+      ASSERTION_ISSUED_AT,
+    );
+    expect(headers.get("x-programmable-bff-assertion-nonce")).toBe(
+      ASSERTION_NONCE,
+    );
+    expect(headers.get("x-programmable-bff-assertion-body-sha256")).toBe(
+      `sha256:${"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}`,
+    );
+    expect(headers.get("x-programmable-bff-assertion-signature")).toBe(
+      "hmac-sha256:169f5d4dddda9a5d0d3dff95b324ff39a04ffa632c447501704f4d4e1db77736",
+    );
+    expect(init.body).toBeUndefined();
   });
 
   it("creates an exact two-scope key and exposes its raw value once", async () => {
     fetchBackend.mockResolvedValueOnce(backendJson({
       apiKey: summary(),
+      secretState: "delivered-once",
       apiKeySecret: API_KEY_SECRET,
     }, 201));
     const request = new Request(
@@ -122,6 +144,7 @@ describe("developer API key same-origin bridge", () => {
         headers: {
           accept: "application/json",
           "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_ID,
           authorization: "Bearer browser-privy-token",
         },
         body: JSON.stringify({
@@ -138,9 +161,12 @@ describe("developer API key same-origin bridge", () => {
     expect(await response.json()).toEqual({
       schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
       apiKey: summary(),
+      secretState: "delivered-once",
       apiKeySecret: API_KEY_SECRET,
     });
     const [, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
+    const headers = new Headers(init.headers);
+    expect(headers.get("idempotency-key")).toBe(IDEMPOTENCY_ID);
     expect(JSON.parse(String(init.body))).toEqual({
       schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
       label: "Launch agent",
@@ -148,6 +174,186 @@ describe("developer API key same-origin bridge", () => {
     });
     expect(String(init.body)).not.toContain(WALLET);
     expect(String(init.body)).not.toContain("browser-privy-token");
+    expect(headers.get("x-programmable-bff-assertion-body-sha256")).toBe(
+      "sha256:2262e615379988c79eb8d90f4593d5aa708c6ded57505dfd7d37e6202a252695",
+    );
+    expect(headers.get("x-programmable-bff-assertion-signature")).toBe(
+      "hmac-sha256:c966ed9d880c5e2c19fae08b7c4d0130f37a6c880b236a177160a5fdc4559e06",
+    );
+  });
+
+  it("accepts an idempotent issue replay without inventing or leaking a secret", async () => {
+    fetchBackend.mockResolvedValueOnce(backendJson({
+      apiKey: summary(),
+      secretState: "already-delivered",
+    }, 200));
+    const response = await bridge().create(new Request(
+      "https://programmable.market/api/developer/api-keys",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_ID,
+        },
+        body: JSON.stringify({
+          schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+          walletAddress: WALLET,
+          label: "Launch agent",
+          expiresInDays: 90,
+        }),
+      },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+      apiKey: summary(),
+      secretState: "already-delivered",
+    });
+    expect(body).not.toHaveProperty("apiKeySecret");
+  });
+
+  it("rotates with exact bytes and projects the replacement secret only once", async () => {
+    const replacement = summary({
+      id: "028f3e2a-7b4c-7d5e-8f90-123456789abc",
+    });
+    fetchBackend.mockResolvedValueOnce(backendJson({
+      apiKey: replacement,
+      secretState: "delivered-once",
+      apiKeySecret: API_KEY_SECRET,
+      rotatedCredentialId: CREDENTIAL_ID,
+    }, 201));
+    const response = await bridge().rotate(new Request(
+      `https://programmable.market/api/developer/api-keys/${CREDENTIAL_ID}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_ID,
+        },
+        body: JSON.stringify({
+          schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+          walletAddress: WALLET,
+          label: "Launch agent",
+          expiresInDays: 90,
+        }),
+      },
+    ), CREDENTIAL_ID);
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+      apiKey: replacement,
+      secretState: "delivered-once",
+      apiKeySecret: API_KEY_SECRET,
+      rotatedCredentialId: CREDENTIAL_ID,
+    });
+    const [url, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
+    expect(url.pathname).toBe(
+      `/v1/wallet-admin/api-keys/${CREDENTIAL_ID}/rotate`,
+    );
+    expect(Buffer.isBuffer(init.body)).toBe(true);
+    expect(String(init.body)).toBe(JSON.stringify({
+      schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+      label: "Launch agent",
+      expiresInDays: 90,
+    }));
+    expect(new Headers(init.headers).get("idempotency-key")).toBe(
+      IDEMPOTENCY_ID,
+    );
+  });
+
+  it("rejects a rotate response that reuses the revoked credential id", async () => {
+    fetchBackend.mockResolvedValueOnce(backendJson({
+      apiKey: summary(),
+      secretState: "delivered-once",
+      apiKeySecret: API_KEY_SECRET,
+      rotatedCredentialId: CREDENTIAL_ID,
+    }, 201));
+    const response = await bridge().rotate(new Request(
+      `https://programmable.market/api/developer/api-keys/${CREDENTIAL_ID}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_ID,
+        },
+        body: JSON.stringify({
+          schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+          walletAddress: WALLET,
+          label: "Launch agent",
+          expiresInDays: 90,
+        }),
+      },
+    ), CREDENTIAL_ID);
+
+    expect(response.status).toBe(503);
+    expect((await correlatedError(response)).body.error.code).toBe(
+      "api_key_service_unavailable",
+    );
+  });
+
+  it("fails closed when replay state and secret delivery contradict", async () => {
+    fetchBackend.mockResolvedValueOnce(backendJson({
+      apiKey: summary(),
+      secretState: "already-delivered",
+      apiKeySecret: API_KEY_SECRET,
+    }, 200));
+    const response = await bridge().create(new Request(
+      "https://programmable.market/api/developer/api-keys",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_ID,
+        },
+        body: JSON.stringify({
+          schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+          walletAddress: WALLET,
+          label: "Launch agent",
+        }),
+      },
+    ));
+
+    expect(response.status).toBe(503);
+    expect((await correlatedError(response)).body.error.code).toBe(
+      "api_key_service_unavailable",
+    );
+  });
+
+  it("requires a bounded idempotency key before authenticating issue or rotate", async () => {
+    const body = JSON.stringify({
+      schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+      walletAddress: WALLET,
+      label: "Launch agent",
+    });
+    const issue = await bridge().create(new Request(
+      "https://programmable.market/api/developer/api-keys",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      },
+    ));
+    const rotate = await bridge().rotate(new Request(
+      `https://programmable.market/api/developer/api-keys/${CREDENTIAL_ID}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "too-short",
+        },
+        body,
+      },
+    ), CREDENTIAL_ID);
+
+    expect(issue.status).toBe(400);
+    expect((await issue.json()).error.code).toBe("INVALID_IDEMPOTENCY_KEY");
+    expect(rotate.status).toBe(400);
+    expect((await rotate.json()).error.code).toBe("INVALID_IDEMPOTENCY_KEY");
+    expect(authenticate).not.toHaveBeenCalled();
+    expect(fetchBackend).not.toHaveBeenCalled();
   });
 
   it("rejects a wallet outside the current Privy linked-wallet set", async () => {
@@ -157,6 +363,7 @@ describe("developer API key same-origin bridge", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          "idempotency-key": IDEMPOTENCY_ID,
           authorization: "Bearer browser-privy-token",
         },
         body: JSON.stringify({

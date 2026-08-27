@@ -283,7 +283,7 @@
 .revealHeading,
 .panelHeading,
 .keyIdentity > div,
-.revokeConfirmation > div {
+.mutationConfirmation > div {
   align-items: center;
   display: flex;
   justify-content: space-between;
@@ -675,6 +675,7 @@
 .primaryButton:disabled,
 .secondaryButton:disabled,
 .dangerButton:disabled,
+.revokeButton:disabled,
 .textButton:disabled {
   opacity: 0.58;
 }
@@ -770,20 +771,32 @@
   overflow-wrap: anywhere;
 }
 
-.revokeConfirmation {
+.keyActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.keyActions .revokeButton {
+  margin-top: 0;
+}
+
+.mutationConfirmation {
   border: 1px solid color-mix(in srgb, var(--danger) 36%, var(--api-line));
   border-radius: var(--webde-radius-control);
   margin-top: 16px;
   padding: 12px;
 }
 
-.revokeConfirmation > p:first-child {
+.mutationConfirmation > p:first-child {
   color: var(--webde-muted);
   font-size: 13px;
   line-height: 1.5;
 }
 
-.revokeConfirmation > div {
+.mutationConfirmation > div {
   gap: 8px;
   justify-content: flex-end;
   margin-top: 12px;
@@ -901,6 +914,7 @@
 .dangerButton:focus-visible,
 .dismissButton:focus-visible,
 .revokeButton:focus-visible,
+.keyItem:focus-visible,
 .textButton:focus-visible,
 .scopeLedger summary:focus-visible,
 .field input:focus-visible,
@@ -1006,9 +1020,15 @@
     padding-inline: 0;
   }
 
-  .revokeConfirmation > div {
+  .keyActions,
+  .mutationConfirmation > div {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .keyActions > button,
+  .mutationConfirmation > div > button {
+    width: 100%;
   }
 }
 
@@ -1063,6 +1083,7 @@
   .secondaryButton,
   .dangerButton,
   .keyItem,
+  .mutationConfirmation,
   .panel,
   .keyReveal,
   .walletGate,

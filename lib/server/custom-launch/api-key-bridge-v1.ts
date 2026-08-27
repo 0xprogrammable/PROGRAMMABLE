@@ -1,6 +1,9 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import {
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 
 import { getAddress, isAddress } from "viem";
 
@@ -16,6 +19,10 @@ import {
   PreservedBackendPublicErrorV1,
   readPreservedBackendPublicErrorV1,
 } from "./backend-public-error-v1";
+import {
+  createWalletAdminBffAssertionV2,
+  requireWalletAdminBffAssertionKeyV2,
+} from "./wallet-admin-bff-assertion-v2";
 
 export const CUSTOM_LAUNCH_API_SCHEMA_V1 =
   "programmable.custom-launch-api.v1" as const;
@@ -25,6 +32,7 @@ const MAXIMUM_BACKEND_BODY_BYTES = 65_536;
 const DEFAULT_BACKEND_TIMEOUT_MS = 5_000;
 const DEFAULT_EXPIRY_DAYS = 90;
 const MAXIMUM_EXPIRY_DAYS = 366;
+const WALLET_ADMIN_IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/u;
 const CURRENT_SCOPES = Object.freeze([
   "custom-launch:create",
   "custom-launch:read",
@@ -51,8 +59,22 @@ export type DeveloperApiKeySummaryV1 = Readonly<{
 export interface DeveloperApiKeyBridgeV1 {
   list(request: Request): Promise<Response>;
   create(request: Request): Promise<Response>;
+  rotate(request: Request, credentialId: string): Promise<Response>;
   revoke(request: Request, credentialId: string): Promise<Response>;
 }
+
+export type DeveloperApiKeyMutationResultV1 =
+  | Readonly<{
+      apiKey: DeveloperApiKeySummaryV1;
+      secretState: "delivered-once";
+      apiKeySecret: string;
+      rotatedCredentialId?: string;
+    }>
+  | Readonly<{
+      apiKey: DeveloperApiKeySummaryV1;
+      secretState: "already-delivered";
+      rotatedCredentialId?: string;
+    }>;
 
 export type DeveloperApiKeyBackendFetchV1 = (
   input: string | URL | Request,
@@ -63,15 +85,27 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
   authenticator: WalletPrincipalAuthenticatorV1;
   backendBaseUrl: string;
   websiteToken: string;
+  bffAssertionKeyV2: string;
   fetchBackend: DeveloperApiKeyBackendFetchV1;
   backendTimeoutMs?: number;
+  assertionNow?: () => Date;
+  assertionNonce?: () => string;
 }>): DeveloperApiKeyBridgeV1 {
   const backendBaseUrl = normalizedBackendBaseUrl(input.backendBaseUrl);
   const websiteToken = boundedWebsiteToken(input.websiteToken);
+  const bffAssertionKeyV2 = requireWalletAdminBffAssertionKeyV2(
+    input.bffAssertionKeyV2,
+    websiteToken,
+  );
   const timeoutMs = input.backendTimeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS;
+  const assertionNow = input.assertionNow ?? (() => new Date());
+  const assertionNonce = input.assertionNonce
+    ?? (() => randomBytes(16).toString("base64url"));
   if (
     typeof input.authenticator?.authenticate !== "function"
     || typeof input.fetchBackend !== "function"
+    || typeof assertionNow !== "function"
+    || typeof assertionNonce !== "function"
     || !Number.isInteger(timeoutMs)
     || timeoutMs < 250
     || timeoutMs > 15_000
@@ -84,20 +118,39 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
     method: "GET" | "POST" | "DELETE",
     pathname: string,
     body?: Readonly<Record<string, JsonValue>>,
+    idempotencyKey?: string,
   ) => {
+    const backendUrl = new URL(pathname, backendBaseUrl);
+    const bodyBytes = body === undefined
+      ? Buffer.alloc(0)
+      : Buffer.from(JSON.stringify(body), "utf8");
+    const assertion = createWalletAdminBffAssertionV2({
+      method,
+      requestTarget: `${backendUrl.pathname}${backendUrl.search}`,
+      privyUserId: principal.privyUserId,
+      walletAddress,
+      issuedAt: assertionNow().toISOString(),
+      nonce: assertionNonce(),
+      bodyBytes,
+      assertionKey: bffAssertionKeyV2,
+    });
     const headers = new Headers({
       Accept: "application/json",
       Authorization: `Bearer ${websiteToken}`,
       "X-Programmable-Privy-User-Id": principal.privyUserId,
       "X-Programmable-Wallet-Address": walletAddress,
+      ...assertion,
     });
     if (body !== undefined) headers.set("Content-Type", "application/json");
+    if (idempotencyKey !== undefined) {
+      headers.set("Idempotency-Key", idempotencyKey);
+    }
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = AbortSignal.any([request.signal, timeoutSignal]);
-    return input.fetchBackend(new URL(pathname, backendBaseUrl), {
+    return input.fetchBackend(backendUrl, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : bodyBytes,
       cache: "no-store",
       redirect: "error",
       signal,
@@ -124,6 +177,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
         if (!backend.ok) throw await mappedBackendError(backend);
         const value = await readBoundedBackendJson(backend);
         const record = jsonRecord(value);
+        requireBackendSchema(record);
         const apiKeys = parseApiKeyList(record.apiKeys);
         return jsonResponse(200, {
           schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
@@ -142,6 +196,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
         requireJsonRequest(request);
         const body = await readBrowserJson(request);
         const parsed = parseCreateBody(body);
+        const idempotencyKey = requireIdempotencyKey(request);
         const principal = await input.authenticator.authenticate(request);
         const walletAddress = requireLinkedWallet(principal, parsed.walletAddress);
         const backend = await callBackend(
@@ -155,22 +210,58 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
             label: parsed.label,
             expiresInDays: parsed.expiresInDays,
           }),
+          idempotencyKey,
         );
         if (!backend.ok) throw await mappedBackendError(backend);
-        const value = await readBoundedBackendJson(backend);
-        const record = jsonRecord(value);
-        const apiKey = parseApiKeySummary(record.apiKey);
-        const apiKeySecret = requiredString(record.apiKeySecret, 74, 74);
-        if (!/^pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u.test(apiKeySecret)) {
-          throw new BackendContractErrorV1();
-        }
-        if (!apiKeySecret.startsWith(`${apiKey.keyPrefix}_`)) {
-          throw new BackendContractErrorV1();
-        }
-        return jsonResponse(201, {
+        const result = parseApiKeyMutationResult(
+          await readBoundedBackendJson(backend),
+          backend.status,
+        );
+        return jsonResponse(backend.status, {
           schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
-          apiKey,
-          apiKeySecret,
+          ...result,
+        });
+      } catch (error) {
+        return mappedError(error);
+      }
+    },
+
+    async rotate(request: Request, credentialId: string) {
+      if (request.method !== "POST") {
+        return errorResponse(405, "method_not_allowed", "POST");
+      }
+      try {
+        requireJsonRequest(request);
+        const normalizedCredentialId = requireBrowserCredentialId(credentialId);
+        const body = await readBrowserJson(request);
+        const parsed = parseCreateBody(body);
+        const idempotencyKey = requireIdempotencyKey(request);
+        const principal = await input.authenticator.authenticate(request);
+        const walletAddress = requireLinkedWallet(principal, parsed.walletAddress);
+        const backend = await callBackend(
+          request,
+          principal,
+          walletAddress,
+          "POST",
+          `/v1/wallet-admin/api-keys/${
+            encodeURIComponent(normalizedCredentialId)
+          }/rotate`,
+          Object.freeze({
+            schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+            label: parsed.label,
+            expiresInDays: parsed.expiresInDays,
+          }),
+          idempotencyKey,
+        );
+        if (!backend.ok) throw await mappedBackendError(backend);
+        const result = parseApiKeyMutationResult(
+          await readBoundedBackendJson(backend),
+          backend.status,
+          normalizedCredentialId,
+        );
+        return jsonResponse(backend.status, {
+          schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
+          ...result,
         });
       } catch (error) {
         return mappedError(error);
@@ -201,6 +292,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
         if (!backend.ok) throw await mappedBackendError(backend);
         const value = await readBoundedBackendJson(backend);
         const record = jsonRecord(value);
+        requireBackendSchema(record);
         if (
           record.revoked !== true
           || record.credentialId !== normalizedCredentialId
@@ -227,6 +319,9 @@ export function getProductionDeveloperApiKeyBridgeV1() {
     ),
     websiteToken: requiredEnvironment(
       "PROGRAMMABLE_CUSTOM_LAUNCH_WEBSITE_TOKEN",
+    ),
+    bffAssertionKeyV2: requiredRawEnvironment(
+      "PROGRAMMABLE_CUSTOM_LAUNCH_BFF_ASSERTION_KEY_V2",
     ),
     fetchBackend: fetch,
   });
@@ -265,6 +360,15 @@ function parseCreateBody(value: JsonValue) {
     || (expiresInDays as number) > MAXIMUM_EXPIRY_DAYS
   ) throw new BrowserRequestErrorV1(400, "request_schema_invalid");
   return Object.freeze({ walletAddress, label, expiresInDays });
+}
+
+function requireIdempotencyKey(request: Request) {
+  const idempotencyKey = request.headers.get("idempotency-key");
+  if (
+    idempotencyKey === null
+    || !WALLET_ADMIN_IDEMPOTENCY_KEY.test(idempotencyKey)
+  ) throw new BrowserRequestErrorV1(400, "INVALID_IDEMPOTENCY_KEY");
+  return idempotencyKey;
 }
 
 function exactWalletQuery(request: Request) {
@@ -368,6 +472,54 @@ function parseApiKeySummary(value: JsonValue | undefined): DeveloperApiKeySummar
     lastUsedAt: optionalTimestamp(record.lastUsedAt),
     revokedAt: optionalTimestamp(record.revokedAt),
   });
+}
+
+function parseApiKeyMutationResult(
+  value: JsonValue,
+  status: number,
+  rotatedCredentialId?: string,
+): DeveloperApiKeyMutationResultV1 {
+  const record = jsonRecord(value);
+  requireBackendSchema(record);
+  const apiKey = parseApiKeySummary(record.apiKey);
+  const secretState = record.secretState;
+  const hasSecret = Object.prototype.hasOwnProperty.call(record, "apiKeySecret");
+  const hasRotatedCredentialId = Object.prototype.hasOwnProperty.call(
+    record,
+    "rotatedCredentialId",
+  );
+  if (
+    (secretState !== "delivered-once" && secretState !== "already-delivered")
+    || (secretState === "delivered-once" && status !== 201)
+    || (secretState === "already-delivered" && status !== 200)
+    || (secretState === "delivered-once") !== hasSecret
+    || (rotatedCredentialId !== undefined) !== hasRotatedCredentialId
+  ) throw new BackendContractErrorV1();
+  if (rotatedCredentialId !== undefined) {
+    if (
+      requireBackendCredentialId(record.rotatedCredentialId)
+      !== rotatedCredentialId
+      || apiKey.id === rotatedCredentialId
+    ) throw new BackendContractErrorV1();
+  }
+  const rotation = rotatedCredentialId === undefined
+    ? Object.freeze({})
+    : Object.freeze({ rotatedCredentialId });
+  if (secretState === "already-delivered") {
+    return Object.freeze({ apiKey, secretState, ...rotation });
+  }
+  const apiKeySecret = requiredString(record.apiKeySecret, 74, 74);
+  if (
+    !/^pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u.test(apiKeySecret)
+    || !apiKeySecret.startsWith(`${apiKey.keyPrefix}_`)
+  ) throw new BackendContractErrorV1();
+  return Object.freeze({ apiKey, secretState, apiKeySecret, ...rotation });
+}
+
+function requireBackendSchema(record: Readonly<Record<string, JsonValue>>) {
+  if (record.schemaVersion !== CUSTOM_LAUNCH_API_SCHEMA_V1) {
+    throw new BackendContractErrorV1();
+  }
 }
 
 function exactBrowserRecord(
@@ -478,6 +630,12 @@ function boundedWebsiteToken(value: string) {
 
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim();
+  if (!value) throw new TypeError(`${name} is not configured`);
+  return value;
+}
+
+function requiredRawEnvironment(name: string) {
+  const value = process.env[name];
   if (!value) throw new TypeError(`${name} is not configured`);
   return value;
 }

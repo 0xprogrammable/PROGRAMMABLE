@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 
 import { getAddress, isAddress } from "viem";
@@ -25,6 +25,10 @@ import {
   PreservedBackendPublicErrorV1,
   readPreservedBackendPublicErrorV1,
 } from "./backend-public-error-v1";
+import {
+  createWalletAdminBffAssertionV2,
+  requireWalletAdminBffAssertionKeyV2,
+} from "./wallet-admin-bff-assertion-v2";
 
 export const CUSTOM_LAUNCH_LIST_SCHEMA_V1 =
   "programmable.custom-launch-list.v1" as const;
@@ -227,19 +231,60 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
   authenticator: WalletPrincipalAuthenticatorV1;
   backendBaseUrl: string;
   websiteToken: string;
+  bffAssertionKeyV2: string;
   fetchBackend: DeveloperLaunchHistoryBackendFetchV1;
   backendTimeoutMs?: number;
+  assertionNow?: () => Date;
+  assertionNonce?: () => string;
 }>): DeveloperLaunchHistoryBridgeV1 {
   const backendBaseUrl = normalizedBackendBaseUrl(input.backendBaseUrl);
   const websiteToken = boundedWebsiteToken(input.websiteToken);
+  const bffAssertionKeyV2 = requireWalletAdminBffAssertionKeyV2(
+    input.bffAssertionKeyV2,
+    websiteToken,
+  );
   const timeoutMs = input.backendTimeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS;
+  const assertionNow = input.assertionNow ?? (() => new Date());
+  const assertionNonce = input.assertionNonce
+    ?? (() => randomBytes(16).toString("base64url"));
   if (
     typeof input.authenticator?.authenticate !== "function"
     || typeof input.fetchBackend !== "function"
+    || typeof assertionNow !== "function"
+    || typeof assertionNonce !== "function"
     || !Number.isInteger(timeoutMs)
     || timeoutMs < 250
     || timeoutMs > 15_000
   ) throw new TypeError("Developer launch history bridge configuration is invalid");
+
+  const walletAdminHeaders = (
+    principal: AuthenticatedWalletPrincipalV1,
+    walletAddress: `0x${string}`,
+    method: "GET" | "POST",
+    backendUrl: URL,
+    bodyBytes: Buffer,
+    idempotencyKey?: string,
+  ) => {
+    const assertion = createWalletAdminBffAssertionV2({
+      method,
+      requestTarget: `${backendUrl.pathname}${backendUrl.search}`,
+      privyUserId: principal.privyUserId,
+      walletAddress,
+      issuedAt: assertionNow().toISOString(),
+      nonce: assertionNonce(),
+      bodyBytes,
+      assertionKey: bffAssertionKeyV2,
+    });
+    return new Headers({
+      Accept: "application/json",
+      Authorization: `Bearer ${websiteToken}`,
+      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      "X-Programmable-Privy-User-Id": principal.privyUserId,
+      "X-Programmable-Wallet-Address": walletAddress,
+      ...assertion,
+    });
+  };
 
   return Object.freeze({
     async list(request: Request) {
@@ -251,12 +296,6 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
         const query = exactHistoryQuery(request);
         const principal = await input.authenticator.authenticate(request);
         const walletAddress = requireLinkedWallet(principal, query.walletAddress);
-        const headers = new Headers({
-          Accept: "application/json",
-          Authorization: `Bearer ${websiteToken}`,
-          "X-Programmable-Privy-User-Id": principal.privyUserId,
-          "X-Programmable-Wallet-Address": walletAddress,
-        });
         const expectedWallet = walletAddress.toLowerCase();
         const readVersion = async (version: BackendHistoryVersion) => {
           const cursorState = query.cursor?.[version];
@@ -278,7 +317,13 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           }
           const backend = await input.fetchBackend(backendUrl, {
             method: "GET",
-            headers,
+            headers: walletAdminHeaders(
+              principal,
+              walletAddress,
+              "GET",
+              backendUrl,
+              Buffer.alloc(0),
+            ),
             cache: "no-store",
             redirect: "error",
             signal: AbortSignal.any([
@@ -381,12 +426,6 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           principal,
           walletInput.walletAddress,
         );
-        const headers = new Headers({
-          Accept: "application/json",
-          Authorization: `Bearer ${websiteToken}`,
-          "X-Programmable-Privy-User-Id": principal.privyUserId,
-          "X-Programmable-Wallet-Address": walletAddress,
-        });
         const readVersion = async (version: BackendHistoryVersion) => {
           const backendUrl = new URL(
             `/${version}/wallet-admin/custom-launches/${
@@ -396,7 +435,13 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           );
           const backend = await input.fetchBackend(backendUrl, {
             method: "GET",
-            headers,
+            headers: walletAdminHeaders(
+              principal,
+              walletAddress,
+              "GET",
+              backendUrl,
+              Buffer.alloc(0),
+            ),
             cache: "no-store",
             redirect: "error",
             signal: AbortSignal.any([
@@ -459,24 +504,24 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           principal,
           walletInput.walletAddress,
         );
-        const headers = new Headers({
-          Accept: "application/json",
-          Authorization: `Bearer ${websiteToken}`,
-          "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey,
-          "X-Programmable-Privy-User-Id": principal.privyUserId,
-          "X-Programmable-Wallet-Address": walletAddress,
-        });
         const backendUrl = new URL(
           `/v3/wallet-admin/custom-launches/${
             encodeURIComponent(launchId.toLowerCase())
           }/funding-authorization`,
           backendBaseUrl,
         );
+        const bodyBytes = Buffer.from(JSON.stringify(body), "utf8");
         const backend = await input.fetchBackend(backendUrl, {
           method: "POST",
-          headers,
-          body: JSON.stringify(body),
+          headers: walletAdminHeaders(
+            principal,
+            walletAddress,
+            "POST",
+            backendUrl,
+            bodyBytes,
+            idempotencyKey,
+          ),
+          body: bodyBytes,
           cache: "no-store",
           redirect: "error",
           signal: AbortSignal.any([
@@ -518,6 +563,9 @@ export function getProductionDeveloperLaunchHistoryBridgeV1() {
     ),
     websiteToken: requiredEnvironment(
       "PROGRAMMABLE_CUSTOM_LAUNCH_WEBSITE_TOKEN",
+    ),
+    bffAssertionKeyV2: requiredRawEnvironment(
+      "PROGRAMMABLE_CUSTOM_LAUNCH_BFF_ASSERTION_KEY_V2",
     ),
     fetchBackend: fetch,
   });
@@ -1624,6 +1672,12 @@ function boundedWebsiteToken(value: string) {
 
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim();
+  if (!value) throw new TypeError(`${name} is not configured`);
+  return value;
+}
+
+function requiredRawEnvironment(name: string) {
+  const value = process.env[name];
   if (!value) throw new TypeError(`${name} is not configured`);
   return value;
 }

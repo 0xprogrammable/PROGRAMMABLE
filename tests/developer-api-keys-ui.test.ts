@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyApiKeyMutationResult,
+  apiKeyLifetimeDays,
   mergeApiKeySummaries,
+  parseApiKeyMutationResult,
+  prepareApiKeyMutationAttempt,
+  shouldRetainApiKeyMutationAttempt,
   type ApiKeySummary,
 } from "../components/developer-api-keys";
 import {
@@ -185,6 +190,86 @@ function v3Launch(
 }
 
 describe("developer API key interface", () => {
+  it("models one-time and replayed mutations without leaking a replay secret", () => {
+    const oldCredentialId = "018f3e2a-7b4c-7d5e-8f90-123456789abc";
+    const replacement = apiKey("028f3e2a-7b4c-7d5e-8f90-123456789abc", {
+      keyPrefix: `pm_live_${"A".repeat(22)}`,
+    });
+    const secret = `${replacement.keyPrefix}_${"B".repeat(43)}`;
+    const delivered = parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: replacement,
+      secretState: "delivered-once",
+      apiKeySecret: secret,
+      rotatedCredentialId: oldCredentialId,
+    }, 201, oldCredentialId);
+    const replayed = parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: replacement,
+      secretState: "already-delivered",
+      rotatedCredentialId: oldCredentialId,
+    }, 200, oldCredentialId);
+
+    expect(delivered).toEqual({
+      apiKey: replacement,
+      secretState: "delivered-once",
+      apiKeySecret: secret,
+      rotatedCredentialId: oldCredentialId,
+    });
+    expect(replayed).toEqual({
+      apiKey: replacement,
+      secretState: "already-delivered",
+      rotatedCredentialId: oldCredentialId,
+    });
+    expect(parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: replacement,
+      secretState: "already-delivered",
+      apiKeySecret: secret,
+      rotatedCredentialId: oldCredentialId,
+    }, 200, oldCredentialId)).toBeNull();
+    expect(parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: apiKey(oldCredentialId),
+      secretState: "already-delivered",
+      rotatedCredentialId: oldCredentialId,
+    }, 200, oldCredentialId)).toBeNull();
+    expect(applyApiKeyMutationResult(
+      [apiKey(oldCredentialId)],
+      replayed!,
+      "2026-08-27T10:00:00.000Z",
+    )).toEqual([
+      replacement,
+      expect.objectContaining({
+        id: oldCredentialId,
+        revokedAt: "2026-08-27T10:00:00.000Z",
+      }),
+    ]);
+
+    const input = { kind: "issue" as const, credentialId: null, body: "{}" };
+    const attempt = prepareApiKeyMutationAttempt(
+      null,
+      input,
+      () => "018f3e2a-7b4c-7d5e-8f90-123456789abc",
+    );
+    expect(prepareApiKeyMutationAttempt(
+      attempt,
+      input,
+      () => "unused-idempotency-key",
+    )).toBe(attempt);
+    expect(() => prepareApiKeyMutationAttempt(
+      attempt,
+      { ...input, body: '{"label":"different"}' },
+      () => "unused-idempotency-key",
+    )).toThrow("An API key mutation retry is already pending");
+    expect(shouldRetainApiKeyMutationAttempt(503, null)).toBe(true);
+    expect(shouldRetainApiKeyMutationAttempt(400, null)).toBe(false);
+    expect(apiKeyLifetimeDays(apiKey("lifetime", {
+      createdAt: "2026-08-27T10:00:00.500Z",
+      expiresAt: "2026-09-26T10:00:00.000Z",
+    }))).toBe(30);
+  });
+
   it("keeps the first view compact and focused on key management", () => {
     expect(apiKeysSource).toContain("<h1>API keys</h1>");
     expect(apiKeysSource).toContain('aria-label="Developer access view"');
@@ -380,7 +465,7 @@ describe("developer API key interface", () => {
     )).toHaveLength(2);
     expect(apiKeysSource.match(
       /refreshApiKeysAfterMutation\(account\);/gu,
-    )).toHaveLength(2);
+    )).toHaveLength(3);
     expect(apiKeysSource).toContain(
       'loadApiKeys(walletAddress, undefined, "mutation")',
     );
