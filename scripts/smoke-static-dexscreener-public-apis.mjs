@@ -10,6 +10,16 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const CATALOG_SOURCES = new Set(["envio-classic-v3"]);
 const PROGRAMMABLE_MAIN_ASSET_ADDRESS =
   "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
+const SHARD_TOKEN_ADDRESS = [
+  "0xface73b63787960282f2",
+  "d4682d3752beb25271ad",
+].join("");
+const SHARD_POOL_ID =
+  "0x9c74d6183b1ee526a62db562a81da3bf579b5bd6bff5066ae985265a7028e010";
+const SHARD_ROUTER_TRADE_PROJECT_ID =
+  "sha256:98f170ed0fa4e98f5b7e1901905132c24082f54f37f6176133be54fd039959a3";
+const SHARD_ROUTER_TRADE_CAPABILITY_HASH =
+  "sha256:6c562e4c2f52829d6c5fdf806ab7deb5a9a37ac549e8137a17160d0dd8436e6a";
 const CATALOG_STATUSES = new Set([
   "current",
   "last-known-good",
@@ -106,6 +116,36 @@ function exactExplorePage(response, tokens, expected = { page: 1, pageSize: 20 }
     tokens.length === Math.min(expected.pageSize, Math.max(0, total - offset)) &&
     Number.isSafeInteger(totalPages) &&
     totalPages === Math.ceil(total / expected.pageSize);
+}
+
+function exactShardRouterTradeDetail(response) {
+  const project = response.body?.routerTradeProject;
+  const market = Array.isArray(project?.markets) && project.markets.length === 1
+    ? project.markets[0]
+    : null;
+  const capability = market?.tradeCapability;
+  return response.status === 200 &&
+    response.body?.status === "ready" &&
+    response.body?.customProject === null &&
+    String(response.body?.token?.tokenAddress ?? "").toLowerCase() ===
+      SHARD_TOKEN_ADDRESS &&
+    project?.customProjectId === SHARD_ROUTER_TRADE_PROJECT_ID &&
+    market?.marketId === "shard-eth-v4" &&
+    market?.kind === "uniswap-v4-hooked-pool" &&
+    market?.status === "active" &&
+    String(market?.poolId ?? "").toLowerCase() === SHARD_POOL_ID &&
+    market?.baseAsset?.symbol === "SHARD" &&
+    String(market?.baseAsset?.identity?.value ?? "").toLowerCase() ===
+      SHARD_TOKEN_ADDRESS &&
+    market?.quoteAsset?.symbol === "ETH" &&
+    String(market?.quoteAsset?.identity?.value ?? "").toLowerCase() ===
+      "0x0000000000000000000000000000000000000000" &&
+    JSON.stringify(capability?.supportedSides) ===
+      JSON.stringify(["base-to-quote", "quote-to-base"]) &&
+    capability?.hookDataPolicy?.kind === "empty" &&
+    capability?.hookDataPolicy?.data === "0x" &&
+    capability?.tradeCapabilityBindingHash ===
+      SHARD_ROUTER_TRADE_CAPABILITY_HASH;
 }
 
 function exactIdentity(token) {
@@ -572,6 +612,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     : {};
   const request = (path, acceptedStatuses) =>
     requestJson(target, headers, path, fetchImpl, acceptedStatuses);
+  const requireShardRouterTrade =
+    environment.PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE === "true";
 
   const health = await request("/api/ops/health");
   if (!exactInformationalHealth(health)) {
@@ -740,12 +782,39 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       const detailStatus = qualifiedDexscreenerFdv(detailToken)
         ? "verified-dexscreener-market"
         : "verified-identity-market-unavailable";
+      let shardTradeStatus = "not-required";
+      if (requireShardRouterTrade) {
+        const shardDetail = await request(
+          "/api/explore/token?address=" +
+            encodeURIComponent(SHARD_TOKEN_ADDRESS),
+        );
+        const shardCatalog = exactCatalogSnapshot(
+          { ...shardDetail, body: {
+            ...shardDetail.body,
+            total: shardDetail.body?.catalog?.identityCount,
+          } },
+          { requireLaunchIdentity: false },
+        );
+        if (shardCatalog === null) {
+          throw new Error("SHARD trade detail catalog is invalid");
+        }
+        if (shardCatalog !== highestCatalog) {
+          throw new ExploreCatalogBoundaryDriftError(
+            "Explore catalog changed before SHARD trade detail read",
+          );
+        }
+        if (!exactShardRouterTradeDetail(shardDetail)) {
+          throw new Error("SHARD Router trade project is unavailable or invalid");
+        }
+        shardTradeStatus = "verified";
+      }
 
       exploreSnapshot = {
         catalogBoundary,
         detailStatus,
         highest,
         newestTokens,
+        shardTradeStatus,
         tokenAddress,
       };
       break;
@@ -768,6 +837,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     detailStatus,
     highest,
     newestTokens,
+    shardTradeStatus,
     tokenAddress,
   } = exploreSnapshot;
 
@@ -943,6 +1013,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       [
         `market_read_status=${marketReadStatus}`,
         `detail_status=${detailStatus}`,
+        `shard_trade_status=${shardTradeStatus}`,
         `chart_status=${chartStatus}`,
       ].join("\n") + "\n",
       "utf8",
@@ -961,6 +1032,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     profileAccount,
     profileStatus,
     detailStatus,
+    shardTradeStatus,
     chartStatus,
     creatorClaimPrepare: "separate-live-probe-required",
     tradePrepare: "separate-live-probe-required",
@@ -976,6 +1048,7 @@ export function runProductionStaticDexscreenerSmokeV1(input = {}) {
     environment: {
       ...(input.environment ?? process.env),
       STAGED_TARGET_URL: "https://programmable.market/",
+      PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true",
     },
   });
 }

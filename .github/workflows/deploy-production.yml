@@ -1347,6 +1347,7 @@ jobs:
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"
         run: |
           node scripts/smoke-static-dexscreener-public-apis.mjs
 
@@ -1374,6 +1375,7 @@ jobs:
           CUSTOM_LAUNCH_V3_RELEASE: ${{ inputs.custom_launch_v3_release }}
           MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
           DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
+          SHARD_TRADE_STATUS: ${{ steps.public-provider-smoke.outputs.shard_trade_status }}
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
           CATALOG_BLOCK_NUMBER: ${{ steps.envio-catalog-probe.outputs.block_number }}
           CATALOG_TOKEN_COUNT: ${{ steps.envio-catalog-probe.outputs.token_count }}
@@ -1392,6 +1394,7 @@ jobs:
             echo "- Market data provider: Dexscreener (optional enrichment)"
             echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
             echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"
+            echo "- SHARD trade adapter smoke: \`${SHARD_TRADE_STATUS:-not-run}\`"
             echo "- Market chart smoke: \`${CHART_SMOKE_STATUS:-not-run}\`"
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then
