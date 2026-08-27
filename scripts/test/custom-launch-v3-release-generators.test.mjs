@@ -16,6 +16,7 @@ import { promisify } from "node:util";
 
 import {
   materializeCustomLaunchApiReleaseBindingV1,
+  parseCustomLaunchApiReleaseBindingArguments,
 } from "../generate-custom-launch-api-release-binding-v1.mjs";
 import {
   createCustomLaunchV3RollbackConfigurationSnapshotV1,
@@ -283,6 +284,50 @@ async function releaseFixture(t) {
   return { root, websiteRoot, backendRoot, website, backend, readiness, paths };
 }
 
+function releaseBindingArguments() {
+  return [
+    "--website-root", "/tmp/website",
+    "--backend-root", "/tmp/backend",
+    "--fly-releases", "/tmp/fly-releases.json",
+    "--fly-machines", "/tmp/fly-machines.json",
+    "--fly-images", "/tmp/fly-images.json",
+    "--api-readiness", "/tmp/readyz.json",
+    "--supabase-migration-list", "/tmp/supabase-migrations.json",
+    "--database-schema-evidence-output", "/tmp/database-evidence.json",
+  ];
+}
+
+test("binding generator CLI defaults to compatibility and accepts only explicit supported modes", () => {
+  const defaultArguments = parseCustomLaunchApiReleaseBindingArguments(
+    releaseBindingArguments(),
+  );
+  assert.equal(defaultArguments.walletAdminAssertionMode, undefined);
+
+  for (const assertionMode of ["compatibility", "enforced"]) {
+    const argumentsWithMode = parseCustomLaunchApiReleaseBindingArguments([
+      ...releaseBindingArguments(),
+      "--wallet-admin-assertion-mode", assertionMode,
+    ]);
+    assert.equal(argumentsWithMode.walletAdminAssertionMode, assertionMode);
+  }
+
+  assert.throws(
+    () => parseCustomLaunchApiReleaseBindingArguments([
+      ...releaseBindingArguments(),
+      "--wallet-admin-assertion-mode", "permissive",
+    ]),
+    /assertion mode is unsupported/u,
+  );
+  assert.throws(
+    () => parseCustomLaunchApiReleaseBindingArguments([
+      ...releaseBindingArguments(),
+      "--wallet-admin-assertion-mode", "enforced",
+      "--wallet-admin-assertion-mode", "enforced",
+    ]),
+    /invalid command arguments/u,
+  );
+});
+
 test("binding generator derives exact revision 3 artifacts and retained database evidence", async (t) => {
   const fixture = await releaseFixture(t);
   const staleReadiness = structuredClone(fixture.readiness);
@@ -337,7 +382,7 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.deepEqual(await readFile(result.outputPath), beforeRetry);
 });
 
-test("binding generator requires the exact compatibility wallet-admin security identity", async (t) => {
+test("binding generator defaults to the exact compatibility wallet-admin security identity", async (t) => {
   const mutations = Object.freeze([
     (readiness) => { delete readiness.walletAdminSecurity; },
     (readiness) => { readiness.walletAdminSecurity.assertionVersion = "1"; },
@@ -365,6 +410,68 @@ test("binding generator requires the exact compatibility wallet-admin security i
       /readiness differs from the exact backend artifacts/u,
     );
   }
+});
+
+test("binding generator accepts only the exact enforced wallet-admin security identity when selected", async (t) => {
+  const fixture = await releaseFixture(t);
+  const input = {
+    websiteRoot: fixture.websiteRoot,
+    backendRoot: fixture.backendRoot,
+    flyReleases: fixture.paths.releases,
+    flyMachines: fixture.paths.machines,
+    flyImages: fixture.paths.images,
+    apiReadiness: fixture.paths.readiness,
+    supabaseMigrationList: fixture.paths.migrationList,
+    databaseSchemaEvidenceOutput: fixture.paths.databaseEvidence,
+    walletAdminAssertionMode: "enforced",
+  };
+  const mismatches = Object.freeze([
+    (readiness) => {
+      readiness.walletAdminSecurity.assertionVersion = "1";
+      readiness.walletAdminSecurity.assertionMode = "enforced";
+      readiness.walletAdminSecurity.legacyBearerRequestsAccepted = false;
+    },
+    (readiness) => {
+      readiness.walletAdminSecurity.assertionMode = "compatibility";
+      readiness.walletAdminSecurity.legacyBearerRequestsAccepted = false;
+    },
+    (readiness) => {
+      readiness.walletAdminSecurity.assertionMode = "enforced";
+      readiness.walletAdminSecurity.legacyBearerRequestsAccepted = true;
+    },
+    (readiness) => {
+      readiness.walletAdminSecurity.assertionMode = "enforced";
+      readiness.walletAdminSecurity.legacyBearerRequestsAccepted = false;
+      readiness.walletAdminSecurity.unexpected = true;
+    },
+  ]);
+
+  for (const mutate of mismatches) {
+    const readiness = structuredClone(fixture.readiness);
+    mutate(readiness);
+    await json(fixture.paths.readiness, readiness);
+    await assert.rejects(
+      materializeCustomLaunchApiReleaseBindingV1(input),
+      /readiness differs from the exact backend artifacts/u,
+    );
+  }
+
+  const enforcedReadiness = structuredClone(fixture.readiness);
+  enforcedReadiness.walletAdminSecurity.assertionMode = "enforced";
+  enforcedReadiness.walletAdminSecurity.legacyBearerRequestsAccepted = false;
+  await json(fixture.paths.readiness, enforcedReadiness);
+  await assert.rejects(
+    materializeCustomLaunchApiReleaseBindingV1({
+      ...input,
+      walletAdminAssertionMode: undefined,
+    }),
+    /readiness differs from the exact backend artifacts/u,
+  );
+  const result = await materializeCustomLaunchApiReleaseBindingV1(input);
+  assert.equal(
+    result.binding.api.readinessIdentitySha256,
+    sha256(Buffer.from(canonicalize(enforcedReadiness), "utf8")),
+  );
 });
 
 test("rollback snapshot retains only exact deployment and env metadata", async (t) => {
