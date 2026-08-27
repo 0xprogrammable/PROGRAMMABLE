@@ -209,9 +209,7 @@ contract MemeLaunchV3Test is Deployers {
     function test_launchRejectsEveryNonRouterCaller() public {
         MemeLaunchV3.LaunchParameters memory parameters = _parameters(bytes32("direct-call"), 0);
         vm.deal(deployer, MIN_INITIAL_BUY_WEI);
-        vm.expectRevert(
-            abi.encodeWithSelector(MemeLaunchV3.UnauthorizedRouter.selector, deployer, launcher.ROUTER())
-        );
+        vm.expectRevert(abi.encodeWithSelector(MemeLaunchV3.UnauthorizedRouter.selector, deployer, launcher.ROUTER()));
         vm.prank(deployer);
         launcher.launchFor{ value: MIN_INITIAL_BUY_WEI }(deployer, parameters);
     }
