@@ -299,6 +299,86 @@ describe("Explore static identity and Dexscreener market contract", () => {
     );
   });
 
+  it("keeps SHARD in Custom Explore while excluding the three non-public launch identities", async () => {
+    const routerEntry = (
+      tokenAddress: `0x${string}`,
+      launchId: `0x${string}`,
+      name: string,
+      symbol: string,
+    ): ExploreEntry => {
+      const launchStampProvenance = {
+        ...customGraphExploreEntry.launchStampProvenance,
+        launchId,
+        tokenProof: {
+          ...customGraphExploreEntry.launchStampProvenance.tokenProof,
+          tokenAddress,
+          launchId,
+        },
+      };
+      return {
+        ...customGraphExploreEntry,
+        id: `1:${tokenAddress.toLowerCase()}`,
+        tokenAddress,
+        name,
+        symbol,
+        launchStampProvenance,
+        launchCategoryProvenance: {
+          ...customGraphExploreEntry.launchCategoryProvenance,
+          launchId,
+        },
+      };
+    };
+    const shard = routerEntry(
+      "0xFAce73B63787960282f2d4682d3752Beb25271Ad",
+      "0xe253f3bd22fcb3d6cb20b9d408287e30f0f1aeeb56426b779425c35fd6411de9",
+      "Shard",
+      "SHARD",
+    );
+    mocks.readRouter.mockResolvedValue([
+      shard,
+      routerEntry(
+        "0xD0f3E1e5C985D2b37a66Cf07feCB0d8191c0445F",
+        "0x786d3d5cdd0c6ba81621eb01fbcc6b5912556a2d7dbe886431346460afeee197",
+        "Renamed clean-room launch",
+        "PCR2",
+      ),
+      routerEntry(
+        "0x69D278968AbF120F878F2E1E016Ab615D3686c19",
+        "0x6d6ed0e1e69a7cd6afa177e3454c9e32eed61cbd3f855ee56aff1915a6776fc2",
+        "Renamed example launch",
+        "FADE",
+      ),
+      routerEntry(
+        "0x9DEeB39D2590b0cAD5fc473F755C5F97Dcc8f7cE",
+        "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+        "Renamed canary launch",
+        "PCAN",
+      ),
+    ]);
+
+    const response = await GET(
+      request("sort=newest&page=1&limit=100&model=custom"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.tokens).toHaveLength(1);
+    expect(body.tokens[0]).toMatchObject({
+      tokenAddress: shard.tokenAddress,
+      name: "Shard",
+      symbol: "SHARD",
+    });
+    expect(body.catalog).toMatchObject({
+      identityCount: TOKEN_COUNT + 1,
+      routerStamp: {
+        verifiedIdentityCount: 4,
+        projectedIdentityCount: 1,
+      },
+    });
+    expect(mocks.readDex.mock.calls.at(-1)?.[0]).toEqual([shard]);
+  });
+
   it("filters Classic and Custom launch categories before pagination", async () => {
     mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
 
