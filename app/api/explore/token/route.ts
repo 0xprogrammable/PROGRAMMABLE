@@ -25,7 +25,10 @@ import { readProductionSourceVerificationDisplayV1 } from
   "../../../../lib/server/custom-launch/source-verification-display-v1";
 import { routerTradeProjectForEntryV1 } from
   "../../../../lib/custom-launch/router-trade-adapters-v1";
-import { publicExplorePresentationEntryV1 } from
+import {
+  publicExploreCatalogEntriesV1,
+  publicExplorePresentationEntryV1,
+} from
   "../../../../lib/public-explore-catalog-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../lib/server/custom-launch/public-readiness";
@@ -241,6 +244,7 @@ export async function GET(request: NextRequest) {
   const entry: ExploreEntry | null = identityEntries.find(
     (candidate) => tokenAddress(candidate) === address,
   ) ?? null;
+  const publicIdentityEntries = publicExploreCatalogEntriesV1(identityEntries);
   if (
     catalog === null &&
     (routerReadResult.snapshot === null ||
@@ -268,7 +272,7 @@ export async function GET(request: NextRequest) {
     registryCustomCurrent: registryCustomStatus === "current",
     routerCustomCurrent: routerAvailable,
   });
-  const projectedRouterIdentityCount = identityEntries.filter(
+  const projectedRouterIdentityCount = publicIdentityEntries.filter(
     (candidate) => candidate.exploreKind === "token" &&
       candidate.launchCategoryProvenance.source ===
         ROUTER_CUSTOM_LAUNCH_SOURCE,
@@ -289,9 +293,9 @@ export async function GET(request: NextRequest) {
         chainId: 1,
         launchSource: ROUTER_CUSTOM_LAUNCH_SOURCE,
         asOfBlock: identityAsOfBlock,
-        entries: identityEntries,
+        entries: publicIdentityEntries,
       })
-    : envioClassicV3IdentityCommitmentV1(catalog, identityEntries);
+    : envioClassicV3IdentityCommitmentV1(catalog, publicIdentityEntries);
   const catalogScope = catalog?.scope ?? {
     included: [] as readonly string[],
     excluded: [
@@ -315,7 +319,7 @@ export async function GET(request: NextRequest) {
     lastIndexedAt: identityGeneratedAt,
     asOfBlock: identityAsOfBlock,
     asOfBlockHash: identityAsOfBlockHash,
-    identityCount: identityEntries.length,
+    identityCount: publicIdentityEntries.length,
     identityCommitment,
     completeness: {
       ...(catalog?.completeness ?? {
