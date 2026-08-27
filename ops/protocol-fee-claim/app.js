@@ -7,45 +7,249 @@ import {
   CUSTOM_V2_RELEASE_PATH,
   CUSTOM_V2_SELECTORS,
   HOOKS,
+  LAUNCH_STAMP_ROUTER,
+  LAUNCH_STAMP_SELECTORS,
+  LAUNCH_STAMP_TOPICS,
   MAINNET_CHAIN_ID,
+  ROUTER_CUSTOM_CLAIM_PROFILES,
   SELECTORS,
-  TOKEN_SELECTORS,
   TREASURY,
   atomicCapabilityStatus,
   buildWalletSendCalls,
+  confirmedBatchReceiptProof,
+  confirmedTransactionReceiptMatches,
+  createRefreshQueue,
   customClaimDefinitionClassification,
   customLaunchClassification,
   customLaunchStateData,
   customV2Bytes32ReadData,
   customV2IndexedReadData,
   customV2SourceClassification,
-  decodeAbiString,
   decodeAddress,
   decodeBool,
   decodeBytes4,
   decodeBytes32,
   decodeCustomLaunchState,
   decodeCustomV2SourceState,
+  decodeLaunchStampProof,
+  decodeLaunchStampRecord,
   decodeUint256,
+  encodeAddressArgument,
+  exactRouterFinalizedCheckpoint,
   formatEth,
   formatUnits,
   isTreasury,
   keccak256Hex,
+  launchStampAddressReadData,
+  launchStampBytes32ReadData,
+  launchStampLogSetFingerprint,
+  launchStampPoolReadData,
   normalizeBatchId,
+  metaMaskProviderFrom,
   parseCustomV2Release,
+  poolManagerBalanceOfData,
   readAccruedData,
   reduceClassicLaunchLogs,
   reduceCustomRegistryLogs,
+  reduceLaunchStampLogs,
   requireAtomicClaimCapability,
+  routerFinalizedBoundary,
   shortAddress,
   toQuantityHex,
+  routerCustomClaimClassification,
+  validatedAtomicBatchStatus,
+  walletSendDefinitelyNotSubmitted,
+  walletSendDuplicateBatchId,
+  withTimeout,
 } from "./logic.mjs";
+
+const DEMO_MODE = new URLSearchParams(window.location.search).has("demo");
+const EVENT_LOG_CHUNK_SIZE = 10_000n;
+const MAX_ROUTER_LAUNCHES = 4_096;
+const MAX_BATCH_CALLS = 64;
+const ROUTER_QUORUM_RPC_GROUPS = Object.freeze([
+  Object.freeze([
+    "https://mainnet.gateway.tenderly.co",
+    "https://eth.drpc.org",
+  ]),
+  Object.freeze(["https://rpc.mevblocker.io"]),
+]);
+const ROUTER_QUORUM_TIMEOUT_MS = 20_000;
+const WALLET_DISCOVERY_TIMEOUT_MS = 1_500;
+const CONFIRMED_BATCH_STORAGE_KEY =
+  "programmable.fee-claim.confirmed-batch.v2";
+const CONFIRMED_BATCH_SCHEMA = "programmable.confirmed-claim-batch.v2";
+const CLAIM_SUBMISSION_LEASE = "programmable-fee-claim-submission";
+const INTERACTIVE_WALLET_METHODS = new Set([
+  "eth_requestAccounts",
+  "wallet_requestPermissions",
+  "wallet_switchEthereumChain",
+  "wallet_sendCalls",
+]);
+
+const announcedWalletProviders = new Map();
+let boundWalletProvider = null;
+let walletAuthorizationRevision = 0;
+
+function rememberAnnouncedWalletProvider(event) {
+  const detail = event?.detail;
+  if (
+    typeof detail?.info?.uuid !== "string" ||
+    typeof detail?.provider?.request !== "function"
+  )
+    return;
+  announcedWalletProviders.set(detail.info.uuid, detail);
+}
+
+window.addEventListener(
+  "eip6963:announceProvider",
+  rememberAnnouncedWalletProvider,
+);
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+function invalidConfirmedBatchLock() {
+  return {
+    schema: CONFIRMED_BATCH_SCHEMA,
+    account: TREASURY.toLowerCase(),
+    chainId: MAINNET_CHAIN_ID,
+    batchId: null,
+    batch: null,
+    phase: "manual",
+    receipts: null,
+    failureStatus: null,
+    invalid: true,
+  };
+}
+
+function normalizeStoredBatch(batch, expectedBatchId) {
+  const id = normalizeBatchId(batch?.id);
+  if (
+    id.toLowerCase() !== expectedBatchId.toLowerCase() ||
+    batch?.version !== "2.0.0" ||
+    !isTreasury(batch?.from) ||
+    batch?.chainId !== MAINNET_CHAIN_ID ||
+    batch?.atomicRequired !== true ||
+    !Array.isArray(batch?.calls) ||
+    batch.calls.length === 0 ||
+    batch.calls.length > MAX_BATCH_CALLS
+  ) {
+    throw new Error("Ungültiger gespeicherter Claim-Batch");
+  }
+  const calls = batch.calls.map((call) => {
+    if (
+      typeof call?.to !== "string" ||
+      !/^0x[0-9a-fA-F]{40}$/.test(call.to) ||
+      typeof call?.data !== "string" ||
+      !/^0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{64})*$/.test(call.data) ||
+      call?.value !== "0x0"
+    ) {
+      throw new Error("Ungültiger gespeicherter Claim-Call");
+    }
+    return {
+      to: call.to,
+      data: call.data.toLowerCase(),
+      value: "0x0",
+    };
+  });
+  const callKeys = calls.map(
+    ({ to, data }) => `${to.toLowerCase()}:${data}`,
+  );
+  if (new Set(callKeys).size !== callKeys.length)
+    throw new Error("Doppelter gespeicherter Claim-Call");
+  return {
+    version: "2.0.0",
+    id,
+    from: batch.from,
+    chainId: MAINNET_CHAIN_ID,
+    atomicRequired: true,
+    calls,
+  };
+}
+
+function normalizeStoredReceipt(receipt) {
+  const blockNumber = BigInt(receipt?.blockNumber);
+  if (
+    blockNumber <= 0n ||
+    typeof receipt?.blockHash !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(receipt.blockHash) ||
+    typeof receipt?.transactionHash !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(receipt.transactionHash)
+  ) {
+    throw new Error("Ungültiger gespeicherter Receipt");
+  }
+  return {
+    blockNumber: blockNumber.toString(),
+    blockHash: receipt.blockHash.toLowerCase(),
+    transactionHash: receipt.transactionHash.toLowerCase(),
+  };
+}
+
+function loadConfirmedBatchLock() {
+  let stored;
+  try {
+    stored = window.localStorage.getItem(CONFIRMED_BATCH_STORAGE_KEY);
+  } catch {
+    return invalidConfirmedBatchLock();
+  }
+  if (stored === null) return null;
+
+  try {
+    const parsed = JSON.parse(stored);
+    const batchId = normalizeBatchId(parsed.batchId);
+    const batch = normalizeStoredBatch(parsed.batch, batchId);
+    const receipts =
+      parsed.receipts === null
+        ? null
+        : parsed.receipts.map(normalizeStoredReceipt);
+    if (
+      parsed.schema !== CONFIRMED_BATCH_SCHEMA ||
+      !isTreasury(parsed.account) ||
+      parsed.chainId !== MAINNET_CHAIN_ID ||
+      batchId !== parsed.batchId ||
+      !["submitting", "pending", "confirmed", "manual"].includes(
+        parsed.phase,
+      ) ||
+      (parsed.phase === "confirmed" &&
+        (!Array.isArray(receipts) || receipts.length === 0)) ||
+      (parsed.failureStatus !== null &&
+        !Number.isInteger(parsed.failureStatus))
+    ) {
+      throw new Error("Ungültige Claim-Sperre");
+    }
+    return {
+      schema: CONFIRMED_BATCH_SCHEMA,
+      account: parsed.account.toLowerCase(),
+      chainId: MAINNET_CHAIN_ID,
+      batchId,
+      batch,
+      phase: parsed.phase,
+      receipts,
+      failureStatus: parsed.failureStatus,
+    };
+  } catch {
+    return invalidConfirmedBatchLock();
+  }
+}
+
+function requireConfirmedBatchStorage() {
+  const probeKey = `${CONFIRMED_BATCH_STORAGE_KEY}.probe`;
+  try {
+    window.localStorage.setItem(probeKey, "1");
+    window.localStorage.removeItem(probeKey);
+  } catch {
+    throw new Error(
+      "Der sichere Claim-Status kann in diesem Browser nicht gespeichert werden. Es wurde nichts gesendet.",
+    );
+  }
+}
 
 const state = {
   account: null,
   chainId: null,
   blockTag: null,
   capability: null,
+  walletMissing: false,
+  confirmedBatch: DEMO_MODE ? null : loadConfirmedBatchLock(),
   claims: new Map(),
   hooks: new Map(),
   custom: {
@@ -60,6 +264,13 @@ const state = {
     sources: [],
     error: null,
   },
+  router: {
+    status: "idle",
+    verified: false,
+    finalizedBlock: null,
+    launches: [],
+    error: null,
+  },
   classic: {
     status: "idle",
     launchersVerified: false,
@@ -69,6 +280,136 @@ const state = {
   busy: false,
 };
 
+function saveConfirmedBatchLock(
+  lock,
+  { expectedBatchId = null, requireEmpty = false } = {},
+) {
+  try {
+    const stored = loadConfirmedBatchLock();
+    if (
+      stored?.invalid ||
+      (requireEmpty && stored !== null) ||
+      (expectedBatchId !== null &&
+        stored?.batchId?.toLowerCase() !== expectedBatchId.toLowerCase())
+    ) {
+      state.confirmedBatch = stored;
+      return false;
+    }
+    const serialized = JSON.stringify(lock);
+    window.localStorage.setItem(CONFIRMED_BATCH_STORAGE_KEY, serialized);
+    if (window.localStorage.getItem(CONFIRMED_BATCH_STORAGE_KEY) !== serialized)
+      return false;
+    state.confirmedBatch = lock;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearConfirmedBatchLock(expectedBatchId) {
+  try {
+    const stored = loadConfirmedBatchLock();
+    if (
+      stored &&
+      (!expectedBatchId ||
+        stored.batchId?.toLowerCase() !== expectedBatchId.toLowerCase())
+    ) {
+      state.confirmedBatch = stored;
+      return false;
+    }
+    window.localStorage.removeItem(CONFIRMED_BATCH_STORAGE_KEY);
+    if (window.localStorage.getItem(CONFIRMED_BATCH_STORAGE_KEY) !== null)
+      return false;
+    state.confirmedBatch = null;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function highestConfirmedReceiptBlock(lock = state.confirmedBatch) {
+  if (!Array.isArray(lock?.receipts) || lock.receipts.length === 0) return null;
+  return lock.receipts.reduce((highest, receipt) => {
+    const blockNumber = BigInt(receipt.blockNumber);
+    return blockNumber > highest ? blockNumber : highest;
+  }, 0n);
+}
+
+function confirmedBatchStatus() {
+  if (state.confirmedBatch?.invalid)
+    return "Lokaler Claim-Status ist unvollständig · Claims bleiben gesperrt";
+  if ((state.confirmedBatch?.failureStatus ?? 0) >= 600)
+    return "Wallet meldet mögliche Teil-Ausführung · Claims bleiben gesperrt";
+  if (state.confirmedBatch?.phase === "submitting")
+    return "Wallet-Antwort wird wiederhergestellt · kein neuer Claim möglich";
+  if (state.confirmedBatch?.phase !== "confirmed")
+    return "MetaMask-Batch wird bestätigt · kein neuer Claim möglich";
+  return `Claim bestätigt · wartet auf finalisierten Block ${highestConfirmedReceiptBlock()?.toString()}`;
+}
+
+function createAppBatchId() {
+  const bytes = new Uint8Array(32);
+  window.crypto.getRandomValues(bytes);
+  return `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function withExclusiveClaimLease(callback) {
+  if (!window.navigator.locks?.request)
+    throw new Error(
+      "Dieser Browser kann parallele Claim-Tabs nicht sicher koordinieren. Es wurde nichts gesendet.",
+    );
+  return window.navigator.locks.request(
+    CLAIM_SUBMISSION_LEASE,
+    { mode: "exclusive", ifAvailable: true },
+    async (lease) => {
+      if (!lease)
+        throw new Error(
+          "Ein anderer Tab bereitet bereits einen Claim vor. Es wurde nichts gesendet.",
+        );
+      const stored = loadConfirmedBatchLock();
+      if (stored) {
+        state.confirmedBatch = stored;
+        renderSummary();
+        throw new Error(
+          "Ein bestehender Claim-Batch muss zuerst finalisiert werden",
+        );
+      }
+      return callback();
+    },
+  );
+}
+
+async function withExistingClaimLease(callback) {
+  if (!window.navigator.locks?.request)
+    throw new Error(
+      "Dieser Browser kann parallele Claim-Tabs nicht sicher koordinieren. Es wurde nichts gesendet.",
+    );
+  return window.navigator.locks.request(
+    CLAIM_SUBMISSION_LEASE,
+    { mode: "exclusive", ifAvailable: true },
+    async (lease) => {
+      if (!lease)
+        throw new Error(
+          "Ein anderer Tab prüft bereits diesen Claim-Batch. Es wurde nichts erneut gesendet.",
+        );
+      const stored = loadConfirmedBatchLock();
+      if (!stored || stored.invalid)
+        throw new Error("Der gespeicherte Claim-Batch ist nicht wiederherstellbar");
+      state.confirmedBatch = stored;
+      return callback(stored);
+    },
+  );
+}
+
+async function withAvailableClaimStateLease(callback) {
+  if (!window.navigator.locks?.request) return null;
+  return window.navigator.locks.request(
+    CLAIM_SUBMISSION_LEASE,
+    { mode: "exclusive", ifAvailable: true },
+    (lease) => (lease ? callback() : null),
+  );
+}
+
 const elements = {
   action: document.querySelector("[data-action]"),
   actionLabel: document.querySelector("[data-action-label]"),
@@ -77,21 +418,202 @@ const elements = {
   batchMode: document.querySelector("[data-batch-mode]"),
   claimCount: document.querySelector("[data-claim-count]"),
   claimRows: document.querySelector("[data-claim-rows]"),
+  content: document.querySelector(".content"),
   error: document.querySelector("[data-error]"),
+  metamaskOpen: document.querySelector("[data-metamask-open]"),
   network: document.querySelector("[data-network]"),
   refresh: document.querySelector("[data-refresh]"),
   status: document.querySelector("[data-status]"),
   total: document.querySelector("[data-total]"),
 };
 
-function provider() {
-  if (!window.ethereum?.request)
-    throw new Error("MetaMask wurde in diesem Browser nicht gefunden");
-  return window.ethereum;
+function clearWalletAuthorizationState() {
+  state.account = null;
+  state.chainId = null;
+  state.capability = null;
+}
+
+function invalidateWalletAuthorizationState() {
+  walletAuthorizationRevision += 1;
+  clearWalletAuthorizationState();
+  return walletAuthorizationRevision;
+}
+
+async function syncAfterWalletEvent() {
+  const revision = invalidateWalletAuthorizationState();
+  setError();
+  setStatus("Wallet wird aktualisiert");
+  renderSummary();
+  try {
+    await syncWallet({ expectedRevision: revision });
+  } catch {
+    if (revision !== walletAuthorizationRevision) return;
+    clearWalletAuthorizationState();
+    setError("Wallet-Status konnte nicht aktualisiert werden");
+    setStatus("MetaMask erneut verbinden");
+    renderSummary();
+  }
+}
+
+function failClosedAfterWalletDisconnect() {
+  invalidateWalletAuthorizationState();
+  setError("MetaMask wurde getrennt");
+  setStatus("MetaMask verbinden");
+  renderSummary();
+}
+
+function bindWalletProviderEvents(walletProvider) {
+  if (boundWalletProvider === walletProvider) return;
+  boundWalletProvider?.removeListener?.(
+    "accountsChanged",
+    syncAfterWalletEvent,
+  );
+  boundWalletProvider?.removeListener?.("chainChanged", syncAfterWalletEvent);
+  boundWalletProvider?.removeListener?.(
+    "disconnect",
+    failClosedAfterWalletDisconnect,
+  );
+  boundWalletProvider = walletProvider;
+  boundWalletProvider.on?.("accountsChanged", syncAfterWalletEvent);
+  boundWalletProvider.on?.("chainChanged", syncAfterWalletEvent);
+  boundWalletProvider.on?.("disconnect", failClosedAfterWalletDisconnect);
+}
+
+function selectedMetaMaskProvider({ allowLegacy = false } = {}) {
+  const selected = metaMaskProviderFrom(
+    [...announcedWalletProviders.values()],
+    allowLegacy ? window.ethereum : null,
+  );
+  if (!selected) return null;
+  bindWalletProviderEvents(selected);
+  return selected;
+}
+
+async function requireMetaMaskProvider() {
+  let selected = selectedMetaMaskProvider();
+  if (selected) {
+    state.walletMissing = false;
+    return selected;
+  }
+  if (boundWalletProvider) {
+    state.walletMissing = false;
+    return boundWalletProvider;
+  }
+
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  selected = selectedMetaMaskProvider();
+  if (selected) {
+    state.walletMissing = false;
+    return selected;
+  }
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      window.removeEventListener("eip6963:announceProvider", finish);
+      window.removeEventListener("ethereum#initialized", retry);
+    };
+    const settle = () => {
+      settled = true;
+      window.clearTimeout(timeout);
+      cleanup();
+      resolve();
+    };
+    const finish = () => {
+      if (settled || !selectedMetaMaskProvider()) return;
+      settle();
+    };
+    const retry = () => {
+      if (settled) return;
+      window.dispatchEvent(new Event("eip6963:requestProvider"));
+      finish();
+    };
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    }, WALLET_DISCOVERY_TIMEOUT_MS);
+    window.addEventListener("eip6963:announceProvider", finish);
+    window.addEventListener("ethereum#initialized", retry);
+  });
+
+  selected = selectedMetaMaskProvider({ allowLegacy: true });
+  if (!selected) {
+    state.walletMissing = true;
+    const error = new Error(
+      "MetaMask wurde nicht gefunden. Erweiterung entsperren, Seite neu laden und erneut verbinden.",
+    );
+    error.code = "METAMASK_NOT_FOUND";
+    throw error;
+  }
+  state.walletMissing = false;
+  return selected;
 }
 
 async function request(method, params = []) {
-  return provider().request({ method, params });
+  const walletProvider = await requireMetaMaskProvider();
+  const operation = walletProvider.request({ method, params });
+  if (INTERACTIVE_WALLET_METHODS.has(method)) return operation;
+  return withTimeout(
+    operation,
+    ROUTER_QUORUM_TIMEOUT_MS,
+    `Wallet-RPC-Zeitlimit bei ${method} überschritten`,
+  );
+}
+
+let publicRpcId = 1;
+
+async function publicRpcRequest(url, method, params = []) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    ROUTER_QUORUM_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: publicRpcId++,
+        method,
+        params,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok)
+      throw new Error(`Router-Quorum-RPC antwortet mit HTTP ${response.status}`);
+    const payload = await response.json();
+    if (payload?.error || payload?.result === undefined)
+      throw new Error(
+        payload?.error?.message ?? "Router-Quorum-RPC-Antwort ist ungültig",
+      );
+    return payload.result;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function publicRpcGroupRequest(urls, method, params = []) {
+  let lastError;
+  for (const url of urls) {
+    try {
+      return await publicRpcRequest(url, method, params);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("Router-Quorum-RPC-Gruppe ist nicht verfügbar");
+}
+
+async function routerQuorumRequest(method, params = []) {
+  return Promise.all([
+    request(method, params),
+    ...ROUTER_QUORUM_RPC_GROUPS.map((urls) =>
+      publicRpcGroupRequest(urls, method, params),
+    ),
+  ]);
 }
 
 function setError(message = "") {
@@ -111,8 +633,24 @@ function disclosureIndicator() {
 }
 
 function hookVerified(claim) {
-  if (claim.kind === "custom") return claim.bindingVerified === true;
+  if (claim.kind === "custom") {
+    if (claim.origin === "launch-stamp-router")
+      return (
+        claim.provenanceVerified === true &&
+        claim.runtimeVerified === true &&
+        claim.claimBindingVerified === true
+      );
+    return claim.bindingVerified === true;
+  }
   return state.hooks.get(claim.hookId)?.verified === true;
+}
+
+function claimHasOpenAmount(claim) {
+  return (
+    (typeof claim?.amount === "bigint" && claim.amount > 0n) ||
+    (typeof claim?.secondaryAmount === "bigint" &&
+      claim.secondaryAmount > 0n)
+  );
 }
 
 function statusLabel(claim) {
@@ -122,9 +660,11 @@ function statusLabel(claim) {
   if (claim.status === "pending") return "Wird bestätigt";
   if (claim.status === "claimed") return "Geclaimt";
   if (claim.status === "failed") return "Nicht verfügbar";
+  if (state.confirmedBatch && claimHasOpenAmount(claim))
+    return "Bestätigt · Finalität ausstehend";
   if (!hookVerified(claim)) return "Contract nicht verifiziert";
   if (!claim.recipientMatches) return "Falscher Empfänger";
-  if (claim.amount === 0n) return "Nichts offen";
+  if (!claimHasOpenAmount(claim)) return "Nichts offen";
   return "Bereit";
 }
 
@@ -158,6 +698,8 @@ function customStatusLabel(launch) {
   if (launch.status === "pending") return "Wird bestätigt";
   if (launch.status === "claimed") return "Geclaimt";
   if (launch.status === "failed") return "Nicht verfügbar";
+  if (state.confirmedBatch && classification === "ready")
+    return "Bestätigt · Finalität ausstehend";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "no-market") return "Kein Fee-Markt";
@@ -207,6 +749,8 @@ function customV2StatusLabel(source) {
   if (source.status === "claimed") return "Geclaimt";
   if (source.status === "failed") return "Nicht verfügbar";
   const classification = customV2SourceClassification(source);
+  if (state.confirmedBatch && classification === "ready")
+    return "Bestätigt · Finalität ausstehend";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "quarantined") return "Nicht ausführbar";
@@ -242,7 +786,72 @@ function buildCustomV2Row(source) {
   return row;
 }
 
+function routerCustomStatusLabel(source) {
+  const current = state.claims.get(source.id) ?? source;
+  if (current.status === "claiming") return "In MetaMask bestätigen";
+  if (current.status === "pending") return "Wird bestätigt";
+  if (current.status === "claimed") return "Geclaimt";
+  const classification = routerCustomClaimClassification({
+    ...source,
+    ...current,
+  });
+  if (state.confirmedBatch && classification === "ready")
+    return "Bestätigt · Finalität ausstehend";
+  if (classification === "ready") return "Bereit";
+  if (classification === "empty") return "Nichts offen";
+  if (classification === "no-manual-claim")
+    return "Gebühren werden direkt ausgezahlt";
+  return "Claim-Profil fehlt · alles gesperrt";
+}
+
+function buildRouterCustomRow(source) {
+  const current = state.claims.get(source.id) ?? source;
+  const rendered = { ...source, ...current };
+  const classification = routerCustomClaimClassification(rendered);
+  const row = document.createElement("li");
+  row.className = "claim-row custom-row router-custom-row";
+  row.dataset.state = ["claiming", "pending", "claimed"].includes(
+    rendered.status,
+  )
+    ? rendered.status
+    : classification;
+
+  const identity = document.createElement("div");
+  identity.className = "claim-identity";
+  const name = document.createElement("strong");
+  name.textContent = `Custom · ${shortAddress(source.token)}`;
+  const detail = document.createElement("span");
+  detail.textContent = `Launch Router · ${shortAddress(source.hook)}`;
+  identity.append(name, detail);
+
+  const value = document.createElement("div");
+  value.className = "claim-value";
+  const amount = document.createElement("strong");
+  if (classification === "no-manual-claim") {
+    amount.textContent = "Direkt";
+  } else if (classification === "blocked") {
+    amount.textContent = "—";
+  } else {
+    const amounts = [];
+    if ((rendered.amount ?? 0n) > 0n)
+      amounts.push(`${formatEth(rendered.amount)} ETH`);
+    if ((rendered.secondaryAmount ?? 0n) > 0n)
+      amounts.push(
+        `${formatUnits(rendered.secondaryAmount, rendered.secondaryDecimals)} ${rendered.secondaryUnit}`,
+      );
+    amount.textContent = amounts.length > 0 ? amounts.join(" + ") : "0 ETH";
+  }
+  const status = document.createElement("span");
+  status.textContent = routerCustomStatusLabel(rendered);
+  value.append(amount, status);
+  row.append(identity, value);
+  return row;
+}
+
 function buildCustomGroup() {
+  const routerCustoms = state.router.launches.filter(
+    ({ launchKind }) => launchKind === 1,
+  );
   const group = document.createElement("li");
   group.className = "asset-group custom-group";
   const details = document.createElement("details");
@@ -252,7 +861,7 @@ function buildCustomGroup() {
   const name = document.createElement("strong");
   name.textContent = "Custom-v4-Gebühren";
   const detail = document.createElement("span");
-  detail.textContent = "Automatisch aus der Mainnet Registry";
+  detail.textContent = "Retired V1 + offizieller Launch Router";
   identity.append(name, detail);
 
   const value = document.createElement("span");
@@ -264,11 +873,12 @@ function buildCustomGroup() {
     hint.textContent = "Nach Verbindung";
   } else if (
     state.custom.status === "loading" ||
-    state.customV2.status === "loading"
+    state.customV2.status === "loading" ||
+    state.router.status === "loading"
   ) {
     count.textContent = "Wird gelesen";
     hint.textContent = "Finalisierte Launches";
-  } else if (state.custom.error) {
+  } else if (state.custom.error || state.router.error) {
     count.textContent = "Nicht verfügbar";
     hint.textContent = "Claims gesperrt";
   } else {
@@ -279,11 +889,22 @@ function buildCustomGroup() {
       (launch) => customLaunchClassification(launch) === "ready",
     ).length;
     const sourceCount = state.customV2.sources.length;
-    const readyCount = readyV1Count + state.customV2.sources.filter(
-      (source) => customV2SourceClassification(source) === "ready",
+    const routerReadyCount = routerCustoms.filter(
+      (source) => routerCustomClaimClassification(source) === "ready",
     ).length;
-    count.textContent = `${state.custom.launches.length + sourceCount} erkannt`;
+    const routerBlockedCount = routerCustoms.filter(
+      (source) => routerCustomClaimClassification(source) === "blocked",
+    ).length;
+    const readyCount =
+      readyV1Count +
+      routerReadyCount +
+      state.customV2.sources.filter(
+        (source) => customV2SourceClassification(source) === "ready",
+      ).length;
+    count.textContent = `${state.custom.launches.length + sourceCount + routerCustoms.length} erkannt`;
     if (state.customV2.error) hint.textContent = "V2-Release gesperrt";
+    else if (routerBlockedCount > 0)
+      hint.textContent = `${routerBlockedCount} unbekanntes Claim-Profil gesperrt`;
     else if (readyCount > 0)
       hint.textContent = `${readyCount} Custom-Claim${readyCount === 1 ? "" : "s"} offen`;
     else if (feeBearing > 0)
@@ -296,11 +917,16 @@ function buildCustomGroup() {
   summary.append(identity, value, disclosureIndicator());
   details.append(summary);
 
-  if (state.custom.launches.length > 0 || state.customV2.sources.length > 0) {
+  if (
+    state.custom.launches.length > 0 ||
+    state.customV2.sources.length > 0 ||
+    routerCustoms.length > 0
+  ) {
     const list = document.createElement("ul");
     list.className = "asset-list";
     list.replaceChildren(
       ...state.customV2.sources.map(buildCustomV2Row),
+      ...routerCustoms.map(buildRouterCustomRow),
       ...state.custom.launches.map(buildCustomRow),
     );
     details.append(list);
@@ -312,28 +938,36 @@ function buildCustomGroup() {
 function buildClassicLaunchRow(launch) {
   const row = document.createElement("li");
   row.className = "claim-row classic-launch-row";
-  row.dataset.state = "covered";
+  const releaseName = launch.releaseName ?? "Launch Router";
+  const covered = launch.claimMode !== "unsupported";
+  row.dataset.state = covered ? "covered" : "blocked";
 
   const identity = document.createElement("div");
   identity.className = "claim-identity";
   const name = document.createElement("strong");
   name.textContent = launch.symbol || launch.name || "Classic Token";
   const detail = document.createElement("span");
-  detail.textContent = `${launch.releaseName} · ${shortAddress(launch.token)}`;
+  detail.textContent = `${releaseName} · ${shortAddress(launch.token)}`;
   identity.append(name, detail);
 
   const value = document.createElement("div");
   value.className = "claim-value";
   const coverage = document.createElement("strong");
-  coverage.textContent = "Enthalten";
+  coverage.textContent = covered ? "Enthalten" : "Gesperrt";
   const status = document.createElement("span");
-  status.textContent = `Im ${launch.releaseName}-Claim`;
+  status.textContent = covered
+    ? `Im ${launch.claimProfile ?? releaseName}-Claim`
+    : "Unbekannter Classic-Hook";
   value.append(coverage, status);
   row.append(identity, value);
   return row;
 }
 
 function buildClassicLaunchGroup() {
+  const routerClassic = state.router.launches.filter(
+    ({ launchKind }) => launchKind === 2,
+  );
+  const launches = [...routerClassic, ...state.classic.launches];
   const group = document.createElement("li");
   group.className = "asset-group classic-launch-group";
   const details = document.createElement("details");
@@ -343,7 +977,7 @@ function buildClassicLaunchGroup() {
   const name = document.createElement("strong");
   name.textContent = "Classic Launches";
   const detail = document.createElement("span");
-  detail.textContent = "Neue Coins automatisch aus den Launchern";
+  detail.textContent = "Launcher-Historie + offizieller Launch Router";
   identity.append(name, detail);
 
   const value = document.createElement("span");
@@ -353,24 +987,32 @@ function buildClassicLaunchGroup() {
   if (state.account === null) {
     count.textContent = "Onchain";
     hint.textContent = "Nach Verbindung";
-  } else if (state.classic.status === "loading") {
+  } else if (
+    state.classic.status === "loading" ||
+    state.router.status === "loading"
+  ) {
     count.textContent = "Wird gelesen";
     hint.textContent = "V2 und V3";
-  } else if (state.classic.error) {
+  } else if (state.classic.error || state.router.error) {
     count.textContent = "Nicht verfügbar";
     hint.textContent = "Hook-Claim bleibt aktiv";
   } else {
-    count.textContent = `${state.classic.launches.length} erkannt`;
-    hint.textContent = "Alle über Classic-Hooks abgedeckt";
+    const unsupported = routerClassic.filter(
+      ({ claimMode }) => claimMode === "unsupported",
+    ).length;
+    count.textContent = `${launches.length} erkannt`;
+    hint.textContent = unsupported
+      ? `${unsupported} neuer Hook gesperrt`
+      : "Alle über Classic-Hooks abgedeckt";
   }
   value.append(count, hint);
   summary.append(identity, value, disclosureIndicator());
   details.append(summary);
 
-  if (state.classic.launches.length > 0) {
+  if (launches.length > 0) {
     const list = document.createElement("ul");
     list.className = "asset-list";
-    list.replaceChildren(...state.classic.launches.map(buildClassicLaunchRow));
+    list.replaceChildren(...launches.map(buildClassicLaunchRow));
     details.append(list);
   }
   group.append(details);
@@ -452,10 +1094,17 @@ function allClaimDefinitions() {
         standardClaimBindingVerified === true,
     ),
     ...state.customV2.sources,
+    ...state.router.launches.flatMap((launch) => {
+      if (launch.launchKind !== 1 || launch.claimMode !== "manual") return [];
+      return Array.isArray(launch.claimDefinitions)
+        ? launch.claimDefinitions
+        : [launch];
+    }),
   ];
 }
 
-function claimableClaims() {
+function claimableClaims({ ignoreConfirmedBatch = false } = {}) {
+  if (state.confirmedBatch && !ignoreConfirmedBatch) return [];
   return allClaimDefinitions().filter((claim) => {
     const current = state.claims.get(claim.id);
     if (claim.kind === "custom") {
@@ -468,14 +1117,18 @@ function claimableClaims() {
     return (
       hookVerified(claim) &&
       current?.recipientMatches === true &&
-      current.amount > 0n
+      claimHasOpenAmount(current)
     );
-  });
+  }).sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function claimSafetyError() {
+function claimSafetyError({ ignoreConfirmedBatch = false } = {}) {
+  if (state.confirmedBatch && !ignoreConfirmedBatch)
+    return "Ein bestätigter Claim-Batch wartet noch auf einen finalisierten Onchain-Stand";
+  if (state.router.status !== "ready" || state.router.verified !== true)
+    return "Der Launch-Stamp-Router ist nicht vollständig verifiziert";
   if (
-    state.custom.status !== "ready" ||
+    !["ready", "retired"].includes(state.custom.status) ||
     state.custom.registryVerified !== true
   )
     return "Die Custom Registry ist nicht vollständig verifiziert";
@@ -495,20 +1148,41 @@ function claimSafetyError() {
     )
   )
     return "Mindestens eine Custom-V2-Source-Bindung stimmt nicht";
+  if (
+    state.router.launches.some(
+      (launch) =>
+        (launch.launchKind === 1 &&
+          routerCustomClaimClassification(launch) === "blocked") ||
+        (launch.launchKind === 2 && launch.claimMode === "unsupported"),
+    )
+  )
+    return "Mindestens ein Router-Launch hat noch kein freigegebenes Claim-Profil";
   if (HOOKS.some(({ id }) => state.hooks.get(id)?.verified !== true))
     return "Mindestens eine Classic- oder Stock-Bindung stimmt nicht";
+  if (claimableClaims({ ignoreConfirmedBatch }).length > MAX_BATCH_CALLS)
+    return `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`;
   return null;
 }
 
 function renderSummary() {
   const claimable = claimableClaims();
   const nativeTotal = claimable
-    .filter(({ kind }) => kind === "native" || kind === "custom")
+    .filter(
+      ({ kind, unit }) =>
+        kind === "native" || (kind === "custom" && unit === "ETH"),
+    )
     .reduce(
       (sum, claim) => sum + (state.claims.get(claim.id)?.amount ?? 0n),
       0n,
     );
-  const assetCount = claimable.filter(({ kind }) => kind === "asset").length;
+  const assetCount =
+    claimable.filter(
+      ({ kind, unit }) =>
+        kind === "asset" || (kind === "custom" && unit !== "ETH"),
+    ).length +
+    claimable.filter(
+      (claim) => (state.claims.get(claim.id)?.secondaryAmount ?? 0n) > 0n,
+    ).length;
   const verifiedHooks = HOOKS.filter(
     ({ id }) => state.hooks.get(id)?.verified === true,
   ).length;
@@ -521,14 +1195,25 @@ function renderSummary() {
   const customV2BindingBlockers = state.customV2.sources.filter(
     (source) => customV2SourceClassification(source) === "blocked",
   );
+  const routerBindingBlockers = state.router.launches.filter(
+    (launch) =>
+      (launch.launchKind === 1 &&
+        routerCustomClaimClassification(launch) === "blocked") ||
+      (launch.launchKind === 2 && launch.claimMode === "unsupported"),
+  );
 
-  elements.total.textContent = `${formatEth(nativeTotal)} ETH${assetCount > 0 ? ` + ${assetCount} Assets` : ""}`;
-  elements.claimCount.textContent = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
+  elements.total.textContent = state.account
+    ? `${formatEth(nativeTotal)} ETH`
+    : "—";
+  elements.claimCount.textContent = state.account
+    ? `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}${assetCount > 0 ? ` · +${assetCount} Assets` : ""}`
+    : "Noch nicht geprüft";
   elements.account.textContent = state.account
     ? shortAddress(state.account)
     : "Nicht verbunden";
-  elements.network.textContent =
-    state.chainId === MAINNET_CHAIN_ID
+  elements.network.textContent = DEMO_MODE
+    ? "Ethereum · QA"
+    : state.chainId === MAINNET_CHAIN_ID
       ? "Ethereum"
       : state.account
         ? "Falsches Netzwerk"
@@ -542,63 +1227,110 @@ function renderSummary() {
   const connected = state.account !== null;
   const correctWallet = connected && isTreasury(state.account);
   const correctNetwork = state.chainId === MAINNET_CHAIN_ID;
+  const loading =
+    state.custom.status === "loading" ||
+    state.customV2.status === "loading" ||
+    state.classic.status === "loading" ||
+    state.router.status === "loading";
+  elements.content.setAttribute("aria-busy", String(state.busy || loading));
+  elements.network.dataset.state = !connected
+    ? "idle"
+    : correctNetwork
+      ? "ready"
+      : "wrong";
+  elements.refresh.hidden = !correctWallet || !correctNetwork;
+  elements.metamaskOpen.hidden = !state.walletMissing;
 
   if (!connected) {
-    elements.actionLabel.textContent = "Wallet verbinden";
-    elements.actionDetail.textContent = "MetaMask · Programmable Treasury";
+    elements.actionLabel.textContent = state.walletMissing
+      ? "MetaMask erneut suchen"
+      : "MetaMask verbinden";
+    elements.actionDetail.textContent = "Reward Wallet · endet 376C";
     elements.action.disabled = state.busy;
   } else if (!correctNetwork) {
     elements.actionLabel.textContent = "Zu Ethereum wechseln";
-    elements.actionDetail.textContent = "Mainnet erforderlich";
+    elements.actionDetail.textContent = "Ein Klick";
     elements.action.disabled = state.busy;
   } else if (!correctWallet) {
-    elements.actionLabel.textContent = "Treasury-Wallet verwenden";
-    elements.actionDetail.textContent = shortAddress(TREASURY);
+    elements.actionLabel.textContent = "MetaMask-Konto wechseln";
+    elements.actionDetail.textContent = "Wallet · endet 376C";
+    elements.action.disabled = state.busy;
+  } else if (loading) {
+    elements.actionLabel.textContent = "Fees werden gesucht";
+    elements.actionDetail.textContent = "Einen Moment";
     elements.action.disabled = true;
+  } else if (state.confirmedBatch) {
+    const resumable =
+      !state.confirmedBatch.invalid &&
+      ["submitting", "pending"].includes(state.confirmedBatch.phase);
+    elements.actionLabel.textContent = state.confirmedBatch.invalid
+      ? "Claim-Status prüfen"
+      : resumable
+        ? "Claim-Batch sicher fortsetzen"
+        : "Claim bereits bestätigt";
+    elements.actionDetail.textContent = state.confirmedBatch.invalid
+      ? "Lokale Sperre unvollständig · nichts erneut senden"
+      : (state.confirmedBatch.failureStatus ?? 0) >= 600
+        ? "Mögliche Teil-Ausführung muss onchain geprüft werden"
+        : resumable
+          ? "Exakt dieselbe Batch-ID · kein zweiter Claim"
+          : `Neuer Scan erst nach finalisiertem Block ${highestConfirmedReceiptBlock()?.toString()}`;
+    elements.action.disabled = state.busy || !resumable;
   } else if (
     state.custom.status === "failed" ||
     state.custom.registryVerified !== true
   ) {
-    elements.actionLabel.textContent = "Custom Registry nicht verifiziert";
-    elements.actionDetail.textContent = "Neu laden oder RPC-Verbindung prüfen";
+    elements.actionLabel.textContent = "Scan fehlgeschlagen";
+    elements.actionDetail.textContent = "Bitte neu scannen";
     elements.action.disabled = true;
   } else if (state.customV2.status === "failed") {
-    elements.actionLabel.textContent = "Custom V2 nicht verifiziert";
-    elements.actionDetail.textContent = "Release-Bindung oder RPC-Verbindung prüfen";
+    elements.actionLabel.textContent = "Scan fehlgeschlagen";
+    elements.actionDetail.textContent = "Bitte neu scannen";
+    elements.action.disabled = true;
+  } else if (state.router.status === "failed" || state.router.verified !== true) {
+    elements.actionLabel.textContent = "Scan fehlgeschlagen";
+    elements.actionDetail.textContent = "Bitte neu scannen";
     elements.action.disabled = true;
   } else if (customBindingBlockers.length > 0) {
-    elements.actionLabel.textContent = "Custom-Quelle nicht verifiziert";
-    elements.actionDetail.textContent = `${customBindingBlockers.length} Onchain-Bindung${customBindingBlockers.length === 1 ? "" : "en"} gesperrt`;
+    elements.actionLabel.textContent = "Neue Quelle prüfen";
+    elements.actionDetail.textContent = "Claim bleibt sicher gesperrt";
     elements.action.disabled = true;
   } else if (customV2BindingBlockers.length > 0) {
-    elements.actionLabel.textContent = "Custom-V2-Quelle nicht verifiziert";
-    elements.actionDetail.textContent = `${customV2BindingBlockers.length} Source-Bindung${customV2BindingBlockers.length === 1 ? "" : "en"} gesperrt`;
+    elements.actionLabel.textContent = "Neue Quelle prüfen";
+    elements.actionDetail.textContent = "Claim bleibt sicher gesperrt";
     elements.action.disabled = true;
   } else if (customAdapterBlockers.length > 0) {
-    elements.actionLabel.textContent = "Custom-Claimadapter fehlt";
-    elements.actionDetail.textContent = `${customAdapterBlockers.length} finalisierte Feequelle${customAdapterBlockers.length === 1 ? "" : "n"} gesperrt`;
+    elements.actionLabel.textContent = "Neue Quelle prüfen";
+    elements.actionDetail.textContent = "Claim bleibt sicher gesperrt";
+    elements.action.disabled = true;
+  } else if (routerBindingBlockers.length > 0) {
+    elements.actionLabel.textContent = "Neue Quelle prüfen";
+    elements.actionDetail.textContent = "Claim bleibt sicher gesperrt";
     elements.action.disabled = true;
   } else if (verifiedHooks !== HOOKS.length) {
-    elements.actionLabel.textContent = "Contract-Prüfung fehlgeschlagen";
-    elements.actionDetail.textContent = `${verifiedHooks} von ${HOOKS.length} verifiziert`;
+    elements.actionLabel.textContent = "Scan fehlgeschlagen";
+    elements.actionDetail.textContent = "Bitte neu scannen";
+    elements.action.disabled = true;
+  } else if (claimable.length > MAX_BATCH_CALLS) {
+    elements.actionLabel.textContent = "Zu viele offene Claims";
+    elements.actionDetail.textContent = "Details prüfen";
     elements.action.disabled = true;
   } else if (claimable.length === 0) {
-    elements.actionLabel.textContent = "Alles geclaimt";
-    elements.actionDetail.textContent = "Aktuell sind keine Fees offen";
+    elements.actionLabel.textContent = "Nichts offen";
+    elements.actionDetail.textContent = "Später erneut scannen";
     elements.action.disabled = true;
   } else if (!state.capability) {
-    elements.actionLabel.textContent = "Gemeinsamer Claim nicht verfügbar";
-    elements.actionDetail.textContent =
-      "MetaMask unterstützt keinen atomaren Batch";
+    elements.actionLabel.textContent = "MetaMask aktualisieren";
+    elements.actionDetail.textContent = "Gemeinsamer Claim nicht verfügbar";
     elements.action.disabled = true;
   } else {
-    elements.actionLabel.textContent = "Scannen & alles claimen";
+    elements.actionLabel.textContent = "Alles claimen";
     const claimLabel = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
-    elements.actionDetail.textContent = `${claimLabel} · 1 MetaMask-Bestätigung`;
+    elements.actionDetail.textContent = `${claimLabel} · eine Bestätigung`;
     elements.action.disabled = state.busy;
   }
 
-  elements.refresh.disabled = state.busy || !connected;
+  elements.refresh.disabled = state.busy || !correctWallet || !correctNetwork;
   renderRows();
 }
 
@@ -609,9 +1341,12 @@ async function readCustomRegistryLogs(blockTag) {
   for (
     let fromBlock = CUSTOM_REGISTRY.startBlock;
     fromBlock <= latest;
-    fromBlock += 4_000n
+    fromBlock += EVENT_LOG_CHUNK_SIZE
   ) {
-    const toBlock = fromBlock + 3_999n < latest ? fromBlock + 3_999n : latest;
+    const toBlock =
+      fromBlock + EVENT_LOG_CHUNK_SIZE - 1n < latest
+        ? fromBlock + EVENT_LOG_CHUNK_SIZE - 1n
+        : latest;
     logs.push(
       ...(await request("eth_getLogs", [
         {
@@ -632,9 +1367,12 @@ async function readClassicLauncherLogs(launcher, blockTag) {
   for (
     let fromBlock = launcher.startBlock;
     fromBlock <= latest;
-    fromBlock += 4_000n
+    fromBlock += EVENT_LOG_CHUNK_SIZE
   ) {
-    const toBlock = fromBlock + 3_999n < latest ? fromBlock + 3_999n : latest;
+    const toBlock =
+      fromBlock + EVENT_LOG_CHUNK_SIZE - 1n < latest
+        ? fromBlock + EVENT_LOG_CHUNK_SIZE - 1n
+        : latest;
     logs.push(
       ...(await request("eth_getLogs", [
         {
@@ -647,24 +1385,6 @@ async function readClassicLauncherLogs(launcher, blockTag) {
     );
   }
   return logs;
-}
-
-async function readTokenText(token, selector, blockTag) {
-  return decodeAbiString(
-    await request("eth_call", [{ to: token, data: selector }, blockTag]),
-  );
-}
-
-async function readClassicLaunchMetadata(launch, blockTag) {
-  const [name, symbol] = await Promise.allSettled([
-    readTokenText(launch.token, TOKEN_SELECTORS.name, blockTag),
-    readTokenText(launch.token, TOKEN_SELECTORS.symbol, blockTag),
-  ]);
-  return {
-    ...launch,
-    name: name.status === "fulfilled" ? name.value : null,
-    symbol: symbol.status === "fulfilled" ? symbol.value : null,
-  };
 }
 
 async function readClassicLaunches(blockTag) {
@@ -691,13 +1411,10 @@ async function readClassicLaunches(blockTag) {
       }),
     );
     const launches = reduceClassicLaunchLogs(launcherResults.flat());
-    const hydrated = await Promise.all(
-      launches.map((launch) => readClassicLaunchMetadata(launch, blockTag)),
-    );
     state.classic = {
       status: "ready",
       launchersVerified: true,
-      launches: hydrated,
+      launches,
       error: null,
     };
   } catch (error) {
@@ -709,6 +1426,759 @@ async function readClassicLaunches(blockTag) {
         error instanceof Error
           ? error.message
           : "Classic Launches konnten nicht gelesen werden",
+    };
+  }
+}
+
+async function readLaunchStampLogs(toBlock) {
+  const logs = [];
+  for (
+    let fromBlock = LAUNCH_STAMP_ROUTER.startBlock;
+    fromBlock <= toBlock;
+    fromBlock += EVENT_LOG_CHUNK_SIZE
+  ) {
+    const chunkEnd =
+      fromBlock + EVENT_LOG_CHUNK_SIZE - 1n < toBlock
+        ? fromBlock + EVENT_LOG_CHUNK_SIZE - 1n
+        : toBlock;
+    const filter = {
+      address: LAUNCH_STAMP_ROUTER.address,
+      fromBlock: toQuantityHex(fromBlock),
+      toBlock: toQuantityHex(chunkEnd),
+      topics: [LAUNCH_STAMP_TOPICS.launchStamped],
+    };
+    const responses = await routerQuorumRequest("eth_getLogs", [filter]);
+    const fingerprints = responses.map(launchStampLogSetFingerprint);
+    if (new Set(fingerprints).size !== 1)
+      throw new Error("Die Router-Loghistorie stimmt im RPC-Quorum nicht überein");
+    logs.push(...responses[0]);
+    if (logs.length > MAX_ROUTER_LAUNCHES)
+      throw new Error("Die Router-Launchliste überschreitet das sichere Scan-Limit");
+  }
+  return logs;
+}
+
+async function readRouterQuorumBlock(blockTag) {
+  const blocks = await routerQuorumRequest("eth_getBlockByNumber", [
+    blockTag,
+    false,
+  ]);
+  return exactRouterFinalizedCheckpoint(
+    blocks,
+    LAUNCH_STAMP_ROUTER.startBlock,
+  );
+}
+
+async function readRouterFinalizedBoundary() {
+  const blocks = await routerQuorumRequest("eth_getBlockByNumber", [
+    LAUNCH_STAMP_ROUTER.finalizedTag,
+    false,
+  ]);
+  return routerFinalizedBoundary(
+    blocks,
+    LAUNCH_STAMP_ROUTER.startBlock,
+    LAUNCH_STAMP_ROUTER.maximumFinalizedSpread,
+  );
+}
+
+async function verifyLaunchStampInfrastructure(blockTag) {
+  const [
+    routerCode,
+    chainIdWord,
+    permitAuthorityWord,
+    permitAuthorityRuntimeWord,
+    graphFactoryWord,
+    graphFactoryRuntimeWord,
+    poolManagerWord,
+    poolManagerRuntimeWord,
+  ] = await Promise.all([
+    request("eth_getCode", [LAUNCH_STAMP_ROUTER.address, blockTag]),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      LAUNCH_STAMP_SELECTORS.chainId,
+      blockTag,
+    ),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      LAUNCH_STAMP_SELECTORS.permitAuthority,
+      blockTag,
+    ),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      LAUNCH_STAMP_SELECTORS.permitAuthorityRuntimeCodeHash,
+      blockTag,
+    ),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      LAUNCH_STAMP_SELECTORS.graphFactory,
+      blockTag,
+    ),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      LAUNCH_STAMP_SELECTORS.graphFactoryRuntimeCodeHash,
+      blockTag,
+    ),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      LAUNCH_STAMP_SELECTORS.poolManager,
+      blockTag,
+    ),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      LAUNCH_STAMP_SELECTORS.poolManagerRuntimeCodeHash,
+      blockTag,
+    ),
+  ]);
+  const permitAuthority = decodeAddress(permitAuthorityWord);
+  const graphFactory = decodeAddress(graphFactoryWord);
+  const poolManager = decodeAddress(poolManagerWord);
+  if (
+    keccak256Hex(routerCode).toLowerCase() !==
+      LAUNCH_STAMP_ROUTER.runtimeCodeHash ||
+    decodeUint256(chainIdWord) !== 1n ||
+    permitAuthority.toLowerCase() !==
+      LAUNCH_STAMP_ROUTER.permitAuthority.address.toLowerCase() ||
+    decodeBytes32(permitAuthorityRuntimeWord) !==
+      LAUNCH_STAMP_ROUTER.permitAuthority.runtimeCodeHash ||
+    graphFactory.toLowerCase() !==
+      LAUNCH_STAMP_ROUTER.graphFactory.address.toLowerCase() ||
+    decodeBytes32(graphFactoryRuntimeWord) !==
+      LAUNCH_STAMP_ROUTER.graphFactory.runtimeCodeHash ||
+    poolManager.toLowerCase() !==
+      LAUNCH_STAMP_ROUTER.poolManager.address.toLowerCase() ||
+    decodeBytes32(poolManagerRuntimeWord) !==
+      LAUNCH_STAMP_ROUTER.poolManager.runtimeCodeHash
+  )
+    throw new Error("Launch-Stamp-Router-Bindung stimmt nicht");
+
+  const [permitCode, graphCode, poolManagerCode] = await Promise.all([
+    request("eth_getCode", [permitAuthority, blockTag]),
+    request("eth_getCode", [graphFactory, blockTag]),
+    request("eth_getCode", [poolManager, blockTag]),
+  ]);
+  if (
+    keccak256Hex(permitCode).toLowerCase() !==
+      LAUNCH_STAMP_ROUTER.permitAuthority.runtimeCodeHash ||
+    keccak256Hex(graphCode).toLowerCase() !==
+      LAUNCH_STAMP_ROUTER.graphFactory.runtimeCodeHash ||
+    keccak256Hex(poolManagerCode).toLowerCase() !==
+      LAUNCH_STAMP_ROUTER.poolManager.runtimeCodeHash
+  )
+    throw new Error("Launch-Stamp-Infrastruktur-Runtime stimmt nicht");
+}
+
+function routerProfileBindingMatches(launch, profile) {
+  return profile.bindings.some(
+    ({ launchId, token, source, runtimeCodeHash }) =>
+      launch.launchId === launchId &&
+      (!token || launch.token.toLowerCase() === token.toLowerCase()) &&
+      launch.hook.toLowerCase() === source.toLowerCase() &&
+      launch.runtimeCodeHash === runtimeCodeHash,
+  );
+}
+
+function routerFeeVaultBinding(launch, profile) {
+  return profile.bindings.find(
+    ({ launchId, token, hook, hookRuntimeCodeHash }) =>
+      launch.launchId === launchId &&
+      launch.token.toLowerCase() === token.toLowerCase() &&
+      launch.hook.toLowerCase() === hook.toLowerCase() &&
+      launch.runtimeCodeHash === hookRuntimeCodeHash,
+  );
+}
+
+async function verifyRouterProfileComponent(launch, binding, blockTag) {
+  const [launchIdWord, proofValue, runtimeWord, runtimeCode] =
+    await Promise.all([
+      readContractWord(
+        LAUNCH_STAMP_ROUTER.address,
+        launchStampAddressReadData(
+          LAUNCH_STAMP_SELECTORS.launchIdByComponent,
+          binding.source,
+        ),
+        blockTag,
+      ),
+      request("eth_call", [
+        {
+          to: LAUNCH_STAMP_ROUTER.address,
+          data: launchStampAddressReadData(
+            LAUNCH_STAMP_SELECTORS.stampProof,
+            binding.source,
+          ),
+        },
+        blockTag,
+      ]),
+      readContractWord(
+        LAUNCH_STAMP_ROUTER.address,
+        launchStampAddressReadData(
+          LAUNCH_STAMP_SELECTORS.componentRuntimeCodeHash,
+          binding.source,
+        ),
+        blockTag,
+      ),
+      request("eth_getCode", [binding.source, blockTag]),
+    ]);
+  const proof = decodeLaunchStampProof(proofValue);
+  const runtimeCodeHash = decodeBytes32(runtimeWord);
+  if (
+    decodeBytes32(launchIdWord) !== launch.launchId ||
+    proof.launchId !== launch.launchId ||
+    proof.stampHash !== launch.stampHash ||
+    runtimeCodeHash !== binding.sourceRuntimeCodeHash ||
+    keccak256Hex(runtimeCode).toLowerCase() !==
+      binding.sourceRuntimeCodeHash.toLowerCase()
+  )
+    throw new Error("Custom-Vault-Stamp oder Runtime stimmt nicht");
+}
+
+async function tryRouterClaimProfile(
+  launch,
+  runtimeCode,
+  profile,
+  blockTag,
+) {
+  if (!routerProfileBindingMatches(launch, profile)) return null;
+  try {
+    const [
+      recipientWord,
+      feeWord,
+      accruedWord,
+      feeDenominatorWord,
+      poolManagerWord,
+      boundTokenWord,
+      nftWord,
+      initializedWord,
+    ] = await Promise.all([
+      readContractWord(launch.hook, profile.recipient, blockTag),
+      readContractWord(launch.hook, profile.feeBps, blockTag),
+      readContractWord(launch.hook, profile.accrued, blockTag),
+      profile.feeDenominatorBps
+        ? readContractWord(launch.hook, profile.feeDenominatorBps, blockTag)
+        : null,
+      profile.poolManager
+        ? readContractWord(launch.hook, profile.poolManager, blockTag)
+        : null,
+      profile.boundToken
+        ? readContractWord(launch.hook, profile.boundToken, blockTag)
+        : null,
+      profile.nft ? readContractWord(launch.hook, profile.nft, blockTag) : null,
+      profile.initialized
+        ? readContractWord(launch.hook, profile.initialized, blockTag)
+        : null,
+    ]);
+    const amount = decodeUint256(accruedWord);
+    if (
+      !isTreasury(decodeAddress(recipientWord)) ||
+      decodeUint256(feeWord) !== profile.expectedFeeBps ||
+      (feeDenominatorWord !== null &&
+        decodeUint256(feeDenominatorWord) !==
+          profile.expectedFeeDenominatorBps) ||
+      (poolManagerWord !== null &&
+        decodeAddress(poolManagerWord).toLowerCase() !==
+          LAUNCH_STAMP_ROUTER.poolManager.address.toLowerCase()) ||
+      (boundTokenWord !== null &&
+        decodeAddress(boundTokenWord).toLowerCase() !==
+          launch.token.toLowerCase()) ||
+      (nftWord !== null &&
+        decodeAddress(nftWord).toLowerCase() !==
+          profile.expectedNft.toLowerCase()) ||
+      (initializedWord !== null && !decodeBool(initializedWord))
+    )
+      return null;
+    if (amount > 0n) {
+      const simulated = await readContractWord(
+        launch.hook,
+        profile.claim,
+        blockTag,
+        TREASURY,
+      );
+      if (decodeUint256(simulated) !== amount)
+        throw new Error("Custom-Claim-Simulation stimmt nicht");
+    }
+    return {
+      ...launch,
+      id: `router-custom:${launch.launchId}`,
+      name: "Custom · Router",
+      detail: shortAddress(launch.token),
+      unit: "ETH",
+      decimals: 18,
+      kind: "custom",
+      origin: "launch-stamp-router",
+      address: launch.hook,
+      claimMode: "manual",
+      claimProfile: profile.id,
+      readData: profile.accrued,
+      claimData: profile.claim,
+      claimBindingVerified: true,
+      recipientMatches: true,
+      amount,
+      status: "ready",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function tryRouterFeeVaultProfile(launch, profile, blockTag) {
+  const binding = routerFeeVaultBinding(launch, profile);
+  if (!binding) return null;
+  try {
+    await verifyRouterProfileComponent(launch, binding, blockTag);
+    const nativeAsset = CUSTOM_V2_POLICY.nativeAsset;
+    const nativeReadData = `${profile.accrued}${encodeAddressArgument(nativeAsset)}`;
+    const tokenReadData = `${profile.accrued}${encodeAddressArgument(launch.token)}`;
+    const nativeClaimData = `${profile.claim}${encodeAddressArgument(nativeAsset)}`;
+    const tokenClaimData = `${profile.claim}${encodeAddressArgument(launch.token)}`;
+    const [
+      hookVaultWord,
+      recipientWord,
+      feePpmWord,
+      feeDenominatorWord,
+      poolManagerWord,
+      authorizedAdapterWord,
+      authorizedAdapterCodeHashWord,
+      bindingAuthorityWord,
+      nativeAmountWord,
+      tokenAmountWord,
+    ] = await Promise.all([
+      readContractWord(launch.hook, profile.hookFeeVault, blockTag),
+      readContractWord(binding.source, profile.recipient, blockTag),
+      readContractWord(binding.source, profile.feePpm, blockTag),
+      readContractWord(binding.source, profile.feeDenominatorPpm, blockTag),
+      readContractWord(binding.source, profile.poolManager, blockTag),
+      readContractWord(binding.source, profile.authorizedAdapter, blockTag),
+      readContractWord(
+        binding.source,
+        profile.authorizedAdapterCodeHash,
+        blockTag,
+      ),
+      readContractWord(binding.source, profile.bindingAuthority, blockTag),
+      readContractWord(binding.source, nativeReadData, blockTag),
+      readContractWord(binding.source, tokenReadData, blockTag),
+    ]);
+    if (
+      decodeAddress(hookVaultWord).toLowerCase() !==
+        binding.source.toLowerCase() ||
+      !isTreasury(decodeAddress(recipientWord)) ||
+      decodeUint256(feePpmWord) !== profile.expectedFeePpm ||
+      decodeUint256(feeDenominatorWord) !==
+        profile.expectedFeeDenominatorPpm ||
+      decodeAddress(poolManagerWord).toLowerCase() !==
+        LAUNCH_STAMP_ROUTER.poolManager.address.toLowerCase() ||
+      decodeAddress(authorizedAdapterWord).toLowerCase() !==
+        launch.hook.toLowerCase() ||
+      decodeBytes32(authorizedAdapterCodeHashWord) !==
+        binding.hookRuntimeCodeHash ||
+      decodeAddress(bindingAuthorityWord) !== nativeAsset
+    )
+      throw new Error("Custom-Vault-Claim-Bindung stimmt nicht");
+
+    const amount = decodeUint256(nativeAmountWord);
+    const secondaryAmount = decodeUint256(tokenAmountWord);
+    await Promise.all(
+      [
+        { amount, claimData: nativeClaimData },
+        { amount: secondaryAmount, claimData: tokenClaimData },
+      ].map(async (leg) => {
+        if (leg.amount === 0n) return;
+        const simulated = await readContractWord(
+          binding.source,
+          leg.claimData,
+          blockTag,
+          TREASURY,
+        );
+        if (decodeUint256(simulated) !== leg.amount)
+          throw new Error("Custom-Vault-Claim-Simulation stimmt nicht");
+      }),
+    );
+
+    const id = `router-custom:${launch.launchId}`;
+    const common = {
+      launchId: launch.launchId,
+      token: launch.token,
+      hook: launch.hook,
+      launchKind: launch.launchKind,
+      kind: "custom",
+      origin: "launch-stamp-router",
+      address: binding.source,
+      provenanceVerified: true,
+      runtimeVerified: true,
+      sourceRuntimeVerified: true,
+      claimMode: "manual",
+      claimProfile: profile.id,
+      claimBindingVerified: true,
+      recipientMatches: true,
+      status: "ready",
+    };
+    const claimDefinitions = [
+      {
+        ...common,
+        id: `${id}:native`,
+        name: "Custom · Router",
+        detail: `${shortAddress(launch.token)} · ETH`,
+        unit: "ETH",
+        decimals: 18,
+        readData: nativeReadData,
+        claimData: nativeClaimData,
+        amount,
+      },
+      {
+        ...common,
+        id: `${id}:${launch.token.toLowerCase()}`,
+        name: "Custom · Router",
+        detail: `${shortAddress(launch.token)} · ${profile.secondaryUnit}`,
+        asset: launch.token,
+        unit: profile.secondaryUnit,
+        decimals: profile.secondaryDecimals,
+        readData: tokenReadData,
+        claimData: tokenClaimData,
+        amount: secondaryAmount,
+      },
+    ];
+    return {
+      ...launch,
+      ...common,
+      id,
+      name: "Custom · Router",
+      detail: shortAddress(launch.token),
+      unit: "ETH",
+      decimals: 18,
+      secondaryAsset: launch.token,
+      secondaryUnit: profile.secondaryUnit,
+      secondaryDecimals: profile.secondaryDecimals,
+      amount,
+      secondaryAmount,
+      claimDefinitions,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readRouterCustomClaim(launch, runtimeCode, blockTag) {
+  for (const profile of [
+    ROUTER_CUSTOM_CLAIM_PROFILES.nativeAccumulatorV1,
+    ROUTER_CUSTOM_CLAIM_PROFILES.shardLauncherFeesV1,
+    ROUTER_CUSTOM_CLAIM_PROFILES.protocolFeeSourceV1,
+  ]) {
+    const claim = await tryRouterClaimProfile(
+      launch,
+      runtimeCode,
+      profile,
+      blockTag,
+    );
+    if (claim) return claim;
+  }
+
+  const feeVaultClaim = await tryRouterFeeVaultProfile(
+    launch,
+    ROUTER_CUSTOM_CLAIM_PROFILES.isolatedAfterSwapFeeVaultV2,
+    blockTag,
+  );
+  if (feeVaultClaim) return feeVaultClaim;
+
+  const redeemer = ROUTER_CUSTOM_CLAIM_PROFILES.dualCurrencyRedeemerV1;
+  try {
+    if (!routerProfileBindingMatches(launch, redeemer))
+      throw new Error("Kein freigegebenes Mehrwährungs-Claim-Profil");
+    const [
+      recipientWord,
+      feePipsWord,
+      poolManagerWord,
+      currency0Word,
+      currency1Word,
+      poolIdWord,
+      nativeAmountWord,
+      tokenAmountWord,
+    ] = await Promise.all([
+      readContractWord(launch.hook, redeemer.recipient, blockTag),
+      readContractWord(launch.hook, redeemer.feePips, blockTag),
+      readContractWord(launch.hook, redeemer.poolManager, blockTag),
+      readContractWord(launch.hook, redeemer.currency0, blockTag),
+      readContractWord(launch.hook, redeemer.currency1, blockTag),
+      readContractWord(launch.hook, redeemer.poolId, blockTag),
+      readContractWord(
+        LAUNCH_STAMP_ROUTER.poolManager.address,
+        poolManagerBalanceOfData(
+          redeemer.balanceOf,
+          launch.hook,
+          CUSTOM_V2_POLICY.nativeAsset,
+        ),
+        blockTag,
+      ),
+      readContractWord(
+        LAUNCH_STAMP_ROUTER.poolManager.address,
+        poolManagerBalanceOfData(
+          redeemer.balanceOf,
+          launch.hook,
+          launch.token,
+        ),
+        blockTag,
+      ),
+    ]);
+    if (
+      !isTreasury(decodeAddress(recipientWord)) ||
+      decodeUint256(feePipsWord) !== redeemer.expectedFeePips ||
+      decodeAddress(poolManagerWord).toLowerCase() !==
+        LAUNCH_STAMP_ROUTER.poolManager.address.toLowerCase() ||
+      decodeAddress(currency0Word).toLowerCase() !==
+        CUSTOM_V2_POLICY.nativeAsset.toLowerCase() ||
+      decodeAddress(currency1Word).toLowerCase() !==
+        launch.token.toLowerCase() ||
+      decodeBytes32(poolIdWord) !== launch.poolId
+    )
+      throw new Error("Mehrwährungs-Claim-Bindung stimmt nicht");
+    const amount = decodeUint256(nativeAmountWord);
+    const secondaryAmount = decodeUint256(tokenAmountWord);
+    if (amount > 0n || secondaryAmount > 0n) {
+      const simulated = await request("eth_call", [
+        { from: TREASURY, to: launch.hook, data: redeemer.claim },
+        blockTag,
+      ]);
+      if (simulated !== "0x")
+        throw new Error("Mehrwährungs-Claim-Simulation stimmt nicht");
+    }
+    return {
+      ...launch,
+      id: `router-custom:${launch.launchId}`,
+      name: "Custom · Router",
+      detail: shortAddress(launch.token),
+      unit: "ETH",
+      decimals: 18,
+      secondaryAsset: launch.token,
+      secondaryUnit: redeemer.secondaryUnit,
+      secondaryDecimals: redeemer.secondaryDecimals,
+      kind: "custom",
+      origin: "launch-stamp-router",
+      address: launch.hook,
+      claimMode: "manual",
+      claimProfile: redeemer.id,
+      claimData: redeemer.claim,
+      claimBindingVerified: true,
+      recipientMatches: true,
+      amount,
+      secondaryAmount,
+      status: "ready",
+    };
+  } catch {
+    // Continue to the explicit unsupported disposition below.
+  }
+
+  return {
+    ...launch,
+    id: `router-custom:${launch.launchId}`,
+    name: "Custom · Router",
+    detail: shortAddress(launch.token),
+    unit: "ETH",
+    decimals: 18,
+    kind: "custom",
+    origin: "launch-stamp-router",
+    address: launch.hook,
+    claimMode: "unsupported",
+    claimProfile: null,
+    claimBindingVerified: false,
+    recipientMatches: false,
+    amount: 0n,
+    status: "failed",
+  };
+}
+
+async function readVerifiedRouterLaunch(candidate, finalizedTag) {
+  const [recordValue, tokenLaunchIdWord, poolLaunchIdWord, tokenProofValue] =
+    await Promise.all([
+    request("eth_call", [
+      {
+        to: LAUNCH_STAMP_ROUTER.address,
+        data: launchStampBytes32ReadData(
+          LAUNCH_STAMP_SELECTORS.launchStamp,
+          candidate.launchId,
+        ),
+      },
+      finalizedTag,
+    ]),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      launchStampAddressReadData(
+        LAUNCH_STAMP_SELECTORS.launchIdByToken,
+        candidate.token,
+      ),
+      finalizedTag,
+    ),
+    readContractWord(
+      LAUNCH_STAMP_ROUTER.address,
+      launchStampPoolReadData(
+        LAUNCH_STAMP_SELECTORS.launchIdByPool,
+        candidate.poolManager,
+        candidate.poolId,
+      ),
+      finalizedTag,
+    ),
+    request("eth_call", [
+      {
+        to: LAUNCH_STAMP_ROUTER.address,
+        data: launchStampAddressReadData(
+          LAUNCH_STAMP_SELECTORS.stampProof,
+          candidate.token,
+        ),
+      },
+      finalizedTag,
+    ]),
+  ]);
+  const record = decodeLaunchStampRecord(recordValue);
+  const tokenProof = decodeLaunchStampProof(tokenProofValue);
+  if (
+    decodeBytes32(tokenLaunchIdWord) !== candidate.launchId ||
+    decodeBytes32(poolLaunchIdWord) !== candidate.launchId ||
+    tokenProof.launchId !== candidate.launchId ||
+    tokenProof.stampHash !== candidate.stampHash ||
+    record.token.toLowerCase() !== candidate.token.toLowerCase() ||
+    record.hook.toLowerCase() !== candidate.hook.toLowerCase() ||
+    record.poolManager.toLowerCase() !== candidate.poolManager.toLowerCase() ||
+    record.poolId !== candidate.poolId ||
+    record.stampHash !== candidate.stampHash
+  )
+    throw new Error("Launch-Stamp-Record stimmt nicht mit dem Event überein");
+
+  const routeCode = await request("eth_getCode", [
+    record.routeLauncher,
+    finalizedTag,
+  ]);
+  if (
+    keccak256Hex(routeCode).toLowerCase() !==
+    record.routeLauncherRuntimeCodeHash
+  )
+    throw new Error("Launch-Route-Runtime ist gedriftet");
+
+  const verified = {
+    ...candidate,
+    ...record,
+    launchKind: record.kind,
+    provenanceVerified: true,
+    runtimeVerified: true,
+  };
+  if (record.kind === 2) {
+    const knownHook = HOOKS.find(
+      ({ address }) => address.toLowerCase() === record.hook.toLowerCase(),
+    );
+    return {
+      ...verified,
+      claimMode: knownHook ? "covered-by-known-hook" : "unsupported",
+      claimProfile: knownHook?.id ?? null,
+      claimBindingVerified: Boolean(knownHook),
+      amount: 0n,
+    };
+  }
+
+  const [hookLaunchIdWord, hookProofValue, recordedRuntimeWord, hookCode] =
+    await Promise.all([
+      readContractWord(
+        LAUNCH_STAMP_ROUTER.address,
+        launchStampAddressReadData(
+          LAUNCH_STAMP_SELECTORS.launchIdByComponent,
+          record.hook,
+        ),
+        finalizedTag,
+      ),
+      request("eth_call", [
+        {
+          to: LAUNCH_STAMP_ROUTER.address,
+          data: launchStampAddressReadData(
+            LAUNCH_STAMP_SELECTORS.stampProof,
+            record.hook,
+          ),
+        },
+        finalizedTag,
+      ]),
+      readContractWord(
+        LAUNCH_STAMP_ROUTER.address,
+        launchStampAddressReadData(
+          LAUNCH_STAMP_SELECTORS.componentRuntimeCodeHash,
+          record.hook,
+        ),
+        finalizedTag,
+      ),
+      request("eth_getCode", [record.hook, finalizedTag]),
+    ]);
+  const hookProof = decodeLaunchStampProof(hookProofValue);
+  const recordedRuntime = decodeBytes32(recordedRuntimeWord);
+  if (
+    decodeBytes32(hookLaunchIdWord) !== candidate.launchId ||
+    hookProof.launchId !== candidate.launchId ||
+    hookProof.stampHash !== candidate.stampHash ||
+    /^0x0{64}$/i.test(recordedRuntime) ||
+    keccak256Hex(hookCode).toLowerCase() !== recordedRuntime
+  )
+    throw new Error("Custom-Hook-Stamp oder Runtime stimmt nicht");
+
+  return readRouterCustomClaim(
+    { ...verified, runtimeCodeHash: recordedRuntime },
+    hookCode,
+    finalizedTag,
+  );
+}
+
+async function readLaunchStampRouter() {
+  for (const key of state.claims.keys()) {
+    if (key.startsWith("router-custom:")) state.claims.delete(key);
+  }
+  state.router = {
+    status: "loading",
+    verified: false,
+    finalizedBlock: null,
+    launches: [],
+    error: null,
+  };
+  renderSummary();
+  try {
+    const finalizedBlock = await readRouterFinalizedBoundary();
+    const finalizedTag = toQuantityHex(finalizedBlock);
+    const openingBlock = await readRouterQuorumBlock(finalizedTag);
+    await verifyLaunchStampInfrastructure(finalizedTag);
+    const candidates = reduceLaunchStampLogs(
+      await readLaunchStampLogs(finalizedBlock),
+    );
+    const launches = await mapWithConcurrency(candidates, 8, (candidate) =>
+      readVerifiedRouterLaunch(candidate, finalizedTag),
+    );
+    const closingBlock = await readRouterQuorumBlock(finalizedTag);
+    if (
+      closingBlock.number !== openingBlock.number ||
+      closingBlock.hash !== openingBlock.hash
+    )
+      throw new Error("Finalisierter Router-Block hat sich während des Scans geändert");
+    for (const launch of launches) {
+      if (launch.launchKind !== 1 || launch.claimMode !== "manual") continue;
+      state.claims.set(launch.id, {
+        amount: launch.amount,
+        secondaryAmount: launch.secondaryAmount,
+        recipientMatches: launch.recipientMatches,
+        status: launch.status,
+      });
+      for (const claim of launch.claimDefinitions ?? []) {
+        state.claims.set(claim.id, {
+          amount: claim.amount,
+          recipientMatches: claim.recipientMatches,
+          status: claim.status,
+        });
+      }
+    }
+    state.router = {
+      status: "ready",
+      verified: true,
+      finalizedBlock,
+      launches,
+      error: null,
+    };
+  } catch (error) {
+    state.router = {
+      status: "failed",
+      verified: false,
+      finalizedBlock: null,
+      launches: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Launch-Stamp-Router konnte nicht gelesen werden",
     };
   }
 }
@@ -810,16 +2280,18 @@ async function readCustomRegistry(blockTag) {
     if (key.startsWith("custom-v1-standard:")) state.claims.delete(key);
   }
   state.custom = {
-    status: "failed",
-    registryVerified: false,
+    status: "retired",
+    registryVerified: true,
     launches: [],
-    error: "Custom Registry V1 ist außer Betrieb",
+    error: null,
   };
   renderSummary();
 }
 
-async function readContractWord(address, data, blockTag) {
-  const value = await request("eth_call", [{ to: address, data }, blockTag]);
+async function readContractWord(address, data, blockTag, from = null) {
+  const call = { to: address, data };
+  if (from) call.from = from;
+  const value = await request("eth_call", [call, blockTag]);
   if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value))
     throw new Error(`Ungültige Contract-Antwort von ${shortAddress(address)}`);
   return value;
@@ -1075,6 +2547,9 @@ async function readCustomV2Source(release, indexed, blockTag) {
 }
 
 async function readCustomV2(blockTag) {
+  for (const key of state.claims.keys()) {
+    if (key.startsWith("custom-v2:")) state.claims.delete(key);
+  }
   state.customV2 = {
     status: "loading",
     release: null,
@@ -1217,11 +2692,160 @@ async function readCapabilities() {
   }
 }
 
-async function refreshClaims() {
+async function verifyCanonicalConfirmedBatchReceipts(receipts) {
+  await Promise.all(
+    receipts.map(async (storedReceipt) => {
+      const proof = {
+        blockNumber: BigInt(storedReceipt.blockNumber),
+        blockHash: storedReceipt.blockHash,
+        transactionHash: storedReceipt.transactionHash,
+      };
+      const [checkpoint, rpcReceipts] = await Promise.all([
+        readRouterQuorumBlock(toQuantityHex(proof.blockNumber)),
+        routerQuorumRequest("eth_getTransactionReceipt", [
+          proof.transactionHash,
+        ]),
+      ]);
+      if (
+        checkpoint.number !== proof.blockNumber ||
+        checkpoint.hash.toLowerCase() !== proof.blockHash.toLowerCase() ||
+        rpcReceipts.length !== 3 ||
+        rpcReceipts.some(
+          (receipt) => !confirmedTransactionReceiptMatches(proof, receipt),
+        )
+      ) {
+        throw new Error(
+          "Der bestätigte Claim-Receipt ist noch nicht kanonisch finalisiert",
+        );
+      }
+    }),
+  );
+}
+
+async function reconcileConfirmedBatchLock() {
+  return withAvailableClaimStateLease(async () => {
+    let lock = loadConfirmedBatchLock();
+    state.confirmedBatch = lock;
+    if (
+      !lock ||
+      lock.invalid ||
+      !state.account ||
+      state.chainId !== MAINNET_CHAIN_ID ||
+      state.account.toLowerCase() !== lock.account ||
+      lock.phase === "manual"
+    ) {
+      return;
+    }
+
+    if (lock.phase !== "confirmed") {
+      let result;
+      try {
+        result = await request("wallet_getCallsStatus", [lock.batchId]);
+      } catch {
+        return;
+      }
+
+      let status;
+      try {
+        status = validatedAtomicBatchStatus(
+          result,
+          lock.batchId,
+          MAINNET_CHAIN_ID,
+        );
+      } catch {
+        return;
+      }
+
+      if (status === 400 || status === 500) {
+        clearConfirmedBatchLock(lock.batchId);
+        return;
+      }
+      if (status >= 600) {
+        saveConfirmedBatchLock(
+          {
+            ...lock,
+            phase: "manual",
+            failureStatus: status,
+          },
+          { expectedBatchId: lock.batchId },
+        );
+        return;
+      }
+      if (status !== 200) {
+        if (status >= 100 && status < 200)
+          saveConfirmedBatchLock(
+            { ...lock, phase: "pending" },
+            { expectedBatchId: lock.batchId },
+          );
+        return;
+      }
+
+      try {
+        const proof = confirmedBatchReceiptProof(
+          result,
+          lock.batchId,
+          MAINNET_CHAIN_ID,
+        );
+        lock = {
+          ...lock,
+          phase: "confirmed",
+          receipts: proof.receipts.map((receipt) => ({
+            blockNumber: receipt.blockNumber.toString(),
+            blockHash: receipt.blockHash,
+            transactionHash: receipt.transactionHash,
+          })),
+          failureStatus: null,
+        };
+        if (
+          !saveConfirmedBatchLock(lock, {
+            expectedBatchId: lock.batchId,
+          })
+        )
+          return;
+      } catch {
+        return;
+      }
+    }
+
+    const highestBlock = highestConfirmedReceiptBlock(lock);
+    let inventoryBlock = null;
+    try {
+      inventoryBlock = BigInt(state.blockTag);
+    } catch {
+      // The fee inventory is not bound to a usable post-receipt checkpoint.
+    }
+    if (
+      highestBlock === null ||
+      inventoryBlock === null ||
+      inventoryBlock < highestBlock ||
+      state.router.status !== "ready" ||
+      state.router.verified !== true ||
+      typeof state.router.finalizedBlock !== "bigint" ||
+      state.router.finalizedBlock < highestBlock
+    ) {
+      return;
+    }
+
+    try {
+      await verifyCanonicalConfirmedBatchReceipts(lock.receipts);
+      clearConfirmedBatchLock(lock.batchId);
+    } catch {
+      // A reorged, missing or divergent receipt remains locked until a later scan.
+    }
+  });
+}
+
+async function refreshClaimsOnce() {
   if (!state.account || state.chainId !== MAINNET_CHAIN_ID) return;
   setError();
   setStatus("Contract-Bindungen und Guthaben werden geprüft");
-  const blockTag = await request("eth_blockNumber");
+  await readLaunchStampRouter();
+  const blockTag =
+    state.router.status === "ready" &&
+    state.router.verified === true &&
+    typeof state.router.finalizedBlock === "bigint"
+      ? toQuantityHex(state.router.finalizedBlock)
+      : await request("eth_blockNumber");
   state.blockTag = blockTag;
 
   await Promise.all([
@@ -1230,9 +2854,13 @@ async function refreshClaims() {
     readClassicLaunches(blockTag),
   ]);
 
-  const hookResults = await Promise.allSettled(
-    HOOKS.map((hook) => readHook(hook, blockTag)),
-  );
+  const hookResults = await mapWithConcurrency(HOOKS, 4, async (hook) => {
+    try {
+      return { status: "fulfilled", value: await readHook(hook, blockTag) };
+    } catch (reason) {
+      return { status: "rejected", reason };
+    }
+  });
   hookResults.forEach((result, index) => {
     const hook = HOOKS[index];
     state.hooks.set(
@@ -1241,9 +2869,13 @@ async function refreshClaims() {
     );
   });
 
-  const claimResults = await Promise.allSettled(
-    CLAIMS.map((claim) => readClaim(claim, blockTag)),
-  );
+  const claimResults = await mapWithConcurrency(CLAIMS, 4, async (claim) => {
+    try {
+      return { status: "fulfilled", value: await readClaim(claim, blockTag) };
+    } catch (reason) {
+      return { status: "rejected", reason };
+    }
+  });
   claimResults.forEach((result, index) => {
     const claim = CLAIMS[index];
     state.claims.set(
@@ -1255,6 +2887,7 @@ async function refreshClaims() {
   });
 
   await readCapabilities();
+  await reconcileConfirmedBatchLock();
   const verified = hookResults.filter(
     ({ status }, index) =>
       status === "fulfilled" && state.hooks.get(HOOKS[index].id)?.verified,
@@ -1279,53 +2912,146 @@ async function refreshClaims() {
     errors.push(
       "Die Classic-Launchliste konnte nicht vollständig gelesen werden. Der verifizierte gemeinsame Hook-Claim bleibt verfügbar.",
     );
+  if (state.router.error)
+    errors.push(
+      "Der offizielle Launch-Stamp-Router konnte nicht vollständig verifiziert werden. Alle Claims bleiben gesperrt.",
+    );
   setError(errors.join(" "));
   setStatus(
-    state.custom.error || state.customV2.error
-      ? "Custom Registry konnte nicht vollständig gelesen werden"
-      : failedClaims === 0
-        ? `Stand Block ${BigInt(blockTag).toString()} · ${state.classic.launches.length} Classic · ${state.custom.launches.length + state.customV2.sources.length} Custom`
-        : `${failedClaims} Guthaben konnten nicht gelesen werden`,
+    state.confirmedBatch
+      ? confirmedBatchStatus()
+      : state.custom.error || state.customV2.error || state.router.error
+        ? "Ecosystem-Scan konnte nicht vollständig gelesen werden"
+        : failedClaims === 0
+          ? `Stand Block ${BigInt(blockTag).toString()} · ${state.classic.launches.length + state.router.launches.filter(({ launchKind }) => launchKind === 2).length} Classic · ${state.custom.launches.length + state.customV2.sources.length + state.router.launches.filter(({ launchKind }) => launchKind === 1).length} Custom`
+          : `${failedClaims} Guthaben konnten nicht gelesen werden`,
   );
   renderSummary();
 }
 
-async function syncWallet({ requestAccounts = false } = {}) {
+const refreshClaims = createRefreshQueue(refreshClaimsOnce);
+
+async function syncWallet({
+  requestAccounts = false,
+  expectedRevision = walletAuthorizationRevision,
+} = {}) {
   const method = requestAccounts ? "eth_requestAccounts" : "eth_accounts";
   const [accounts, chainId] = await Promise.all([
     request(method),
     request("eth_chainId"),
   ]);
-  state.account =
-    Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
+  if (expectedRevision !== walletAuthorizationRevision) return;
+  state.account = Array.isArray(accounts) ? accounts[0] ?? null : null;
   state.chainId = chainId;
   renderSummary();
-  if (state.account && chainId === MAINNET_CHAIN_ID) await refreshClaims();
+  if (requestAccounts && state.account) {
+    setStatus(
+      isTreasury(state.account)
+        ? "Wallet verbunden · Fees werden gesucht"
+        : "Reward Wallet auswählen",
+    );
+  }
+  if (
+    !state.account ||
+    state.chainId !== MAINNET_CHAIN_ID ||
+    !isTreasury(state.account)
+  )
+    return;
+  await refreshClaims();
+}
+
+async function chooseRewardWallet() {
+  setStatus("Reward Wallet in MetaMask auswählen");
+  await request("wallet_requestPermissions", [{ eth_accounts: {} }]);
+  await syncWallet();
+}
+
+async function requireActiveRewardWallet(expectedAccount = null) {
+  const revision = walletAuthorizationRevision;
+  const [accounts, chainId] = await Promise.all([
+    request("eth_accounts"),
+    request("eth_chainId"),
+  ]);
+  if (revision !== walletAuthorizationRevision)
+    throw new Error(
+      "Wallet oder Netzwerk wurde während der Prüfung geändert. Es wurde nichts gesendet.",
+    );
+  const activeAccount = Array.isArray(accounts) ? accounts[0] ?? null : null;
+  state.account = activeAccount;
+  state.chainId = chainId;
+  renderSummary();
+  if (
+    chainId !== MAINNET_CHAIN_ID ||
+    !activeAccount ||
+    !isTreasury(activeAccount) ||
+    (expectedAccount !== null &&
+      activeAccount.toLowerCase() !== expectedAccount.toLowerCase())
+  )
+    throw new Error(
+      "Aktive Reward Wallet oder Netzwerk hat sich geändert. Es wurde nichts gesendet.",
+    );
+  return activeAccount.toLowerCase();
 }
 
 async function switchToMainnet() {
   await request("wallet_switchEthereumChain", [{ chainId: MAINNET_CHAIN_ID }]);
-  state.chainId = await request("eth_chainId");
-  renderSummary();
-  await refreshClaims();
+  await syncWallet();
+  if (!state.account || !isTreasury(state.account))
+    setStatus("Reward Wallet auswählen");
 }
 
-async function waitForBatch(id) {
+async function waitForBatch(initialLock) {
+  let lock = initialLock;
+  const id = lock.batchId;
   const startedAt = Date.now();
   while (Date.now() - startedAt < 5 * 60 * 1000) {
-    const result = await request("wallet_getCallsStatus", [id]);
-    if (result?.status === 200) {
-      if (
-        result.atomic !== true ||
-        !Array.isArray(result.receipts) ||
-        result.receipts.some(({ status }) => status !== "0x1")
-      ) {
-        throw new Error("Der atomare Claim-Batch ist fehlgeschlagen");
-      }
-      return result;
+    let result;
+    try {
+      result = await request("wallet_getCallsStatus", [id]);
+    } catch {
+      await new Promise((resolve) => window.setTimeout(resolve, 3000));
+      continue;
     }
-    if (typeof result?.status === "number" && result.status >= 400)
+    let status;
+    try {
+      status = validatedAtomicBatchStatus(result, id, MAINNET_CHAIN_ID);
+    } catch {
+      await new Promise((resolve) => window.setTimeout(resolve, 3000));
+      continue;
+    }
+    if (status === 200) {
+      const proof = confirmedBatchReceiptProof(result, id, MAINNET_CHAIN_ID);
+      lock = {
+        ...lock,
+        phase: "confirmed",
+        receipts: proof.receipts.map((receipt) => ({
+          blockNumber: receipt.blockNumber.toString(),
+          blockHash: receipt.blockHash,
+          transactionHash: receipt.transactionHash,
+        })),
+        failureStatus: null,
+      };
+      if (!saveConfirmedBatchLock(lock, { expectedBatchId: id }))
+        throw new Error(
+          "Der bestätigte Claim-Batch konnte nicht sicher gespeichert werden. Claims bleiben gesperrt.",
+        );
+      return lock;
+    }
+    if (status === 400 || status === 500) {
+      clearConfirmedBatchLock(id);
       throw new Error("Der Claim-Batch wurde abgelehnt");
+    }
+    if (status >= 600) {
+      lock = {
+        ...lock,
+        phase: "manual",
+        failureStatus: status,
+      };
+      saveConfirmedBatchLock(lock, { expectedBatchId: id });
+      throw new Error(
+        "Der Wallet-Batch kann teilweise ausgeführt worden sein. Claims bleiben gesperrt.",
+      );
+    }
     await new Promise((resolve) => window.setTimeout(resolve, 3000));
   }
   throw new Error(
@@ -1333,8 +3059,92 @@ async function waitForBatch(id) {
   );
 }
 
-async function claimAll() {
+async function submitStoredBatchAndWait(initialLock) {
+  let lock = initialLock;
+  const id = lock.batchId;
+  try {
+    const result = await request("wallet_sendCalls", [lock.batch]);
+    const returnedId = normalizeBatchId(result);
+    if (returnedId.toLowerCase() !== id.toLowerCase())
+      throw new Error(
+        "MetaMask hat eine abweichende Batch-ID geliefert. Claims bleiben gesperrt.",
+      );
+  } catch (error) {
+    if (walletSendDefinitelyNotSubmitted(error)) {
+      clearConfirmedBatchLock(id);
+      throw error;
+    }
+    if (!walletSendDuplicateBatchId(error)) throw error;
+  }
+
+  lock = { ...lock, phase: "pending" };
+  if (!saveConfirmedBatchLock(lock, { expectedBatchId: id }))
+    throw new Error(
+      "Der Claim-Batch konnte nach der Wallet-Antwort nicht sicher gespeichert werden. Claims bleiben gesperrt.",
+    );
+  return waitForBatch(lock);
+}
+
+async function preflightWalletBatch(batch) {
+  await Promise.all(
+    batch.calls.map(({ to, data, value }) =>
+      request("eth_call", [
+        { from: batch.from, to, data, value },
+        "latest",
+      ]),
+    ),
+  );
+}
+
+async function preflightClaimBatch(claims) {
+  if (claims.length > MAX_BATCH_CALLS)
+    throw new Error(
+      `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`,
+    );
+  const batch = buildWalletSendCalls(state.account, claims);
+  await preflightWalletBatch(batch);
+  return batch;
+}
+
+function walletCallKey({ to, data, value }) {
+  return `${to.toLowerCase()}:${data.toLowerCase()}:${value.toLowerCase()}`;
+}
+
+async function walletRecognizesStoredBatch(lock) {
+  try {
+    const result = await request("wallet_getCallsStatus", [lock.batchId]);
+    validatedAtomicBatchStatus(result, lock.batchId, MAINNET_CHAIN_ID);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function validateStoredBatchForResubmission(lock) {
   await refreshClaims();
+  await requireActiveRewardWallet(lock.account);
+  const safetyError = claimSafetyError({ ignoreConfirmedBatch: true });
+  if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
+
+  const currentClaims = claimableClaims({ ignoreConfirmedBatch: true });
+  const currentCalls =
+    currentClaims.length === 0
+      ? []
+      : buildWalletSendCalls(lock.account, currentClaims).calls;
+  const currentCallKeys = new Set(currentCalls.map(walletCallKey));
+  if (lock.batch.calls.some((call) => !currentCallKeys.has(walletCallKey(call))))
+    throw new Error(
+      "Der gespeicherte Claim ist nicht mehr Teil des aktuell verifizierten Fee-Inventars. Es wurde nichts gesendet.",
+    );
+
+  await preflightWalletBatch(lock.batch);
+  await requireActiveRewardWallet(lock.account);
+}
+
+async function claimAll() {
+  const expectedAccount = await requireActiveRewardWallet();
+  await refreshClaims();
+  await requireActiveRewardWallet(expectedAccount);
   const safetyError = claimSafetyError();
   if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
   const claims = claimableClaims();
@@ -1345,13 +3155,34 @@ async function claimAll() {
   renderSummary();
 
   try {
-    setStatus(
-      `${claims.length} Claims werden in einer MetaMask-Bestätigung vorbereitet`,
-    );
-    const result = await request("wallet_sendCalls", [
-      buildWalletSendCalls(state.account, claims),
-    ]);
-    await waitForBatch(normalizeBatchId(result));
+    await withExclusiveClaimLease(async () => {
+      setStatus(
+        `${claims.length} Claims werden direkt vor MetaMask erneut simuliert`,
+      );
+      const batch = await preflightClaimBatch(claims);
+      await requireActiveRewardWallet(expectedAccount);
+      requireConfirmedBatchStorage();
+      const id = createAppBatchId();
+      const exactBatch = { ...batch, id };
+      const submissionLock = {
+        schema: CONFIRMED_BATCH_SCHEMA,
+        account: expectedAccount,
+        chainId: MAINNET_CHAIN_ID,
+        batchId: id,
+        batch: exactBatch,
+        phase: "submitting",
+        receipts: null,
+        failureStatus: null,
+      };
+      if (!saveConfirmedBatchLock(submissionLock, { requireEmpty: true }))
+        throw new Error(
+          "Die tabübergreifende Claim-Sperre konnte nicht gespeichert werden. Es wurde nichts gesendet.",
+        );
+      setStatus(
+        `${claims.length} Claims werden in einer MetaMask-Bestätigung vorbereitet`,
+      );
+      return submitStoredBatchAndWait(submissionLock);
+    });
     setStatus("Alle verfügbaren Fees wurden geclaimt");
     await refreshClaims();
   } catch (error) {
@@ -1371,14 +3202,63 @@ async function claimAll() {
   }
 }
 
+async function resumeStoredBatch() {
+  state.busy = true;
+  setError();
+  renderSummary();
+  try {
+    await withExistingClaimLease(async (lock) => {
+      if (!["submitting", "pending"].includes(lock.phase))
+        throw new Error("Dieser Claim-Batch kann nicht erneut eingereicht werden");
+      await requireActiveRewardWallet(lock.account);
+      if (lock.phase === "pending" || (await walletRecognizesStoredBatch(lock)))
+        return waitForBatch(lock);
+      await validateStoredBatchForResubmission(lock);
+      setStatus("Der gespeicherte Claim-Batch wird mit derselben ID fortgesetzt");
+      return submitStoredBatchAndWait(lock);
+    });
+    setStatus("Alle verfügbaren Fees wurden geclaimt");
+    await refreshClaims();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Der gespeicherte Claim-Batch konnte nicht fortgesetzt werden";
+    setError(
+      /reject|denied|cancel/i.test(message)
+        ? "Claim in MetaMask abgebrochen"
+        : message,
+    );
+    setStatus("Claims wurden sicher gestoppt");
+  } finally {
+    state.busy = false;
+    renderSummary();
+  }
+}
+
 async function handlePrimaryAction() {
   try {
     setError();
+    if (DEMO_MODE) {
+      setStatus(
+        "QA-Vorschau: In der echten Ansicht öffnet dieser Button genau eine MetaMask-Bestätigung",
+      );
+      return;
+    }
     state.busy = true;
     renderSummary();
     if (!state.account) await syncWallet({ requestAccounts: true });
     else if (state.chainId !== MAINNET_CHAIN_ID) await switchToMainnet();
-    else if (isTreasury(state.account)) await claimAll();
+    else if (!isTreasury(state.account)) await chooseRewardWallet();
+    else if (isTreasury(state.account)) {
+      if (
+        state.confirmedBatch &&
+        !state.confirmedBatch.invalid &&
+        ["submitting", "pending"].includes(state.confirmedBatch.phase)
+      )
+        await resumeStoredBatch();
+      else await claimAll();
+    }
   } catch (error) {
     const message =
       error instanceof Error
@@ -1395,8 +3275,31 @@ async function handlePrimaryAction() {
   }
 }
 
+window.addEventListener("storage", (event) => {
+  if (DEMO_MODE || event.key !== CONFIRMED_BATCH_STORAGE_KEY) return;
+  const stored = loadConfirmedBatchLock();
+  if (stored) {
+    state.confirmedBatch = stored;
+    renderSummary();
+    return;
+  }
+  state.confirmedBatch = null;
+  state.busy = true;
+  renderSummary();
+  refreshClaims()
+    .catch(() => undefined)
+    .finally(() => {
+      state.busy = false;
+      renderSummary();
+    });
+});
+
 elements.action.addEventListener("click", handlePrimaryAction);
 elements.refresh.addEventListener("click", async () => {
+  if (DEMO_MODE) {
+    setStatus("QA-Vorschau wurde neu geladen · keine Wallet-Aktion");
+    return;
+  }
   state.busy = true;
   renderSummary();
   try {
@@ -1411,15 +3314,132 @@ elements.refresh.addEventListener("click", async () => {
   }
 });
 
-window.ethereum?.on?.("accountsChanged", () =>
-  syncWallet().catch(() => undefined),
-);
-window.ethereum?.on?.("chainChanged", () =>
-  syncWallet().catch(() => undefined),
-);
-
-renderSummary();
-syncWallet().catch(() => {
-  setStatus("MetaMask verbinden, um offene Fees zu lesen");
+function seedDemoState() {
+  state.account = TREASURY;
+  state.chainId = MAINNET_CHAIN_ID;
+  state.blockTag = "0x189f510";
+  state.capability = "ready";
+  for (const hook of HOOKS) {
+    state.hooks.set(hook.id, {
+      actualCodeHash: hook.runtimeCodeHash,
+      recipient: TREASURY,
+      verified: true,
+    });
+  }
+  const demoAmounts = new Map([
+    ["classic-v3", 3_831_314_566_506_772n],
+    ["classic-v2", 227_307_871_565_013_620n],
+    ["classic-v1", 46_446_511_178_969n],
+    ["stock-current-nvdaon", 84_200_000_000_000_000n],
+  ]);
+  for (const claim of CLAIMS) {
+    state.claims.set(claim.id, {
+      amount: demoAmounts.get(claim.id) ?? 0n,
+      recipient: TREASURY,
+      recipientMatches: true,
+      status: "ready",
+    });
+  }
+  state.custom = {
+    status: "retired",
+    registryVerified: true,
+    launches: [],
+    error: null,
+  };
+  state.customV2 = {
+    status: "hold",
+    release: null,
+    sources: [],
+    error: null,
+  };
+  state.classic = {
+    status: "ready",
+    launchersVerified: true,
+    launches: [],
+    error: null,
+  };
+  const fadeProfile = ROUTER_CUSTOM_CLAIM_PROFILES.nativeAccumulatorV1;
+  const fadeBinding = fadeProfile.bindings[0];
+  const fadeClaim = {
+    id: `router-custom:${fadeBinding.launchId}`,
+    launchId: fadeBinding.launchId,
+    token: "0x69d278968abf120f878f2e1e016ab615d3686c19",
+    hook: fadeBinding.source,
+    runtimeCodeHash: fadeBinding.runtimeCodeHash,
+    launchKind: 1,
+    kind: "custom",
+    origin: "launch-stamp-router",
+    address: fadeBinding.source,
+    unit: "ETH",
+    decimals: 18,
+    provenanceVerified: true,
+    runtimeVerified: true,
+    claimMode: "manual",
+    claimProfile: fadeProfile.id,
+    readData: fadeProfile.accrued,
+    claimData: fadeProfile.claim,
+    claimBindingVerified: true,
+    recipientMatches: true,
+    amount: 28_054_452_170_132_560n,
+    status: "ready",
+  };
+  const pcanProfile = ROUTER_CUSTOM_CLAIM_PROFILES.dualCurrencyRedeemerV1;
+  const pcanBinding = pcanProfile.bindings[0];
+  const pcanClaim = {
+    id: `router-custom:${pcanBinding.launchId}`,
+    launchId: pcanBinding.launchId,
+    token: "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce",
+    hook: pcanBinding.source,
+    runtimeCodeHash: pcanBinding.runtimeCodeHash,
+    launchKind: 1,
+    kind: "custom",
+    origin: "launch-stamp-router",
+    address: pcanBinding.source,
+    unit: "ETH",
+    decimals: 18,
+    provenanceVerified: true,
+    runtimeVerified: true,
+    claimMode: "manual",
+    claimProfile: pcanProfile.id,
+    claimData: pcanProfile.claim,
+    claimBindingVerified: true,
+    recipientMatches: true,
+    amount: 500_802_908_283_517n,
+    secondaryAsset: "0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce",
+    secondaryAmount: 2_740_004_896_936_423_458_238n,
+    secondaryUnit: pcanProfile.secondaryUnit,
+    secondaryDecimals: pcanProfile.secondaryDecimals,
+    status: "ready",
+  };
+  state.router = {
+    status: "ready",
+    verified: true,
+    finalizedBlock: 25_827_076n,
+    launches: [fadeClaim, pcanClaim],
+    error: null,
+  };
+  state.claims.set(fadeClaim.id, {
+    amount: fadeClaim.amount,
+    recipientMatches: true,
+    status: "ready",
+  });
+  state.claims.set(pcanClaim.id, {
+    amount: pcanClaim.amount,
+    secondaryAmount: pcanClaim.secondaryAmount,
+    recipientMatches: true,
+    status: "ready",
+  });
   renderSummary();
-});
+  elements.status.textContent =
+    "Sichere QA-Vorschau · Werte sind Testdaten · keine Wallet-Aktion";
+}
+
+if (DEMO_MODE) {
+  seedDemoState();
+} else {
+  renderSummary();
+  syncWallet().catch(() => {
+    setStatus("MetaMask verbinden");
+    renderSummary();
+  });
+}

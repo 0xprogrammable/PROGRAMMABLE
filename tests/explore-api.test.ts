@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ValuedExploreEntry } from "../lib/explore-financial-data";
+import { SHARD_PUBLIC_PRESENTATION_V1 } from
+  "../lib/custom-launch/router-trade-adapters-v1";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
@@ -297,6 +299,113 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(response.headers.get("x-programmable-router-read-status")).toBe(
       "current",
     );
+  });
+
+  it("keeps SHARD in Custom Explore while excluding the three non-public launch identities", async () => {
+    const routerEntry = (
+      tokenAddress: `0x${string}`,
+      launchId: `0x${string}`,
+      name: string,
+      symbol: string,
+      stampHash = customGraphExploreEntry.launchStampProvenance.stampHash,
+    ): ExploreEntry => {
+      const launchStampProvenance = {
+        ...customGraphExploreEntry.launchStampProvenance,
+        launchId,
+        stampHash,
+        tokenProof: {
+          ...customGraphExploreEntry.launchStampProvenance.tokenProof,
+          tokenAddress,
+          launchId,
+          stampHash,
+        },
+      };
+      return {
+        ...customGraphExploreEntry,
+        id: `1:${tokenAddress.toLowerCase()}`,
+        tokenAddress,
+        name,
+        symbol,
+        launchStampProvenance,
+        launchCategoryProvenance: {
+          ...customGraphExploreEntry.launchCategoryProvenance,
+          launchId,
+          stampHash,
+        },
+      };
+    };
+    const shard = routerEntry(
+      "0xFAce73B63787960282f2d4682d3752Beb25271Ad",
+      "0xe253f3bd22fcb3d6cb20b9d408287e30f0f1aeeb56426b779425c35fd6411de9",
+      "Shard",
+      "SHARD",
+      "0x55fbb83ac4599303b146cb4a2f7c1c906d8b3e9fe4fbbe5bf9cf44e905cc3ce0",
+    );
+    mocks.readRouter.mockResolvedValue([
+      shard,
+      routerEntry(
+        "0xD0f3E1e5C985D2b37a66Cf07feCB0d8191c0445F",
+        "0x786d3d5cdd0c6ba81621eb01fbcc6b5912556a2d7dbe886431346460afeee197",
+        "Renamed clean-room launch",
+        "PCR2",
+      ),
+      routerEntry(
+        "0x69D278968AbF120F878F2E1E016Ab615D3686c19",
+        "0x6d6ed0e1e69a7cd6afa177e3454c9e32eed61cbd3f855ee56aff1915a6776fc2",
+        "Renamed example launch",
+        "FADE",
+      ),
+      routerEntry(
+        "0x9DEeB39D2590b0cAD5fc473F755C5F97Dcc8f7cE",
+        "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+        "Renamed canary launch",
+        "PCAN",
+      ),
+    ]);
+
+    const response = await GET(
+      request("sort=newest&page=1&limit=100&model=custom"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.tokens).toHaveLength(1);
+    expect(body.tokens[0]).toMatchObject({
+      tokenAddress: shard.tokenAddress,
+      name: "Shard",
+      symbol: "SHARD",
+      description: SHARD_PUBLIC_PRESENTATION_V1.description,
+      imageUrl: "/brand/projects/shard-token-v1.png",
+      links: SHARD_PUBLIC_PRESENTATION_V1.links,
+    });
+    expect(body.catalog).toMatchObject({
+      identityCount: TOKEN_COUNT + 1,
+      routerStamp: {
+        verifiedIdentityCount: 4,
+        projectedIdentityCount: 1,
+      },
+    });
+    expect(mocks.readDex.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({
+        tokenAddress: shard.tokenAddress,
+        description: SHARD_PUBLIC_PRESENTATION_V1.description,
+        imageUrl: SHARD_PUBLIC_PRESENTATION_V1.imageUrl,
+        links: SHARD_PUBLIC_PRESENTATION_V1.links,
+      }),
+    ]);
+
+    const withSocials = await json(await GET(
+      request("sort=newest&page=1&limit=100&model=custom&socials=yes"),
+    ));
+    expect(withSocials.total).toBe(1);
+    expect(withSocials.tokens[0].tokenAddress).toBe(shard.tokenAddress);
+
+    const withoutSocials = await json(await GET(
+      request("sort=newest&page=1&limit=100&model=custom&socials=no"),
+    ));
+    expect(withoutSocials.total).toBe(0);
+    expect(withoutSocials.tokens).toEqual([]);
   });
 
   it("filters Classic and Custom launch categories before pagination", async () => {

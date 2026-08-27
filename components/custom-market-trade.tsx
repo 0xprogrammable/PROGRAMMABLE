@@ -73,7 +73,25 @@ function currentUnixSeconds() {
 }
 
 function customMarketLabel(market: CustomMarket) {
-  return `${market.marketId} · ${market.kind}`;
+  return `${assetLabel(market.baseAsset)} / ${assetLabel(market.quoteAsset)}`;
+}
+
+function customTradeSideOptions(
+  capability: CustomMarket["tradeCapability"] | undefined,
+): readonly DiscoverableMarketTradeSideV1[] {
+  const supported = capability?.supportedSides ?? [];
+  return supported.includes("quote-to-base")
+    ? [
+        "quote-to-base",
+        ...supported.filter((side) => side !== "quote-to-base"),
+      ]
+    : supported;
+}
+
+function preferredCustomTradeSide(
+  capability: CustomMarket["tradeCapability"] | undefined,
+) {
+  return customTradeSideOptions(capability)[0] ?? "base-to-quote";
 }
 
 function CustomMarketSelector({
@@ -155,7 +173,7 @@ export function CustomMarketTrade({
     ?? null;
   const capability = market?.tradeCapability;
   const [selectedSide, setSelectedSide] = useState<DiscoverableMarketTradeSideV1>(
-    capability?.supportedSides[0] ?? "base-to-quote",
+    preferredCustomTradeSide(capability),
   );
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState(
@@ -178,9 +196,10 @@ export function CustomMarketTrade({
   if (market === null || capability === undefined) return null;
   const activeMarket = market;
   const activeCapability = capability;
+  const sideOptions = customTradeSideOptions(activeCapability);
   const side = activeCapability.supportedSides.includes(selectedSide)
     ? selectedSide
-    : activeCapability.supportedSides[0];
+    : sideOptions[0];
   if (side === undefined) return null;
   const binding = activeCapability.sideBindings.find((candidate) => candidate.side === side);
   if (binding === undefined) return null;
@@ -360,7 +379,7 @@ export function CustomMarketTrade({
             (candidate) => candidate.marketId === nextMarketId,
           )?.tradeCapability;
           setMarketId(nextMarketId);
-          setSelectedSide(nextCapability?.supportedSides[0] ?? "base-to-quote");
+          setSelectedSide(preferredCustomTradeSide(nextCapability));
           if (nextCapability) {
             setSlippage((current) => customTradeSlippagePercent(
               nextCapability.slippagePolicy.maximumSlippageBps,
@@ -376,7 +395,7 @@ export function CustomMarketTrade({
         role="group"
         aria-label="Trade direction"
       >
-        {capability.supportedSides.map((candidate) => {
+        {sideOptions.map((candidate) => {
           const candidateBinding = capability.sideBindings.find((item) => item.side === candidate)!;
           const from = candidateBinding.inputAssetId === market.baseAsset.assetId
             ? assetLabel(market.baseAsset) : assetLabel(market.quoteAsset);

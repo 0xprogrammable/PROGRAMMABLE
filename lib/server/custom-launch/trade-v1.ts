@@ -18,7 +18,7 @@ import {
   resolveRouterTradeAdapterV1,
   routerTradeAdapterForProjectIdV1,
   type RouterTradeAdapterV1,
-} from "../../custom-launch/router-trade-adapter-v1";
+} from "../../custom-launch/router-trade-adapters-v1";
 import {
   CUSTOM_TRADE_RESPONSE_SCHEMA_V1,
   CustomMarketTradeInputErrorV1,
@@ -97,20 +97,10 @@ async function assertRouterAdapterRuntimeV1(
   client: CustomMarketTradeRuntimeClientV1,
   adapter: RouterTradeAdapterV1,
 ) {
-  const targets = [
-    {
-      label: "FADE token",
-      address: getAddress(adapter.tokenAddress),
-      runtimeCodeKeccak256: adapter.tokenRuntimeCodeKeccak256,
-      runtimeCodeSha256: adapter.tokenRuntimeCodeSha256,
-    },
-    {
-      label: "FADE hook",
-      address: getAddress(adapter.hookAddress),
-      runtimeCodeKeccak256: adapter.hookRuntimeCodeKeccak256,
-      runtimeCodeSha256: adapter.hookRuntimeCodeSha256,
-    },
-  ] as const;
+  const targets = adapter.runtimeTargets.map((target) => ({
+    ...target,
+    address: getAddress(target.address),
+  }));
   const codes = await Promise.all(targets.map(({ address }) =>
     client.getCode({ address })));
   for (let index = 0; index < targets.length; index += 1) {
@@ -307,10 +297,9 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
     });
     const matches = entries.flatMap((entry) => {
       const adapter = resolveRouterTradeAdapterV1(entry);
-      return adapter === null ? [] : [adapter];
+      return adapter?.projectId === input.request.projectId ? [adapter] : [];
     });
-    if (matches.length !== 1
-      || matches[0]!.projectId !== input.request.projectId) {
+    if (matches.length !== 1) {
       throw new CustomMarketTradeUnavailableErrorV1(
         "The Router Custom project is not an exact finalized adapter",
       );

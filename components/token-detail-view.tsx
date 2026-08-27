@@ -49,6 +49,7 @@ import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
+import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 import {
   validatePreparedBondingGraduationResponse,
   validatePreparedTradeResponse,
@@ -290,22 +291,6 @@ function parseUniswapV4Pool(
     ...(tick === undefined ? {} : { tick }),
     feeTierPips,
   };
-}
-
-function safeImageUrl(value: unknown) {
-  if (typeof value !== "string") return undefined;
-
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      url.hostname
-      ? value
-      : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function parseTokenLink(value: unknown): TokenLink | null {
@@ -552,7 +537,7 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     links,
     description:
       typeof value.description === "string" ? value.description : undefined,
-    imageUrl: safeImageUrl(value.imageUrl),
+    imageUrl: safePublicImageUrl(value.imageUrl),
     uniswapV4Pool: uniswapV4Pool ?? undefined,
     ...(platformFeePolicy ? { platformFeePolicy } : {}),
   };
@@ -775,7 +760,7 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
     ...(typeof value.description === "string"
       ? { description: value.description }
       : {}),
-    ...(safeImageUrl(value.imageUrl)
+    ...(safePublicImageUrl(value.imageUrl)
       ? { imageUrl: value.imageUrl as string }
       : {}),
     links: links as TokenLink[],

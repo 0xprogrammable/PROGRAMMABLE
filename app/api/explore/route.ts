@@ -22,6 +22,11 @@ import {
   ROUTER_CUSTOM_LAUNCH_SOURCE,
 } from "../../../lib/alchemy/router-custom-public.server";
 import { parseExploreSort } from "../../../lib/onchain/query";
+import {
+  publicExploreCatalogEntriesV1,
+  publicExplorePresentationEntryV1,
+} from
+  "../../../lib/public-explore-catalog-v1";
 import { safeOperationalRpcError } from
   "../../../lib/onchain/operational-rpc-failover.server";
 import { readProductionCustomExploreDirectoryV1 } from
@@ -429,14 +434,20 @@ export async function GET(request: NextRequest) {
       : catalog!.asOfBlockHash;
     const identityGeneratedAt = catalog?.generatedAt ??
       acceptedRouterSnapshot!.generatedAt;
+    const publicIdentityEntries = publicExploreCatalogEntriesV1(
+      identityEntries,
+    );
+    const presentedPublicEntries = publicIdentityEntries.map(
+      publicExplorePresentationEntryV1,
+    );
     const identityCommitment = catalog === null
       ? canonicalSha256("programmable.public-identity-fallback.v1", {
           chainId: 1,
           launchSource: ROUTER_CUSTOM_LAUNCH_SOURCE,
           asOfBlock: identityAsOfBlock,
-          entries: identityEntries,
+          entries: publicIdentityEntries,
         })
-      : envioClassicV3IdentityCommitmentV1(catalog, identityEntries);
+      : envioClassicV3IdentityCommitmentV1(catalog, publicIdentityEntries);
     const customStatus =
       registryCustomStatus === "current" && routerCustomStatus === "current"
         ? "current" as const
@@ -449,7 +460,7 @@ export async function GET(request: NextRequest) {
       registryCustomCurrent: registryCustomStatus === "current",
       routerCustomCurrent: routerAvailable,
     });
-    const projectedRouterIdentityCount = identityEntries.filter(
+    const projectedRouterIdentityCount = publicIdentityEntries.filter(
       (entry) => entry.exploreKind === "token" &&
         entry.launchCategoryProvenance.source === ROUTER_CUSTOM_LAUNCH_SOURCE,
     ).length;
@@ -472,7 +483,7 @@ export async function GET(request: NextRequest) {
     let marketQualifiedEntryCount = 0;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
       const filtered = filterExploreEntries(
-        identityEntries,
+        presentedPublicEntries,
         options.query,
         options.socials,
         options.model,
@@ -492,7 +503,10 @@ export async function GET(request: NextRequest) {
         model: null,
       });
     } else {
-      const identityPage = paginateExploreEntriesV1(identityEntries, options);
+      const identityPage = paginateExploreEntriesV1(
+        presentedPublicEntries,
+        options,
+      );
       const valued = await readDexscreenerExploreEntriesV1(
         identityPage.tokens,
         { signal: readSignal, deadlineMs },
@@ -500,7 +514,9 @@ export async function GET(request: NextRequest) {
       marketRead = valued.marketRead;
       paginated = { ...identityPage, tokens: [...valued.entries] };
     }
-    const pageEntries = paginated.tokens as ValuedExploreEntry[];
+    const pageEntries = paginated.tokens.map(
+      publicExplorePresentationEntryV1,
+    ) as ValuedExploreEntry[];
     const dataQuality = buildExploreDataQuality({
       entries: pageEntries,
       generatedAt: identityGeneratedAt,
@@ -539,7 +555,7 @@ export async function GET(request: NextRequest) {
           lastIndexedAt: identityGeneratedAt,
           asOfBlock: identityAsOfBlock,
           asOfBlockHash: identityAsOfBlockHash,
-          identityCount: identityEntries.length,
+          identityCount: publicIdentityEntries.length,
           identityCommitment,
           completeness: {
             ...(catalog?.completeness ?? {

@@ -16,6 +16,16 @@ const ROUTER_TOKEN = "0x6969696969696969696969696969696969696969";
 const ROUTER_LAUNCH_ID = `0x${"ab".repeat(32)}`;
 const ROUTER_STAMP_HASH = `0x${"cd".repeat(32)}`;
 const POOL_MANAGER = "0x000000000004444c5dc75cb358380d2e3de08a90";
+const SHARD_TOKEN = [
+  "0xface73b63787960282f2",
+  "d4682d3752beb25271ad",
+].join("");
+const SHARD_POOL =
+  "0x9c74d6183b1ee526a62db562a81da3bf579b5bd6bff5066ae985265a7028e010";
+const SHARD_PROJECT =
+  "sha256:98f170ed0fa4e98f5b7e1901905132c24082f54f37f6176133be54fd039959a3";
+const SHARD_CAPABILITY =
+  "sha256:6c562e4c2f52829d6c5fdf806ab7deb5a9a37ac549e8137a17160d0dd8436e6a";
 
 function entry(index) {
   const tokenAddress = index === 0
@@ -235,6 +245,39 @@ function explore(sort) {
   };
 }
 
+function shardTradeDetail() {
+  return {
+    status: "ready",
+    token: { tokenAddress: SHARD_TOKEN },
+    customProject: null,
+    routerTradeProject: {
+      customProjectId: SHARD_PROJECT,
+      markets: [{
+        marketId: "shard-eth-v4",
+        kind: "uniswap-v4-hooked-pool",
+        status: "active",
+        poolId: SHARD_POOL,
+        baseAsset: {
+          symbol: "SHARD",
+          identity: { value: SHARD_TOKEN },
+        },
+        quoteAsset: {
+          symbol: "ETH",
+          identity: {
+            value: "0x0000000000000000000000000000000000000000",
+          },
+        },
+        tradeCapability: {
+          supportedSides: ["base-to-quote", "quote-to-base"],
+          hookDataPolicy: { kind: "empty", data: "0x" },
+          tradeCapabilityBindingHash: SHARD_CAPABILITY,
+        },
+      }],
+    },
+    catalog: catalog(),
+  };
+}
+
 function response(body, extraHeaders = {}, omittedHeaders = []) {
   const headers = new Headers({
     "content-type": "application/json",
@@ -270,12 +313,14 @@ function stagedFetch(
     } else if (url.pathname === "/api/explore") {
       body = explore(url.searchParams.get("sort"));
     } else if (url.pathname === "/api/explore/token") {
-      body = {
-        status: "ready",
-        token: entry(0),
-        customProject: null,
-        catalog: catalog(),
-      };
+      body = url.searchParams.get("address")?.toLowerCase() === SHARD_TOKEN
+        ? shardTradeDetail()
+        : {
+            status: "ready",
+            token: entry(0),
+            customProject: null,
+            catalog: catalog(),
+          };
     } else if (url.pathname === "/api/explore/token/chart") {
       body = {
         schemaVersion: "programmable.market-chart.v1",
@@ -609,6 +654,23 @@ test("staged smoke accepts an exact Router Custom token identity", async () => {
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
 });
 
+test("staged smoke requires the exact SHARD Router trade project", async () => {
+  const output = [];
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(),
+    appendOutput: (...args) => output.push(args),
+  });
+
+  assert.equal(result.shardTradeStatus, "verified");
+  assert.match(output[0][1], /shard_trade_status=verified/u);
+});
+
 test("staged smoke accepts a bounded Router last-known-good identity", async () => {
   const result = await runStagedStaticDexscreenerSmokeV1({
     environment: {
@@ -774,7 +836,107 @@ test("staged smoke accepts monotonic Envio progress with stable identities", asy
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
 });
 
+test("staged smoke restarts the full Explore snapshot after ranking-boundary drift", async () => {
+  let exploreReads = 0;
+  let detailReads = 0;
+  const waits = [];
+  const advancedCommitment = `sha256:${"dd".repeat(32)}`;
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(({ body, url }) => {
+      if (url.pathname === "/api/explore") {
+        exploreReads += 1;
+        return exploreReads >= 2
+          ? {
+              ...body,
+              catalog: {
+                ...body.catalog,
+                identityCommitment: advancedCommitment,
+              },
+            }
+          : body;
+      }
+      if (url.pathname === "/api/explore/token") {
+        detailReads += 1;
+        return {
+          ...body,
+          catalog: {
+            ...body.catalog,
+            identityCommitment: advancedCommitment,
+          },
+        };
+      }
+      return body;
+    }),
+    appendOutput: () => undefined,
+    waitForCatalogConvergence: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+  });
+
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+  assert.equal(exploreReads, 4);
+  assert.equal(detailReads, 1);
+  assert.deepEqual(waits, [16_000]);
+});
+
+test("staged smoke restarts list and detail after detail-boundary drift", async () => {
+  let advanced = false;
+  let exploreReads = 0;
+  let detailReads = 0;
+  const waits = [];
+  const advancedCommitment = `sha256:${"dd".repeat(32)}`;
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(({ body, url }) => {
+      if (url.pathname === "/api/explore") {
+        exploreReads += 1;
+        return advanced
+          ? {
+              ...body,
+              catalog: {
+                ...body.catalog,
+                identityCommitment: advancedCommitment,
+              },
+            }
+          : body;
+      }
+      if (url.pathname === "/api/explore/token") {
+        detailReads += 1;
+        advanced = true;
+        return {
+          ...body,
+          catalog: {
+            ...body.catalog,
+            identityCommitment: advancedCommitment,
+          },
+        };
+      }
+      return body;
+    }),
+    appendOutput: () => undefined,
+    waitForCatalogConvergence: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+  });
+
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+  assert.equal(exploreReads, 4);
+  assert.equal(detailReads, 2);
+  assert.deepEqual(waits, [16_000]);
+});
+
 test("staged smoke rejects a mixed Explore identity commitment", async () => {
+  let exploreReads = 0;
+  const waits = [];
   await assert.rejects(
     runStagedStaticDexscreenerSmokeV1({
       environment: {
@@ -782,9 +944,10 @@ test("staged smoke rejects a mixed Explore identity commitment", async () => {
         VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
         GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
       },
-      fetchImpl: stagedFetch(({ body, url }) =>
-        url.pathname === "/api/explore" &&
-          url.searchParams.get("sort") === "newest"
+      fetchImpl: stagedFetch(({ body, url }) => {
+        if (url.pathname === "/api/explore") exploreReads += 1;
+        return url.pathname === "/api/explore" &&
+            url.searchParams.get("sort") === "newest"
           ? {
               ...body,
               catalog: {
@@ -792,14 +955,23 @@ test("staged smoke rejects a mixed Explore identity commitment", async () => {
                 identityCommitment: `sha256:${"dd".repeat(32)}`,
               },
             }
-          : body),
+          : body;
+      }),
       appendOutput: () => undefined,
+      waitForCatalogConvergence: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
     }),
-    /catalog changed/u,
+    /catalog changed.*3 bounded attempts/u,
   );
+  assert.equal(exploreReads, 6);
+  assert.deepEqual(waits, [16_000, 16_000]);
 });
 
 test("staged smoke rejects a token detail bound to the wrong pool", async () => {
+  let exploreReads = 0;
+  let detailReads = 0;
+  const waits = [];
   await assert.rejects(
     runStagedStaticDexscreenerSmokeV1({
       environment: {
@@ -807,17 +979,90 @@ test("staged smoke rejects a token detail bound to the wrong pool", async () => 
         VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
         GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
       },
-      fetchImpl: stagedFetch(({ body, url }) =>
-        url.pathname === "/api/explore/token"
+      fetchImpl: stagedFetch(({ body, url }) => {
+        if (url.pathname === "/api/explore") exploreReads += 1;
+        if (url.pathname === "/api/explore/token") detailReads += 1;
+        return url.pathname === "/api/explore/token"
           ? {
               ...body,
               token: { ...body.token, poolId: `0x${"ee".repeat(32)}` },
             }
-          : body),
+          : body;
+      }),
       appendOutput: () => undefined,
+      waitForCatalogConvergence: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
     }),
     /detail identity or market contract/u,
   );
+  assert.equal(exploreReads, 2);
+  assert.equal(detailReads, 1);
+  assert.deepEqual(waits, []);
+});
+
+test("staged smoke never retries malformed detail headers or valuation", async () => {
+  const scenarios = [
+    {
+      transform: ({ body, url }) => url.pathname === "/api/explore/token"
+        ? {
+            ...body,
+            token: {
+              ...body.token,
+              valuation: {
+                status: "available",
+                metric: "fdv",
+                valueWad: "1",
+              },
+            },
+          }
+        : body,
+      transformHeaders: ({ extraHeaders, omittedHeaders }) => ({
+        extraHeaders,
+        omittedHeaders,
+      }),
+    },
+    {
+      transform: ({ body }) => body,
+      transformHeaders: ({ extraHeaders, omittedHeaders, url }) => ({
+        extraHeaders: url.pathname === "/api/explore/token"
+          ? { ...extraHeaders, "x-programmable-read-source": "invalid" }
+          : extraHeaders,
+        omittedHeaders,
+      }),
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    let exploreReads = 0;
+    let detailReads = 0;
+    const waits = [];
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: stagedFetch(
+          (input) => {
+            if (input.url.pathname === "/api/explore") exploreReads += 1;
+            if (input.url.pathname === "/api/explore/token") detailReads += 1;
+            return scenario.transform(input);
+          },
+          scenario.transformHeaders,
+        ),
+        appendOutput: () => undefined,
+        waitForCatalogConvergence: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+      /detail identity or market contract/u,
+    );
+    assert.equal(exploreReads, 2);
+    assert.equal(detailReads, 1);
+    assert.deepEqual(waits, []);
+  }
 });
 
 test("staged smoke rejects a partial ranking with no qualified first-page row", async () => {

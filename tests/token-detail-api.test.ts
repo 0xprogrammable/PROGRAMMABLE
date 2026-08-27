@@ -73,8 +73,14 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
 }));
 
 import { GET } from "../app/api/explore/token/route";
+import {
+  SHARD_PUBLIC_PRESENTATION_V1,
+  SHARD_ROUTER_TRADE_PROJECT_ID,
+} from
+  "../lib/custom-launch/router-trade-adapters-v1";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 import { fadeRouterTradeEntry } from "./fade-router-trade-fixture";
+import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
 
@@ -412,6 +418,17 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     expect(response.status).toBe(200);
     expect(body.token.tokenAddress).toBe(fadeRouterTradeEntry.tokenAddress);
     expect(body.customProject).toBeNull();
+    expect(body.catalog).toMatchObject({
+      identityCount: 1,
+      routerStamp: {
+        verifiedIdentityCount: 1,
+        projectedIdentityCount: 0,
+      },
+    });
+    expect(mocks.identityCommitment).toHaveBeenCalledWith(
+      expect.any(Object),
+      [entry],
+    );
     expect(body.routerTradeProject).toMatchObject({
       customProjectId:
         "sha256:e7bf1306fc05ef655e3ebebe9566ff86c74b4de21465c3d836cbf3f497865c2d",
@@ -421,6 +438,53 @@ describe("Token detail static identity and Dexscreener market contract", () => {
         tradeCapability: {
           tradeCapabilityBindingHash:
             "sha256:2bf52e6d8c476c5d7aa0cbb4724ef9e2e9e132b60c4ffdb5cb9522f89749bbff",
+          hookDataPolicy: { kind: "empty", data: "0x" },
+        },
+      }],
+    });
+  });
+
+  it("returns the exact reviewed SHARD project for the finalized Router stamp", async () => {
+    mocks.readRouter.mockResolvedValue([shardRouterTradeEntry]);
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...shardRouterTradeEntry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      marketRead: marketRead("unavailable"),
+    });
+
+    const response = await GET(request(shardRouterTradeEntry.tokenAddress));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.token.tokenAddress).toBe(shardRouterTradeEntry.tokenAddress);
+    expect(body.token).toMatchObject({
+      description: SHARD_PUBLIC_PRESENTATION_V1.description,
+      imageUrl: "/brand/projects/shard-token-v1.png",
+      links: SHARD_PUBLIC_PRESENTATION_V1.links,
+    });
+    expect(body.customProject).toBeNull();
+    expect(body.catalog).toMatchObject({
+      identityCount: 2,
+      routerStamp: {
+        verifiedIdentityCount: 1,
+        projectedIdentityCount: 1,
+      },
+    });
+    expect(mocks.identityCommitment).toHaveBeenCalledWith(
+      expect.any(Object),
+      [entry, shardRouterTradeEntry],
+    );
+    expect(body.routerTradeProject).toMatchObject({
+      customProjectId: SHARD_ROUTER_TRADE_PROJECT_ID,
+      markets: [{
+        marketId: "shard-eth-v4",
+        poolId: shardRouterTradeEntry.poolId,
+        baseAsset: { symbol: "SHARD" },
+        quoteAsset: { symbol: "ETH" },
+        tradeCapability: {
+          supportedSides: ["base-to-quote", "quote-to-base"],
           hookDataPolicy: { kind: "empty", data: "0x" },
         },
       }],

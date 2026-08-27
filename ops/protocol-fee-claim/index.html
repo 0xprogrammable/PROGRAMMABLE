@@ -25,63 +25,74 @@
       </header>
 
       <section class="content" aria-labelledby="claim-title">
-        <div class="intro-grid">
-          <div>
-            <p class="eyebrow">Privates Claim-Fenster</p>
-            <h1 id="claim-title">Alle Fees<br />claimen</h1>
-          </div>
+        <div class="hero">
+          <p class="eyebrow">Fee Claim</p>
+          <h1 id="claim-title">Alles claimen.</h1>
           <p class="intro">
-            Neue Classic- und Custom-Launches erscheinen bei jedem Scan
-            automatisch. Stock bleibt auf den bestehenden Assets.
+            Reward Wallet verbinden. Offene Fees werden automatisch gefunden.
           </p>
         </div>
 
         <div class="total-line" aria-label="Offene Gebühren">
-          <span data-claim-count>0 Claims</span>
+          <span>Offen</span>
           <strong data-total>0 ETH</strong>
-        </div>
-
-        <ul
-          class="claim-list"
-          data-claim-rows
-          aria-label="Programmable Feequellen"
-        ></ul>
-
-        <div class="meta-grid">
-          <div>
-            <span>Wallet</span>
-            <strong data-account>Nicht verbunden</strong>
-          </div>
-          <div>
-            <span>Bestätigung</span>
-            <strong data-batch-mode>Batch wird geprüft</strong>
-          </div>
-          <button class="refresh" type="button" data-refresh disabled>
-            Nur scannen
-          </button>
+          <small data-claim-count>Noch nicht gescannt</small>
         </div>
 
         <button class="primary" type="button" data-action>
-          <strong data-action-label>Wallet verbinden</strong>
-          <span data-action-detail>MetaMask · Programmable Treasury</span>
+          <strong data-action-label>MetaMask verbinden</strong>
+          <span data-action-detail>Reward Wallet · endet 376C</span>
         </button>
 
         <p class="status" role="status" aria-live="polite" data-status>
-          MetaMask verbinden, um offene Fees zu lesen
+          Bereit
         </p>
         <p class="error" role="alert" data-error hidden></p>
 
-        <footer class="trust">
-          <span class="trust-mark" aria-hidden="true"></span>
-          <p>
-            Lokal und ohne Private Key. Vor jedem Claim werden Contract-Code,
-            Treasury-Empfänger und Guthaben am selben Ethereum-Block geprüft.
-            Classic-Launches laufen gesammelt über ihren gemeinsamen Hook.
-            Standardisierte Custom-Quellen werden aus der Registry erkannt und
-            im selben Wallet-Batch geclaimt. Unbekannte Quellen bleiben
-            gesperrt. Ohne atomaren MetaMask-Batch wird nichts gesendet.
-          </p>
-        </footer>
+        <div class="quick-actions">
+          <button class="refresh" type="button" data-refresh hidden disabled>
+            Neu scannen
+          </button>
+          <a
+            href="https://link.metamask.io/dapp/claimhazard.vercel.app/"
+            data-metamask-open
+            hidden
+          >
+            In MetaMask öffnen
+          </a>
+          <span>Nur die Reward Wallet kann claimen</span>
+        </div>
+
+        <details class="details">
+          <summary>Details</summary>
+          <div class="details-body">
+            <div class="meta-grid">
+              <div>
+                <span>Wallet</span>
+                <strong data-account>Nicht verbunden</strong>
+              </div>
+              <div>
+                <span>Bestätigung</span>
+                <strong data-batch-mode>Wird geprüft</strong>
+              </div>
+            </div>
+
+            <ul
+              class="claim-list"
+              data-claim-rows
+              aria-label="Programmable Feequellen"
+            ></ul>
+
+            <footer class="trust">
+              <span class="trust-mark" aria-hidden="true"></span>
+              <p>
+                Vor jeder Wallet-Bestätigung werden Empfänger, Contracts und
+                offene Beträge erneut geprüft. Unbekannte Quellen werden nicht
+                gesendet.
+              </p>
+            </footer>
+          </div>
+        </details>
       </section>
     </main>
 
