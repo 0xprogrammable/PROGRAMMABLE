@@ -57,7 +57,7 @@ describe("public Custom Launch CLI surface", () => {
         apiVersion: "3",
         guideUrl: "https://programmable.market/docs/developers/custom-launch",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        authentication: "wallet-bound-api-key",
+        authentication: "bearer-api-key",
         walletBoundary: "separate-wallet-signature",
         cli: {
           packageName: "@programmable/launch",

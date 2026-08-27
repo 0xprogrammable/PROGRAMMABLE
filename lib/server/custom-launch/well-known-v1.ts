@@ -4,6 +4,8 @@ import { resolveCustomRegistryPublicManifestV1 } from
   "./registry-manifest-v1";
 import type { CustomRegistryPublicManifestV1 } from
   "../../custom-launch/registry-public-manifest-v1";
+import { PARTNER_CREDENTIALS_PUBLIC_CONTRACT_V1 } from
+  "../../custom-launch/partner-credentials-v1";
 
 export const PROGRAMMABLE_WELL_KNOWN_PATH =
   "/.well-known/programmable.json";
@@ -18,7 +20,7 @@ export function programmableWellKnownDocumentV1(
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
     description:
-      "Canonical discovery for Programmable Classic and Custom launches. Public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet.",
+      "Canonical discovery for Programmable Classic and Custom launches. Public V3 general-hook creation and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet.",
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -45,6 +47,7 @@ export function programmableWellKnownDocumentV1(
         "https://api.programmable.market/v3/finalized-custom-launches",
       openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
       apiKeysUrl: "https://programmable.market/developers/api-keys",
+      partnerCredentials: PARTNER_CREDENTIALS_PUBLIC_CONTRACT_V1,
       guideUrl: "https://programmable.market/docs/developers/custom-launch",
       agentIntegration: Object.freeze({
         status: "live" as const,
@@ -138,7 +141,7 @@ export function programmableWellKnownDocumentV1(
         apiVersion: "3" as const,
         guideUrl: "https://programmable.market/docs/developers/custom-launch",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        authentication: "wallet-bound-api-key" as const,
+        authentication: "bearer-api-key" as const,
         walletBoundary: "separate-wallet-signature" as const,
         cli: Object.freeze({
           packageName: "@programmable/launch",
@@ -366,7 +369,7 @@ export function programmableWellKnownDocumentV1(
           genericBuybackManagement: "not-live" as const,
         }),
       }),
-      authentication: "wallet-bound-api-key" as const,
+      authentication: "bearer-api-key" as const,
       walletAuthority: "separate-review-and-sign" as const,
       versions: Object.freeze({
         v1: Object.freeze({

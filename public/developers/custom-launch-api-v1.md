@@ -1,7 +1,8 @@
 # Programmable Custom Launch API
 
 V3 is public and live: general custom-hook launch creation, list and single-resource reads are available at
-`https://api.programmable.market` for wallet-bound API keys. V2 and V1 history remain available for existing requests, while authenticated
+`https://api.programmable.market` for wallet keys, partner roots and bounded partner subkeys. V2 and V1 history remain
+available for existing requests, while authenticated
 `POST /v1/custom-launches` remains permanently read only with `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and
 GitHub submission intake is closed.
 
@@ -17,9 +18,10 @@ Readiness: <https://api.programmable.market/readyz>
 
 ## Existing-project integration
 
-The API key is authorization, not an instruction bundle. Start every cold-agent run at
-<https://programmable.market/.well-known/programmable.json>. Read `customLaunchApi.agentIntegration`, then fetch the
-advertised machine-readable remediation catalog:
+The API key is scoped API authorization, not an instruction bundle or wallet authority. Start every cold-agent run at
+<https://programmable.market/.well-known/programmable.json>. Read `customLaunchApi.partnerCredentials` to distinguish
+partner roots and bounded subkeys from wallet keys. Then read `customLaunchApi.agentIntegration` and fetch the advertised
+machine-readable remediation catalog:
 <https://programmable.market/policies/custom-launch-agent-remediation-v1.json>. The catalog, this guide, V3 OpenAPI and
 the pinned CLI release are the complete public integration path. There is no project allowlist or private approval
 step.

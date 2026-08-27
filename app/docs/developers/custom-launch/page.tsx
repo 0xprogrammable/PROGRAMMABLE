@@ -7,7 +7,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
   description:
-    "Package, submit and track deterministic wallet-bound Custom launches on Ethereum Mainnet.",
+    "Package, submit and track deterministic Custom launches with scoped API credentials on Ethereum Mainnet.",
   alternates: { canonical: "/docs/developers/custom-launch" },
 };
 
@@ -30,7 +30,7 @@ const customLaunchSections = [
 
 const requestFields = [
   ["schemaVersion", "programmable.custom-launch-create-request.v3"],
-  ["launchWallet", "The Ethereum wallet bound to the API key"],
+  ["launchWallet", "The Ethereum controller wallet for the launch"],
   ["chainId", "String 1"],
   ["nonce", "A nonzero lowercase bytes32"],
   ["sourceDescriptor", "One DeterministicSourceBundleV2 descriptor"],
@@ -118,10 +118,10 @@ const errors = [
     "400",
     "Fix malformed JSON, fields, query values or the idempotency key before retrying.",
   ],
-  ["401", "Use an active, unexpired and unrevoked pm_live_ key."],
+  ["401", "Use an active, unexpired and unrevoked credential from PROGRAMMABLE_API_KEY."],
   [
     "403",
-    "Use a key with the required scope and the exact wallet named by the request.",
+    "Use a credential with the required scope and access to the exact launch principal.",
   ],
   [
     "404",
@@ -202,8 +202,9 @@ export default function CustomLaunchApiDocsPage() {
             derived hashes by hand.
           </li>
           <li>
-            Use <Link href="/developers/api-keys">API keys</Link> to manage the
-            wallet-bound key. Store it as{" "}
+            For a wallet key, use <Link href="/developers/api-keys">API keys</Link>.
+            For a partner flow, use the root or bounded subkey issued to the
+            integration. Store the selected credential as{" "}
             <code>PROGRAMMABLE_API_KEY</code>.
           </li>
           <li>
@@ -239,7 +240,7 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="authentication">
         <div className={styles.sectionIntro}>
-          <h2>Keep wallet and API authentication separate</h2>
+          <h2>Keep API credentials and wallet authority separate</h2>
         </div>
 
         <ul className={styles.checkList}>
@@ -249,20 +250,29 @@ export default function CustomLaunchApiDocsPage() {
             never writes the API key.
           </li>
           <li>
-            Connect the controller wallet on <code>programmable.market</code> to
-            list or revoke its keys.
+            Wallet keys are managed through the connected controller wallet on{" "}
+            <code>programmable.market</code>. Partner roots and subkeys are
+            separate credentials advertised by{" "}
+            <code>customLaunchApi.partnerCredentials</code> in discovery.
           </li>
           <li>
-            Send <code>Authorization: Bearer pm_live_...</code> only to{" "}
-            <code>https://api.programmable.market</code>.
+            Send <code>Authorization: Bearer $PROGRAMMABLE_API_KEY</code> only
+            to <code>https://api.programmable.market</code>. Wallet keys,
+            partner roots and bounded partner subkeys use the same canonical V3
+            launch routes.
           </li>
           <li>
             Do not send the website wallet session token to the Custom Launch
             API.
           </li>
           <li>
-            A key can access only requests owned by its bound wallet. API
-            scopes grant API operations only; they never grant wallet signing.
+            A partner root may manage one level of subkeys. A child&apos;s scopes,
+            budgets and expiry cannot exceed its root, and a child cannot manage
+            credentials.
+          </li>
+          <li>
+            API scopes grant API operations only. No wallet key, partner root or
+            subkey can sign, broadcast or bypass launch gates.
           </li>
           <li>
             Store the secret outside source control and logs. Key lists never
