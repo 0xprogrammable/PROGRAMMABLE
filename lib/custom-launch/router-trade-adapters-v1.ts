@@ -750,11 +750,9 @@ function resolveShardRouterTradeAdapterV1(
     || stamp.transactionIndex !== 25
     || stamp.routeLogIndex !== 266
     || stamp.launchLogIndex !== 267
-    || stamp.finalizedAtBlockNumber !== "25845472"
-    || !sameHex(
-      stamp.finalizedAtBlockHash,
-      "0x27a50f4ef518dd04bfe23cb666f633436fe4b6ed684f168c1b95fa1e7741c16a",
-    )
+    // These two finality fields identify the later observation head, not the
+    // immutable launch. The provenance validator above still requires a
+    // bytes32 block hash and at least 64 confirmations.
     || !sameHex(
       stamp.poolManagerAddress,
       "0x000000000004444c5dc75cb358380d2e3de08a90",

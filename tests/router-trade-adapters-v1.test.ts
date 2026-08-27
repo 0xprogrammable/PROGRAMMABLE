@@ -72,6 +72,33 @@ describe("reviewed Router trade adapter registry v1", () => {
     });
   });
 
+  it("accepts a later valid SHARD finality observation", () => {
+    const rehydratedEntry = {
+      ...shardRouterTradeEntry,
+      launchStampProvenance: {
+        ...shardRouterTradeStamp,
+        finalizedAtBlockNumber: "25846576",
+        finalizedAtBlockHash:
+          "0x1284240707b04c1c4472bbf708d232a104d05ecd2364ef8ddfac8a3606bb4750",
+      },
+    } as CanonicalTokenExploreEntry;
+    const underFinalizedEntry = {
+      ...shardRouterTradeEntry,
+      launchStampProvenance: {
+        ...shardRouterTradeStamp,
+        finalizedAtBlockNumber: "25845471",
+        finalizedAtBlockHash: `0x${"f".repeat(64)}`,
+      },
+    } as CanonicalTokenExploreEntry;
+
+    expect(resolveRouterTradeAdapterV1(rehydratedEntry)).toBe(
+      SHARD_ROUTER_TRADE_ADAPTER_V1,
+    );
+    expect(routerTradeProjectForEntryV1(rehydratedEntry)?.customProjectId)
+      .toBe(SHARD_ROUTER_TRADE_PROJECT_ID);
+    expect(resolveRouterTradeAdapterV1(underFinalizedEntry)).toBeNull();
+  });
+
   it("builds SHARD with the canonical capability binding and exact PoolKey", () => {
     expect(parseDiscoverableMarketTradeCapabilityV1({
       value: SHARD_ROUTER_TRADE_CAPABILITY_V1,

@@ -314,6 +314,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     smoke,
     /node scripts\/smoke-static-dexscreener-public-apis\.mjs/u,
   );
+  assert.match(smoke, /PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"/u);
   assert.equal(
     smoke.match(/smoke-static-dexscreener-public-apis\.mjs/gu)?.length,
     1,
@@ -334,6 +335,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   );
   assert.match(handoff, /Explore market read status:/u);
   assert.match(handoff, /Token detail smoke:/u);
+  assert.match(handoff, /SHARD trade adapter smoke:/u);
   assert.match(handoff, /Market chart smoke:/u);
 
   for (const retired of [
