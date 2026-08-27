@@ -6,6 +6,7 @@ import {
   getAddress,
   isAddress,
   isHex,
+  keccak256,
   type Address,
   type Hex,
 } from "viem";
@@ -19,6 +20,7 @@ import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
 } from "../scripts/classic-v4-digest.mjs";
+import { CLASSIC_V4_LAUNCH_STAMP_ROUTER } from "./classic-v4";
 
 export const CLASSIC_V4_RELEASE_MANIFEST_PATH =
   "contracts/deployments/mainnet-classic-v4.json";
@@ -113,6 +115,12 @@ const SWAP_EXACT_AMOUNTS = {
 } as const;
 const ACTION_EVENT_KEYS = {
   launch: [
+    "ProgrammableComponentStampedV1.token",
+    "ProgrammableComponentStampedV1.rewardVault",
+    "ProgrammableComponentStampedV1.positionRecipient",
+    "ProgrammableComponentStampedV1.feeHook",
+    "ProgrammableLaunchRouteStampedV1",
+    "ProgrammableLaunchStampedV1",
     "MemeTokenLaunchedV2",
     "MemeLiquidityConfiguredV2",
     "MemeCreatorInitialBuyV2",
@@ -285,6 +293,14 @@ function bytes32(value: unknown): Hex | null {
     isHex(value, { strict: true }) &&
     value.length === 66 &&
     BigInt(value) !== 0n
+    ? (value.toLowerCase() as Hex)
+    : null;
+}
+
+function calldata(value: unknown): Hex | null {
+  return typeof value === "string" &&
+    isHex(value, { strict: true }) &&
+    value.length >= 10
     ? (value.toLowerCase() as Hex)
     : null;
 }
@@ -507,7 +523,7 @@ function validRichLifecycleEvidence(input: {
         : lifecycle.operatorWallet;
     const expectedTo =
       actionName === "launch"
-        ? addresses.launcher
+        ? CLASSIC_V4_LAUNCH_STAMP_ROUTER
         : swapIdentity
           ? universalRouter
           : actionName === "creatorClaim"
@@ -530,6 +546,111 @@ function validRichLifecycleEvidence(input: {
       Number(lifecycle.verificationBlock) -
         Number(lifecycle.latestLifecycleBlock) +
         1
+  ) {
+    return false;
+  }
+
+  const launchAction = record(actions.launch)!;
+  const launchAuthorization = exactKeys(lifecycle.launchAuthorization, [
+    "schemaVersion",
+    "chainId",
+    "releaseManifestDigest",
+    "predictedToken",
+    "predictedHook",
+    "permitDigest",
+    "validAfter",
+    "deadline",
+    "simulation",
+    "transaction",
+  ]);
+  const launchSimulation =
+    launchAuthorization &&
+    exactKeys(launchAuthorization.simulation, [
+      "blockNumber",
+      "blockHash",
+      "blockTimestamp",
+      "gasEstimate",
+      "stampHash",
+    ]);
+  const launchTransaction =
+    launchAuthorization &&
+    exactKeys(launchAuthorization.transaction, [
+      "chainId",
+      "from",
+      "to",
+      "valueWei",
+      "calldata",
+      "gasLimit",
+    ]);
+  const launchCalldata = calldata(launchTransaction?.calldata);
+  const validAfter = decimalBigInt(launchAuthorization?.validAfter);
+  const deadline = decimalBigInt(launchAuthorization?.deadline, {
+    positive: true,
+  });
+  const simulationBlock = decimalBigInt(launchSimulation?.blockNumber, {
+    positive: true,
+  });
+  const simulationTimestamp = decimalBigInt(
+    launchSimulation?.blockTimestamp,
+    { positive: true },
+  );
+  const gasEstimate = decimalBigInt(launchSimulation?.gasEstimate, {
+    positive: true,
+  });
+  const gasLimit = decimalBigInt(launchTransaction?.gasLimit, {
+    positive: true,
+  });
+  const launchTimestamp = decimalBigInt(launchAction.blockTimestamp, {
+    positive: true,
+  });
+  if (
+    !launchAuthorization ||
+    !launchSimulation ||
+    !launchTransaction ||
+    launchAuthorization.schemaVersion !==
+      "programmable.classic-launch-authorization.v1" ||
+    launchAuthorization.chainId !== "1" ||
+    launchTransaction.chainId !== "1" ||
+    !bytes32(launchAuthorization.permitDigest) ||
+    !bytes32(launchSimulation.blockHash) ||
+    !bytes32(launchSimulation.stampHash) ||
+    !bytes32(lifecycle.launchAuthorizationDigest) ||
+    String(lifecycle.launchAuthorizationDigest).toLowerCase() !==
+      digestJson(
+        launchAuthorization,
+        CLASSIC_V4_DIGEST_DOMAINS.lifecycleAuthorization,
+      ).toLowerCase() ||
+    String(launchAuthorization.releaseManifestDigest).toLowerCase() !==
+      String(lifecycle.releaseBindingDigest).toLowerCase() ||
+    !sameAddressValue(launchAuthorization.predictedToken, lifecycle.canaryToken) ||
+    !sameAddressValue(launchAuthorization.predictedHook, lifecycle.feeHook) ||
+    !sameAddressValue(launchTransaction.from, lifecycle.operatorWallet) ||
+    !sameAddressValue(launchTransaction.to, CLASSIC_V4_LAUNCH_STAMP_ROUTER) ||
+    !sameAddressValue(launchAction.to, CLASSIC_V4_LAUNCH_STAMP_ROUTER) ||
+    !sameAddressValue(launchAction.from, lifecycle.operatorWallet) ||
+    decimalBigInt(launchTransaction.valueWei) !==
+      CLASSIC_V4_CANARY_INITIAL_BUY ||
+    decimalBigInt(launchAction.value) !== CLASSIC_V4_CANARY_INITIAL_BUY ||
+    !launchCalldata ||
+    !launchCalldata.startsWith("0xe5f6b8cd") ||
+    String(launchAction.inputHash).toLowerCase() !==
+      keccak256(launchCalldata).toLowerCase() ||
+    validAfter === null ||
+    deadline === null ||
+    simulationBlock === null ||
+    simulationTimestamp === null ||
+    gasEstimate === null ||
+    gasLimit === null ||
+    launchTimestamp === null ||
+    validAfter > simulationTimestamp ||
+    simulationTimestamp > deadline ||
+    validAfter > launchTimestamp ||
+    launchTimestamp > deadline ||
+    deadline - validAfter > 330n ||
+    simulationBlock > BigInt(Number(launchAction.blockNumber)) ||
+    gasLimit < 1_500_000n ||
+    gasLimit > 13_500_000n ||
+    gasEstimate > gasLimit
   ) {
     return false;
   }

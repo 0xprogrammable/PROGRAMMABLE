@@ -5,6 +5,7 @@ import {
   decodeFunctionData,
   encodeAbiParameters,
   encodeFunctionData,
+  hashTypedData,
   keccak256,
   parseAbi,
   parseAbiParameters,
@@ -49,6 +50,21 @@ const zeroAddress = "0x0000000000000000000000000000000000000000";
 const routerAbi = parseAbi([
   "function launchAndStampV1((uint256 chainId,address router,address launchWallet,uint8 kind,bytes32 routePayloadHash,bytes32 expectedResultHash,bytes32 stampRequestHash,bytes32 nonce,uint64 validAfter,uint64 deadline,uint256 value) permit,(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bytes32 hookRuntimeCodeHash,(uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope)[] components) stampRequest,bytes routePayload,bytes signature) payable returns (bytes32 stampHash)",
 ]);
+const routerPermitTypes = {
+  ProgrammableLaunchPermitV1: [
+    { name: "chainId", type: "uint256" },
+    { name: "router", type: "address" },
+    { name: "launchWallet", type: "address" },
+    { name: "kind", type: "uint8" },
+    { name: "routePayloadHash", type: "bytes32" },
+    { name: "expectedResultHash", type: "bytes32" },
+    { name: "stampRequestHash", type: "bytes32" },
+    { name: "nonce", type: "bytes32" },
+    { name: "validAfter", type: "uint64" },
+    { name: "deadline", type: "uint64" },
+    { name: "value", type: "uint256" },
+  ],
+} as const;
 const routeParameters = parseAbiParameters(
   "(address launcher,bytes32 launcherRuntimeCodeHash,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters,(address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) expectedResult) route",
 );
@@ -187,6 +203,24 @@ function activeReleaseManifest() {
       CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
     ),
   };
+  const releaseBindingDigest = hash("release-binding");
+  const launchTimestamp = 1_788_000_000n;
+  const launchValidAfter = launchTimestamp - 30n;
+  const launchDeadline = launchTimestamp + 300n;
+  const routerLaunch = preparedV4RouterTransaction(
+    v4Draft(),
+    {
+      addresses: {
+        launcher: addresses.launcher,
+        feeHook: addresses.feeHook,
+      },
+      runtimeCodeHashes: {
+        launcher: runtimeCodeHashes.launcher,
+        feeHook: runtimeCodeHashes.feeHook,
+      },
+    },
+    { validAfter: launchValidAfter, deadline: launchDeadline },
+  );
   const actionNames = [
     "launch",
     "buyExactInput",
@@ -199,6 +233,12 @@ function activeReleaseManifest() {
   const lifecycleVerificationBlock = 25_700_220;
   const actionEvents = {
     launch: [
+      "ProgrammableComponentStampedV1.token",
+      "ProgrammableComponentStampedV1.rewardVault",
+      "ProgrammableComponentStampedV1.positionRecipient",
+      "ProgrammableComponentStampedV1.feeHook",
+      "ProgrammableLaunchRouteStampedV1",
+      "ProgrammableLaunchStampedV1",
       "MemeTokenLaunchedV2",
       "MemeLiquidityConfiguredV2",
       "MemeCreatorInitialBuyV2",
@@ -250,7 +290,7 @@ function activeReleaseManifest() {
   const timestamps = Object.fromEntries(
     actionNames.map((name, index) => [
       name,
-      (1_788_000_000n + BigInt(index) * 12n).toString(),
+      (launchTimestamp + BigInt(index) * 12n).toString(),
     ]),
   ) as Record<(typeof actionNames)[number], string>;
   const actions = Object.fromEntries(
@@ -269,7 +309,7 @@ function activeReleaseManifest() {
       } as const;
       const target =
         name === "launch"
-          ? launcher
+          ? CLASSIC_V4_LAUNCH_STAMP_ROUTER
           : swapIdentity
             ? "0xd92A36B0000531EF3063dEd4De20A0783308446C"
             : name === "creatorClaim"
@@ -279,7 +319,10 @@ function activeReleaseManifest() {
         name,
         {
           transactionHash: hash(`action:${name}`),
-          inputHash: hash(`input:${name}`),
+          inputHash:
+            name === "launch"
+              ? keccak256(routerLaunch.transaction.data)
+              : hash(`input:${name}`),
           blockNumber,
           blockHash: hash(`block:${name}`),
           blockTimestamp: timestamps[name],
@@ -447,6 +490,31 @@ function activeReleaseManifest() {
     beneficiaryClaimable: "0",
     rawNativeBalance: "0",
   });
+  const launchAuthorization = {
+    schemaVersion: "programmable.classic-launch-authorization.v1",
+    chainId: "1",
+    releaseManifestDigest: releaseBindingDigest,
+    predictedToken: routerLaunch.token,
+    predictedHook: addresses.feeHook,
+    permitDigest: routerLaunch.permitDigest,
+    validAfter: launchValidAfter.toString(),
+    deadline: launchDeadline.toString(),
+    simulation: {
+      blockNumber: (Number(actions.launch.blockNumber) - 1).toString(),
+      blockHash: hash("launch-authorization-block"),
+      blockTimestamp: (launchTimestamp - 1n).toString(),
+      gasEstimate: "2000000",
+      stampHash: hash("launch-authorization-stamp"),
+    },
+    transaction: {
+      chainId: "1",
+      from: account,
+      to: routerLaunch.transaction.to,
+      valueWei: routerLaunch.transaction.value,
+      calldata: routerLaunch.transaction.data,
+      gasLimit: routerLaunch.transaction.gasLimit,
+    },
+  };
   const lifecycleUnsigned = {
     schemaVersion: 1,
     chainId: 1,
@@ -457,7 +525,13 @@ function activeReleaseManifest() {
     independentRpcCount: 2,
     releaseEligible: true,
     canaryPlanDigest: hash("canary-plan"),
-    releaseBindingDigest: hash("release-binding"),
+    launchAuthorization,
+    launchAuthorizationDigest: digest(
+      launchAuthorization,
+      undefined,
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleAuthorization,
+    ),
+    releaseBindingDigest,
     deploymentEvidenceDigest: deploymentVerification.evidenceDigest,
     sourceEvidenceDigest: sourceVerification.evidenceDigest,
     verificationBlock: lifecycleVerificationBlock,
@@ -746,9 +820,18 @@ function v4Draft(): LaunchDraft {
   };
 }
 
+type RouterFixtureRelease = {
+  addresses: { launcher: Address; feeHook: Address };
+  runtimeCodeHashes: Record<string, Hex>;
+};
+
 function preparedV4RouterTransaction(
   draft: LaunchDraft,
-  manifest: ReturnType<typeof publiclyAvailableReleaseManifest>,
+  manifest: RouterFixtureRelease,
+  permitWindow: { validAfter: bigint; deadline: bigint } = {
+    validAfter: 100n,
+    deadline: 430n,
+  },
 ) {
   const initialBuy = 600_000_000_000_000n;
   const token = address(30);
@@ -933,8 +1016,8 @@ function preparedV4RouterTransaction(
     expectedResultHash,
     stampRequestHash,
     nonce: hash("router-permit-nonce"),
-    validAfter: 100n,
-    deadline: 430n,
+    validAfter: permitWindow.validAfter,
+    deadline: permitWindow.deadline,
     value: initialBuy,
   } as const;
   const signature = concat([
@@ -957,6 +1040,18 @@ function preparedV4RouterTransaction(
   };
   return {
     transaction,
+    permitDigest: hashTypedData({
+      domain: {
+        name: "ProgrammableLaunchStampRouter",
+        version: "1",
+        chainId: 1,
+        verifyingContract: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+      },
+      types: routerPermitTypes,
+      primaryType: "ProgrammableLaunchPermitV1",
+      message: permit,
+    }),
+    token,
     planHash: buildPlanHash(account, {
       kind: "launch",
       chainId: 1,
@@ -998,6 +1093,30 @@ describe("Classic V4 release and launch preflight", () => {
 
     const parsedIndexerRelease = parseClassicV4PublicRelease(manifest);
     expect(isClassicV4PublicActionRelease(parsedIndexerRelease)).toBe(false);
+
+    const directLauncher = structuredClone(manifest);
+    Object.assign(directLauncher.lifecycleEvidence.actions.launch, {
+      to: launcher,
+    });
+    Object.assign(
+      directLauncher.lifecycleEvidence.launchAuthorization.transaction,
+      { to: launcher },
+    );
+    directLauncher.lifecycleEvidence.launchAuthorizationDigest = digest(
+      directLauncher.lifecycleEvidence.launchAuthorization,
+      undefined,
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleAuthorization,
+    );
+    directLauncher.lifecycleEvidence.evidenceDigest = digest(
+      directLauncher.lifecycleEvidence,
+      "evidenceDigest",
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+    );
+    directLauncher.manifestDigest = digest(
+      directLauncher,
+      "manifestDigest",
+    );
+    expect(parseClassicV4PublicRelease(directLauncher)).toBeNull();
 
     const publicManifest = publiclyAvailableReleaseManifest();
     const parsedPublicRelease = parseClassicV4PublicRelease(publicManifest);
