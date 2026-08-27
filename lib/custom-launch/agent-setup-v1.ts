@@ -6,7 +6,7 @@ export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
     "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
   packConfigSchema:
     "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
-  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
+  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
   guide:
     "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
   openApi: "https://programmable.market/openapi/custom-launch-v3.json",
@@ -44,7 +44,7 @@ export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   "Submit when launchEligibility.deployable is true, including needs_evidence results. Needs-evidence findings remain visible and keep trading, fee, verification, indexing or featured claims unverified; they are not a private allowlist. For unsupported, fix the typed hard-block remediation and rebuild instead of asking for a bypass.",
   "programmable-launch submit launch.json --config programmable-launch.config.json",
   "programmable-launch status REQUEST_UUID --watch --until authorized",
-  "Use this quickstart: pack -> validate --remote -> submit -> wallet -> status. Remote validation fetches public capabilities and sends the same exact V3 bytes to quota-free, non-persisting preflight; it never allocates a nonce. Wallet means a separate connected-controller action, not a CLI command. Submit only the byte-identical V3 request produced by pack and keep the CLI journal and Idempotency-Key unchanged for retries.",
+  "Use this state machine: pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized. Remote validation first fails closed unless the public profile, revision, version, routes and authentication boundary match this CLI, then sends the same exact V3 bytes to quota-free, non-persisting preflight. Submit only the byte-identical V3 request produced by pack and keep the CLI journal and Idempotency-Key unchanged for retries.",
   "If status is action_required, follow the resource remediation, fix the exact source or config finding, rebuild and submit a new immutable request. Do not ask for a manual allowlist or retry unchanged bytes.",
   "If status is awaiting_funding_authorization, open only the same-origin walletHandoffUrl and stop for the connected controller to review and sign the exact funding typed data in the website. At authorized, stop again for the controller to review and send the exact Router transaction. Respect expiresAt and secondsRemaining; never reuse an expired handoff. Then use status to follow that single resource to a terminal state.",
   "The CLI never signs or broadcasts.",

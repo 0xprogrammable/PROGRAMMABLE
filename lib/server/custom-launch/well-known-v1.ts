@@ -84,15 +84,21 @@ export function programmableWellKnownDocumentV1(
           "pack",
           "validate --remote",
           "submit",
-          "status",
+          "status --watch --until authorized",
+          "status --watch --until finalized",
         ] as const),
         quickstart: Object.freeze([
           "pack",
           "validate --remote",
           "submit",
+          "status --watch --until authorized",
           "wallet",
-          "status",
+          "status --watch --until finalized",
         ] as const),
+        authenticatedApiOrigin:
+          "https://api.programmable.market" as const,
+        apiOriginOverride: false as const,
+        preflightAndSubmitCapabilitiesFailClosedBeforeApiKey: true as const,
         remotePreflight: Object.freeze({
           quotaConsumed: false as const,
           nonceAllocated: false as const,
@@ -302,20 +308,17 @@ export function programmableWellKnownDocumentV1(
         errorCode: null,
       }),
       releaseCandidate: Object.freeze({
-        status: "promoted-to-public" as const,
+        status: "candidate-unpublished" as const,
         publicAuthorization: true as const,
+        artifactPublished: false as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.3",
-        releaseTag: "programmable-launch-v3.3.3",
-        releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.3",
-        tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
-        checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
-        tarballSha256:
-          "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+        releaseVersion: "3.3.4",
+        releaseTag: "programmable-launch-v3.3.4",
+        releaseUrl: null,
+        tarballUrl: null,
+        checksumUrl: null,
+        tarballSha256: null,
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({

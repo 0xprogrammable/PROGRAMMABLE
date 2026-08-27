@@ -100,7 +100,6 @@ export async function main(argv) {
     const validateOptions = {
       launchPath: parsed.positionals[0],
       configPath: parsed.flags.config,
-      apiOrigin: parsed.flags["api-origin"],
       maxAttempts: integerFlag(parsed, "max-attempts"),
       timeoutMs: integerFlag(parsed, "timeout-ms"),
     };
@@ -113,7 +112,6 @@ export async function main(argv) {
       launchPath: parsed.positionals[0],
       configPath: requiredV3ConfigFlag(parsed),
       idempotencyKey: parsed.flags["idempotency-key"],
-      apiOrigin: parsed.flags["api-origin"],
       stateDirectory: parsed.flags["state-dir"],
       maxAttempts: integerFlag(parsed, "max-attempts"),
       timeoutMs: integerFlag(parsed, "timeout-ms"),
@@ -125,7 +123,6 @@ export async function main(argv) {
       apiVersion: parsed.flags["api-version"],
       watch: parsed.booleans.has("watch"),
       until: parsed.flags.until,
-      apiOrigin: parsed.flags["api-origin"],
       maxAttempts: integerFlag(parsed, "max-attempts"),
       timeoutMs: integerFlag(parsed, "timeout-ms"),
       pollIntervalMs: integerFlag(parsed, "poll-ms"),
@@ -146,7 +143,6 @@ function parseArguments(argv) {
     "output",
     "receipt",
     "idempotency-key",
-    "api-origin",
     "state-dir",
     "max-attempts",
     "timeout-ms",

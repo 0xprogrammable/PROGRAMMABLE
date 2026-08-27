@@ -10,7 +10,7 @@ Public V3 general-hook creation and lifecycle reads are live on Ethereum Mainnet
 
 Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.
 
-The 3.3.3 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
+The 3.3.4 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
 compiles real project-owned token, hook and initializer targets with exact
 `solc 0.8.26+commit.8a97fa7a`, then runs deterministic `pack` and `validate` without submitting, signing, broadcasting
 or creating a Mainnet coin.
@@ -31,7 +31,12 @@ The key is bound to its controller wallet and API scopes. It is not a wallet key
 
 ## Submit the V3 request
 
-Run `programmable-launch pack`, `validate`, `submit` and then `status`. Submit the bundle to `POST https://api.programmable.market/v3/custom-launches` with the CLI. Preserve the exact request bytes and idempotency key across timeout, `429` and `503` retries and honor `Retry-After`. Follow the [Custom Launch API guide](../developers/custom-launch.md) for the exact public contract.
+Run `programmable-launch pack`, `validate --remote`, `submit`, then `status --watch --until authorized`. Stop for the
+connected controller's wallet review and signature, then resume `status --watch --until finalized`. Submit the bundle
+to `POST https://api.programmable.market/v3/custom-launches` with the CLI. Authenticated CLI traffic is fixed to exact
+origin `https://api.programmable.market`; there is no origin override. Preserve the exact request bytes and idempotency
+key across timeout, `429` and `503` retries and honor `Retry-After`. Follow the [Custom Launch API
+guide](../developers/custom-launch.md) for the exact public contract.
 
 The default direct-native profile uses `programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
 `profileVersion: 3.2.0`. It requires canonical project name, symbol, description, an optional image and sorted public

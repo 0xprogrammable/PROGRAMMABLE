@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyApiKeyMutationResult,
+  apiKeyLifetimeDays,
   mergeApiKeySummaries,
+  parseApiKeyMutationResult,
+  prepareApiKeyMutationAttempt,
+  shouldRetainApiKeyMutationAttempt,
   type ApiKeySummary,
 } from "../components/developer-api-keys";
 import {
@@ -185,6 +190,86 @@ function v3Launch(
 }
 
 describe("developer API key interface", () => {
+  it("models one-time and replayed mutations without leaking a replay secret", () => {
+    const oldCredentialId = "018f3e2a-7b4c-7d5e-8f90-123456789abc";
+    const replacement = apiKey("028f3e2a-7b4c-7d5e-8f90-123456789abc", {
+      keyPrefix: `pm_live_${"A".repeat(22)}`,
+    });
+    const secret = `${replacement.keyPrefix}_${"B".repeat(43)}`;
+    const delivered = parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: replacement,
+      secretState: "delivered-once",
+      apiKeySecret: secret,
+      rotatedCredentialId: oldCredentialId,
+    }, 201, oldCredentialId);
+    const replayed = parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: replacement,
+      secretState: "already-delivered",
+      rotatedCredentialId: oldCredentialId,
+    }, 200, oldCredentialId);
+
+    expect(delivered).toEqual({
+      apiKey: replacement,
+      secretState: "delivered-once",
+      apiKeySecret: secret,
+      rotatedCredentialId: oldCredentialId,
+    });
+    expect(replayed).toEqual({
+      apiKey: replacement,
+      secretState: "already-delivered",
+      rotatedCredentialId: oldCredentialId,
+    });
+    expect(parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: replacement,
+      secretState: "already-delivered",
+      apiKeySecret: secret,
+      rotatedCredentialId: oldCredentialId,
+    }, 200, oldCredentialId)).toBeNull();
+    expect(parseApiKeyMutationResult({
+      schemaVersion: "programmable.custom-launch-api.v1",
+      apiKey: apiKey(oldCredentialId),
+      secretState: "already-delivered",
+      rotatedCredentialId: oldCredentialId,
+    }, 200, oldCredentialId)).toBeNull();
+    expect(applyApiKeyMutationResult(
+      [apiKey(oldCredentialId)],
+      replayed!,
+      "2026-08-27T10:00:00.000Z",
+    )).toEqual([
+      replacement,
+      expect.objectContaining({
+        id: oldCredentialId,
+        revokedAt: "2026-08-27T10:00:00.000Z",
+      }),
+    ]);
+
+    const input = { kind: "issue" as const, credentialId: null, body: "{}" };
+    const attempt = prepareApiKeyMutationAttempt(
+      null,
+      input,
+      () => "018f3e2a-7b4c-7d5e-8f90-123456789abc",
+    );
+    expect(prepareApiKeyMutationAttempt(
+      attempt,
+      input,
+      () => "unused-idempotency-key",
+    )).toBe(attempt);
+    expect(() => prepareApiKeyMutationAttempt(
+      attempt,
+      { ...input, body: '{"label":"different"}' },
+      () => "unused-idempotency-key",
+    )).toThrow("An API key mutation retry is already pending");
+    expect(shouldRetainApiKeyMutationAttempt(503, null)).toBe(true);
+    expect(shouldRetainApiKeyMutationAttempt(400, null)).toBe(false);
+    expect(apiKeyLifetimeDays(apiKey("lifetime", {
+      createdAt: "2026-08-27T10:00:00.500Z",
+      expiresAt: "2026-09-26T10:00:00.000Z",
+    }))).toBe(30);
+  });
+
   it("keeps the first view compact and focused on key management", () => {
     expect(apiKeysSource).toContain("<h1>API keys</h1>");
     expect(apiKeysSource).toContain('aria-label="Developer access view"');
@@ -259,6 +344,13 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain("confirmRevokeRef.current?.focus()");
     expect(apiKeysSource).toContain("Copy agent setup");
     expect(apiKeysSource).toContain("PROGRAMMABLE_AGENT_SETUP_TEXT_V1");
+    expect(apiKeysSource).toContain(
+      "Agent setup contains the <code>$PROGRAMMABLE_API_KEY</code>",
+    );
+    expect(apiKeysSource).toContain(
+      "discovery, capabilities, preflight, remediation, pack schema,",
+    );
+    expect(apiKeysSource).not.toContain("Agent setup contains only");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("$PROGRAMMABLE_API_KEY");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli,
@@ -291,10 +383,10 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "pack -> validate --remote -> submit -> wallet -> status",
+      "pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli).toContain(
-      "programmable-launch-v3.3.3",
+      "programmable-launch-v3.3.4",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "Before pack, collect the project name and symbol",
@@ -373,7 +465,7 @@ describe("developer API key interface", () => {
     )).toHaveLength(2);
     expect(apiKeysSource.match(
       /refreshApiKeysAfterMutation\(account\);/gu,
-    )).toHaveLength(2);
+    )).toHaveLength(3);
     expect(apiKeysSource).toContain(
       'loadApiKeys(walletAddress, undefined, "mutation")',
     );
@@ -542,6 +634,35 @@ describe("developer launch history interface", () => {
       expect(poller).toContain("while (!controller.signal.aborted)");
       expect(poller).toContain("if (terminalStatus(updated.status))");
     }
+  });
+
+  it("shows bounded Retry-After guidance for both retryable error statuses", () => {
+    expect(apiKeysSource).toContain(
+      "(response.status === 429 || response.status === 503)",
+    );
+    expect(historySource).toContain(
+      "(response.status === 429 || response.status === 503)",
+    );
+  });
+
+  it("keeps stored launch failures out of assertive live regions", () => {
+    const storedFailureStart = historySource.indexOf("{reviewLaunch.failure");
+    const storedFailureEnd = historySource.indexOf(
+      '{reviewLaunch.status === "action_required"',
+      storedFailureStart,
+    );
+    expect(storedFailureStart).toBeGreaterThan(-1);
+    expect(storedFailureEnd).toBeGreaterThan(storedFailureStart);
+
+    const storedFailure = historySource.slice(
+      storedFailureStart,
+      storedFailureEnd,
+    );
+    expect(storedFailure).toContain("<p className={styles.failure}>");
+    expect(storedFailure).not.toContain('role="alert"');
+    expect(historySource).toContain(
+      '<p className={styles.inlineError} role="alert">',
+    );
   });
 
   it("keeps the complete EIP-3009 preparation lifecycle monotonic", () => {

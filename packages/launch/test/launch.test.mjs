@@ -95,7 +95,7 @@ test("submit persists exact bytes and retries ambiguity with the same key", asyn
     launchPath: packed.outputPath,
     configPath: fixture.configPath,
     idempotencyKey: "clean-room-retry-0001",
-    apiOrigin: "http://127.0.0.1:43191",
+    apiOrigin: "https://api.programmable.market",
     stateDirectory,
     maxAttempts: 2,
     fetchImpl,
@@ -125,7 +125,7 @@ test("submit refuses an idempotency key rebound to different request bytes", asy
   const common = {
     configPath: fixture.configPath,
     idempotencyKey: "binding-conflict-0001",
-    apiOrigin: "http://localhost:43192",
+    apiOrigin: "https://api.programmable.market",
     stateDirectory,
     maxAttempts: 1,
     fetchImpl,
@@ -173,7 +173,7 @@ test("concurrent first submit atomically binds one body to an idempotency key", 
   const networkBodies = [];
   const common = {
     idempotencyKey: "atomic-first-binding-0001",
-    apiOrigin: "http://127.0.0.1:43195",
+    apiOrigin: "https://api.programmable.market",
     stateDirectory,
     maxAttempts: 1,
     fetchImpl: async (_url, options) => {
@@ -255,7 +255,7 @@ test("submit treats the V1 read-only 409 as non-retryable", async () => {
     launchPath: packed.outputPath,
     configPath: fixture.configPath,
     idempotencyKey: "v1-read-only-no-retry-0001",
-    apiOrigin: "http://127.0.0.1:43193",
+    apiOrigin: "https://api.programmable.market",
     stateDirectory: path.join(fixture.root, "v1-read-only-state"),
     maxAttempts: 5,
     fetchImpl: async () => {
@@ -287,7 +287,7 @@ test("CLI renders only safe API error details", async () => {
     await statusLaunch({
       requestId: "836b6989-bac4-4f39-98ab-828c7231fbf1",
       maxAttempts: 1,
-      apiOrigin: "http://127.0.0.1:43197",
+      apiOrigin: "https://api.programmable.market",
       fetchImpl: async () => new Response(JSON.stringify({
         error: {
           code: "RATE_LIMITED",
@@ -359,7 +359,7 @@ test("status honors Retry-After and stops at the wallet handoff", async () => {
     requestId: "836b6989-bac4-4f39-98ab-828c7231fbf1",
     watch: true,
     until: "authorized",
-    apiOrigin: "http://127.0.0.1:43193",
+    apiOrigin: "https://api.programmable.market",
     maxAttempts: 3,
     fetchImpl: async () => responses.shift(),
     sleepImpl: async (milliseconds) => sleeps.push(milliseconds),
@@ -378,7 +378,7 @@ test("API retry covers stalled bodies and malformed transient gateway responses"
     requestId: "836b6989-bac4-4f39-98ab-828c7231fbf1",
     maxAttempts: 3,
     timeoutMs: 250,
-    apiOrigin: "http://127.0.0.1:43196",
+    apiOrigin: "https://api.programmable.market",
     fetchImpl: async (_url, options) => {
       calls += 1;
       if (calls === 1) {
@@ -415,7 +415,7 @@ test("API retry covers stalled bodies and malformed transient gateway responses"
   await assert.rejects(() => statusLaunch({
     requestId: "836b6989-bac4-4f39-98ab-828c7231fbf1",
     maxAttempts: 1,
-    apiOrigin: "http://127.0.0.1:43196",
+    apiOrigin: "https://api.programmable.market",
     fetchImpl: async () => new Response("bad gateway", {
       status: 503,
       headers: { "retry-after": "7", "content-type": "text/plain" },
@@ -807,7 +807,7 @@ test("V2 submit and status use the schema-selected path and bind it in the journ
     launchPath: packed.outputPath,
     configPath: fixture.configPath,
     idempotencyKey: "fee-enforced-v2-route-0001",
-    apiOrigin: "http://127.0.0.1:43194",
+    apiOrigin: "https://api.programmable.market",
     stateDirectory,
     maxAttempts: 1,
     fetchImpl: async (url) => {
@@ -820,14 +820,14 @@ test("V2 submit and status use the schema-selected path and bind it in the journ
     },
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
   });
-  assert.equal(urls[0], "http://127.0.0.1:43194/v2/custom-launches");
+  assert.equal(urls[0], "https://api.programmable.market/v2/custom-launches");
   const journal = JSON.parse(await readFile(submitResult.journalPath, "utf8"));
   assert.equal(journal.requestPath, "/v2/custom-launches");
 
   const statusResult = await statusLaunch({
     requestId: "515a4b20-a7bd-40e1-8cfa-f6da5457036b",
     apiVersion: 2,
-    apiOrigin: "http://127.0.0.1:43194",
+    apiOrigin: "https://api.programmable.market",
     maxAttempts: 1,
     fetchImpl: async (url) => {
       urls.push(url);
@@ -839,7 +839,10 @@ test("V2 submit and status use the schema-selected path and bind it in the journ
     },
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
   });
-  assert.equal(urls[1], "http://127.0.0.1:43194/v2/custom-launches/515a4b20-a7bd-40e1-8cfa-f6da5457036b");
+  assert.equal(
+    urls[1],
+    "https://api.programmable.market/v2/custom-launches/515a4b20-a7bd-40e1-8cfa-f6da5457036b",
+  );
   assert.equal(statusResult.resource.status, "received");
 });
 

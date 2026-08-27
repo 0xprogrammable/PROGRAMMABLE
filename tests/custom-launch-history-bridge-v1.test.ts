@@ -22,8 +22,20 @@ const V3_LAUNCH_ID = "60000000-0000-4000-8000-000000000006";
 const V3_NATIVE_LAUNCH_ID = "70000000-0000-4000-8000-000000000007";
 const V3_ACTION_REQUIRED_LAUNCH_ID = "80000000-0000-4000-8000-000000000008";
 const WEBSITE_TOKEN = "w".repeat(43);
+const BFF_ASSERTION_KEY = "b".repeat(43);
+const ASSERTION_ISSUED_AT = "2026-08-27T08:00:00.000Z";
 const RAW_PROGRAMMABLE_API_KEY =
   `pm_live_${"a".repeat(22)}_${"b".repeat(43)}`;
+const REQUEST_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+async function correlatedError(response: Response) {
+  const requestId = response.headers.get("x-request-id");
+  expect(requestId).toMatch(REQUEST_ID);
+  const body = await response.json();
+  expect(body.error.requestId).toBe(requestId);
+  return { body, requestId };
+}
 
 const EXTERNAL_LIQUIDITY_INTENT = Object.freeze({
   model: "external-concentrated-liquidity",
@@ -330,11 +342,13 @@ function v3IntegrationPending() {
 describe("developer launch history same-origin bridge", () => {
   const authenticate = vi.fn();
   const fetchBackend = vi.fn();
+  let assertionNonceCounter = 0;
 
   beforeEach(() => {
     vi.clearAllMocks();
     authenticate.mockReset();
     fetchBackend.mockReset();
+    assertionNonceCounter = 0;
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     authenticate.mockResolvedValue({
       privyUserId: "did:privy:test-user",
@@ -349,8 +363,14 @@ describe("developer launch history same-origin bridge", () => {
       authenticator: { authenticate },
       backendBaseUrl: "https://custom-launch-api.example/",
       websiteToken: WEBSITE_TOKEN,
+      bffAssertionKeyV2: BFF_ASSERTION_KEY,
       fetchBackend,
       backendTimeoutMs: 1_000,
+      assertionNow: () => new Date(ASSERTION_ISSUED_AT),
+      assertionNonce: () => Buffer.alloc(
+        16,
+        ++assertionNonceCounter,
+      ).toString("base64url"),
     });
   }
 
@@ -397,6 +417,21 @@ describe("developer launch history same-origin bridge", () => {
     );
     expect(headers.get("x-programmable-wallet-address")).toBe(WALLET);
     expect(headers.get("x-privy-identity-token")).toBeNull();
+    expect(headers.get("x-programmable-bff-assertion-version")).toBe("2");
+    expect(headers.get("x-programmable-bff-assertion-issued-at")).toBe(
+      ASSERTION_ISSUED_AT,
+    );
+    expect(headers.get("x-programmable-bff-assertion-body-sha256")).toBe(
+      "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    );
+    const nonces = fetchBackend.mock.calls.slice(0, 3).map(([, requestInit]) =>
+      new Headers((requestInit as RequestInit).headers).get(
+        "x-programmable-bff-assertion-nonce",
+      )
+    );
+    expect(new Set(nonces).size).toBe(3);
+    expect(nonces.every((nonce) => /^[A-Za-z0-9_-]{22}$/u.test(nonce ?? "")))
+      .toBe(true);
   });
 
   it("fails closed if the backend returns any other wallet", async () => {
@@ -409,8 +444,16 @@ describe("developer launch history same-origin bridge", () => {
     ));
 
     expect(response.status).toBe(503);
-    expect((await response.json()).error.code).toBe(
+    const correlation = await correlatedError(response);
+    expect(correlation.body.error.code).toBe(
       "launch_history_unavailable",
+    );
+    expect(console.error).toHaveBeenCalledWith(
+      "Developer launch history request failed",
+      {
+        name: "BackendContractErrorV1",
+        requestId: correlation.requestId,
+      },
     );
   });
 
@@ -484,6 +527,24 @@ describe("developer launch history same-origin bridge", () => {
     ));
     expect(malformed.status).toBe(400);
     expect((await malformed.json()).error.code).toBe("pagination_invalid");
+    expect(fetchBackend).not.toHaveBeenCalled();
+  });
+
+  it("assigns a fresh correlation ID to every locally generated error", async () => {
+    const methodError = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}`,
+      { method: "POST" },
+    ));
+    const requestError = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&cursor=not-a-cursor`,
+    ));
+
+    expect(methodError.status).toBe(405);
+    expect(methodError.headers.get("allow")).toBe("GET");
+    expect(requestError.status).toBe(400);
+    const methodCorrelation = await correlatedError(methodError);
+    const requestCorrelation = await correlatedError(requestError);
+    expect(methodCorrelation.requestId).not.toBe(requestCorrelation.requestId);
     expect(fetchBackend).not.toHaveBeenCalled();
   });
 
@@ -1382,6 +1443,15 @@ describe("developer launch history same-origin bridge", () => {
       "60000000-0000-4000-8000-000000000006",
     );
     expect(JSON.parse(String(init.body))).toEqual(submission);
+    expect(Buffer.isBuffer(init.body)).toBe(true);
+    expect(new Headers(init.headers).get(
+      "x-programmable-bff-assertion-body-sha256",
+    )).toBe(`sha256:${createHash("sha256")
+      .update(init.body as Buffer)
+      .digest("hex")}`);
+    expect(new Headers(init.headers).get(
+      "x-programmable-bff-assertion-signature",
+    )).toMatch(/^hmac-sha256:[0-9a-f]{64}$/u);
   });
 
   it("fails closed if an EIP-3009 funding response loses its bound intent hash", async () => {

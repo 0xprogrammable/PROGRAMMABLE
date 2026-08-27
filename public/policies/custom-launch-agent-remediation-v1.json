@@ -35,6 +35,9 @@
     "apiKeyEnvironmentVariable": "PROGRAMMABLE_API_KEY",
     "apiKeyPlaceholder": "$PROGRAMMABLE_API_KEY",
     "apiKeyContainsPolicy": false,
+    "authenticatedApiOrigin": "https://api.programmable.market",
+    "apiOriginOverride": false,
+    "preflightAndSubmitCapabilitiesFailClosedBeforeApiKey": true,
     "manualProjectAllowlist": false,
     "projectSpecificApprovalPath": false,
     "automaticAdmission": true,
@@ -54,8 +57,9 @@
     "pack",
     "validate --remote",
     "submit",
+    "status --watch --until authorized",
     "wallet",
-    "status"
+    "status --watch --until finalized"
   ],
   "workflow": [
     {
@@ -90,20 +94,21 @@
     },
     {
       "step": 7,
-      "id": "wallet",
-      "action": "When the resource exposes walletHandoffUrl and expiresAt, stop automation. The connected controller independently reviews and signs the exact funding authorization or Router transaction. The API and CLI never sign or broadcast."
+      "id": "status-before-wallet",
+      "action": "Poll the single resource with status --watch --until authorized. It may stop earlier at awaiting_funding_authorization. When the resource exposes walletHandoffUrl and expiresAt, stop automation. The connected controller independently reviews and signs the exact funding authorization. Poll the same resource again until authorized, then stop for separate review and broadcast of the exact Router transaction. The API and CLI never sign or broadcast."
     },
     {
       "step": 8,
-      "id": "status",
-      "action": "Poll the single resource after each explicit wallet action. Use lifecycleQueue only as bounded worker scheduling guidance; queue completion is not launch finality. At action_required follow the typed remediation, fix the bound source or config hard blocker and create a new exact request. Keep deployment, trading, platform-fee evidence, source verification, indexing and featured state separate."
+      "id": "status-after-wallet",
+      "action": "After the controller broadcasts, poll the same single resource with status --watch --until finalized. Use lifecycleQueue only as bounded worker scheduling guidance; queue completion is not launch finality. At action_required follow the typed remediation, fix the bound source or config hard blocker and create a new exact request. Keep deployment, trading, platform-fee evidence, source verification, indexing and featured state separate."
     }
   ],
   "commands": [
     "programmable-launch pack --config programmable-launch.config.json --output launch.json",
     "programmable-launch validate launch.json --config programmable-launch.config.json --remote",
     "programmable-launch submit launch.json --config programmable-launch.config.json",
-    "programmable-launch status REQUEST_UUID --watch --until authorized"
+    "programmable-launch status REQUEST_UUID --watch --until authorized",
+    "programmable-launch status REQUEST_UUID --watch --until finalized"
   ],
   "productTruthAxes": [
     "deployment",

@@ -74,8 +74,24 @@ describe("Custom Launch cold-agent remediation contract", () => {
         authorizationEncoding: "eip3009-nonce-r-s-v-abi-leaves",
       },
       walletSigning: "separate-controller-action",
-      requiredCommandOrder: ["pack", "validate --remote", "submit", "status"],
-      quickstart: ["pack", "validate --remote", "submit", "wallet", "status"],
+      requiredCommandOrder: [
+        "pack",
+        "validate --remote",
+        "submit",
+        "status --watch --until authorized",
+        "status --watch --until finalized",
+      ],
+      quickstart: [
+        "pack",
+        "validate --remote",
+        "submit",
+        "status --watch --until authorized",
+        "wallet",
+        "status --watch --until finalized",
+      ],
+      authenticatedApiOrigin: "https://api.programmable.market",
+      apiOriginOverride: false,
+      preflightAndSubmitCapabilitiesFailClosedBeforeApiKey: true,
       remotePreflight: {
         quotaConsumed: false,
         nonceAllocated: false,
@@ -99,8 +115,24 @@ describe("Custom Launch cold-agent remediation contract", () => {
       apiKeyContainsPolicy: false,
       manualProjectAllowlist: false,
       automaticAdmission: true,
-      requiredCommandOrder: ["pack", "validate --remote", "submit", "status"],
-      quickstart: ["pack", "validate --remote", "submit", "wallet", "status"],
+      requiredCommandOrder: [
+        "pack",
+        "validate --remote",
+        "submit",
+        "status --watch --until authorized",
+        "status --watch --until finalized",
+      ],
+      quickstart: [
+        "pack",
+        "validate --remote",
+        "submit",
+        "status --watch --until authorized",
+        "wallet",
+        "status --watch --until finalized",
+      ],
+      authenticatedApiOrigin: "https://api.programmable.market",
+      apiOriginOverride: false,
+      preflightAndSubmitCapabilitiesFailClosedBeforeApiKey: true,
       remotePreflight: {
         quotaConsumed: false,
         nonceAllocated: false,
@@ -141,6 +173,9 @@ describe("Custom Launch cold-agent remediation contract", () => {
         apiKeyEnvironmentVariable: "PROGRAMMABLE_API_KEY",
         apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY",
         apiKeyContainsPolicy: false,
+        authenticatedApiOrigin: "https://api.programmable.market",
+        apiOriginOverride: false,
+        preflightAndSubmitCapabilitiesFailClosedBeforeApiKey: true,
         manualProjectAllowlist: false,
         projectSpecificApprovalPath: false,
         automaticAdmission: true,
@@ -162,21 +197,23 @@ describe("Custom Launch cold-agent remediation contract", () => {
       "pack",
       "validate",
       "submit",
-      "wallet",
-      "status",
+      "status-before-wallet",
+      "status-after-wallet",
     ]);
     expect(catalog.quickstart).toEqual([
       "pack",
       "validate --remote",
       "submit",
+      "status --watch --until authorized",
       "wallet",
-      "status",
+      "status --watch --until finalized",
     ]);
     expect(catalog.commands).toEqual([
       "programmable-launch pack --config programmable-launch.config.json --output launch.json",
       "programmable-launch validate launch.json --config programmable-launch.config.json --remote",
       "programmable-launch submit launch.json --config programmable-launch.config.json",
       "programmable-launch status REQUEST_UUID --watch --until authorized",
+      "programmable-launch status REQUEST_UUID --watch --until finalized",
     ]);
     expect(catalog.authoritativeSources.cliChecksumUrl).toBe(
       document.customLaunchApi.cli.checksumUrl,
@@ -239,7 +276,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.3.3");
+    expect(openApi.info.version).toBe("3.3.4");
     const v2Patch =
       openApi.components.schemas.FundingAuthorizationPatchDescriptorV2;
     expect(v2Patch.required).toEqual([

@@ -10,6 +10,9 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_ID,
+  DIRECT_NATIVE_PROFILE_REVISION,
+  DIRECT_NATIVE_PROFILE_VERSION,
   MAX_REQUEST_BYTES,
   PREFLIGHT_PATH_V3,
   PREFLIGHT_SCHEMA_V1,
@@ -51,7 +54,7 @@ export class ProgrammableApiError extends Error {
 }
 
 export async function getLaunchCapabilities(options = {}) {
-  const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
+  const apiOrigin = productionApiOrigin(options.apiOrigin);
   const result = await requestWithRetry({
     method: "GET",
     url: `${apiOrigin}${CAPABILITIES_PATH_V3}`,
@@ -61,7 +64,7 @@ export async function getLaunchCapabilities(options = {}) {
     fetchImpl: options.fetchImpl,
     sleepImpl: options.sleepImpl,
   });
-  assertResponseObject(result.body, "capabilities");
+  assertCapabilitiesResponse(result.body);
   return {
     httpStatus: result.status,
     retryAfter: result.retryAfter,
@@ -87,7 +90,7 @@ export async function validateLaunchRemote(options) {
   }
   const serverRequestHash = customLaunchRequestHashV3(requestBytes);
 
-  const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
+  const apiOrigin = productionApiOrigin(options.apiOrigin);
   const capabilities = await getLaunchCapabilities({
     apiOrigin,
     maxAttempts: options.maxAttempts,
@@ -166,7 +169,16 @@ export async function submitLaunch(options) {
   const idempotencyKey = normalizeIdempotencyKey(
     options.idempotencyKey ?? `programmable-${sha256Hex(requestBytes)}`,
   );
-  const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
+  const apiOrigin = productionApiOrigin(options.apiOrigin);
+  const capabilities = validation.schemaVersion === CREATE_REQUEST_SCHEMA_V3
+    ? await getLaunchCapabilities({
+      apiOrigin,
+      maxAttempts: options.maxAttempts,
+      timeoutMs: options.timeoutMs,
+      fetchImpl: options.fetchImpl,
+      sleepImpl: options.sleepImpl,
+    })
+    : null;
   const stateDirectory = path.resolve(options.stateDirectory ?? defaultStateDirectory());
   const journalPath = path.join(
     stateDirectory,
@@ -199,7 +211,9 @@ export async function submitLaunch(options) {
     sleepImpl: options.sleepImpl,
   });
   await updateJournal(journalPath, journal, result);
-  const action = resourceActionSummary(result.body, { apiOrigin });
+  const action = resourceActionSummary(result.body, {
+    walletHandoffBaseUrl: capabilities?.resource.walletHandoffBaseUrl,
+  });
   return {
     idempotencyKey,
     requestSha256,
@@ -218,7 +232,7 @@ export async function statusLaunch(options) {
   if (typeof options.requestId !== "string" || !REQUEST_ID.test(options.requestId)) {
     throw new TypeError("status requires the Custom launch request UUID");
   }
-  const apiOrigin = normalizeApiOrigin(options.apiOrigin ?? API_ORIGIN);
+  const apiOrigin = productionApiOrigin(options.apiOrigin);
   const requestPath = createPathForApiVersion(options.apiVersion ?? 3);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
   const until = options.until ?? WALLET_HANDOFF_STATUS;
@@ -256,7 +270,7 @@ export async function statusLaunch(options) {
       || (until === WALLET_HANDOFF_STATUS && walletHandoffReady)
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
-      const action = resourceActionSummary(resource, { apiOrigin });
+      const action = resourceActionSummary(resource);
       return {
         httpStatus: result.status,
         stopped,
@@ -368,12 +382,12 @@ async function requestWithRetry(options) {
     }
     if (response.status === 429 || response.status === 503) {
       if (attempt === maxAttempts) {
-        throw apiError(response.status, body, retryAfter, options.url);
+        throw apiError(response.status, body, retryAfter);
       }
       await sleepImpl(retryDelayMs(retryAfter, attempt));
       continue;
     }
-    if (!response.ok) throw apiError(response.status, body, retryAfter, options.url);
+    if (!response.ok) throw apiError(response.status, body, retryAfter);
     return { status: response.status, retryAfter, body };
   }
   throw new ProgrammableApiError("Custom Launch API request remained ambiguous after identical retries", {
@@ -391,7 +405,7 @@ function parseResponseBody(bytes, status) {
   }
 }
 
-function apiError(status, body, retryAfter, requestUrl) {
+function apiError(status, body, retryAfter) {
   const error = body?.error ?? body;
   const serverDetails = isJsonValue(error?.details) ? error.details : undefined;
   const remediations = typedRemediations(
@@ -399,8 +413,7 @@ function apiError(status, body, retryAfter, requestUrl) {
       ?? (isPlainObject(serverDetails) ? serverDetails.remediations : undefined)
       ?? body?.remediations,
   );
-  const apiOrigin = safeRequestOrigin(requestUrl);
-  const action = resourceActionSummary(error, { apiOrigin });
+  const action = resourceActionSummary(error);
   return new ProgrammableApiError(
     `Custom Launch API returned HTTP ${status}`,
     {
@@ -420,7 +433,7 @@ function assertPreflightResponse(value, requestHash) {
   assertPreflightField(value.schemaVersion === PREFLIGHT_SCHEMA_V1, "schemaVersion");
   assertPreflightField(value.requestHash === requestHash, "requestHash");
   assertPreflightField(
-    Number.isSafeInteger(value.profileRevision) && value.profileRevision > 0,
+    value.profileRevision === DIRECT_NATIVE_PROFILE_REVISION,
     "profileRevision",
   );
   assertPreflightField(
@@ -457,6 +470,99 @@ function assertPreflightResponse(value, requestHash) {
   ]) {
     assertPreflightField(value[field] === expected, field);
   }
+}
+
+function assertCapabilitiesResponse(value) {
+  assertCapabilitiesField(isPlainObject(value), "$", value);
+  assertCapabilitiesField(
+    value.schemaVersion === "programmable.custom-launch-capabilities.v1",
+    "schemaVersion",
+  );
+  assertCapabilitiesField(value.apiVersion === "v3", "apiVersion");
+  assertCapabilitiesField(
+    typeof value.serverTime === "string" && Number.isFinite(Date.parse(value.serverTime)),
+    "serverTime",
+  );
+  assertCapabilitiesField(value.readinessUrl === `${API_ORIGIN}/readyz`, "readinessUrl");
+  assertCapabilitiesField(isPlainObject(value.chain), "chain");
+  assertCapabilitiesField(value.chain?.id === "1", "chain.id");
+  assertCapabilitiesField(value.chain?.name === "Ethereum Mainnet", "chain.name");
+  assertCapabilitiesField(isPlainObject(value.profile), "profile");
+  assertCapabilitiesField(value.profile?.profileId === DIRECT_NATIVE_PROFILE_ID, "profile.profileId");
+  assertCapabilitiesField(
+    value.profile?.profileRevision === DIRECT_NATIVE_PROFILE_REVISION,
+    "profile.profileRevision",
+  );
+  assertCapabilitiesField(
+    value.profile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION,
+    "profile.profileVersion",
+  );
+  assertCapabilitiesField(
+    value.profile?.productionLaunchAuthorized === true,
+    "profile.productionLaunchAuthorized",
+  );
+  assertCapabilitiesField(isPlainObject(value.routes), "routes");
+  for (const [field, expected] of Object.entries({
+    create: CREATE_PATH_V3,
+    preflight: PREFLIGHT_PATH_V3,
+    status: `${CREATE_PATH_V3}/{launchId}`,
+    list: CREATE_PATH_V3,
+    finalizedMetadata: "/v3/finalized-custom-launches",
+    capabilities: CAPABILITIES_PATH_V3,
+  })) {
+    assertCapabilitiesField(value.routes?.[field] === expected, `routes.${field}`);
+  }
+  assertCapabilitiesField(isPlainObject(value.authentication), "authentication");
+  for (const [field, expected] of Object.entries({
+    create: "bearer-api-key",
+    preflight: "bearer-api-key",
+    status: "bearer-api-key",
+    finalizedMetadata: "none",
+    capabilities: "none",
+  })) {
+    assertCapabilitiesField(
+      value.authentication?.[field] === expected,
+      `authentication.${field}`,
+    );
+  }
+  assertCapabilitiesField(
+    Array.isArray(value.authentication?.requiredScopes)
+      && value.authentication.requiredScopes.length === 2
+      && value.authentication.requiredScopes[0] === "custom-launch:create"
+      && value.authentication.requiredScopes[1] === "custom-launch:read",
+    "authentication.requiredScopes",
+  );
+  assertCapabilitiesField(
+    value.authentication?.apiKeyIsWallet === false,
+    "authentication.apiKeyIsWallet",
+  );
+  assertCapabilitiesField(isPlainObject(value.preflight), "preflight");
+  for (const [field, expected] of Object.entries({
+    quotaConsumed: false,
+    nonceAllocated: false,
+    persisted: false,
+    walletSignatureProduced: false,
+    transactionBroadcast: false,
+    exactProductionAdmissionEngine: true,
+  })) {
+    assertCapabilitiesField(value.preflight?.[field] === expected, `preflight.${field}`);
+  }
+  assertCapabilitiesField(
+    safeWalletHandoffBase(value.walletHandoffBaseUrl) !== null,
+    "walletHandoffBaseUrl",
+  );
+}
+
+function assertCapabilitiesField(condition, field, value) {
+  if (condition) return;
+  throw new ProgrammableApiError(
+    "Custom Launch API capabilities do not match the production V3 machine contract",
+    {
+      code: "CAPABILITIES_CONTRACT_INVALID",
+      serverDetails: { field },
+      ...(field === "$" && value !== undefined ? { cause: "response-is-not-an-object" } : {}),
+    },
+  );
 }
 
 function assertPreflightField(condition, field) {
@@ -503,7 +609,7 @@ function isTypedRemediation(value) {
   return Object.hasOwn(value, "expected") && Object.hasOwn(value, "observed");
 }
 
-function resourceActionSummary(resource, { apiOrigin, walletHandoffBaseUrl } = {}) {
+function resourceActionSummary(resource, { walletHandoffBaseUrl } = {}) {
   if (!isPlainObject(resource)) return {};
   const output = isPlainObject(resource.output) ? resource.output : null;
   const outputAction = isPlainObject(output?.actionRequired) ? output.actionRequired : null;
@@ -523,7 +629,6 @@ function resourceActionSummary(resource, { apiOrigin, walletHandoffBaseUrl } = {
   );
   const safeHandoffUrl = safeWalletHandoffUrl(
     handoffUrl,
-    apiOrigin,
     walletHandoffBaseUrl,
   );
   if (safeHandoffUrl !== null) summary.walletHandoffUrl = safeHandoffUrl;
@@ -556,7 +661,7 @@ function resourceActionSummary(resource, { apiOrigin, walletHandoffBaseUrl } = {
   return summary;
 }
 
-function safeWalletHandoffUrl(value, apiOrigin, advertisedBaseUrl) {
+function safeWalletHandoffUrl(value, advertisedBaseUrl) {
   if (typeof value !== "string") return null;
   let candidate;
   try {
@@ -566,16 +671,16 @@ function safeWalletHandoffUrl(value, apiOrigin, advertisedBaseUrl) {
   }
   if (candidate.username || candidate.password) return null;
   const bases = [
-    safeWalletHandoffBase(advertisedBaseUrl, apiOrigin, true),
-    safeWalletHandoffBase(WALLET_HANDOFF_BASE_URL, apiOrigin, false),
+    safeWalletHandoffBase(advertisedBaseUrl),
+    safeWalletHandoffBase(WALLET_HANDOFF_BASE_URL),
   ].filter((entry) => entry !== null);
-  if (isLoopbackOrigin(apiOrigin)) {
-    bases.push(`${apiOrigin}/`);
-  }
-  return bases.some((base) => candidate.href.startsWith(base)) ? candidate.href : null;
+  if (candidate.origin !== new URL(WALLET_HANDOFF_BASE_URL).origin) return null;
+  return bases.some((base) => pathIsWithin(candidate.pathname, new URL(base).pathname))
+    ? candidate.href
+    : null;
 }
 
-function safeWalletHandoffBase(value, apiOrigin, allowAdvertisedHttps) {
+function safeWalletHandoffBase(value) {
   if (typeof value !== "string") return null;
   let base;
   try {
@@ -584,36 +689,26 @@ function safeWalletHandoffBase(value, apiOrigin, allowAdvertisedHttps) {
     return null;
   }
   if (base.username || base.password || base.search || base.hash) return null;
-  const productionBase = base.protocol === "https:"
-    && (allowAdvertisedHttps || base.origin === new URL(WALLET_HANDOFF_BASE_URL).origin);
-  const loopbackBase = isLoopbackOrigin(apiOrigin) && base.origin === apiOrigin;
-  return productionBase || loopbackBase
+  const productionBase = new URL(WALLET_HANDOFF_BASE_URL);
+  const normalizedPath = base.pathname === "/" ? "/" : base.pathname.replace(/\/$/u, "");
+  return base.protocol === "https:"
+    && base.origin === productionBase.origin
+    && normalizedPath === productionBase.pathname
     ? `${base.origin}${base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`}`
     : null;
 }
 
-function isLoopbackOrigin(value) {
-  if (typeof value !== "string") return false;
-  try {
-    const url = new URL(value);
-    return url.hostname === "127.0.0.1" || url.hostname === "[::1]" || url.hostname === "localhost";
-  } catch {
-    return false;
-  }
+function pathIsWithin(candidatePath, basePath) {
+  const normalizedBase = basePath === "/" ? "/" : basePath.replace(/\/$/u, "");
+  return normalizedBase === "/"
+    || candidatePath === normalizedBase
+    || candidatePath.startsWith(`${normalizedBase}/`);
 }
 
 function safeExpiresAt(value) {
   return typeof value === "string" && value.length <= 64 && Number.isFinite(Date.parse(value))
     ? value
     : null;
-}
-
-function safeRequestOrigin(value) {
-  try {
-    return new URL(value).origin;
-  } catch {
-    return undefined;
-  }
 }
 
 function firstDefined(...values) {
@@ -673,16 +768,11 @@ function normalizeIdempotencyKey(value) {
   return value;
 }
 
-function normalizeApiOrigin(value) {
-  const url = new URL(value);
-  const isProduction = url.origin === API_ORIGIN;
-  const isLoopback = (url.hostname === "127.0.0.1" || url.hostname === "[::1]" || url.hostname === "localhost")
-    && (url.protocol === "http:" || url.protocol === "https:");
-  if ((!isProduction && !isLoopback) || url.pathname !== "/" || url.search || url.hash
-    || url.username || url.password) {
-    throw new TypeError("API origin must be https://api.programmable.market or an explicit loopback test origin");
-  }
-  return url.origin;
+function productionApiOrigin(value) {
+  if (value === undefined || value === API_ORIGIN) return API_ORIGIN;
+  throw new TypeError(
+    `API origin is fixed to ${API_ORIGIN}; test network behavior through an injected fetch implementation`,
+  );
 }
 
 function createPathForRequestSchema(schemaVersion) {

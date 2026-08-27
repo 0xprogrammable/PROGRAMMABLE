@@ -10,6 +10,7 @@ import {
   fetchCreatorProfile,
   mapCreatorProfileResponse,
 } from "../lib/profile/onchain-profile";
+import type { LauncherToken } from "../lib/tokens";
 
 const account = "0x1111111111111111111111111111111111111111";
 const tokenAddress = "0x2222222222222222222222222222222222222222";
@@ -296,6 +297,179 @@ describe("profile API client", () => {
     expect(profile.activity.every((item) => item.href === `/token/${tokenAddress}`))
       .toBe(true);
   });
+
+  it.each(["current", "last-known-good"] as const)(
+    "preserves %s project presentation and every link kind through public JSON",
+    (projectMetadataStatus) => {
+      const response = profileResponse();
+      const metadataToken = {
+        ...response.tokens[0],
+        tokenAddress,
+        hookAddress,
+        poolId,
+        creatorAddress: account,
+        positionRecipient,
+        launchTransactionHash,
+        liquidityPath: "meme" as const,
+        description: "A finalized Custom Graph project.",
+        imageUrl:
+          "https://ipfs.io/ipfs/QmYwAPJzv5CZsnAzt8auVZRnG9n4FJSj3cKX5Q9zVqvJf8",
+        projectMetadataStatus,
+        projectMetadataLinks: [
+          {
+            kind: "discord",
+            url: "https://discord.com/invite/customgraph",
+          },
+          {
+            kind: "documentation",
+            url: "https://docs.example.com/custom-graph",
+          },
+          {
+            kind: "github",
+            url: "https://github.com/example/custom-graph",
+          },
+          {
+            kind: "other",
+            url: "https://community.example.com/custom-graph",
+          },
+          { kind: "telegram", url: "https://t.me/customgraph" },
+          { kind: "website", url: "https://example.com/custom-graph" },
+          { kind: "x", url: "https://x.com/customgraph" },
+        ],
+      } as const satisfies LauncherToken;
+      const publicJson = JSON.parse(JSON.stringify({
+        ...response,
+        tokens: [metadataToken],
+      }));
+
+      const profile = mapCreatorProfileResponse(publicJson, account);
+
+      expect(profile.tokens[0]).toMatchObject({
+        address: tokenAddress,
+        name: "Programmable",
+        symbol: "PRG",
+        description: "A finalized Custom Graph project.",
+        imageUrl:
+          "https://ipfs.io/ipfs/QmYwAPJzv5CZsnAzt8auVZRnG9n4FJSj3cKX5Q9zVqvJf8",
+        projectMetadataStatus,
+        projectMetadataLinks: [
+          {
+            kind: "discord",
+            url: "https://discord.com/invite/customgraph",
+          },
+          {
+            kind: "documentation",
+            url: "https://docs.example.com/custom-graph",
+          },
+          {
+            kind: "github",
+            url: "https://github.com/example/custom-graph",
+          },
+          {
+            kind: "other",
+            url: "https://community.example.com/custom-graph",
+          },
+          { kind: "telegram", url: "https://t.me/customgraph" },
+          { kind: "website", url: "https://example.com/custom-graph" },
+          { kind: "x", url: "https://x.com/customgraph" },
+        ],
+      });
+    },
+  );
+
+  it("keeps canonical identity while dropping untrusted presentation URLs", () => {
+    const response = profileResponse();
+    Object.assign(response.tokens[0], {
+      description: "The identity remains available.",
+      imageUrl: "https://127.0.0.1/private.png",
+      projectMetadataStatus: "last-known-good",
+      projectMetadataLinks: [
+        { kind: "website", url: "https://metadata.local/project" },
+      ],
+    });
+
+    const profile = mapCreatorProfileResponse(response, account);
+
+    expect(profile.tokens).toHaveLength(1);
+    expect(profile.tokens[0]).toMatchObject({
+      address: tokenAddress,
+      name: "Programmable",
+      symbol: "PRG",
+      description: "The identity remains available.",
+      projectMetadataStatus: "last-known-good",
+    });
+    expect(profile.tokens[0]?.imageUrl).toBeUndefined();
+    expect(profile.tokens[0]?.projectMetadataLinks).toBeUndefined();
+  });
+
+  it.each([
+    {
+      label: "description",
+      presentation: {
+        description: `PROGRAMMABLE_API_KEY=${"s".repeat(32)}`,
+      },
+      omittedField: "description",
+    },
+    {
+      label: "double-encoded image path",
+      presentation: {
+        imageUrl: `https://assets.example.com/${encodeURIComponent(
+          Array.from(
+            new TextEncoder().encode(
+              `pm_live_${"a".repeat(22)}_${"b".repeat(43)}`,
+            ),
+            (byte) => `%${byte.toString(16).padStart(2, "0")}`,
+          ).join(""),
+        )}`,
+      },
+      omittedField: "imageUrl",
+    },
+    {
+      label: "double-encoded sensitive query key",
+      presentation: {
+        projectMetadataLinks: [{
+          kind: "website",
+          url: `https://example.com/?${encodeURIComponent(
+            "%61%70%69%5f%6b%65%79",
+          )}=${"s".repeat(16)}`,
+        }],
+      },
+      omittedField: "projectMetadataLinks",
+    },
+    {
+      label: "double-encoded secret query value",
+      presentation: {
+        projectMetadataLinks: [{
+          kind: "website",
+          url: `https://example.com/?note=${encodeURIComponent(
+            Array.from(
+              new TextEncoder().encode(
+                `pm_live_${"c".repeat(22)}_${"d".repeat(43)}`,
+              ),
+              (byte) => `%${byte.toString(16).padStart(2, "0")}`,
+            ).join(""),
+          )}`,
+        }],
+      },
+      omittedField: "projectMetadataLinks",
+    },
+  ] as const)(
+    "drops secret-bearing $label presentation without losing identity",
+    ({ presentation, omittedField }) => {
+      const response = profileResponse();
+      Object.assign(response.tokens[0], presentation);
+
+      const profile = mapCreatorProfileResponse(response, account);
+
+      expect(profile.tokens).toHaveLength(1);
+      expect(profile.tokens[0]).toMatchObject({
+        address: tokenAddress,
+        name: "Programmable",
+        symbol: "PRG",
+      });
+      expect(profile.tokens[0]?.[omittedField]).toBeUndefined();
+    },
+  );
 
   it("maps an exactly bound initial buy lock into the creator profile", () => {
     const response = profileResponse();

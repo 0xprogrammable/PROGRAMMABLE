@@ -32,13 +32,37 @@ export type ApiKeySummary = Readonly<{
   revokedAt: string | null;
 }>;
 
-type CreatedApiKey = Readonly<{
-  apiKey: ApiKeySummary;
-  apiKeySecret: string;
+export type ApiKeyMutationResult =
+  | Readonly<{
+      apiKey: ApiKeySummary;
+      secretState: "delivered-once";
+      apiKeySecret: string;
+      rotatedCredentialId?: string;
+    }>
+  | Readonly<{
+      apiKey: ApiKeySummary;
+      secretState: "already-delivered";
+      rotatedCredentialId?: string;
+    }>;
+
+type VisibleApiKeyMutationResult = Readonly<{
+  operation: "issue" | "rotate";
+  result: ApiKeyMutationResult;
 }>;
 
+export type ApiKeyMutationAttempt = Readonly<{
+  kind: "issue" | "rotate";
+  credentialId: string | null;
+  idempotencyKey: string;
+  body: string;
+}>;
+
+type ApiKeyMutationState =
+  | Readonly<{ kind: "idle" }>
+  | Readonly<{ kind: "issue" }>
+  | Readonly<{ kind: "rotate"; credentialId: string }>;
+
 type ListState = "idle" | "loading" | "ready" | "error";
-type CreateState = "idle" | "creating";
 type ActiveSection = "keys" | "history";
 type ApiKeyLoadMode = "initial" | "refresh" | "mutation";
 type DeveloperApiKeysViewProps = Readonly<{
@@ -68,6 +92,9 @@ const fixedScopes = ["custom-launch:create", "custom-launch:read"] as const;
 const schemaVersion = "programmable.custom-launch-api.v1";
 const launchRequestIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const apiKeySecretPattern =
+  /^pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
+const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -132,17 +159,109 @@ function parseApiKeyList(value: unknown): ApiKeySummary[] | null {
   return apiKeys;
 }
 
-function parseCreatedApiKey(value: unknown): CreatedApiKey | null {
+export function parseApiKeyMutationResult(
+  value: unknown,
+  status: number,
+  expectedRotatedCredentialId?: string,
+): ApiKeyMutationResult | null {
   if (
     !isRecord(value) ||
-    value.schemaVersion !== schemaVersion ||
-    typeof value.apiKeySecret !== "string"
+    value.schemaVersion !== schemaVersion
   ) {
     return null;
   }
   const apiKey = parseApiKeySummary(value.apiKey);
-  if (!apiKey || value.apiKeySecret.length === 0) return null;
-  return { apiKey, apiKeySecret: value.apiKeySecret };
+  const secretState = value.secretState;
+  const hasSecret = Object.prototype.hasOwnProperty.call(value, "apiKeySecret");
+  const hasRotatedCredentialId = Object.prototype.hasOwnProperty.call(
+    value,
+    "rotatedCredentialId",
+  );
+  if (
+    !apiKey
+    || (secretState !== "delivered-once" && secretState !== "already-delivered")
+    || (secretState === "delivered-once" && status !== 201)
+    || (secretState === "already-delivered" && status !== 200)
+    || (secretState === "delivered-once") !== hasSecret
+    || (expectedRotatedCredentialId !== undefined) !== hasRotatedCredentialId
+    || (expectedRotatedCredentialId !== undefined
+      && (value.rotatedCredentialId !== expectedRotatedCredentialId
+        || apiKey?.id === expectedRotatedCredentialId))
+  ) return null;
+  const rotation = expectedRotatedCredentialId === undefined
+    ? {}
+    : { rotatedCredentialId: expectedRotatedCredentialId };
+  if (secretState === "already-delivered") {
+    return { apiKey, secretState, ...rotation };
+  }
+  if (
+    typeof value.apiKeySecret !== "string"
+    || !apiKeySecretPattern.test(value.apiKeySecret)
+    || !value.apiKeySecret.startsWith(`${apiKey.keyPrefix}_`)
+  ) return null;
+  return {
+    apiKey,
+    secretState,
+    apiKeySecret: value.apiKeySecret,
+    ...rotation,
+  };
+}
+
+export function prepareApiKeyMutationAttempt(
+  current: ApiKeyMutationAttempt | null,
+  input: Readonly<{
+    kind: "issue" | "rotate";
+    credentialId: string | null;
+    body: string;
+  }>,
+  createIdempotencyKey: () => string,
+) {
+  if (
+    current?.kind === input.kind
+    && current.credentialId === input.credentialId
+    && current.body === input.body
+  ) return current;
+  if (current) {
+    throw new TypeError("An API key mutation retry is already pending");
+  }
+  const idempotencyKey = createIdempotencyKey();
+  if (!idempotencyKeyPattern.test(idempotencyKey)) {
+    throw new TypeError("API key mutation idempotency key is invalid");
+  }
+  return Object.freeze({ ...input, idempotencyKey });
+}
+
+export function apiKeyLifetimeDays(apiKey: ApiKeySummary) {
+  if (!apiKey.expiresAt) return 90;
+  const durationDays = (
+    Date.parse(apiKey.expiresAt) - Date.parse(apiKey.createdAt)
+  ) / 86_400_000;
+  const roundedDurationDays = Math.round(durationDays);
+  return Number.isFinite(durationDays)
+    && roundedDurationDays >= 1
+    && roundedDurationDays <= 366
+    ? roundedDurationDays
+    : 90;
+}
+
+export function applyApiKeyMutationResult(
+  current: readonly ApiKeySummary[],
+  result: ApiKeyMutationResult,
+  revokedAt: string,
+) {
+  const rotatedCredentialId = result.rotatedCredentialId;
+  const updated = current.map((candidate) =>
+    candidate.id === rotatedCredentialId
+      ? { ...candidate, revokedAt: latestNullableTimestamp(
+          candidate.revokedAt,
+          revokedAt,
+        ) }
+      : candidate
+  );
+  return [
+    result.apiKey,
+    ...updated.filter((candidate) => candidate.id !== result.apiKey.id),
+  ];
 }
 
 function latestNullableTimestamp(
@@ -196,13 +315,27 @@ function readApiError(response: Response, value: unknown, fallback: string) {
     ? value.error.requestId
     : null;
   const retryAfter = response.headers.get("retry-after");
-  const retryCopy = response.status === 429
+  const retryCopy = (response.status === 429 || response.status === 503)
     && retryAfter !== null
     && /^[1-9][0-9]{0,4}$/u.test(retryAfter)
     ? ` Try again in ${retryAfter} seconds.`
     : "";
   const requestCopy = requestId ? ` Request ID: ${requestId}.` : "";
   return `${message}${retryCopy}${requestCopy}`;
+}
+
+export function shouldRetainApiKeyMutationAttempt(
+  status: number,
+  value: unknown,
+) {
+  const code = isRecord(value) && isRecord(value.error)
+    && typeof value.error.code === "string"
+    ? value.error.code
+    : null;
+  return status === 408
+    || status === 429
+    || status >= 500
+    || code === "BFF_ASSERTION_REPLAYED";
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -475,11 +608,12 @@ function DeveloperApiKeysView({
   const [label, setLabel] = useState("");
   const [expiresInDays, setExpiresInDays] = useState<ExpiryDays>(90);
   const [labelError, setLabelError] = useState("");
-  const [createState, setCreateState] = useState<CreateState>("idle");
+  const [mutationState, setMutationState] = useState<ApiKeyMutationState>({
+    kind: "idle",
+  });
   const [createError, setCreateError] = useState("");
-  const [createdApiKey, setCreatedApiKey] = useState<CreatedApiKey | null>(
-    null,
-  );
+  const [mutationResult, setMutationResult] =
+    useState<VisibleApiKeyMutationResult | null>(null);
   const [keyCopyState, setKeyCopyState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
@@ -491,8 +625,12 @@ function DeveloperApiKeysView({
   const [confirmingRevokeId, setConfirmingRevokeId] = useState<string | null>(
     null,
   );
+  const [confirmingRotateId, setConfirmingRotateId] = useState<string | null>(
+    null,
+  );
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokeError, setRevokeError] = useState("");
+  const [rotateError, setRotateError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [activeSection, setActiveSection] = useState<ActiveSection>("keys");
   const [initialLaunchId, setInitialLaunchId] = useState<string | null>(null);
@@ -502,8 +640,12 @@ function DeveloperApiKeysView({
   const revealRef = useRef<HTMLDivElement>(null);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const revokeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const rotateTriggerRef = useRef<HTMLButtonElement | null>(null);
   const confirmRevokeRef = useRef<HTMLButtonElement>(null);
-  const createInFlightRef = useRef(false);
+  const confirmRotateRef = useRef<HTMLButtonElement>(null);
+  const mutationInFlightRef = useRef(false);
+  const pendingMutationAttemptRef = useRef<ApiKeyMutationAttempt | null>(null);
+  const keyItemRefs = useRef(new Map<string, HTMLLIElement>());
   const apiKeyReadGenerationRef = useRef(0);
 
   const getAuthHeaders = useCallback(
@@ -612,12 +754,16 @@ function DeveloperApiKeysView({
   }, [account, authReady, loadApiKeys]);
 
   useEffect(() => {
-    if (createdApiKey) revealRef.current?.focus();
-  }, [createdApiKey]);
+    if (mutationResult) revealRef.current?.focus();
+  }, [mutationResult]);
 
   useEffect(() => {
     if (confirmingRevokeId) confirmRevokeRef.current?.focus();
   }, [confirmingRevokeId]);
+
+  useEffect(() => {
+    if (confirmingRotateId) confirmRotateRef.current?.focus();
+  }, [confirmingRotateId]);
 
   useEffect(() => {
     if (authReady) return;
@@ -640,8 +786,12 @@ function DeveloperApiKeysView({
 
   const createApiKey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!account || createState === "creating" || createInFlightRef.current) return;
-    if (createdApiKey) {
+    if (
+      !account
+      || mutationState.kind !== "idle"
+      || mutationInFlightRef.current
+    ) return;
+    if (mutationResult?.result.secretState === "delivered-once") {
       setStatusMessage("Save the visible API key before creating another.");
       revealRef.current?.focus();
       return;
@@ -663,41 +813,62 @@ function DeveloperApiKeysView({
     setCreateError("");
     setKeyCopyState("idle");
     setSetupCopyState("idle");
-    createInFlightRef.current = true;
-    setCreateState("creating");
+    const body = JSON.stringify({
+      expiresInDays,
+      label: cleanLabel,
+      schemaVersion,
+      walletAddress: account,
+    });
+    let attempt: ApiKeyMutationAttempt;
+    try {
+      attempt = prepareApiKeyMutationAttempt(
+        pendingMutationAttemptRef.current,
+        { kind: "issue", credentialId: null, body },
+        () => crypto.randomUUID(),
+      );
+    } catch {
+      setCreateError(
+        "Retry the previous API key request before starting another.",
+      );
+      return;
+    }
+    pendingMutationAttemptRef.current = attempt;
+    mutationInFlightRef.current = true;
+    setMutationState({ kind: "issue" });
     try {
       const headers = await getAuthHeaders(true);
+      headers.set("Idempotency-Key", attempt.idempotencyKey);
       const response = await fetch("/api/developer/api-keys", {
-        body: JSON.stringify({
-          expiresInDays,
-          label: cleanLabel,
-          schemaVersion,
-          walletAddress: account,
-        }),
+        body: attempt.body,
         headers,
         method: "POST",
       });
-      const body = await readJson(response);
+      const responseBody = await readJson(response);
       if (!response.ok) {
+        if (!shouldRetainApiKeyMutationAttempt(response.status, responseBody)) {
+          pendingMutationAttemptRef.current = null;
+        }
         throw new Error(readApiError(
           response,
-          body,
+          responseBody,
           "Unable to create the API key.",
         ));
       }
-      const parsed = parseCreatedApiKey(body);
+      const parsed = parseApiKeyMutationResult(responseBody, response.status);
       if (!parsed) throw new Error("The API returned an invalid new key.");
 
-      setApiKeys((current) => [
-        parsed.apiKey,
-        ...current.filter((apiKey) => apiKey.id !== parsed.apiKey.id),
-      ]);
+      pendingMutationAttemptRef.current = null;
+      setApiKeys((current) => applyApiKeyMutationResult(
+        current,
+        parsed,
+        new Date().toISOString(),
+      ));
       setListState("ready");
-      setCreatedApiKey(parsed);
+      setMutationResult({ operation: "issue", result: parsed });
       setLabel("");
-      setStatusMessage(
-        `${parsed.apiKey.label} was created. Save the secret now because it will not be shown again.`,
-      );
+      setStatusMessage(parsed.secretState === "delivered-once"
+        ? `${parsed.apiKey.label} was created. Save the secret now because it will not be shown again.`
+        : `${parsed.apiKey.label} was already created. Its one-time secret cannot be shown again.`);
       refreshApiKeysAfterMutation(account);
     } catch (error) {
       setCreateError(
@@ -706,15 +877,15 @@ function DeveloperApiKeysView({
           : "Unable to create the API key.",
       );
     } finally {
-      createInFlightRef.current = false;
-      setCreateState("idle");
+      mutationInFlightRef.current = false;
+      setMutationState({ kind: "idle" });
     }
   };
 
   const copyApiKey = async () => {
-    if (!createdApiKey) return;
+    if (mutationResult?.result.secretState !== "delivered-once") return;
     try {
-      await copyToClipboard(createdApiKey.apiKeySecret);
+      await copyToClipboard(mutationResult.result.apiKeySecret);
       setKeyCopyState("copied");
       setStatusMessage("API key copied.");
     } catch {
@@ -724,7 +895,7 @@ function DeveloperApiKeysView({
   };
 
   const copyAgentSetup = async () => {
-    if (!createdApiKey) return;
+    if (mutationResult?.result.secretState !== "delivered-once") return;
     try {
       await copyToClipboard(PROGRAMMABLE_AGENT_SETUP_TEXT_V1);
       setSetupCopyState("copied");
@@ -735,12 +906,21 @@ function DeveloperApiKeysView({
     }
   };
 
-  const dismissApiKey = () => {
-    setCreatedApiKey(null);
+  const dismissApiKeyResult = (focusReplacement = false) => {
+    const result = mutationResult;
+    setMutationResult(null);
     setKeyCopyState("idle");
     setSetupCopyState("idle");
-    setStatusMessage("Key hidden.");
-    window.setTimeout(() => createButtonRef.current?.focus(), 0);
+    setStatusMessage(result?.result.secretState === "delivered-once"
+      ? "Key hidden."
+      : "Secret recovery notice closed.");
+    window.setTimeout(() => {
+      if (result && (focusReplacement || result.operation === "rotate")) {
+        keyItemRefs.current.get(result.result.apiKey.id)?.focus();
+      } else {
+        createButtonRef.current?.focus();
+      }
+    }, 0);
   };
 
   const showSection = (section: ActiveSection) => {
@@ -757,7 +937,10 @@ function DeveloperApiKeysView({
   };
 
   const beginRevoke = (apiKeyId: string, trigger: HTMLButtonElement) => {
+    if (mutationState.kind !== "idle" || mutationInFlightRef.current) return;
     revokeTriggerRef.current = trigger;
+    setConfirmingRotateId(null);
+    setRotateError("");
     setRevokeError("");
     setConfirmingRevokeId(apiKeyId);
   };
@@ -768,8 +951,113 @@ function DeveloperApiKeysView({
     window.setTimeout(() => revokeTriggerRef.current?.focus(), 0);
   };
 
+  const beginRotate = (apiKeyId: string, trigger: HTMLButtonElement) => {
+    if (mutationState.kind !== "idle" || mutationInFlightRef.current) return;
+    if (mutationResult?.result.secretState === "delivered-once") {
+      setStatusMessage("Save the visible API key before rotating another.");
+      revealRef.current?.focus();
+      return;
+    }
+    rotateTriggerRef.current = trigger;
+    setConfirmingRevokeId(null);
+    setRevokeError("");
+    setRotateError("");
+    setConfirmingRotateId(apiKeyId);
+  };
+
+  const cancelRotate = () => {
+    setConfirmingRotateId(null);
+    setRotateError("");
+    window.setTimeout(() => rotateTriggerRef.current?.focus(), 0);
+  };
+
+  const rotateApiKey = async (apiKey: ApiKeySummary) => {
+    if (
+      !account
+      || mutationState.kind !== "idle"
+      || mutationInFlightRef.current
+      || revokingId !== null
+    ) return;
+    const body = JSON.stringify({
+      expiresInDays: apiKeyLifetimeDays(apiKey),
+      label: apiKey.label,
+      schemaVersion,
+      walletAddress: account,
+    });
+    let attempt: ApiKeyMutationAttempt;
+    try {
+      attempt = prepareApiKeyMutationAttempt(
+        pendingMutationAttemptRef.current,
+        { kind: "rotate", credentialId: apiKey.id, body },
+        () => crypto.randomUUID(),
+      );
+    } catch {
+      setRotateError(
+        "Retry the previous API key request before starting another.",
+      );
+      return;
+    }
+    pendingMutationAttemptRef.current = attempt;
+    mutationInFlightRef.current = true;
+    setRotateError("");
+    setMutationState({ kind: "rotate", credentialId: apiKey.id });
+    try {
+      const headers = await getAuthHeaders(true);
+      headers.set("Idempotency-Key", attempt.idempotencyKey);
+      const response = await fetch(
+        `/api/developer/api-keys/${encodeURIComponent(apiKey.id)}/rotate`,
+        { body: attempt.body, headers, method: "POST" },
+      );
+      const responseBody = await readJson(response);
+      if (!response.ok) {
+        if (!shouldRetainApiKeyMutationAttempt(response.status, responseBody)) {
+          pendingMutationAttemptRef.current = null;
+        }
+        throw new Error(readApiError(
+          response,
+          responseBody,
+          "Unable to rotate the API key.",
+        ));
+      }
+      const parsed = parseApiKeyMutationResult(
+        responseBody,
+        response.status,
+        apiKey.id,
+      );
+      if (!parsed) throw new Error("The API returned an invalid rotated key.");
+
+      pendingMutationAttemptRef.current = null;
+      setApiKeys((current) => applyApiKeyMutationResult(
+        current,
+        parsed,
+        new Date().toISOString(),
+      ));
+      setListState("ready");
+      setMutationResult({ operation: "rotate", result: parsed });
+      setConfirmingRotateId(null);
+      setStatusMessage(parsed.secretState === "delivered-once"
+        ? `${apiKey.label} was rotated. Save the replacement secret now because it will not be shown again.`
+        : `${apiKey.label} was already rotated. The replacement secret cannot be shown again.`);
+      refreshApiKeysAfterMutation(account);
+    } catch (error) {
+      setRotateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to rotate the API key.",
+      );
+    } finally {
+      mutationInFlightRef.current = false;
+      setMutationState({ kind: "idle" });
+    }
+  };
+
   const revokeApiKey = async (apiKey: ApiKeySummary) => {
-    if (!account || revokingId) return;
+    if (
+      !account
+      || revokingId
+      || mutationState.kind !== "idle"
+      || mutationInFlightRef.current
+    ) return;
     setRevokeError("");
     setRevokingId(apiKey.id);
     try {
@@ -977,68 +1265,105 @@ function DeveloperApiKeysView({
         </section>
       ) : (
         <>
-          {createdApiKey ? (
+          {mutationResult ? (
             <div
               ref={revealRef}
               className={styles.keyReveal}
+              role="region"
               tabIndex={-1}
-              aria-labelledby="new-api-key-title"
+              aria-labelledby="api-key-mutation-result-title"
             >
               <div className={styles.revealHeading}>
                 <div>
-                  <p className={styles.kicker}>Created</p>
-                  <h2 id="new-api-key-title">Save this key now</h2>
+                  <p className={styles.kicker}>
+                    {mutationResult.operation === "rotate"
+                      ? "Rotated"
+                      : "Created"}
+                  </p>
+                  <h2 id="api-key-mutation-result-title">
+                    {mutationResult.result.secretState === "delivered-once"
+                      ? mutationResult.operation === "rotate"
+                        ? "Save the new key now"
+                        : "Save this key now"
+                      : "Secret no longer available"}
+                  </h2>
                 </div>
-                <span className={styles.oneTimeBadge}>Shown once</span>
+                <span className={styles.oneTimeBadge}>
+                  {mutationResult.result.secretState === "delivered-once"
+                    ? "Shown once"
+                    : "Already delivered"}
+                </span>
               </div>
-              <p className={styles.revealWarning}>
-                Copy this secret now. It will not be shown again. Store it in
-                encrypted secrets or the environment, never in chat, a prompt,
-                source code, or command history.
-              </p>
-              <div className={styles.secretRow}>
-                <code>{createdApiKey.apiKeySecret}</code>
-                <div className={styles.secretActions}>
+              {mutationResult.result.secretState === "delivered-once" ? (
+                <>
+                  <p className={styles.revealWarning}>
+                    {mutationResult.operation === "rotate"
+                      ? "The previous key is revoked. Copy this replacement secret now; it will not be shown again."
+                      : "Copy this secret now. It will not be shown again."}{" "}
+                    Store it in encrypted secrets or the environment, never in
+                    chat, a prompt, source code, or command history.
+                  </p>
+                  <div className={styles.secretRow}>
+                    <code>{mutationResult.result.apiKeySecret}</code>
+                    <div className={styles.secretActions}>
+                      <button
+                        className={styles.secondaryButton}
+                        type="button"
+                        onClick={() => void copyApiKey()}
+                      >
+                        {keyCopyState === "copied" ? "Copied" : "Copy key"}
+                      </button>
+                      <button
+                        className={styles.secondaryButton}
+                        type="button"
+                        onClick={() => void copyAgentSetup()}
+                      >
+                        {setupCopyState === "copied"
+                          ? "Setup copied"
+                          : "Copy agent setup"}
+                      </button>
+                    </div>
+                  </div>
+                  <p className={styles.setupNote}>
+                    Agent setup contains the <code>$PROGRAMMABLE_API_KEY</code>
+                    placeholder, install and workflow instructions, plus public
+                    discovery, capabilities, preflight, remediation, pack schema,
+                    CLI, guide, and OpenAPI links. It never includes this key.
+                  </p>
+                  {keyCopyState === "error" ? (
+                    <p className={styles.inlineError} role="alert">
+                      Copy failed. Select the key and copy it manually.
+                    </p>
+                  ) : null}
+                  {setupCopyState === "error" ? (
+                    <p className={styles.inlineError} role="alert">
+                      Agent setup could not be copied. Try again.
+                    </p>
+                  ) : null}
+                  <button
+                    className={styles.dismissButton}
+                    type="button"
+                    onClick={() => dismissApiKeyResult()}
+                  >
+                    I saved this key
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className={styles.revealWarning}>
+                    This operation completed earlier. The service cannot return
+                    its one-time secret again. Find the replacement below and
+                    rotate it if you did not save the secret.
+                  </p>
                   <button
                     className={styles.secondaryButton}
                     type="button"
-                    onClick={() => void copyApiKey()}
+                    onClick={() => dismissApiKeyResult(true)}
                   >
-                    {keyCopyState === "copied" ? "Copied" : "Copy key"}
+                    Find key to rotate
                   </button>
-                  <button
-                    className={styles.secondaryButton}
-                    type="button"
-                    onClick={() => void copyAgentSetup()}
-                  >
-                    {setupCopyState === "copied"
-                      ? "Setup copied"
-                      : "Copy agent setup"}
-                  </button>
-                </div>
-              </div>
-              <p className={styles.setupNote}>
-                Agent setup contains only <code>$PROGRAMMABLE_API_KEY</code>,
-                install instructions, and public CLI, guide, and OpenAPI links.
-                It never includes this key.
-              </p>
-              {keyCopyState === "error" ? (
-                <p className={styles.inlineError} role="alert">
-                  Copy failed. Select the key and copy it manually.
-                </p>
-              ) : null}
-              {setupCopyState === "error" ? (
-                <p className={styles.inlineError} role="alert">
-                  Agent setup could not be copied. Try again.
-                </p>
-              ) : null}
-              <button
-                className={styles.dismissButton}
-                type="button"
-                onClick={dismissApiKey}
-              >
-                I saved this key
-              </button>
+                </>
+              )}
             </div>
           ) : null}
 
@@ -1068,6 +1393,7 @@ function DeveloperApiKeysView({
               <section
                 className={`${styles.panel} ${styles.createPanel}`}
                 aria-labelledby="create-key-title"
+                aria-busy={mutationState.kind === "issue"}
               >
                 <div className={styles.panelHeading}>
                   <div>
@@ -1145,13 +1471,14 @@ function DeveloperApiKeysView({
                     ref={createButtonRef}
                     className={styles.primaryButton}
                     disabled={
-                      createState === "creating" || Boolean(createdApiKey)
+                      mutationState.kind !== "idle"
+                      || mutationResult?.result.secretState === "delivered-once"
                     }
                     type="submit"
                   >
-                    {createState === "creating"
+                    {mutationState.kind === "issue"
                       ? "Creating key"
-                      : createdApiKey
+                      : mutationResult?.result.secretState === "delivered-once"
                         ? "Save current key first"
                         : "Create key"}
                   </button>
@@ -1161,7 +1488,11 @@ function DeveloperApiKeysView({
               <section
                 className={`${styles.panel} ${styles.listPanel}`}
                 aria-labelledby="api-keys-title"
-                aria-busy={listState === "loading" || refreshingKeys}
+                aria-busy={
+                  listState === "loading"
+                  || refreshingKeys
+                  || mutationState.kind === "rotate"
+                }
               >
                 <div className={styles.panelHeading}>
                   <div>
@@ -1218,10 +1549,27 @@ function DeveloperApiKeysView({
                   <ul className={styles.keyList}>
                     {apiKeys.map((apiKey) => {
                       const status = keyStatus(apiKey);
-                      const confirming = confirmingRevokeId === apiKey.id;
+                      const confirmingRevoke = confirmingRevokeId === apiKey.id;
+                      const confirmingRotate = confirmingRotateId === apiKey.id;
                       const revoking = revokingId === apiKey.id;
+                      const rotating = mutationState.kind === "rotate"
+                        && mutationState.credentialId === apiKey.id;
+                      const mutationBusy = revokingId !== null
+                        || mutationState.kind !== "idle";
                       return (
-                        <li className={styles.keyItem} key={apiKey.id}>
+                        <li
+                          ref={(element) => {
+                            if (element) {
+                              keyItemRefs.current.set(apiKey.id, element);
+                            } else {
+                              keyItemRefs.current.delete(apiKey.id);
+                            }
+                          }}
+                          className={styles.keyItem}
+                          key={apiKey.id}
+                          tabIndex={-1}
+                          aria-busy={rotating || revoking}
+                        >
                           <div className={styles.keyIdentity}>
                             <div>
                               <h3>{apiKey.label}</h3>
@@ -1256,9 +1604,53 @@ function DeveloperApiKeysView({
                             ) : null}
                           </dl>
 
-                          {confirming ? (
+                          {confirmingRotate ? (
                             <div
-                              className={styles.revokeConfirmation}
+                              className={styles.mutationConfirmation}
+                              role="group"
+                              aria-label={`Rotate ${apiKey.label}`}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape" && !rotating) {
+                                  event.preventDefault();
+                                  cancelRotate();
+                                }
+                              }}
+                            >
+                              <p>
+                                The current key will stop working immediately.
+                                The replacement keeps this name and its original{" "}
+                                {apiKeyLifetimeDays(apiKey)}-day lifetime. Update
+                                every agent that uses it.
+                              </p>
+                              {rotateError ? (
+                                <p className={styles.inlineError} role="alert">
+                                  {rotateError}
+                                </p>
+                              ) : null}
+                              <div>
+                                <button
+                                  ref={confirmRotateRef}
+                                  className={styles.secondaryButton}
+                                  disabled={rotating}
+                                  type="button"
+                                  onClick={cancelRotate}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  className={styles.dangerButton}
+                                  disabled={rotating}
+                                  type="button"
+                                  data-confirm-rotate
+                                  onClick={() => void rotateApiKey(apiKey)}
+                                >
+                                  {rotating ? "Rotating key" : "Rotate key"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : confirmingRevoke ? (
+                            <div
+                              className={styles.mutationConfirmation}
                               role="group"
                               aria-label={`Revoke ${apiKey.label}`}
                               onKeyDown={(event) => {
@@ -1299,15 +1691,28 @@ function DeveloperApiKeysView({
                               </div>
                             </div>
                           ) : status === "Active" ? (
-                            <button
-                              className={styles.revokeButton}
-                              type="button"
-                              onClick={(event) =>
-                                beginRevoke(apiKey.id, event.currentTarget)
-                              }
-                            >
-                              Revoke key
-                            </button>
+                            <div className={styles.keyActions}>
+                              <button
+                                className={styles.secondaryButton}
+                                disabled={mutationBusy}
+                                type="button"
+                                onClick={(event) =>
+                                  beginRotate(apiKey.id, event.currentTarget)
+                                }
+                              >
+                                Rotate key
+                              </button>
+                              <button
+                                className={styles.revokeButton}
+                                disabled={mutationBusy}
+                                type="button"
+                                onClick={(event) =>
+                                  beginRevoke(apiKey.id, event.currentTarget)
+                                }
+                              >
+                                Revoke key
+                              </button>
+                            </div>
                           ) : null}
                         </li>
                       );

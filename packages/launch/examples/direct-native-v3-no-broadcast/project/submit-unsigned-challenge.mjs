@@ -22,10 +22,6 @@ const args = [
   "--max-attempts",
   "1",
 ];
-if (process.env.PROGRAMMABLE_API_ORIGIN) {
-  args.push("--api-origin", process.env.PROGRAMMABLE_API_ORIGIN);
-}
-
 const { code, stdout } = await run(executable, args);
 if (code !== 0) process.exit(code);
 

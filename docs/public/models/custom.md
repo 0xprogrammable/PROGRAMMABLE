@@ -12,15 +12,16 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## Local packaging and API availability
 
-Build and test the exact project. The public `programmable-launch` 3.3.3 CLI derives the deterministic source manifest,
+Build and test the exact project. The public `programmable-launch` 3.3.4 CLI derives the deterministic source manifest,
 graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API
 schema](../developers/custom-launch.md). The default `programmable.direct-native-hook-graph-profile.v3` profile uses
 `profileRevision: 3`, `profileVersion: 3.2.0` and exact `solc 0.8.26+commit.8a97fa7a`. It also binds canonical project
 name, symbol, description, optional image and links into the request and graph hashes. Exact `3.1.0` and `3.0.0`
 requests remain readable and byte-identical retryable under their original immutable policies, and revision 2 remains
 compatible.
-Run `pack`, `validate`, `submit` and `status` for the byte-identical public V3 request. Stop for every explicit wallet
-handoff. The API key and CLI never sign or broadcast.
+Run `pack`, `validate --remote`, `submit` and `status --watch --until authorized` for the byte-identical public V3
+request. Stop for every explicit wallet handoff, then resume `status --watch --until finalized`. The API key and CLI
+never sign or broadcast.
 
 Profile 3.2.0 applies role-aware exact-source static admission. Exactly seven objective rules hard-block deployment;
 proxy/delegatecall, mint/tax/pause, liquidity and return-delta surfaces require evidence instead of categorical

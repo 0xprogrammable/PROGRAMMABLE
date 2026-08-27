@@ -213,16 +213,16 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.3.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.3.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.3.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.3.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.4.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.4.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.4.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.4.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.3`.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.4`.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
 matching solc artifacts. Its generated evidence is limited to `pre-submit`. The deterministic permission salt grind
@@ -252,10 +252,12 @@ programmable-launch submit ./launch.json \
 programmable-launch status REQUEST_UUID --watch --until authorized
 ```
 
-The agent quickstart is `pack -> validate --remote -> submit -> wallet -> status`. `wallet` means stop for the connected
-controller to review and sign; it is not a fifth CLI command. Remote validation and later submission use the same exact
-request bytes. Preflight has no Idempotency-Key because it creates no durable resource; `submit` keeps its existing
-durable idempotency and retry rules.
+The agent state machine is `pack -> validate --remote -> submit -> status --watch --until authorized -> wallet ->
+status --watch --until finalized`. `wallet` means stop for the connected controller to review and sign; it is not a
+fifth CLI command. Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`; there is no
+origin override. Remote validation and later submission use the same exact request bytes. Preflight has no
+Idempotency-Key because it creates no durable resource; `submit` keeps its existing durable idempotency and retry
+rules.
 
 With `--until authorized`, the status command stops at either the EIP-3009 funding handoff or the Router handoff. In
 EIP-3009 mode, first complete the exact funding signature in the website, then run the same status command again. At

@@ -11,6 +11,7 @@ import {
   readFinalizedCustomLaunchMetadataPagesV1,
 } from "../lib/server/custom-launch/finalized-custom-launch-metadata-feed-v1";
 import { canonicalSha256 } from "../lib/server/projection-target/hashing";
+import { PROGRAMMABLE_TOKEN_IMAGE_HOST } from "../lib/token-image";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const NOW = Date.parse("2026-08-25T06:00:00.000Z");
@@ -36,6 +37,8 @@ function projectMetadata(
     name: true,
     symbol: true,
   },
+  imageUri =
+    `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}/token-images/custom-graph.webp`,
 ) {
   return {
     schemaVersion: "programmable.project-metadata.v1",
@@ -47,17 +50,29 @@ function projectMetadata(
       schemaVersion: "programmable.launch-presentation-draft.v1",
       description: "A finalized Custom Graph project.",
       image: {
-        uri: "https://assets.example.com/custom-graph.png",
+        uri: imageUri,
         contentSha256: digest("31"),
-        mediaType: "image/png",
+        mediaType: "image/webp",
         byteLength: 1_024,
         width: 512,
         height: 512,
       },
       links: [
         {
+          kind: "discord",
+          uri: "https://discord.com/invite/customgraph",
+        },
+        {
           kind: "documentation",
           uri: "https://docs.example.com/custom-graph",
+        },
+        {
+          kind: "github",
+          uri: "https://github.com/example/custom-graph",
+        },
+        {
+          kind: "other",
+          uri: "https://community.example.com/custom-graph",
         },
         {
           kind: "telegram",
@@ -113,6 +128,7 @@ type LaunchFixtureOptions = Readonly<{
   observedAtBlockNumber?: string | null;
   observedAt?: string | null;
   standardReadModel?: Readonly<{ name: boolean; symbol: boolean }>;
+  imageUri?: string;
 }>;
 
 function launchFixture(input: LaunchFixtureOptions = {}) {
@@ -120,6 +136,7 @@ function launchFixture(input: LaunchFixtureOptions = {}) {
     input.tokenName,
     input.tokenSymbol,
     input.standardReadModel,
+    input.imageUri,
   );
   const actualProjectMetadataHash = canonicalSha256(
     "programmable.project-metadata.v1",
@@ -527,8 +544,31 @@ describe("finalized Custom launch metadata feed v1", () => {
       symbol: customGraphExploreEntry.symbol,
       tokenDecimals: customGraphExploreEntry.tokenDecimals,
       description: "A finalized Custom Graph project.",
-      imageUrl: "https://assets.example.com/custom-graph.png",
+      imageUrl:
+        `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}/token-images/custom-graph.webp`,
+      projectMetadataStatus: "current",
       links: [
+        { kind: "telegram", url: "https://t.me/customgraph" },
+        { kind: "website", url: "https://example.com/custom-graph" },
+        { kind: "x", url: "https://x.com/customgraph" },
+      ],
+      projectMetadataLinks: [
+        {
+          kind: "discord",
+          url: "https://discord.com/invite/customgraph",
+        },
+        {
+          kind: "documentation",
+          url: "https://docs.example.com/custom-graph",
+        },
+        {
+          kind: "github",
+          url: "https://github.com/example/custom-graph",
+        },
+        {
+          kind: "other",
+          url: "https://community.example.com/custom-graph",
+        },
         { kind: "telegram", url: "https://t.me/customgraph" },
         { kind: "website", url: "https://example.com/custom-graph" },
         { kind: "x", url: "https://x.com/customgraph" },
@@ -587,6 +627,69 @@ describe("finalized Custom launch metadata feed v1", () => {
         appliedBindings: overlay?.appliedBindings,
       },
     ));
+  });
+
+  it.each([
+    {
+      imageUri:
+        "ipfs://QmYwAPJzv5CZsnAzt8auVZRnG9n4FJSj3cKX5Q9zVqvJf8",
+      expected:
+        "https://ipfs.io/ipfs/QmYwAPJzv5CZsnAzt8auVZRnG9n4FJSj3cKX5Q9zVqvJf8",
+    },
+    {
+      imageUri: `ar://${"a".repeat(43)}`,
+      expected: `https://arweave.net/${"a".repeat(43)}`,
+    },
+  ])("projects $imageUri through the trusted image gateway", async ({
+    imageUri,
+    expected,
+  }) => {
+    const snapshot = routerSnapshot();
+    const feed = await parsedFeed(launchFixture({ imageUri }));
+
+    const result = await enrichRouterCustomSnapshotWithFinalizedMetadataV1(
+      snapshot,
+      { readFeed: async () => feed },
+    );
+
+    expect(result.identityCommitment).toBe(snapshot.identityCommitment);
+    expect(result.entries[0]).toMatchObject({ imageUrl: expected });
+  });
+
+  it("does not auto-load a mutable third-party HTTPS presentation image", async () => {
+    const result = await enrichRouterCustomSnapshotWithFinalizedMetadataV1(
+      routerSnapshot(),
+      {
+        readFeed: async () => await parsedFeed(launchFixture({
+          imageUri: "https://assets.example.com/mutable-project.webp",
+        })),
+      },
+    );
+
+    expect(result.entries[0]).toMatchObject({
+      description: "A finalized Custom Graph project.",
+      projectMetadataStatus: "current",
+    });
+    expect(result.entries[0]?.imageUrl).toBeUndefined();
+  });
+
+  it("keeps Router identity and drops an untrusted image URL", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const snapshot = routerSnapshot();
+
+    const result = await enrichRouterCustomSnapshotWithFinalizedMetadataV1(
+      snapshot,
+      {
+        readFeed: async () => await parsedFeed(launchFixture({
+          imageUri: "https://127.0.0.1/project.png",
+        })),
+      },
+    );
+
+    expect(result).toBe(snapshot);
+    expect(result.entries[0]?.imageUrl).toBe(
+      "https://prior.example.com/image.png",
+    );
   });
 
   it.each([
@@ -743,6 +846,14 @@ describe("finalized Custom launch metadata feed v1", () => {
     expect(lastKnownGood.status).toBe("last-known-good");
     expect(lastKnownGood.launches).toBe(current.launches);
     expect(fetchFeed).toHaveBeenCalledTimes(2);
+    const projectedLastKnownGood =
+      await enrichRouterCustomSnapshotWithFinalizedMetadataV1(
+        routerSnapshot(),
+        { readFeed: async () => lastKnownGood },
+      );
+    expect(projectedLastKnownGood.entries[0]).toMatchObject({
+      projectMetadataStatus: "last-known-good",
+    });
 
     now = NOW + FINALIZED_CUSTOM_LAUNCH_METADATA_LKG_TTL_MS + 1;
     await expect(readFeed()).rejects.toThrow("provider unavailable");

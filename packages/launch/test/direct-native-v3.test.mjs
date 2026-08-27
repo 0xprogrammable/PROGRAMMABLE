@@ -29,6 +29,7 @@ import {
   validateLaunchFile,
   validateLaunchRequest,
 } from "../src/validate.mjs";
+import { jsonResponse, validCapabilities } from "./fixtures/capabilities.mjs";
 
 const SHA = `sha256:${"11".repeat(32)}`;
 const RUNTIME_HASH = `0x${"22".repeat(32)}`;
@@ -1024,7 +1025,7 @@ test("V3 submit and status select the V3 route and stop at the funding wallet ac
     launchPath,
     configPath: path.join(root, "programmable-launch.config.json"),
     idempotencyKey: "direct-native-v3-route-0001",
-    apiOrigin: "http://127.0.0.1:43198",
+    apiOrigin: "https://api.programmable.market",
     stateDirectory: path.join(root, "state"),
     maxAttempts: 1,
     validateLaunchFileImpl: async () => ({
@@ -1033,6 +1034,9 @@ test("V3 submit and status select the V3 route and stop at the funding wallet ac
     }),
     fetchImpl: async (url) => {
       urls.push(url);
+      if (url.endsWith("/v3/capabilities")) {
+        return jsonResponse(validCapabilities());
+      }
       return new Response(JSON.stringify({
         schemaVersion: "programmable.custom-launch.v3",
         requestId,
@@ -1042,7 +1046,10 @@ test("V3 submit and status select the V3 route and stop at the funding wallet ac
     },
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
   });
-  assert.equal(urls[0], "http://127.0.0.1:43198/v3/custom-launches");
+  assert.deepEqual(urls.slice(0, 2), [
+    "https://api.programmable.market/v3/capabilities",
+    "https://api.programmable.market/v3/custom-launches",
+  ]);
   const journal = JSON.parse(await readFile(submit.journalPath, "utf8"));
   assert.equal(journal.requestPath, "/v3/custom-launches");
   assert.ok(!JSON.stringify(journal).includes("pm_live_publictest_secretvalue"));
@@ -1052,7 +1059,7 @@ test("V3 submit and status select the V3 route and stop at the funding wallet ac
     apiVersion: 3,
     watch: true,
     until: "authorized",
-    apiOrigin: "http://127.0.0.1:43198",
+    apiOrigin: "https://api.programmable.market",
     maxAttempts: 1,
     fetchImpl: async (url) => {
       urls.push(url);
@@ -1066,8 +1073,8 @@ test("V3 submit and status select the V3 route and stop at the funding wallet ac
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
   });
   assert.equal(
-    urls[1],
-    `http://127.0.0.1:43198/v3/custom-launches/${requestId}`,
+    urls[2],
+    `https://api.programmable.market/v3/custom-launches/${requestId}`,
   );
   assert.equal(status.stopped, true);
   assert.equal(status.walletHandoffReady, true);

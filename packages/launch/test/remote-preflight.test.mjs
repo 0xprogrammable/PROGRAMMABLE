@@ -20,7 +20,8 @@ import {
 import { sha256Digest } from "../src/io.mjs";
 
 const API_KEY = "pm_live_remote_preflight_test_secret";
-const API_ORIGIN = "http://127.0.0.1:43210";
+const API_ORIGIN = "https://api.programmable.market";
+const WALLET_HANDOFF_BASE_URL = "https://programmable.market/developers/api-keys";
 const REQUEST_ID = "8ad84ddb-9453-4264-87fe-bb18a9f80bf0";
 const CANONICAL_REQUEST_VECTOR_BYTES = Buffer.from(
   "{\n  \"z\":\"last\",\n  \"schemaVersion\":\"programmable.custom-launch-create-request.v3\",\n  \"a\":{\"value\":1}\n}\n",
@@ -39,11 +40,7 @@ test("remote validate discovers public capabilities then runs authenticated side
     assert.notEqual(requestSha256, CANONICAL_REQUEST_VECTOR_HASH);
     const calls = [];
     const capabilities = {
-      schemaVersion: "programmable.custom-launch-capabilities.v1",
-      routes: {
-        preflight: { method: "POST", path: PREFLIGHT_PATH_V3 },
-      },
-      walletHandoffBaseUrl: `${API_ORIGIN}/wallet/`,
+      ...validCapabilities(),
       futureAdditiveCapability: { preserved: true },
     };
     const preflight = validPreflight(CANONICAL_REQUEST_VECTOR_HASH, {
@@ -108,7 +105,10 @@ test("remote validate discovers public capabilities then runs authenticated side
         schemaVersion: CREATE_REQUEST_SCHEMA_V3,
         requestSha256,
       }),
-      fetchImpl: async (_url, options) => {
+      fetchImpl: async (url, options) => {
+        if (url.endsWith(CAPABILITIES_PATH_V3)) {
+          return jsonResponse(validCapabilities());
+        }
         submitBody = Buffer.from(options.body);
         return jsonResponse({
           schemaVersion: "programmable.custom-launch.v3",
@@ -142,7 +142,7 @@ test("remote validate rejects a response that contradicts the no-side-effects co
       fetchImpl: async () => {
         calls += 1;
         return calls === 1
-          ? jsonResponse({ walletHandoffBaseUrl: `${API_ORIGIN}/wallet/` })
+          ? jsonResponse(validCapabilities())
           : jsonResponse(validPreflight(CANONICAL_REQUEST_VECTOR_HASH, { quotaConsumed: true }));
       },
       loadApiKeyImpl: async () => API_KEY,
@@ -174,7 +174,7 @@ test("remote validate rejects the raw launch-file digest as the server requestHa
       fetchImpl: async () => {
         calls += 1;
         return calls === 1
-          ? jsonResponse({ walletHandoffBaseUrl: `${API_ORIGIN}/wallet/` })
+          ? jsonResponse(validCapabilities())
           : jsonResponse(validPreflight(rawRequestSha256));
       },
       loadApiKeyImpl: async () => API_KEY,
@@ -235,14 +235,14 @@ test("status promotes the safe wallet handoff, expiry and action without signing
       requestId: REQUEST_ID,
       status: "authorized",
       actionRequired,
-      walletHandoffUrl: `${API_ORIGIN}/wallet/${REQUEST_ID}`,
+      walletHandoffUrl: `${WALLET_HANDOFF_BASE_URL}/${REQUEST_ID}`,
       expiresAt: "2026-08-26T23:00:00.000Z",
       secondsRemaining: 900,
     }),
     loadApiKeyImpl: async () => API_KEY,
   });
   assert.deepEqual(result.actionRequired, actionRequired);
-  assert.equal(result.walletHandoffUrl, `${API_ORIGIN}/wallet/${REQUEST_ID}`);
+  assert.equal(result.walletHandoffUrl, `${WALLET_HANDOFF_BASE_URL}/${REQUEST_ID}`);
   assert.equal(result.expiresAt, "2026-08-26T23:00:00.000Z");
   assert.equal(result.secondsRemaining, 900);
   assert.equal(result.walletHandoffReady, true);
@@ -264,6 +264,164 @@ test("validate help keeps four commands and documents remote preflight boundarie
   assert.match(output, /quota-free V3 preflight/u);
   assert.match(output, /never allocates a nonce, persists a launch, signs, or broadcasts/u);
 });
+
+test("authenticated commands reject every non-production API origin before loading a key", async () => {
+  let keyLoads = 0;
+  let networkCalls = 0;
+  await assert.rejects(
+    statusLaunch({
+      requestId: REQUEST_ID,
+      apiOrigin: "http://127.0.0.1:43210",
+      fetchImpl: async () => {
+        networkCalls += 1;
+        throw new Error("network must not be reached");
+      },
+      loadApiKeyImpl: async () => {
+        keyLoads += 1;
+        return API_KEY;
+      },
+    }),
+    /API origin is fixed to https:\/\/api\.programmable\.market/u,
+  );
+  assert.equal(keyLoads, 0);
+  assert.equal(networkCalls, 0);
+
+  await assert.rejects(
+    main(["status", REQUEST_ID, "--api-origin", "http://127.0.0.1:43210"]),
+    /Unknown option --api-origin/u,
+  );
+});
+
+test("remote validation fails closed on profile, route, and auth capability drift before loading a key", async () => {
+  const cases = [
+    ["profile.profileId", (value) => { value.profile.profileId = "other.profile"; }],
+    ["profile.profileRevision", (value) => { value.profile.profileRevision = 4; }],
+    ["profile.profileVersion", (value) => { value.profile.profileVersion = "3.3.0"; }],
+    ["profile.productionLaunchAuthorized", (value) => {
+      value.profile.productionLaunchAuthorized = false;
+    }],
+    ["routes.create", (value) => { value.routes.create = "/v2/custom-launches"; }],
+    ["authentication.create", (value) => { value.authentication.create = "none"; }],
+    ["authentication.capabilities", (value) => {
+      value.authentication.capabilities = "bearer-api-key";
+    }],
+    ["authentication.requiredScopes", (value) => {
+      value.authentication.requiredScopes = ["custom-launch:read"];
+    }],
+  ];
+  for (const [expectedField, mutate] of cases) {
+    const capabilities = structuredClone(validCapabilities());
+    mutate(capabilities);
+    let keyLoads = 0;
+    let calls = 0;
+    await assert.rejects(
+      validateLaunchRemote({
+        launchPath: "/does/not/need/to/exist.json",
+        configPath: "/does/not/need/to/exist.config.json",
+        maxAttempts: 1,
+        readLaunchBytesImpl: async () => CANONICAL_REQUEST_VECTOR_BYTES,
+        validateLaunchFileImpl: async () => ({
+          schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+          requestSha256: sha256Digest(CANONICAL_REQUEST_VECTOR_BYTES),
+        }),
+        fetchImpl: async () => {
+          calls += 1;
+          return jsonResponse(capabilities);
+        },
+        loadApiKeyImpl: async () => {
+          keyLoads += 1;
+          return API_KEY;
+        },
+      }),
+      (error) => {
+        assert.ok(error instanceof ProgrammableApiError);
+        assert.equal(error.details.code, "CAPABILITIES_CONTRACT_INVALID");
+        assert.deepEqual(error.details.serverDetails, { field: expectedField });
+        return true;
+      },
+    );
+    assert.equal(calls, 1, expectedField);
+    assert.equal(keyLoads, 0, expectedField);
+  }
+});
+
+test("V3 submit rechecks capabilities before loading a key", async () => {
+  const capabilities = validCapabilities();
+  capabilities.routes.create = "/v2/custom-launches";
+  let keyLoads = 0;
+  let networkCalls = 0;
+  await assert.rejects(
+    submitLaunch({
+      launchPath: "/does/not/need/to/exist.json",
+      configPath: "/does/not/need/to/exist.config.json",
+      stateDirectory: "/does/not/need/to/exist.state",
+      maxAttempts: 1,
+      validateLaunchFileImpl: async () => ({
+        schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+        requestSha256: sha256Digest(CANONICAL_REQUEST_VECTOR_BYTES),
+      }),
+      readLaunchBytesImpl: async () => CANONICAL_REQUEST_VECTOR_BYTES,
+      fetchImpl: async () => {
+        networkCalls += 1;
+        return jsonResponse(capabilities);
+      },
+      loadApiKeyImpl: async () => {
+        keyLoads += 1;
+        return API_KEY;
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof ProgrammableApiError);
+      assert.equal(error.details.code, "CAPABILITIES_CONTRACT_INVALID");
+      assert.deepEqual(error.details.serverDetails, { field: "routes.create" });
+      return true;
+    },
+  );
+  assert.equal(networkCalls, 1);
+  assert.equal(keyLoads, 0);
+});
+
+function validCapabilities() {
+  return {
+    schemaVersion: "programmable.custom-launch-capabilities.v1",
+    apiVersion: "v3",
+    serverTime: "2026-08-26T18:00:00.000Z",
+    readinessUrl: `${API_ORIGIN}/readyz`,
+    chain: { id: "1", name: "Ethereum Mainnet" },
+    profile: {
+      profileId: "programmable.direct-native-hook-graph.v1",
+      profileRevision: 3,
+      profileVersion: "3.2.0",
+      productionLaunchAuthorized: true,
+    },
+    routes: {
+      create: "/v3/custom-launches",
+      preflight: PREFLIGHT_PATH_V3,
+      status: "/v3/custom-launches/{launchId}",
+      list: "/v3/custom-launches",
+      finalizedMetadata: "/v3/finalized-custom-launches",
+      capabilities: CAPABILITIES_PATH_V3,
+    },
+    authentication: {
+      create: "bearer-api-key",
+      preflight: "bearer-api-key",
+      status: "bearer-api-key",
+      finalizedMetadata: "none",
+      capabilities: "none",
+      requiredScopes: ["custom-launch:create", "custom-launch:read"],
+      apiKeyIsWallet: false,
+    },
+    preflight: {
+      quotaConsumed: false,
+      nonceAllocated: false,
+      persisted: false,
+      walletSignatureProduced: false,
+      transactionBroadcast: false,
+      exactProductionAdmissionEngine: true,
+    },
+    walletHandoffBaseUrl: WALLET_HANDOFF_BASE_URL,
+  };
+}
 
 function validPreflight(requestHash, overrides = {}) {
   return {
