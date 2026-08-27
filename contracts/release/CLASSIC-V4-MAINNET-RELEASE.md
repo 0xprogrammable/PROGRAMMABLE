@@ -99,18 +99,10 @@ The required object is `$defs.sourceEvidence` in `contracts/deployments/schema/c
 
 ## 4. Canonical Router handoff and lifecycle canary
 
-The launcher is intentionally Mainnet Router-only. Before a lifecycle canary can be prepared, the external permit
-authority must produce an exact, time-bounded signature for the canonical Router
-`0x8622DD5bAb44185f2A458ac90384Ac99248f8d56` and its `launchAndStampV1` call. Direct launcher calldata is invalid and
-does not establish Programmable provenance.
+The launch action is Mainnet Router-only. It must call `launchAndStampV1` on the canonical Router
+`0x8622DD5bAb44185f2A458ac90384Ac99248f8d56` with route kind `2`. Direct launcher calldata is invalid and does not establish Programmable provenance.
 
-The current repository does not contain that external authority service. Accordingly, the canary preparation command
-fails closed after verifying deployment and source evidence until a permit-authority-signed Router handoff artifact is
-integrated and independently validated. This is a real release blocker, not a local test failure.
-
-After that handoff integration is installed, the lifecycle remains:
-
-Once deployment and source evidence are verified:
+Once deployment and source evidence are verified, first print the exact external authorization request:
 
 ```bash
 npm run contracts:classic-v4:mainnet:canary:prepare -- \
@@ -119,10 +111,26 @@ npm run contracts:classic-v4:mainnet:canary:prepare -- \
   --source-evidence </absolute/classic-v4-source-evidence.json> \
   --rpc-a <https-rpc-one> \
   --rpc-b <https-rpc-two> \
-  --wallet <human-canary-wallet>
+  --wallet <human-canary-wallet> \
+  --authorization-request-only
 ```
 
-Before constructing a wallet-bound plan, preparation reruns the fixed-block deployment verifier on both RPCs and independently refetches the committed source-provider matches. Saved source timestamps later than the fresh replay are rejected. The preparation is read-only. It binds a small canonical Classic launch with non-minimum buy/sell fees so both claim paths become non-zero, then requires:
+Submit only that JSON through the authenticated, owner-only Website canary handoff and download the returned signed authorization JSON. The release CLI does not accept Website bearer tokens, assertion secrets, private keys or a general authorization API. The wire field named `releaseManifestDigest` is bound here to the preliminary `releaseBindingDigest`; it is not proof that a final manifest already exists.
+
+The permit window is at most 330 seconds. Acquire the artifact immediately before preparing and signing the launch. Then pass its absolute path to the normal preparation run:
+
+```bash
+npm run contracts:classic-v4:mainnet:canary:prepare -- \
+  --plan </absolute/classic-v4-plan.json> \
+  --deployment-evidence </absolute/classic-v4-deployment-evidence.json> \
+  --source-evidence </absolute/classic-v4-source-evidence.json> \
+  --rpc-a <https-rpc-one> \
+  --rpc-b <https-rpc-two> \
+  --wallet <human-canary-wallet> \
+  --launch-authorization </absolute/classic-v4-launch-authorization.json>
+```
+
+Before constructing a wallet-bound plan, preparation reruns the fixed-block deployment verifier on both RPCs and independently refetches the committed source-provider matches. Saved source timestamps later than the fresh replay are rejected. It then validates the artifact against the exact release binding, wallet, value, Router, kind-2 permit, inner launcher route, predicted result, sorted component stamps, canonical signature and time window. Both RPCs must reproduce the signed block and stamp hash, and the Router runtime hash must match at the signed block and latest block. The preparation is read-only. It binds a small canonical Classic launch with non-minimum buy/sell fees so both claim paths become non-zero, then requires:
 
 1. launch;
 2. buy exact-input;
@@ -144,12 +152,13 @@ npm run contracts:classic-v4:mainnet:canary:prepare -- \
   --rpc-a <https-rpc-one> \
   --rpc-b <https-rpc-two> \
   --wallet <human-canary-wallet> \
+  --launch-authorization </absolute/classic-v4-launch-authorization.json> \
   --write \
   --output </absolute/classic-v4-canary-plan.json> \
   --acknowledge-plan-digest <fresh-canary-plan-digest>
 ```
 
-Preparing the plan does not fund, approve, sign or run the canary. After the two human wallets have submitted the seven reviewed actions, record only their actual hashes in an external file:
+The saved plan embeds the normalized authorization and its dedicated digest. Preparing the plan does not fund, approve, sign or run the canary. The launch transaction must submit the plan's exact Router destination, value and calldata before its deadline. After the two human wallets have submitted the seven reviewed actions, record only their actual hashes in an external file:
 
 ```json
 {
@@ -177,7 +186,7 @@ npm run contracts:classic-v4:mainnet:canary:verify -- \
   --rpc-b <https-rpc-two>
 ```
 
-The standalone verifier first reruns and compares the same deployment and provider prerequisites; self-digested JSON cannot set `releaseEligible`. It then reconstructs all seven transaction inputs, receipts, canonical blocks and required logs; requotes all four quadrants through V4Quoter at their parent blocks; proves the D92 V2.0 calldata, exact slippage bounds, Permit2 sell allowances, reward-vault beneficiary claim, treasury claim, global zero fee baseline, absence of foreign hook activity, conservation, pool/vault provenance and permanent position lock. It reconciles the complete evidence digest across both RPCs. Saving evidence remains a second explicit external-path `--write --output ... --wallet ... --acknowledge-evidence-digest ...` operation.
+The standalone verifier first reruns and compares the same deployment and provider prerequisites; self-digested JSON cannot set `releaseEligible`. It decodes the Router call and exact inner launcher route, validates all Router and launcher events, and reads the Router's launch, reverse-map, component, runtime-hash and stamp proofs at the launch block. It also checks the Router runtime again at the fixed verification block. It then reconstructs the remaining transaction inputs, receipts, canonical blocks and required logs; requotes all four quadrants through V4Quoter at their parent blocks; proves the D92 V2.0 calldata, exact slippage bounds, Permit2 sell allowances, reward-vault beneficiary claim, treasury claim, global zero fee baseline, absence of foreign hook activity, conservation, pool/vault provenance and permanent position lock. It reconciles the complete evidence digest across both RPCs. Saving evidence remains a second explicit external-path `--write --output ... --wallet ... --acknowledge-evidence-digest ...` operation.
 
 ## 5. Canonical manifest and indexer handoff
 

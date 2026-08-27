@@ -2,13 +2,18 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  concat,
+  decodeAbiParameters,
+  decodeFunctionData,
   encodeAbiParameters,
   encodeFunctionData,
   getAddress,
   getContractAddress,
   getCreate2Address,
+  hashTypedData,
   keccak256,
   parseAbi,
+  parseAbiParameters,
   stringToHex,
 } from "viem";
 import {
@@ -34,6 +39,11 @@ export const CLASSIC_V4_LAUNCHER_FEE_RECIPIENT =
   "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c";
 export const CLASSIC_V4_EXPECTED_CTO_AUTHORITY_OWNER =
   "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
+export const CLASSIC_V4_LAUNCH_STAMP_ROUTER =
+  "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56";
+export const CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH =
+  "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546";
+export const CLASSIC_V4_LAUNCH_STAMP_KIND = 2;
 
 export const CLASSIC_V4_OFFICIAL_DEPENDENCIES = Object.freeze({
   poolManager: Object.freeze({
@@ -167,6 +177,52 @@ const hookFactoryAbi = parseAbi([
 const classicV4LauncherAbi = parseAbi([
   "function launchFor(address launchWallet,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) result)",
 ]);
+export const classicV4LaunchStampRouterAbi = parseAbi([
+  "function launchAndStampV1((uint256 chainId,address router,address launchWallet,uint8 kind,bytes32 routePayloadHash,bytes32 expectedResultHash,bytes32 stampRequestHash,bytes32 nonce,uint64 validAfter,uint64 deadline,uint256 value) permit,(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bytes32 hookRuntimeCodeHash,(uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope)[] components) stampRequest,bytes routePayload,bytes signature) payable returns (bytes32 stampHash)",
+]);
+const CLASSIC_V4_ROUTE_PARAMETERS = parseAbiParameters(
+  "(address launcher,bytes32 launcherRuntimeCodeHash,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters,(address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) expectedResult) route",
+);
+const CLASSIC_V4_LAUNCH_PERMIT_TYPES = Object.freeze({
+  ProgrammableLaunchPermitV1: Object.freeze([
+    Object.freeze({ name: "chainId", type: "uint256" }),
+    Object.freeze({ name: "router", type: "address" }),
+    Object.freeze({ name: "launchWallet", type: "address" }),
+    Object.freeze({ name: "kind", type: "uint8" }),
+    Object.freeze({ name: "routePayloadHash", type: "bytes32" }),
+    Object.freeze({ name: "expectedResultHash", type: "bytes32" }),
+    Object.freeze({ name: "stampRequestHash", type: "bytes32" }),
+    Object.freeze({ name: "nonce", type: "bytes32" }),
+    Object.freeze({ name: "validAfter", type: "uint64" }),
+    Object.freeze({ name: "deadline", type: "uint64" }),
+    Object.freeze({ name: "value", type: "uint256" }),
+  ]),
+});
+const CLASSIC_V4_RESULT_ADDRESSES_TYPEHASH = keccak256(stringToHex(
+  "ProgrammableClassicResultAddressesV1(address token,address rewardVault,address positionRecipient,address initialBuyCustody)",
+));
+const CLASSIC_V4_RESULT_AMOUNTS_TYPEHASH = keccak256(stringToHex(
+  "ProgrammableClassicResultAmountsV1(uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount)",
+));
+const CLASSIC_V4_RESULT_TYPEHASH = keccak256(stringToHex(
+  "ProgrammableClassicLaunchResultV1(bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash)",
+));
+const CLASSIC_V4_COMPONENT_TYPEHASH = keccak256(stringToHex(
+  "ProgrammableLaunchComponentV1(uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope)",
+));
+const CLASSIC_V4_POOL_KEY_TYPEHASH = keccak256(stringToHex(
+  "ProgrammablePoolKeyV1(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)",
+));
+const CLASSIC_V4_STAMP_REQUEST_TYPEHASH = keccak256(stringToHex(
+  "ProgrammableStampRequestV1(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash)",
+));
+const CLASSIC_V4_SECP256K1_ORDER =
+  0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+const CLASSIC_V4_SECP256K1_HALF_ORDER = CLASSIC_V4_SECP256K1_ORDER >> 1n;
+const CLASSIC_V4_MAXIMUM_PERMIT_WINDOW_SECONDS = 330n;
+const CLASSIC_V4_MINIMUM_LAUNCH_GAS_LIMIT = 1_500_000n;
+const CLASSIC_V4_MAXIMUM_LAUNCH_GAS_LIMIT = 13_500_000n;
+const CLASSIC_V4_TOKEN_SUPPLY = 1_000_000_000n * 10n ** 18n;
 const classicV4UniversalRouterAbi = parseAbi([
   "function execute(bytes commands,bytes[] inputs,uint256 deadline) payable",
 ]);
@@ -1399,7 +1455,509 @@ function assertSameAddress(actual, expected, label) {
   );
 }
 
-function lifecycleReleaseCandidate(plan, deployment, source) {
+function exactJsonRecord(value, keys, label) {
+  assert(
+    value !== null &&
+      !Array.isArray(value) &&
+      typeof value === "object" &&
+      (Object.getPrototypeOf(value) === Object.prototype ||
+        Object.getPrototypeOf(value) === null),
+    `${label} must be an object`,
+  );
+  assertExactKeys(value, keys, label);
+  return value;
+}
+
+function canonicalCalldata(value, label) {
+  assert(
+    typeof value === "string" &&
+      /^0x(?:[0-9a-f]{2})+$/i.test(value) &&
+      value.length >= 10,
+    `Invalid ${label}`,
+  );
+  return value.toLowerCase();
+}
+
+function canonicalClassicV4Signature(signature) {
+  if (typeof signature !== "string" || !/^0x[0-9a-f]{130}$/i.test(signature)) {
+    return false;
+  }
+  const r = BigInt(`0x${signature.slice(2, 66)}`);
+  const s = BigInt(`0x${signature.slice(66, 130)}`);
+  const v = Number.parseInt(signature.slice(130, 132), 16);
+  return (
+    r > 0n &&
+    r < CLASSIC_V4_SECP256K1_ORDER &&
+    s > 0n &&
+    s <= CLASSIC_V4_SECP256K1_HALF_ORDER &&
+    (v === 27 || v === 28)
+  );
+}
+
+export function classicV4PoolId(poolKey) {
+  return keccak256(encodeAbiParameters([CLASSIC_V4_POOL_KEY_TYPE], [poolKey]));
+}
+
+function classicV4PoolKeyHash(poolKey) {
+  return keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks",
+      ),
+      [
+        CLASSIC_V4_POOL_KEY_TYPEHASH,
+        poolKey.currency0,
+        poolKey.currency1,
+        poolKey.fee,
+        poolKey.tickSpacing,
+        poolKey.hooks,
+      ],
+    ),
+  );
+}
+
+function classicV4ComponentSetHash(components) {
+  assert(Array.isArray(components) && components.length > 0, "Classic components are missing");
+  const hashes = components.map((component) =>
+    keccak256(
+      encodeAbiParameters(
+        parseAbiParameters(
+          "bytes32 typehash,uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope",
+        ),
+        [
+          CLASSIC_V4_COMPONENT_TYPEHASH,
+          component.resultIndex,
+          component.account,
+          component.runtimeCodeHash,
+          component.kind,
+          component.scope,
+        ],
+      ),
+    ),
+  );
+  return keccak256(concat(hashes));
+}
+
+export function hashClassicV4StampRequest(request) {
+  return keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash",
+      ),
+      [
+        CLASSIC_V4_STAMP_REQUEST_TYPEHASH,
+        request.launchId,
+        request.token,
+        request.tokenRuntimeCodeHash,
+        classicV4PoolKeyHash(request.poolKey),
+        request.hookRuntimeCodeHash,
+        classicV4ComponentSetHash(request.components),
+      ],
+    ),
+  );
+}
+
+export function hashClassicV4LaunchResult(result) {
+  const addressesHash = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,address token,address rewardVault,address positionRecipient,address initialBuyCustody",
+      ),
+      [
+        CLASSIC_V4_RESULT_ADDRESSES_TYPEHASH,
+        result.token,
+        result.rewardVault,
+        result.positionRecipient,
+        result.initialBuyCustody,
+      ],
+    ),
+  );
+  const amountsHash = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount",
+      ),
+      [
+        CLASSIC_V4_RESULT_AMOUNTS_TYPEHASH,
+        result.positionTokenId,
+        result.tokenLiquidityAmount,
+        result.lockedTokenDust,
+        result.initialBuyNativeAmount,
+        result.initialBuyTokenAmount,
+      ],
+    ),
+  );
+  return keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash",
+      ),
+      [
+        CLASSIC_V4_RESULT_TYPEHASH,
+        addressesHash,
+        amountsHash,
+        result.poolId,
+        result.launchHash,
+      ],
+    ),
+  );
+}
+
+export function hashClassicV4LaunchPermit(permit) {
+  return hashTypedData({
+    domain: {
+      name: "ProgrammableLaunchStampRouter",
+      version: "1",
+      chainId: 1,
+      verifyingContract: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+    },
+    types: CLASSIC_V4_LAUNCH_PERMIT_TYPES,
+    primaryType: "ProgrammableLaunchPermitV1",
+    message: permit,
+  });
+}
+
+function classicV4ParametersMatch(actual, expected) {
+  return (
+    actual.name === expected.name &&
+    actual.symbol === expected.symbol &&
+    Number(actual.buySwapFeeBps) === Number(expected.buySwapFeeBps) &&
+    Number(actual.sellSwapFeeBps) === Number(expected.sellSwapFeeBps) &&
+    normalizeHex(actual.creatorSalt) === normalizeHex(expected.creatorSalt) &&
+    actual.metadata.description === expected.metadata.description &&
+    actual.metadata.website === expected.metadata.website &&
+    actual.metadata.image === expected.metadata.image &&
+    normalizeHex(actual.metadata.extraData) === normalizeHex(expected.metadata.extraData) &&
+    actual.rewardBeneficiaries.length === expected.rewardBeneficiaries.length &&
+    actual.rewardBeneficiaries.every(
+      (value, index) => normalizeHex(value) === normalizeHex(expected.rewardBeneficiaries[index]),
+    ) &&
+    actual.rewardSharesBps.length === expected.rewardSharesBps.length &&
+    actual.rewardSharesBps.every(
+      (value, index) => Number(value) === Number(expected.rewardSharesBps[index]),
+    ) &&
+    Number(actual.initialBuyCustody.mode) === 0 &&
+    Number(actual.initialBuyCustody.durationDays) === 0 &&
+    Number(actual.initialBuyCustody.cliffDays) === 0 &&
+    Number(expected.initialBuyCustody.mode) === 0 &&
+    Number(expected.initialBuyCustody.durationDays) === 0 &&
+    Number(expected.initialBuyCustody.cliffDays) === 0
+  );
+}
+
+function normalizeClassicV4LaunchAuthorization(value) {
+  const authorization = exactJsonRecord(
+    value,
+    [
+      "chainId",
+      "deadline",
+      "permitDigest",
+      "predictedHook",
+      "predictedToken",
+      "releaseManifestDigest",
+      "schemaVersion",
+      "simulation",
+      "transaction",
+      "validAfter",
+    ],
+    "Classic launch authorization",
+  );
+  const simulation = exactJsonRecord(
+    authorization.simulation,
+    ["blockHash", "blockNumber", "blockTimestamp", "gasEstimate", "stampHash"],
+    "Classic launch authorization simulation",
+  );
+  const transaction = exactJsonRecord(
+    authorization.transaction,
+    ["calldata", "chainId", "from", "gasLimit", "to", "valueWei"],
+    "Classic launch authorization transaction",
+  );
+  assert(
+    authorization.schemaVersion === "programmable.classic-launch-authorization.v1" &&
+      authorization.chainId === "1" &&
+      transaction.chainId === "1",
+    "Classic launch authorization schema differs",
+  );
+  const normalized = {
+    schemaVersion: authorization.schemaVersion,
+    chainId: "1",
+    releaseManifestDigest: assertNonzeroBytes32(
+      authorization.releaseManifestDigest,
+      "Classic release binding digest",
+    ),
+    predictedToken: canonicalNonzeroAddress(
+      authorization.predictedToken,
+      "predicted Classic token",
+    ),
+    predictedHook: canonicalNonzeroAddress(
+      authorization.predictedHook,
+      "predicted Classic hook",
+    ),
+    permitDigest: assertNonzeroBytes32(
+      authorization.permitDigest,
+      "Classic permit digest",
+    ),
+    validAfter: decimalBigInt(
+      authorization.validAfter,
+      "Classic permit validAfter",
+    ).toString(),
+    deadline: decimalBigInt(
+      authorization.deadline,
+      "Classic permit deadline",
+      { positive: true },
+    ).toString(),
+    simulation: {
+      blockNumber: decimalBigInt(
+        simulation.blockNumber,
+        "Classic authorization block number",
+        { positive: true },
+      ).toString(),
+      blockHash: assertNonzeroBytes32(
+        simulation.blockHash,
+        "Classic authorization block hash",
+      ),
+      blockTimestamp: decimalBigInt(
+        simulation.blockTimestamp,
+        "Classic authorization block timestamp",
+        { positive: true },
+      ).toString(),
+      gasEstimate: decimalBigInt(
+        simulation.gasEstimate,
+        "Classic authorization gas estimate",
+        { positive: true },
+      ).toString(),
+      stampHash: assertNonzeroBytes32(
+        simulation.stampHash,
+        "Classic simulated stamp hash",
+      ),
+    },
+    transaction: {
+      chainId: "1",
+      from: canonicalNonzeroAddress(transaction.from, "Classic launch wallet"),
+      to: canonicalNonzeroAddress(transaction.to, "Classic launch target"),
+      valueWei: decimalBigInt(
+        transaction.valueWei,
+        "Classic launch value",
+      ).toString(),
+      calldata: canonicalCalldata(
+        transaction.calldata,
+        "Classic Router calldata",
+      ),
+      gasLimit: decimalBigInt(
+        transaction.gasLimit,
+        "Classic launch gas limit",
+        { positive: true },
+      ).toString(),
+    },
+  };
+  return normalized;
+}
+
+export function validateClassicV4LaunchAuthorization(canary, value) {
+  const authorization = normalizeClassicV4LaunchAuthorization(value);
+  assert(
+    normalizeHex(authorization.releaseManifestDigest) ===
+      normalizeHex(canary.releaseBindingDigest),
+    "Classic authorization release binding differs",
+  );
+  assertSameAddress(
+    authorization.predictedHook,
+    canary.feeHook,
+    "Classic authorization hook",
+  );
+  assertSameAddress(
+    authorization.transaction.from,
+    canary.operatorWallet,
+    "Classic authorization wallet",
+  );
+  assertSameAddress(
+    authorization.transaction.to,
+    CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+    "Classic authorization Router",
+  );
+  assert(
+    BigInt(authorization.transaction.valueWei) ===
+      BigInt(canary.launchFixture.initialBuyWei),
+    "Classic authorization value differs",
+  );
+  const gasEstimate = BigInt(authorization.simulation.gasEstimate);
+  const gasLimit = BigInt(authorization.transaction.gasLimit);
+  assert(
+    gasLimit >= CLASSIC_V4_MINIMUM_LAUNCH_GAS_LIMIT &&
+      gasLimit <= CLASSIC_V4_MAXIMUM_LAUNCH_GAS_LIMIT &&
+      gasEstimate <= gasLimit,
+    "Classic authorization gas binding differs",
+  );
+  const validAfter = BigInt(authorization.validAfter);
+  const deadline = BigInt(authorization.deadline);
+  const blockTimestamp = BigInt(authorization.simulation.blockTimestamp);
+  assert(
+    validAfter <= blockTimestamp &&
+      blockTimestamp <= deadline &&
+      validAfter <= deadline &&
+      deadline - validAfter <= CLASSIC_V4_MAXIMUM_PERMIT_WINDOW_SECONDS,
+    "Classic authorization time window differs",
+  );
+
+  let call;
+  let route;
+  try {
+    call = decodeFunctionData({
+      abi: classicV4LaunchStampRouterAbi,
+      data: authorization.transaction.calldata,
+    });
+    assert(call.functionName === "launchAndStampV1", "Classic Router selector differs");
+    route = decodeAbiParameters(CLASSIC_V4_ROUTE_PARAMETERS, call.args[2])[0];
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Classic ")) throw error;
+    throw new Error("Classic authorization Router calldata is invalid");
+  }
+  const [permit, stampRequest, routePayload, signature] = call.args;
+  assert(
+    encodeFunctionData({
+      abi: classicV4LaunchStampRouterAbi,
+      functionName: "launchAndStampV1",
+      args: [permit, stampRequest, routePayload, signature],
+    }).toLowerCase() === authorization.transaction.calldata.toLowerCase(),
+    "Classic Router calldata is not canonical",
+  );
+  assert(
+    permit.chainId === 1n &&
+      normalizeHex(permit.router) === normalizeHex(CLASSIC_V4_LAUNCH_STAMP_ROUTER) &&
+      normalizeHex(permit.launchWallet) === normalizeHex(canary.operatorWallet) &&
+      Number(permit.kind) === CLASSIC_V4_LAUNCH_STAMP_KIND &&
+      permit.value === BigInt(canary.launchFixture.initialBuyWei) &&
+      assertNonzeroBytes32(permit.nonce, "Classic permit nonce") &&
+      permit.validAfter === validAfter &&
+      permit.deadline === deadline &&
+      normalizeHex(keccak256(routePayload)) === normalizeHex(permit.routePayloadHash),
+    "Classic Router permit differs",
+  );
+  assert(
+    normalizeHex(route.launcher) === normalizeHex(canary.launcher) &&
+      normalizeHex(route.launcherRuntimeCodeHash) ===
+        normalizeHex(canary.runtimeCodeHashes.launcher),
+    "Classic route launcher binding differs",
+  );
+  const direct = decodeFunctionData({
+    abi: classicV4LauncherAbi,
+    data: expectedLifecycleLauncherCalldata(canary),
+  });
+  assert(
+    direct.functionName === "launchFor" &&
+      classicV4ParametersMatch(route.parameters, direct.args[1]) &&
+      encodeAbiParameters(CLASSIC_V4_ROUTE_PARAMETERS, [route]).toLowerCase() ===
+        routePayload.toLowerCase(),
+    "Classic route fixture differs",
+  );
+
+  const result = route.expectedResult;
+  const poolKey = stampRequest.poolKey;
+  assert(
+    normalizeHex(authorization.predictedToken) === normalizeHex(result.token) &&
+      normalizeHex(stampRequest.token) === normalizeHex(result.token) &&
+      normalizeHex(poolKey.currency0) ===
+        "0x0000000000000000000000000000000000000000" &&
+      normalizeHex(poolKey.currency1) === normalizeHex(result.token) &&
+      Number(poolKey.fee) === 0 &&
+      Number(poolKey.tickSpacing) === 200 &&
+      normalizeHex(poolKey.hooks) === normalizeHex(canary.feeHook) &&
+      normalizeHex(stampRequest.hookRuntimeCodeHash) ===
+        normalizeHex(canary.runtimeCodeHashes.feeHook) &&
+      normalizeHex(classicV4PoolId(poolKey)) === normalizeHex(result.poolId) &&
+      result.positionTokenId > 0n &&
+      result.tokenLiquidityAmount > 0n &&
+      result.tokenLiquidityAmount + result.lockedTokenDust ===
+        CLASSIC_V4_TOKEN_SUPPLY &&
+      result.initialBuyNativeAmount === BigInt(canary.launchFixture.initialBuyWei) &&
+      result.initialBuyTokenAmount > 0n &&
+      normalizeHex(result.initialBuyCustody) ===
+        "0x0000000000000000000000000000000000000000" &&
+      assertNonzeroBytes32(result.launchHash, "Classic launch hash") &&
+      assertNonzeroBytes32(stampRequest.launchId, "Classic launch id") &&
+      assertNonzeroBytes32(
+        stampRequest.tokenRuntimeCodeHash,
+        "Classic token runtime code hash",
+      ),
+    "Classic expected launch result differs",
+  );
+  assert(
+    Array.isArray(stampRequest.components) && stampRequest.components.length === 4,
+    "Classic component set differs",
+  );
+  for (let index = 0; index < stampRequest.components.length; index += 1) {
+    const component = stampRequest.components[index];
+    canonicalNonzeroAddress(component.account, "Classic component");
+    assertNonzeroBytes32(component.runtimeCodeHash, "Classic component runtime code hash");
+    if (index > 0) {
+      assert(
+        BigInt(stampRequest.components[index - 1].account) < BigInt(component.account),
+        "Classic components are not sorted and unique",
+      );
+    }
+  }
+  const componentByResultIndex = new Map(
+    stampRequest.components.map((component) => [Number(component.resultIndex), component]),
+  );
+  const tokenComponent = componentByResultIndex.get(0);
+  const rewardComponent = componentByResultIndex.get(1);
+  const positionComponent = componentByResultIndex.get(2);
+  const hookComponent = componentByResultIndex.get(255);
+  assert(
+    tokenComponent &&
+      normalizeHex(tokenComponent.account) === normalizeHex(result.token) &&
+      normalizeHex(tokenComponent.runtimeCodeHash) ===
+        normalizeHex(stampRequest.tokenRuntimeCodeHash) &&
+      Number(tokenComponent.kind) === 1 &&
+      Number(tokenComponent.scope) === 1 &&
+      rewardComponent &&
+      normalizeHex(rewardComponent.account) === normalizeHex(result.rewardVault) &&
+      Number(rewardComponent.kind) === 0 &&
+      Number(rewardComponent.scope) === 1 &&
+      positionComponent &&
+      normalizeHex(positionComponent.account) ===
+        normalizeHex(result.positionRecipient) &&
+      Number(positionComponent.kind) === 0 &&
+      Number(positionComponent.scope) === 1 &&
+      hookComponent &&
+      normalizeHex(hookComponent.account) === normalizeHex(canary.feeHook) &&
+      normalizeHex(hookComponent.runtimeCodeHash) ===
+        normalizeHex(stampRequest.hookRuntimeCodeHash) &&
+      Number(hookComponent.kind) === 2 &&
+      Number(hookComponent.scope) === 2,
+    "Classic component bindings differ",
+  );
+  assert(
+    normalizeHex(hashClassicV4LaunchResult(result)) ===
+      normalizeHex(permit.expectedResultHash) &&
+      normalizeHex(hashClassicV4StampRequest(stampRequest)) ===
+        normalizeHex(permit.stampRequestHash) &&
+      normalizeHex(hashClassicV4LaunchPermit(permit)) ===
+        normalizeHex(authorization.permitDigest) &&
+      canonicalClassicV4Signature(signature),
+    "Classic Router proof differs",
+  );
+  return {
+    authorization,
+    authorizationDigest: digestJson(
+      authorization,
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleAuthorization,
+    ),
+    permit,
+    stampRequest,
+    route,
+    routePayload,
+    signature,
+    poolKeyHash: classicV4PoolKeyHash(stampRequest.poolKey),
+    componentSetHash: classicV4ComponentSetHash(stampRequest.components),
+  };
+}
+
+export function buildClassicV4LifecycleReleaseCandidate(
+  plan,
+  deployment,
+  source,
+) {
   return {
     internalContractRelease: CLASSIC_V4_RELEASE,
     chainId: 1,
@@ -1423,6 +1981,20 @@ function lifecycleReleaseCandidate(plan, deployment, source) {
         ]),
       ),
       ...plan.predictedAddresses,
+    },
+    runtimeCodeHashes: {
+      ...Object.fromEntries(
+        Object.entries(plan.sharedDependencies).map(([name, value]) => [
+          name,
+          value.runtimeCodeHash,
+        ]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(deployment.contracts).map(([name, value]) => [
+          name,
+          value.runtimeCodeHash,
+        ]),
+      ),
     },
     officialDependencies: plan.officialDependencies,
     verification: {
@@ -1455,7 +2027,7 @@ function assertEventIndices(events, expected, label) {
   }
 }
 
-export function expectedLifecycleLaunchCalldata(canary) {
+export function expectedLifecycleLauncherCalldata(canary) {
   return encodeFunctionData({
     abi: classicV4LauncherAbi,
     functionName: "launchFor",
@@ -1478,6 +2050,17 @@ export function expectedLifecycleLaunchCalldata(canary) {
       },
     ],
   });
+}
+
+export function expectedLifecycleLaunchCalldata(canary) {
+  assert(
+    canary?.launchAuthorization?.transaction?.calldata,
+    "Classic Router launch authorization is missing",
+  );
+  return canonicalCalldata(
+    canary.launchAuthorization.transaction.calldata,
+    "Classic Router launch calldata",
+  );
 }
 
 export function expectedLifecycleSwapCalldata(
@@ -1588,6 +2171,8 @@ export function validateClassicV4LifecycleEvidence(
       "independentRpcCount",
       "releaseEligible",
       "canaryPlanDigest",
+      "launchAuthorization",
+      "launchAuthorizationDigest",
       "releaseBindingDigest",
       "deploymentEvidenceDigest",
       "sourceEvidenceDigest",
@@ -1636,16 +2221,27 @@ export function validateClassicV4LifecycleEvidence(
     "Lifecycle evidence is not verified",
   );
 
-  const releaseCandidate = lifecycleReleaseCandidate(plan, deployment, source);
+  const releaseCandidate = buildClassicV4LifecycleReleaseCandidate(
+    plan,
+    deployment,
+    source,
+  );
   const canary = buildClassicV4LifecycleCanaryPlan(
     releaseCandidate,
     evidence.operatorWallet,
+    evidence.launchAuthorization,
+  );
+  const launchProof = validateClassicV4LaunchAuthorization(
+    canary,
+    canary.launchAuthorization,
   );
   assert(
     normalizeHex(evidence.releaseBindingDigest) ===
       normalizeHex(releaseCandidate.releaseBindingDigest) &&
       normalizeHex(evidence.canaryPlanDigest) ===
         normalizeHex(canary.planDigest) &&
+      normalizeHex(evidence.launchAuthorizationDigest) ===
+        normalizeHex(canary.launchAuthorizationDigest) &&
       normalizeHex(evidence.deploymentEvidenceDigest) ===
         normalizeHex(deployment.evidenceDigest) &&
       normalizeHex(evidence.sourceEvidenceDigest) ===
@@ -1655,11 +2251,32 @@ export function validateClassicV4LifecycleEvidence(
   assertSameAddress(evidence.operatorWallet, canary.operatorWallet, "Canary operator");
   assertSameAddress(evidence.launcher, canary.launcher, "Lifecycle launcher");
   assertSameAddress(evidence.feeHook, canary.feeHook, "Lifecycle fee hook");
-  canonicalNonzeroAddress(evidence.canaryToken, "canary token");
-  canonicalNonzeroAddress(evidence.rewardVault, "reward vault");
-  canonicalNonzeroAddress(evidence.positionRecipient, "position recipient");
-  assertNonzeroBytes32(evidence.poolId, "canary pool id");
-  decimalBigInt(evidence.positionTokenId, "position token ID", { positive: true });
+  assertSameAddress(
+    evidence.canaryToken,
+    launchProof.route.expectedResult.token,
+    "canary token",
+  );
+  assertSameAddress(
+    evidence.rewardVault,
+    launchProof.route.expectedResult.rewardVault,
+    "reward vault",
+  );
+  assertSameAddress(
+    evidence.positionRecipient,
+    launchProof.route.expectedResult.positionRecipient,
+    "position recipient",
+  );
+  assert(
+    normalizeHex(evidence.poolId) ===
+      normalizeHex(launchProof.route.expectedResult.poolId),
+    "Canary pool ID differs from the signed Router result",
+  );
+  assert(
+    decimalBigInt(evidence.positionTokenId, "position token ID", {
+      positive: true,
+    }) === launchProof.route.expectedResult.positionTokenId,
+    "Canary position token ID differs from the signed Router result",
+  );
   assertNonNegativeInteger(evidence.verificationBlock, "lifecycle verification block");
   assert(evidence.verificationBlock > 0, "Lifecycle verification block must be positive");
   assertNonzeroBytes32(
@@ -1674,6 +2291,12 @@ export function validateClassicV4LifecycleEvidence(
   );
   const eventKeys = {
     launch: [
+      "ProgrammableComponentStampedV1.token",
+      "ProgrammableComponentStampedV1.rewardVault",
+      "ProgrammableComponentStampedV1.positionRecipient",
+      "ProgrammableComponentStampedV1.feeHook",
+      "ProgrammableLaunchRouteStampedV1",
+      "ProgrammableLaunchStampedV1",
       "MemeTokenLaunchedV2",
       "MemeLiquidityConfiguredV2",
       "MemeCreatorInitialBuyV2",
@@ -1787,7 +2410,7 @@ export function validateClassicV4LifecycleEvidence(
       action === "launcherClaim" ? canary.treasury : canary.operatorWallet;
     const expectedTo =
       action === "launch"
-        ? canary.launcher
+        ? canary.launchStampRouterBinding.address
         : isSwap
           ? canary.dependencies.universalRouter
           : action === "creatorClaim"
@@ -1804,6 +2427,12 @@ export function validateClassicV4LifecycleEvidence(
       );
     }
   }
+  const launchTimestamp = BigInt(evidence.actions.launch.blockTimestamp);
+  assert(
+    launchTimestamp >= BigInt(canary.launchAuthorization.validAfter) &&
+      launchTimestamp <= BigInt(canary.launchAuthorization.deadline),
+    "Router launch executed outside its signed authorization window",
+  );
   assert(
     evidence.latestLifecycleBlock ===
       evidence.actions.launcherClaim.blockNumber &&
@@ -2637,7 +3266,7 @@ export function createClassicV4ReleaseManifest({
   };
 }
 
-export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
+function buildClassicV4LifecycleCanaryBase(manifest, wallet) {
   assert(
     manifest?.internalContractRelease === CLASSIC_V4_RELEASE &&
       manifest?.chainId === 1 &&
@@ -2648,8 +3277,13 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
     "Classic V4 deployment is not ready for a lifecycle canary",
   );
   const operatorWallet = canonicalNonzeroAddress(wallet, "canary wallet");
+  assert(
+    manifest.releaseBindingDigest !== undefined &&
+      manifest.manifestDigest === undefined,
+    "Classic lifecycle preparation requires one preliminary release binding digest",
+  );
   const releaseBindingDigest = assertBytes32(
-    manifest.manifestDigest ?? manifest.releaseBindingDigest,
+    manifest.releaseBindingDigest,
     "release binding digest",
   );
   const creatorSalt = digestJson(
@@ -2659,6 +3293,14 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
       operatorWallet,
     },
     CLASSIC_V4_DIGEST_DOMAINS.canaryCreatorSalt,
+  );
+  const launcherRuntimeCodeHash = assertNonzeroBytes32(
+    manifest?.runtimeCodeHashes?.launcher,
+    "Classic launcher runtime code hash",
+  );
+  const feeHookRuntimeCodeHash = assertNonzeroBytes32(
+    manifest?.runtimeCodeHashes?.feeHook,
+    "Classic fee hook runtime code hash",
   );
   const plan = {
     schemaVersion: 1,
@@ -2672,6 +3314,10 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
     launcher: manifest.addresses.launcher,
     feeHook: manifest.addresses.feeHook,
     treasury: manifest.addresses.launcherFeeRecipient,
+    runtimeCodeHashes: {
+      launcher: launcherRuntimeCodeHash,
+      feeHook: feeHookRuntimeCodeHash,
+    },
     dependencies: {
       poolManager: manifest.officialDependencies.poolManager.address,
       positionManager: manifest.officialDependencies.positionManager.address,
@@ -2679,6 +3325,13 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
       v4Quoter: manifest.officialDependencies.v4Quoter.address,
       permit2: manifest.officialDependencies.permit2.address,
       universalRouter: manifest.officialDependencies.universalRouter.address,
+    },
+    launchStampRouterBinding: {
+      address: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+      runtimeCodeHash: CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+      functionName: "launchAndStampV1",
+      selector: "0xe5f6b8cd",
+      kind: CLASSIC_V4_LAUNCH_STAMP_KIND,
     },
     universalRouterBinding: {
       version: "V2_0",
@@ -2734,7 +3387,10 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
     actions: [
       {
         key: "launch",
-        kind: "launcher",
+        kind: "launch-stamp-router",
+        routeKind: CLASSIC_V4_LAUNCH_STAMP_KIND,
+        target: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+        innerLauncher: manifest.addresses.launcher,
         requiredSigner: operatorWallet,
         requiresWalletSignature: true,
       },
@@ -2788,6 +3444,7 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
     ],
     requiredReadbacks: [
       "pool key and pool id",
+      "Router kind 2 route, component set, stamp and launch provenance",
       "position owner, operator, timelock and liquidity",
       "all four swap receipts and HookSwap/HookFee reconciliation",
       "creator and launcher accrual before and after claims",
@@ -2800,6 +3457,44 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
       writes: false,
       humanWalletRequired: true,
     },
+  };
+  return plan;
+}
+
+export function buildClassicV4LifecycleAuthorizationRequest(manifest, wallet) {
+  const canary = buildClassicV4LifecycleCanaryBase(manifest, wallet);
+  return {
+    schemaVersion: "programmable.classic-launch-authorization-request.v1",
+    chainId: "1",
+    launchWallet: canary.operatorWallet,
+    releaseManifestDigest: canary.releaseBindingDigest,
+    launcher: canary.launcher,
+    launcherRuntimeCodeHash: canary.runtimeCodeHashes.launcher,
+    feeHook: canary.feeHook,
+    feeHookRuntimeCodeHash: canary.runtimeCodeHashes.feeHook,
+    valueWei: canary.launchFixture.initialBuyWei,
+    launcherCalldata: expectedLifecycleLauncherCalldata(canary),
+  };
+}
+
+export function buildClassicV4LifecycleCanaryPlan(
+  manifest,
+  wallet,
+  launchAuthorization,
+) {
+  const base = buildClassicV4LifecycleCanaryBase(manifest, wallet);
+  assert(
+    launchAuthorization !== undefined && launchAuthorization !== null,
+    "Classic Router launch authorization is required",
+  );
+  const validated = validateClassicV4LaunchAuthorization(
+    base,
+    launchAuthorization,
+  );
+  const plan = {
+    ...base,
+    launchAuthorization: validated.authorization,
+    launchAuthorizationDigest: validated.authorizationDigest,
   };
   return {
     ...plan,

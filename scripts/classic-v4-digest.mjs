@@ -10,6 +10,8 @@ export const CLASSIC_V4_DIGEST_DOMAINS = Object.freeze({
   deploymentEvidence: "programmable.classic-v4.deployment-evidence.v1",
   sourceEvidence: "programmable.classic-v4.source-evidence.v1",
   releaseBinding: "programmable.classic-v4.release-binding.v1",
+  lifecycleAuthorization:
+    "programmable.classic-v4.lifecycle-authorization.v1",
   lifecycleCanaryPlan: "programmable.classic-v4.lifecycle-canary-plan.v1",
   lifecycleEvidence: "programmable.classic-v4.lifecycle-evidence.v1",
   releaseManifest: "programmable.classic-v4.release-manifest.v1",

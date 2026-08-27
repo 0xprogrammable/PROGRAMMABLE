@@ -920,6 +920,79 @@
         "feeConservationVerified": { "const": true }
       }
     },
+    "classicLaunchAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "chainId",
+        "releaseManifestDigest",
+        "predictedToken",
+        "predictedHook",
+        "permitDigest",
+        "validAfter",
+        "deadline",
+        "simulation",
+        "transaction"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.classic-launch-authorization.v1"
+        },
+        "chainId": { "const": "1" },
+        "releaseManifestDigest": {
+          "$ref": "#/$defs/bytes32",
+          "description": "V1 wire name. For a Classic V4 lifecycle canary this must equal the preliminary releaseBindingDigest; it is not evidence that a final release manifest exists."
+        },
+        "predictedToken": { "$ref": "#/$defs/address" },
+        "predictedHook": { "$ref": "#/$defs/address" },
+        "permitDigest": { "$ref": "#/$defs/bytes32" },
+        "validAfter": { "$ref": "#/$defs/decimal" },
+        "deadline": { "$ref": "#/$defs/positiveDecimal" },
+        "simulation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "blockNumber",
+            "blockHash",
+            "blockTimestamp",
+            "gasEstimate",
+            "stampHash"
+          ],
+          "properties": {
+            "blockNumber": { "$ref": "#/$defs/positiveDecimal" },
+            "blockHash": { "$ref": "#/$defs/bytes32" },
+            "blockTimestamp": { "$ref": "#/$defs/positiveDecimal" },
+            "gasEstimate": { "$ref": "#/$defs/positiveDecimal" },
+            "stampHash": { "$ref": "#/$defs/bytes32" }
+          }
+        },
+        "transaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "chainId",
+            "from",
+            "to",
+            "valueWei",
+            "calldata",
+            "gasLimit"
+          ],
+          "properties": {
+            "chainId": { "const": "1" },
+            "from": { "$ref": "#/$defs/address" },
+            "to": { "$ref": "#/$defs/address" },
+            "valueWei": { "$ref": "#/$defs/decimal" },
+            "calldata": {
+              "type": "string",
+              "pattern": "^0x(?:[0-9a-fA-F]{2})+$",
+              "minLength": 10
+            },
+            "gasLimit": { "$ref": "#/$defs/positiveDecimal" }
+          }
+        }
+      }
+    },
     "lifecycleEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -933,6 +1006,8 @@
         "independentRpcCount",
         "releaseEligible",
         "canaryPlanDigest",
+        "launchAuthorization",
+        "launchAuthorizationDigest",
         "releaseBindingDigest",
         "deploymentEvidenceDigest",
         "sourceEvidenceDigest",
@@ -967,6 +1042,10 @@
         "independentRpcCount": { "const": 2 },
         "releaseEligible": { "const": true },
         "canaryPlanDigest": { "$ref": "#/$defs/bytes32" },
+        "launchAuthorization": {
+          "$ref": "#/$defs/classicLaunchAuthorization"
+        },
+        "launchAuthorizationDigest": { "$ref": "#/$defs/bytes32" },
         "releaseBindingDigest": { "$ref": "#/$defs/bytes32" },
         "deploymentEvidenceDigest": { "$ref": "#/$defs/bytes32" },
         "sourceEvidenceDigest": { "$ref": "#/$defs/bytes32" },

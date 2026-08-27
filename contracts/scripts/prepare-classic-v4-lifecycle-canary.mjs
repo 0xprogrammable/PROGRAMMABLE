@@ -5,11 +5,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
+import { decodeFunctionResult, keccak256 } from "viem";
 
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
+  buildClassicV4LifecycleAuthorizationRequest,
   buildClassicV4LifecycleCanaryPlan,
+  buildClassicV4LifecycleReleaseCandidate,
   canonicalAddress,
+  classicV4LaunchStampRouterAbi,
   digestJson,
   normalizeHex,
   validateClassicV4DeploymentEvidence,
@@ -48,6 +52,8 @@ function parseArguments(argv) {
     plan: null,
     deploymentEvidence: null,
     sourceEvidence: null,
+    launchAuthorization: null,
+    authorizationRequestOnly: false,
     rpcA: null,
     rpcB: null,
     wallet: null,
@@ -61,6 +67,10 @@ function parseArguments(argv) {
       parsed.write = true;
       continue;
     }
+    if (argument === "--authorization-request-only") {
+      parsed.authorizationRequestOnly = true;
+      continue;
+    }
     const separator = argument.indexOf("=");
     const key = separator === -1 ? argument : argument.slice(0, separator);
     const inlineValue = separator === -1 ? null : argument.slice(separator + 1);
@@ -68,6 +78,7 @@ function parseArguments(argv) {
       "--plan",
       "--deployment-evidence",
       "--source-evidence",
+      "--launch-authorization",
       "--rpc-a",
       "--rpc-b",
       "--wallet",
@@ -80,6 +91,7 @@ function parseArguments(argv) {
     if (key === "--plan") parsed.plan = value;
     if (key === "--deployment-evidence") parsed.deploymentEvidence = value;
     if (key === "--source-evidence") parsed.sourceEvidence = value;
+    if (key === "--launch-authorization") parsed.launchAuthorization = value;
     if (key === "--rpc-a") parsed.rpcA = value;
     if (key === "--rpc-b") parsed.rpcB = value;
     if (key === "--wallet") parsed.wallet = value;
@@ -89,6 +101,20 @@ function parseArguments(argv) {
   for (const key of ["plan", "deploymentEvidence", "sourceEvidence"]) {
     if (!parsed[key]) fail(`${key} is required`);
     if (!path.isAbsolute(parsed[key])) fail(`${key} path must be absolute`);
+  }
+  if (Boolean(parsed.launchAuthorization) === parsed.authorizationRequestOnly) {
+    fail(
+      "Use exactly one of --launch-authorization or --authorization-request-only",
+    );
+  }
+  if (parsed.launchAuthorization && !path.isAbsolute(parsed.launchAuthorization)) {
+    fail("launchAuthorization path must be absolute");
+  }
+  if (
+    parsed.authorizationRequestOnly &&
+    (parsed.write || parsed.output || parsed.acknowledgement)
+  ) {
+    fail("Authorization request mode is read-only");
   }
   if (!parsed.wallet) fail("--wallet is required");
   if (!parsed.rpcA || !parsed.rpcB) fail("--rpc-a and --rpc-b are required");
@@ -118,38 +144,93 @@ function assertSchema(schema, value, label) {
   }
 }
 
-function releaseCandidate(plan, deploymentEvidence, sourceEvidence) {
+async function rpc(endpoint, method, params) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    fail(`Classic authorization ${method} returned HTTP ${response.status}`);
+  }
+  const payload = await response.json();
+  if (payload?.error || payload?.result === undefined) {
+    fail(`Classic authorization ${method} failed`);
+  }
+  return payload.result;
+}
+
+function blockTag(value) {
+  return `0x${BigInt(value).toString(16)}`;
+}
+
+function decodeStampHash(value) {
+  try {
+    return decodeFunctionResult({
+      abi: classicV4LaunchStampRouterAbi,
+      functionName: "launchAndStampV1",
+      data: value,
+    });
+  } catch {
+    fail("Classic Router simulation returned an invalid stamp hash");
+  }
+}
+
+async function verifySignedAuthorizationAtEndpoint(endpoint, canaryPlan) {
+  const authorization = canaryPlan.launchAuthorization;
+  const transaction = authorization.transaction;
+  const pinnedTag = blockTag(authorization.simulation.blockNumber);
+  const [chainId, pinnedBlock, latestBlock, pinnedRouterCode, latestRouterCode] =
+    await Promise.all([
+      rpc(endpoint, "eth_chainId", []),
+      rpc(endpoint, "eth_getBlockByNumber", [pinnedTag, false]),
+      rpc(endpoint, "eth_getBlockByNumber", ["latest", false]),
+      rpc(endpoint, "eth_getCode", [
+        canaryPlan.launchStampRouterBinding.address,
+        pinnedTag,
+      ]),
+      rpc(endpoint, "eth_getCode", [
+        canaryPlan.launchStampRouterBinding.address,
+        "latest",
+      ]),
+    ]);
+  if (
+    BigInt(chainId) !== 1n ||
+    !pinnedBlock ||
+    !latestBlock ||
+    BigInt(pinnedBlock.number) !== BigInt(authorization.simulation.blockNumber) ||
+    normalizeHex(pinnedBlock.hash) !== normalizeHex(authorization.simulation.blockHash) ||
+    BigInt(pinnedBlock.timestamp) !== BigInt(authorization.simulation.blockTimestamp) ||
+    BigInt(latestBlock.timestamp) < BigInt(authorization.validAfter) ||
+    BigInt(latestBlock.timestamp) > BigInt(authorization.deadline) ||
+    normalizeHex(keccak256(pinnedRouterCode)) !==
+      normalizeHex(canaryPlan.launchStampRouterBinding.runtimeCodeHash) ||
+    normalizeHex(keccak256(latestRouterCode)) !==
+      normalizeHex(canaryPlan.launchStampRouterBinding.runtimeCodeHash)
+  ) {
+    fail("Classic signed authorization block or active time window differs");
+  }
+  const request = {
+    from: transaction.from,
+    to: transaction.to,
+    value: blockTag(transaction.valueWei),
+    data: transaction.calldata,
+  };
+  const [pinnedResult, latestResult] = await Promise.all([
+    rpc(endpoint, "eth_call", [request, pinnedTag]),
+    rpc(endpoint, "eth_call", [request, "latest"]),
+  ]);
+  const expectedStampHash = normalizeHex(authorization.simulation.stampHash);
+  if (
+    normalizeHex(decodeStampHash(pinnedResult)) !== expectedStampHash ||
+    normalizeHex(decodeStampHash(latestResult)) !== expectedStampHash
+  ) {
+    fail("Classic signed Router simulation differs from the authorization artifact");
+  }
   return {
-    internalContractRelease: "classic-v4",
-    chainId: 1,
-    releaseCommit: plan.releaseCommit,
-    sourceCommitment: plan.sourceCommitment,
-    releaseBindingDigest: digestJson(
-      {
-        planDigest: plan.planDigest,
-        deploymentEvidence,
-        sourceEvidence,
-      },
-      CLASSIC_V4_DIGEST_DOMAINS.releaseBinding,
-    ),
-    addresses: {
-      deployer: plan.deployer,
-      launcherFeeRecipient: plan.launcherFeeRecipient,
-      ...Object.fromEntries(
-        Object.entries(plan.sharedDependencies).map(([name, value]) => [
-          name,
-          value.address,
-        ]),
-      ),
-      ...plan.predictedAddresses,
-    },
-    officialDependencies: plan.officialDependencies,
-    verification: {
-      deploymentLive: true,
-      runtimeCodeVerified: true,
-      constructorBindingsVerified: true,
-      sourceVerified: true,
-    },
+    pinnedBlockHash: normalizeHex(pinnedBlock.hash),
+    stampHash: expectedStampHash,
   };
 }
 
@@ -215,13 +296,39 @@ export async function main(argv = process.argv.slice(2)) {
     sourceEvidence,
     artifacts,
   });
-  fail(
-    "Canonical Classic Router handoff is not installed: obtain a permit-authority-signed launchAndStampV1 artifact before lifecycle canary preparation",
+  const candidate = buildClassicV4LifecycleReleaseCandidate(
+    plan,
+    deploymentEvidence,
+    sourceEvidence,
   );
-  const canaryPlan = buildClassicV4LifecycleCanaryPlan(
-    releaseCandidate(plan, deploymentEvidence, sourceEvidence),
+  const authorizationRequest = buildClassicV4LifecycleAuthorizationRequest(
+    candidate,
     options.wallet,
   );
+  if (options.authorizationRequestOnly) {
+    process.stdout.write(`${JSON.stringify(authorizationRequest, null, 2)}\n`);
+    return;
+  }
+  const launchAuthorization = await readJson(
+    options.launchAuthorization,
+    "Classic signed authorization",
+  );
+  const canaryPlan = buildClassicV4LifecycleCanaryPlan(
+    candidate,
+    options.wallet,
+    launchAuthorization,
+  );
+  const simulations = await Promise.all(
+    [options.rpcA, options.rpcB].map((endpoint) =>
+      verifySignedAuthorizationAtEndpoint(endpoint, canaryPlan),
+    ),
+  );
+  if (
+    digestJson(simulations[0], CLASSIC_V4_DIGEST_DOMAINS.generic) !==
+    digestJson(simulations[1], CLASSIC_V4_DIGEST_DOMAINS.generic)
+  ) {
+    fail("Independent RPCs disagree on the signed Classic Router authorization");
+  }
   if (options.write) await writeAcknowledgedPlan(canaryPlan, options);
   process.stdout.write(`${JSON.stringify(canaryPlan, null, 2)}\n`);
 }

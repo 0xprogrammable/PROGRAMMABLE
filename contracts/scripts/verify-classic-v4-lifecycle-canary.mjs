@@ -18,13 +18,17 @@ import {
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   CLASSIC_V4_FINALITY_CONFIRMATIONS,
+  CLASSIC_V4_LAUNCH_STAMP_KIND,
+  CLASSIC_V4_LAUNCH_STAMP_ROUTER,
   CLASSIC_V4_LIFECYCLE_ACTIONS,
   CLASSIC_V4_NEW_CONTRACTS,
   buildClassicV4LifecycleCanaryPlan,
+  buildClassicV4LifecycleReleaseCandidate,
   canonicalAddress,
   canonicalNonzeroAddress,
   digestJson,
   normalizeHex,
+  validateClassicV4LaunchAuthorization,
   validateClassicV4DeploymentEvidence,
   validateClassicV4LifecycleEvidence,
   validateClassicV4PreparationPlan,
@@ -122,6 +126,19 @@ const permit2Abi = parseAbi([
 ]);
 const poolManagerEventAbi = parseAbi([
   "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+]);
+const launchStampRouterEventAbi = parseAbi([
+  "event ProgrammableComponentStampedV1(bytes32 indexed launchId,address indexed component,uint8 indexed kind,bytes32 runtimeCodeHash)",
+  "event ProgrammableLaunchRouteStampedV1(bytes32 indexed launchId,uint8 indexed kind,bytes32 indexed routePayloadHash,bytes32 expectedResultHash,bytes32 permitDigest)",
+  "event ProgrammableLaunchStampedV1(bytes32 indexed launchId,address indexed token,address indexed hook,address poolManager,bytes32 poolId,bytes32 stampHash)",
+]);
+const launchStampRouterReadAbi = parseAbi([
+  "function launchStamp(bytes32 launchId) view returns ((uint8 kind,address launchWallet,address token,address hook,address poolManager,bytes32 poolId,bytes32 poolKeyHash,bytes32 componentSetHash,bytes32 routePayloadHash,address routeLauncher,bytes32 routeLauncherRuntimeCodeHash,bytes32 expectedResultHash,bytes32 permitDigest,bytes32 stampHash) record)",
+  "function launchIdByToken(address token) view returns (bytes32 launchId)",
+  "function launchIdByPool(address poolManager,bytes32 poolId) view returns (bytes32 launchId)",
+  "function launchIdByComponent(address component) view returns (bytes32 launchId)",
+  "function componentRuntimeCodeHash(address component) view returns (bytes32 runtimeCodeHash)",
+  "function stampProof(address component) view returns (bytes32 launchId,bytes32 stampHash)",
 ]);
 const v4QuoterAbi = parseAbi([
   "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
@@ -343,45 +360,15 @@ function validateTransactionHashes(value) {
   return Object.fromEntries(entries);
 }
 
-function releaseCandidate(plan, deploymentEvidence, sourceEvidence) {
-  return {
-    internalContractRelease: "classic-v4",
-    chainId: 1,
-    releaseCommit: plan.releaseCommit,
-    sourceCommitment: plan.sourceCommitment,
-    releaseBindingDigest: digestJson(
-      {
-        planDigest: plan.planDigest,
-        deploymentEvidence,
-        sourceEvidence,
-      },
-      CLASSIC_V4_DIGEST_DOMAINS.releaseBinding,
-    ),
-    addresses: {
-      deployer: plan.deployer,
-      launcherFeeRecipient: plan.launcherFeeRecipient,
-      ...Object.fromEntries(
-        Object.entries(plan.sharedDependencies).map(([name, value]) => [
-          name,
-          value.address,
-        ]),
-      ),
-      ...plan.predictedAddresses,
-    },
-    officialDependencies: plan.officialDependencies,
-    verification: {
-      deploymentLive: true,
-      runtimeCodeVerified: true,
-      constructorBindingsVerified: true,
-      sourceVerified: true,
-    },
-  };
-}
-
 function reconstructCanary(plan, deploymentEvidence, sourceEvidence, supplied) {
   const expected = buildClassicV4LifecycleCanaryPlan(
-    releaseCandidate(plan, deploymentEvidence, sourceEvidence),
+    buildClassicV4LifecycleReleaseCandidate(
+      plan,
+      deploymentEvidence,
+      sourceEvidence,
+    ),
     supplied?.operatorWallet,
+    supplied?.launchAuthorization,
   );
   sameHex(supplied?.planDigest, expected.planDigest, "Canary plan digest");
   assert(
@@ -537,7 +524,7 @@ async function readTransactions(
     sameAddress(transaction.to, receipt.to, `${action} receipt destination`);
     const destination =
       action === "launch"
-        ? canary.launcher
+        ? canary.launchStampRouterBinding.address
         : action.startsWith("buy") || action.startsWith("sell")
           ? canary.dependencies.universalRouter
           : action === "launcherClaim"
@@ -657,13 +644,21 @@ function validateLaunch(action, canary, artifacts, plan) {
     BigInt(action.transaction.value) === BigInt(canary.launchFixture.initialBuyWei),
     "Launch initial buy differs from the canary plan",
   );
-  const call = decodeFunctionData({
-    abi: artifacts.launcher.abi,
-    data: action.transaction.input,
-  });
-  assert(call.functionName === "launchFor", "Launch selector differs");
-  sameAddress(call.args[0], canary.operatorWallet, "Launch wallet");
-  const input = call.args[1];
+  sameHex(
+    action.transaction.input,
+    canary.launchAuthorization.transaction.calldata,
+    "Signed Router launch calldata",
+  );
+  assert(
+    action.blockTimestamp >= BigInt(canary.launchAuthorization.validAfter) &&
+      action.blockTimestamp <= BigInt(canary.launchAuthorization.deadline),
+    "Router launch executed outside its signed authorization window",
+  );
+  const routerProof = validateClassicV4LaunchAuthorization(
+    canary,
+    canary.launchAuthorization,
+  );
+  const input = routerProof.route.parameters;
   assert(
     input.name === canary.launchFixture.name &&
       input.symbol === canary.launchFixture.symbol &&
@@ -802,6 +797,111 @@ function validateLaunch(action, canary, artifacts, plan) {
     custody.args.configurationHash,
     expectedCustodyHash,
     "Unlocked custody configuration hash",
+  );
+
+  const expectedResult = routerProof.route.expectedResult;
+  sameAddress(expectedResult.token, token, "Router result token");
+  sameAddress(expectedResult.rewardVault, rewardVault, "Router result reward vault");
+  sameAddress(
+    expectedResult.positionRecipient,
+    positionRecipient,
+    "Router result position recipient",
+  );
+  sameAddress(expectedResult.initialBuyCustody, ZERO_ADDRESS, "Router result custody");
+  sameHex(expectedResult.poolId, poolId, "Router result pool");
+  sameHex(expectedResult.launchHash, launchHash, "Router result launch hash");
+  assert(
+    expectedResult.positionTokenId === launched.args.positionTokenId &&
+      expectedResult.tokenLiquidityAmount === liquidity.args.tokenLiquidityAmount &&
+      expectedResult.lockedTokenDust === liquidity.args.lockedTokenDust &&
+      expectedResult.initialBuyNativeAmount === initialBuy.args.nativeAmount &&
+      expectedResult.initialBuyTokenAmount === initialBuy.args.tokenAmount,
+    "Router expected result differs from launcher events",
+  );
+
+  const routerEvents = decodeEvents(
+    action.receipt,
+    launchStampRouterEventAbi,
+    CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+  );
+  const componentEvents = routerEvents.filter(
+    (event) => event.eventName === "ProgrammableComponentStampedV1",
+  );
+  assert(componentEvents.length === 4, "Router component stamp count differs");
+  const componentEventByResultIndex = new Map();
+  for (const component of routerProof.stampRequest.components) {
+    const matches = componentEvents.filter(
+      (event) => normalizeHex(event.args.component) === normalizeHex(component.account),
+    );
+    assert(matches.length === 1, "Router component stamp differs");
+    const event = matches[0];
+    sameHex(event.args.launchId, routerProof.stampRequest.launchId, "Component launch ID");
+    sameHex(
+      event.args.runtimeCodeHash,
+      component.runtimeCodeHash,
+      "Component runtime code hash",
+    );
+    assert(Number(event.args.kind) === Number(component.kind), "Component kind differs");
+    componentEventByResultIndex.set(Number(component.resultIndex), event);
+  }
+  const routeStamped = oneEvent(
+    routerEvents,
+    "ProgrammableLaunchRouteStampedV1",
+    "ProgrammableLaunchRouteStampedV1 event",
+  );
+  const launchStamped = oneEvent(
+    routerEvents,
+    "ProgrammableLaunchStampedV1",
+    "ProgrammableLaunchStampedV1 event",
+  );
+  sameHex(routeStamped.args.launchId, routerProof.stampRequest.launchId, "Route launch ID");
+  assert(
+    Number(routeStamped.args.kind) === CLASSIC_V4_LAUNCH_STAMP_KIND,
+    "Router route kind differs",
+  );
+  sameHex(
+    routeStamped.args.routePayloadHash,
+    routerProof.permit.routePayloadHash,
+    "Router route payload hash",
+  );
+  sameHex(
+    routeStamped.args.expectedResultHash,
+    routerProof.permit.expectedResultHash,
+    "Router expected result hash",
+  );
+  sameHex(
+    routeStamped.args.permitDigest,
+    canary.launchAuthorization.permitDigest,
+    "Router permit digest",
+  );
+  sameHex(launchStamped.args.launchId, routerProof.stampRequest.launchId, "Stamp launch ID");
+  sameAddress(launchStamped.args.token, token, "Stamped token");
+  sameAddress(launchStamped.args.hook, canary.feeHook, "Stamped hook");
+  sameAddress(
+    launchStamped.args.poolManager,
+    canary.dependencies.poolManager,
+    "Stamped PoolManager",
+  );
+  sameHex(launchStamped.args.poolId, poolId, "Stamped pool ID");
+  sameHex(
+    launchStamped.args.stampHash,
+    canary.launchAuthorization.simulation.stampHash,
+    "Stamped result hash",
+  );
+  const orderedRouterEvents = [
+    ...componentEvents.sort((left, right) => left.logIndex - right.logIndex),
+    routeStamped,
+    launchStamped,
+  ];
+  assert(
+    orderedRouterEvents.every(
+      (event, index) =>
+        index === 0 ||
+        event.logIndex === orderedRouterEvents[index - 1].logIndex + 1,
+    ) &&
+      orderedRouterEvents.at(-2) === routeStamped &&
+      orderedRouterEvents.at(-1) === launchStamped,
+    "Router stamp events are not one contiguous Component -> Route -> Launch group",
   );
 
   const hookEvents = decodeEvents(action.receipt, artifacts.feeHook.abi, canary.feeHook);
@@ -943,6 +1043,16 @@ function validateLaunch(action, canary, artifacts, plan) {
     );
   }
   action.anchor.events = {
+    "ProgrammableComponentStampedV1.token":
+      componentEventByResultIndex.get(0).logIndex,
+    "ProgrammableComponentStampedV1.rewardVault":
+      componentEventByResultIndex.get(1).logIndex,
+    "ProgrammableComponentStampedV1.positionRecipient":
+      componentEventByResultIndex.get(2).logIndex,
+    "ProgrammableComponentStampedV1.feeHook":
+      componentEventByResultIndex.get(255).logIndex,
+    ProgrammableLaunchRouteStampedV1: routeStamped.logIndex,
+    ProgrammableLaunchStampedV1: launchStamped.logIndex,
     MemeTokenLaunchedV2: launched.logIndex,
     MemeLiquidityConfiguredV2: liquidity.logIndex,
     MemeCreatorInitialBuyV2: initialBuy.logIndex,
@@ -955,6 +1065,7 @@ function validateLaunch(action, canary, artifacts, plan) {
     PoolManagerSwap: poolSwap.logIndex,
   };
   return {
+    routerProof,
     token,
     rewardVault,
     positionRecipient,
@@ -973,6 +1084,191 @@ function validateLaunch(action, canary, artifacts, plan) {
       forwarderDeployments[0]?.args.configurationHash ?? null,
     initialFee: accrual.args,
   };
+}
+
+async function verifyLaunchStampRouterProvenance(
+  endpoint,
+  verificationBlock,
+  action,
+  launch,
+  canary,
+) {
+  const launchBlockTag = blockTag(action.anchor.blockNumber);
+  const verificationBlockTag = blockTag(verificationBlock);
+  const proof = launch.routerProof;
+  const launchId = proof.stampRequest.launchId;
+  const [
+    record,
+    tokenLaunchId,
+    poolLaunchId,
+    launchRouterCode,
+    finalRouterCode,
+    launchLauncherCode,
+  ] = await Promise.all([
+      readContract(
+        endpoint,
+        launchBlockTag,
+        canary.launchStampRouterBinding.address,
+        launchStampRouterReadAbi,
+        "launchStamp",
+        [launchId],
+      ),
+      readContract(
+        endpoint,
+        launchBlockTag,
+        canary.launchStampRouterBinding.address,
+        launchStampRouterReadAbi,
+        "launchIdByToken",
+        [launch.token],
+      ),
+      readContract(
+        endpoint,
+        launchBlockTag,
+        canary.launchStampRouterBinding.address,
+        launchStampRouterReadAbi,
+        "launchIdByPool",
+        [canary.dependencies.poolManager, launch.poolId],
+      ),
+      rpc(endpoint, "eth_getCode", [
+        canary.launchStampRouterBinding.address,
+        launchBlockTag,
+      ]),
+      rpc(endpoint, "eth_getCode", [
+        canary.launchStampRouterBinding.address,
+        verificationBlockTag,
+      ]),
+      rpc(endpoint, "eth_getCode", [canary.launcher, launchBlockTag]),
+    ]);
+  assert(
+    Number(record.kind) === CLASSIC_V4_LAUNCH_STAMP_KIND,
+    "Router stored route kind differs",
+  );
+  sameAddress(record.launchWallet, canary.operatorWallet, "Router stored wallet");
+  sameAddress(record.token, launch.token, "Router stored token");
+  sameAddress(record.hook, canary.feeHook, "Router stored hook");
+  sameAddress(
+    record.poolManager,
+    canary.dependencies.poolManager,
+    "Router stored PoolManager",
+  );
+  sameHex(record.poolId, launch.poolId, "Router stored pool ID");
+  sameHex(record.poolKeyHash, proof.poolKeyHash, "Router stored PoolKey hash");
+  sameHex(
+    record.componentSetHash,
+    proof.componentSetHash,
+    "Router stored component set hash",
+  );
+  sameHex(
+    record.routePayloadHash,
+    proof.permit.routePayloadHash,
+    "Router stored route payload hash",
+  );
+  sameAddress(record.routeLauncher, canary.launcher, "Router stored launcher");
+  sameHex(
+    record.routeLauncherRuntimeCodeHash,
+    canary.runtimeCodeHashes.launcher,
+    "Router stored launcher runtime code hash",
+  );
+  sameHex(
+    record.expectedResultHash,
+    proof.permit.expectedResultHash,
+    "Router stored expected result hash",
+  );
+  sameHex(
+    record.permitDigest,
+    canary.launchAuthorization.permitDigest,
+    "Router stored permit digest",
+  );
+  sameHex(
+    record.stampHash,
+    canary.launchAuthorization.simulation.stampHash,
+    "Router stored stamp hash",
+  );
+  sameHex(tokenLaunchId, launchId, "Router token reverse proof");
+  sameHex(poolLaunchId, launchId, "Router pool reverse proof");
+  sameHex(
+    keccak256(launchRouterCode),
+    canary.launchStampRouterBinding.runtimeCodeHash,
+    "Launch-block Router runtime code hash",
+  );
+  sameHex(
+    keccak256(finalRouterCode),
+    canary.launchStampRouterBinding.runtimeCodeHash,
+    "Verification-block Router runtime code hash",
+  );
+  sameHex(
+    keccak256(launchLauncherCode),
+    canary.runtimeCodeHashes.launcher,
+    "Launch-block launcher runtime code hash",
+  );
+
+  for (const component of proof.stampRequest.components) {
+    if (Number(component.scope) === 2) {
+      const [exclusiveLaunchId, componentCode] = await Promise.all([
+        readContract(
+          endpoint,
+          launchBlockTag,
+          canary.launchStampRouterBinding.address,
+          launchStampRouterReadAbi,
+          "launchIdByComponent",
+          [component.account],
+        ),
+        rpc(endpoint, "eth_getCode", [component.account, launchBlockTag]),
+      ]);
+      sameHex(exclusiveLaunchId, ZERO_HASH, "Shared hook exclusive proof");
+      sameHex(
+        keccak256(componentCode),
+        component.runtimeCodeHash,
+        "Shared hook runtime code hash",
+      );
+      continue;
+    }
+    const [componentLaunchId, runtimeCodeHash, stampProof, componentCode] =
+      await Promise.all([
+        readContract(
+          endpoint,
+          launchBlockTag,
+          canary.launchStampRouterBinding.address,
+          launchStampRouterReadAbi,
+          "launchIdByComponent",
+          [component.account],
+        ),
+        readContract(
+          endpoint,
+          launchBlockTag,
+          canary.launchStampRouterBinding.address,
+          launchStampRouterReadAbi,
+          "componentRuntimeCodeHash",
+          [component.account],
+        ),
+        readContract(
+          endpoint,
+          launchBlockTag,
+          canary.launchStampRouterBinding.address,
+          launchStampRouterReadAbi,
+          "stampProof",
+          [component.account],
+        ),
+        rpc(endpoint, "eth_getCode", [component.account, launchBlockTag]),
+      ]);
+    sameHex(componentLaunchId, launchId, "Exclusive component launch ID");
+    sameHex(
+      runtimeCodeHash,
+      component.runtimeCodeHash,
+      "Exclusive component runtime code hash",
+    );
+    sameHex(
+      keccak256(componentCode),
+      component.runtimeCodeHash,
+      "Exclusive component launch-block runtime code hash",
+    );
+    sameHex(stampProof[0], launchId, "Exclusive component stamp launch ID");
+    sameHex(
+      stampProof[1],
+      canary.launchAuthorization.simulation.stampHash,
+      "Exclusive component stamp hash",
+    );
+  }
 }
 
 function parseSwap(action, expected, launch, canary) {
@@ -2203,6 +2499,13 @@ async function verifyAtEndpoint(
     deploymentEvidence,
   );
   const launch = validateLaunch(actions.launch, canary, artifacts, plan);
+  await verifyLaunchStampRouterProvenance(
+    endpoint,
+    verificationBlock,
+    actions.launch,
+    launch,
+    canary,
+  );
   const swaps = Object.fromEntries(
     SWAP_ACTIONS.map((expected) => [
       expected.key,
@@ -2408,6 +2711,8 @@ export async function verifyClassicV4LifecycleCanary({
     independentRpcCount: 2,
     releaseEligible: true,
     canaryPlanDigest: canary.planDigest,
+    launchAuthorization: canary.launchAuthorization,
+    launchAuthorizationDigest: canary.launchAuthorizationDigest,
     releaseBindingDigest: canary.releaseBindingDigest,
     deploymentEvidenceDigest: deploymentEvidence.evidenceDigest,
     sourceEvidenceDigest: sourceEvidence.evidenceDigest,

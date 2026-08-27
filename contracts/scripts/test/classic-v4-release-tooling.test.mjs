@@ -7,9 +7,12 @@ import test from "node:test";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import {
+  decodeFunctionData,
+  encodeAbiParameters,
   encodeFunctionData,
   keccak256,
   parseAbi,
+  parseAbiParameters,
   stringToHex,
 } from "viem";
 
@@ -19,15 +22,23 @@ import {
   CLASSIC_V4_INDEXER_LAUNCHER_EVENTS,
   CLASSIC_V4_LIFECYCLE_ACTIONS,
   CLASSIC_V4_NEW_CONTRACTS,
+  buildClassicV4LifecycleAuthorizationRequest,
   buildClassicV4LifecycleCanaryPlan,
+  buildClassicV4LifecycleReleaseCandidate,
   buildClassicV4PreparationPlan,
   computeClassicV4BuildCommitments,
   computeClassicV4SourceCommitment,
   createClassicV4ReleaseManifest,
   digestJson,
+  classicV4LaunchStampRouterAbi,
+  classicV4PoolId,
   expectedLifecycleLaunchCalldata,
   expectedLifecycleSwapCalldata,
+  hashClassicV4LaunchPermit,
+  hashClassicV4LaunchResult,
+  hashClassicV4StampRequest,
   normalizeRuntimeImmutables,
+  validateClassicV4LaunchAuthorization,
   validateClassicV4DeploymentEvidence,
   validateClassicV4LifecycleEvidence,
   validateClassicV4PreparationPlan,
@@ -166,6 +177,179 @@ function exactPinnedDependencyGitStates() {
 
 function txHash(label) {
   return keccak256(stringToHex(`classic-v4-test:${label}`));
+}
+
+const classicLauncherAbi = parseAbi([
+  "function launchFor(address launchWallet,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) result)",
+]);
+const classicRouteParameters = parseAbiParameters(
+  "(address launcher,bytes32 launcherRuntimeCodeHash,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters,(address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) expectedResult) route",
+);
+
+function classicLaunchAuthorization(
+  manifest,
+  wallet,
+  {
+    token = "0x0000000000000000000000000000000000000001",
+    rewardVault = "0x0000000000000000000000000000000000000002",
+    positionRecipient = "0x0000000000000000000000000000000000000003",
+    blockNumber = "25700199",
+    blockTimestamp = "1788000000",
+  } = {},
+) {
+  const request = buildClassicV4LifecycleAuthorizationRequest(manifest, wallet);
+  const direct = decodeFunctionData({
+    abi: classicLauncherAbi,
+    data: request.launcherCalldata,
+  });
+  assert.equal(direct.functionName, "launchFor");
+  const poolKey = {
+    currency0: "0x0000000000000000000000000000000000000000",
+    currency1: token,
+    fee: 0,
+    tickSpacing: 200,
+    hooks: request.feeHook,
+  };
+  const result = {
+    token,
+    rewardVault,
+    positionRecipient,
+    positionTokenId: 42n,
+    tokenLiquidityAmount: 999_999_999n * 10n ** 18n,
+    lockedTokenDust: 1n * 10n ** 18n,
+    initialBuyNativeAmount: BigInt(request.valueWei),
+    initialBuyTokenAmount: 123_000n * 10n ** 18n,
+    initialBuyCustody: "0x0000000000000000000000000000000000000000",
+    poolId: classicV4PoolId(poolKey),
+    launchHash: txHash("router-launch-hash"),
+  };
+  const components = [
+    {
+      resultIndex: 0,
+      account: token,
+      runtimeCodeHash: txHash("router-token-runtime"),
+      kind: 1,
+      scope: 1,
+    },
+    {
+      resultIndex: 1,
+      account: rewardVault,
+      runtimeCodeHash: txHash("router-vault-runtime"),
+      kind: 0,
+      scope: 1,
+    },
+    {
+      resultIndex: 2,
+      account: positionRecipient,
+      runtimeCodeHash: txHash("router-position-runtime"),
+      kind: 0,
+      scope: 1,
+    },
+    {
+      resultIndex: 255,
+      account: request.feeHook,
+      runtimeCodeHash: request.feeHookRuntimeCodeHash,
+      kind: 2,
+      scope: 2,
+    },
+  ].sort((left, right) =>
+    BigInt(left.account) < BigInt(right.account) ? -1 : 1,
+  );
+  const stampRequest = {
+    launchId: txHash("router-launch-id"),
+    token,
+    tokenRuntimeCodeHash: components.find((item) => item.resultIndex === 0)
+      .runtimeCodeHash,
+    poolKey,
+    hookRuntimeCodeHash: request.feeHookRuntimeCodeHash,
+    components,
+  };
+  const routePayload = encodeAbiParameters(classicRouteParameters, [
+    {
+      launcher: request.launcher,
+      launcherRuntimeCodeHash: request.launcherRuntimeCodeHash,
+      parameters: direct.args[1],
+      expectedResult: result,
+    },
+  ]);
+  const validAfter = (BigInt(blockTimestamp) - 30n).toString();
+  const deadline = (BigInt(blockTimestamp) + 300n).toString();
+  const permit = {
+    chainId: 1n,
+    router: "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+    launchWallet: request.launchWallet,
+    kind: 2,
+    routePayloadHash: keccak256(routePayload),
+    expectedResultHash: hashClassicV4LaunchResult(result),
+    stampRequestHash: hashClassicV4StampRequest(stampRequest),
+    nonce: txHash("router-permit-nonce"),
+    validAfter: BigInt(validAfter),
+    deadline: BigInt(deadline),
+    value: BigInt(request.valueWei),
+  };
+  const signature = `0x${"0".repeat(63)}1${"0".repeat(63)}2${"1b"}`;
+  const calldata = encodeFunctionData({
+    abi: classicV4LaunchStampRouterAbi,
+    functionName: "launchAndStampV1",
+    args: [permit, stampRequest, routePayload, signature],
+  });
+  return {
+    schemaVersion: "programmable.classic-launch-authorization.v1",
+    chainId: "1",
+    releaseManifestDigest: request.releaseManifestDigest,
+    predictedToken: token,
+    predictedHook: request.feeHook,
+    permitDigest: hashClassicV4LaunchPermit(permit),
+    validAfter,
+    deadline,
+    simulation: {
+      blockNumber,
+      blockHash: txHash("router-simulation-block"),
+      blockTimestamp,
+      gasEstimate: "2000000",
+      stampHash: txHash("router-stamp-hash"),
+    },
+    transaction: {
+      chainId: "1",
+      from: request.launchWallet,
+      to: permit.router,
+      valueWei: request.valueWei,
+      calldata,
+      gasLimit: "2400000",
+    },
+  };
+}
+
+function rewriteClassicLaunchAuthorization(authorization, mutate) {
+  const rewritten = structuredClone(authorization);
+  const decoded = decodeFunctionData({
+    abi: classicV4LaunchStampRouterAbi,
+    data: rewritten.transaction.calldata,
+  });
+  const permit = structuredClone(decoded.args[0]);
+  const stampRequest = structuredClone(decoded.args[1]);
+  const route = structuredClone(
+    decodeAbiParameters(classicRouteParameters, decoded.args[2])[0],
+  );
+  const context = {
+    permit,
+    stampRequest,
+    route,
+    signature: decoded.args[3],
+    authorization: rewritten,
+  };
+  mutate(context);
+  const routePayload = encodeAbiParameters(classicRouteParameters, [route]);
+  permit.routePayloadHash = keccak256(routePayload);
+  permit.expectedResultHash = hashClassicV4LaunchResult(route.expectedResult);
+  permit.stampRequestHash = hashClassicV4StampRequest(stampRequest);
+  rewritten.permitDigest = hashClassicV4LaunchPermit(permit);
+  rewritten.transaction.calldata = encodeFunctionData({
+    abi: classicV4LaunchStampRouterAbi,
+    functionName: "launchAndStampV1",
+    args: [permit, stampRequest, routePayload, context.signature],
+  });
+  return rewritten;
 }
 
 function withDigest(value, domain) {
@@ -310,42 +494,27 @@ function lifecycleEvidence(plan, deployment, source) {
   const rewardVault = "0x0000000000000000000000000000000000000002";
   const positionRecipient = "0x0000000000000000000000000000000000000003";
   const zeroAddress = "0x0000000000000000000000000000000000000000";
-  const releaseBindingDigest = digestJson(
-    {
-      planDigest: plan.planDigest,
-      deploymentEvidence: deployment,
-      sourceEvidence: source,
-    },
-    CLASSIC_V4_DIGEST_DOMAINS.releaseBinding,
+  const releaseCandidate = buildClassicV4LifecycleReleaseCandidate(
+    plan,
+    deployment,
+    source,
   );
-  const canary = buildClassicV4LifecycleCanaryPlan(
-    {
-      internalContractRelease: "classic-v4",
-      chainId: 1,
-      releaseCommit: plan.releaseCommit,
-      sourceCommitment: plan.sourceCommitment,
-      releaseBindingDigest,
-      addresses: {
-        deployer: plan.deployer,
-        launcherFeeRecipient: plan.launcherFeeRecipient,
-        ...Object.fromEntries(
-          Object.entries(plan.sharedDependencies).map(([name, value]) => [
-            name,
-            value.address,
-          ]),
-        ),
-        ...plan.predictedAddresses,
-      },
-      officialDependencies: plan.officialDependencies,
-      verification: {
-        deploymentLive: true,
-        runtimeCodeVerified: true,
-        constructorBindingsVerified: true,
-        sourceVerified: true,
-      },
-    },
+  const authorization = classicLaunchAuthorization(
+    releaseCandidate,
     operatorWallet,
   );
+  const canary = buildClassicV4LifecycleCanaryPlan(
+    releaseCandidate,
+    operatorWallet,
+    authorization,
+  );
+  const canaryPoolId = classicV4PoolId({
+    currency0: zeroAddress,
+    currency1: canaryToken,
+    fee: 0,
+    tickSpacing: 200,
+    hooks: canary.feeHook,
+  });
   const verificationBlock = 25_700_220;
   const timestamps = Object.fromEntries(
     CLASSIC_V4_LIFECYCLE_ACTIONS.map((name, index) => [
@@ -355,6 +524,12 @@ function lifecycleEvidence(plan, deployment, source) {
   );
   const actionEvents = {
     launch: [
+      "ProgrammableComponentStampedV1.token",
+      "ProgrammableComponentStampedV1.rewardVault",
+      "ProgrammableComponentStampedV1.positionRecipient",
+      "ProgrammableComponentStampedV1.feeHook",
+      "ProgrammableLaunchRouteStampedV1",
+      "ProgrammableLaunchStampedV1",
       "MemeTokenLaunchedV2",
       "MemeLiquidityConfiguredV2",
       "MemeCreatorInitialBuyV2",
@@ -417,7 +592,7 @@ function lifecycleEvidence(plan, deployment, source) {
       };
       const target =
         name === "launch"
-          ? canary.launcher
+          ? canary.launchStampRouterBinding.address
           : swapIdentity
             ? canary.dependencies.universalRouter
             : name === "creatorClaim"
@@ -619,7 +794,9 @@ function lifecycleEvidence(plan, deployment, source) {
     independentRpcCount: 2,
     releaseEligible: true,
     canaryPlanDigest: canary.planDigest,
-    releaseBindingDigest,
+    launchAuthorization: canary.launchAuthorization,
+    launchAuthorizationDigest: canary.launchAuthorizationDigest,
+    releaseBindingDigest: releaseCandidate.releaseBindingDigest,
     deploymentEvidenceDigest: deployment.evidenceDigest,
     sourceEvidenceDigest: source.evidenceDigest,
     verificationBlock,
@@ -631,7 +808,7 @@ function lifecycleEvidence(plan, deployment, source) {
     feeHook: plan.predictedAddresses.feeHook,
     canaryToken,
     rewardVault,
-    poolId: txHash("pool"),
+    poolId: canaryPoolId,
     positionRecipient,
     positionTokenId: "42",
     actions,
@@ -1723,17 +1900,17 @@ test("canary preparation covers launch, all four swap quadrants and both claims"
   const plan = preparationPlan();
   const deployment = deploymentEvidence(plan);
   const source = sourceEvidence(plan, deployment);
-  const lifecycle = lifecycleEvidence(plan, deployment, source);
-  const manifest = createClassicV4ReleaseManifest({
+  const candidate = buildClassicV4LifecycleReleaseCandidate(
     plan,
-    deploymentEvidence: deployment,
-    sourceEvidence: source,
-    lifecycleEvidence: lifecycle,
-    capturedAt: lifecycle.checkedAt,
-  });
+    deployment,
+    source,
+  );
+  const wallet = "0xa11CE00000000000000000000000000000000004";
+  const authorization = classicLaunchAuthorization(candidate, wallet);
   const canary = buildClassicV4LifecycleCanaryPlan(
-    manifest,
-    "0xa11CE00000000000000000000000000000000004",
+    candidate,
+    wallet,
+    authorization,
   );
   assert.deepEqual(
     canary.actions.map((action) => action.key),
@@ -1747,30 +1924,207 @@ test("canary preparation covers launch, all four swap quadrants and both claims"
   assert.equal(canary.universalRouterBinding.exactOutputSingleAction, "0x08");
   assert.equal(canary.executionBoundary.signs, false);
   assert.equal(canary.executionBoundary.broadcasts, false);
+  assert.equal(canary.actions[0].kind, "launch-stamp-router");
+  assert.equal(canary.actions[0].routeKind, 2);
+  assert.equal(canary.actions[0].target, authorization.transaction.to);
+  assert.equal(
+    canary.launchAuthorization.transaction.calldata,
+    authorization.transaction.calldata.toLowerCase(),
+  );
   assert.match(canary.actions[1].guard, /amountOutMinimum>0/);
   assert.match(canary.actions[2].guard, /amountInMaximum>0/);
   assert.equal(
     canary.actions.at(-1).requiredSigner,
-    manifest.addresses.launcherFeeRecipient,
+    candidate.addresses.launcherFeeRecipient,
   );
 });
 
-test("operational canary preparation fails closed until the canonical Router handoff exists", async () => {
-  const source = await readFile(
-    path.join(
-      repositoryRoot,
-      "contracts/scripts/prepare-classic-v4-lifecycle-canary.mjs",
-    ),
-    "utf8",
+test("Classic Router authorization rejects every foreign binding", () => {
+  const plan = preparationPlan();
+  const deployment = deploymentEvidence(plan);
+  const source = sourceEvidence(plan, deployment);
+  const candidate = buildClassicV4LifecycleReleaseCandidate(
+    plan,
+    deployment,
+    source,
   );
+  const wallet = "0xa11CE00000000000000000000000000000000004";
+  const authorization = classicLaunchAuthorization(candidate, wallet);
+  const canary = buildClassicV4LifecycleCanaryPlan(
+    candidate,
+    wallet,
+    authorization,
+  );
+  const request = buildClassicV4LifecycleAuthorizationRequest(candidate, wallet);
+  const foreignAddress = "0x0000000000000000000000000000000000000009";
+  const cases = [
+    [
+      "preliminary release digest",
+      () => ({
+        ...structuredClone(authorization),
+        releaseManifestDigest: txHash("foreign-release-binding"),
+      }),
+    ],
+    [
+      "wallet",
+      () => {
+        const value = structuredClone(authorization);
+        value.transaction.from = foreignAddress;
+        return value;
+      },
+    ],
+    [
+      "value",
+      () => {
+        const value = structuredClone(authorization);
+        value.transaction.valueWei = "1";
+        return value;
+      },
+    ],
+    [
+      "Router",
+      () => {
+        const value = structuredClone(authorization);
+        value.transaction.to = foreignAddress;
+        return value;
+      },
+    ],
+    [
+      "route kind",
+      () =>
+        rewriteClassicLaunchAuthorization(authorization, ({ permit }) => {
+          permit.kind = 1;
+        }),
+    ],
+    [
+      "launcher runtime",
+      () =>
+        rewriteClassicLaunchAuthorization(authorization, ({ route }) => {
+          route.launcherRuntimeCodeHash = txHash("foreign-launcher-runtime");
+        }),
+    ],
+    [
+      "direct launcher calldata",
+      () => {
+        const value = structuredClone(authorization);
+        value.transaction.calldata = request.launcherCalldata;
+        return value;
+      },
+    ],
+    [
+      "expected result",
+      () =>
+        rewriteClassicLaunchAuthorization(authorization, ({ route }) => {
+          route.expectedResult.initialBuyNativeAmount += 1n;
+        }),
+    ],
+    [
+      "component set",
+      () =>
+        rewriteClassicLaunchAuthorization(authorization, ({ stampRequest }) => {
+          const token = stampRequest.components.find(
+            (component) => Number(component.resultIndex) === 0,
+          );
+          token.kind = 0;
+        }),
+    ],
+    [
+      "signature",
+      () =>
+        rewriteClassicLaunchAuthorization(authorization, (context) => {
+          context.signature = `0x${"00".repeat(65)}`;
+        }),
+    ],
+    [
+      "noncanonical Router encoding",
+      () => {
+        const value = structuredClone(authorization);
+        value.transaction.calldata += "00";
+        return value;
+      },
+    ],
+  ];
+  for (const [label, mutate] of cases) {
+    assert.throws(
+      () => validateClassicV4LaunchAuthorization(canary, mutate()),
+      undefined,
+      label,
+    );
+  }
+});
+
+test("lifecycle preparation rejects final-manifest digest ambiguity", () => {
+  const plan = preparationPlan();
+  const deployment = deploymentEvidence(plan);
+  const source = sourceEvidence(plan, deployment);
+  const candidate = buildClassicV4LifecycleReleaseCandidate(
+    plan,
+    deployment,
+    source,
+  );
+  const wallet = "0xa11CE00000000000000000000000000000000004";
+  assert.throws(
+    () =>
+      buildClassicV4LifecycleAuthorizationRequest(
+        { ...candidate, manifestDigest: txHash("future-manifest") },
+        wallet,
+      ),
+    /preliminary release binding digest/,
+  );
+  const missing = structuredClone(candidate);
+  delete missing.releaseBindingDigest;
+  assert.throws(
+    () => buildClassicV4LifecycleAuthorizationRequest(missing, wallet),
+    /preliminary release binding digest/,
+  );
+});
+
+test("operational canary preparation requires and validates the signed Router handoff", async () => {
+  const [source, verifier] = await Promise.all([
+    readFile(
+      path.join(
+        repositoryRoot,
+        "contracts/scripts/prepare-classic-v4-lifecycle-canary.mjs",
+      ),
+      "utf8",
+    ),
+    readFile(
+      path.join(
+        repositoryRoot,
+        "contracts/scripts/verify-classic-v4-lifecycle-canary.mjs",
+      ),
+      "utf8",
+    ),
+  ]);
   const prerequisite = source.indexOf("await verifyClassicV4ReleasePrerequisites");
-  const blocker = source.indexOf("Canonical Classic Router handoff is not installed");
+  const authorizationInput = source.indexOf('"--launch-authorization"');
   const planConstruction = source.indexOf(
     "const canaryPlan = buildClassicV4LifecycleCanaryPlan",
   );
   assert.ok(prerequisite >= 0);
-  assert.ok(blocker > prerequisite);
-  assert.ok(planConstruction > blocker);
+  assert.ok(authorizationInput >= 0);
+  assert.ok(planConstruction > prerequisite);
+  assert.equal(source.includes("Canonical Classic Router handoff is not installed"), false);
+  assert.match(source, /--authorization-request-only/);
+  assert.match(source, /verifySignedAuthorizationAtEndpoint/);
+  assert.match(source, /eth_getCode/);
+  assert.doesNotMatch(
+    source,
+    /CUSTOM_LAUNCH_WEBSITE_TOKEN|BFF_ASSERTION|privy-user-id|authorization-api/,
+  );
+  for (const proof of [
+    '"launchStamp"',
+    '"launchIdByToken"',
+    '"launchIdByPool"',
+    '"launchIdByComponent"',
+    '"componentRuntimeCodeHash"',
+    '"stampProof"',
+    '"eth_getCode"',
+    "ProgrammableLaunchRouteStampedV1",
+    "ProgrammableLaunchStampedV1",
+  ]) {
+    assert.match(verifier, new RegExp(proof));
+  }
 });
 
 test("every operator rejects private keys and broadcast flags", () => {
