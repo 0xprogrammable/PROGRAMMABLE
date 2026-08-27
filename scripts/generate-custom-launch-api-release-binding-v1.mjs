@@ -34,7 +34,7 @@ const PUBLIC_PROFILE_SCHEMA_VERSION =
   "programmable.direct-native-hook-graph-admission-profile.v3";
 const PUBLIC_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
 const PUBLIC_PROFILE_VERSION = "3.2.0";
-const LAUNCH_PACKAGE_VERSION = "3.3.3";
+const LAUNCH_PACKAGE_VERSION = "3.3.5";
 const PLATFORM_ADMISSION_POLICY = Object.freeze({
   schemaVersion: "programmable.direct-native-platform-admission-policy.v1",
   mode: "deterministic-exact-source-graph-static-baseline-v1",
@@ -94,6 +94,7 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   "0009_admit_eip3009_authorization_patch_v2.sql",
   "0010_durable_launch_lifecycle_queue_v3.sql",
   "0011_custom_launch_project_metadata_v3.sql",
+  "0012_custom_launch_api_reliability_v1.sql",
 ]);
 const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -107,6 +108,7 @@ const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260826105310_admit_eip3009_authorization_patch_v2.sql",
   "20260826135927_durable_launch_lifecycle_queue_v3.sql",
   "20260826175335_custom_launch_project_metadata_v3.sql",
+  "20260827074734_custom_launch_api_reliability_v1.sql",
 ]);
 const EXPECTED_API_ROUTES = Object.freeze([
   Object.freeze({ method: "GET", path: "/v3/capabilities" }),
@@ -414,7 +416,7 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
   }
   if (launchPackage?.name !== "@programmable/launch"
     || launchPackage?.version !== LAUNCH_PACKAGE_VERSION) {
-    throw new Error("launch package manifest is not the 3.3.3 public CLI contract");
+    throw new Error("launch package manifest is not the 3.3.5 public CLI contract");
   }
 }
 

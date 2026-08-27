@@ -36,6 +36,7 @@ const runtimeMigrations = Object.freeze([
   "0009_admit_eip3009_authorization_patch_v2.sql",
   "0010_durable_launch_lifecycle_queue_v3.sql",
   "0011_custom_launch_project_metadata_v3.sql",
+  "0012_custom_launch_api_reliability_v1.sql",
 ]);
 const supabaseMigrations = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -49,6 +50,7 @@ const supabaseMigrations = Object.freeze([
   "20260826105310_admit_eip3009_authorization_patch_v2.sql",
   "20260826135927_durable_launch_lifecycle_queue_v3.sql",
   "20260826175335_custom_launch_project_metadata_v3.sql",
+  "20260827074734_custom_launch_api_reliability_v1.sql",
 ]);
 const apiRoutes = Object.freeze([
   Object.freeze({ method: "GET", path: "/v3/capabilities" }),
@@ -136,7 +138,7 @@ async function releaseFixture(t) {
   const backendRoot = join(root, "backend");
   await json(join(websiteRoot, "public/openapi/custom-launch-v3.json"), {
     openapi: "3.1.0",
-    info: { title: "fixture", version: "3.3.3" },
+    info: { title: "fixture", version: "3.3.5" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileVersion: "3.2.0",
@@ -152,7 +154,7 @@ async function releaseFixture(t) {
   });
   await json(join(websiteRoot, "packages/launch/package.json"), {
     name: "@programmable/launch",
-    version: "3.3.3",
+    version: "3.3.5",
   });
   const profile = {
     schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v3",
@@ -313,9 +315,9 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.equal(binding.database.schemaEvidenceSha256, sha256(databaseEvidenceBytes));
   assert.equal(databaseEvidence.status, "passed");
   assert.equal(binding.database.lastMigration,
-    "migrations/0011_custom_launch_project_metadata_v3.sql");
-  assert.equal(databaseEvidence.supabaseMigrationList.migrations.length, 11);
-  assert.equal(databaseEvidence.mirrorByteChecks.length, 11);
+    "migrations/0012_custom_launch_api_reliability_v1.sql");
+  assert.equal(databaseEvidence.supabaseMigrationList.migrations.length, 12);
+  assert.equal(databaseEvidence.mirrorByteChecks.length, 12);
   assert.ok(databaseEvidence.mirrorByteChecks.every((check) => check.byteEqual));
   assert.equal((await stat(result.outputPath)).mode & 0o777, 0o600);
   const beforeRetry = Buffer.from(bindingBytes);

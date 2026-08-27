@@ -65,7 +65,8 @@
             "migrations/0007_direct_native_hook_profile_v3.sql",
             "migrations/0008_direct_native_platform_admission_v3.sql",
             "migrations/0010_durable_launch_lifecycle_queue_v3.sql",
-            "migrations/0011_custom_launch_project_metadata_v3.sql"
+            "migrations/0011_custom_launch_project_metadata_v3.sql",
+            "migrations/0012_custom_launch_api_reliability_v1.sql"
           ]
         },
         "schemaEvidenceSha256": { "$ref": "#/$defs/sha256" }
@@ -172,7 +173,10 @@
               "type": "object",
               "properties": {
                 "lastMigration": {
-                  "const": "migrations/0011_custom_launch_project_metadata_v3.sql"
+                  "enum": [
+                    "migrations/0011_custom_launch_project_metadata_v3.sql",
+                    "migrations/0012_custom_launch_api_reliability_v1.sql"
+                  ]
                 }
               }
             },
