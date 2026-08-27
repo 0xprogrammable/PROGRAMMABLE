@@ -49,6 +49,8 @@ npm run contracts:classic-v4:mainnet:prepare -- \
 
 This local write still does not authorize or perform a transaction. The owner must review the plan and explicitly sign the four transactions with their wallet. Never pass a private key or mnemonic to these tools.
 
+The localhost MetaMask execution flow, external transaction hash journal, and browser QA mode are documented in [`CLASSIC-V4-METAMASK-DEPLOYMENT-CONSOLE.md`](./CLASSIC-V4-METAMASK-DEPLOYMENT-CONSOLE.md).
+
 ## 2. Read-only finalized deployment verification
 
 After the owner has submitted the reviewed transactions, create an external JSON file containing exactly these four transaction hashes:
