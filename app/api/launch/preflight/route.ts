@@ -39,7 +39,9 @@ import {
   classicV4HookFactoryAbi,
   classicV4LaunchAbi,
   classicV4PositionPlannerAbi,
-  encodeClassicV4Launch,
+  CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+  CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+  encodeClassicV4PresetSalt,
   validateClassicV4LaunchDraft,
 } from "@/lib/classic-v4";
 import {
@@ -1556,6 +1558,11 @@ async function assertClassicV4Infrastructure(
 ) {
   const { addresses, runtimeCodeHashes, officialDependencies } = release;
   const runtimeBindings = [
+    [
+      CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+      CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+      "canonical Launch Stamp Router",
+    ] as const,
     ...Object.entries(officialDependencies).map(
       ([, dependency]) =>
         [
@@ -1602,6 +1609,7 @@ async function assertClassicV4Infrastructure(
     launcherPositionFactory,
     launcherPlanner,
     launcherGraduationVaultFactory,
+    launcherRouter,
     minimumInitialBuyWei,
     maximumLauncherRewardBeneficiaries,
     launcherRewardShareBasisPoints,
@@ -1699,6 +1707,11 @@ async function assertClassicV4Infrastructure(
       address: launcher,
       abi: classicV4LaunchAbi,
       functionName: "graduationVaultFactory",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "ROUTER",
     }),
     rpcClient.readContract({
       address: launcher,
@@ -1969,6 +1982,7 @@ async function assertClassicV4Infrastructure(
       addresses.graduationVaultFactory,
       "graduation vault factory",
     ],
+    [launcherRouter, CLASSIC_V4_LAUNCH_STAMP_ROUTER, "Launch Stamp Router"],
     [hookPoolManager, officialDependencies.poolManager.address, "hook PoolManager"],
     [hookTreasury, addresses.launcherFeeRecipient, "treasury"],
     [hookVaultFactory, addresses.rewardVaultFactory, "hook reward factory"],
@@ -2108,6 +2122,10 @@ async function prepareClassicV4Launch(
 
   await assertClassicV4Infrastructure(release, rpcClient);
   const launcher = release.addresses.launcher;
+  const presetSalt = encodeClassicV4PresetSalt(
+    draft.launchSalt,
+    configuration.liquidity.presetCode,
+  );
   const [predictedToken] = await rpcClient.readContract({
     address: launcher,
     abi: classicV4LaunchAbi,
@@ -2116,7 +2134,7 @@ async function prepareClassicV4Launch(
       draft.tokenName.trim(),
       draft.tokenSymbol.trim(),
       account,
-      draft.launchSalt,
+      presetSalt,
     ],
   });
   const predictedRewardVault = await rpcClient.readContract({
@@ -2137,78 +2155,11 @@ async function prepareClassicV4Launch(
     );
   }
 
-  const launchBase = {
-    kind: "launch" as const,
-    chainId: launchChain.id,
-    to: launcher,
-    data: encodeClassicV4Launch(draft, draft.launchSalt, account),
-    value: initialBuyWei.toString(),
-  };
-  const simulation = await rpcClient.call({
-    account,
-    to: launchBase.to,
-    data: launchBase.data,
-    value: initialBuyWei,
-  });
-  if (!simulation.data) {
-    throw new Error("The Classic V4 launch simulation returned no result");
-  }
-  const simulated = decodeFunctionResult({
-    abi: classicV4LaunchAbi,
-    functionName: "launch",
-    data: simulation.data,
-  });
-  if (
-    simulated.token.toLowerCase() !== predictedToken.toLowerCase() ||
-    simulated.rewardVault.toLowerCase() !== predictedRewardVault.toLowerCase() ||
-    simulated.positionRecipient ===
-      "0x0000000000000000000000000000000000000000" ||
-    simulated.positionTokenId <= 0n ||
-    simulated.initialBuyNativeAmount !== initialBuyWei ||
-    simulated.initialBuyTokenAmount <= 0n ||
-    simulated.tokenLiquidityAmount <= 0n ||
-    simulated.initialBuyTokenAmount > simulated.tokenLiquidityAmount ||
-    simulated.tokenLiquidityAmount + simulated.lockedTokenDust !==
-      MEME_TOKEN_SUPPLY_WEI ||
-    !isHex(simulated.poolId, { strict: true }) ||
-    simulated.poolId === `0x${"0".repeat(64)}` ||
-    !isHex(simulated.launchHash, { strict: true }) ||
-    simulated.launchHash === `0x${"0".repeat(64)}` ||
-    (configuration.liquidity.preset === "bonding"
-      ? simulated.graduationVault ===
-          "0x0000000000000000000000000000000000000000" ||
-        simulated.positionRecipient.toLowerCase() !==
-          simulated.graduationVault.toLowerCase() ||
-        simulated.finalPositionRecipient ===
-          "0x0000000000000000000000000000000000000000" ||
-        simulated.graduationReserveAmount !==
-          CLASSIC_GRADUATION_TOKEN_RESERVE_WEI ||
-        simulated.finalLiquidity <= 0n
-      : simulated.graduationVault !==
-          "0x0000000000000000000000000000000000000000" ||
-        simulated.positionRecipient.toLowerCase() !==
-          simulated.finalPositionRecipient.toLowerCase() ||
-        simulated.graduationReserveAmount !== 0n ||
-        simulated.finalPositionTokenId !== 0n ||
-        simulated.finalLiquidity !== 0n) ||
-    (configuration.initialBuyCustody.mode === "unlocked"
-      ? simulated.initialBuyCustody !== "0x0000000000000000000000000000000000000000"
-      : simulated.initialBuyCustody === "0x0000000000000000000000000000000000000000")
-  ) {
-    throw new Error(
-      "The Classic V4 simulation does not match the prepared launch",
-    );
-  }
-  const gasLimit = await estimatePreparedTransaction(
-    account,
-    launchBase,
-    rpcClient,
-  );
   return response({
-    status: "ready",
+    status: "blocked",
     mode: "classic-v3",
-    title: "Ready for wallet review",
-    detail: `The exact Classic V4 launch and Activation Buy succeeded in a read-only ${networkName} simulation`,
+    title: "Classic V4 Router authorization is pending",
+    detail: `The deterministic token ${predictedToken.slice(0, 8)}…${predictedToken.slice(-6)} and reward vault ${predictedRewardVault.slice(0, 8)}…${predictedRewardVault.slice(-6)} match, but no permit-attached canonical Router handoff is installed. A direct launcher transaction is intentionally never returned.`,
     checks: [
       tokenCheck,
       connectedWalletCheck,
@@ -2222,19 +2173,14 @@ async function prepareClassicV4Launch(
       {
         id: "simulation",
         label: "Simulation",
-        status: "pass",
-        detail:
-          configuration.liquidity.preset === "bonding"
-            ? "The token, reward vault, 80/20 Bonding reserve and Activation Buy execute atomically"
-            : "The complete token, reward vault, locked position and Activation Buy execute atomically",
+        status: "blocked",
+        detail: "Waiting for a signed launchAndStampV1 Router artifact",
       },
     ],
-    transaction: { ...launchBase, gasLimit: gasLimit.toString() },
     predictedToken,
     predictedHook: release.addresses.feeHook,
     releaseLauncher: release.addresses.launcher,
     releaseManifestDigest: release.manifestDigest,
-    planHash: buildPlanHash(account, launchBase),
   });
 }
 

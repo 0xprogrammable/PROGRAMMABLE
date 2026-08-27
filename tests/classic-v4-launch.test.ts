@@ -33,7 +33,7 @@ describe("Classic V4 launch configuration", () => {
       (item) => item.type === "function" && item.name === "launch",
     );
     const v4Launch = classicV4LaunchAbi.find(
-      (item) => item.type === "function" && item.name === "launch",
+      (item) => item.type === "function" && item.name === "launchFor",
     );
 
     expect(v3Launch).toBeDefined();
@@ -42,14 +42,14 @@ describe("Classic V4 launch configuration", () => {
     expect(toFunctionSelector(v3Launch)).not.toBe(toFunctionSelector(v4Launch));
     if (
       v3Launch.inputs[0]?.type !== "tuple" ||
-      v4Launch.inputs[0]?.type !== "tuple"
+      v4Launch.inputs[1]?.type !== "tuple"
     ) {
       throw new Error("Classic launch parameters must remain ABI tuples");
     }
     expect(
       v3Launch.inputs[0].components.map((item) => item.name),
     ).not.toContain("liquidityPreset");
-    expect(v4Launch.inputs[0].components.map((item) => item.name)).toContain(
+    expect(v4Launch.inputs[1].components.map((item) => item.name)).not.toContain(
       "liquidityPreset",
     );
   });
@@ -128,12 +128,14 @@ describe("Classic V4 launch configuration", () => {
       data: encodeClassicV4Launch(launchDraft, salt, account),
     });
 
-    expect(decoded.functionName).toBe("launch");
-    if (decoded.functionName !== "launch") return;
-    expect(decoded.args[0]).toMatchObject({
+    expect(decoded.functionName).toBe("launchFor");
+    if (decoded.functionName !== "launchFor") return;
+    expect(decoded.args[0]).toBe(account);
+    expect(decoded.args[1]).toMatchObject({
       buySwapFeeBps: 10,
       sellSwapFeeBps: 700,
-      liquidityPreset: 1,
+      creatorSalt:
+        "0x01aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       rewardBeneficiaries: [external, third],
       rewardSharesBps: [2500, 7500],
     });

@@ -1749,6 +1749,24 @@ test("canary preparation covers launch, all four swap quadrants and both claims"
   );
 });
 
+test("operational canary preparation fails closed until the canonical Router handoff exists", async () => {
+  const source = await readFile(
+    path.join(
+      repositoryRoot,
+      "contracts/scripts/prepare-classic-v4-lifecycle-canary.mjs",
+    ),
+    "utf8",
+  );
+  const prerequisite = source.indexOf("await verifyClassicV4ReleasePrerequisites");
+  const blocker = source.indexOf("Canonical Classic Router handoff is not installed");
+  const planConstruction = source.indexOf(
+    "const canaryPlan = buildClassicV4LifecycleCanaryPlan",
+  );
+  assert.ok(prerequisite >= 0);
+  assert.ok(blocker > prerequisite);
+  assert.ok(planConstruction > blocker);
+});
+
 test("every operator rejects private keys and broadcast flags", () => {
   for (const operator of [
     "prepare-classic-v4-mainnet-release.mjs",

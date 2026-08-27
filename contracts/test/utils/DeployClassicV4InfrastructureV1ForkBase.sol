@@ -100,10 +100,11 @@ abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
                 ? "classicV4BondingCreator"
                 : "classicV4Creator"
         );
-        vm.deal(creator, MIN_INITIAL_BUY);
         MemeLaunchV3.LaunchParameters memory parameters = _parameters(creator, liquidityPreset);
-        vm.prank(creator);
-        MemeLaunchV3.LaunchResult memory launchResult = result.launcher.launch{ value: MIN_INITIAL_BUY }(parameters);
+        vm.deal(result.launcher.ROUTER(), MIN_INITIAL_BUY);
+        vm.prank(result.launcher.ROUTER());
+        MemeLaunchV3.LaunchResult memory launchResult =
+            result.launcher.launchFor{ value: MIN_INITIAL_BUY }(creator, parameters);
 
         assertGt(launchResult.initialBuyTokenAmount, 0);
         assertEq(IERC20(launchResult.token).balanceOf(creator), launchResult.initialBuyTokenAmount);
@@ -200,9 +201,14 @@ abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
             symbol: liquidityPreset == 1 ? "PCB4" : "PCS4",
             buySwapFeeBps: 10,
             sellSwapFeeBps: 1000,
-            liquidityPreset: liquidityPreset,
-            creatorSalt: keccak256(
-                abi.encode(block.chainid, creator, liquidityPreset, "classic-v4-deployment-rehearsal")
+            creatorSalt: bytes32(
+                (uint256(liquidityPreset) << 248)
+                    | (uint256(
+                            keccak256(
+                                abi.encode(block.chainid, creator, liquidityPreset, "classic-v4-deployment-rehearsal")
+                            )
+                        )
+                        & type(uint248).max)
             ),
             metadata: UERC20Metadata({
                 description: "Additive Classic V4 deployment rehearsal",

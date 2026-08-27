@@ -48,6 +48,39 @@ import { MemeLaunchV3 } from "../src/MemeLaunchV3.sol";
 
 contract ClassicPlannerImpostor { }
 
+interface ICanonicalClassicRouterLauncherV1 {
+    struct LaunchParameters {
+        string name;
+        string symbol;
+        uint16 buySwapFeeBps;
+        uint16 sellSwapFeeBps;
+        bytes32 creatorSalt;
+        UERC20Metadata metadata;
+        address[] rewardBeneficiaries;
+        uint16[] rewardSharesBps;
+        ClassicInitialBuyCustodyConfig initialBuyCustody;
+    }
+
+    struct LaunchResult {
+        address token;
+        address rewardVault;
+        address positionRecipient;
+        uint256 positionTokenId;
+        uint256 tokenLiquidityAmount;
+        uint256 lockedTokenDust;
+        uint256 initialBuyNativeAmount;
+        uint256 initialBuyTokenAmount;
+        address initialBuyCustody;
+        bytes32 poolId;
+        bytes32 launchHash;
+    }
+
+    function launchFor(address launchWallet, LaunchParameters calldata parameters)
+        external
+        payable
+        returns (LaunchResult memory result);
+}
+
 contract MemeLaunchV3Test is Deployers {
     using PositionInfoLibrary for PositionInfo;
     using StateLibrary for IPoolManager;
@@ -144,6 +177,53 @@ contract MemeLaunchV3Test is Deployers {
         _assertStandardLockedPositionLifecycle(result);
     }
 
+    function test_canonicalRouterV1AbiDecodesExtendedClassicV4Result() public {
+        MemeLaunchV3.LaunchParameters memory parameters = _parameters(bytes32("router-v1-abi"), 1);
+        ICanonicalClassicRouterLauncherV1.LaunchParameters memory canonical =
+            ICanonicalClassicRouterLauncherV1.LaunchParameters({
+                name: parameters.name,
+                symbol: parameters.symbol,
+                buySwapFeeBps: parameters.buySwapFeeBps,
+                sellSwapFeeBps: parameters.sellSwapFeeBps,
+                creatorSalt: parameters.creatorSalt,
+                metadata: parameters.metadata,
+                rewardBeneficiaries: parameters.rewardBeneficiaries,
+                rewardSharesBps: parameters.rewardSharesBps,
+                initialBuyCustody: parameters.initialBuyCustody
+            });
+
+        vm.deal(launcher.ROUTER(), MIN_INITIAL_BUY_WEI);
+        vm.prank(launcher.ROUTER());
+        ICanonicalClassicRouterLauncherV1.LaunchResult memory result = ICanonicalClassicRouterLauncherV1(
+            address(launcher)
+        )
+        .launchFor{ value: MIN_INITIAL_BUY_WEI }(
+            deployer, canonical
+        );
+
+        assertGt(result.initialBuyTokenAmount, 0);
+        assertEq(launcher.graduationVaultOf(result.token), result.positionRecipient);
+        assertEq(launcher.launchHashOf(result.token), result.launchHash);
+    }
+
+    function test_launchRejectsEveryNonRouterCaller() public {
+        MemeLaunchV3.LaunchParameters memory parameters = _parameters(bytes32("direct-call"), 0);
+        vm.deal(deployer, MIN_INITIAL_BUY_WEI);
+        vm.expectRevert(
+            abi.encodeWithSelector(MemeLaunchV3.UnauthorizedRouter.selector, deployer, launcher.ROUTER())
+        );
+        vm.prank(deployer);
+        launcher.launchFor{ value: MIN_INITIAL_BUY_WEI }(deployer, parameters);
+    }
+
+    function test_routerCannotLaunchForZeroWallet() public {
+        MemeLaunchV3.LaunchParameters memory parameters = _parameters(bytes32("zero-wallet"), 0);
+        vm.deal(launcher.ROUTER(), MIN_INITIAL_BUY_WEI);
+        vm.prank(launcher.ROUTER());
+        vm.expectRevert(MemeLaunchV3.ZeroLaunchWallet.selector);
+        launcher.launchFor{ value: MIN_INITIAL_BUY_WEI }(address(0), parameters);
+    }
+
     function test_bondingPresetMintsOneVaultOwnedPositionAndPreservesLegacyEvents() public {
         MemeLaunchV3.LaunchParameters memory parameters = _parameters(bytes32("deep30-events"), 1);
         parameters.initialBuyCustody = ClassicInitialBuyCustodyConfig({
@@ -198,9 +278,12 @@ contract MemeLaunchV3Test is Deployers {
             launcher.predictTokenAddress(parameters.name, parameters.symbol, deployer, parameters.creatorSalt);
         uint256 nextTokenIdBefore = positionManager.nextTokenId();
 
-        vm.prank(deployer);
-        vm.expectRevert(abi.encodeWithSelector(ClassicPositionPlannerV1.InvalidLiquidityPreset.selector, uint8(2)));
-        launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);
+        vm.deal(launcher.ROUTER(), MIN_INITIAL_BUY_WEI);
+        vm.prank(launcher.ROUTER());
+        vm.expectRevert(
+            abi.encodeWithSelector(MemeLaunchV3.InvalidLiquidityPresetSalt.selector, parameters.creatorSalt)
+        );
+        launcher.launchFor{ value: MIN_INITIAL_BUY_WEI }(deployer, parameters);
 
         assertEq(predictedToken.code.length, 0);
         assertEq(positionManager.nextTokenId(), nextTokenIdBefore);
@@ -428,9 +511,10 @@ contract MemeLaunchV3Test is Deployers {
         uint256 launcherFeesBefore = feeHook.launcherFeesAccrued();
         uint256 nativeFeesBefore = feeHook.totalNativeFeesAccrued();
 
-        vm.prank(deployer);
+        vm.deal(launcher.ROUTER(), grossInput);
+        vm.prank(launcher.ROUTER());
         vm.expectPartialRevert(CustomRevert.WrappedError.selector);
-        launcher.launch{ value: grossInput }(parameters);
+        launcher.launchFor{ value: grossInput }(deployer, parameters);
 
         (,,,, bool registered,) = feeHook.poolFeeConfig(predictedPoolId);
         assertEq(_netAtMinimumFee(grossInput), targetNet);
@@ -498,8 +582,9 @@ contract MemeLaunchV3Test is Deployers {
         private
         returns (MemeLaunchV3.LaunchResult memory result)
     {
-        vm.prank(deployer);
-        result = launcher.launch{ value: value }(parameters);
+        vm.deal(launcher.ROUTER(), value);
+        vm.prank(launcher.ROUTER());
+        result = launcher.launchFor{ value: value }(deployer, parameters);
     }
 
     function _assertInvalidFeePreflight(MemeLaunchV3.LaunchParameters memory parameters, uint16 invalidFee) private {
@@ -527,9 +612,10 @@ contract MemeLaunchV3Test is Deployers {
             address(positionManager), PositionManager.modifyLiquidities.selector, unexpectedDeploymentWork
         );
 
+        vm.deal(launcher.ROUTER(), MIN_INITIAL_BUY_WEI);
+        vm.prank(launcher.ROUTER());
         vm.expectRevert(abi.encodeWithSelector(EthCreatorFeeHookV4.InvalidTotalSwapFee.selector, invalidFee));
-        vm.prank(deployer);
-        launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);
+        launcher.launchFor{ value: MIN_INITIAL_BUY_WEI }(deployer, parameters);
 
         assertEq(predictedToken.code.length, 0);
         assertEq(positionManager.nextTokenId(), nextTokenIdBefore);
@@ -551,8 +637,7 @@ contract MemeLaunchV3Test is Deployers {
             symbol: string.concat("C4", _hexNibble(uint8(uint256(salt) & 0xf))),
             buySwapFeeBps: 10,
             sellSwapFeeBps: 10,
-            liquidityPreset: liquidityPreset,
-            creatorSalt: salt,
+            creatorSalt: _presetSalt(salt, liquidityPreset),
             metadata: UERC20Metadata({
                 description: "Classic V4 liquidity preset fixture",
                 website: "https://programmable.family",
@@ -565,6 +650,10 @@ contract MemeLaunchV3Test is Deployers {
                 mode: ClassicInitialBuyCustodyMode.Unlocked, durationDays: 0, cliffDays: 0
             })
         });
+    }
+
+    function _presetSalt(bytes32 salt, uint8 liquidityPreset) private pure returns (bytes32) {
+        return bytes32((uint256(liquidityPreset) << 248) | (uint256(salt) & type(uint248).max));
     }
 
     function _deep30NetCapacity() private view returns (uint256 capacity) {

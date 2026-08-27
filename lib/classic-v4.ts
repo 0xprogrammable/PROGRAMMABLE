@@ -1,4 +1,10 @@
-import { encodeFunctionData, formatEther, parseAbi, type Hex } from "viem";
+import {
+  encodeFunctionData,
+  formatEther,
+  parseAbi,
+  type Address,
+  type Hex,
+} from "viem";
 
 import {
   formatClassicV3Percent,
@@ -24,7 +30,7 @@ import {
 } from "./launch-transaction";
 
 export const classicV4LaunchAbi = parseAbi([
-  "function launch((string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,uint8 liquidityPreset,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash,address graduationVault,address finalPositionRecipient,uint256 graduationReserveAmount,uint256 finalPositionTokenId,uint128 finalLiquidity) result)",
+  "function launchFor(address launchWallet,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash,address graduationVault,address finalPositionRecipient,uint256 graduationReserveAmount,uint256 finalPositionTokenId,uint128 finalLiquidity) result)",
   "function predictTokenAddress(string name,string symbol,address deployer,bytes32 creatorSalt) view returns (address token,bytes32 effectiveGraffiti)",
   "function predictRewardVault(address token,address deployer,address[] beneficiaries,uint16[] sharesBps) view returns (address)",
   "function poolManager() view returns (address)",
@@ -41,6 +47,8 @@ export const classicV4LaunchAbi = parseAbi([
   "function finalPositionRecipientOf(address token) view returns (address)",
   "function graduate(address token) returns (uint256 finalPositionTokenId)",
   "function maxBuyAndGraduate(address token,address recipient) payable returns (uint256 tokenAmount,uint256 finalPositionTokenId)",
+  "function ROUTER() view returns (address)",
+  "function liquidityPresetForSalt(bytes32 creatorSalt) pure returns (uint8)",
   "function STANDARD_LIQUIDITY_PRESET() view returns (uint8)",
   "function BONDING_LIQUIDITY_PRESET() view returns (uint8)",
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
@@ -51,6 +59,11 @@ export const classicV4LaunchAbi = parseAbi([
   "function TICK_SPACING() view returns (int24)",
   "function LP_FEE_PIPS() view returns (uint24)",
 ]);
+
+export const CLASSIC_V4_LAUNCH_STAMP_ROUTER =
+  "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56" as const;
+export const CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH =
+  "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546" as const;
 
 export const classicV4HookAbi = parseAbi([
   "function poolManager() view returns (address)",
@@ -214,20 +227,24 @@ export function validateClassicV4LaunchDraft(
 export function encodeClassicV4Launch(
   draft: LaunchDraft,
   creatorSalt: Hex,
-  launcherAccount: string,
+  launcherAccount: Address,
 ) {
   const configuration = validateClassicV4LaunchDraft(draft, launcherAccount);
+  const presetSalt = encodeClassicV4PresetSalt(
+    creatorSalt,
+    configuration.liquidity.presetCode,
+  );
   return encodeFunctionData({
     abi: classicV4LaunchAbi,
-    functionName: "launch",
+    functionName: "launchFor",
     args: [
+      launcherAccount,
       {
         name: draft.tokenName.trim(),
         symbol: draft.tokenSymbol.trim(),
         buySwapFeeBps: configuration.fees.buySwapFeeBps,
         sellSwapFeeBps: configuration.fees.sellSwapFeeBps,
-        liquidityPreset: configuration.liquidity.presetCode,
-        creatorSalt,
+        creatorSalt: presetSalt,
         metadata: {
           description: draft.tokenDescription.trim(),
           website: normalizeOptionalHttpsUrl(
@@ -252,6 +269,16 @@ export function encodeClassicV4Launch(
       },
     ],
   });
+}
+
+export function encodeClassicV4PresetSalt(
+  creatorSalt: Hex,
+  presetCode: 0 | 1,
+): Hex {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(creatorSalt)) {
+    throw new LaunchInputError("The Classic launch salt is invalid");
+  }
+  return `0x${presetCode.toString(16).padStart(2, "0")}${creatorSalt.slice(4).toLowerCase()}` as Hex;
 }
 
 export function buildClassicV4LaunchDisclosure(

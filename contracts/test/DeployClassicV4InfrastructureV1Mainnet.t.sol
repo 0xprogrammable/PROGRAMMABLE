@@ -5,7 +5,8 @@ import { DeployClassicV4InfrastructureV1 } from "../script/DeployClassicV4Infras
 import { DeployClassicV4InfrastructureV1ForkBase } from "./utils/DeployClassicV4InfrastructureV1ForkBase.sol";
 
 contract DeployClassicV4InfrastructureV1MainnetTest is DeployClassicV4InfrastructureV1ForkBase {
-    uint256 internal constant SNAPSHOT_BLOCK = 25_640_000;
+    // The canonical Launch Stamp Router was deployed at block 25,717,612.
+    uint256 internal constant SNAPSHOT_BLOCK = 25_720_000;
 
     function setUp() public {
         _selectFork("ETHEREUM_RPC_URL", "https://eth.drpc.org", SNAPSHOT_BLOCK);

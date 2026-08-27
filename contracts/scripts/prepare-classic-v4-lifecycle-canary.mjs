@@ -215,6 +215,9 @@ export async function main(argv = process.argv.slice(2)) {
     sourceEvidence,
     artifacts,
   });
+  fail(
+    "Canonical Classic Router handoff is not installed: obtain a permit-authority-signed launchAndStampV1 artifact before lifecycle canary preparation",
+  );
   const canaryPlan = buildClassicV4LifecycleCanaryPlan(
     releaseCandidate(plan, deploymentEvidence, sourceEvidence),
     options.wallet,

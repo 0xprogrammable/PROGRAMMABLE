@@ -6,7 +6,10 @@ import {
   type Address,
 } from "viem";
 
-import { encodeClassicV4Launch } from "../lib/classic-v4";
+import {
+  CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+  encodeClassicV4Launch,
+} from "../lib/classic-v4";
 import {
   validatePreparedClassicV4LaunchTransaction,
   validatePreparedClassicV4LaunchTransactionAgainstPublicRelease,
@@ -831,7 +834,7 @@ describe("Classic V4 release and launch preflight", () => {
     expect(parseClassicV4PublicRelease(missingFinality)).toBeNull();
   });
 
-  it("binds wallet review to V4 calldata, activation buy and release proof", () => {
+  it("rejects direct V4 launcher calldata until a signed Router handoff is installed", () => {
     const draft = v4Draft();
     const data = encodeClassicV4Launch(draft, salt, account);
     const transaction = {
@@ -888,12 +891,24 @@ describe("Classic V4 release and launch preflight", () => {
       releaseStatus: "publicly-available" as const,
       publicAvailable: true as const,
     };
-    expect(
+    expect(() =>
       validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
         input,
         browserBinding,
       ),
-    ).toEqual(transaction);
+    ).toThrow("canonical Launch Stamp Router");
+    expect(() =>
+      validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
+        {
+          ...input,
+          transaction: {
+            ...transaction,
+            to: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+          },
+        },
+        browserBinding,
+      ),
+    ).toThrow("Router handoff validator is not installed");
     expect(CLASSIC_V4_PUBLIC_RELEASE_BINDING).toBeNull();
     expect(() => validatePreparedClassicV4LaunchTransaction(input)).toThrow(
       "browser release binding",

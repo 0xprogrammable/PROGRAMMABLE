@@ -37,6 +37,9 @@ contract DeployClassicV4InfrastructureV1 is Script {
 
     address public constant LAUNCHER_FEE_RECIPIENT = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address public constant EXPECTED_CTO_AUTHORITY_OWNER = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
+    address public constant CANONICAL_LAUNCH_STAMP_ROUTER = 0x8622DD5bAb44185f2A458ac90384Ac99248f8d56;
+    bytes32 public constant CANONICAL_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH =
+        0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546;
     int24 public constant EXPECTED_INITIAL_TICK = 204_200;
     int24 public constant EXPECTED_DEEP30_TICK_LOWER = 174_800;
     int24 public constant EXPECTED_FINAL_TICK_LOWER = 9800;
@@ -295,6 +298,9 @@ contract DeployClassicV4InfrastructureV1 is Script {
     /// @notice Checks every official dependency needed by deployment, quoting and Universal Router trading.
     function validateOfficialDependencies() public view returns (OfficialDependencies memory dependencies) {
         dependencies = _officialDependencies();
+        if (block.chainid == MAINNET_CHAIN_ID) {
+            _assertCodeHash(CANONICAL_LAUNCH_STAMP_ROUTER, CANONICAL_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH);
+        }
         _assertCodeHash(dependencies.poolManager, dependencies.poolManagerCodeHash);
         _assertCodeHash(dependencies.positionManager, dependencies.positionManagerCodeHash);
         _assertCodeHash(dependencies.stateView, dependencies.stateViewCodeHash);
@@ -523,6 +529,7 @@ contract DeployClassicV4InfrastructureV1 is Script {
             address(result.launcher.graduationVaultFactory()),
             address(result.graduationVaultFactory)
         );
+        _assertAddress(keccak256("launcher.router"), result.launcher.ROUTER(), CANONICAL_LAUNCH_STAMP_ROUTER);
         _assertValue(keccak256("launcher.standardPreset"), result.launcher.STANDARD_LIQUIDITY_PRESET(), 0);
         _assertValue(keccak256("launcher.deep30Preset"), result.launcher.DEEP30_LIQUIDITY_PRESET(), 1);
         _assertValue(keccak256("launcher.minimumInitialBuyWei"), result.launcher.MIN_INITIAL_BUY_WEI(), 0.0006 ether);

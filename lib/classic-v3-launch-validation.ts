@@ -12,7 +12,7 @@ import {
   encodeClassicV3Launch,
   type ClassicV3DeploymentManifest,
 } from "./classic-v3";
-import { classicV4LaunchAbi, encodeClassicV4Launch } from "./classic-v4";
+import { CLASSIC_V4_LAUNCH_STAMP_ROUTER } from "./classic-v4";
 import {
   CLASSIC_V4_PUBLIC_RELEASE_BINDING,
   isClassicV4PublicActionBinding,
@@ -82,56 +82,6 @@ function parametersMatch(
     received.symbol === expected.symbol &&
     received.buySwapFeeBps === expected.buySwapFeeBps &&
     received.sellSwapFeeBps === expected.sellSwapFeeBps &&
-    received.creatorSalt.toLowerCase() === expected.creatorSalt.toLowerCase() &&
-    received.metadata.description === expected.metadata.description &&
-    received.metadata.website === expected.metadata.website &&
-    received.metadata.image === expected.metadata.image &&
-    received.metadata.extraData.toLowerCase() ===
-      expected.metadata.extraData.toLowerCase() &&
-    received.rewardBeneficiaries.length ===
-      expected.rewardBeneficiaries.length &&
-    received.rewardBeneficiaries.every(
-      (beneficiary, index) =>
-        beneficiary.toLowerCase() ===
-        expected.rewardBeneficiaries[index].toLowerCase(),
-    ) &&
-    received.rewardSharesBps.length === expected.rewardSharesBps.length &&
-    received.rewardSharesBps.every(
-      (share, index) => share === expected.rewardSharesBps[index],
-    ) &&
-    received.initialBuyCustody.mode === expected.initialBuyCustody.mode &&
-    received.initialBuyCustody.durationDays ===
-      expected.initialBuyCustody.durationDays &&
-    received.initialBuyCustody.cliffDays ===
-      expected.initialBuyCustody.cliffDays
-  );
-}
-
-function readClassicV4Parameters(data: Hex) {
-  try {
-    const decoded = decodeFunctionData({
-      abi: classicV4LaunchAbi,
-      data,
-    });
-    if (decoded.functionName !== "launch") throw new Error("selector");
-    return decoded.args[0];
-  } catch {
-    throw new Error(
-      "The prepared transaction does not call the Classic V4 launch function",
-    );
-  }
-}
-
-function classicV4ParametersMatch(
-  received: ReturnType<typeof readClassicV4Parameters>,
-  expected: ReturnType<typeof readClassicV4Parameters>,
-) {
-  return (
-    received.name === expected.name &&
-    received.symbol === expected.symbol &&
-    received.buySwapFeeBps === expected.buySwapFeeBps &&
-    received.sellSwapFeeBps === expected.sellSwapFeeBps &&
-    received.liquidityPreset === expected.liquidityPreset &&
     received.creatorSalt.toLowerCase() === expected.creatorSalt.toLowerCase() &&
     received.metadata.description === expected.metadata.description &&
     received.metadata.website === expected.metadata.website &&
@@ -324,75 +274,15 @@ export function validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
       "The prepared Classic V4 launch is not on the public Ethereum release",
     );
   }
-  const expectedLauncher = getAddress(publicRelease.launcher);
-  if (transaction.to.toLowerCase() !== expectedLauncher.toLowerCase()) {
-    throw new Error(
-      "The prepared launch destination does not match the public V4 release",
-    );
-  }
-
-  const activationBuy = parseInitialBuyWei(input.draft.initialBuyEth);
   if (
-    activationBuy === null ||
-    transaction.value !== activationBuy.toString()
+    transaction.to.toLowerCase() !==
+    CLASSIC_V4_LAUNCH_STAMP_ROUTER.toLowerCase()
   ) {
     throw new Error(
-      "The prepared Activation Buy does not match the current token setup",
+      "Classic V4 launches must use the canonical Launch Stamp Router",
     );
   }
-  const gasLimit = BigInt(transaction.gasLimit);
-  if (
-    gasLimit < MIN_CLASSIC_V3_LAUNCH_GAS_LIMIT ||
-    gasLimit > MAX_CLASSIC_V3_LAUNCH_GAS_LIMIT
-  ) {
-    throw new Error(
-      "The prepared launch gas limit is outside the reviewed range",
-    );
-  }
-  if (
-    !isHex(input.draft.launchSalt, { strict: true }) ||
-    input.draft.launchSalt.length !== 66
-  ) {
-    throw new Error(
-      "Create a fresh launch identifier before opening the wallet",
-    );
-  }
-
-  const account: Address = connectedAccount(input.account);
-  const expectedData = encodeClassicV4Launch(
-    input.draft,
-    input.draft.launchSalt,
-    account,
+  throw new Error(
+    "The signed Classic V4 Router handoff validator is not installed",
   );
-  const receivedParameters = readClassicV4Parameters(transaction.data);
-  const expectedParameters = readClassicV4Parameters(expectedData);
-  if (
-    !classicV4ParametersMatch(receivedParameters, expectedParameters) ||
-    transaction.data.toLowerCase() !== expectedData.toLowerCase()
-  ) {
-    throw new Error(
-      "The prepared Classic V4 launch does not match the current token setup",
-    );
-  }
-
-  if (
-    typeof input.planHash !== "string" ||
-    !isHex(input.planHash, { strict: true }) ||
-    input.planHash.length !== 66
-  ) {
-    throw new Error("The prepared launch proof is invalid");
-  }
-  const expectedPlanHash = buildPlanHash(account, {
-    kind: "launch",
-    chainId: transaction.chainId,
-    to: transaction.to,
-    data: transaction.data,
-    value: transaction.value,
-  });
-  if (expectedPlanHash.toLowerCase() !== input.planHash.toLowerCase()) {
-    throw new Error(
-      "The prepared launch does not match the connected wallet",
-    );
-  }
-  return transaction;
 }
