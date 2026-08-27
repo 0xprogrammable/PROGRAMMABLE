@@ -1457,6 +1457,7 @@ function renderHtml({ plan, initialInspection, uiCheck, operatorToken, nonce }) 
     .alert:empty { display: none; }
     .ledger-heading { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 16px; }
     .ledger-heading p { font-size: 14px; line-height: 20px; }
+    .ledger-heading > code { flex: 0 0 auto; white-space: nowrap; }
     .ledger {
       position: relative;
       margin: 0;
