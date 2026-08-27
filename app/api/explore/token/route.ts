@@ -238,12 +238,9 @@ export async function GET(request: NextRequest) {
     routerCustomStatus = "unavailable";
     routerReadFailed = true;
   }
-  const identityEntry: ExploreEntry | null = identityEntries.find(
+  const entry: ExploreEntry | null = identityEntries.find(
     (candidate) => tokenAddress(candidate) === address,
   ) ?? null;
-  const entry = identityEntry === null
-    ? null
-    : publicExplorePresentationEntryV1(identityEntry);
   if (
     catalog === null &&
     (routerReadResult.snapshot === null ||
