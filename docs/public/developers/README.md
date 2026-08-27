@@ -12,7 +12,7 @@ Start at [Programmable discovery](https://programmable.market/.well-known/progra
 `customLaunchApi.agentIntegration`, and fetch the advertised [agent remediation
 catalog](https://programmable.market/policies/custom-launch-agent-remediation-v1.json). Then use the [Custom Launch API
 guide](custom-launch.md) and [pack-config schema](https://programmable.market/schemas/custom-launch/v3/pack-config.json).
-Install the pinned public `programmable-launch` 3.3.4 CLI to
+Install the pinned public `programmable-launch` 3.3.5 CLI to
 pack, validate, submit and track V3 requests, and manage a key at [Custom Launch API
 keys](https://programmable.market/developers/api-keys). The [public V3
 contract](https://programmable.market/openapi/custom-launch-v3.json) is the normative production contract. Its default
