@@ -719,7 +719,7 @@ describe("developer launch history same-origin bridge", () => {
     })()],
     ["an unknown profile version", {
       ...launchV3(),
-      launchProfileVersion: "3.3.0",
+      launchProfileVersion: "9.9.0",
     }],
     ["metadata on a legacy profile", {
       ...launchV3(),

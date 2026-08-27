@@ -30,6 +30,7 @@ import {
   DIRECT_NATIVE_PROFILE_VERSION_V2,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA,
   DIRECT_NATIVE_PLATFORM_ADMISSION_POLICY_SCHEMA,
   FUNDING_AUTHORIZATION_DESCRIPTOR_SCHEMA,
@@ -143,6 +144,25 @@ const PLATFORM_ADMISSION_POLICY = platformAdmissionPolicy(
 const LEGACY_PLATFORM_ADMISSION_POLICY = platformAdmissionPolicy(
   LEGACY_PLATFORM_ADMISSION_BLOCKING_FINDING_RULES,
 );
+const PROJECT_METADATA_POLICY = Object.freeze({
+  schemaVersion: "programmable.project-metadata-policy.v1",
+  descriptionMinimumUtf8Bytes: 20,
+  descriptionMaximumUtf8Bytes: 4_096,
+  descriptionMinimumUnicodeLettersOrNumbers: 8,
+  imageRequired: true,
+  imageReceiptSourceManifestBindingRequired: true,
+  imageMediaTypes: Object.freeze([
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+  ]),
+  linksMaximumCount: 32,
+  requiredLinkKinds: Object.freeze(["website", "x"]),
+  exactlyOneRequiredLinkPerKind: true,
+  websiteUriPolicy: "canonical-public-credential-free-https",
+  xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
+});
 
 function platformAdmissionPolicy(blockingFindingRules) {
   return Object.freeze({
@@ -313,6 +333,9 @@ export function resolveDirectNativeProfile(selection, options = {}) {
       normalized.assessmentBase,
       normalized.feeCurrency,
     ),
+    ...(profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3
+      ? { projectMetadataPolicy: PROJECT_METADATA_POLICY }
+      : {}),
     ...(profileContract.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V2
       ? { platformFeeProofPolicy: PLATFORM_FEE_PROOF_POLICY }
       : { platformAdmissionPolicy: platformAdmissionPolicyForVersion(profileVersion) }),
@@ -1772,6 +1795,7 @@ export const DIRECT_NATIVE_PROFILE_PUBLIC_CONSTANTS = Object.freeze({
   platformFeeAssessmentPairs: PLATFORM_FEE_ASSESSMENT_PAIRS,
   platformFeeProofPolicy: PLATFORM_FEE_PROOF_POLICY,
   platformAdmissionPolicy: PLATFORM_ADMISSION_POLICY,
+  projectMetadataPolicy: PROJECT_METADATA_POLICY,
 });
 
 function directNativeProfileContract(value, schemaField, message) {
@@ -1792,6 +1816,7 @@ function directNativeProfileVersion(profileContract, requestedVersion) {
     return profileVersion;
   }
   if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
+    && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY) {
     throw new TypeError("direct-native embedded launchProfile version is not supported");

@@ -245,6 +245,73 @@
   white-space: nowrap;
 }
 
+.projectRequirementHeading {
+  align-items: baseline;
+  border-top: 1px solid var(--webde-line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.projectRequirementHeading h5 {
+  color: var(--webde-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.projectRequirementHeading span {
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.projectRequirementHeading span[data-complete="false"] {
+  color: var(--warning);
+}
+
+.projectRequirements {
+  display: grid;
+  gap: 0 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 8px 0 0;
+}
+
+.projectRequirements > div {
+  border-top: 1px solid var(--webde-line);
+  min-width: 0;
+  padding-block: 10px;
+}
+
+.projectRequirements dt {
+  color: var(--webde-dim);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.projectRequirements dd {
+  color: var(--webde-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.projectRequirements [data-complete="false"] dd {
+  color: var(--warning);
+  font-weight: 650;
+}
+
+.projectRequirements a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
 .projectDescription {
   color: var(--webde-muted);
   font-size: 13px;
@@ -253,6 +320,28 @@
   max-width: 720px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.projectDescription strong {
+  color: var(--webde-ink);
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.projectDescription p {
+  margin: 0;
+}
+
+.projectMissing {
+  border-inline-start: 2px solid var(--warning);
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 14px;
+  padding-inline-start: 10px;
 }
 
 .projectAssetNote {
@@ -985,7 +1074,8 @@
   }
 
   .remediationList dl,
-  .truthGrid {
+  .truthGrid,
+  .projectRequirements {
     grid-template-columns: minmax(0, 1fr);
   }
 

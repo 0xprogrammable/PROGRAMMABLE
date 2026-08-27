@@ -1,0 +1,239 @@
+name: Release Programmable Launch CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact @programmable/launch package version at this production commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: programmable-launch-cli-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, attest, and publish exact CLI release
+    if: >-
+      github.repository == '0xprogrammable/programmable' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    permissions:
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Check out exact production commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          lfs: false
+          submodules: false
+
+      - name: Set up exact Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Set up exact npm
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0
+          test "$(node --version)" = "v24.14.0"
+          test "$(npm --version)" = "11.16.0"
+
+      - name: Resolve exact production Verify proof
+        id: resolve-proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/production-verify-proof.mjs resolve
+          --repository-root "$GITHUB_WORKSPACE"
+          --verification-mode change
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Download exact immutable production Verify proof
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.resolve-proof.outputs.artifact_id }}
+          path: ${{ runner.temp }}/production-verify-proof
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}
+          digest-mismatch: error
+
+      - name: Verify proof provenance and exact source binding
+        id: verify-proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_DIGEST: ${{ steps.resolve-proof.outputs.artifact_digest }}
+          VERIFY_RUN_ID: ${{ steps.resolve-proof.outputs.verify_run_id }}
+          VERIFY_RUN_ATTEMPT: ${{ steps.resolve-proof.outputs.verify_run_attempt }}
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/production-verify-proof/production-verify-proof.json"
+          test -f "$proof"
+          gh attestation verify "$proof" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --signer-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners \
+            --format json > "$RUNNER_TEMP/production-verify-attestation.json"
+          node scripts/production-verify-proof.mjs verify \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --proof "$proof" \
+            --run-id "$VERIFY_RUN_ID" \
+            --run-attempt "$VERIFY_RUN_ATTEMPT" \
+            --artifact-digest "$ARTIFACT_DIGEST" \
+            --verification-mode change \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Validate requested release identity
+        id: identity
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync("packages/launch/package.json", "utf8"));
+            if (pkg.name !== "@programmable/launch" || pkg.version !== process.env.EXPECTED_VERSION) {
+              throw new Error("Requested release does not match the exact package identity");
+            }
+            if (pkg.packageManager !== "npm@11.16.0") {
+              throw new Error("Package manager does not match the exact release toolchain");
+            }
+            if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/u.test(pkg.version)) {
+              throw new Error("Package version is not an exact supported release version");
+            }
+          '
+          echo "tag=programmable-launch-v$EXPECTED_VERSION" >> "$GITHUB_OUTPUT"
+          echo "asset_glob=$RUNNER_TEMP/programmable-launch-release/*" >> "$GITHUB_OUTPUT"
+
+      - name: Require immutable releases and protected CLI tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq '.enabled')" = "true"
+          ruleset_id="$(gh api "repos/$GITHUB_REPOSITORY/rulesets" --jq '.[] | select(.name == "Protect Programmable Launch CLI release tags" and .target == "tag" and .enforcement == "active") | .id')"
+          test -n "$ruleset_id"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/rulesets/$ruleset_id" --jq '(.conditions.ref_name.include == ["refs/tags/programmable-launch-v*"]) and (.conditions.ref_name.exclude == []) and ([.rules[].type] | sort == ["deletion", "update"]) and (.bypass_actors == [])')" = "true"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists and will not be changed." >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag already exists and will not be reused." >&2
+            exit 1
+          fi
+
+      - name: Install exact runtime dependency closure
+        working-directory: packages/launch
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run focused public package gates
+        working-directory: packages/launch
+        run: |
+          set -euo pipefail
+          npm test
+          npm run verify:machine-contracts
+          npm run pack:dry-run
+
+      - name: Build and self-verify deterministic release assets
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/programmable-launch-release-assets.mjs build \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --output-dir "$RUNNER_TEMP/programmable-launch-release" \
+            --source-ref "$GITHUB_REF" \
+            --expected-version "$EXPECTED_VERSION"
+
+      - name: Attest all exact release assets
+        id: attest-assets
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.identity.outputs.asset_glob }}
+
+      - name: Verify exact asset provenance before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for asset in "$RUNNER_TEMP"/programmable-launch-release/*; do
+            gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-programmable-launch.yml" \
+              --source-ref "$GITHUB_REF" \
+              --source-digest "$GITHUB_SHA" \
+              --signer-digest "$GITHUB_SHA" \
+              --deny-self-hosted-runners >/dev/null
+          done
+
+      - name: Create exact immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.identity.outputs.tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            "$RUNNER_TEMP"/programmable-launch-release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Programmable Launch CLI $VERSION" \
+            --notes "Exact-source public pack, validate, submit, and status CLI. Verify every downloaded asset with GitHub attestations and the published release manifest. The CLI never signs or broadcasts wallet transactions."
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable --jq '(.isDraft == false) and (.isImmutable == true)')" = "true"
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq '.targetCommitish')" = "$GITHUB_SHA"
+
+      - name: Fresh-download and verify the published release
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/programmable-launch-release-download"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/programmable-launch-release-download"
+          gh release verify "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          for asset in "$RUNNER_TEMP"/programmable-launch-release-download/*; do
+            gh release verify-asset "$TAG" "$asset" --repo "$GITHUB_REPOSITORY" >/dev/null
+          done
+          node scripts/programmable-launch-release-assets.mjs verify \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --output-dir "$RUNNER_TEMP/programmable-launch-release-download" \
+            --source-ref "$GITHUB_REF" \
+            --expected-version "$EXPECTED_VERSION"
+
+      - name: Record release evidence
+        env:
+          ATTESTATION_URL: ${{ steps.attest-assets.outputs.attestation-url }}
+          PROOF_SHA256: ${{ steps.verify-proof.outputs.proof_sha256 }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: |
+          {
+            echo "## Programmable Launch CLI release"
+            echo
+            echo "- Exact source commit: \`$GITHUB_SHA\`"
+            echo "- Production Verify proof: \`$PROOF_SHA256\`"
+            echo "- Immutable release tag: \`$TAG\`"
+            echo "- Asset attestation: $ATTESTATION_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

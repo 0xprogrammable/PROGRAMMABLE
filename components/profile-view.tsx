@@ -37,6 +37,8 @@ import {
 } from "@/lib/profile/avatar";
 import { GitHubBrandIcon, XBrandIcon } from "@/components/brand-icons";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
+import { PartnerLaunchAttribution } from
+  "@/components/partner-launch-attribution";
 import {
   ClassicV3ProfileReadError,
   EMPTY_CLASSIC_V3_PROFILE,
@@ -2177,6 +2179,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       name: token.name,
       symbol: token.symbol || null,
       imageUrl: token.imageUrl ?? null,
+      ...(token.partnerAttribution
+        ? { partnerAttribution: token.partnerAttribution }
+        : {}),
       source: token.address.toLowerCase() === PROGRAMMABLE_MAIN_TOKEN_ADDRESS
         ? "official-main-token" as const
         : token.launchProvenance === "canonical-router"
@@ -4583,28 +4588,33 @@ export function ProfileRouterLaunches({
             token.launchModel === "custom-graph" ? "Custom" : "Classic";
 
           return (
-            <Link
-              className={styles.launchRow}
-              href={token.href}
-              key={token.address}
-            >
-              <span className={styles.launchMark} aria-hidden="true">
-                <Image
-                  src={tokenImageSource}
-                  alt=""
-                  fill
-                  sizes="44px"
-                  unoptimized={!canOptimizeTokenImage(tokenImageSource)}
+            <article className={styles.launchListItem} key={token.address}>
+              <Link className={styles.launchRow} href={token.href}>
+                <span className={styles.launchMark} aria-hidden="true">
+                  <Image
+                    src={tokenImageSource}
+                    alt=""
+                    fill
+                    sizes="44px"
+                    unoptimized={!canOptimizeTokenImage(tokenImageSource)}
+                  />
+                </span>
+                <span className={styles.launchIdentity}>
+                  <strong>{token.name}</strong>
+                  <small>${token.symbol}</small>
+                </span>
+                <span className={styles.launchStatus}>
+                  <strong>{category}</strong>
+                </span>
+              </Link>
+              {token.partnerAttribution ? (
+                <PartnerLaunchAttribution
+                  attribution={token.partnerAttribution}
+                  className={styles.launchPartnerAttribution}
+                  compact
                 />
-              </span>
-              <span className={styles.launchIdentity}>
-                <strong>{token.name}</strong>
-                <small>${token.symbol}</small>
-              </span>
-              <span className={styles.launchStatus}>
-                <strong>{category}</strong>
-              </span>
-            </Link>
+              ) : null}
+            </article>
           );
         })}
       </div>

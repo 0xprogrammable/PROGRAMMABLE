@@ -20,6 +20,7 @@ import {
   projectImageFetchUrlV1,
   selectMonotonicLaunchResource,
   walletProjectMetadataBindingV1,
+  walletProjectMetadataRequirementsV1,
   walletProjectMetadataSummaryV1,
   walletProjectRequestBindingV1,
   type CustomLaunchProjectMetadataV1,
@@ -386,7 +387,7 @@ describe("developer API key interface", () => {
       "pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli).toContain(
-      "programmable-launch-v3.3.5",
+      "programmable-launch-v3.3.6",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "Before pack, collect the project name and symbol",
@@ -1032,6 +1033,58 @@ describe("developer launch history interface", () => {
       projectMetadata: PROJECT_METADATA,
       projectMetadataHash: PROJECT_METADATA_HASH,
     });
+    expect(walletProjectMetadataBindingV1({
+      ...launch,
+      launchProfileVersion: "3.3.0",
+    })).toEqual({
+      mode: "bound-metadata",
+      requestHash: launch.requestHash,
+      launchIntentHash: launch.launchIntentHash,
+      projectMetadata: PROJECT_METADATA,
+      projectMetadataHash: PROJECT_METADATA_HASH,
+    });
+    expect(walletProjectMetadataRequirementsV1(PROJECT_METADATA)).toEqual({
+      name: true,
+      symbol: true,
+      description: true,
+      image: true,
+      website: true,
+      x: true,
+      complete: true,
+    });
+    const missingX = {
+      ...PROJECT_METADATA,
+      presentation: {
+        ...PROJECT_METADATA.presentation,
+        links: PROJECT_METADATA.presentation.links.filter((link) => link.kind !== "x"),
+      },
+    } satisfies CustomLaunchProjectMetadataV1;
+    const missingXHash = canonicalBrowserSha256V2(
+      "programmable.project-metadata.v1",
+      missingX,
+    );
+    expect(walletProjectMetadataRequirementsV1(missingX)).toMatchObject({
+      x: false,
+      complete: false,
+    });
+    expect(walletProjectMetadataBindingV1({
+      ...launch,
+      status: "prepared",
+      projectMetadata: missingX,
+      projectMetadataHash: missingXHash,
+      output: null,
+    })).toEqual(expect.objectContaining({
+      mode: "bound-metadata",
+      projectMetadataHash: missingXHash,
+    }));
+    expect(walletProjectMetadataBindingV1({
+      ...launch,
+      launchProfileVersion: "3.3.0",
+      status: "prepared",
+      projectMetadata: missingX,
+      projectMetadataHash: missingXHash,
+      output: null,
+    })).toBeNull();
     expect(walletProjectMetadataSummaryV1({
       ...launch,
       output: null,
@@ -1144,7 +1197,7 @@ describe("developer launch history interface", () => {
       "Declared identity is bound now. Onchain ERC-20 name and symbol",
     );
     expect(historySource).toContain(
-      "Changing any\n        field requires a newly packed request.",
+      "Changing any\n          bound field requires a newly packed request.",
     );
     expect(historySource).not.toContain("Edit project metadata");
     expect(historyStyles).toContain(".projectReview");

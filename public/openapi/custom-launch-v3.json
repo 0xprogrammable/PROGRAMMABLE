@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.3.5",
+    "version": "3.3.6",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Metadata-bound profile 3.2.0 is current; exact profiles 3.1.0 and 3.0.0 remain readable and retryable under their original immutable metadata-absent policies. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. No API key can sign or broadcast a wallet transaction. Revision 2 requests also remain readable and retryable with their original exact bytes.",
+    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Complete-metadata profile 3.3.0 is current; exact profile 3.2.0 remains readable and retryable with its original permissive metadata semantics, while exact profiles 3.1.0 and 3.0.0 retain immutable metadata-absent semantics. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. Wallet and partner API keys use the same V3 endpoints, but no API key can sign or broadcast a wallet transaction. Partner attribution is server-owned provenance, not project verification or a safety claim. Revision 2 requests also remain readable and retryable with their original exact bytes.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -51,7 +51,7 @@
       "status": "live",
       "path": "/v3/custom-launches/preflight",
       "httpStatus": 200,
-      "authentication": "wallet-bound-api-key",
+      "authentication": "bearer-api-key",
       "requiredScope": "custom-launch:create",
       "quotaConsumed": false,
       "nonceAllocated": false,
@@ -105,8 +105,8 @@
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
-    "profileVersion": "3.2.0",
-    "compatibleProfileVersions": ["3.1.0", "3.0.0"],
+    "profileVersion": "3.3.0",
+    "compatibleProfileVersions": ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
     "productionLaunchAuthorized": true,
     "minimumTargets": 3,
     "maximumTargets": 16,
@@ -119,9 +119,41 @@
     "safetyClaim": false,
     "feeBehaviorClaim": false
   },
+  "x-programmable-partner-credentials": {
+    "schemaVersion": "programmable.partner-public-contract.v1",
+    "environmentVariable": "PROGRAMMABLE_API_KEY",
+    "credentialFormats": [
+      "pm_live_<key>",
+      "pm_partner_root_<22-char-key-id>_<43-char-secret>",
+      "pm_partner_<22-char-key-id>_<43-char-secret>"
+    ],
+    "canonicalLaunchRoutes": [
+      "GET /v3/capabilities",
+      "POST /v3/custom-launches/preflight",
+      "POST /v3/custom-launches",
+      "GET /v3/custom-launches",
+      "GET /v3/custom-launches/{launchId}"
+    ],
+    "launchScopes": ["custom-launch:create", "custom-launch:read"],
+    "rootOnlyScope": "partner-subkeys:manage",
+    "rootSubkeyRoutes": [
+      "GET /v1/partner/subkeys",
+      "POST /v1/partner/subkeys",
+      "POST /v1/partner/subkeys/{subkeyId}/rotate",
+      "DELETE /v1/partner/subkeys/{subkeyId}"
+    ],
+    "secretDelivery": "issue-and-rotation-response-only",
+    "walletSigningAuthority": false,
+    "walletBroadcastAuthority": false,
+    "gateBypassAuthority": false,
+    "attributionResponseField": "partnerAttribution",
+    "attributionSchemaVersion": "programmable.launch-partner-attribution.v1",
+    "callerSuppliedAttributionAccepted": false,
+    "attributionIsVerificationOrSafetyClaim": false
+  },
   "x-programmable-admission-policy": {
-    "currentProfileVersion": "3.2.0",
-    "legacyExactProfileVersions": ["3.1.0", "3.0.0"],
+    "currentProfileVersion": "3.3.0",
+    "legacyExactProfileVersions": ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
     "legacySemantics": "readable-and-byte-identical-retryable-only",
     "manualProjectAllowlist": false,
     "hardBlockFindingRules": [
@@ -195,6 +227,10 @@
     {
       "name": "V3 general hooks",
       "description": "Production project-owned token, hook and multi-contract graph launch capability."
+    },
+    {
+      "name": "Partner subkeys",
+      "description": "Root-partner management of bounded child API credentials. These public routes never expose partner administration or wallet-signing authority."
     }
   ],
   "paths": {
@@ -772,6 +808,308 @@
           }
         }
       }
+    },
+    "/v3/custom-launches/{launchId}/permit-reissues": {
+      "post": {
+        "operationId": "requestPermitReissueDispositionV3",
+        "summary": "Inspect the Router V1 permit-reissue disposition",
+        "description": "This deployed-contract release has no successful permit-reissue operation and therefore defines no 2xx response. Router V1 uses the signed permit nonce as the CREATE2 route nonce, so changing it would change the predicted route. A conforming call returns a typed 409 explaining why reissue is unsupported, not applicable, or bound to different request bytes. The current recovery is to repack and submit a new launch request with a fresh nonce and new Idempotency-Key; full fee and security gates run again and predicted addresses may change. This endpoint never reserves a replacement nonce, issues a replacement permit, signs, or broadcasts.",
+        "tags": ["V3 general hooks"],
+        "x-programmable-public-availability": "live-unsupported-disposition-only",
+        "x-programmable-required-scope": "custom-launch:create",
+        "security": [{ "CustomLaunchApiKey": [] }],
+        "parameters": [
+          {
+            "name": "launchId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Binds this exact disposition request. It does not reserve a nonce or create a launch.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PermitReissueRequestV1" }
+            }
+          }
+        },
+        "responses": {
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": {
+            "description": "Launch not found for this authenticated credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Typed disposition: PERMIT_REISSUE_UNSUPPORTED, PERMIT_REISSUE_NOT_APPLICABLE, or PERMIT_REISSUE_RESOURCE_BINDING_MISMATCH. There is no successful reissue response in this release.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "PERMIT_REISSUE_UNSUPPORTED",
+                                "PERMIT_REISSUE_NOT_APPLICABLE",
+                                "PERMIT_REISSUE_RESOURCE_BINDING_MISMATCH"
+                              ]
+                            },
+                            "details": {
+                              "$ref": "#/components/schemas/PermitReissueDispositionV1"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/LaunchQuotaExceeded" },
+          "503": { "$ref": "#/components/responses/V3Unavailable" }
+        }
+      }
+    },
+    "/v1/partner/subkeys": {
+      "get": {
+        "operationId": "listPartnerSubkeysV1",
+        "summary": "List subkeys owned by the authenticated partner root",
+        "description": "Returns at most 500 newest-first child credentials for the exact authenticated root. No query parameters are accepted. Secrets are never returned by list. A root credential with partner-subkeys:manage is required; wallet keys and partner subkeys cannot call this route.",
+        "tags": ["Partner subkeys"],
+        "x-programmable-public-availability": "live",
+        "x-programmable-required-scope": "partner-subkeys:manage",
+        "security": [{ "PartnerRootApiKey": [] }],
+        "responses": {
+          "200": {
+            "description": "Bounded subkey metadata for this root only.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PartnerSubkeyListV1" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/PartnerBadRequest" },
+          "401": { "$ref": "#/components/responses/PartnerUnauthorized" },
+          "403": { "$ref": "#/components/responses/PartnerForbidden" },
+          "429": { "$ref": "#/components/responses/PartnerRateLimited" },
+          "500": { "$ref": "#/components/responses/PartnerInternalError" }
+        }
+      },
+      "post": {
+        "operationId": "createPartnerSubkeyV1",
+        "summary": "Issue one bounded partner subkey",
+        "description": "Issues a child credential whose scopes and budgets cannot exceed the authenticated root and whose expiry cannot exceed the root expiry. The Idempotency-Key binds the canonical request. The first committed response is 201 and delivers apiKey exactly once; an exact replay is 200 with apiKey null. Preserve the original body and Idempotency-Key across ambiguous transport failure. No query parameters are accepted.",
+        "tags": ["Partner subkeys"],
+        "x-programmable-public-availability": "live",
+        "x-programmable-required-scope": "partner-subkeys:manage",
+        "security": [{ "PartnerRootApiKey": [] }],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Stable key for these exact canonical request bytes. Reuse with different bytes returns 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Content-Type must be exactly application/json. Unknown fields are rejected.",
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PartnerSubkeyRequestV1" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact idempotent replay. The one-time secret was already delivered and apiKey is null.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PartnerSubkeyReplayResultV1" }
+              }
+            }
+          },
+          "201": {
+            "description": "Subkey created. apiKey is delivered in this response only and must be moved directly into an encrypted secret store.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PartnerSubkeyCreatedResultV1" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/PartnerBadRequest" },
+          "401": { "$ref": "#/components/responses/PartnerUnauthorized" },
+          "403": { "$ref": "#/components/responses/PartnerForbidden" },
+          "409": { "$ref": "#/components/responses/PartnerConflict" },
+          "413": { "$ref": "#/components/responses/PartnerRequestTooLarge" },
+          "415": { "$ref": "#/components/responses/PartnerUnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/PartnerRateLimited" },
+          "500": { "$ref": "#/components/responses/PartnerInternalError" }
+        }
+      }
+    },
+    "/v1/partner/subkeys/{subkeyId}/rotate": {
+      "post": {
+        "operationId": "rotatePartnerSubkeyV1",
+        "summary": "Rotate one subkey owned by the authenticated root",
+        "description": "Revokes the selected child and creates its replacement atomically for this root. The replacement remains bounded by the authenticated root. The first committed response is 201 with the replacement apiKey exactly once; an exact idempotent replay is 200 with apiKey null. No query parameters are accepted.",
+        "tags": ["Partner subkeys"],
+        "x-programmable-public-availability": "live",
+        "x-programmable-required-scope": "partner-subkeys:manage",
+        "security": [{ "PartnerRootApiKey": [] }],
+        "parameters": [
+          {
+            "name": "subkeyId",
+            "in": "path",
+            "required": true,
+            "description": "UUID of a child credential owned by the authenticated root.",
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Stable key for this exact rotation target and canonical request body. Reuse with different bytes returns 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Content-Type must be exactly application/json. Unknown fields are rejected.",
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PartnerSubkeyRequestV1" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact idempotent replay. The replacement secret was already delivered and apiKey is null.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PartnerSubkeyReplayResultV1" }
+              }
+            }
+          },
+          "201": {
+            "description": "Replacement created. apiKey is delivered in this response only.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PartnerSubkeyCreatedResultV1" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/PartnerBadRequest" },
+          "401": { "$ref": "#/components/responses/PartnerUnauthorized" },
+          "403": { "$ref": "#/components/responses/PartnerForbidden" },
+          "404": { "$ref": "#/components/responses/PartnerNotFound" },
+          "409": { "$ref": "#/components/responses/PartnerConflict" },
+          "413": { "$ref": "#/components/responses/PartnerRequestTooLarge" },
+          "415": { "$ref": "#/components/responses/PartnerUnsupportedMediaType" },
+          "429": { "$ref": "#/components/responses/PartnerRateLimited" },
+          "500": { "$ref": "#/components/responses/PartnerInternalError" }
+        }
+      }
+    },
+    "/v1/partner/subkeys/{subkeyId}": {
+      "delete": {
+        "operationId": "revokePartnerSubkeyV1",
+        "summary": "Revoke one subkey owned by the authenticated root",
+        "description": "Revokes a child credential and its launch-principal bridge. Repeating deletion of the same owned credential returns 200 with disposition already_revoked. No request body, Idempotency-Key, query parameter, or secret is accepted or returned.",
+        "tags": ["Partner subkeys"],
+        "x-programmable-public-availability": "live",
+        "x-programmable-required-scope": "partner-subkeys:manage",
+        "security": [{ "PartnerRootApiKey": [] }],
+        "parameters": [
+          {
+            "name": "subkeyId",
+            "in": "path",
+            "required": true,
+            "description": "UUID of a child credential owned by the authenticated root.",
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential revoked now or already revoked earlier.",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PartnerSubkeyRevocationV1" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/PartnerBadRequest" },
+          "401": { "$ref": "#/components/responses/PartnerUnauthorized" },
+          "403": { "$ref": "#/components/responses/PartnerForbidden" },
+          "404": { "$ref": "#/components/responses/PartnerNotFound" },
+          "429": { "$ref": "#/components/responses/PartnerRateLimited" },
+          "500": { "$ref": "#/components/responses/PartnerInternalError" }
+        }
+      }
     }
   },
   "components": {
@@ -789,20 +1127,30 @@
           "type": "string",
           "pattern": "^[1-9][0-9]*$"
         }
+      },
+      "NoStore": {
+        "description": "Partner credential responses are never cacheable.",
+        "schema": { "const": "no-store" }
       }
     },
     "securitySchemes": {
       "CustomLaunchApiKey": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "pm_live_<22-char-key-id>_<43-char-secret>",
-        "description": "Wallet-bound API key loaded from PROGRAMMABLE_API_KEY or the supported operating-system secret store. It is never accepted as an argument or prompt and grants no wallet signing authority."
+        "bearerFormat": "pm_live_* | pm_partner_root_<22>_<43> | pm_partner_<22>_<43>",
+        "description": "Wallet, partner-root, or bounded partner-subkey credential loaded from the same PROGRAMMABLE_API_KEY or supported operating-system secret store. It is never accepted as an argument or prompt. Partner credentials use the canonical V3 flow and may add server-owned attribution, but no credential grants wallet signing, broadcast, or gate-bypass authority."
       },
       "CustomLaunchWebsiteToken": {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "server-held website service token",
         "description": "Server-to-server credential held only by the Programmable website BFF. A browser authenticates its own wallet session to the BFF and never receives this token."
+      },
+      "PartnerRootApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "pm_partner_root_<22-char-key-id>_<43-char-secret>",
+        "description": "Partner root credential read from PROGRAMMABLE_API_KEY or an encrypted secret store. The authenticated root must hold partner-subkeys:manage. Wallet keys and child partner subkeys cannot manage subkeys. This credential never grants wallet signing or broadcast authority."
       }
     },
     "responses": {
@@ -939,9 +1287,290 @@
             }
           }
         }
+      },
+      "PartnerBadRequest": {
+        "description": "The path/query boundary, JSON body, Idempotency-Key, requested scopes, budgets, expiry, or closed request shape is invalid.",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerUnauthorized": {
+        "description": "The partner-root Bearer credential is missing, malformed, expired, revoked, suspended, or unknown.",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Bearer challenge.",
+            "schema": { "const": "Bearer" }
+          },
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerForbidden": {
+        "description": "The authenticated credential is not a partner root or does not hold partner-subkeys:manage.",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerNotFound": {
+        "description": "The path identifier is invalid. DELETE also returns this response when the selected subkey is not owned by this authenticated root.",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerConflict": {
+        "description": "The same Idempotency-Key was already committed for a different partner operation target or canonical body.",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerRequestTooLarge": {
+        "description": "The streaming partner request body exceeded 32,768 bytes.",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerUnsupportedMediaType": {
+        "description": "Content-Type must be exactly application/json.",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerRateLimited": {
+        "description": "The authenticated root's partner-subkey-admin hourly budget was reached. Retry the identical operation only after Retry-After.",
+        "headers": {
+          "Retry-After": { "$ref": "#/components/headers/RetryAfter" },
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" }
+          }
+        }
+      },
+      "PartnerInternalError": {
+        "description": "Unexpected internal failure. The bounded response contains a correlation requestId and never includes a credential, secret, request body, or internal error detail.",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Cache-Control": { "$ref": "#/components/headers/NoStore" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchApiErrorV2" },
+            "example": {
+              "schemaVersion": "programmable.api-error.v1",
+              "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "The partner administration service is temporarily unavailable.",
+                "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
+              }
+            }
+          }
+        }
       }
     },
     "schemas": {
+      "PartnerSubkeyBudgetLimitsV1": {
+        "type": "object",
+        "required": ["prepareRequestsPerHour", "readRequestsPerMinute"],
+        "properties": {
+          "prepareRequestsPerHour": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000,
+            "description": "Child create/preflight ceiling. It cannot exceed the authenticated root's prepareRequestsPerHour budget."
+          },
+          "readRequestsPerMinute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000,
+            "description": "Child lifecycle-read ceiling. It cannot exceed the authenticated root's readRequestsPerMinute budget."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartnerSubkeyScopeV1": {
+        "type": "string",
+        "enum": ["custom-launch:create", "custom-launch:read"],
+        "description": "A child may receive only scopes already held by its authenticated root. partner-subkeys:manage is never grantable to a child."
+      },
+      "PartnerSubkeyRequestV1": {
+        "type": "object",
+        "required": ["schemaVersion", "displayName", "scopes", "budgets", "expiresAt"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.partner-subkey-request.v1" },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "description": "Trimmed public label. Control, bidi-control, zero-width, and byte-order-mark characters are rejected."
+          },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/PartnerSubkeyScopeV1" }
+          },
+          "budgets": { "$ref": "#/components/schemas/PartnerSubkeyBudgetLimitsV1" },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+            "description": "Canonical millisecond UTC timestamp after server time and no later than the authenticated root expiry."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartnerSubkeyMetadataV1": {
+        "type": "object",
+        "required": [
+          "subkeyId",
+          "rootKeyId",
+          "partnerId",
+          "keyId",
+          "displayName",
+          "scopes",
+          "budgets",
+          "createdAt",
+          "expiresAt",
+          "lastUsedAt",
+          "revokedAt",
+          "rotatedFromSubkeyId"
+        ],
+        "properties": {
+          "subkeyId": { "type": "string", "format": "uuid" },
+          "rootKeyId": { "type": "string", "format": "uuid" },
+          "partnerId": { "type": "string", "format": "uuid" },
+          "keyId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "description": "Public credential identifier only, never the secret."
+          },
+          "displayName": { "type": "string", "minLength": 1, "maxLength": 96 },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/PartnerSubkeyScopeV1" }
+          },
+          "budgets": { "$ref": "#/components/schemas/PartnerSubkeyBudgetLimitsV1" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "lastUsedAt": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "revokedAt": {
+            "oneOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ]
+          },
+          "rotatedFromSubkeyId": {
+            "oneOf": [
+              { "type": "string", "format": "uuid" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartnerSubkeyListV1": {
+        "type": "object",
+        "required": ["schemaVersion", "credentials"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.partner-subkey-list.v1" },
+          "credentials": {
+            "type": "array",
+            "maxItems": 500,
+            "items": { "$ref": "#/components/schemas/PartnerSubkeyMetadataV1" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartnerSubkeyCreatedResultV1": {
+        "type": "object",
+        "required": ["schemaVersion", "disposition", "credential", "apiKey", "secretState"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.partner-subkey-result.v1" },
+          "disposition": { "const": "created" },
+          "credential": { "$ref": "#/components/schemas/PartnerSubkeyMetadataV1" },
+          "apiKey": {
+            "type": "string",
+            "pattern": "^pm_partner_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$",
+            "description": "One-time secret. The service never persists or returns it again."
+          },
+          "secretState": { "const": "delivered-once" }
+        },
+        "additionalProperties": false
+      },
+      "PartnerSubkeyReplayResultV1": {
+        "type": "object",
+        "required": ["schemaVersion", "disposition", "credential", "apiKey", "secretState"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.partner-subkey-result.v1" },
+          "disposition": { "const": "replayed" },
+          "credential": { "$ref": "#/components/schemas/PartnerSubkeyMetadataV1" },
+          "apiKey": { "type": "null" },
+          "secretState": { "const": "already-delivered" }
+        },
+        "additionalProperties": false
+      },
+      "PartnerSubkeyRevocationV1": {
+        "type": "object",
+        "required": ["schemaVersion", "subkeyId", "disposition"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.partner-subkey-revocation.v1" },
+          "subkeyId": { "type": "string", "format": "uuid" },
+          "disposition": { "enum": ["revoked", "already_revoked"] }
+        },
+        "additionalProperties": false
+      },
       "CustomLaunchCapabilitiesV1": {
         "type": "object",
         "required": [
@@ -957,6 +1586,7 @@
           "graph",
           "compiler",
           "projectMetadata",
+          "permitReissue",
           "hookPermissions",
           "fundingModes",
           "liquidityModels",
@@ -1017,7 +1647,7 @@
                 "const": 3
               },
               "profileVersion": {
-                "const": "3.2.0"
+                "const": "3.3.0"
               },
               "productionLaunchAuthorized": {
                 "const": true
@@ -1033,7 +1663,8 @@
               "status",
               "list",
               "capabilities",
-              "finalizedMetadata"
+              "finalizedMetadata",
+              "permitReissue"
             ],
             "properties": {
               "create": {
@@ -1053,6 +1684,9 @@
               },
               "finalizedMetadata": {
                 "const": "/v3/finalized-custom-launches"
+              },
+              "permitReissue": {
+                "const": "/v3/custom-launches/{launchId}/permit-reissues"
               }
             },
             "additionalProperties": false
@@ -1065,6 +1699,7 @@
               "status",
               "capabilities",
               "finalizedMetadata",
+              "permitReissue",
               "requiredScopes",
               "apiKeyIsWallet"
             ],
@@ -1083,6 +1718,9 @@
               },
               "finalizedMetadata": {
                 "const": "none"
+              },
+              "permitReissue": {
+                "const": "bearer-api-key"
               },
               "requiredScopes": {
                 "const": [
@@ -1206,48 +1844,10 @@
             "additionalProperties": false
           },
           "projectMetadata": {
-            "type": "object",
-            "required": [
-              "schemaVersion",
-              "inputSchemaVersion",
-              "requiredForProfileVersion",
-              "legacyWithoutMetadataProfileVersions",
-              "requiredFields",
-              "imageMayBeNull",
-              "maximumLinks",
-              "linkKinds",
-              "projectMetadataHashDomain",
-              "graphBundleHashBindingDomain",
-              "postDeploymentTokenReadbackRequired"
-            ],
-            "properties": {
-              "schemaVersion": { "const": "programmable.project-metadata.v1" },
-              "inputSchemaVersion": { "const": "programmable.project-metadata-input.v1" },
-              "requiredForProfileVersion": { "const": "3.2.0" },
-              "legacyWithoutMetadataProfileVersions": {
-                "const": ["2.0.0", "3.0.0", "3.1.0"]
-              },
-              "requiredFields": {
-                "const": [
-                  "token.name",
-                  "token.symbol",
-                  "presentation.description",
-                  "presentation.image",
-                  "presentation.links"
-                ]
-              },
-              "imageMayBeNull": { "const": true },
-              "maximumLinks": { "const": 32 },
-              "linkKinds": {
-                "const": ["website", "documentation", "x", "telegram", "discord", "github", "other"]
-              },
-              "projectMetadataHashDomain": { "const": "programmable.project-metadata.v1" },
-              "graphBundleHashBindingDomain": {
-                "const": "programmable.custom-graph-project-metadata.v1"
-              },
-              "postDeploymentTokenReadbackRequired": { "const": true }
-            },
-            "additionalProperties": false
+            "$ref": "#/components/schemas/ProjectMetadataCapabilitiesV1"
+          },
+          "permitReissue": {
+            "$ref": "#/components/schemas/PermitReissueCapabilityV1"
           },
           "hookPermissions": {
             "type": "object",
@@ -1387,6 +1987,122 @@
           }
         },
         "description": "Public additive discovery for the current V3 structural and operational boundary. It grants no authorization and makes no universal, audit or safety claim.",
+        "additionalProperties": true
+      },
+      "ProjectMetadataCapabilitiesV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion", "inputSchemaVersion", "requiredForProfileVersion",
+          "requiredForProfileVersions", "strictNewPackPolicyProfileVersion", "enforcement",
+          "profilePolicy", "legacyWithoutMetadataProfileVersions", "legacyMetadataProfileVersions",
+          "requiredFields", "imageMayBeNull", "legacyImageMayBeNullProfileVersions",
+          "description", "image", "maximumLinks", "exactlyOneRequiredLinkPerKind",
+          "requiredLinkKinds", "websiteUriPolicy", "xUriPattern", "linkKinds",
+          "projectMetadataHashDomain", "graphBundleHashBindingDomain",
+          "postDeploymentTokenReadbackRequired"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.project-metadata.v1" },
+          "inputSchemaVersion": { "const": "programmable.project-metadata-input.v1" },
+          "requiredForProfileVersion": { "const": "3.3.0" },
+          "requiredForProfileVersions": { "const": ["3.2.0", "3.3.0"] },
+          "strictNewPackPolicyProfileVersion": { "const": "3.3.0" },
+          "enforcement": {
+            "type": "object",
+            "required": ["routes", "serverSide", "clientBypassAccepted", "failureCode", "legacyProfilesNotRetrofitted"],
+            "properties": {
+              "routes": { "const": ["POST /v3/custom-launches/preflight", "POST /v3/custom-launches"] },
+              "serverSide": { "const": true },
+              "clientBypassAccepted": { "const": false },
+              "failureCode": { "const": "PROJECT_METADATA_POLICY_INVALID" },
+              "legacyProfilesNotRetrofitted": { "const": true }
+            },
+            "additionalProperties": false
+          },
+          "profilePolicy": { "$ref": "#/components/schemas/ProjectMetadataPolicyV1" },
+          "legacyWithoutMetadataProfileVersions": { "const": ["2.0.0", "3.0.0", "3.1.0"] },
+          "legacyMetadataProfileVersions": { "const": ["3.2.0"] },
+          "requiredFields": { "const": ["token.name", "token.symbol", "presentation.description", "presentation.image", "presentation.links"] },
+          "imageMayBeNull": { "const": false },
+          "legacyImageMayBeNullProfileVersions": { "const": ["3.2.0"] },
+          "description": {
+            "type": "object",
+            "required": ["minimumUtf8Bytes", "maximumUtf8Bytes", "minimumUnicodeLettersOrNumbers", "nfcAndTrimmedRequired"],
+            "properties": {
+              "minimumUtf8Bytes": { "const": 20 },
+              "maximumUtf8Bytes": { "const": 4096 },
+              "minimumUnicodeLettersOrNumbers": { "const": 8 },
+              "nfcAndTrimmedRequired": { "const": true }
+            },
+            "additionalProperties": false
+          },
+          "image": {
+            "type": "object",
+            "required": ["required", "exactContentSha256Required", "exactByteLengthRequired", "sourceManifestFileBindingRequired", "mediaTypes"],
+            "properties": {
+              "required": { "const": true },
+              "exactContentSha256Required": { "const": true },
+              "exactByteLengthRequired": { "const": true },
+              "sourceManifestFileBindingRequired": { "const": true },
+              "mediaTypes": { "const": ["image/png", "image/jpeg", "image/webp", "image/gif"] }
+            },
+            "additionalProperties": false
+          },
+          "maximumLinks": { "const": 32 },
+          "exactlyOneRequiredLinkPerKind": { "const": true },
+          "requiredLinkKinds": { "const": ["website", "x"] },
+          "websiteUriPolicy": { "const": "canonical-public-credential-free-https" },
+          "xUriPattern": { "const": "^https://x\\.com/[A-Za-z0-9_]{1,64}$" },
+          "linkKinds": { "const": ["website", "documentation", "x", "telegram", "discord", "github", "other"] },
+          "projectMetadataHashDomain": { "const": "programmable.project-metadata.v1" },
+          "graphBundleHashBindingDomain": { "const": "programmable.custom-graph-project-metadata.v1" },
+          "postDeploymentTokenReadbackRequired": { "const": true }
+        },
+        "additionalProperties": false
+      },
+      "PermitReissueCapabilityV1": {
+        "type": "object",
+        "required": ["schemaVersion", "endpoint", "requestSchemaVersion", "dispositionSchemaVersion", "disposition", "httpStatus", "reasonCode", "authenticationScope", "idempotencyKeyRequired", "resourceBindingRequired", "noReplacementNonceReserved", "noReplacementPermitIssued", "oldPermitStateRequired", "oldPermitInvalidation", "currentReleaseRecovery", "futureContractRequirements"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.custom-launch-permit-reissue-capability.v1" },
+          "endpoint": { "const": "/v3/custom-launches/{launchId}/permit-reissues" },
+          "requestSchemaVersion": { "const": "programmable.custom-launch-permit-reissue-request.v1" },
+          "dispositionSchemaVersion": { "const": "programmable.custom-launch-permit-reissue-disposition.v1" },
+          "disposition": { "const": "unsupported" }, "httpStatus": { "const": 409 },
+          "reasonCode": { "const": "ROUTER_V1_PERMIT_NONCE_IS_CREATE2_ROUTE_NONCE" },
+          "authenticationScope": { "const": "custom-launch:create" },
+          "idempotencyKeyRequired": { "const": true },
+          "resourceBindingRequired": { "const": ["launchId", "expectedRequestHash", "expectedLaunchIntentHash"] },
+          "noReplacementNonceReserved": { "const": true }, "noReplacementPermitIssued": { "const": true },
+          "oldPermitStateRequired": { "const": "expired-and-unconsumed" },
+          "oldPermitInvalidation": { "const": "original-signature-expired-by-signed-deadline" },
+          "currentReleaseRecovery": { "const": "repack-and-submit-new-launch-request" },
+          "futureContractRequirements": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+        },
+        "additionalProperties": false
+      },
+      "PermitReissueRequestV1": {
+        "type": "object",
+        "required": ["schemaVersion", "expectedRequestHash", "expectedLaunchIntentHash", "replacementNonce", "replacementPermitWindow"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.custom-launch-permit-reissue-request.v1" },
+          "expectedRequestHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "expectedLaunchIntentHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "replacementNonce": { "$ref": "./custom-launch-v2.json#/components/schemas/NonzeroLowerHex32" },
+          "replacementPermitWindow": { "$ref": "#/components/schemas/DirectNativePermitWindowV1" }
+        },
+        "additionalProperties": false
+      },
+      "PermitReissueDispositionV1": {
+        "type": "object",
+        "required": ["schemaVersion"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.custom-launch-permit-reissue-disposition.v1" },
+          "reason": { "type": "string" }, "resourceBinding": { "type": "object" },
+          "requestedReplacementAuthorization": { "type": "object" },
+          "deployedContractConstraint": { "type": "object" }, "feeAndSecurityGates": { "type": "object" },
+          "currentReleaseRecovery": { "type": "object" }, "futureContractBoundary": { "type": "object" }
+        },
         "additionalProperties": true
       },
       "CustomLaunchPreflightV1": {
@@ -2540,6 +3256,41 @@
           }
         ]
       },
+      "ProjectMetadataPolicyV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "descriptionMinimumUtf8Bytes",
+          "descriptionMaximumUtf8Bytes",
+          "descriptionMinimumUnicodeLettersOrNumbers",
+          "imageRequired",
+          "imageReceiptSourceManifestBindingRequired",
+          "imageMediaTypes",
+          "linksMaximumCount",
+          "requiredLinkKinds",
+          "exactlyOneRequiredLinkPerKind",
+          "websiteUriPolicy",
+          "xUriPattern"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.project-metadata-policy.v1" },
+          "descriptionMinimumUtf8Bytes": { "const": 20 },
+          "descriptionMaximumUtf8Bytes": { "const": 4096 },
+          "descriptionMinimumUnicodeLettersOrNumbers": { "const": 8 },
+          "imageRequired": { "const": true },
+          "imageReceiptSourceManifestBindingRequired": { "const": true },
+          "imageMediaTypes": {
+            "const": ["image/png", "image/jpeg", "image/webp", "image/gif"]
+          },
+          "linksMaximumCount": { "const": 32 },
+          "requiredLinkKinds": { "const": ["website", "x"] },
+          "exactlyOneRequiredLinkPerKind": { "const": true },
+          "websiteUriPolicy": { "const": "canonical-public-credential-free-https" },
+          "xUriPattern": { "const": "^https://x\\.com/[A-Za-z0-9_]{1,64}$" }
+        },
+        "description": "Hash-bound profile 3.3.0 policy. The server enforces it during preflight and create; it does not apply retroactively to exact 3.2.0 or older requests.",
+        "additionalProperties": false
+      },
       "DirectNativeHookGraphProfileV1": {
         "type": "object",
         "required": [
@@ -2579,7 +3330,7 @@
             "enum": [2, 3]
           },
           "profileVersion": {
-            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0"]
+            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0"]
           },
           "productionLaunchAuthorized": {
             "const": true,
@@ -2636,6 +3387,9 @@
           "platformAdmissionPolicy": {
             "$ref": "#/components/schemas/PlatformAdmissionPolicyV1"
           },
+          "projectMetadataPolicy": {
+            "$ref": "#/components/schemas/ProjectMetadataPolicyV1"
+          },
           "platformFeeProofPolicy": {
             "$ref": "#/components/schemas/PlatformFeeProofPolicyV1",
             "deprecated": true,
@@ -2643,6 +3397,18 @@
           }
         },
         "oneOf": [
+          {
+            "required": ["platformAdmissionPolicy", "projectMetadataPolicy"],
+            "properties": {
+              "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+              "profileRevision": { "const": 3 },
+              "profileVersion": { "const": "3.3.0" },
+              "platformAdmissionPolicy": {
+                "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0"
+              }
+            },
+            "not": { "required": ["platformFeeProofPolicy"] }
+          },
           {
             "required": ["platformAdmissionPolicy"],
             "properties": {
@@ -2653,7 +3419,12 @@
                 "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0"
               }
             },
-            "not": { "required": ["platformFeeProofPolicy"] }
+            "not": {
+              "anyOf": [
+                { "required": ["platformFeeProofPolicy"] },
+                { "required": ["projectMetadataPolicy"] }
+              ]
+            }
           },
           {
             "required": ["platformAdmissionPolicy"],
@@ -2665,7 +3436,12 @@
                 "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0"
               }
             },
-            "not": { "required": ["platformFeeProofPolicy"] }
+            "not": {
+              "anyOf": [
+                { "required": ["platformFeeProofPolicy"] },
+                { "required": ["projectMetadataPolicy"] }
+              ]
+            }
           },
           {
             "required": ["platformAdmissionPolicy"],
@@ -2677,7 +3453,12 @@
                 "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_0_0"
               }
             },
-            "not": { "required": ["platformFeeProofPolicy"] }
+            "not": {
+              "anyOf": [
+                { "required": ["platformFeeProofPolicy"] },
+                { "required": ["projectMetadataPolicy"] }
+              ]
+            }
           },
           {
             "required": ["platformFeeProofPolicy"],
@@ -2686,10 +3467,15 @@
               "profileRevision": { "const": 2 },
               "profileVersion": { "const": "2.0.0" }
             },
-            "not": { "required": ["platformAdmissionPolicy"] }
+            "not": {
+              "anyOf": [
+                { "required": ["platformAdmissionPolicy"] },
+                { "required": ["projectMetadataPolicy"] }
+              ]
+            }
           }
         ],
-        "description": "Production-authorized revision 3 direct-graph profile. Metadata-bound profile 3.2.0 is current; exact 3.1.0 and 3.0.0 requests remain readable and retryable under their original policies. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Production-authorized revision 3 direct-graph profile. Complete-metadata profile 3.3.0 is current and binds projectMetadataPolicy. Exact 3.2.0 requests retain their original metadata policy; exact 3.1.0 and 3.0.0 requests remain metadata-absent. All legacy profiles remain readable and byte-identical retryable. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "DirectNativePoolKeyV1": {
@@ -3064,7 +3850,7 @@
           },
           "liquidityModel": {
             "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
-            "description": "Current CLI 3.3.5 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
+            "description": "Current CLI 3.3.6 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
           }
         },
         "allOf": [
@@ -3218,7 +4004,7 @@
             "$ref": "#/components/schemas/FundingSignaturePatchDescriptorV1"
           }
         ],
-        "description": "CLI 3.3.5 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
+        "description": "CLI 3.3.6 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
       },
       "Eip3009FundingAuthorizationDescriptorV1": {
         "type": "object",
@@ -3431,21 +4217,15 @@
           "description": {
             "type": "string",
             "maxLength": 4096,
-            "description": "Canonical NFC public text, already trimmed, at most 4,096 UTF-8 bytes."
+            "description": "Legacy profile 3.2.0 canonical NFC public text, which may be empty. New profile 3.3.0 uses CompleteLaunchPresentationDraftV1."
           },
           "image": {
             "oneOf": [
-              { "type": "null" },
               {
                 "type": "object",
                 "required": ["uri", "contentSha256", "mediaType", "byteLength", "width", "height"],
                 "properties": {
-                  "uri": {
-                    "type": "string",
-                    "format": "uri",
-                    "maxLength": 2048,
-                    "description": "Canonical public HTTPS URI without query or fragment, canonical ipfs CID URI, or canonical ar transaction URI. HTTPS should expose browser-readable CORS bytes so wallet review can verify this object's digest, length, media type and dimensions; a failed remote check renders a placeholder and never mutates or signs the launch."
-                  },
+                  "uri": { "type": "string", "format": "uri", "maxLength": 2048 },
                   "contentSha256": {
                     "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
                   },
@@ -3455,7 +4235,8 @@
                   "height": { "type": "integer", "minimum": 1, "maximum": 8192 }
                 },
                 "additionalProperties": false
-              }
+              },
+              { "type": "null" }
             ]
           },
           "links": {
@@ -3472,8 +4253,99 @@
                 "uri": { "type": "string", "format": "uri", "maxLength": 2048, "pattern": "^https://" }
               },
               "additionalProperties": false
+            }
+          }
+        },
+        "description": "Immutable legacy profile 3.2.0 presentation contract retained for exact read and replay compatibility.",
+        "additionalProperties": false
+      },
+      "CompleteLaunchPresentationDraftV1": {
+        "type": "object",
+        "required": ["schemaVersion", "description", "image", "links"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.launch-presentation-draft.v1" },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "x-programmable-minUtf8Bytes": 20,
+            "x-programmable-minUnicodeLettersOrNumbers": 8,
+            "description": "Profile 3.3.0 canonical NFC public text with at least 20 UTF-8 bytes and 8 Unicode letters or numbers, already trimmed, at most 4,096 UTF-8 bytes."
+          },
+          "image": {
+            "type": "object",
+            "required": ["uri", "contentSha256", "mediaType", "byteLength", "width", "height"],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 2048,
+                "description": "Canonical public HTTPS URI without query or fragment, canonical ipfs CID URI, or canonical ar transaction URI. HTTPS should expose browser-readable CORS bytes so wallet review can verify this object's digest, length, media type and dimensions; a failed remote check renders a placeholder and never mutates or signs the launch."
+              },
+              "contentSha256": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+              },
+              "mediaType": { "enum": ["image/png", "image/jpeg", "image/webp", "image/gif"] },
+              "byteLength": { "type": "integer", "minimum": 1, "maximum": 20971520 },
+              "width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+              "height": { "type": "integer", "minimum": 1, "maximum": 8192 }
             },
-            "description": "Unique entries in strict UTF-8 order by kind, NUL, then canonical public HTTPS URI."
+            "description": "Required image identity. The digest, byte length, media type and dimensions are derived from and bind the exact local bytes included in the source manifest.",
+            "additionalProperties": false
+          },
+          "links": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "kind": { "const": "website" } },
+                  "required": ["kind"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "kind": { "const": "x" } },
+                  "required": ["kind"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              }
+            ],
+            "items": {
+              "type": "object",
+              "required": ["kind", "uri"],
+              "properties": {
+                "kind": {
+                  "enum": ["website", "documentation", "x", "telegram", "discord", "github", "other"]
+                },
+                "uri": { "type": "string", "format": "uri", "maxLength": 2048, "pattern": "^https://" }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": { "kind": { "const": "x" } },
+                    "required": ["kind"]
+                  },
+                  "then": {
+                    "properties": {
+                      "uri": {
+                        "type": "string",
+                        "pattern": "^https://x\\.com/[A-Za-z0-9_]{1,64}$"
+                      }
+                    }
+                  }
+                }
+              ],
+              "additionalProperties": false
+            },
+            "description": "Exactly one website and one canonical https://x.com/<project_handle> profile are required. Up to 30 additional canonical public HTTPS links are optional. Entries use strict UTF-8 order by kind, NUL, then URI."
           }
         },
         "additionalProperties": false
@@ -3509,6 +4381,21 @@
         },
         "description": "Canonical display metadata. Its domain-framed projectMetadataHash is included in the bound graphBundleHash, launch intent, prepared artifact, wallet review and onchain launch identity.",
         "additionalProperties": false
+      },
+      "CompleteProjectMetadataV1": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ProjectMetadataV1" },
+          {
+            "type": "object",
+            "properties": {
+              "presentation": {
+                "$ref": "#/components/schemas/CompleteLaunchPresentationDraftV1"
+              }
+            },
+            "required": ["presentation"]
+          }
+        ],
+        "description": "Profile 3.3.0 metadata that satisfies the hash-bound projectMetadataPolicy."
       },
       "FinalizedCustomLaunchTokenMetadataReadbackV1": {
         "type": "object",
@@ -3573,6 +4460,47 @@
         "description": "Finality-scoped onchain name and symbol comparison. Unavailable is explicit and never converted into a matching claim.",
         "additionalProperties": false
       },
+      "LaunchPartnerAttributionV1": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "partnerId",
+          "name",
+          "website",
+          "attributionSource",
+          "attributionVersion",
+          "snapshotDigest"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "programmable.launch-partner-attribution.v1" },
+          "partnerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "description": "Canonical NFC partner display name snapshotted when the authenticated credential is accepted."
+          },
+          "website": {
+            "oneOf": [
+              { "type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048 },
+              { "type": "null" }
+            ]
+          },
+          "attributionSource": { "const": "authenticated-partner-api-key" },
+          "attributionVersion": { "const": 1 },
+          "snapshotDigest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "SHA-256 of UTF-8 domain programmable.launch-partner-attribution.v1, NUL, and JCS of this object without snapshotDigest."
+          }
+        },
+        "description": "Immutable server-owned partner provenance. The create body cannot set or override it. A display label such as Launched via {name} is attribution only, never project verification, safety status, endorsement, or an economic launch category.",
+        "additionalProperties": false
+      },
       "FinalizedCustomLaunchMetadataV1": {
         "type": "object",
         "required": [
@@ -3612,6 +4540,9 @@
           "projectMetadata": { "$ref": "#/components/schemas/ProjectMetadataV1" },
           "projectMetadataHash": {
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+          },
+          "partnerAttribution": {
+            "$ref": "#/components/schemas/LaunchPartnerAttributionV1"
           },
           "bindings": {
             "type": "object",
@@ -3768,6 +4699,38 @@
         "allOf": [
           {
             "oneOf": [
+              {
+                "properties": {
+                  "launchProfile": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+                      "profileRevision": { "const": 3 },
+                      "profileVersion": { "const": "3.3.0" }
+                    }
+                  },
+                  "projectMetadata": {
+                    "$ref": "#/components/schemas/CompleteProjectMetadataV1"
+                  },
+                  "launchProfileSelection": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v3" },
+                      "profileRevision": { "const": 3 }
+                    }
+                  },
+                  "verificationBundle": {
+                    "$ref": "#/components/schemas/DirectNativeExactSourceVerificationBundleV3"
+                  }
+                },
+                "required": [
+                  "launchProfile",
+                  "launchProfileSelection",
+                  "verificationBundle",
+                  "projectMetadata",
+                  "projectMetadataHash"
+                ]
+              },
               {
                 "properties": {
                   "launchProfile": {
@@ -5273,8 +6236,8 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
           },
           "launchProfileVersion": {
-            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0"],
-            "description": "Immutable persisted launchProfile.profileVersion. Metadata is required only for 3.2.0; exact 2.0.0, 3.0.0 and 3.1.0 resources retain legacy null metadata semantics."
+            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0"],
+            "description": "Immutable persisted launchProfile.profileVersion. Complete metadata is required for 3.3.0; 3.2.0 retains its original permissive metadata semantics; exact 2.0.0, 3.0.0 and 3.1.0 resources retain null metadata semantics."
           },
           "projectMetadata": {
             "oneOf": [
@@ -5288,6 +6251,9 @@
               { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
               { "type": "null" }
             ]
+          },
+          "partnerAttribution": {
+            "$ref": "#/components/schemas/LaunchPartnerAttributionV1"
           },
           "launchProfileHash": {
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
@@ -5382,6 +6348,16 @@
         "allOf": [
           {
             "oneOf": [
+              {
+                "properties": {
+                  "launchProfileVersion": { "const": "3.3.0" },
+                  "projectMetadata": { "$ref": "#/components/schemas/CompleteProjectMetadataV1" },
+                  "projectMetadataHash": {
+                    "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
+                  }
+                },
+                "required": ["launchProfileVersion", "projectMetadata", "projectMetadataHash"]
+              },
               {
                 "properties": {
                   "launchProfileVersion": { "const": "3.2.0" },

@@ -15,6 +15,10 @@ import {
   type CreatorProjectSummaryV1,
 } from "@/components/creator-article-editor-loader";
 import { useWallet } from "@/components/wallet-provider";
+import { PartnerLaunchAttribution } from
+  "@/components/partner-launch-attribution";
+import { parseLaunchPartnerAttributionV1 } from
+  "@/lib/launch-partner-attribution";
 
 import styles from "./profile-projects.module.css";
 
@@ -482,6 +486,12 @@ export function ProfileProjects({
                   </small>
                 ) : null}
                 {project.article ? <small>Updated {formatDate(project.article.updatedAt)}</small> : null}
+                {project.partnerAttribution ? (
+                  <PartnerLaunchAttribution
+                    attribution={project.partnerAttribution}
+                    compact
+                  />
+                ) : null}
                 {initialBuyLabel ? (
                   <div className={styles.initialBuy}>
                     <small>{initialBuyLabel.amount}</small>
@@ -804,6 +814,12 @@ function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
         updatedAt: candidate.article.updatedAt,
       };
     }
+    const partnerAttribution = candidate.partnerAttribution === undefined
+      ? undefined
+      : parseLaunchPartnerAttributionV1(candidate.partnerAttribution);
+    if (candidate.partnerAttribution !== undefined && !partnerAttribution) {
+      throw new Error("Invalid project partner attribution");
+    }
     return Object.freeze({
       chainId: 1 as const,
       tokenAddress: getAddress(candidate.tokenAddress),
@@ -811,6 +827,7 @@ function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
       symbol: candidate.symbol as string | null,
       imageUrl: candidate.imageUrl as string | null,
       source: candidate.source as CreatorProjectSummaryV1["source"],
+      ...(partnerAttribution ? { partnerAttribution } : {}),
       article,
     });
   });

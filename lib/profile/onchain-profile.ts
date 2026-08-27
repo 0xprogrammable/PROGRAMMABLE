@@ -15,6 +15,10 @@ import {
   type ProjectMetadataStatus,
 } from "../tokens";
 import {
+  parseLaunchPartnerAttributionV1,
+  type LaunchPartnerAttributionV1,
+} from "../launch-partner-attribution";
+import {
   FADE_ROUTER_CUSTOM_CREATOR_CLAIM_ADAPTER_ID,
   resolveRouterCustomCreatorClaimCapabilityV1,
   type RouterCustomCreatorClaimCapabilityV1,
@@ -60,6 +64,7 @@ export type ProfileToken = {
     | "stock-paired"
     | "custom-graph";
   launchProvenance?: "canonical-router";
+  partnerAttribution?: LaunchPartnerAttributionV1;
   initialBuy?: ProfileInitialBuy;
 };
 
@@ -861,6 +866,12 @@ function parseToken(
   const imageUrl = readOptionalHttpsUrl(token, "imageUrl");
   const projectMetadataLinks = readOptionalProjectMetadataLinks(token);
   const projectMetadataStatus = readOptionalProjectMetadataStatus(token);
+  const partnerAttribution = token.partnerAttribution === undefined
+    ? undefined
+    : parseLaunchPartnerAttributionV1(token.partnerAttribution);
+  if (token.partnerAttribution !== undefined && !partnerAttribution) {
+    throw new ProfileResponseError("Invalid launch partner attribution");
+  }
   const marketCapEthWei = readOptionalIntegerString(
     token,
     "marketCapEthWei",
@@ -978,6 +989,7 @@ function parseToken(
     ...(imageUrl ? { imageUrl } : {}),
     ...(projectMetadataLinks ? { projectMetadataLinks } : {}),
     ...(projectMetadataStatus ? { projectMetadataStatus } : {}),
+    ...(partnerAttribution ? { partnerAttribution } : {}),
     ...(marketCapEthWei ? { marketCapEthWei } : {}),
     ...(fdvUsdWad ? { fdvUsdWad } : {}),
     ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),
@@ -1309,6 +1321,7 @@ export function mapCreatorProfileResponse(
       imageUrl,
       projectMetadataLinks,
       projectMetadataStatus,
+      partnerAttribution,
       marketCapEthWei,
       fdvUsdWad,
       marketCapQuoteWad,
@@ -1326,6 +1339,7 @@ export function mapCreatorProfileResponse(
       ...(imageUrl ? { imageUrl } : {}),
       ...(projectMetadataLinks ? { projectMetadataLinks } : {}),
       ...(projectMetadataStatus ? { projectMetadataStatus } : {}),
+      ...(partnerAttribution ? { partnerAttribution } : {}),
       ...(marketCapEthWei ? { marketCapEthWei } : {}),
       ...(fdvUsdWad ? { fdvUsdWad } : {}),
       ...(marketCapQuoteWad ? { marketCapQuoteWad } : {}),

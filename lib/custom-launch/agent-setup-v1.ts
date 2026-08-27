@@ -6,7 +6,7 @@ export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
     "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
   packConfigSchema:
     "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
-  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz",
+  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz",
   guide:
     "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
   openApi: "https://programmable.market/openapi/custom-launch-v3.json",

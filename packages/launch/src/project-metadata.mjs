@@ -20,6 +20,8 @@ const PROJECT_NAME_MAX_CHARACTERS = 64;
 const PROJECT_NAME_MAX_BYTES = 64;
 const PROJECT_SYMBOL_MAX_CHARACTERS = 16;
 const PROJECT_SYMBOL_MAX_BYTES = 16;
+const DESCRIPTION_MIN_UTF8_BYTES = 20;
+const DESCRIPTION_MIN_LETTERS_OR_NUMBERS = 8;
 const DESCRIPTION_MAX_BYTES = 4_096;
 const URL_MAX_BYTES = 2_048;
 const IMAGE_MAX_BYTES = 20 * 1_024 * 1_024;
@@ -33,6 +35,7 @@ const SENSITIVE_QUERY_KEY = /(?:api[-_]?key|access[-_]?token|auth(?:orization)?|
 const SECRET_PATTERNS = Object.freeze([
   /PROGRAMMABLE_API_KEY\s*=/iu,
   /(?:^|[^A-Za-z0-9_-])pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}(?=$|[^A-Za-z0-9_-])/u,
+  /(?:^|[^A-Za-z0-9_-])pm_partner_(?:root_)?[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}(?=$|[^A-Za-z0-9_-])/u,
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/iu,
   /\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\b/u,
   /\b(?:sk|rk|pk)-(?:live|test)?[_-]?[A-Za-z0-9_-]{20,}\b/iu,
@@ -59,7 +62,10 @@ const JPEG_SOF_MARKERS = new Set([
   0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
 ]);
 
-export async function buildProjectMetadata(input, { sourceRoot, tokenTarget }) {
+export async function buildProjectMetadata(
+  input,
+  { sourceRoot, tokenTarget, requireComplete = false },
+) {
   assertExactKeys(input, ["schemaVersion", "token", "presentation"], "projectMetadata input");
   if (input.schemaVersion !== PROJECT_METADATA_INPUT_SCHEMA) {
     throw new TypeError(`projectMetadata.schemaVersion must be ${PROJECT_METADATA_INPUT_SCHEMA}`);
@@ -79,22 +85,24 @@ export async function buildProjectMetadata(input, { sourceRoot, tokenTarget }) {
       exact: true,
     }),
   };
-  const presentation = await buildPresentation(input.presentation, sourceRoot);
+  const presentation = await buildPresentation(input.presentation, sourceRoot, {
+    requireComplete,
+  });
   const tokenMetadataBinding = buildTokenMetadataBinding(token, tokenTarget);
   const projectMetadata = validateProjectMetadata({
     schemaVersion: PROJECT_METADATA_SCHEMA,
     token,
     presentation,
     tokenMetadataBinding,
-  });
+  }, { requireComplete });
   return {
     projectMetadata,
-    projectMetadataHash: hashProjectMetadata(projectMetadata),
+    projectMetadataHash: hashProjectMetadata(projectMetadata, { requireComplete }),
     imageSourcePath: input.presentation.image?.sourcePath ?? null,
   };
 }
 
-export function validateProjectMetadata(value) {
+export function validateProjectMetadata(value, { requireComplete = false } = {}) {
   assertExactKeys(
     value,
     ["schemaVersion", "token", "presentation", "tokenMetadataBinding"],
@@ -118,7 +126,7 @@ export function validateProjectMetadata(value) {
       exact: true,
     }),
   };
-  const presentation = validatePresentation(value.presentation);
+  const presentation = validatePresentation(value.presentation, { requireComplete });
   const tokenMetadataBinding = validateTokenMetadataBinding(value.tokenMetadataBinding);
   return {
     schemaVersion: PROJECT_METADATA_SCHEMA,
@@ -128,8 +136,8 @@ export function validateProjectMetadata(value) {
   };
 }
 
-export function hashProjectMetadata(value) {
-  const normalized = validateProjectMetadata(value);
+export function hashProjectMetadata(value, { requireComplete = false } = {}) {
+  const normalized = validateProjectMetadata(value, { requireComplete });
   return sha256Digest(Buffer.concat([
     Buffer.from(PROJECT_METADATA_HASH_DOMAIN, "utf8"),
     Buffer.from([0]),
@@ -137,17 +145,25 @@ export function hashProjectMetadata(value) {
   ]));
 }
 
-async function buildPresentation(value, sourceRoot) {
+async function buildPresentation(value, sourceRoot, { requireComplete }) {
   assertExactKeys(value, ["description", "image", "links"], "projectMetadata.presentation");
-  const description = canonicalDescription(value.description, { exact: true });
-  const links = canonicalLinks(value.links, { exactUris: true });
+  const description = canonicalDescription(value.description, {
+    exact: true,
+    requireComplete,
+  });
+  const links = canonicalLinks(value.links, { exactUris: true, requireComplete });
   if (value.image === null) {
-    return {
-      schemaVersion: "programmable.launch-presentation-draft.v1",
-      description,
-      image: null,
-      links,
-    };
+    if (!requireComplete) {
+      return {
+        schemaVersion: "programmable.launch-presentation-draft.v1",
+        description,
+        image: null,
+        links,
+      };
+    }
+    throw new TypeError(
+      "projectMetadata.presentation.image must name a non-empty local PNG, JPEG, WebP, or GIF and its public URI",
+    );
   }
   assertExactKeys(value.image, ["sourcePath", "uri"], "projectMetadata.presentation.image");
   const sourcePath = canonicalRelativePath(
@@ -186,7 +202,7 @@ async function buildPresentation(value, sourceRoot) {
   };
 }
 
-function validatePresentation(value) {
+function validatePresentation(value, { requireComplete }) {
   assertExactKeys(
     value,
     ["schemaVersion", "description", "image", "links"],
@@ -195,32 +211,45 @@ function validatePresentation(value) {
   if (value.schemaVersion !== "programmable.launch-presentation-draft.v1") {
     throw new TypeError("projectMetadata.presentation schemaVersion is invalid");
   }
-  const description = canonicalDescription(value.description, { exact: true });
-  const links = canonicalLinks(value.links, { exact: true });
-  let image = null;
-  if (value.image !== null) {
-    assertExactKeys(
-      value.image,
-      ["uri", "contentSha256", "mediaType", "byteLength", "width", "height"],
-      "projectMetadata.presentation.image",
-    );
-    if (!/^sha256:[0-9a-f]{64}$/.test(value.image.contentSha256)
-      || !new Set(["image/png", "image/jpeg", "image/webp", "image/gif"])
-        .has(value.image.mediaType)
-      || !boundedInteger(value.image.byteLength, 1, IMAGE_MAX_BYTES)
-      || !boundedInteger(value.image.width, 1, IMAGE_MAX_DIMENSION)
-      || !boundedInteger(value.image.height, 1, IMAGE_MAX_DIMENSION)) {
-      throw new TypeError("projectMetadata.presentation.image is invalid");
+  const description = canonicalDescription(value.description, {
+    exact: true,
+    requireComplete,
+  });
+  const links = canonicalLinks(value.links, { exact: true, requireComplete });
+  if (value.image === null) {
+    if (requireComplete) {
+      throw new TypeError("projectMetadata.presentation.image must not be null");
     }
-    image = {
-      uri: canonicalPresentationImageUri(value.image.uri, { exact: true }),
-      contentSha256: value.image.contentSha256,
-      mediaType: value.image.mediaType,
-      byteLength: value.image.byteLength,
-      width: value.image.width,
-      height: value.image.height,
+    return {
+      schemaVersion: "programmable.launch-presentation-draft.v1",
+      description,
+      image: null,
+      links,
     };
   }
+  assertExactKeys(
+    value.image,
+    ["uri", "contentSha256", "mediaType", "byteLength", "width", "height"],
+    "projectMetadata.presentation.image",
+  );
+  if (!/^sha256:[0-9a-f]{64}$/.test(value.image.contentSha256)
+    || !new Set(["image/png", "image/jpeg", "image/webp", "image/gif"])
+      .has(value.image.mediaType)
+    || !boundedInteger(value.image.byteLength, 1, IMAGE_MAX_BYTES)
+    || !boundedInteger(value.image.width, 1, IMAGE_MAX_DIMENSION)
+    || !boundedInteger(value.image.height, 1, IMAGE_MAX_DIMENSION)) {
+    throw new TypeError(
+      "projectMetadata.presentation.image must contain a sha256 digest, supported media type, byte length, width, and height",
+    );
+  }
+  const image = {
+    uri: canonicalPresentationImageUri(value.image.uri, { exact: true }),
+    contentSha256: value.image.contentSha256,
+    mediaType: value.image.mediaType,
+    byteLength: value.image.byteLength,
+    width: value.image.width,
+    height: value.image.height,
+  };
   return {
     schemaVersion: "programmable.launch-presentation-draft.v1",
     description,
@@ -426,20 +455,29 @@ function canonicalProjectText(value, label, {
   return normalized;
 }
 
-function canonicalDescription(value, { exact = false } = {}) {
+function canonicalDescription(value, { exact = false, requireComplete = false } = {}) {
   if (typeof value !== "string") throw new TypeError("projectMetadata presentation description must be a string");
   const normalized = value.normalize("NFC").replace(/\r\n?/gu, "\n").trim();
   if ((exact && normalized !== value)
+    || (requireComplete && Buffer.byteLength(normalized, "utf8") < DESCRIPTION_MIN_UTF8_BYTES)
+    || (requireComplete
+      && [...normalized.matchAll(/[\p{L}\p{N}]/gu)].length
+        < DESCRIPTION_MIN_LETTERS_OR_NUMBERS)
     || Buffer.byteLength(normalized, "utf8") > DESCRIPTION_MAX_BYTES
     || UNSAFE_DESCRIPTION_TEXT.test(normalized)
     || hasLoneSurrogate(normalized)
     || containsSecret(fullyDecode(normalized))) {
-    throw new TypeError("projectMetadata presentation description is not canonical public text");
+    throw new TypeError(
+      `projectMetadata.presentation.description must be canonical public text with at least ${DESCRIPTION_MIN_UTF8_BYTES} UTF-8 bytes and ${DESCRIPTION_MIN_LETTERS_OR_NUMBERS} letters or numbers, and at most ${DESCRIPTION_MAX_BYTES} UTF-8 bytes`,
+    );
   }
   return normalized;
 }
 
-function canonicalLinks(value, { exact = false, exactUris = exact } = {}) {
+function canonicalLinks(
+  value,
+  { exact = false, exactUris = exact, requireComplete = false } = {},
+) {
   if (!Array.isArray(value) || value.length > MAX_LINKS) {
     throw new TypeError(`projectMetadata presentation links must contain at most ${MAX_LINKS} entries`);
   }
@@ -448,13 +486,12 @@ function canonicalLinks(value, { exact = false, exactUris = exact } = {}) {
     if (!LINK_KINDS.has(candidate.kind)) {
       throw new TypeError(`projectMetadata presentation links[${index}].kind is invalid`);
     }
+    const label = `projectMetadata.presentation.links[${index}].uri`;
     return {
       kind: candidate.kind,
-      uri: canonicalPublicHttpsUri(
-        candidate.uri,
-        `projectMetadata presentation links[${index}].uri`,
-        { exact: exactUris },
-      ),
+      uri: requireComplete && candidate.kind === "x"
+        ? canonicalXProfileUri(candidate.uri, label, { exact: exactUris })
+        : canonicalPublicHttpsUri(candidate.uri, label, { exact: exactUris }),
     };
   }).sort((left, right) => compareUtf8(
     `${left.kind}\0${left.uri}`,
@@ -464,10 +501,35 @@ function canonicalLinks(value, { exact = false, exactUris = exact } = {}) {
   if (new Set(keys).size !== keys.length) {
     throw new TypeError("projectMetadata presentation links must be unique");
   }
+  if (requireComplete) {
+    for (const requiredKind of ["website", "x"]) {
+      const matches = links.filter(({ kind }) => kind === requiredKind);
+      if (matches.length !== 1) {
+        throw new TypeError(
+          `projectMetadata.presentation.links must contain exactly one ${requiredKind} link`,
+        );
+      }
+    }
+  }
   if (exact && canonicalizeJson(links) !== canonicalizeJson(value)) {
     throw new TypeError("projectMetadata presentation links are not canonically ordered");
   }
   return links;
+}
+
+function canonicalXProfileUri(value, label, { exact = false } = {}) {
+  const canonical = canonicalPublicHttpsUri(value, label, {
+    forbidQuery: true,
+    exact,
+  });
+  const url = new URL(canonical);
+  if (url.hostname !== "x.com"
+    || !/^\/[A-Za-z0-9_]{1,64}$/u.test(url.pathname)) {
+    throw new TypeError(
+      `${label} must be a canonical X profile URL like https://x.com/project_handle`,
+    );
+  }
+  return canonical;
 }
 
 function canonicalPublicHttpsUri(value, label, { forbidQuery = false, exact = false } = {}) {

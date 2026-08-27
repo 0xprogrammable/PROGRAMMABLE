@@ -1,3 +1,6 @@
+import type { LaunchPartnerAttributionV1 } from
+  "./launch-partner-attribution";
+
 export type TokenLinkKind = "website" | "x" | "telegram";
 
 export type TokenLink = {
@@ -826,6 +829,7 @@ export type LauncherToken = {
   };
   liquidityPath: "meme" | "programmable-v4";
   metadataExtraData?: `0x${string}`;
+  partnerAttribution?: LaunchPartnerAttributionV1;
 };
 
 export type CanonicalTokenExploreEntry = LauncherToken & Readonly<{
@@ -885,6 +889,7 @@ export type CustomProjectExploreEntry = Readonly<{
     ExploreLaunchCategoryProvenance,
     { category: "custom" }
   >;
+  partnerAttribution?: LaunchPartnerAttributionV1;
 }>;
 
 export type ExploreEntry = CanonicalTokenExploreEntry | CustomProjectExploreEntry;

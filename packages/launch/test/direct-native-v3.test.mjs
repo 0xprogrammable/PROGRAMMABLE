@@ -279,7 +279,21 @@ test("V3 selection closes funding, accounting, claim, and applicant-selected rat
 
 test("V3 profile binds static admission without claiming safety or fee behavior", () => {
   const profile = resolveDirectNativeProfile(SELECTION);
-  assert.equal(profile.profileVersion, "3.2.0");
+  assert.equal(profile.profileVersion, "3.3.0");
+  assert.deepEqual(profile.projectMetadataPolicy, {
+    schemaVersion: "programmable.project-metadata-policy.v1",
+    descriptionMinimumUtf8Bytes: 20,
+    descriptionMaximumUtf8Bytes: 4096,
+    descriptionMinimumUnicodeLettersOrNumbers: 8,
+    imageRequired: true,
+    imageReceiptSourceManifestBindingRequired: true,
+    imageMediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+    linksMaximumCount: 32,
+    requiredLinkKinds: ["website", "x"],
+    exactlyOneRequiredLinkPerKind: true,
+    websiteUriPolicy: "canonical-public-credential-free-https",
+    xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
+  });
   assert.deepEqual(profile.platformFeePolicy, {
     schemaVersion: "programmable.platform-fee-policy.v1",
     accountingMode: "inclusive-selected-total",
@@ -339,18 +353,22 @@ test("V3 profile binds static admission without claiming safety or fee behavior"
   assert.equal(additive.platformFeePolicy.accountingMode, "additive-platform-share");
 });
 
-test("V3.2 preserves exact V3.1 and V3.0 embedded-profile validation for retries", () => {
+test("V3.3 preserves exact V3.2, V3.1 and V3.0 embedded-profile validation for retries", () => {
   const current = resolveDirectNativeProfile(SELECTION);
+  const legacyMetadata = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.2.0" });
   const preMetadata = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.1.0" });
   const legacy = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.0.0" });
 
-  assert.equal(current.profileVersion, "3.2.0");
+  assert.equal(current.profileVersion, "3.3.0");
+  assert.equal(legacyMetadata.profileVersion, "3.2.0");
   assert.equal(preMetadata.profileVersion, "3.1.0");
   assert.equal(legacy.profileVersion, "3.0.0");
   assert.deepEqual(validateEmbeddedDirectNativeProfile(current), current);
+  assert.deepEqual(validateEmbeddedDirectNativeProfile(legacyMetadata), legacyMetadata);
   assert.deepEqual(validateEmbeddedDirectNativeProfile(preMetadata), preMetadata);
   assert.deepEqual(validateEmbeddedDirectNativeProfile(legacy), legacy);
   assert.deepEqual(preMetadata.platformAdmissionPolicy, current.platformAdmissionPolicy);
+  assert.equal(Object.hasOwn(legacyMetadata, "projectMetadataPolicy"), false);
   assert.deepEqual(
     legacy.platformAdmissionPolicy.blockingFindingRules.map(({ code }) => code),
     [
@@ -377,7 +395,7 @@ test("V3.2 preserves exact V3.1 and V3.0 embedded-profile validation for retries
     /closed embedded launchProfile/u,
   );
   assert.throws(
-    () => resolveDirectNativeProfile(SELECTION, { profileVersion: "3.3.0" }),
+    () => resolveDirectNativeProfile(SELECTION, { profileVersion: "3.4.0" }),
     /version is not supported/u,
   );
 });

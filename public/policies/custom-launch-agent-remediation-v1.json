@@ -5,10 +5,12 @@
   "profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
-    "profileVersion": "3.2.0",
+    "profileVersion": "3.3.0",
     "compatibleProfileVersions": [
+      "3.2.0",
       "3.1.0",
-      "3.0.0"
+      "3.0.0",
+      "2.0.0"
     ],
     "legacyProfileSemantics": "readable-and-byte-identical-retryable-only",
     "chainId": "1",
@@ -24,11 +26,11 @@
     "capabilitiesUrl": "https://api.programmable.market/v3/capabilities",
     "finalizedMetadataUrl": "https://api.programmable.market/v3/finalized-custom-launches",
     "preflightUrl": "https://api.programmable.market/v3/custom-launches/preflight",
-    "cliReleaseVersion": "3.3.5",
-    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.5",
-    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz",
-    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256",
-    "cliTarballSha256": "sha256:d9df0c0bb4d492d0303bc849ea74b2a337dc5aef217c954192ad5c14576039ca"
+    "cliReleaseVersion": "3.3.6",
+    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.6",
+    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz",
+    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
+    "cliTarballSha256": "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25"
   },
   "agentContract": {
     "coldStartUrl": "https://programmable.market/.well-known/programmable.json",
@@ -70,7 +72,7 @@
     {
       "step": 2,
       "id": "inspect-project",
-      "action": "Pin one public exact source revision, compile every graph target with the required compiler, identify token, hook, initializer and supporting targets, collect the canonical project name, symbol, description, optional image and public links, and classify funding, liquidity, hook permissions, fee accounting, custody and withdrawal behavior."
+      "action": "Pin one public exact source revision, compile every graph target with the required compiler, identify token, hook, initializer and supporting targets, collect the canonical project name, symbol, description, exact source-bound image and public links, and classify funding, liquidity, hook permissions, fee accounting, custody and withdrawal behavior."
     },
     {
       "step": 3,
@@ -134,7 +136,7 @@
       "Map every deployment and initializer address dependency to a target reference so the CLI derives locators and CREATE2 predictions.",
       "Declare the hook's complete 14-bit permission mask and implement every enabled callback as concrete reachable code authenticated to the canonical PoolManager.",
       "Choose one funding mode, one liquidity model, exact pool key, fee accounting mode, platform fee binding, custody path and withdrawal disclosure.",
-      "Bind canonical project name and symbol to the primary token target, include a canonical description, set image to null or one exact public image, and list only canonical public links.",
+      "Bind canonical project name and symbol to the primary token target, include a canonical description, bind one exact public image to the source manifest, and list exactly one canonical website and X link plus any optional canonical public links.",
       "Preserve project-specific check evidence and attest only checks that actually ran."
     ]
   },
@@ -178,11 +180,51 @@
   "projectMetadata": {
     "schemaVersion": "programmable.project-metadata.v1",
     "inputSchemaVersion": "programmable.project-metadata-input.v1",
-    "requiredForProfileVersion": "3.2.0",
+    "requiredForProfileVersion": "3.3.0",
+    "requiredForProfileVersions": [
+      "3.2.0",
+      "3.3.0"
+    ],
+    "strictNewPackPolicyProfileVersion": "3.3.0",
+    "enforcement": {
+      "routes": [
+        "POST /v3/custom-launches/preflight",
+        "POST /v3/custom-launches"
+      ],
+      "serverSide": true,
+      "clientBypassAccepted": false,
+      "failureCode": "PROJECT_METADATA_POLICY_INVALID",
+      "legacyProfilesNotRetrofitted": true
+    },
+    "profilePolicy": {
+      "schemaVersion": "programmable.project-metadata-policy.v1",
+      "descriptionMinimumUtf8Bytes": 20,
+      "descriptionMaximumUtf8Bytes": 4096,
+      "descriptionMinimumUnicodeLettersOrNumbers": 8,
+      "imageRequired": true,
+      "imageReceiptSourceManifestBindingRequired": true,
+      "imageMediaTypes": [
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif"
+      ],
+      "linksMaximumCount": 32,
+      "requiredLinkKinds": [
+        "website",
+        "x"
+      ],
+      "exactlyOneRequiredLinkPerKind": true,
+      "websiteUriPolicy": "canonical-public-credential-free-https",
+      "xUriPattern": "^https://x\\.com/[A-Za-z0-9_]{1,64}$"
+    },
     "legacyWithoutMetadataProfileVersions": [
       "2.0.0",
       "3.0.0",
       "3.1.0"
+    ],
+    "legacyMetadataProfileVersions": [
+      "3.2.0"
     ],
     "requiredFields": [
       "token.name",
@@ -191,7 +233,35 @@
       "presentation.image",
       "presentation.links"
     ],
-    "imageMayBeNull": true,
+    "imageMayBeNull": false,
+    "legacyImageMayBeNullProfileVersions": [
+      "3.2.0"
+    ],
+    "description": {
+      "minimumUtf8Bytes": 20,
+      "maximumUtf8Bytes": 4096,
+      "minimumUnicodeLettersOrNumbers": 8,
+      "nfcAndTrimmedRequired": true
+    },
+    "image": {
+      "required": true,
+      "exactContentSha256Required": true,
+      "exactByteLengthRequired": true,
+      "sourceManifestFileBindingRequired": true,
+      "mediaTypes": [
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif"
+      ]
+    },
+    "exactlyOneRequiredLinkPerKind": true,
+    "requiredLinkKinds": [
+      "website",
+      "x"
+    ],
+    "websiteUriPolicy": "canonical-public-credential-free-https",
+    "xUriPattern": "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
     "maximumLinks": 32,
     "linkKinds": [
       "website",
@@ -331,10 +401,12 @@
   "automaticAdmission": {
     "manualAllowlist": false,
     "manualProjectApproval": false,
-    "currentProfileVersion": "3.2.0",
+    "currentProfileVersion": "3.3.0",
     "legacyExactProfileVersions": [
+      "3.2.0",
       "3.1.0",
-      "3.0.0"
+      "3.0.0",
+      "2.0.0"
     ],
     "legacyProfileSemantics": "readable-and-byte-identical-retryable-only",
     "staticAdmission": "automatic-role-aware-exact-source",
@@ -395,7 +467,7 @@
     "routerSimulationRole": "Final execution-compatibility detector for the exact prepared Router transaction. It is not a safety, fee-behavior, liquidity or economic-solvency claim.",
     "blockingStatus": "action_required",
     "warningDisposition": "continue-to-router-simulation",
-    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.2.0 deployment blocks. No warning is an admission, conformance or safety claim.",
+    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.3.0 deployment blocks. No warning is an admission, conformance or safety claim.",
     "actionRequiredInstruction": "Read the exact single-resource report, match each hard-blocking finding to its target and role, change the exact source or config, rebuild, repack and validate, then submit a new immutable request. Do not retry unchanged and do not ask for an allowlist bypass.",
     "supportInstruction": "When the resource directs you to support, send only requestId, status, UTC time and the public finding or error code. Never send the API key."
   },

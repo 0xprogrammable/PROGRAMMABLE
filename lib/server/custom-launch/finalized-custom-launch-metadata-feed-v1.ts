@@ -14,6 +14,11 @@ import {
   type JsonValue,
 } from "../projection-target/canonical-json";
 import { canonicalSha256 } from "../projection-target/hashing";
+import {
+  LAUNCH_PARTNER_ATTRIBUTION_SCHEMA_V1,
+  parseLaunchPartnerAttributionV1,
+  type LaunchPartnerAttributionV1,
+} from "../../launch-partner-attribution";
 
 export const FINALIZED_CUSTOM_LAUNCH_METADATA_FEED_URL =
   "https://api.programmable.market/v3/finalized-custom-launches" as const;
@@ -164,6 +169,7 @@ export type FinalizedCustomLaunchMetadataV1 = Readonly<{
   poolId: Hex32;
   projectMetadata: ProjectMetadataV1;
   projectMetadataHash: Sha256Digest;
+  partnerAttribution?: LaunchPartnerAttributionV1;
   bindings: Readonly<{
     requestHash: Sha256Digest;
     launchIntentHash: Sha256Digest;
@@ -222,6 +228,7 @@ export type RouterCustomMetadataOverlayBindingV1 = Readonly<{
   graphBundleHash: Sha256Digest;
   unboundGraphBundleHash: Sha256Digest;
   artifactHash: Sha256Digest;
+  partnerAttribution?: LaunchPartnerAttributionV1;
   tokenMetadataReadback: Readonly<{
     status: "matching" | "unavailable";
     observedAtBlockNumber: string | null;
@@ -487,6 +494,9 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
       graphBundleHash: metadata.bindings.graphBundleHash,
       unboundGraphBundleHash: metadata.bindings.unboundGraphBundleHash,
       artifactHash: metadata.bindings.artifactHash,
+      ...(metadata.partnerAttribution
+        ? { partnerAttribution: metadata.partnerAttribution }
+        : {}),
       tokenMetadataReadback: Object.freeze({
         status: metadata.tokenMetadataReadback.status,
         observedAtBlockNumber:
@@ -503,6 +513,9 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
         : {}),
       projectMetadataLinks: presentation.projectMetadataLinks,
       projectMetadataStatus: feed.status,
+      ...(metadata.partnerAttribution
+        ? { partnerAttribution: metadata.partnerAttribution }
+        : {}),
     });
   });
   if (!changed) return snapshot;
@@ -652,11 +665,16 @@ function parseFeedPageV1(value: JsonValue, now: number): FeedPageV1 {
 }
 
 function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
+  const hasPartnerAttribution = value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.hasOwn(value, "partnerAttribution");
   const record = exactRecord(value, [
     "schemaVersion", "resourceId", "routerLaunchId", "chainId", "router",
     "token", "hook", "poolManager", "poolId", "projectMetadata",
     "projectMetadataHash", "bindings", "tokenMetadataReadback", "finality",
     "createdAt", "finalizedAt",
+    ...(hasPartnerAttribution ? ["partnerAttribution"] : []),
   ], "Finalized Custom metadata item");
   if (
     record.schemaVersion !== FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1
@@ -674,6 +692,19 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     canonicalSha256(PROJECT_METADATA_SCHEMA_V1, projectMetadata)
       !== projectMetadataHash
   ) throw new Error("Finalized Custom project metadata hash is invalid");
+  const partnerAttribution = hasPartnerAttribution
+    ? parseLaunchPartnerAttributionV1(record.partnerAttribution)
+    : null;
+  if (hasPartnerAttribution && partnerAttribution === null) {
+    throw new Error("Finalized Custom partner attribution is invalid");
+  }
+  if (partnerAttribution !== null) {
+    const { snapshotDigest, ...snapshot } = partnerAttribution;
+    if (
+      canonicalSha256(LAUNCH_PARTNER_ATTRIBUTION_SCHEMA_V1, snapshot)
+        !== snapshotDigest
+    ) throw new Error("Finalized Custom partner attribution digest is invalid");
+  }
 
   const bindingsRecord = exactRecord(record.bindings, [
     "requestHash", "launchIntentHash", "graphBundleHash",
@@ -723,6 +754,7 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     poolId: lowerBytes32(record.poolId, "pool id"),
     projectMetadata,
     projectMetadataHash,
+    ...(partnerAttribution ? { partnerAttribution } : {}),
     bindings,
     tokenMetadataReadback: readback,
     finality,

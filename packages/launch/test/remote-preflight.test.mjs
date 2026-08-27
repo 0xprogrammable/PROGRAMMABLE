@@ -14,10 +14,15 @@ import { formatCliError, main } from "../src/cli.mjs";
 import {
   CAPABILITIES_PATH_V3,
   CREATE_REQUEST_SCHEMA_V3,
+  PERMIT_REISSUE_CAPABILITY_SCHEMA_V1,
+  PERMIT_REISSUE_DISPOSITION_SCHEMA_V1,
+  PERMIT_REISSUE_PATH_TEMPLATE_V3,
+  PERMIT_REISSUE_REQUEST_SCHEMA_V1,
   PREFLIGHT_PATH_V3,
   PREFLIGHT_SCHEMA_V1,
 } from "../src/constants.mjs";
 import { sha256Digest } from "../src/io.mjs";
+import { validProjectMetadataCapabilities } from "./fixtures/capabilities.mjs";
 
 const API_KEY = "pm_live_remote_preflight_test_secret";
 const API_ORIGIN = "https://api.programmable.market";
@@ -296,7 +301,7 @@ test("remote validation fails closed on profile, route, and auth capability drif
   const cases = [
     ["profile.profileId", (value) => { value.profile.profileId = "other.profile"; }],
     ["profile.profileRevision", (value) => { value.profile.profileRevision = 4; }],
-    ["profile.profileVersion", (value) => { value.profile.profileVersion = "3.3.0"; }],
+    ["profile.profileVersion", (value) => { value.profile.profileVersion = "3.4.0"; }],
     ["profile.productionLaunchAuthorized", (value) => {
       value.profile.productionLaunchAuthorized = false;
     }],
@@ -307,6 +312,20 @@ test("remote validation fails closed on profile, route, and auth capability drif
     }],
     ["authentication.requiredScopes", (value) => {
       value.authentication.requiredScopes = ["custom-launch:read"];
+    }],
+    ["projectMetadata.imageMayBeNull", (value) => {
+      value.projectMetadata.imageMayBeNull = true;
+    }],
+    ["projectMetadata.requiredFields", (value) => {
+      value.projectMetadata.requiredFields = value.projectMetadata.requiredFields.filter(
+        (field) => field !== "presentation.links",
+      );
+    }],
+    ["projectMetadata.profilePolicy", (value) => {
+      value.projectMetadata.profilePolicy.xUriPattern = "^https://twitter.com/";
+    }],
+    ["permitReissue.reasonCode", (value) => {
+      value.permitReissue.reasonCode = "OTHER_REASON";
     }],
   ];
   for (const [expectedField, mutate] of cases) {
@@ -391,7 +410,7 @@ function validCapabilities() {
     profile: {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 3,
-      profileVersion: "3.2.0",
+      profileVersion: "3.3.0",
       productionLaunchAuthorized: true,
     },
     routes: {
@@ -401,6 +420,7 @@ function validCapabilities() {
       list: "/v3/custom-launches",
       finalizedMetadata: "/v3/finalized-custom-launches",
       capabilities: CAPABILITIES_PATH_V3,
+      permitReissue: PERMIT_REISSUE_PATH_TEMPLATE_V3,
     },
     authentication: {
       create: "bearer-api-key",
@@ -408,6 +428,7 @@ function validCapabilities() {
       status: "bearer-api-key",
       finalizedMetadata: "none",
       capabilities: "none",
+      permitReissue: "bearer-api-key",
       requiredScopes: ["custom-launch:create", "custom-launch:read"],
       apiKeyIsWallet: false,
     },
@@ -418,6 +439,29 @@ function validCapabilities() {
       walletSignatureProduced: false,
       transactionBroadcast: false,
       exactProductionAdmissionEngine: true,
+    },
+    projectMetadata: validProjectMetadataCapabilities(),
+    permitReissue: {
+      schemaVersion: PERMIT_REISSUE_CAPABILITY_SCHEMA_V1,
+      endpoint: PERMIT_REISSUE_PATH_TEMPLATE_V3,
+      requestSchemaVersion: PERMIT_REISSUE_REQUEST_SCHEMA_V1,
+      dispositionSchemaVersion: PERMIT_REISSUE_DISPOSITION_SCHEMA_V1,
+      disposition: "unsupported",
+      httpStatus: 409,
+      reasonCode: "ROUTER_V1_PERMIT_NONCE_IS_CREATE2_ROUTE_NONCE",
+      authenticationScope: "custom-launch:create",
+      idempotencyKeyRequired: true,
+      resourceBindingRequired: [
+        "launchId",
+        "expectedRequestHash",
+        "expectedLaunchIntentHash",
+      ],
+      noReplacementNonceReserved: true,
+      noReplacementPermitIssued: true,
+      oldPermitStateRequired: "expired-and-unconsumed",
+      oldPermitInvalidation: "original-signature-expired-by-signed-deadline",
+      currentReleaseRecovery: "repack-and-submit-new-launch-request",
+      futureContractRequirements: ["separate authorization nonce from route nonce"],
     },
     walletHandoffBaseUrl: WALLET_HANDOFF_BASE_URL,
   };

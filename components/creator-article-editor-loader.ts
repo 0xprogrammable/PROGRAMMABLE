@@ -1,5 +1,7 @@
 import { parseCreatorArticleV1, type CreatorArticleV1 } from
   "@/lib/creator-article/contract-v1";
+import type { LaunchPartnerAttributionV1 } from
+  "@/lib/launch-partner-attribution";
 
 export type CreatorProjectSummaryV1 = Readonly<{
   chainId: 1;
@@ -7,6 +9,7 @@ export type CreatorProjectSummaryV1 = Readonly<{
   name: string;
   symbol: string | null;
   imageUrl: string | null;
+  partnerAttribution?: LaunchPartnerAttributionV1;
   source:
     | "envio-classic-v3"
     | "registry.custom-launched"
