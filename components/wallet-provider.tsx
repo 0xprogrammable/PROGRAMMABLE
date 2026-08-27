@@ -75,6 +75,13 @@ import {
   parsePreparedTransactionForAccount,
   type PreparedTransaction,
 } from "../lib/prepared-transaction";
+import {
+  acquireBrowserWalletLoginLease,
+  createWalletLoginAttemptGate,
+  WALLET_LOGIN_OTHER_TAB_MESSAGE,
+  WalletLoginPendingError,
+  type BrowserWalletLoginLease,
+} from "../lib/wallet-login-lock";
 import { runWithBrowserWalletRequestLock } from "../lib/wallet-request-lock";
 
 type WalletState = {
@@ -1032,23 +1039,37 @@ function PrivyWalletBridge({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [loginPending, setLoginPending] = useState(false);
+  const [walletLoginStatus, setWalletLoginStatus] = useState("");
   const [sessionSuppressed, setSessionSuppressed] = useState(false);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
   const [error, setError] = useState("");
   const [providerTimedOut, setProviderTimedOut] = useState(false);
   const [selectedWalletAddress, setSelectedWalletAddress] = useState<string | null>(null);
+  const walletLoginAttemptGateRef = useRef(createWalletLoginAttemptGate());
+  const walletLoginLeaseRef = useRef<BrowserWalletLoginLease | null>(null);
+  const settleWalletLoginAttempt = useCallback(() => {
+    walletLoginAttemptGateRef.current.settle();
+    walletLoginLeaseRef.current?.release();
+    walletLoginLeaseRef.current = null;
+    setLoginPending(false);
+  }, []);
   const { login } = useLogin({
     onComplete: () => {
+      settleWalletLoginAttempt();
       applicantRefreshUserGate.invalidate();
       setSessionSuppressed(false);
       setError("");
+      setWalletLoginStatus("");
       setDialogOpen(false);
     },
     onError: (errorCode) => {
+      settleWalletLoginAttempt();
       const message = getWalletLoginErrorMessage(errorCode);
       if (!message) return;
 
       setError(message);
+      setWalletLoginStatus("");
       setDialogOpen(true);
     },
   });
@@ -1290,11 +1311,16 @@ function PrivyWalletBridge({
   );
 
   const startLogin = useCallback(() => {
+    if (!walletLoginAttemptGateRef.current.tryStart()) return;
+
+    setLoginPending(true);
     setSessionSuppressed(false);
     setError("");
+    setWalletLoginStatus("");
     setDialogOpen(false);
 
     if (!ready) {
+      settleWalletLoginAttempt();
       setError(
         "Wallet access is taking longer than expected. Reload the page and try again.",
       );
@@ -1302,11 +1328,44 @@ function PrivyWalletBridge({
       return;
     }
 
-    login({
-      loginMethods: ["wallet", "email"],
-      walletChainType: "ethereum-only",
-    });
-  }, [login, ready]);
+    void acquireBrowserWalletLoginLease()
+      .then((lease) => {
+        if (!walletLoginAttemptGateRef.current.isPending()) {
+          lease.release();
+          return;
+        }
+        walletLoginLeaseRef.current = lease;
+
+        try {
+          login({
+            loginMethods: ["wallet", "email"],
+            walletChainType: "ethereum-only",
+          });
+        } catch {
+          settleWalletLoginAttempt();
+          setError("Unable to connect wallet. Try again.");
+          setWalletLoginStatus("");
+          setDialogOpen(true);
+        }
+      })
+      .catch((loginError: unknown) => {
+        settleWalletLoginAttempt();
+        if (loginError instanceof WalletLoginPendingError) {
+          setError("");
+          setWalletLoginStatus(WALLET_LOGIN_OTHER_TAB_MESSAGE);
+        } else {
+          setError("Unable to connect wallet. Try again.");
+          setWalletLoginStatus("");
+        }
+        setDialogOpen(true);
+      });
+  }, [login, ready, settleWalletLoginAttempt]);
+
+  useEffect(() => () => {
+    walletLoginAttemptGateRef.current.settle();
+    walletLoginLeaseRef.current?.release();
+    walletLoginLeaseRef.current = null;
+  }, []);
 
   const connectGithub = useCallback(() => {
     setSessionSuppressed(false);
@@ -2145,7 +2204,8 @@ function PrivyWalletBridge({
       authReady: ready,
       authenticated: activeAuthenticated,
       hasSession,
-      connecting: !providerSettled && !providerTimedOut,
+      connecting:
+        loginPending || (!providerSettled && !providerTimedOut),
       disconnecting,
       switchingNetwork,
       preloadWallet: () => undefined,
@@ -2186,6 +2246,7 @@ function PrivyWalletBridge({
       githubUserId,
       githubUsername,
       hasSession,
+      loginPending,
       openWallet,
       providerTimedOut,
       readNativeBalance,
@@ -2213,6 +2274,14 @@ function PrivyWalletBridge({
   return (
     <WalletContext.Provider value={value}>
       {children}
+      <span
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {walletLoginStatus}
+      </span>
       {dialogOpen ? (
         <WalletDialog
           wallet={wallet}
@@ -2221,6 +2290,7 @@ function PrivyWalletBridge({
           copied={copied}
           disconnecting={disconnecting}
           error={error}
+          status={walletLoginStatus}
           switchingNetwork={switchingNetwork}
           walletOptions={walletOptions}
           onAddWallet={addWallet}
@@ -2338,6 +2408,7 @@ function WalletDialog({
   copied,
   disconnecting,
   error,
+  status,
   switchingNetwork,
   walletOptions,
   onAddWallet,
@@ -2354,6 +2425,7 @@ function WalletDialog({
   copied: boolean;
   disconnecting: boolean;
   error: string;
+  status: string;
   switchingNetwork: boolean;
   walletOptions: readonly WalletState[];
   onAddWallet: () => void;
@@ -2370,7 +2442,9 @@ function WalletDialog({
       ? "Complete wallet setup"
       : error
         ? "Wallet connection failed"
-        : "Finish wallet connection";
+        : status
+          ? "Wallet connection in progress"
+          : "Finish wallet connection";
 
   return (
     <DialogFrame eyebrow="Wallet" title={title} onClose={onClose}>
@@ -2478,6 +2552,8 @@ function WalletDialog({
                 ? "The wallet connected, but sign-in was not completed"
                 : "Connect an Ethereum wallet to continue"}
           </p>
+
+          {status ? <p className="dialog-copy">{status}</p> : null}
 
           {error ? (
             <p className="form-error" role="alert">
@@ -2639,7 +2715,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCopied, setMenuCopied] = useState(false);
   const [menuError, setMenuError] = useState("");
-  const hydrationPending = connecting || !authReady;
+  const hydrationPending = !authReady;
+  const openingWallet = connecting && authReady;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -2670,17 +2747,19 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
 
   const label = disconnecting
     ? "Disconnecting"
-    : hydrationPending
-      ? "Loading wallet"
-      : wallet
-        ? username || shortenAddress(wallet.account)
-        : authenticated
-          ? "Set up wallet"
-          : hasSession
-            ? "Reconnect"
-            : compact
-              ? "Connect"
-              : "Connect wallet";
+    : openingWallet
+      ? "Opening wallet"
+      : hydrationPending
+        ? "Loading wallet"
+        : wallet
+          ? username || shortenAddress(wallet.account)
+          : authenticated
+            ? "Set up wallet"
+            : hasSession
+              ? "Reconnect"
+              : compact
+                ? "Connect"
+                : "Connect wallet";
 
   const button = (
     <button
