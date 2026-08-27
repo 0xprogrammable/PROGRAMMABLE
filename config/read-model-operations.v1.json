@@ -160,7 +160,7 @@
     },
     "publicSnapshot": {
       "path": "lib/alchemy/router-custom-public.server.ts",
-      "sha256": "e8d75b9ed722bac43833562eae6a77e45d612a61e71fd8c018719c374d2977a1"
+      "sha256": "a2fdc5c675e31f062908038499586fd958e990c8add4d031d518f83c7df0331a"
     }
   },
   "workers": [
