@@ -11,7 +11,10 @@ import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { IUnlockCallback } from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import { SqrtPriceMath } from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
+import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import { BalanceDelta, BalanceDeltaLibrary } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {
     BeforeSwapDelta,
     BeforeSwapDeltaLibrary,
@@ -20,7 +23,7 @@ import {
 import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
-import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import { ModifyLiquidityParams, SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 import { FeeSplitVaultFactoryV1 } from "./FeeSplitVaultFactoryV1.sol";
 import { FeeSplitVaultV1 } from "./FeeSplitVaultV1.sol";
@@ -39,6 +42,7 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
     using BeforeSwapDeltaLibrary for BeforeSwapDelta;
     using CurrencySettler for Currency;
     using SafeCast for *;
+    using StateLibrary for IPoolManager;
 
     uint16 public constant BASIS_POINTS = 10_000;
     uint16 public constant LAUNCHER_FEE_BPS = 10;
@@ -48,6 +52,10 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
     uint16 public constant TRANSFER_TAX_BPS = 0;
     uint24 public constant LP_FEE_PIPS = 0;
     int24 public constant TICK_SPACING = 200;
+    int24 public constant BONDING_TICK_LOWER = 174_800;
+    int24 public constant BONDING_TICK_UPPER = 204_200;
+    int24 public constant FINAL_TICK_LOWER = 9800;
+    int24 public constant FINAL_TICK_UPPER = 225_200;
 
     Currency private constant NATIVE = Currency.wrap(address(0));
 
@@ -60,6 +68,22 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
         uint256 creatorFeesAccrued;
     }
 
+    enum BondingState {
+        Unconfigured,
+        AwaitingPosition,
+        Bonding,
+        Ready,
+        Migrating,
+        Graduated
+    }
+
+    struct BondingConfig {
+        address controller;
+        uint160 endpointSqrtPriceX96;
+        uint128 bondingLiquidity;
+        BondingState state;
+    }
+
     /// @notice The immutable address that receives Programmable's fixed 0.10 percentage-point share.
     address public immutable launcherFeeRecipient;
 
@@ -67,11 +91,20 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
     FeeSplitVaultFactoryV1 public immutable feeSplitVaultFactory;
 
     mapping(bytes32 poolId => PoolFeeConfig config) public poolFeeConfig;
+    mapping(bytes32 poolId => BondingConfig config) public bondingConfig;
 
     uint256 public launcherFeesAccrued;
     uint256 public totalNativeFeesAccrued;
 
     error AlreadyRegistered(bytes32 poolId);
+    error BondingEndpointCrossed(bytes32 poolId, uint160 actualSqrtPriceX96, uint160 endpointSqrtPriceX96);
+    error BondingLiquidityLocked(bytes32 poolId, BondingState state);
+    error BondingPositionMismatch(int24 actualLower, int24 actualUpper, int256 liquidityDelta);
+    error BondingSwapsPaused(bytes32 poolId);
+    error GraduationPriceMismatch(bytes32 poolId, uint160 actualSqrtPriceX96, uint160 endpointSqrtPriceX96);
+    error InvalidBondingConfiguration(address controller, uint160 endpointSqrtPriceX96);
+    error InvalidGraduationReceipt();
+    error InvalidBondingState(bytes32 poolId, BondingState actual, BondingState expected);
     error InvalidCurrencyOrder(address currency0, address currency1);
     error InvalidHook(address actual, address expected);
     error InvalidLpFee(uint24 actual, uint24 expected);
@@ -85,6 +118,7 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
     error UnauthorizedCreatorClaim(address caller, address expectedVault);
     error UnauthorizedFeeRedirect(address caller, address expected);
     error UnauthorizedInitializer(address caller, address expected);
+    error UnauthorizedGraduationController(address caller, address expected);
     error UnexpectedUnlockResult();
     error UnrecognizedToken(address token);
     error ZeroAddress();
@@ -125,6 +159,23 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
     event LauncherFeesClaimed(
         address indexed treasury, address indexed recipient, address indexed caller, uint256 amount
     );
+    event ClassicBondingConfigured(
+        bytes32 indexed poolId, address indexed token, address indexed controller, uint160 endpointSqrtPriceX96
+    );
+    event ClassicBondingPositionActivated(bytes32 indexed poolId, address indexed token, uint128 bondingLiquidity);
+    event ClassicBondingReached(bytes32 indexed poolId, address indexed token, uint160 endpointSqrtPriceX96);
+    event ClassicGraduationBegun(bytes32 indexed poolId, address indexed token, address indexed controller);
+    event ClassicLiquidityGraduated(
+        bytes32 indexed poolId,
+        address indexed token,
+        address indexed finalPositionRecipient,
+        uint256 bondingPositionTokenId,
+        uint256 finalPositionTokenId,
+        uint256 nativeAmount,
+        uint256 tokenAmount,
+        int24 tickLower,
+        int24 tickUpper
+    );
 
     constructor(IPoolManager poolManager_, address launcherFeeRecipient_, FeeSplitVaultFactoryV1 feeSplitVaultFactory_)
         BaseHook(poolManager_)
@@ -144,9 +195,41 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
         external
         returns (bytes32 poolId)
     {
+        return _registerPool(key, rewardVault, buySwapFeeBps, sellSwapFeeBps, address(0), 0);
+    }
+
+    /// @notice Registers a Bonding pool whose swaps stop exactly at `endpointSqrtPriceX96` until graduation completes.
+    function registerPool(
+        PoolKey calldata key,
+        address rewardVault,
+        uint16 buySwapFeeBps,
+        uint16 sellSwapFeeBps,
+        address bondingController,
+        uint160 endpointSqrtPriceX96
+    ) external returns (bytes32 poolId) {
+        return _registerPool(key, rewardVault, buySwapFeeBps, sellSwapFeeBps, bondingController, endpointSqrtPriceX96);
+    }
+
+    function _registerPool(
+        PoolKey calldata key,
+        address rewardVault,
+        uint16 buySwapFeeBps,
+        uint16 sellSwapFeeBps,
+        address bondingController,
+        uint160 endpointSqrtPriceX96
+    ) private returns (bytes32 poolId) {
         _validatePoolShape(key);
         _validateTotalSwapFee(buySwapFeeBps);
         _validateTotalSwapFee(sellSwapFeeBps);
+        bool isBonding = bondingController != address(0) || endpointSqrtPriceX96 != 0;
+        if (
+            (bondingController == address(0)) != (endpointSqrtPriceX96 == 0)
+                || (isBonding
+                    && (bondingController.code.length == 0
+                        || endpointSqrtPriceX96 != TickMath.getSqrtPriceAtTick(BONDING_TICK_LOWER)))
+        ) {
+            revert InvalidBondingConfiguration(bondingController, endpointSqrtPriceX96);
+        }
 
         address token = Currency.unwrap(key.currency1);
         address recordedCreator = _recordedTokenCreator(token);
@@ -164,6 +247,14 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
             registered: true,
             creatorFeesAccrued: 0
         });
+        if (isBonding) {
+            bondingConfig[poolId] = BondingConfig({
+                controller: bondingController,
+                endpointSqrtPriceX96: endpointSqrtPriceX96,
+                bondingLiquidity: 0,
+                state: BondingState.AwaitingPosition
+            });
+        }
 
         emit PoolRegistered(
             poolId, token, rewardVault, msg.sender, buySwapFeeBps, sellSwapFeeBps, rewardConfigurationHash
@@ -179,6 +270,112 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
             LAUNCHER_FEE_BPS,
             TRANSFER_TAX_BPS,
             LP_FEE_PIPS
+        );
+        if (isBonding) {
+            emit ClassicBondingConfigured(poolId, token, bondingController, endpointSqrtPriceX96);
+        }
+    }
+
+    /// @notice Returns the lifecycle shape consumed by the one-shot graduation controller.
+    function bondingState(bytes32 poolId)
+        external
+        view
+        returns (bool ready, bool completed, uint160 endpointSqrtPriceX96)
+    {
+        BondingConfig storage config = bondingConfig[poolId];
+        ready = config.state == BondingState.Ready;
+        completed = config.state == BondingState.Graduated;
+        endpointSqrtPriceX96 = config.endpointSqrtPriceX96;
+    }
+
+    /// @notice Returns canonical, price-derived Bonding progress for UI and quote preparation.
+    /// @dev Pre-graduation third-party liquidity is blocked, so `nativeRemainingNet` is the exact net curve amount.
+    function bondingProgress(bytes32 poolId)
+        external
+        view
+        returns (BondingState state, uint16 progressBps, uint256 tokenRemaining, uint256 nativeRemainingNet)
+    {
+        BondingConfig storage config = bondingConfig[poolId];
+        state = config.state;
+        if (state == BondingState.Unconfigured) revert InvalidBondingState(poolId, state, BondingState.Bonding);
+        if (state == BondingState.Ready || state == BondingState.Migrating || state == BondingState.Graduated) {
+            return (state, BASIS_POINTS, 0, 0);
+        }
+
+        uint128 liquidity = config.bondingLiquidity;
+        uint160 upperSqrtPriceX96 = TickMath.getSqrtPriceAtTick(BONDING_TICK_UPPER);
+        if (state == BondingState.AwaitingPosition || liquidity == 0) {
+            return (state, 0, 0, 0);
+        }
+
+        (uint160 currentSqrtPriceX96,,,) = poolManager.getSlot0(PoolId.wrap(poolId));
+        uint160 endpointSqrtPriceX96 = config.endpointSqrtPriceX96;
+        if (currentSqrtPriceX96 < endpointSqrtPriceX96) {
+            revert BondingEndpointCrossed(poolId, currentSqrtPriceX96, endpointSqrtPriceX96);
+        }
+        if (currentSqrtPriceX96 > upperSqrtPriceX96) currentSqrtPriceX96 = upperSqrtPriceX96;
+
+        uint256 initialTokenAmount =
+            SqrtPriceMath.getAmount1Delta(endpointSqrtPriceX96, upperSqrtPriceX96, liquidity, true);
+        tokenRemaining = SqrtPriceMath.getAmount1Delta(endpointSqrtPriceX96, currentSqrtPriceX96, liquidity, true);
+        nativeRemainingNet = SqrtPriceMath.getAmount0Delta(endpointSqrtPriceX96, currentSqrtPriceX96, liquidity, true);
+        progressBps = uint16(FullMath.mulDiv(initialTokenAmount - tokenRemaining, BASIS_POINTS, initialTokenAmount));
+    }
+
+    /// @notice Opens the synchronous burn-and-remint window for the configured one-shot controller.
+    function beginGraduation(PoolKey calldata key) external {
+        bytes32 poolId = _registeredPoolId(key);
+        BondingConfig storage config = bondingConfig[poolId];
+        if (config.state != BondingState.Ready) {
+            revert InvalidBondingState(poolId, config.state, BondingState.Ready);
+        }
+        if (msg.sender != config.controller) {
+            revert UnauthorizedGraduationController(msg.sender, config.controller);
+        }
+        _requireGraduationPrice(poolId, config.endpointSqrtPriceX96);
+        config.state = BondingState.Migrating;
+        emit ClassicGraduationBegun(poolId, Currency.unwrap(key.currency1), msg.sender);
+    }
+
+    /// @notice Records a controller-completed same-pool graduation after the endpoint is reached.
+    function completeGraduation(
+        PoolKey calldata key,
+        uint256 bondingPositionTokenId,
+        uint256 finalPositionTokenId,
+        address finalPositionRecipient,
+        uint256 nativeAmount,
+        uint256 tokenAmount,
+        int24 tickLower,
+        int24 tickUpper
+    ) external {
+        bytes32 poolId = _registeredPoolId(key);
+        BondingConfig storage config = bondingConfig[poolId];
+        if (config.state != BondingState.Migrating) {
+            revert InvalidBondingState(poolId, config.state, BondingState.Migrating);
+        }
+        if (msg.sender != config.controller) {
+            revert UnauthorizedGraduationController(msg.sender, config.controller);
+        }
+
+        _requireGraduationPrice(poolId, config.endpointSqrtPriceX96);
+        if (
+            bondingPositionTokenId == finalPositionTokenId || finalPositionRecipient == address(0) || nativeAmount == 0
+                || tokenAmount == 0 || tickLower != FINAL_TICK_LOWER || tickUpper != FINAL_TICK_UPPER
+        ) {
+            revert InvalidGraduationReceipt();
+        }
+
+        config.state = BondingState.Graduated;
+        emit ClassicLiquidityGraduated(
+            poolId,
+            Currency.unwrap(key.currency1),
+            finalPositionRecipient,
+            bondingPositionTokenId,
+            finalPositionTokenId,
+            nativeAmount,
+            tokenAmount,
+            tickLower,
+            tickUpper
         );
     }
 
@@ -285,10 +482,10 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
         return Hooks.Permissions({
             beforeInitialize: true,
             afterInitialize: false,
-            beforeAddLiquidity: false,
-            afterAddLiquidity: false,
-            beforeRemoveLiquidity: false,
-            afterRemoveLiquidity: false,
+            beforeAddLiquidity: true,
+            afterAddLiquidity: true,
+            beforeRemoveLiquidity: true,
+            afterRemoveLiquidity: true,
             beforeSwap: true,
             afterSwap: true,
             beforeDonate: false,
@@ -306,12 +503,102 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
         return IHooks.beforeInitialize.selector;
     }
 
+    function _beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata params, bytes calldata)
+        internal
+        view
+        override
+        returns (bytes4)
+    {
+        bytes32 poolId = _registeredPoolId(key);
+        BondingState state = bondingConfig[poolId].state;
+        if (state == BondingState.Unconfigured || state == BondingState.Graduated) {
+            return IHooks.beforeAddLiquidity.selector;
+        }
+        if (state == BondingState.AwaitingPosition) {
+            if (
+                params.tickLower != BONDING_TICK_LOWER || params.tickUpper != BONDING_TICK_UPPER
+                    || params.liquidityDelta <= 0 || uint256(params.liquidityDelta) > type(uint128).max
+            ) {
+                revert BondingPositionMismatch(params.tickLower, params.tickUpper, params.liquidityDelta);
+            }
+            return IHooks.beforeAddLiquidity.selector;
+        }
+        if (state == BondingState.Migrating) {
+            if (
+                params.tickLower != FINAL_TICK_LOWER || params.tickUpper != FINAL_TICK_UPPER
+                    || params.liquidityDelta <= 0
+            ) {
+                revert BondingPositionMismatch(params.tickLower, params.tickUpper, params.liquidityDelta);
+            }
+            return IHooks.beforeAddLiquidity.selector;
+        }
+        revert BondingLiquidityLocked(poolId, state);
+    }
+
+    function _afterAddLiquidity(
+        address,
+        PoolKey calldata key,
+        ModifyLiquidityParams calldata params,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) internal override returns (bytes4, BalanceDelta) {
+        bytes32 poolId = _registeredPoolId(key);
+        BondingConfig storage config = bondingConfig[poolId];
+        if (config.state == BondingState.AwaitingPosition) {
+            config.bondingLiquidity = uint256(params.liquidityDelta).toUint128();
+            config.state = BondingState.Bonding;
+            emit ClassicBondingPositionActivated(poolId, Currency.unwrap(key.currency1), config.bondingLiquidity);
+        }
+        return (IHooks.afterAddLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+    }
+
+    function _beforeRemoveLiquidity(
+        address,
+        PoolKey calldata key,
+        ModifyLiquidityParams calldata params,
+        bytes calldata
+    ) internal view override returns (bytes4) {
+        bytes32 poolId = _registeredPoolId(key);
+        BondingConfig storage config = bondingConfig[poolId];
+        BondingState state = config.state;
+        if (state == BondingState.Unconfigured || state == BondingState.Graduated) {
+            return IHooks.beforeRemoveLiquidity.selector;
+        }
+        if (state == BondingState.Migrating) {
+            if (
+                params.tickLower != BONDING_TICK_LOWER || params.tickUpper != BONDING_TICK_UPPER
+                    || params.liquidityDelta != -int256(uint256(config.bondingLiquidity))
+            ) {
+                revert BondingPositionMismatch(params.tickLower, params.tickUpper, params.liquidityDelta);
+            }
+            return IHooks.beforeRemoveLiquidity.selector;
+        }
+        revert BondingLiquidityLocked(poolId, state);
+    }
+
+    function _afterRemoveLiquidity(
+        address,
+        PoolKey calldata key,
+        ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) internal view override returns (bytes4, BalanceDelta) {
+        _registeredPoolId(key);
+        return (IHooks.afterRemoveLiquidity.selector, BalanceDeltaLibrary.ZERO_DELTA);
+    }
+
     function _beforeSwap(address sender, PoolKey calldata key, SwapParams calldata params, bytes calldata)
         internal
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         bytes32 poolId = _registeredPoolId(key);
+        BondingState state = bondingConfig[poolId].state;
+        if (state == BondingState.AwaitingPosition || state == BondingState.Ready || state == BondingState.Migrating) {
+            revert BondingSwapsPaused(poolId);
+        }
         bool nativeIsSpecified = params.zeroForOne == (params.amountSpecified < 0);
         if (!nativeIsSpecified) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -333,28 +620,40 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
         bytes calldata
     ) internal override returns (bytes4, int128) {
         bytes32 poolId = _registeredPoolId(key);
-        uint16 appliedFeeBps = totalSwapFeeBpsFor(poolId, params.zeroForOne);
+        int128 hookDelta = _afterSwapFeeDelta(poolId, sender, params, delta);
+        _enforceBondingEndpoint(poolId, key);
+        return (IHooks.afterSwap.selector, hookDelta);
+    }
+
+    function _afterSwapFeeDelta(bytes32 poolId, address sender, SwapParams calldata params, BalanceDelta delta)
+        private
+        returns (int128 hookDelta)
+    {
         bool nativeIsSpecified = params.zeroForOne == (params.amountSpecified < 0);
         if (nativeIsSpecified) {
-            uint256 requestedNativeAmount = _absolute(params.amountSpecified);
-            (uint256 creatorFee, uint256 launcherFee) = params.amountSpecified > 0
-                ? _feesForNet(requestedNativeAmount, appliedFeeBps)
-                : _feesForGross(requestedNativeAmount, appliedFeeBps);
-            uint256 expectedTotalFee = creatorFee + launcherFee;
-            uint256 expectedNativePoolAmount = params.amountSpecified > 0
-                ? requestedNativeAmount + expectedTotalFee
-                : requestedNativeAmount - expectedTotalFee;
-            uint256 actualNativePoolAmount = _absolute(int256(delta.amount0()));
-            if (actualNativePoolAmount != expectedNativePoolAmount) {
-                revert PartialFillUnsupported(expectedNativePoolAmount, actualNativePoolAmount);
-            }
-            return (IHooks.afterSwap.selector, 0);
+            _validateNativeSpecifiedSwap(poolId, params, delta);
+            return 0;
         }
 
         uint256 nativeAmount = _absolute(int256(delta.amount0()));
         uint256 totalFee = _chargeNative(poolId, sender, nativeAmount, params.amountSpecified > 0, params.zeroForOne);
-        if (totalFee == 0) return (IHooks.afterSwap.selector, 0);
-        return (IHooks.afterSwap.selector, totalFee.toInt256().toInt128());
+        if (totalFee != 0) hookDelta = totalFee.toInt256().toInt128();
+    }
+
+    function _validateNativeSpecifiedSwap(bytes32 poolId, SwapParams calldata params, BalanceDelta delta) private view {
+        uint256 requestedNativeAmount = _absolute(params.amountSpecified);
+        uint16 appliedFeeBps = totalSwapFeeBpsFor(poolId, params.zeroForOne);
+        (uint256 creatorFee, uint256 launcherFee) = params.amountSpecified > 0
+            ? _feesForNet(requestedNativeAmount, appliedFeeBps)
+            : _feesForGross(requestedNativeAmount, appliedFeeBps);
+        uint256 expectedTotalFee = creatorFee + launcherFee;
+        uint256 expectedNativePoolAmount = params.amountSpecified > 0
+            ? requestedNativeAmount + expectedTotalFee
+            : requestedNativeAmount - expectedTotalFee;
+        uint256 actualNativePoolAmount = _absolute(int256(delta.amount0()));
+        if (actualNativePoolAmount != expectedNativePoolAmount) {
+            revert PartialFillUnsupported(expectedNativePoolAmount, actualNativePoolAmount);
+        }
     }
 
     function unlockCallback(bytes calldata data) external onlyPoolManager returns (bytes memory) {
@@ -411,6 +710,27 @@ contract EthCreatorFeeHookV4 is BaseHook, IUnlockCallback, ReentrancyGuardTransi
     function _redeemNative(address recipient, uint256 amount) private {
         bytes memory result = poolManager.unlock(abi.encode(recipient, amount));
         if (result.length != 0) revert UnexpectedUnlockResult();
+    }
+
+    function _enforceBondingEndpoint(bytes32 poolId, PoolKey calldata key) private {
+        BondingConfig storage config = bondingConfig[poolId];
+        if (config.state != BondingState.Bonding) return;
+
+        (uint160 actualSqrtPriceX96,,,) = poolManager.getSlot0(PoolId.wrap(poolId));
+        if (actualSqrtPriceX96 < config.endpointSqrtPriceX96) {
+            revert BondingEndpointCrossed(poolId, actualSqrtPriceX96, config.endpointSqrtPriceX96);
+        }
+        if (actualSqrtPriceX96 == config.endpointSqrtPriceX96) {
+            config.state = BondingState.Ready;
+            emit ClassicBondingReached(poolId, Currency.unwrap(key.currency1), config.endpointSqrtPriceX96);
+        }
+    }
+
+    function _requireGraduationPrice(bytes32 poolId, uint160 endpointSqrtPriceX96) private view {
+        (uint160 actualSqrtPriceX96,,,) = poolManager.getSlot0(PoolId.wrap(poolId));
+        if (actualSqrtPriceX96 != endpointSqrtPriceX96) {
+            revert GraduationPriceMismatch(poolId, actualSqrtPriceX96, endpointSqrtPriceX96);
+        }
     }
 
     function _registeredConfig(PoolKey calldata key) private view returns (PoolFeeConfig storage config) {

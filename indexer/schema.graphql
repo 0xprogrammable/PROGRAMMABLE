@@ -73,17 +73,77 @@ type Launch {
   initialBuyOccurrenceId: String
   custodyOccurrenceId: String
   coordinatorOccurrenceId: String
+  bondingLaunchOccurrenceId: String
+  graduationVault: String
+  finalPositionRecipient: String
+  graduationReserveAmount: BigInt
+  bondingLiquidity: BigInt
+  finalLiquidity: BigInt
+  bondingEndpointTick: Int
+  graduationFinalTickLower: Int
+  graduationFinalTickUpper: Int
+  bondingStatus: String
+  bondingController: String
+  bondingEndpointSqrtPriceX96: BigInt
+  bondingReachedSqrtPriceX96: BigInt
+  bondingProgressBps: Int
+  bondingTokenRemaining: BigInt
+  bondingNativeRemainingNet: BigInt
+  bondingConfiguredOccurrenceId: String
+  bondingActivatedOccurrenceId: String
+  bondingReachedOccurrenceId: String
+  graduationBegunOccurrenceId: String
+  graduationOccurrenceId: String
+  graduationFinalRecipient: String
+  graduationOldPositionTokenId: BigInt
+  graduationNewPositionTokenId: BigInt
+  graduationNativeAmount: BigInt
+  graduationTokenAmount: BigInt
+  graduationTickLower: Int
+  graduationTickUpper: Int
   hasLaunchEvent: Boolean!
   hasLiquidityEvent: Boolean!
   hasInitialBuyEvent: Boolean!
   hasCustodyEvent: Boolean!
   hasCoordinatorEvent: Boolean!
+  hasBondingConfigurationEvent: Boolean!
   hasPoolRegistrationEvent: Boolean!
   hasPoolFeeDisclosureEvent: Boolean!
   hasRewardVaultFactoryEvent: Boolean!
   provenanceValid: Boolean!
   isComplete: Boolean!
   updatedBlock: BigInt! @index
+}
+
+type ClassicBondingState {
+  id: ID!
+  chainId: Int!
+  poolId: String! @index
+  token: String! @index
+  controller: String
+  endpointSqrtPriceX96: BigInt
+  reachedSqrtPriceX96: BigInt
+  bondingLiquidity: BigInt
+  status: String! @index
+  progressBps: Int
+  tokenRemaining: BigInt
+  nativeRemainingNet: BigInt
+  configuredOccurrenceId: String
+  activatedOccurrenceId: String
+  reachedOccurrenceId: String
+  begunOccurrenceId: String
+  graduationOccurrenceId: String
+  finalRecipient: String
+  oldPositionTokenId: BigInt
+  newPositionTokenId: BigInt
+  nativeAmount: BigInt
+  tokenAmount: BigInt
+  tickLower: Int
+  tickUpper: Int
+  model: String! @index
+  releaseVersion: String! @index
+  provenanceValid: Boolean!
+  blockNumber: BigInt! @index
 }
 
 type PoolRelease {

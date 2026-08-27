@@ -11,7 +11,7 @@ contract DeployClassicV4InfrastructureV1MainnetTest is DeployClassicV4Infrastruc
         _selectFork("ETHEREUM_RPC_URL", "https://eth.drpc.org", SNAPSHOT_BLOCK);
     }
 
-    function test_mainnetReusesExactV3DependenciesAndDeploysDeep30ReleasePrep() public {
+    function test_mainnetReusesExactV3DependenciesAndDeploysBondingReleasePrep() public {
         _assertApprovalAndInputGuards();
         _assertDeterministicDeploymentAndLaunch(1);
     }

@@ -18,6 +18,7 @@ import {
   CLASSIC_V4_LAUNCHER_FEE_RECIPIENT,
   CLASSIC_V4_NEW_CONTRACTS,
   CLASSIC_V4_OFFICIAL_DEPENDENCIES,
+  CLASSIC_V4_REQUIRED_HOOK_FLAGS,
   CLASSIC_V4_SHARED_DEPENDENCIES,
   canonicalAddress,
   digestJson,
@@ -54,13 +55,21 @@ const hookAbi = parseAbi([
   "function TRANSFER_TAX_BPS() view returns (uint16)",
   "function LP_FEE_PIPS() view returns (uint24)",
   "function TICK_SPACING() view returns (int24)",
+  "function BONDING_TICK_LOWER() view returns (int24)",
+  "function BONDING_TICK_UPPER() view returns (int24)",
+  "function FINAL_TICK_LOWER() view returns (int24)",
+  "function FINAL_TICK_UPPER() view returns (int24)",
 ]);
 const plannerAbi = parseAbi([
   "function STANDARD_PRESET() view returns (uint8)",
-  "function DEEP30_PRESET() view returns (uint8)",
+  "function BONDING_PRESET() view returns (uint8)",
   "function TOKEN_SUPPLY() view returns (uint256)",
+  "function BONDING_TOKEN_ALLOCATION() view returns (uint256)",
+  "function GRADUATION_TOKEN_RESERVE() view returns (uint256)",
   "function INITIAL_TICK() view returns (int24)",
-  "function DEEP30_TICK_LOWER() view returns (int24)",
+  "function BONDING_TICK_LOWER() view returns (int24)",
+  "function FINAL_TICK_LOWER() view returns (int24)",
+  "function FINAL_TICK_UPPER() view returns (int24)",
   "function TICK_SPACING() view returns (int24)",
 ]);
 const launcherAbi = parseAbi([
@@ -73,13 +82,18 @@ const launcherAbi = parseAbi([
   "function initialBuyVestingWalletFactory() view returns (address)",
   "function launchPolicy() view returns (address)",
   "function positionForwarderFactory() view returns (address)",
+  "function graduationVaultFactory() view returns (address)",
   "function STANDARD_LIQUIDITY_PRESET() view returns (uint8)",
-  "function DEEP30_LIQUIDITY_PRESET() view returns (uint8)",
+  "function BONDING_LIQUIDITY_PRESET() view returns (uint8)",
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
   "function TOKEN_SUPPLY() view returns (uint256)",
   "function INITIAL_TICK() view returns (int24)",
   "function TICK_SPACING() view returns (int24)",
   "function LP_FEE_PIPS() view returns (uint24)",
+]);
+const graduationVaultFactoryAbi = parseAbi([
+  "function positionManager() view returns (address)",
+  "function positionForwarderFactory() view returns (address)",
 ]);
 const ctoAuthorityAbi = parseAbi([
   "function authority() view returns (address)",
@@ -261,7 +275,7 @@ function runtimeBindingChecks(plan) {
       address.hookFactory,
       hookFactoryAbi,
       "REQUIRED_HOOK_FLAGS",
-      uintResult(8_396, "uint160"),
+      uintResult(CLASSIC_V4_REQUIRED_HOOK_FLAGS, "uint160"),
     ),
     callCheck(
       "factory hook provenance",
@@ -342,6 +356,34 @@ function runtimeBindingChecks(plan) {
       intResult(200, "int24"),
     ),
     callCheck(
+      "hook Bonding lower tick",
+      address.feeHook,
+      hookAbi,
+      "BONDING_TICK_LOWER",
+      intResult(174_800, "int24"),
+    ),
+    callCheck(
+      "hook Bonding upper tick",
+      address.feeHook,
+      hookAbi,
+      "BONDING_TICK_UPPER",
+      intResult(204_200, "int24"),
+    ),
+    callCheck(
+      "hook final lower tick",
+      address.feeHook,
+      hookAbi,
+      "FINAL_TICK_LOWER",
+      intResult(9_800, "int24"),
+    ),
+    callCheck(
+      "hook final upper tick",
+      address.feeHook,
+      hookAbi,
+      "FINAL_TICK_UPPER",
+      intResult(225_200, "int24"),
+    ),
+    callCheck(
       "planner standard preset",
       address.positionPlanner,
       plannerAbi,
@@ -349,10 +391,10 @@ function runtimeBindingChecks(plan) {
       uintResult(0, "uint8"),
     ),
     callCheck(
-      "planner Deep30 preset",
+      "planner Bonding preset",
       address.positionPlanner,
       plannerAbi,
-      "DEEP30_PRESET",
+      "BONDING_PRESET",
       uintResult(1, "uint8"),
     ),
     callCheck(
@@ -363,6 +405,20 @@ function runtimeBindingChecks(plan) {
       uintResult(1_000_000_000n * 10n ** 18n),
     ),
     callCheck(
+      "planner Bonding allocation",
+      address.positionPlanner,
+      plannerAbi,
+      "BONDING_TOKEN_ALLOCATION",
+      uintResult(800_000_000n * 10n ** 18n),
+    ),
+    callCheck(
+      "planner graduation reserve",
+      address.positionPlanner,
+      plannerAbi,
+      "GRADUATION_TOKEN_RESERVE",
+      uintResult(200_000_000n * 10n ** 18n),
+    ),
+    callCheck(
       "planner initial tick",
       address.positionPlanner,
       plannerAbi,
@@ -370,11 +426,25 @@ function runtimeBindingChecks(plan) {
       intResult(204_200, "int24"),
     ),
     callCheck(
-      "planner Deep30 lower tick",
+      "planner Bonding lower tick",
       address.positionPlanner,
       plannerAbi,
-      "DEEP30_TICK_LOWER",
+      "BONDING_TICK_LOWER",
       intResult(174_800, "int24"),
+    ),
+    callCheck(
+      "planner final lower tick",
+      address.positionPlanner,
+      plannerAbi,
+      "FINAL_TICK_LOWER",
+      intResult(9_800, "int24"),
+    ),
+    callCheck(
+      "planner final upper tick",
+      address.positionPlanner,
+      plannerAbi,
+      "FINAL_TICK_UPPER",
+      intResult(225_200, "int24"),
     ),
     callCheck(
       "planner tick spacing",
@@ -447,6 +517,13 @@ function runtimeBindingChecks(plan) {
       addressResult(shared.positionForwarderFactory.address),
     ),
     callCheck(
+      "launcher graduation vault factory",
+      address.launcher,
+      launcherAbi,
+      "graduationVaultFactory",
+      addressResult(address.graduationVaultFactory),
+    ),
+    callCheck(
       "launcher standard preset",
       address.launcher,
       launcherAbi,
@@ -454,10 +531,10 @@ function runtimeBindingChecks(plan) {
       uintResult(0, "uint8"),
     ),
     callCheck(
-      "launcher Deep30 preset",
+      "launcher Bonding preset",
       address.launcher,
       launcherAbi,
-      "DEEP30_LIQUIDITY_PRESET",
+      "BONDING_LIQUIDITY_PRESET",
       uintResult(1, "uint8"),
     ),
     callCheck(
@@ -494,6 +571,20 @@ function runtimeBindingChecks(plan) {
       launcherAbi,
       "LP_FEE_PIPS",
       uintResult(0, "uint24"),
+    ),
+    callCheck(
+      "graduation factory PositionManager",
+      address.graduationVaultFactory,
+      graduationVaultFactoryAbi,
+      "positionManager",
+      addressResult(official.positionManager.address),
+    ),
+    callCheck(
+      "graduation factory forwarder factory",
+      address.graduationVaultFactory,
+      graduationVaultFactoryAbi,
+      "positionForwarderFactory",
+      addressResult(shared.positionForwarderFactory.address),
     ),
     callCheck(
       "shared CTO owner",
@@ -576,7 +667,7 @@ function assertTransactionInputFile(value) {
     !keys.every((key, index) => key === expected[index])
   ) {
     fail(
-      "Transaction hash file must contain exactly the four Classic V4 contracts",
+      "Transaction hash file must contain exactly the five Classic V4 contracts",
     );
   }
   const hashes = new Set();

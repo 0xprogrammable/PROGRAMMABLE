@@ -77,4 +77,17 @@ describe("token trade amount interface", () => {
       "Math.floor(Date.now() / 1_000) + 1_200",
     );
   });
+
+  it("turns Classic V4 Max into the verified one-shot Bonding completion", () => {
+    expect(source).toContain('fetch("/api/trade/bonding-max"');
+    expect(source).toContain("validatePreparedBondingGraduationResponse");
+    expect(source).toContain('raw.code === "bonding-inactive"');
+    expect(source).toContain("Complete Bonding");
+    expect(source).toContain("Buy & graduate");
+    expect(source).toContain("Permanently locked");
+    expect(source).toContain("Token and Pool ID");
+    expect(detailSource).toContain(
+      'transaction.kind === "bonding-max-buy"',
+    );
+  });
 });

@@ -19,6 +19,9 @@ import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { ModifyLiquidityParams, SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import { PoolModifyLiquidityTest } from "@uniswap/v4-core/src/test/PoolModifyLiquidityTest.sol";
+import { PoolSwapTest } from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
 import { PositionManager } from "@uniswap/v4-periphery/src/PositionManager.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
@@ -32,6 +35,8 @@ import {
     ClassicInitialBuyVestingWalletV1
 } from "../src/ClassicInitialBuyVestingWalletV1.sol";
 import { ClassicInitialBuyVestingWalletFactoryV1 } from "../src/ClassicInitialBuyVestingWalletFactoryV1.sol";
+import { ClassicGraduationVaultFactoryV1 } from "../src/ClassicGraduationVaultFactoryV1.sol";
+import { ClassicGraduationVaultV1 } from "../src/ClassicGraduationVaultV1.sol";
 import { ClassicLaunchPolicyV1 } from "../src/ClassicLaunchPolicyV1.sol";
 import { ClassicPositionPlannerV1 } from "../src/ClassicPositionPlannerV1.sol";
 import { ClassicRewardVaultFactoryV1 } from "../src/ClassicRewardVaultFactoryV1.sol";
@@ -50,12 +55,10 @@ contract MemeLaunchV3Test is Deployers {
     address internal constant CANONICAL_POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
     address internal constant CANONICAL_POSITION_MANAGER = 0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e;
     uint256 internal constant MIN_INITIAL_BUY_WEI = 0.0006 ether;
-    uint256 private constant RATIO_SCALE = 1_000_000_000;
-    uint256 private constant EXPECTED_DEEP30_RATIO = 1_298_604_130;
     uint256 private constant EIP_170_RUNTIME_LIMIT = 24_576;
     uint256 private constant EIP_3860_INITCODE_LIMIT = 49_152;
-    uint256 private constant LAUNCHER_INTERNAL_RUNTIME_LIMIT = 20_000;
-    uint256 private constant LAUNCHER_INTERNAL_INITCODE_LIMIT = 30_000;
+    uint256 private constant LAUNCHER_INTERNAL_RUNTIME_LIMIT = 24_000;
+    uint256 private constant LAUNCHER_INTERNAL_INITCODE_LIMIT = 40_000;
     uint256 private constant RANGE_BOUNDARY_MARGIN = 1e12;
 
     bytes32 private constant TOKEN_LAUNCHED_EVENT = keccak256(
@@ -67,6 +70,9 @@ contract MemeLaunchV3Test is Deployers {
         keccak256("MemeCreatorInitialBuyV2(address,address,bytes32,uint256,uint256,bytes32)");
     bytes32 private constant INITIAL_BUY_CUSTODY_EVENT =
         keccak256("MemeCreatorInitialBuyCustodyV2(address,address,address,uint8,uint16,uint16,bytes32,bytes32)");
+    bytes32 private constant BONDING_CONFIGURED_EVENT = keccak256(
+        "MemeBondingConfiguredV1(address,bytes32,address,address,uint256,uint256,uint128,uint128,int24,int24,int24,bytes32)"
+    );
 
     PositionManager internal positionManager;
     UERC20Factory internal tokenFactory;
@@ -78,6 +84,7 @@ contract MemeLaunchV3Test is Deployers {
     ClassicInitialBuyVestingWalletFactoryV1 internal initialBuyVestingWalletFactory;
     ClassicLaunchPolicyV1 internal launchPolicy;
     LockedPositionFeeForwarderFactoryV1 internal positionForwarderFactory;
+    ClassicGraduationVaultFactoryV1 internal graduationVaultFactory;
     MemeLaunchV3 internal launcher;
 
     address internal deployer;
@@ -92,6 +99,8 @@ contract MemeLaunchV3Test is Deployers {
             CANONICAL_POSITION_MANAGER
         );
         positionManager = PositionManager(payable(CANONICAL_POSITION_MANAGER));
+        swapRouter = new PoolSwapTest(manager);
+        modifyLiquidityRouter = new PoolModifyLiquidityTest(manager);
 
         tokenFactory = new UERC20Factory();
         hookFactory = new EthCreatorFeeHookFactoryV4();
@@ -101,6 +110,7 @@ contract MemeLaunchV3Test is Deployers {
         launchPolicy = new ClassicLaunchPolicyV1();
         positionPlanner = new ClassicPositionPlannerV1();
         positionForwarderFactory = new LockedPositionFeeForwarderFactoryV1(positionManager);
+        graduationVaultFactory = new ClassicGraduationVaultFactoryV1(positionManager, positionForwarderFactory);
         treasury = makeAddr("programmableTreasury");
         feeHook = _deployHook();
         launcher = new MemeLaunchV3(
@@ -112,7 +122,8 @@ contract MemeLaunchV3Test is Deployers {
             vaultFactory,
             initialBuyVestingWalletFactory,
             launchPolicy,
-            positionForwarderFactory
+            positionForwarderFactory,
+            graduationVaultFactory
         );
 
         deployer = makeAddr("deployer");
@@ -130,10 +141,10 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(PoolId.unwrap(positionKey.toId()), result.poolId);
         assertEq(positionInfo.tickLower(), TickMath.minUsableTick(launcher.TICK_SPACING()));
         assertEq(positionInfo.tickUpper(), launcher.INITIAL_TICK());
-        _assertSingleLockedPositionLifecycle(result);
+        _assertStandardLockedPositionLifecycle(result);
     }
 
-    function test_deep30PresetMintsOneLockedPositionWithExpectedRangeCustodyAndLegacyEvents() public {
+    function test_bondingPresetMintsOneVaultOwnedPositionAndPreservesLegacyEvents() public {
         MemeLaunchV3.LaunchParameters memory parameters = _parameters(bytes32("deep30-events"), 1);
         parameters.initialBuyCustody = ClassicInitialBuyCustodyConfig({
             mode: ClassicInitialBuyCustodyMode.FixedLock, durationDays: 30, cliffDays: 0
@@ -158,22 +169,27 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(_eventCount(logs, LIQUIDITY_CONFIGURED_EVENT), 1);
         assertEq(_eventCount(logs, INITIAL_BUY_EVENT), 1);
         assertEq(_eventCount(logs, INITIAL_BUY_CUSTODY_EVENT), 1);
-        _assertSingleLockedPositionLifecycle(result);
+        assertEq(_eventCount(logs, BONDING_CONFIGURED_EVENT), 1);
+        _assertBondingLifecycleBeforeGraduation(result);
     }
 
-    function test_deep30ActiveLiquidityIsApproximately1298604PercentOfStandard() public {
+    function test_bondingPresetAllocates80PercentAndReserves20Percent() public {
         MemeLaunchV3.LaunchResult memory standard =
             _launch(_parameters(bytes32("ratio-standard"), 0), MIN_INITIAL_BUY_WEI);
-        MemeLaunchV3.LaunchResult memory deep30 = _launch(_parameters(bytes32("ratio-deep30"), 1), MIN_INITIAL_BUY_WEI);
+        MemeLaunchV3.LaunchResult memory bonding =
+            _launch(_parameters(bytes32("ratio-bonding"), 1), MIN_INITIAL_BUY_WEI);
 
         uint256 standardLiquidity = positionManager.getPositionLiquidity(standard.positionTokenId);
-        uint256 deep30Liquidity = positionManager.getPositionLiquidity(deep30.positionTokenId);
-        uint256 ratio = deep30Liquidity * RATIO_SCALE / standardLiquidity;
+        uint256 bondingLiquidity = positionManager.getPositionLiquidity(bonding.positionTokenId);
 
-        assertApproxEqAbs(ratio, EXPECTED_DEEP30_RATIO, 2);
-        assertGt(deep30Liquidity, standardLiquidity);
+        assertGt(bondingLiquidity, standardLiquidity);
         assertEq(standard.tokenLiquidityAmount + standard.lockedTokenDust, launcher.TOKEN_SUPPLY());
-        assertEq(deep30.tokenLiquidityAmount + deep30.lockedTokenDust, launcher.TOKEN_SUPPLY());
+        assertEq(bonding.tokenLiquidityAmount + bonding.lockedTokenDust, launcher.TOKEN_SUPPLY());
+        assertEq(bonding.graduationReserveAmount, 200_000_000 ether);
+        assertEq(
+            bonding.tokenLiquidityAmount + bonding.lockedTokenDust - bonding.graduationReserveAmount, 800_000_000 ether
+        );
+        assertEq(IERC20(bonding.token).balanceOf(bonding.graduationVault), bonding.lockedTokenDust);
     }
 
     function test_invalidPresetRevertsBeforeTokenVaultPoolOrPositionCreation() public {
@@ -225,7 +241,8 @@ contract MemeLaunchV3Test is Deployers {
             vaultFactory,
             initialBuyVestingWalletFactory,
             launchPolicy,
-            positionForwarderFactory
+            positionForwarderFactory,
+            graduationVaultFactory
         );
     }
 
@@ -238,7 +255,7 @@ contract MemeLaunchV3Test is Deployers {
         assertLt(initcodeSize, LAUNCHER_INTERNAL_INITCODE_LIMIT);
     }
 
-    function test_deep30InitialBuyDirectlyBelowRangeLimitExecutesInFull() public {
+    function test_bondingInitialBuyDirectlyBelowEndpointExecutesInFull() public {
         uint256 capacity = _deep30NetCapacity();
         uint256 targetNet = capacity - RANGE_BOUNDARY_MARGIN;
         uint256 grossInput = _grossForNetTarget(targetNet);
@@ -247,7 +264,7 @@ contract MemeLaunchV3Test is Deployers {
         uint160 sqrtPriceLowerX96 = TickMath.getSqrtPriceAtTick(positionPlanner.DEEP30_TICK_LOWER());
         uint256 sqrtPriceRatioWad = FullMath.mulDiv(sqrtPriceUpperX96, 1 ether, sqrtPriceLowerX96);
         uint256 tokenPriceMultipleWad = FullMath.mulDiv(sqrtPriceRatioWad, sqrtPriceRatioWad, 1 ether);
-        assertEq(capacity, 5_895_641_055_945_908_140);
+        assertEq(capacity, 4_716_512_844_756_726_512);
         assertApproxEqAbs(tokenPriceMultipleWad, 18_913_066_072_547_532_342, 1 gwei);
 
         MemeLaunchV3.LaunchResult memory result = _launch(_parameters(bytes32("deep30-before-limit"), 1), grossInput);
@@ -261,7 +278,7 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(address(launcher).balance, 0);
     }
 
-    function test_deep30InitialBuyAtRangeLimitExecutesExactlyToLowerTick() public {
+    function test_bondingInitialBuyAtEndpointAutoGraduatesInSamePool() public {
         uint256 capacity = _deep30NetCapacity();
         uint256 grossInput = _grossForNetTarget(capacity);
 
@@ -273,9 +290,132 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(_netAtMinimumFee(grossInput), capacity);
         assertEq(sqrtPriceX96, TickMath.getSqrtPriceAtTick(positionPlanner.DEEP30_TICK_LOWER()));
         assertEq(address(launcher).balance, 0);
+        ClassicGraduationVaultV1 vault = ClassicGraduationVaultV1(payable(result.graduationVault));
+        assertTrue(vault.graduated());
+        assertEq(result.finalPositionTokenId, vault.finalPositionTokenId());
+        assertEq(IERC721(address(positionManager)).ownerOf(result.finalPositionTokenId), result.finalPositionRecipient);
+        (PoolKey memory finalKey, PositionInfo finalInfo) =
+            positionManager.getPoolAndPositionInfo(result.finalPositionTokenId);
+        assertEq(PoolId.unwrap(finalKey.toId()), result.poolId);
+        assertEq(finalInfo.tickLower(), positionPlanner.FINAL_TICK_LOWER());
+        assertEq(finalInfo.tickUpper(), positionPlanner.FINAL_TICK_UPPER());
+        (bool ready, bool completed,) = feeHook.bondingState(result.poolId);
+        assertFalse(ready);
+        assertTrue(completed);
     }
 
-    function test_deep30InitialBuyOverRangeLimitRevertsAtomicallyWithoutLostEthOrFees() public {
+    function test_externalMaxBuyCanBePermissionlesslyGraduatedAndTradingResumes() public {
+        MemeLaunchV3.LaunchResult memory result =
+            _launch(_parameters(bytes32("bonding-external-max"), 1), MIN_INITIAL_BUY_WEI);
+        PoolKey memory key = launcher.poolKey(result.token);
+        (EthCreatorFeeHookV4.BondingState state,, uint256 tokenRemaining, uint256 nativeRemainingNet) =
+            feeHook.bondingProgress(result.poolId);
+        assertEq(uint8(state), uint8(EthCreatorFeeHookV4.BondingState.Bonding));
+        assertGt(tokenRemaining, 0);
+        assertGt(nativeRemainingNet, 0);
+
+        uint256 grossRemaining = _grossForNetTarget(nativeRemainingNet);
+        vm.deal(address(this), grossRemaining + 1 ether);
+        swapRouter.swap{ value: grossRemaining }(
+            key,
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: -int256(grossRemaining),
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            PoolSwapTest.TestSettings({ takeClaims: false, settleUsingBurn: false }),
+            ""
+        );
+
+        (bool ready, bool completed,) = feeHook.bondingState(result.poolId);
+        assertTrue(ready);
+        assertFalse(completed);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                EthCreatorFeeHookV4.UnauthorizedGraduationController.selector, address(this), result.graduationVault
+            )
+        );
+        feeHook.beginGraduation(key);
+
+        address keeper = makeAddr("permissionlessKeeper");
+        vm.prank(keeper);
+        uint256 finalPositionTokenId = launcher.graduate(result.token);
+        assertEq(IERC721(address(positionManager)).ownerOf(finalPositionTokenId), result.finalPositionRecipient);
+        (, completed,) = feeHook.bondingState(result.poolId);
+        assertTrue(completed);
+
+        swapRouter.swap{ value: 0.001 ether }(
+            key,
+            SwapParams({
+                zeroForOne: true, amountSpecified: -int256(0.001 ether), sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            PoolSwapTest.TestSettings({ takeClaims: false, settleUsingBurn: false }),
+            ""
+        );
+    }
+
+    function test_vaultMaxBuyConsumesRemainingCurveAndGraduatesAtomically() public {
+        MemeLaunchV3.LaunchResult memory result =
+            _launch(_parameters(bytes32("bonding-vault-max"), 1), MIN_INITIAL_BUY_WEI);
+        ClassicGraduationVaultV1 vault = ClassicGraduationVaultV1(payable(result.graduationVault));
+        (uint256 grossNativeAmount, uint256 netNativeAmount) = vault.bondingMaxBuyQuote();
+        (,,, uint256 hookNativeRemainingNet) = feeHook.bondingProgress(result.poolId);
+        assertEq(netNativeAmount, hookNativeRemainingNet);
+        assertEq(_netAtMinimumFee(grossNativeAmount), netNativeAmount);
+
+        address buyer = makeAddr("maxBuyer");
+        vm.deal(buyer, grossNativeAmount);
+        vm.prank(buyer);
+        (uint256 tokenAmount, uint256 finalPositionTokenId) = vault.maxBuyAndGraduate{ value: grossNativeAmount }(buyer);
+
+        assertGt(tokenAmount, 0);
+        assertEq(IERC20(result.token).balanceOf(buyer), tokenAmount);
+        assertTrue(vault.graduated());
+        assertEq(vault.finalPositionTokenId(), finalPositionTokenId);
+        assertEq(IERC721(address(positionManager)).ownerOf(finalPositionTokenId), result.finalPositionRecipient);
+        (bool ready, bool completed,) = feeHook.bondingState(result.poolId);
+        assertFalse(ready);
+        assertTrue(completed);
+    }
+
+    function test_launcherMaxBuyUsesCanonicalVaultAndGraduatesAtomically() public {
+        MemeLaunchV3.LaunchResult memory result =
+            _launch(_parameters(bytes32("bonding-launcher-max"), 1), MIN_INITIAL_BUY_WEI);
+        ClassicGraduationVaultV1 vault = ClassicGraduationVaultV1(payable(result.graduationVault));
+        (uint256 grossNativeAmount,) = vault.bondingMaxBuyQuote();
+
+        address buyer = makeAddr("launcherMaxBuyer");
+        vm.deal(buyer, grossNativeAmount);
+        vm.prank(buyer);
+        (uint256 tokenAmount, uint256 finalPositionTokenId) =
+            launcher.maxBuyAndGraduate{ value: grossNativeAmount }(result.token, buyer);
+
+        assertGt(tokenAmount, 0);
+        assertEq(IERC20(result.token).balanceOf(buyer), tokenAmount);
+        assertTrue(vault.graduated());
+        assertEq(vault.finalPositionTokenId(), finalPositionTokenId);
+        assertEq(IERC721(address(positionManager)).ownerOf(finalPositionTokenId), result.finalPositionRecipient);
+        (bool ready, bool completed,) = feeHook.bondingState(result.poolId);
+        assertFalse(ready);
+        assertTrue(completed);
+    }
+
+    function test_bondingBlocksThirdPartyLiquidityBeforeGraduation() public {
+        MemeLaunchV3.LaunchResult memory result =
+            _launch(_parameters(bytes32("bonding-liquidity-lock"), 1), MIN_INITIAL_BUY_WEI);
+        PoolKey memory key = launcher.poolKey(result.token);
+        ModifyLiquidityParams memory parameters = ModifyLiquidityParams({
+            tickLower: positionPlanner.BONDING_TICK_LOWER(),
+            tickUpper: positionPlanner.INITIAL_TICK(),
+            liquidityDelta: 1,
+            salt: bytes32("third-party")
+        });
+
+        vm.expectPartialRevert(CustomRevert.WrappedError.selector);
+        modifyLiquidityRouter.modifyLiquidity(key, parameters, "");
+    }
+
+    function test_bondingInitialBuyOverEndpointRevertsAtomicallyWithoutLostEthOrFees() public {
         uint256 capacity = _deep30NetCapacity();
         uint256 targetNet = capacity + 1;
         uint256 grossInput = _grossForNetTarget(targetNet);
@@ -304,7 +444,7 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(address(launcher).balance, 0);
     }
 
-    function _assertSingleLockedPositionLifecycle(MemeLaunchV3.LaunchResult memory result) private {
+    function _assertStandardLockedPositionLifecycle(MemeLaunchV3.LaunchResult memory result) private {
         PositionFeesForwarder forwarder = PositionFeesForwarder(payable(result.positionRecipient));
         assertEq(result.poolId, PoolId.unwrap(launcher.poolKey(result.token).toId()));
         assertEq(launcher.launchHashOf(result.token), result.launchHash);
@@ -321,6 +461,27 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(forwarder.feeRecipient(), deployer);
         vm.expectRevert(ITimelockedPositionRecipient.Timelocked.selector);
         forwarder.approveOperator();
+    }
+
+    function _assertBondingLifecycleBeforeGraduation(MemeLaunchV3.LaunchResult memory result) private view {
+        ClassicGraduationVaultV1 vault = ClassicGraduationVaultV1(payable(result.graduationVault));
+        PositionFeesForwarder finalForwarder = PositionFeesForwarder(payable(result.finalPositionRecipient));
+        assertEq(result.poolId, PoolId.unwrap(launcher.poolKey(result.token).toId()));
+        assertEq(launcher.graduationVaultOf(result.token), result.graduationVault);
+        assertEq(launcher.finalPositionRecipientOf(result.token), result.finalPositionRecipient);
+        assertEq(result.positionRecipient, result.graduationVault);
+        assertEq(result.graduationReserveAmount, positionPlanner.GRADUATION_TOKEN_RESERVE());
+        assertEq(result.tokenLiquidityAmount + result.lockedTokenDust, launcher.TOKEN_SUPPLY());
+        assertEq(IERC20(result.token).balanceOf(result.graduationVault), result.lockedTokenDust);
+        assertEq(IERC721(address(positionManager)).ownerOf(result.positionTokenId), result.graduationVault);
+        assertEq(vault.bondingPositionTokenId(), result.positionTokenId);
+        assertEq(vault.finalPositionRecipient(), result.finalPositionRecipient);
+        assertEq(vault.poolId(), result.poolId);
+        assertEq(vault.finalLiquidity(), result.finalLiquidity);
+        assertFalse(vault.graduated());
+        assertEq(finalForwarder.operator(), address(0));
+        assertEq(finalForwarder.timelockBlockNumber(), type(uint256).max);
+        assertEq(finalForwarder.feeRecipient(), deployer);
     }
 
     function _deployHook() private returns (EthCreatorFeeHookV4 deployed) {
@@ -356,7 +517,11 @@ contract MemeLaunchV3Test is Deployers {
             unexpectedDeploymentWork
         );
         vm.mockCallRevert(address(tokenFactory), UERC20Factory.createToken.selector, unexpectedDeploymentWork);
-        vm.mockCallRevert(address(feeHook), EthCreatorFeeHookV4.registerPool.selector, unexpectedDeploymentWork);
+        vm.mockCallRevert(
+            address(feeHook),
+            bytes4(keccak256("registerPool((address,address,uint24,int24,address),address,uint16,uint16)")),
+            unexpectedDeploymentWork
+        );
         vm.mockCallRevert(address(manager), IPoolManager.initialize.selector, unexpectedDeploymentWork);
         vm.mockCallRevert(
             address(positionManager), PositionManager.modifyLiquidities.selector, unexpectedDeploymentWork

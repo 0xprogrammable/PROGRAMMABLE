@@ -6,6 +6,10 @@ export const CLASSIC_TOTAL_SWAP_FEE_BPS = 100;
 export const LAUNCH_DRAFT_STORAGE_KEY = "launcher.launch-draft.v1";
 export const MEME_TOKEN_SUPPLY_WHOLE = 1_000_000_000;
 export const MEME_TOKEN_SUPPLY_WEI = 1_000_000_000n * 10n ** 18n;
+export const CLASSIC_BONDING_TOKEN_ALLOCATION_WEI =
+  800_000_000n * 10n ** 18n;
+export const CLASSIC_GRADUATION_TOKEN_RESERVE_WEI =
+  MEME_TOKEN_SUPPLY_WEI - CLASSIC_BONDING_TOKEN_ALLOCATION_WEI;
 export const MEME_INITIAL_TICK = 204_200;
 export const CLASSIC_DEV_BUY_GAS_BUFFER_BPS = 15_000n;
 export const MEME_STARTING_FDV_ETH = 1.3556577608171038;
@@ -16,21 +20,23 @@ export const MEME_MIN_INITIAL_BUY_ETH = "0.0006";
 export const MEME_MIN_INITIAL_BUY_ETH_LABEL =
   `${MEME_MIN_INITIAL_BUY_ETH} ETH`;
 export const CLASSIC_STANDARD_TICK_LOWER = -887_200;
-export const CLASSIC_DEEP_30_TICK_LOWER = 174_800;
+export const CLASSIC_BONDING_TICK_LOWER = 174_800;
+// Compatibility alias for older drafts and release evidence.
+export const CLASSIC_DEEP_30_TICK_LOWER = CLASSIC_BONDING_TICK_LOWER;
 const Q96 = 1n << 96n;
 // Exact TickMath Q64.96 outputs pinned by ClassicPositionPlannerV1.
 const MEME_INITIAL_SQRT_PRICE_X96 =
   2_151_813_121_295_408_910_812_139_624_586_144n;
 const MEME_MIN_SQRT_PRICE_X96 = 4_310_618_292n;
-const CLASSIC_DEEP_30_SQRT_PRICE_X96 =
+const CLASSIC_BONDING_SQRT_PRICE_X96 =
   494_793_039_472_815_777_531_937_397_972_213n;
 const MEME_INITIAL_LIQUIDITY =
   (MEME_TOKEN_SUPPLY_WEI * Q96) /
   (MEME_INITIAL_SQRT_PRICE_X96 - MEME_MIN_SQRT_PRICE_X96);
-const CLASSIC_DEEP_30_INITIAL_LIQUIDITY =
-  (MEME_TOKEN_SUPPLY_WEI * Q96) /
-  (MEME_INITIAL_SQRT_PRICE_X96 - CLASSIC_DEEP_30_SQRT_PRICE_X96);
-const CLASSIC_DEEP_30_END_PRICE_MULTIPLE_WAD =
+const CLASSIC_BONDING_INITIAL_LIQUIDITY =
+  (CLASSIC_BONDING_TOKEN_ALLOCATION_WEI * Q96) /
+  (MEME_INITIAL_SQRT_PRICE_X96 - CLASSIC_BONDING_SQRT_PRICE_X96);
+const CLASSIC_BONDING_END_PRICE_MULTIPLE_WAD =
   18_913_066_072_547_532_342n;
 export const ADAPTIVE_MIN_FDV_INDEX = -887_272;
 export const ADAPTIVE_MAX_FDV_INDEX = 887_272;
@@ -65,7 +71,7 @@ export type LaunchModel =
   | "deep"
   | "stock-paired";
 export type RewardDestinationMode = "launcher" | "external" | "split";
-export type ClassicLiquidityPreset = "standard" | "deep-30";
+export type ClassicLiquidityPreset = "standard" | "bonding";
 export type ClassicContractRelease = "classic-v3" | "classic-v4";
 export type ClassicInitialBuyCustodyMode =
   | "unlocked"
@@ -305,7 +311,7 @@ export function parseClassicFeePercentToBps(value: string) {
 export function normalizeClassicLiquidityPreset(
   value: unknown,
 ): ClassicLiquidityPreset {
-  return value === "deep-30" ? "deep-30" : "standard";
+  return value === "bonding" || value === "deep-30" ? "bonding" : "standard";
 }
 
 export function parseInitialBuyWei(value: string | null | undefined) {
@@ -397,13 +403,12 @@ export function getClassicInitialBuyCurveQuote(
   const poolEthWei =
     initialBuyWei -
     (initialBuyWei * BigInt(buyFeeBps)) / 10_000n;
-  const bounded =
-    normalizeClassicLiquidityPreset(liquidityPreset) === "deep-30";
+  const bounded = normalizeClassicLiquidityPreset(liquidityPreset) === "bonding";
   const initialLiquidity = bounded
-      ? CLASSIC_DEEP_30_INITIAL_LIQUIDITY
+      ? CLASSIC_BONDING_INITIAL_LIQUIDITY
       : MEME_INITIAL_LIQUIDITY;
   const lowerSqrtPriceX96 = bounded
-    ? CLASSIC_DEEP_30_SQRT_PRICE_X96
+    ? CLASSIC_BONDING_SQRT_PRICE_X96
     : MEME_MIN_SQRT_PRICE_X96;
   const curveCapacityWei = amount0DeltaRoundingUp(
     lowerSqrtPriceX96,
@@ -424,7 +429,7 @@ export function getClassicInitialBuyCurveQuote(
       maximumGrossActivationBuyWei,
       bounded,
       endPriceMultipleWad: bounded
-        ? CLASSIC_DEEP_30_END_PRICE_MULTIPLE_WAD
+        ? CLASSIC_BONDING_END_PRICE_MULTIPLE_WAD
         : null,
     };
   }
@@ -441,7 +446,10 @@ export function getClassicInitialBuyCurveQuote(
     (initialLiquidity *
       (MEME_INITIAL_SQRT_PRICE_X96 - nextSqrtPriceX96)) /
     Q96;
-  if (tokenAmountWei <= 0n || tokenAmountWei > MEME_TOKEN_SUPPLY_WEI) {
+  const maximumTokenAmountWei = bounded
+    ? CLASSIC_BONDING_TOKEN_ALLOCATION_WEI
+    : MEME_TOKEN_SUPPLY_WEI;
+  if (tokenAmountWei <= 0n || tokenAmountWei > maximumTokenAmountWei) {
     return { status: "invalid" };
   }
 
@@ -469,7 +477,7 @@ export function getClassicInitialBuyCurveQuote(
         ? maximumGrossActivationBuyWei
         : null,
       endPriceMultipleWad: bounded
-        ? CLASSIC_DEEP_30_END_PRICE_MULTIPLE_WAD
+        ? CLASSIC_BONDING_END_PRICE_MULTIPLE_WAD
         : null,
     },
   };

@@ -19,6 +19,7 @@ import {
     ClassicInitialBuyCustodyMode
 } from "../../src/ClassicInitialBuyVestingWalletV1.sol";
 import { MemeLaunchV3 } from "../../src/MemeLaunchV3.sol";
+import { ClassicGraduationVaultV1 } from "../../src/ClassicGraduationVaultV1.sol";
 
 abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
     using PoolIdLibrary for PoolKey;
@@ -77,15 +78,17 @@ abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
         assertEq(address(result.hookFactory), plan.hookFactory);
         assertEq(address(result.feeHook), plan.feeHook);
         assertEq(address(result.positionPlanner), plan.positionPlanner);
+        assertEq(address(result.graduationVaultFactory), plan.graduationVaultFactory);
         assertEq(address(result.launcher), plan.launcher);
         assertEq(result.hookSalt, plan.hookSalt);
         assertEq(result.sourceCommitment, plan.sourceCommitment);
         assertEq(result.sourceCommitment, deployment.deploymentSourceCommitment(inputs));
-        assertEq(vm.getNonce(DEPLOYER), 4);
+        assertEq(vm.getNonce(DEPLOYER), 5);
         assertEq(deployment.predictHook(plan.hookFactory, inputs, plan.hookSalt), plan.feeHook);
         assertEq(result.hookFactoryRuntimeCodeHash, address(result.hookFactory).codehash);
         assertEq(result.feeHookRuntimeCodeHash, address(result.feeHook).codehash);
         assertEq(result.positionPlannerRuntimeCodeHash, address(result.positionPlanner).codehash);
+        assertEq(result.graduationVaultFactoryRuntimeCodeHash, address(result.graduationVaultFactory).codehash);
         assertEq(result.launcherRuntimeCodeHash, address(result.launcher).codehash);
     }
 
@@ -93,7 +96,9 @@ abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
         private
     {
         address creator = makeAddr(
-            liquidityPreset == result.launcher.DEEP30_LIQUIDITY_PRESET() ? "classicV4DeepCreator" : "classicV4Creator"
+            liquidityPreset == result.launcher.BONDING_LIQUIDITY_PRESET()
+                ? "classicV4BondingCreator"
+                : "classicV4Creator"
         );
         vm.deal(creator, MIN_INITIAL_BUY);
         MemeLaunchV3.LaunchParameters memory parameters = _parameters(creator, liquidityPreset);
@@ -135,10 +140,28 @@ abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
         assertEq(positionInfo.tickUpper(), result.launcher.INITIAL_TICK());
         assertEq(positionInfo.tickLower(), result.positionPlanner.tickLowerForPreset(liquidityPreset));
 
-        PositionFeesForwarder forwarder = PositionFeesForwarder(payable(launchResult.positionRecipient));
+        address finalRecipient = liquidityPreset == result.launcher.BONDING_LIQUIDITY_PRESET()
+            ? launchResult.finalPositionRecipient
+            : launchResult.positionRecipient;
+        PositionFeesForwarder forwarder = PositionFeesForwarder(payable(finalRecipient));
         assertEq(forwarder.operator(), address(0));
         assertEq(forwarder.timelockBlockNumber(), type(uint256).max);
         assertEq(forwarder.feeRecipient(), creator);
+
+        if (liquidityPreset == result.launcher.BONDING_LIQUIDITY_PRESET()) {
+            ClassicGraduationVaultV1 vault = ClassicGraduationVaultV1(payable(launchResult.graduationVault));
+            assertEq(launchResult.positionRecipient, launchResult.graduationVault);
+            assertEq(result.launcher.graduationVaultOf(launchResult.token), launchResult.graduationVault);
+            assertEq(result.launcher.finalPositionRecipientOf(launchResult.token), launchResult.finalPositionRecipient);
+            assertEq(launchResult.graduationReserveAmount, 200_000_000 ether);
+            assertEq(IERC20(launchResult.token).balanceOf(address(vault)), launchResult.lockedTokenDust);
+            assertEq(vault.bondingPositionTokenId(), launchResult.positionTokenId);
+            assertEq(vault.finalPositionRecipient(), launchResult.finalPositionRecipient);
+            assertFalse(vault.graduated());
+        } else {
+            assertEq(launchResult.graduationVault, address(0));
+            assertEq(launchResult.finalPositionRecipient, launchResult.positionRecipient);
+        }
     }
 
     function _assertFees(
@@ -173,8 +196,8 @@ abstract contract DeployClassicV4InfrastructureV1ForkBase is Test {
         uint16[] memory shares = new uint16[](1);
         shares[0] = 10_000;
         parameters = MemeLaunchV3.LaunchParameters({
-            name: liquidityPreset == 1 ? "Programmable Classic V4 Deep30" : "Programmable Classic V4 Standard",
-            symbol: liquidityPreset == 1 ? "PCD4" : "PCS4",
+            name: liquidityPreset == 1 ? "Programmable Classic V4 Bonding" : "Programmable Classic V4 Standard",
+            symbol: liquidityPreset == 1 ? "PCB4" : "PCS4",
             buySwapFeeBps: 10,
             sellSwapFeeBps: 1000,
             liquidityPreset: liquidityPreset,

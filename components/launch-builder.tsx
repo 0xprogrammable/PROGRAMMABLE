@@ -2734,8 +2734,8 @@ function LaunchSuccessDialog({
               <div>
                 <dt>Liquidity</dt>
                 <dd>
-                  {classicConfiguration.liquidity.preset === "deep-30"
-                    ? "Deeper · bounded launch range"
+                  {classicConfiguration.liquidity.preset === "bonding"
+                    ? "Bonding · curve then locked final LP"
                     : "Standard · full launch range"}
                 </dd>
               </div>
@@ -3580,18 +3580,18 @@ export function EnhancedClassicFeeStep({
       ? initialBuyCurveQuote.preview
       : null;
   const activationBuyCapacityNote =
-    !enableV4 || draft.classicLiquidityPreset !== "deep-30"
+    !enableV4 || draft.classicLiquidityPreset !== "bonding"
       ? ""
       : initialBuyCurveQuote.status === "over-capacity"
-        ? `Activation Buy exceeds the Deeper range. Maximum ${formatEther(initialBuyCurveQuote.maximumGrossActivationBuyWei)} ETH at this buy fee.`
+        ? `Activation Buy exceeds the Bonding curve. Maximum ${formatEther(initialBuyCurveQuote.maximumGrossActivationBuyWei)} ETH at this buy fee.`
         : initialBuyCurveQuote.status === "ready" &&
             initialBuyCurveQuote.preview.remainingCurveCapacityWei !== null
-          ? `${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.poolEthWei)))} ETH reaches the curve after fees. ${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.remainingCurveCapacityWei)))} ETH net capacity remains before the 18.91× end price.${
+          ? `${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.poolEthWei)))} ETH reaches the curve after fees. ${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.remainingCurveCapacityWei)))} ETH net remains until graduation.${
               initialBuyCurveQuote.preview.remainingCurveCapacityWei === 0n
-                ? " This fully consumes the Deeper range; another buy requires a sell or outside liquidity first."
+                ? " This completes Bonding and creates the final locked LP automatically."
                 : ""
             }`
-          : "Enter a valid Activation Buy to check the remaining Deeper capacity.";
+          : "Enter a valid Activation Buy to check the remaining Bonding capacity.";
   const initialBuyTokenLabel = draft.tokenSymbol.trim()
     ? `$${draft.tokenSymbol.trim().toUpperCase()}`
     : "tokens";
@@ -3610,15 +3610,15 @@ export function EnhancedClassicFeeStep({
 
       {enableV4 ? (
         <fieldset className="classic-v3-liquidity-presets">
-          <legend>Liquidity depth</legend>
+          <legend>Liquidity mode</legend>
           <div className="classic-v3-liquidity-options">
             {(
               [
                 ["standard", "Standard", "Full one-sided launch range"],
                 [
-                  "deep-30",
-                  "Deeper",
-                  "About 30% higher active liquidity at launch",
+                  "bonding",
+                  "Bonding",
+                  "80% curve · 20% final locked LP",
                 ],
               ] as const
             ).map(([value, label, description]) => (
@@ -3645,8 +3645,8 @@ export function EnhancedClassicFeeStep({
             ))}
           </div>
           <p className="classic-v3-liquidity-note" id="classic-liquidity-note">
-            {draft.classicLiquidityPreset === "deep-30"
-              ? "Uses one bounded liquidity range up to about 18.9× the opening price, with about 5.9 ETH of net curve capacity. It is not deeper at every price. One v4 pool and one permanently locked position."
+            {draft.classicLiquidityPreset === "bonding"
+              ? "Sells 80% on the launch curve and reserves 20% for the final permanently locked LP. Max completes Bonding automatically in the same token and pool."
               : "Uses the full one-sided launch range. One v4 pool and one permanently locked position."}
           </p>
         </fieldset>

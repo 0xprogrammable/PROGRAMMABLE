@@ -11,6 +11,8 @@ import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import { ClassicCtoAuthorityV1 } from "../src/ClassicCtoAuthorityV1.sol";
 import { ClassicInitialBuyVestingWalletFactoryV1 } from "../src/ClassicInitialBuyVestingWalletFactoryV1.sol";
+import { ClassicGraduationVaultFactoryV1 } from "../src/ClassicGraduationVaultFactoryV1.sol";
+import { ClassicGraduationVaultV1 } from "../src/ClassicGraduationVaultV1.sol";
 import { ClassicLaunchPolicyV1 } from "../src/ClassicLaunchPolicyV1.sol";
 import { ClassicPositionPlannerV1 } from "../src/ClassicPositionPlannerV1.sol";
 import { ClassicRewardVaultFactoryV1 } from "../src/ClassicRewardVaultFactoryV1.sol";
@@ -22,7 +24,8 @@ import { MemeLaunchV3 } from "../src/MemeLaunchV3.sol";
 
 /// @title DeployClassicV4InfrastructureV1
 /// @notice Fail-closed preparation for the additive Classic V4 release on Ethereum Mainnet or Sepolia.
-/// @dev Deploys only four new contracts: HookFactoryV4, the mined HookV4, ClassicPositionPlannerV1 and MemeLaunchV3.
+/// @dev Deploys five new contracts: HookFactoryV4, the mined HookV4, ClassicPositionPlannerV1,
+///      ClassicGraduationVaultFactoryV1 and MemeLaunchV3.
 ///      The reviewed Classic V3 authority, reward, custody, policy and position-lock dependencies are explicit Inputs
 ///      and are reused only after exact address, runtime-codehash and immutable-binding validation. `run` never reads a
 ///      private key. A live transaction still requires Forge's explicit `--broadcast`, an operator-controlled signer,
@@ -30,15 +33,18 @@ import { MemeLaunchV3 } from "../src/MemeLaunchV3.sol";
 contract DeployClassicV4InfrastructureV1 is Script {
     uint256 internal constant MAINNET_CHAIN_ID = 1;
     uint256 internal constant SEPOLIA_CHAIN_ID = 11_155_111;
-    uint256 internal constant MAX_LAUNCHER_RUNTIME_BYTES = 23_000;
+    uint256 internal constant MAX_LAUNCHER_RUNTIME_BYTES = 24_000;
 
     address public constant LAUNCHER_FEE_RECIPIENT = 0x4957f49620AFf3Adbbe8195a4f633E49cc93376c;
     address public constant EXPECTED_CTO_AUTHORITY_OWNER = 0x2Bb333d48DFAF1596D9036671d2E43168994249E;
     int24 public constant EXPECTED_INITIAL_TICK = 204_200;
     int24 public constant EXPECTED_DEEP30_TICK_LOWER = 174_800;
+    int24 public constant EXPECTED_FINAL_TICK_LOWER = 9800;
+    int24 public constant EXPECTED_FINAL_TICK_UPPER = 225_200;
     uint160 public constant REQUIRED_HOOK_FLAGS = uint160(
-        Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-            | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+        Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG
+            | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG
+            | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
     );
 
     struct OfficialDependencies {
@@ -82,6 +88,7 @@ contract DeployClassicV4InfrastructureV1 is Script {
         address hookFactory;
         address feeHook;
         address positionPlanner;
+        address graduationVaultFactory;
         address launcher;
         bytes32 hookSalt;
         bytes32 sourceCommitment;
@@ -91,12 +98,14 @@ contract DeployClassicV4InfrastructureV1 is Script {
         EthCreatorFeeHookFactoryV4 hookFactory;
         EthCreatorFeeHookV4 feeHook;
         ClassicPositionPlannerV1 positionPlanner;
+        ClassicGraduationVaultFactoryV1 graduationVaultFactory;
         MemeLaunchV3 launcher;
         bytes32 hookSalt;
         bytes32 sourceCommitment;
         bytes32 hookFactoryRuntimeCodeHash;
         bytes32 feeHookRuntimeCodeHash;
         bytes32 positionPlannerRuntimeCodeHash;
+        bytes32 graduationVaultFactoryRuntimeCodeHash;
         bytes32 launcherRuntimeCodeHash;
         uint64 startingNonce;
     }
@@ -114,7 +123,7 @@ contract DeployClassicV4InfrastructureV1 is Script {
     error UnexpectedNonce(address broadcaster, uint64 actual, uint64 expected);
     error UnexpectedValue(bytes32 field, uint256 actual, uint256 expected);
 
-    /// @notice Simulates or, only with Forge `--broadcast`, submits the reviewed four-transaction sequence.
+    /// @notice Simulates or, only with Forge `--broadcast`, submits the reviewed five-transaction sequence.
     /// @dev Required environment:
     ///      CLASSIC_V4_{MAINNET|SEPOLIA}_OWNER_APPROVED=true
     ///      CLASSIC_V4_{MAINNET|SEPOLIA}_DEPLOYER
@@ -169,6 +178,7 @@ contract DeployClassicV4InfrastructureV1 is Script {
         _assertVacant(plan.hookFactory);
         _assertVacant(plan.feeHook);
         _assertVacant(plan.positionPlanner);
+        _assertVacant(plan.graduationVaultFactory);
         _assertVacant(plan.launcher);
 
         vm.startBroadcast(broadcaster);
@@ -181,12 +191,21 @@ contract DeployClassicV4InfrastructureV1 is Script {
                 FeeSplitVaultFactoryV1(inputs.rewardVaultFactory)
             );
         result.positionPlanner = new ClassicPositionPlannerV1();
-        result.launcher = _deployLauncher(dependencies, inputs, result.feeHook, result.positionPlanner);
+        result.graduationVaultFactory = new ClassicGraduationVaultFactoryV1(
+            IPositionManager(dependencies.positionManager),
+            LockedPositionFeeForwarderFactoryV1(inputs.positionForwarderFactory)
+        );
+        result.launcher = _deployLauncher(
+            dependencies, inputs, result.feeHook, result.positionPlanner, result.graduationVaultFactory
+        );
         vm.stopBroadcast();
 
         _assertAddress(keccak256("hookFactory"), address(result.hookFactory), plan.hookFactory);
         _assertAddress(keccak256("feeHook"), address(result.feeHook), plan.feeHook);
         _assertAddress(keccak256("positionPlanner"), address(result.positionPlanner), plan.positionPlanner);
+        _assertAddress(
+            keccak256("graduationVaultFactory"), address(result.graduationVaultFactory), plan.graduationVaultFactory
+        );
         _assertAddress(keccak256("launcher"), address(result.launcher), plan.launcher);
 
         result.hookSalt = plan.hookSalt;
@@ -196,11 +215,12 @@ contract DeployClassicV4InfrastructureV1 is Script {
         result.hookFactoryRuntimeCodeHash = address(result.hookFactory).codehash;
         result.feeHookRuntimeCodeHash = address(result.feeHook).codehash;
         result.positionPlannerRuntimeCodeHash = address(result.positionPlanner).codehash;
+        result.graduationVaultFactoryRuntimeCodeHash = address(result.graduationVaultFactory).codehash;
         result.launcherRuntimeCodeHash = address(result.launcher).codehash;
 
         uint64 finalNonce = vm.getNonce(broadcaster);
-        if (finalNonce != startingNonce + 4) {
-            revert UnexpectedNonce(broadcaster, finalNonce, startingNonce + 4);
+        if (finalNonce != startingNonce + 5) {
+            revert UnexpectedNonce(broadcaster, finalNonce, startingNonce + 5);
         }
     }
 
@@ -229,7 +249,8 @@ contract DeployClassicV4InfrastructureV1 is Script {
         );
         // The hook is created by transaction N+1 through the factory; the next broadcaster CREATE uses nonce N+2.
         plan.positionPlanner = vm.computeCreateAddress(broadcaster, uint256(startingNonce) + 2);
-        plan.launcher = vm.computeCreateAddress(broadcaster, uint256(startingNonce) + 3);
+        plan.graduationVaultFactory = vm.computeCreateAddress(broadcaster, uint256(startingNonce) + 3);
+        plan.launcher = vm.computeCreateAddress(broadcaster, uint256(startingNonce) + 4);
         plan.sourceCommitment = deploymentSourceCommitment(inputs);
     }
 
@@ -340,6 +361,8 @@ contract DeployClassicV4InfrastructureV1 is Script {
                 keccak256(type(EthCreatorFeeHookFactoryV4).creationCode),
                 keccak256(type(EthCreatorFeeHookV4).creationCode),
                 keccak256(type(ClassicPositionPlannerV1).creationCode),
+                keccak256(type(ClassicGraduationVaultV1).creationCode),
+                keccak256(type(ClassicGraduationVaultFactoryV1).creationCode),
                 keccak256(type(MemeLaunchV3).creationCode)
             )
         );
@@ -371,12 +394,16 @@ contract DeployClassicV4InfrastructureV1 is Script {
         bytes32 liquidityCommitment = keccak256(
             abi.encode(
                 uint256(1_000_000_000 ether),
+                uint256(800_000_000 ether),
+                uint256(200_000_000 ether),
                 int256(EXPECTED_INITIAL_TICK),
                 int256(EXPECTED_DEEP30_TICK_LOWER),
+                int256(EXPECTED_FINAL_TICK_LOWER),
+                int256(EXPECTED_FINAL_TICK_UPPER),
                 uint256(0),
                 uint256(1),
-                keccak256("standard-or-deep30-single-permanently-locked-official-v4-position"),
-                keccak256("deep30-has-a-declared-reachable-liquidity-endpoint")
+                keccak256("standard-permanent-or-bonding-then-same-pool-permanent-position"),
+                keccak256("bonding-freezes-at-endpoint-and-graduates-permissionlessly")
             )
         );
         return keccak256(abi.encode(feeCommitment, liquidityCommitment));
@@ -389,6 +416,9 @@ contract DeployClassicV4InfrastructureV1 is Script {
     ) private view {
         _assertCodeHash(address(result.hookFactory), keccak256(type(EthCreatorFeeHookFactoryV4).runtimeCode));
         _assertCodeHash(address(result.positionPlanner), keccak256(type(ClassicPositionPlannerV1).runtimeCode));
+        if (address(result.graduationVaultFactory).code.length == 0) {
+            revert UnexpectedValue(keccak256("graduationVaultFactory.runtimeBytes"), 0, 1);
+        }
         if (address(result.feeHook).code.length == 0) {
             revert UnexpectedValue(keccak256("feeHook.runtimeBytes"), 0, 1);
         }
@@ -437,6 +467,23 @@ contract DeployClassicV4InfrastructureV1 is Script {
             keccak256("planner.deep30TickLower"), result.positionPlanner.DEEP30_TICK_LOWER(), EXPECTED_DEEP30_TICK_LOWER
         );
         _assertSignedValue(keccak256("planner.tickSpacing"), result.positionPlanner.TICK_SPACING(), 200);
+        _assertValue(
+            keccak256("planner.bondingAllocation"), result.positionPlanner.BONDING_TOKEN_ALLOCATION(), 800_000_000 ether
+        );
+        _assertValue(
+            keccak256("planner.graduationReserve"), result.positionPlanner.GRADUATION_TOKEN_RESERVE(), 200_000_000 ether
+        );
+
+        _assertAddress(
+            keccak256("graduationVaultFactory.positionManager"),
+            address(result.graduationVaultFactory.positionManager()),
+            dependencies.positionManager
+        );
+        _assertAddress(
+            keccak256("graduationVaultFactory.positionForwarderFactory"),
+            address(result.graduationVaultFactory.positionForwarderFactory()),
+            inputs.positionForwarderFactory
+        );
 
         _assertAddress(
             keccak256("launcher.poolManager"), address(result.launcher.poolManager()), dependencies.poolManager
@@ -471,6 +518,11 @@ contract DeployClassicV4InfrastructureV1 is Script {
             address(result.launcher.positionForwarderFactory()),
             inputs.positionForwarderFactory
         );
+        _assertAddress(
+            keccak256("launcher.graduationVaultFactory"),
+            address(result.launcher.graduationVaultFactory()),
+            address(result.graduationVaultFactory)
+        );
         _assertValue(keccak256("launcher.standardPreset"), result.launcher.STANDARD_LIQUIDITY_PRESET(), 0);
         _assertValue(keccak256("launcher.deep30Preset"), result.launcher.DEEP30_LIQUIDITY_PRESET(), 1);
         _assertValue(keccak256("launcher.minimumInitialBuyWei"), result.launcher.MIN_INITIAL_BUY_WEI(), 0.0006 ether);
@@ -484,7 +536,8 @@ contract DeployClassicV4InfrastructureV1 is Script {
         OfficialDependencies memory dependencies,
         Inputs memory inputs,
         EthCreatorFeeHookV4 feeHook,
-        ClassicPositionPlannerV1 positionPlanner
+        ClassicPositionPlannerV1 positionPlanner,
+        ClassicGraduationVaultFactoryV1 graduationVaultFactory
     ) private returns (MemeLaunchV3 launcher) {
         launcher = new MemeLaunchV3(
             IPoolManager(dependencies.poolManager),
@@ -495,16 +548,17 @@ contract DeployClassicV4InfrastructureV1 is Script {
             ClassicRewardVaultFactoryV1(inputs.rewardVaultFactory),
             ClassicInitialBuyVestingWalletFactoryV1(inputs.initialBuyVestingWalletFactory),
             ClassicLaunchPolicyV1(inputs.launchPolicy),
-            LockedPositionFeeForwarderFactoryV1(inputs.positionForwarderFactory)
+            LockedPositionFeeForwarderFactoryV1(inputs.positionForwarderFactory),
+            graduationVaultFactory
         );
     }
 
     function _validateHookPermissions(EthCreatorFeeHookV4 hook) private pure {
         Hooks.Permissions memory permissions = hook.getHookPermissions();
         if (
-            !permissions.beforeInitialize || permissions.afterInitialize || permissions.beforeAddLiquidity
-                || permissions.afterAddLiquidity || permissions.beforeRemoveLiquidity
-                || permissions.afterRemoveLiquidity || !permissions.beforeSwap || !permissions.afterSwap
+            !permissions.beforeInitialize || permissions.afterInitialize || !permissions.beforeAddLiquidity
+                || !permissions.afterAddLiquidity || !permissions.beforeRemoveLiquidity
+                || !permissions.afterRemoveLiquidity || !permissions.beforeSwap || !permissions.afterSwap
                 || permissions.beforeDonate || permissions.afterDonate || !permissions.beforeSwapReturnDelta
                 || !permissions.afterSwapReturnDelta || permissions.afterAddLiquidityReturnDelta
                 || permissions.afterRemoveLiquidityReturnDelta

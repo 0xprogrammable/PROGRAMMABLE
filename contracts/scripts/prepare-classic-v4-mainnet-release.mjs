@@ -872,7 +872,12 @@ async function buildVacantPlan({
       },
       occupiedAddresses: occupiedHooks,
     });
-    for (const name of ["hookFactory", "positionPlanner", "launcher"]) {
+    for (const name of [
+      "hookFactory",
+      "positionPlanner",
+      "graduationVaultFactory",
+      "launcher",
+    ]) {
       if (
         (await codeAtBoth(endpoints, plan.predictedAddresses[name])) !== "0x"
       ) {

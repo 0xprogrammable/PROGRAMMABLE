@@ -54,6 +54,7 @@ function activeReleaseManifest() {
     "hookFactory",
     "feeHook",
     "positionPlanner",
+    "graduationVaultFactory",
     "launcher",
   ] as const;
   const sharedContracts = [
@@ -67,7 +68,8 @@ function activeReleaseManifest() {
     hookFactory: 25_700_100,
     feeHook: 25_700_101,
     positionPlanner: 25_700_102,
-    launcher: 25_700_103,
+    graduationVaultFactory: 25_700_103,
+    launcher: 25_700_104,
   };
   const runtimeCodeHashes = Object.fromEntries(
     [...sharedContracts, ...newContracts].map((name) => [
@@ -87,6 +89,7 @@ function activeReleaseManifest() {
     hookFactory: address(6),
     feeHook: address(7),
     positionPlanner: address(8),
+    graduationVaultFactory: address(9),
     launcher,
   };
   const deploymentTransactions = Object.fromEntries(
@@ -163,8 +166,11 @@ function activeReleaseManifest() {
       "MemeLiquidityConfiguredV2",
       "MemeCreatorInitialBuyV2",
       "MemeCreatorInitialBuyCustodyV2",
+      "MemeBondingConfiguredV1",
       "PoolRegistered",
       "PoolFeeDisclosure",
+      "ClassicBondingConfigured",
+      "ClassicBondingPositionActivated",
       "NativeSwapFeesAccrued",
       "HookFee",
       "HookSwap",
@@ -431,6 +437,7 @@ function activeReleaseManifest() {
     rewardVault: address(31),
     poolId: hash("pool"),
     positionRecipient: address(32),
+    finalPositionRecipient: address(33),
     positionTokenId: "42",
     actions,
     swaps,
@@ -447,6 +454,8 @@ function activeReleaseManifest() {
         launchHash: hash("launch-hash"),
         rewardVault: address(31),
         initialBuyCustody: zeroAddress,
+        graduationVault: address(32),
+        finalPositionRecipient: address(33),
       },
       poolFeeConfig: {
         rewardVault: address(31),
@@ -463,6 +472,19 @@ function activeReleaseManifest() {
         beneficiary: account,
         shareBps: 10_000,
       },
+      bondingLifecycle: {
+        graduationVault: address(32),
+        finalPositionRecipient: address(33),
+        factory: addresses.graduationVaultFactory,
+        factoryConfigurationHash: hash("graduation-vault-factory-config"),
+        poolId: hash("pool"),
+        state: "bonding",
+        progressBps: 12,
+        tokenRemaining: "799000000000000000000000000",
+        nativeRemainingNet: "4700000000000000000",
+        graduated: false,
+        finalPositionTokenId: "0",
+      },
       positionLock: {
         owner: address(32),
         approved: zeroAddress,
@@ -471,6 +493,7 @@ function activeReleaseManifest() {
         activePoolLiquidity: "1000000",
         tickLower: 174_800,
         tickUpper: 204_200,
+        finalPositionRecipient: address(33),
         manager: "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
         operator: zeroAddress,
         timelockBlockNumber: ((1n << 256n) - 1n).toString(),
@@ -486,8 +509,10 @@ function activeReleaseManifest() {
       derivedCodeHashes: {
         token: hash("token-code"),
         rewardVault: hash("vault-code"),
+        graduationVault: hash("graduation-vault-code"),
         positionForwarder: hash("forwarder-code"),
         rewardVaultPredeployed: false,
+        graduationVaultPredeployed: false,
         positionForwarderPredeployed: false,
       },
     },
@@ -547,6 +572,7 @@ function activeReleaseManifest() {
     },
     invariants: {
       launchVerified: true,
+      bondingLifecycleVerified: true,
       positionLockVerified: true,
       buyExactInputVerified: true,
       buyExactOutputVerified: true,
@@ -662,6 +688,7 @@ function activeReleaseManifest() {
             "MemeLiquidityConfiguredV2",
             "MemeCreatorInitialBuyV2",
             "MemeCreatorInitialBuyCustodyV2",
+            "MemeBondingConfiguredV1",
           ],
         },
         feeHook: {
@@ -673,6 +700,11 @@ function activeReleaseManifest() {
             "NativeSwapFeesAccrued",
             "CreatorFeesClaimed",
             "LauncherFeesClaimed",
+            "ClassicBondingConfigured",
+            "ClassicBondingPositionActivated",
+            "ClassicBondingReached",
+            "ClassicGraduationBegun",
+            "ClassicLiquidityGraduated",
           ],
         },
       },

@@ -12,6 +12,7 @@ import {
 
 import type { WalletTradeBalances } from "./wallet-provider";
 import {
+  validatePreparedBondingGraduationResponse,
   validatePreparedTradeResponse,
   type PreparedTokenTrade,
 } from "../lib/trade/client";
@@ -151,9 +152,7 @@ export function calculateTradeTokenEstimate(input: {
     return null;
   }
 
-  return input.side === "buy"
-    ? amount / tokenPriceEth
-    : amount * tokenPriceEth;
+  return input.side === "buy" ? amount / tokenPriceEth : amount * tokenPriceEth;
 }
 
 export function calculateEthVolumeUsdValue(input: {
@@ -402,7 +401,8 @@ export function TokenTrade({
       : null;
   const balances =
     activeBalanceState?.status === "ready" ? activeBalanceState.balances : null;
-  const effectiveTokenPriceEth = tokenPriceEth ??
+  const effectiveTokenPriceEth =
+    tokenPriceEth ??
     (quoteAssetSymbol?.toUpperCase() === "ETH" ? tokenPriceQuote : undefined);
   const approximateUsd = formatApproximateUsd(
     calculateTradeUsdValue({
@@ -475,6 +475,50 @@ export function TokenTrade({
 
     setMaxPending(true);
     try {
+      if (
+        side === "buy" &&
+        chainId === 1 &&
+        launchModelVersion === "classic-v4"
+      ) {
+        const response = await fetch("/api/trade/bonding-max", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chainId, owner, token }),
+        });
+        const raw: unknown = await response.json().catch(() => null);
+        if (response.ok) {
+          const prepared = validatePreparedBondingGraduationResponse(raw, {
+            chainId,
+            owner,
+            token,
+            hook,
+            poolId,
+          });
+          if (prepared.transaction.kind === "bonding-max-buy") {
+            setAmount(
+              formatAmountForInput(BigInt(prepared.quote.amountIn), 18),
+            );
+          }
+          setReview(prepared);
+          return;
+        }
+        const inactive =
+          typeof raw === "object" &&
+          raw !== null &&
+          "code" in raw &&
+          raw.code === "bonding-inactive";
+        if (!inactive) {
+          const detail =
+            typeof raw === "object" &&
+            raw !== null &&
+            "error" in raw &&
+            typeof raw.error === "string"
+              ? raw.error
+              : "Bonding Max could not be prepared";
+          throw new Error(detail);
+        }
+      }
+
       const balances = await readBalances(activeInputAsset);
       setBalanceState({
         owner,
@@ -613,9 +657,13 @@ export function TokenTrade({
       await onPrepared(review);
       setReview(null);
       setMessage(
-        review.status === "approval-required"
-          ? "Approval submitted"
-          : "Swap submitted",
+        review.transaction.kind === "bonding-max-buy"
+          ? "Bonding completion submitted"
+          : review.transaction.kind === "bonding-graduate"
+            ? "Graduation submitted"
+            : review.status === "approval-required"
+              ? "Approval submitted"
+              : "Swap submitted",
       );
     } catch (caught) {
       setError(
@@ -699,9 +747,11 @@ export function TokenTrade({
               className={styles.maxButton}
               type="button"
               disabled={maxPending || !owner}
-              aria-label={`Use maximum ${
-                side === "buy" ? "ETH" : symbol
-              } balance`}
+              aria-label={
+                side === "buy" && launchModelVersion === "classic-v4"
+                  ? "Use Bonding Max or maximum ETH balance"
+                  : `Use maximum ${side === "buy" ? "ETH" : symbol} balance`
+              }
               onClick={() => void applyMaximumBalance()}
             >
               {maxPending ? "Loading" : "Max"}
@@ -772,10 +822,7 @@ export function TokenTrade({
               />
               <datalist id={slippagePresetsId}>
                 {TRADE_SLIPPAGE_PRESET_BPS.map((basisPoints) => (
-                  <option
-                    key={basisPoints}
-                    value={String(basisPoints / 100)}
-                  />
+                  <option key={basisPoints} value={String(basisPoints / 100)} />
                 ))}
               </datalist>
               <span aria-hidden="true">%</span>
@@ -836,6 +883,8 @@ export function PreparedTradeReview({
   onBack(): void;
   onConfirm(): void | Promise<void>;
 }) {
+  const bonding = "bonding" in prepared ? prepared.bonding : null;
+  const readyGraduation = prepared.transaction.kind === "bonding-graduate";
   const outputDecimals = prepared.side === "buy" ? tokenDecimals : 18;
   const outputUnit = prepared.side === "buy" ? symbol : "ETH";
   const expectedOutput = formatTradeAmount(
@@ -859,8 +908,7 @@ export function PreparedTradeReview({
     amountOut: prepared.quote.amountOut,
     tokenDecimals,
     tokenPriceEth,
-    hookSwapFeeBps:
-      feePresentation === "classic-v4-hook" ? totalSwapFeeBps : 0,
+    hookSwapFeeBps: feePresentation === "classic-v4-hook" ? totalSwapFeeBps : 0,
   });
   const approval =
     prepared.transaction.kind === "token-to-permit2"
@@ -872,38 +920,95 @@ export function PreparedTradeReview({
   return (
     <div
       className={styles.review}
-      aria-label={`Review ${prepared.side}`}
+      aria-label={
+        bonding ? "Review Bonding completion" : `Review ${prepared.side}`
+      }
       aria-busy={pending}
     >
-      <h2>{approval ? "Approve token" : `Review ${prepared.side}`}</h2>
-      {approval ? (
+      <h2>
+        {readyGraduation
+          ? "Complete graduation"
+          : bonding
+            ? "Complete Bonding"
+            : approval
+              ? "Approve token"
+              : `Review ${prepared.side}`}
+      </h2>
+      {readyGraduation ? (
+        <p className={styles.reviewLead}>
+          The curve is complete. This creates the final permanently locked LP in
+          the same token and pool.
+        </p>
+      ) : bonding ? (
+        <p className={styles.reviewLead}>
+          This buys the exact remaining curve and creates the final permanently
+          locked LP in the same token and pool.
+        </p>
+      ) : approval ? (
         <p className={styles.reviewLead}>
           One approval is required before this trade. The approval is limited to
           this amount.
         </p>
       ) : null}
       <div className={styles.reviewOutput}>
-        <span>{approval ? "Approval amount" : "Expected output"}</span>
-        <strong>{approval ? approvalAmount : expectedOutput}</strong>
+        <span>
+          {readyGraduation
+            ? "Curve status"
+            : bonding
+              ? "Tokens received"
+              : approval
+                ? "Approval amount"
+                : "Expected output"}
+        </span>
+        <strong>
+          {readyGraduation
+            ? "100% bonded"
+            : approval
+              ? approvalAmount
+              : expectedOutput}
+        </strong>
       </div>
       <dl className={styles.reviewDetails}>
-        {!approval ? (
+        {bonding && !readyGraduation ? (
           <div>
-            <dt>Minimum received</dt>
+            <dt>You pay</dt>
+            <dd>{formatTradeAmount(prepared.quote.amountIn, 18, "ETH")}</dd>
+          </div>
+        ) : null}
+        {!approval && !readyGraduation ? (
+          <div>
+            <dt>{bonding ? "Exact curve output" : "Minimum received"}</dt>
             <dd>{minimumOutput}</dd>
           </div>
         ) : null}
-        <div>
-          <dt>
-            {feePresentation === "classic-v4-hook"
-              ? "Hook swap fee"
-              : launchModel === "deep"
-                ? "Deep fee"
-                : "Pool fee"}
-          </dt>
-          <dd>{formatBasisPoints(totalSwapFeeBps)}</dd>
-        </div>
-        {!approval ? (
+        {!readyGraduation ? (
+          <div>
+            <dt>
+              {feePresentation === "classic-v4-hook"
+                ? "Hook swap fee"
+                : launchModel === "deep"
+                  ? "Deep fee"
+                  : "Pool fee"}
+            </dt>
+            <dd>{formatBasisPoints(totalSwapFeeBps)}</dd>
+          </div>
+        ) : null}
+        {bonding ? (
+          <>
+            <div>
+              <dt>Bonding progress</dt>
+              <dd>{formatFixedBasisPoints(bonding.progressBps)}</dd>
+            </div>
+            <div>
+              <dt>Final liquidity</dt>
+              <dd>Permanently locked</dd>
+            </div>
+            <div>
+              <dt>Token and Pool ID</dt>
+              <dd>Unchanged</dd>
+            </div>
+          </>
+        ) : !approval ? (
           <div>
             <dt>
               {feePresentation === "classic-v4-hook"
@@ -917,7 +1022,8 @@ export function PreparedTradeReview({
             </dd>
           </div>
         ) : null}
-        {!approval &&
+        {!bonding &&
+        !approval &&
         feePresentation === "classic-v4-hook" &&
         costs !== null ? (
           <div>
@@ -959,9 +1065,13 @@ export function PreparedTradeReview({
         >
           {pending
             ? "Opening wallet"
-            : approval
-              ? "Confirm approval"
-              : `Confirm ${prepared.side}`}
+            : readyGraduation
+              ? "Complete graduation"
+              : bonding
+                ? "Buy & graduate"
+                : approval
+                  ? "Confirm approval"
+                  : `Confirm ${prepared.side}`}
         </button>
       </div>
     </div>

@@ -90,6 +90,10 @@ const artifacts = {
     1: [{ start: 4, length: 20 }],
   }),
   positionPlanner: artifactFixture("positionPlanner"),
+  graduationVault: artifactFixture("graduationVault"),
+  graduationVaultFactory: artifactFixture("graduationVaultFactory", {
+    1: [{ start: 8, length: 20 }],
+  }),
   launcher: artifactFixture("launcher"),
 };
 const schema = JSON.parse(
@@ -265,12 +269,14 @@ function sourceEvidence(plan, deployment) {
     hookFactory: "EthCreatorFeeHookFactoryV4",
     feeHook: "EthCreatorFeeHookV4",
     positionPlanner: "ClassicPositionPlannerV1",
+    graduationVaultFactory: "ClassicGraduationVaultFactoryV1",
     launcher: "MemeLaunchV3",
   };
   const sourceFiles = {
     hookFactory: "src/EthCreatorFeeHookFactoryV4.sol",
     feeHook: "src/EthCreatorFeeHookV4.sol",
     positionPlanner: "src/ClassicPositionPlannerV1.sol",
+    graduationVaultFactory: "src/ClassicGraduationVaultFactoryV1.sol",
     launcher: "src/MemeLaunchV3.sol",
   };
   return withDigest({
@@ -309,6 +315,8 @@ function lifecycleEvidence(plan, deployment, source) {
   const canaryToken = "0x0000000000000000000000000000000000000001";
   const rewardVault = "0x0000000000000000000000000000000000000002";
   const positionRecipient = "0x0000000000000000000000000000000000000003";
+  const finalPositionRecipient =
+    "0x0000000000000000000000000000000000000004";
   const zeroAddress = "0x0000000000000000000000000000000000000000";
   const releaseBindingDigest = digestJson(
     {
@@ -359,8 +367,11 @@ function lifecycleEvidence(plan, deployment, source) {
       "MemeLiquidityConfiguredV2",
       "MemeCreatorInitialBuyV2",
       "MemeCreatorInitialBuyCustodyV2",
+      "MemeBondingConfiguredV1",
       "PoolRegistered",
       "PoolFeeDisclosure",
+      "ClassicBondingConfigured",
+      "ClassicBondingPositionActivated",
       "NativeSwapFeesAccrued",
       "HookFee",
       "HookSwap",
@@ -633,6 +644,7 @@ function lifecycleEvidence(plan, deployment, source) {
     rewardVault,
     poolId: txHash("pool"),
     positionRecipient,
+    finalPositionRecipient,
     positionTokenId: "42",
     actions,
     swaps,
@@ -649,6 +661,8 @@ function lifecycleEvidence(plan, deployment, source) {
         launchHash: txHash("launch-hash"),
         rewardVault,
         initialBuyCustody: zeroAddress,
+        graduationVault: positionRecipient,
+        finalPositionRecipient,
       },
       poolFeeConfig: {
         rewardVault,
@@ -665,6 +679,19 @@ function lifecycleEvidence(plan, deployment, source) {
         beneficiary: operatorWallet,
         shareBps: 10_000,
       },
+      bondingLifecycle: {
+        graduationVault: positionRecipient,
+        finalPositionRecipient,
+        factory: plan.predictedAddresses.graduationVaultFactory,
+        factoryConfigurationHash: txHash("graduation-vault-config"),
+        poolId: txHash("pool"),
+        state: "bonding",
+        progressBps: 1,
+        tokenRemaining: "799000000000000000000000000",
+        nativeRemainingNet: "4710000000000000000",
+        graduated: false,
+        finalPositionTokenId: "0",
+      },
       positionLock: {
         owner: positionRecipient,
         approved: zeroAddress,
@@ -673,6 +700,7 @@ function lifecycleEvidence(plan, deployment, source) {
         activePoolLiquidity: "1000000",
         tickLower: 174_800,
         tickUpper: 204_200,
+        finalPositionRecipient,
         manager: plan.officialDependencies.positionManager.address,
         operator: zeroAddress,
         timelockBlockNumber: ((1n << 256n) - 1n).toString(),
@@ -688,8 +716,10 @@ function lifecycleEvidence(plan, deployment, source) {
       derivedCodeHashes: {
         token: txHash("token-code"),
         rewardVault: txHash("vault-code"),
+        graduationVault: txHash("graduation-vault-code"),
         positionForwarder: txHash("forwarder-code"),
         rewardVaultPredeployed: false,
+        graduationVaultPredeployed: false,
         positionForwarderPredeployed: false,
       },
     },
@@ -747,6 +777,7 @@ function lifecycleEvidence(plan, deployment, source) {
     },
     invariants: {
       launchVerified: true,
+      bondingLifecycleVerified: true,
       positionLockVerified: true,
       buyExactInputVerified: true,
       buyExactOutputVerified: true,
@@ -759,18 +790,18 @@ function lifecycleEvidence(plan, deployment, source) {
   }, CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence);
 }
 
-test("preparation binds four transactions, source bytes, treasury and hook flags", () => {
+test("preparation binds five transactions, source bytes, treasury and hook flags", () => {
   const plan = preparationPlan();
-  assert.equal(plan.transactions.length, 4);
+  assert.equal(plan.transactions.length, 5);
   assert.deepEqual(
     plan.transactions.map((transaction) => transaction.name),
     CLASSIC_V4_NEW_CONTRACTS,
   );
   assert.deepEqual(
     plan.transactions.map((transaction) => transaction.nonce),
-    [42, 43, 44, 45],
+    [42, 43, 44, 45, 46],
   );
-  assert.equal(BigInt(plan.predictedAddresses.feeHook) & 16_383n, 8_396n);
+  assert.equal(BigInt(plan.predictedAddresses.feeHook) & 16_383n, 12_236n);
   assert.equal(plan.executionBoundary.signs, false);
   assert.equal(plan.executionBoundary.broadcasts, false);
   assert.equal(
@@ -783,7 +814,7 @@ test("preparation binds four transactions, source bytes, treasury and hook flags
 test("preparation rejects transaction or source drift", () => {
   const plan = preparationPlan();
   const transactionDrift = structuredClone(plan);
-  transactionDrift.transactions[3].data = `${transactionDrift.transactions[3].data}00`;
+  transactionDrift.transactions[4].data = `${transactionDrift.transactions[4].data}00`;
   assert.throws(
     () => validateClassicV4PreparationPlan(transactionDrift, artifacts),
     /transaction launcher differs/,
@@ -1493,7 +1524,7 @@ test("final manifest is schema-valid and exposes exact indexer handoff", () => {
     manifest.deploymentVerification.evidenceDigest,
     deployment.evidenceDigest,
   );
-  assert.equal(manifest.indexerHandoff.sources.launcher.startBlock, 25_700_103);
+  assert.equal(manifest.indexerHandoff.sources.launcher.startBlock, 25_700_104);
   assert.equal(manifest.indexerHandoff.sources.feeHook.startBlock, 25_700_101);
   assert.deepEqual(
     manifest.indexerHandoff.sources.launcher.events,
@@ -1678,7 +1709,7 @@ test("lifecycle receipts, calldata, quotes, claims and global baseline cannot se
         source,
         forgedLock,
       ),
-    /Permanent Deep30 position lock differs/,
+    /Bonding position custody differs/,
   );
 });
 

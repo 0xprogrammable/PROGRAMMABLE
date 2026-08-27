@@ -48,6 +48,8 @@ const launcherReadAbi = parseAbi([
   "function launchHashOf(address token) view returns (bytes32)",
   "function rewardVaultOf(address token) view returns (address)",
   "function initialBuyCustodyOf(address token) view returns (address)",
+  "function graduationVaultOf(address token) view returns (address)",
+  "function finalPositionRecipientOf(address token) view returns (address)",
   "function poolKey(address token) view returns ((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks))",
   "function predictTokenAddress(string name,string symbol,address deployer,bytes32 creatorSalt) view returns (address token,bytes32 effectiveGraffiti)",
 ]);
@@ -56,6 +58,8 @@ const hookReadAbi = parseAbi([
   "function feeDisclosure(bytes32 poolId) view returns (uint16 buySwapFeeBps,uint16 sellSwapFeeBps,uint16 buyCreatorFeeBps,uint16 sellCreatorFeeBps,uint16 launcherFeeBps,uint16 transferTaxBps,uint24 lpFeePips,address rewardVault)",
   "function launcherFeesAccrued() view returns (uint256)",
   "function totalNativeFeesAccrued() view returns (uint256)",
+  "function bondingConfig(bytes32 poolId) view returns (address controller,uint160 endpointSqrtPriceX96,uint128 bondingLiquidity,uint8 state)",
+  "function bondingProgress(bytes32 poolId) view returns (uint8 state,uint16 progressBps,uint256 tokenRemaining,uint256 nativeRemainingNet)",
   "function claimLauncherFees() returns (uint256)",
   "function claimLauncherFeesTo(address recipient) returns (uint256)",
 ]);
@@ -105,6 +109,29 @@ const forwarderAbi = parseAbi([
   "function operator() view returns (address)",
   "function timelockBlockNumber() view returns (uint256)",
   "function feeRecipient() view returns (address)",
+]);
+const graduationVaultFactoryAbi = parseAbi([
+  "function configurationHashOf(address vault) view returns (bytes32)",
+  "event ClassicGraduationVaultDeployed(address indexed vault,bytes32 indexed poolId,address indexed token,uint256 bondingPositionTokenId,address finalPositionRecipient,bytes32 salt,bytes32 configurationHash)",
+]);
+const graduationVaultAbi = parseAbi([
+  "function factory() view returns (address)",
+  "function positionManager() view returns (address)",
+  "function poolManager() view returns (address)",
+  "function positionForwarderFactory() view returns (address)",
+  "function graduationHook() view returns (address)",
+  "function token() view returns (address)",
+  "function poolId() view returns (bytes32)",
+  "function bondingPositionTokenId() view returns (uint256)",
+  "function finalPositionRecipient() view returns (address)",
+  "function bondingTickLower() view returns (int24)",
+  "function bondingTickUpper() view returns (int24)",
+  "function bondingLiquidity() view returns (uint128)",
+  "function endpointSqrtPriceX96() view returns (uint160)",
+  "function RESERVE_TOKEN_AMOUNT() view returns (uint256)",
+  "function graduated() view returns (bool)",
+  "function finalPositionTokenId() view returns (uint256)",
+  "function configurationHash() view returns (bytes32)",
 ]);
 const rewardVaultFactoryAbi = parseAbi([
   "function configurationHashOf(address vault) view returns (bytes32)",
@@ -679,7 +706,7 @@ function validateLaunch(action, canary, artifacts, plan) {
     Number(input.liquidityPreset) === 1 &&
       Number(input.buySwapFeeBps) === 100 &&
       Number(input.sellSwapFeeBps) === 200,
-    "Launch Deep30 or directional fees differ",
+    "Launch Bonding mode or directional fees differ",
   );
   assert(
     input.rewardBeneficiaries.length === 1 &&
@@ -716,12 +743,25 @@ function validateLaunch(action, canary, artifacts, plan) {
     "MemeCreatorInitialBuyCustodyV2",
     "MemeCreatorInitialBuyCustodyV2 event",
   );
+  const bonding = oneEvent(
+    launcherEvents,
+    "MemeBondingConfiguredV1",
+    "MemeBondingConfiguredV1 event",
+  );
   sameAddress(launched.args.deployer, canary.operatorWallet, "Launch deployer");
   const token = canonicalNonzeroAddress(launched.args.token, "canary token");
   const rewardVault = canonicalNonzeroAddress(launched.args.rewardVault, "reward vault");
   const positionRecipient = canonicalNonzeroAddress(
     launched.args.positionRecipient,
     "position recipient",
+  );
+  const graduationVault = canonicalNonzeroAddress(
+    bonding.args.graduationVault,
+    "graduation vault",
+  );
+  const finalPositionRecipient = canonicalNonzeroAddress(
+    bonding.args.finalPositionRecipient,
+    "final position recipient",
   );
   const poolId = nonzeroHash(launched.args.poolId, "canary pool id");
   const launchHash = nonzeroHash(launched.args.launchHash, "launch hash");
@@ -754,8 +794,22 @@ function validateLaunch(action, canary, artifacts, plan) {
       Number(liquidity.args.tickLower) === 174_800 &&
       Number(liquidity.args.tickUpper) === 204_200 &&
       Number(liquidity.args.lpFeePips) === 0,
-    "Deep30 liquidity evidence differs",
+    "Bonding curve liquidity evidence differs",
   );
+  sameAddress(bonding.args.token, token, "Bonding token");
+  sameHex(bonding.args.poolId, poolId, "Bonding pool");
+  sameAddress(graduationVault, positionRecipient, "Bonding position recipient");
+  assert(
+    bonding.args.bondingPositionTokenId === launched.args.positionTokenId &&
+      bonding.args.graduationReserveAmount === 200_000_000n * 10n ** 18n &&
+      bonding.args.bondingLiquidity > 0n &&
+      bonding.args.finalLiquidity > 0n &&
+      Number(bonding.args.endpointTick) === 174_800 &&
+      Number(bonding.args.finalTickLower) === 9_800 &&
+      Number(bonding.args.finalTickUpper) === 225_200,
+    "Bonding lifecycle commitment differs",
+  );
+  sameHex(bonding.args.launchHash, launchHash, "Bonding launch hash");
   sameHex(liquidity.args.launchHash, launchHash, "Liquidity launch hash");
   sameAddress(initialBuy.args.deployer, canary.operatorWallet, "Initial buy deployer");
   sameAddress(initialBuy.args.token, token, "Initial buy token");
@@ -823,6 +877,16 @@ function validateLaunch(action, canary, artifacts, plan) {
     "launch URC-2 HookSwap event",
     (args) => Object.hasOwn(args, "swapFee"),
   );
+  const bondingConfigured = oneEvent(
+    hookEvents,
+    "ClassicBondingConfigured",
+    "ClassicBondingConfigured event",
+  );
+  const bondingActivated = oneEvent(
+    hookEvents,
+    "ClassicBondingPositionActivated",
+    "ClassicBondingPositionActivated event",
+  );
   assertOnlyUrc2HookSwap(hookEvents, "Initial buy");
   sameHex(registered.args.poolId, poolId, "Registered pool");
   sameAddress(registered.args.token, token, "Registered token");
@@ -850,6 +914,23 @@ function validateLaunch(action, canary, artifacts, plan) {
       Number(disclosure.args.transferTaxBps) === 0 &&
       Number(disclosure.args.lpFeePips) === 0,
     "Fee disclosure differs",
+  );
+  sameHex(bondingConfigured.args.poolId, poolId, "Configured Bonding pool");
+  sameAddress(bondingConfigured.args.token, token, "Configured Bonding token");
+  sameAddress(
+    bondingConfigured.args.controller,
+    graduationVault,
+    "Configured Bonding controller",
+  );
+  assert(
+    bondingConfigured.args.endpointSqrtPriceX96 > 0n,
+    "Configured Bonding endpoint is zero",
+  );
+  sameHex(bondingActivated.args.poolId, poolId, "Activated Bonding pool");
+  sameAddress(bondingActivated.args.token, token, "Activated Bonding token");
+  assert(
+    bondingActivated.args.bondingLiquidity === bonding.args.bondingLiquidity,
+    "Activated Bonding liquidity differs",
   );
   validateAccrual(
     accrual.args,
@@ -905,8 +986,15 @@ function validateLaunch(action, canary, artifacts, plan) {
     forwarderFactoryAbi,
     plan.sharedDependencies.positionForwarderFactory.address,
   ).filter((event) => event.eventName === "LockedPositionFeeForwarderDeployed");
+  const graduationVaultDeployments = decodeEvents(
+    action.receipt,
+    graduationVaultFactoryAbi,
+    plan.predictedAddresses.graduationVaultFactory,
+  ).filter((event) => event.eventName === "ClassicGraduationVaultDeployed");
   assert(
-    rewardVaultDeployments.length <= 1 && forwarderDeployments.length <= 1,
+    rewardVaultDeployments.length <= 1 &&
+      forwarderDeployments.length <= 1 &&
+      graduationVaultDeployments.length === 1,
     "Launch contains duplicate derived factory deployments",
   );
   if (rewardVaultDeployments.length === 1) {
@@ -924,7 +1012,7 @@ function validateLaunch(action, canary, artifacts, plan) {
     const deployment = forwarderDeployments[0].args;
     sameAddress(
       deployment.forwarder,
-      positionRecipient,
+      finalPositionRecipient,
       "Deployed position forwarder",
     );
     sameAddress(
@@ -942,13 +1030,35 @@ function validateLaunch(action, canary, artifacts, plan) {
       "deployed forwarder configuration hash",
     );
   }
+  if (graduationVaultDeployments.length === 1) {
+    const deployment = graduationVaultDeployments[0].args;
+    sameAddress(deployment.vault, graduationVault, "Deployed graduation vault");
+    sameHex(deployment.poolId, poolId, "Deployed graduation vault pool");
+    sameAddress(deployment.token, token, "Deployed graduation vault token");
+    assert(
+      deployment.bondingPositionTokenId === launched.args.positionTokenId,
+      "Deployed graduation vault position differs",
+    );
+    sameAddress(
+      deployment.finalPositionRecipient,
+      finalPositionRecipient,
+      "Deployed graduation final recipient",
+    );
+    nonzeroHash(
+      deployment.configurationHash,
+      "deployed graduation vault configuration hash",
+    );
+  }
   action.anchor.events = {
     MemeTokenLaunchedV2: launched.logIndex,
     MemeLiquidityConfiguredV2: liquidity.logIndex,
     MemeCreatorInitialBuyV2: initialBuy.logIndex,
     MemeCreatorInitialBuyCustodyV2: custody.logIndex,
+    MemeBondingConfiguredV1: bonding.logIndex,
     PoolRegistered: registered.logIndex,
     PoolFeeDisclosure: disclosure.logIndex,
+    ClassicBondingConfigured: bondingConfigured.logIndex,
+    ClassicBondingPositionActivated: bondingActivated.logIndex,
     NativeSwapFeesAccrued: accrual.logIndex,
     HookFee: hookFee.logIndex,
     HookSwap: hookSwap.logIndex,
@@ -958,6 +1068,8 @@ function validateLaunch(action, canary, artifacts, plan) {
     token,
     rewardVault,
     positionRecipient,
+    graduationVault,
+    finalPositionRecipient,
     positionTokenId: launched.args.positionTokenId,
     poolId,
     poolKey,
@@ -969,8 +1081,15 @@ function validateLaunch(action, canary, artifacts, plan) {
     initialBuyTokenAmount: initialBuy.args.tokenAmount,
     rewardVaultDeployedDuringLaunch: rewardVaultDeployments.length === 1,
     positionForwarderDeployedDuringLaunch: forwarderDeployments.length === 1,
+    graduationVaultDeployedDuringLaunch:
+      graduationVaultDeployments.length === 1,
     forwarderDeploymentConfigurationHash:
       forwarderDeployments[0]?.args.configurationHash ?? null,
+    graduationVaultDeploymentConfigurationHash:
+      graduationVaultDeployments[0]?.args.configurationHash ?? null,
+    bondingLiquidity: bonding.args.bondingLiquidity,
+    finalLiquidity: bonding.args.finalLiquidity,
+    endpointSqrtPriceX96: bondingConfigured.args.endpointSqrtPriceX96,
     initialFee: accrual.args,
   };
 }
@@ -1732,10 +1851,14 @@ async function verifyFinalState(
     launchHash,
     rewardVaultOf,
     initialBuyCustody,
+    graduationVaultOf,
+    finalPositionRecipientOf,
     launcherPoolKey,
     predictedToken,
     poolConfig,
     disclosure,
+    bondingConfig,
+    bondingProgress,
     tokenName,
     tokenSymbol,
     tokenDecimals,
@@ -1743,7 +1866,7 @@ async function verifyFinalState(
     tokenMetadata,
     tokenCreator,
     totalSupply,
-    forwarderDust,
+    graduationVaultTokenBalance,
     launcherTokenBalance,
     positionManagerTokenBalance,
     nftOwner,
@@ -1768,11 +1891,31 @@ async function verifyFinalState(
     vaultBeneficiary,
     vaultShare,
     vaultFactoryHash,
+    graduationVaultFactory,
+    graduationVaultPositionManager,
+    graduationVaultPoolManager,
+    graduationVaultForwarderFactory,
+    graduationVaultHook,
+    graduationVaultToken,
+    graduationVaultPoolId,
+    graduationVaultPositionTokenId,
+    graduationVaultFinalRecipient,
+    graduationVaultTickLower,
+    graduationVaultTickUpper,
+    graduationVaultLiquidity,
+    graduationVaultEndpoint,
+    graduationVaultReserve,
+    graduationVaultGraduated,
+    graduationVaultFinalPositionTokenId,
+    graduationVaultConfigurationHash,
+    graduationVaultFactoryHash,
     tokenCode,
     vaultCode,
+    graduationVaultCode,
     forwarderCode,
     tokenCodeBefore,
     vaultCodeBefore,
+    graduationVaultCodeBefore,
     forwarderCodeBefore,
   ] = await Promise.all([
     readContract(endpoint, tag, canary.launcher, launcherReadAbi, "launchHashOf", [
@@ -1787,6 +1930,17 @@ async function verifyFinalState(
       canary.launcher,
       launcherReadAbi,
       "initialBuyCustodyOf",
+      [launch.token],
+    ),
+    readContract(endpoint, tag, canary.launcher, launcherReadAbi, "graduationVaultOf", [
+      launch.token,
+    ]),
+    readContract(
+      endpoint,
+      tag,
+      canary.launcher,
+      launcherReadAbi,
+      "finalPositionRecipientOf",
       [launch.token],
     ),
     readContract(endpoint, tag, canary.launcher, launcherReadAbi, "poolKey", [
@@ -1809,6 +1963,12 @@ async function verifyFinalState(
       launch.poolId,
     ]),
     readContract(endpoint, tag, canary.feeHook, hookReadAbi, "feeDisclosure", [
+      launch.poolId,
+    ]),
+    readContract(endpoint, tag, canary.feeHook, hookReadAbi, "bondingConfig", [
+      launch.poolId,
+    ]),
+    readContract(endpoint, tag, canary.feeHook, hookReadAbi, "bondingProgress", [
       launch.poolId,
     ]),
     readContract(endpoint, tag, launch.token, tokenAbi, "name"),
@@ -1859,23 +2019,23 @@ async function verifyFinalState(
       "getPoolAndPositionInfo",
       [launch.positionTokenId],
     ),
-    readContract(endpoint, tag, launch.positionRecipient, forwarderAbi, "positionManager"),
-    readContract(endpoint, tag, launch.positionRecipient, forwarderAbi, "operator"),
+    readContract(endpoint, tag, launch.finalPositionRecipient, forwarderAbi, "positionManager"),
+    readContract(endpoint, tag, launch.finalPositionRecipient, forwarderAbi, "operator"),
     readContract(
       endpoint,
       tag,
-      launch.positionRecipient,
+      launch.finalPositionRecipient,
       forwarderAbi,
       "timelockBlockNumber",
     ),
-    readContract(endpoint, tag, launch.positionRecipient, forwarderAbi, "feeRecipient"),
+    readContract(endpoint, tag, launch.finalPositionRecipient, forwarderAbi, "feeRecipient"),
     readContract(
       endpoint,
       tag,
       shared.positionForwarderFactory.address,
       forwarderFactoryAbi,
       "configurationHashOf",
-      [launch.positionRecipient],
+      [launch.finalPositionRecipient],
     ),
     readContract(endpoint, tag, canary.dependencies.stateView, stateViewAbi, "getSlot0", [
       launch.poolId,
@@ -1912,17 +2072,126 @@ async function verifyFinalState(
       "configurationHashOf",
       [launch.rewardVault],
     ),
+    readContract(endpoint, tag, launch.graduationVault, graduationVaultAbi, "factory"),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "positionManager",
+    ),
+    readContract(endpoint, tag, launch.graduationVault, graduationVaultAbi, "poolManager"),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "positionForwarderFactory",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "graduationHook",
+    ),
+    readContract(endpoint, tag, launch.graduationVault, graduationVaultAbi, "token"),
+    readContract(endpoint, tag, launch.graduationVault, graduationVaultAbi, "poolId"),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "bondingPositionTokenId",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "finalPositionRecipient",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "bondingTickLower",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "bondingTickUpper",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "bondingLiquidity",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "endpointSqrtPriceX96",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "RESERVE_TOKEN_AMOUNT",
+    ),
+    readContract(endpoint, tag, launch.graduationVault, graduationVaultAbi, "graduated"),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "finalPositionTokenId",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      launch.graduationVault,
+      graduationVaultAbi,
+      "configurationHash",
+    ),
+    readContract(
+      endpoint,
+      tag,
+      plan.predictedAddresses.graduationVaultFactory,
+      graduationVaultFactoryAbi,
+      "configurationHashOf",
+      [launch.graduationVault],
+    ),
     rpc(endpoint, "eth_getCode", [launch.token, tag]),
     rpc(endpoint, "eth_getCode", [launch.rewardVault, tag]),
-    rpc(endpoint, "eth_getCode", [launch.positionRecipient, tag]),
+    rpc(endpoint, "eth_getCode", [launch.graduationVault, tag]),
+    rpc(endpoint, "eth_getCode", [launch.finalPositionRecipient, tag]),
     rpc(endpoint, "eth_getCode", [launch.token, baselineTag]),
     rpc(endpoint, "eth_getCode", [launch.rewardVault, baselineTag]),
-    rpc(endpoint, "eth_getCode", [launch.positionRecipient, baselineTag]),
+    rpc(endpoint, "eth_getCode", [launch.graduationVault, baselineTag]),
+    rpc(endpoint, "eth_getCode", [launch.finalPositionRecipient, baselineTag]),
   ]);
 
   sameHex(launchHash, launch.launchHash, "Launcher launch hash mapping");
   sameAddress(rewardVaultOf, launch.rewardVault, "Launcher reward vault mapping");
   sameAddress(initialBuyCustody, ZERO_ADDRESS, "Launcher initial custody mapping");
+  sameAddress(
+    graduationVaultOf,
+    launch.graduationVault,
+    "Launcher graduation vault mapping",
+  );
+  sameAddress(
+    finalPositionRecipientOf,
+    launch.finalPositionRecipient,
+    "Launcher final position recipient mapping",
+  );
   assertPoolKey(launcherPoolKey, launch.poolKey, "Launcher pool key");
   assertPoolKey(poolAndPosition[0], launch.poolKey, "Position pool key");
   const expectedGraffiti = keccak256(
@@ -1965,6 +2234,18 @@ async function verifyFinalState(
     "Final fee disclosure differs",
   );
   sameAddress(disclosure[7], launch.rewardVault, "Final disclosed reward vault");
+  sameAddress(bondingConfig[0], launch.graduationVault, "Bonding controller");
+  assert(
+    bondingConfig[1] === launch.endpointSqrtPriceX96 &&
+      bondingConfig[2] === launch.bondingLiquidity &&
+      Number(bondingConfig[3]) === 2 &&
+      Number(bondingProgress[0]) === 2 &&
+      Number(bondingProgress[1]) > 0 &&
+      Number(bondingProgress[1]) < 10_000 &&
+      bondingProgress[2] > 0n &&
+      bondingProgress[3] > 0n,
+    "Active Bonding lifecycle differs",
+  );
 
   const expectedVaultConfigurationHash = keccak256(
     encodeAbiParameters(
@@ -2034,6 +2315,62 @@ async function verifyFinalState(
     "Vault beneficiary configuration differs",
   );
 
+  sameAddress(
+    graduationVaultFactory,
+    plan.predictedAddresses.graduationVaultFactory,
+    "Graduation vault factory",
+  );
+  sameAddress(
+    graduationVaultPositionManager,
+    canary.dependencies.positionManager,
+    "Graduation vault position manager",
+  );
+  sameAddress(
+    graduationVaultPoolManager,
+    canary.dependencies.poolManager,
+    "Graduation vault PoolManager",
+  );
+  sameAddress(
+    graduationVaultForwarderFactory,
+    shared.positionForwarderFactory.address,
+    "Graduation vault forwarder factory",
+  );
+  sameAddress(graduationVaultHook, canary.feeHook, "Graduation vault hook");
+  sameAddress(graduationVaultToken, launch.token, "Graduation vault token");
+  sameHex(graduationVaultPoolId, launch.poolId, "Graduation vault pool ID");
+  sameAddress(
+    graduationVaultFinalRecipient,
+    launch.finalPositionRecipient,
+    "Graduation vault final recipient",
+  );
+  sameHex(
+    graduationVaultConfigurationHash,
+    graduationVaultFactoryHash,
+    "Graduation vault factory configuration",
+  );
+  nonzeroHash(
+    graduationVaultFactoryHash,
+    "graduation vault factory configuration hash",
+  );
+  if (launch.graduationVaultDeploymentConfigurationHash) {
+    sameHex(
+      launch.graduationVaultDeploymentConfigurationHash,
+      graduationVaultConfigurationHash,
+      "Graduation vault deployment configuration",
+    );
+  }
+  assert(
+    graduationVaultPositionTokenId === launch.positionTokenId &&
+      Number(graduationVaultTickLower) === 174_800 &&
+      Number(graduationVaultTickUpper) === 204_200 &&
+      graduationVaultLiquidity === launch.bondingLiquidity &&
+      graduationVaultEndpoint === launch.endpointSqrtPriceX96 &&
+      graduationVaultReserve === 200_000_000n * 10n ** 18n &&
+      graduationVaultGraduated === false &&
+      graduationVaultFinalPositionTokenId === 0n,
+    "Graduation vault immutable lifecycle differs",
+  );
+
   const expectedForwarderConfigurationHash = keccak256(
     encodeAbiParameters(
       [
@@ -2048,7 +2385,7 @@ async function verifyFinalState(
       [
         1n,
         shared.positionForwarderFactory.address,
-        launch.positionRecipient,
+        launch.finalPositionRecipient,
         canary.dependencies.positionManager,
         ZERO_ADDRESS,
         UINT256_MAX,
@@ -2087,24 +2424,30 @@ async function verifyFinalState(
       (positionInfo & positionPoolMask) ===
         (BigInt(launch.poolId) & positionPoolMask) &&
       tickLower === 174_800 &&
-      tickUpper === 204_200,
-    "Permanent Deep30 position lock differs",
+      tickUpper === 204_200 &&
+      slot0[0] > launch.endpointSqrtPriceX96,
+    "Bonding position custody differs",
   );
 
   sameAddress(tokenCreator, canary.launcher, "Token creator");
   assert(
-    totalSupply === TOKEN_SUPPLY &&
+      totalSupply === TOKEN_SUPPLY &&
       totalSupply === launch.totalSupply &&
-      forwarderDust === launch.lockedTokenDust &&
+      graduationVaultTokenBalance === launch.lockedTokenDust &&
+      graduationVaultTokenBalance >= graduationVaultReserve &&
       launcherTokenBalance === 0n &&
       positionManagerTokenBalance === 0n &&
       launch.tokenLiquidityAmount + launch.lockedTokenDust === TOKEN_SUPPLY,
     "Token supply or locked dust custody differs",
   );
   assert(
-    [tokenCode, vaultCode, forwarderCode].every((code) => code !== "0x") &&
+    [tokenCode, vaultCode, graduationVaultCode, forwarderCode].every(
+      (code) => code !== "0x",
+    ) &&
       tokenCodeBefore === "0x" &&
       (!launch.rewardVaultDeployedDuringLaunch || vaultCodeBefore === "0x") &&
+      (!launch.graduationVaultDeployedDuringLaunch ||
+        graduationVaultCodeBefore === "0x") &&
       (!launch.positionForwarderDeployedDuringLaunch ||
         forwarderCodeBefore === "0x"),
     "Derived deployment code provenance differs",
@@ -2115,6 +2458,8 @@ async function verifyFinalState(
       launchHash: launchHash.toLowerCase(),
       rewardVault: canonicalAddress(rewardVaultOf),
       initialBuyCustody: canonicalAddress(initialBuyCustody),
+      graduationVault: canonicalAddress(graduationVaultOf),
+      finalPositionRecipient: canonicalAddress(finalPositionRecipientOf),
     },
     poolFeeConfig: {
       rewardVault: canonicalAddress(poolConfig[0]),
@@ -2131,6 +2476,19 @@ async function verifyFinalState(
       beneficiary: canonicalAddress(vaultBeneficiary),
       shareBps: Number(vaultShare),
     },
+    bondingLifecycle: {
+      graduationVault: canonicalAddress(launch.graduationVault),
+      finalPositionRecipient: canonicalAddress(launch.finalPositionRecipient),
+      factory: canonicalAddress(graduationVaultFactory),
+      factoryConfigurationHash: graduationVaultFactoryHash.toLowerCase(),
+      poolId: graduationVaultPoolId.toLowerCase(),
+      state: "bonding",
+      progressBps: Number(bondingProgress[1]),
+      tokenRemaining: bondingProgress[2].toString(),
+      nativeRemainingNet: bondingProgress[3].toString(),
+      graduated: graduationVaultGraduated,
+      finalPositionTokenId: graduationVaultFinalPositionTokenId.toString(),
+    },
     positionLock: {
       owner: canonicalAddress(nftOwner),
       approved: canonicalAddress(nftApproval),
@@ -2139,6 +2497,7 @@ async function verifyFinalState(
       activePoolLiquidity: activePoolLiquidity.toString(),
       tickLower,
       tickUpper,
+      finalPositionRecipient: canonicalAddress(launch.finalPositionRecipient),
       manager: canonicalAddress(forwarderManager),
       operator: canonicalAddress(forwarderOperator),
       timelockBlockNumber: forwarderTimelock.toString(),
@@ -2147,15 +2506,18 @@ async function verifyFinalState(
     },
     tokenCustody: {
       totalSupply: totalSupply.toString(),
-      lockedTokenDust: forwarderDust.toString(),
+      lockedTokenDust: graduationVaultTokenBalance.toString(),
       launcherBalance: launcherTokenBalance.toString(),
       positionManagerBalance: positionManagerTokenBalance.toString(),
     },
     derivedCodeHashes: {
       token: keccak256(tokenCode),
       rewardVault: keccak256(vaultCode),
+      graduationVault: keccak256(graduationVaultCode),
       positionForwarder: keccak256(forwarderCode),
       rewardVaultPredeployed: !launch.rewardVaultDeployedDuringLaunch,
+      graduationVaultPredeployed:
+        !launch.graduationVaultDeployedDuringLaunch,
       positionForwarderPredeployed:
         !launch.positionForwarderDeployedDuringLaunch,
     },
@@ -2280,6 +2642,7 @@ async function verifyAtEndpoint(
     rewardVault: launch.rewardVault,
     poolId: launch.poolId,
     positionRecipient: launch.positionRecipient,
+    finalPositionRecipient: launch.finalPositionRecipient,
     positionTokenId: launch.positionTokenId.toString(),
     actions: Object.fromEntries(
       CLASSIC_V4_LIFECYCLE_ACTIONS.map((key) => [key, actions[key].anchor]),
@@ -2422,6 +2785,7 @@ export async function verifyClassicV4LifecycleCanary({
     rewardVault: verified.rewardVault,
     poolId: verified.poolId,
     positionRecipient: verified.positionRecipient,
+    finalPositionRecipient: verified.finalPositionRecipient,
     positionTokenId: verified.positionTokenId,
     actions: verified.actions,
     swaps: verified.swaps,
@@ -2431,6 +2795,7 @@ export async function verifyClassicV4LifecycleCanary({
     observations: verified.observations,
     invariants: {
       launchVerified: true,
+      bondingLifecycleVerified: true,
       positionLockVerified: true,
       buyExactInputVerified: true,
       buyExactOutputVerified: true,
