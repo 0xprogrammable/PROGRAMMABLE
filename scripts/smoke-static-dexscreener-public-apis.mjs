@@ -18,6 +18,14 @@ const MARKET_READ_STATUSES = new Set([
   "partial",
   "unavailable",
 ]);
+const EXPLORE_SNAPSHOT_ATTEMPTS = 3;
+
+class ExploreCatalogBoundaryDriftError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ExploreCatalogBoundaryDriftError";
+  }
+}
 
 function exactOrigin(value, targetKind) {
   const target = new URL(value);
@@ -340,7 +348,10 @@ function exactUnavailableValuation(token) {
     token.marketData === undefined;
 }
 
-function exactCatalogSnapshot(response) {
+function exactCatalogSnapshot(
+  response,
+  options = { requireLaunchIdentity: true },
+) {
   const catalog = response.body?.catalog;
   const source = catalog?.source;
   const generatedAt = catalog?.lastIndexedAt;
@@ -421,13 +432,18 @@ function exactCatalogSnapshot(response) {
       `${launchSource}+dexscreener` &&
     response.headers.get("x-programmable-identity-last-indexed-at") ===
       generatedAt &&
-    launchIdentity?.custom === customStatus &&
-    ["current", "last-known-good"].includes(launchIdentity?.canonical) &&
-    ["current", "last-known-good", "partial"].includes(
-      launchIdentity?.status,
-    ) &&
-    Number.isSafeInteger(launchIdentity.ageMs) &&
-    launchIdentity.ageMs >= 0
+    (
+      options.requireLaunchIdentity === false ||
+      (
+        launchIdentity?.custom === customStatus &&
+        ["current", "last-known-good"].includes(launchIdentity?.canonical) &&
+        ["current", "last-known-good", "partial"].includes(
+          launchIdentity?.status,
+        ) &&
+        Number.isSafeInteger(launchIdentity.ageMs) &&
+        launchIdentity.ageMs >= 0
+      )
+    )
   )) return null;
   return JSON.stringify({
     source,
@@ -556,137 +572,197 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     throw new Error("Informational health response is malformed");
   }
 
-  const highest = await request(
-    "/api/explore?limit=20&page=1&sort=market-cap",
-  );
-  const newest = await request("/api/explore?limit=20&page=1&sort=newest");
-  const highestTokens = Array.isArray(highest.body?.tokens)
-    ? highest.body.tokens
-    : [];
-  const newestTokens = Array.isArray(newest.body?.tokens)
-    ? newest.body.tokens
-    : [];
-  if (
-    highest.status !== 200 ||
-    highest.body?.status !== "ready" ||
-    highest.body?.sort !== "market-cap" ||
-    highest.body?.sortMetric !== "fdv" ||
-    highestTokens.length < 1 ||
-    !exactExplorePage(highest, highestTokens) ||
-    exactCatalogSnapshot(highest) === null ||
-    !exactFdvRanking(highest, highestTokens)
-  ) throw new Error("Highest FDV response contract is invalid");
-  if (
-    newest.status !== 200 ||
-    newest.body?.status !== "ready" ||
-    newest.body?.sort !== "newest" ||
-    newest.body?.ranking !== undefined ||
-    newestTokens.length < 1 ||
-    !exactExplorePage(newest, newestTokens) ||
-    exactCatalogSnapshot(newest) === null ||
-    !exactMarketRead(newest, newestTokens)
-  ) throw new Error("Newest launches response contract is invalid");
-  const highestCatalog = exactCatalogSnapshot(highest);
-  const newestCatalog = exactCatalogSnapshot(newest);
-  if (highestCatalog === null || highestCatalog !== newestCatalog) {
-    throw new Error("Explore catalog changed between ranking reads");
-  }
-  const completeCatalogTokens = [...newestTokens];
-  if (newest.body.total > newestTokens.length) {
-    const catalogPageSize = 100;
-    const catalogTotalPages = Math.ceil(newest.body.total / catalogPageSize);
-    if (catalogTotalPages > 100) {
-      throw new Error("Explore catalog exceeds bounded smoke pagination");
-    }
-    completeCatalogTokens.length = 0;
-    for (let page = 1; page <= catalogTotalPages; page += 1) {
-      const catalogPage = await request(
-        `/api/explore?limit=${catalogPageSize}&page=${page}&sort=newest`,
+  let exploreSnapshot = null;
+  for (
+    let snapshotAttempt = 0;
+    snapshotAttempt < EXPLORE_SNAPSHOT_ATTEMPTS;
+    snapshotAttempt += 1
+  ) {
+    try {
+      const highest = await request(
+        "/api/explore?limit=20&page=1&sort=market-cap",
       );
-      const pageTokens = Array.isArray(catalogPage.body?.tokens)
-        ? catalogPage.body.tokens
+      const newest = await request(
+        "/api/explore?limit=20&page=1&sort=newest",
+      );
+      const highestTokens = Array.isArray(highest.body?.tokens)
+        ? highest.body.tokens
+        : [];
+      const newestTokens = Array.isArray(newest.body?.tokens)
+        ? newest.body.tokens
         : [];
       if (
-        catalogPage.status !== 200 ||
-        catalogPage.body?.status !== "ready" ||
-        catalogPage.body?.sort !== "newest" ||
-        catalogPage.body?.ranking !== undefined ||
-        !exactExplorePage(catalogPage, pageTokens, {
-          page,
-          pageSize: catalogPageSize,
-        }) ||
-        exactCatalogSnapshot(catalogPage) !== newestCatalog ||
-        !exactMarketRead(catalogPage, pageTokens)
-      ) throw new Error("Explore catalog pagination contract is invalid");
-      completeCatalogTokens.push(...pageTokens);
+        highest.status !== 200 ||
+        highest.body?.status !== "ready" ||
+        highest.body?.sort !== "market-cap" ||
+        highest.body?.sortMetric !== "fdv" ||
+        highestTokens.length < 1 ||
+        !exactExplorePage(highest, highestTokens) ||
+        exactCatalogSnapshot(highest) === null ||
+        !exactFdvRanking(highest, highestTokens)
+      ) throw new Error("Highest FDV response contract is invalid");
+      if (
+        newest.status !== 200 ||
+        newest.body?.status !== "ready" ||
+        newest.body?.sort !== "newest" ||
+        newest.body?.ranking !== undefined ||
+        newestTokens.length < 1 ||
+        !exactExplorePage(newest, newestTokens) ||
+        exactCatalogSnapshot(newest) === null ||
+        !exactMarketRead(newest, newestTokens)
+      ) throw new Error("Newest launches response contract is invalid");
+      const highestCatalog = exactCatalogSnapshot(highest);
+      const newestCatalog = exactCatalogSnapshot(newest);
+      if (highestCatalog === null || highestCatalog !== newestCatalog) {
+        throw new ExploreCatalogBoundaryDriftError(
+          "Explore catalog changed between ranking reads",
+        );
+      }
+      const completeCatalogTokens = [...newestTokens];
+      if (newest.body.total > newestTokens.length) {
+        const catalogPageSize = 100;
+        const catalogTotalPages = Math.ceil(
+          newest.body.total / catalogPageSize,
+        );
+        if (catalogTotalPages > 100) {
+          throw new Error("Explore catalog exceeds bounded smoke pagination");
+        }
+        completeCatalogTokens.length = 0;
+        for (let page = 1; page <= catalogTotalPages; page += 1) {
+          const catalogPage = await request(
+            `/api/explore?limit=${catalogPageSize}&page=${page}&sort=newest`,
+          );
+          const pageTokens = Array.isArray(catalogPage.body?.tokens)
+            ? catalogPage.body.tokens
+            : [];
+          const pageCatalog = exactCatalogSnapshot(catalogPage);
+          if (
+            catalogPage.status !== 200 ||
+            catalogPage.body?.status !== "ready" ||
+            catalogPage.body?.sort !== "newest" ||
+            catalogPage.body?.ranking !== undefined ||
+            !exactExplorePage(catalogPage, pageTokens, {
+              page,
+              pageSize: catalogPageSize,
+            }) ||
+            pageCatalog === null ||
+            !exactMarketRead(catalogPage, pageTokens)
+          ) throw new Error("Explore catalog pagination contract is invalid");
+          if (pageCatalog !== newestCatalog) {
+            throw new ExploreCatalogBoundaryDriftError(
+              "Explore catalog changed during pagination",
+            );
+          }
+          completeCatalogTokens.push(...pageTokens);
+        }
+      }
+      if (
+        completeCatalogTokens.length !== newest.body.total ||
+        !exactMarketRead(highest, completeCatalogTokens)
+      ) throw new Error("Highest FDV market request set is invalid");
+      const identities = completeCatalogTokens.map(exactIdentity);
+      if (
+        identities.some((identity) => identity === null) ||
+        new Set(identities).size !== identities.length
+      ) throw new Error("Explore identity set is malformed or duplicated");
+      const initialNewestIdentities = newestTokens.map(exactIdentity);
+      if (
+        initialNewestIdentities.some((identity) => identity === null) ||
+        initialNewestIdentities.some((identity, index) =>
+          identity !== identities[index]
+        )
+      ) throw new Error("Initial Newest page is outside the paged catalog");
+      const completeIdentitySet = new Set(identities);
+      const highestIdentities = highestTokens.map(exactIdentity);
+      if (
+        highestIdentities.some((identity) => identity === null) ||
+        new Set(highestIdentities).size !== highestIdentities.length ||
+        highestIdentities.some((identity) => !completeIdentitySet.has(identity))
+      ) throw new Error("Highest FDV page is outside the paged catalog");
+      for (let index = 1; index < completeCatalogTokens.length; index += 1) {
+        if (
+          Date.parse(completeCatalogTokens[index - 1].launchedAt) <
+            Date.parse(completeCatalogTokens[index].launchedAt)
+        ) throw new Error("Newest launches are not ordered descending");
+      }
+      if (
+        highest.body.ranking.status === "unavailable" &&
+        !exactSamePageOrder(highest, newest)
+      ) throw new Error("Unavailable FDV did not preserve launch order");
+
+      const selectedToken = highestTokens.find((token) =>
+        ADDRESS.test(String(token?.tokenAddress ?? "").toLowerCase())
+      );
+      const tokenAddress = selectedToken?.tokenAddress;
+      if (!tokenAddress || !selectedToken) {
+        throw new Error("Explore returned no token identity");
+      }
+      const detail = await request(
+        "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
+      );
+      const detailToken = detail.body?.token ?? detail.body?.customProject;
+      const catalogBoundary = JSON.parse(highestCatalog);
+      const detailCatalog = exactCatalogSnapshot(
+        { ...detail, body: {
+          ...detail.body,
+          total: detail.body?.catalog?.identityCount,
+        } },
+        { requireLaunchIdentity: false },
+      );
+      if (detailCatalog === null) {
+        throw new Error("Token detail identity or market contract is invalid");
+      }
+      if (detailCatalog !== highestCatalog) {
+        throw new ExploreCatalogBoundaryDriftError(
+          "Explore catalog changed before token detail read",
+        );
+      }
+      if (
+        detail.status !== 200 ||
+        detail.body?.status !== "ready" ||
+        exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
+        detail.headers.get("x-programmable-market-provider") !== "dexscreener" ||
+        detail.headers.get("x-programmable-launch-source") !==
+          catalogBoundary.launchSource ||
+        detail.headers.get("x-programmable-read-source") !==
+          `${catalogBoundary.launchSource}+dexscreener` ||
+        ![
+          qualifiedDexscreenerFdv(detailToken),
+          exactUnavailableValuation(detailToken),
+        ].includes(true)
+      ) throw new Error("Token detail identity or market contract is invalid");
+      const detailStatus = qualifiedDexscreenerFdv(detailToken)
+        ? "verified-dexscreener-market"
+        : "verified-identity-market-unavailable";
+
+      exploreSnapshot = {
+        catalogBoundary,
+        detailStatus,
+        highest,
+        newestTokens,
+        tokenAddress,
+      };
+      break;
+    } catch (error) {
+      if (!(error instanceof ExploreCatalogBoundaryDriftError)) throw error;
+      if (snapshotAttempt === EXPLORE_SNAPSHOT_ATTEMPTS - 1) {
+        throw new Error(
+          `${error.message} after ${EXPLORE_SNAPSHOT_ATTEMPTS} bounded attempts`,
+          { cause: error },
+        );
+      }
     }
   }
-  if (
-    completeCatalogTokens.length !== newest.body.total ||
-    !exactMarketRead(highest, completeCatalogTokens)
-  ) throw new Error("Highest FDV market request set is invalid");
-  const identities = completeCatalogTokens.map(exactIdentity);
-  if (
-    identities.some((identity) => identity === null) ||
-    new Set(identities).size !== identities.length
-  ) throw new Error("Explore identity set is malformed or duplicated");
-  const initialNewestIdentities = newestTokens.map(exactIdentity);
-  if (
-    initialNewestIdentities.some((identity) => identity === null) ||
-    initialNewestIdentities.some((identity, index) =>
-      identity !== identities[index]
-    )
-  ) throw new Error("Initial Newest page is outside the paged catalog");
-  const completeIdentitySet = new Set(identities);
-  const highestIdentities = highestTokens.map(exactIdentity);
-  if (
-    highestIdentities.some((identity) => identity === null) ||
-    new Set(highestIdentities).size !== highestIdentities.length ||
-    highestIdentities.some((identity) => !completeIdentitySet.has(identity))
-  ) throw new Error("Highest FDV page is outside the paged catalog");
-  for (let index = 1; index < completeCatalogTokens.length; index += 1) {
-    if (
-      Date.parse(completeCatalogTokens[index - 1].launchedAt) <
-        Date.parse(completeCatalogTokens[index].launchedAt)
-    ) throw new Error("Newest launches are not ordered descending");
+  if (exploreSnapshot === null) {
+    throw new Error("Explore snapshot retry contract is unreachable");
   }
-  if (
-    highest.body.ranking.status === "unavailable" &&
-    !exactSamePageOrder(highest, newest)
-  ) throw new Error("Unavailable FDV did not preserve launch order");
-
-  const selectedToken = highestTokens.find((token) =>
-    ADDRESS.test(String(token?.tokenAddress ?? "").toLowerCase())
-  );
-  const tokenAddress = selectedToken?.tokenAddress;
-  if (!tokenAddress || !selectedToken) {
-    throw new Error("Explore returned no token identity");
-  }
-  const detail = await request(
-    "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
-  );
-  const detailToken = detail.body?.token ?? detail.body?.customProject;
-  const catalogBoundary = JSON.parse(highestCatalog);
-  if (
-    detail.status !== 200 ||
-    detail.body?.status !== "ready" ||
-    exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
-    exactCatalogSnapshot({ ...detail, body: {
-      ...detail.body,
-      total: detail.body?.catalog?.identityCount,
-      dataQuality: highest.body?.dataQuality,
-    } }) !== highestCatalog ||
-    detail.headers.get("x-programmable-market-provider") !== "dexscreener" ||
-    detail.headers.get("x-programmable-launch-source") !==
-      catalogBoundary.launchSource ||
-    detail.headers.get("x-programmable-read-source") !==
-      `${catalogBoundary.launchSource}+dexscreener` ||
-    ![qualifiedDexscreenerFdv(detailToken), exactUnavailableValuation(detailToken)]
-      .includes(true)
-  ) throw new Error("Token detail identity or market contract is invalid");
-  const detailStatus = qualifiedDexscreenerFdv(detailToken)
-    ? "verified-dexscreener-market"
-    : "verified-identity-market-unavailable";
+  const {
+    catalogBoundary,
+    detailStatus,
+    highest,
+    newestTokens,
+    tokenAddress,
+  } = exploreSnapshot;
 
   const profileToken = newestTokens.find((token) =>
     ADDRESS.test(String(token?.creatorAddress ?? "").toLowerCase())

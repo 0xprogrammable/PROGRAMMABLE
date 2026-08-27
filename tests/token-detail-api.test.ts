@@ -418,6 +418,17 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     expect(response.status).toBe(200);
     expect(body.token.tokenAddress).toBe(fadeRouterTradeEntry.tokenAddress);
     expect(body.customProject).toBeNull();
+    expect(body.catalog).toMatchObject({
+      identityCount: 1,
+      routerStamp: {
+        verifiedIdentityCount: 1,
+        projectedIdentityCount: 0,
+      },
+    });
+    expect(mocks.identityCommitment).toHaveBeenCalledWith(
+      expect.any(Object),
+      [entry],
+    );
     expect(body.routerTradeProject).toMatchObject({
       customProjectId:
         "sha256:e7bf1306fc05ef655e3ebebe9566ff86c74b4de21465c3d836cbf3f497865c2d",
@@ -454,6 +465,17 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       links: SHARD_PUBLIC_PRESENTATION_V1.links,
     });
     expect(body.customProject).toBeNull();
+    expect(body.catalog).toMatchObject({
+      identityCount: 2,
+      routerStamp: {
+        verifiedIdentityCount: 1,
+        projectedIdentityCount: 1,
+      },
+    });
+    expect(mocks.identityCommitment).toHaveBeenCalledWith(
+      expect.any(Object),
+      [entry, shardRouterTradeEntry],
+    );
     expect(body.routerTradeProject).toMatchObject({
       customProjectId: SHARD_ROUTER_TRADE_PROJECT_ID,
       markets: [{
