@@ -884,6 +884,106 @@ test("staged smoke restarts the full Explore snapshot after ranking-boundary dri
   assert.deepEqual(waits, [16_000]);
 });
 
+test("staged smoke retries a valid Router-only fallback after Envio drops", async () => {
+  let exploreReads = 0;
+  const waits = [];
+  const routerOnlyCatalog = {
+    source: "envio-classic-v3",
+    launchSource: "canonical-launch-stamp-router",
+    status: "last-known-good",
+    lastIndexedAt: NOW,
+    asOfBlock: "25740001",
+    asOfBlockHash: `0x${"ab".repeat(32)}`,
+    identityCount: 1,
+    identityCommitment: `sha256:${"de".repeat(32)}`,
+    completeness: {
+      classic: "unavailable",
+      stock: "excluded",
+      custom: "unavailable",
+      registryCustom: "unavailable",
+      routerCustom: "last-known-good",
+    },
+    scope: {
+      included: ["canonical-launch-stamp-router"],
+      excluded: [
+        "classic-v1",
+        "classic-v2",
+        "stock-paired-v1",
+        "stock-paired-v2",
+        "stock-paired-v3",
+      ],
+      publicCategories: ["classic", "custom"],
+    },
+    routerStamp: {
+      source: "canonical-launch-stamp-router",
+      status: "last-known-good",
+      finalityConfirmations: 64,
+      verifiedIdentityCount: 1,
+      projectedIdentityCount: 1,
+      generatedAt: NOW,
+      asOfBlock: "25740001",
+      asOfBlockHash: `0x${"ab".repeat(32)}`,
+      identityCommitment: `sha256:${"ac".repeat(32)}`,
+    },
+  };
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(
+      ({ body, url }) => {
+        if (url.pathname !== "/api/explore") return body;
+        exploreReads += 1;
+        if (exploreReads !== 2) return body;
+        return {
+          ...body,
+          tokens: [routerCustomEntry()],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          dataQuality: {
+            ...body.dataQuality,
+            launchIdentity: {
+              status: "partial",
+              canonical: "unavailable",
+              custom: "unavailable",
+              ageMs: 1_000,
+            },
+          },
+          catalog: routerOnlyCatalog,
+          marketRead: marketRead(1),
+          ranking: undefined,
+        };
+      },
+      ({ extraHeaders, omittedHeaders, url }) => ({
+        extraHeaders: url.pathname === "/api/explore" && exploreReads === 2
+          ? {
+              ...extraHeaders,
+              "x-programmable-launch-source":
+                "canonical-launch-stamp-router",
+              "x-programmable-read-source":
+                "canonical-launch-stamp-router+dexscreener",
+              "x-programmable-canonical-read-status": "unavailable",
+              "x-programmable-router-read-status": "last-known-good",
+            }
+          : extraHeaders,
+        omittedHeaders,
+      }),
+    ),
+    appendOutput: () => undefined,
+    waitForCatalogConvergence: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+  });
+
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+  assert.equal(exploreReads, 4);
+  assert.deepEqual(waits, [16_000]);
+});
+
 test("staged smoke restarts list and detail after detail-boundary drift", async () => {
   let advanced = false;
   let exploreReads = 0;
