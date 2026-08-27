@@ -33,6 +33,7 @@ import {
   formatClassicV3Percent,
   validateClassicV3LaunchDraft,
 } from "@/lib/classic-v3";
+import { validateClassicV4LaunchDraft } from "@/lib/classic-v4";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import {
   deepV3PresetDisclosure,
@@ -82,6 +83,8 @@ import {
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
   MEME_TOKEN_SUPPLY_WHOLE,
+  normalizeClassicLiquidityPreset,
+  parseClassicFeePercentToBps,
   parseInitialBuyWei,
   PLATFORM_FEE_BPS,
   type LaunchDraft,
@@ -967,10 +970,13 @@ function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
         : initialDraft.initialBuyEth.trim(),
     customHookAddress: "",
     customHookSource: "",
+    classicLiquidityPreset: normalizeClassicLiquidityPreset(
+      (initialDraft as Partial<LaunchDraft>).classicLiquidityPreset,
+    ),
   };
 }
 
-function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
+export function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
   return {
     ...normalizeStandardDraft(initialDraft),
     launchModel: "classic-v3",
@@ -1031,6 +1037,18 @@ const classicV3LaunchAvailable =
   (process.env.NODE_ENV !== "production" &&
     process.env.NEXT_PUBLIC_CLASSIC_V3_UI_PREVIEW === "true") ||
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
+const classicV4UiPreviewEnabled =
+  process.env.NODE_ENV !== "production" &&
+  process.env.NEXT_PUBLIC_CLASSIC_V4_UI_PREVIEW === "true";
+
+export function classicV4TransactionBlockReason(
+  model: LaunchModel,
+  previewEnabled: boolean,
+) {
+  return model === "classic-v3" && previewEnabled
+    ? "Classic V4 is a preview. Wallet transactions stay disabled until the V4 deployment and preflight release are verified."
+    : "";
+}
 function browserPendingLaunchStorages(): PendingLaunchStorage[] {
   if (typeof window === "undefined") return [];
   const storages: PendingLaunchStorage[] = [];
@@ -1624,7 +1642,11 @@ function LaunchBuilderFormView({
         validateStockPairedLaunchDraft(draft, wallet.account);
       } else if (model === "classic-v3") {
         if (!wallet) return "Connect a wallet to verify the reward setup";
-        validateClassicV3LaunchDraft(draft, wallet.account);
+        if (classicV4UiPreviewEnabled) {
+          validateClassicV4LaunchDraft(draft, wallet.account);
+        } else {
+          validateClassicV3LaunchDraft(draft, wallet.account);
+        }
       } else {
         validateMemeLaunchDraft(draft);
       }
@@ -1763,6 +1785,12 @@ function LaunchBuilderFormView({
     initialLaunchDraft: LaunchDraft,
     connectedWallet: NonNullable<typeof wallet>,
   ) {
+    const previewBlockReason = classicV4TransactionBlockReason(
+      initialLaunchDraft.launchModel,
+      classicV4UiPreviewEnabled,
+    );
+    if (previewBlockReason) throw new Error(previewBlockReason);
+
     let checkedDraft = initialLaunchDraft;
     let result = await requestLaunchCheck(checkedDraft, connectedWallet);
 
@@ -1791,6 +1819,15 @@ function LaunchBuilderFormView({
 
   async function launchToken() {
     if (draftLocked) return;
+
+    const previewBlockReason = classicV4TransactionBlockReason(
+      model,
+      classicV4UiPreviewEnabled,
+    );
+    if (previewBlockReason) {
+      setFormError(previewBlockReason);
+      return;
+    }
 
     if (!wallet) {
       openWallet();
@@ -1881,6 +1918,7 @@ function LaunchBuilderFormView({
           ? getClassicInitialBuyPreview(
               checkedDraft.initialBuyEth,
               checkedDraft.buySwapFeePercent,
+              checkedDraft.classicLiquidityPreset,
             )
           : null;
       const pendingSubmission: PendingLaunchSubmission = {
@@ -2213,11 +2251,14 @@ function LaunchBuilderFormView({
         launching ||
         walletRequestPending ||
         (model === "classic-v3" && !classicV3LaunchAvailable) ||
+        (model === "classic-v3" && classicV4UiPreviewEnabled) ||
         (model === "stock-paired" && !stockPairedLaunchAllowed)
       }
     >
       {model === "stock-paired" && !stockPairedLaunchAllowed
         ? "Stock-Paired is coming soon"
+        : model === "classic-v3" && classicV4UiPreviewEnabled
+          ? "Classic V4 preview"
         : model === "classic-v3" && !classicV3LaunchAvailable
           ? "Classic is not deployed"
           : !pendingRestoreComplete
@@ -2306,6 +2347,7 @@ function LaunchBuilderFormView({
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
               onMaximumDevBuy={() => void setMaximumDevBuy()}
+              enableV4={classicV4UiPreviewEnabled}
             />
           ) : model === "stock-paired" ? (
             <StockPairedStep
@@ -2360,6 +2402,7 @@ function LaunchBuilderFormView({
               : undefined
           }
           account={submittedAccount}
+          classicV4={classicV4UiPreviewEnabled}
           onClose={closeSuccessDialog}
         />
       ) : null}
@@ -2380,11 +2423,13 @@ function LaunchSuccessDialog({
   launch,
   draft,
   account,
+  classicV4 = false,
   onClose,
 }: {
   launch: LaunchSuccessSummary;
   draft?: LaunchDraft;
   account?: string;
+  classicV4?: boolean;
   onClose: () => void;
 }) {
   const viewLinkRef = useRef<HTMLAnchorElement>(null);
@@ -2474,11 +2519,15 @@ function LaunchSuccessDialog({
     };
   }, [onClose]);
   let classicConfiguration:
-    ReturnType<typeof validateClassicV3LaunchDraft> | undefined;
+    | ReturnType<typeof validateClassicV3LaunchDraft>
+    | ReturnType<typeof validateClassicV4LaunchDraft>
+    | undefined;
   const deepLaunch = draft?.launchModel === "deep";
   try {
     if (draft?.launchModel === "classic-v3" && account) {
-      classicConfiguration = validateClassicV3LaunchDraft(draft, account);
+      classicConfiguration = classicV4
+        ? validateClassicV4LaunchDraft(draft, account)
+        : validateClassicV3LaunchDraft(draft, account);
     }
   } catch {
     classicConfiguration = undefined;
@@ -2584,7 +2633,12 @@ function LaunchSuccessDialog({
               <dd>
                 {formatClassicV3Percent(
                   classicConfiguration.fees.buySwapFeeBps,
-                )}
+                )}{" "}
+                total ·{" "}
+                {formatClassicV3Percent(
+                  classicConfiguration.fees.buyCreatorFeeBps,
+                )}{" "}
+                creator · 0.10% Programmable
               </dd>
             </div>
             <div>
@@ -2592,9 +2646,24 @@ function LaunchSuccessDialog({
               <dd>
                 {formatClassicV3Percent(
                   classicConfiguration.fees.sellSwapFeeBps,
-                )}
+                )}{" "}
+                total ·{" "}
+                {formatClassicV3Percent(
+                  classicConfiguration.fees.sellCreatorFeeBps,
+                )}{" "}
+                creator · 0.10% Programmable
               </dd>
             </div>
+            {"liquidity" in classicConfiguration ? (
+              <div>
+                <dt>Liquidity</dt>
+                <dd>
+                  {classicConfiguration.liquidity.preset === "deep-30"
+                    ? "Deeper · bounded launch range"
+                    : "Standard · full launch range"}
+                </dd>
+              </div>
+            ) : null}
             <div>
               <dt>Reward owners</dt>
               <dd>{classicConfiguration.rewards.beneficiaries.length}</dd>
@@ -3277,6 +3346,7 @@ export function DeepFeeStep({
   );
 }
 
+const classicFeeQuickValues = ["0.1", "1", "3", "10"] as const;
 const classicFeeOptions: readonly LaunchSelectOption<string>[] = Array.from(
   { length: 10 },
   (_, index) => ({
@@ -3284,6 +3354,86 @@ const classicFeeOptions: readonly LaunchSelectOption<string>[] = Array.from(
     label: `${index + 1}.00%`,
   }),
 );
+
+function ClassicFeeControl({
+  direction,
+  value,
+  onChange,
+}: {
+  direction: "buy" | "sell";
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const label = direction === "buy" ? "Buy fee" : "Sell fee";
+  const inputId = `classic-${direction}-fee`;
+  const hintId = `${inputId}-hint`;
+  const breakdownId = `${inputId}-breakdown`;
+  const totalFeeBps = parseClassicFeePercentToBps(value);
+  const creatorFeeBps =
+    totalFeeBps === null ? null : totalFeeBps - PLATFORM_FEE_BPS;
+
+  return (
+    <div className="classic-v3-fee-control">
+      <label htmlFor={inputId}>{label}</label>
+      <span className="classic-v3-fee-input">
+        <input
+          id={inputId}
+          type="text"
+          inputMode="decimal"
+          value={value}
+          maxLength={5}
+          autoComplete="off"
+          spellCheck={false}
+          aria-describedby={`${hintId} ${breakdownId}`}
+          aria-invalid={value.trim().length > 0 && totalFeeBps === null}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <span aria-hidden="true">%</span>
+      </span>
+      <p className="classic-v3-fee-hint" id={hintId}>
+        0.1% to 10% in 0.1% steps
+      </p>
+      <div
+        className="classic-v3-fee-quick"
+        role="group"
+        aria-label={`${label} quick choices`}
+      >
+        {classicFeeQuickValues.map((quickValue) => (
+          <button
+            type="button"
+            aria-pressed={
+              totalFeeBps === parseClassicFeePercentToBps(quickValue)
+            }
+            onClick={() => onChange(quickValue)}
+            key={quickValue}
+          >
+            {quickValue}%
+          </button>
+        ))}
+      </div>
+      <dl className="classic-v3-fee-breakdown" id={breakdownId}>
+        <div>
+          <dt>Total</dt>
+          <dd>
+            {totalFeeBps === null ? "—" : formatClassicV3Percent(totalFeeBps)}
+          </dd>
+        </div>
+        <div>
+          <dt>Creator</dt>
+          <dd>
+            {creatorFeeBps === null
+              ? "—"
+              : formatClassicV3Percent(creatorFeeBps)}
+          </dd>
+        </div>
+        <div>
+          <dt>Programmable</dt>
+          <dd>0.10%</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 
 const initialBuyAccessOptions: readonly LaunchSelectOption<
   LaunchDraft["initialBuyCustodyMode"]
@@ -3304,18 +3454,20 @@ const initialBuySupplyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-function EnhancedClassicFeeStep({
+export function EnhancedClassicFeeStep({
   draft,
   setDraft,
   onEdit,
   settingMaxBuy,
   onMaximumDevBuy,
+  enableV4 = true,
 }: {
   draft: LaunchDraft;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
   settingMaxBuy: boolean;
   onMaximumDevBuy: () => void;
+  enableV4?: boolean;
 }) {
   const updateClassicV3Draft = (patch: Partial<LaunchDraft>) => {
     onEdit();
@@ -3341,6 +3493,7 @@ function EnhancedClassicFeeStep({
   const initialBuyPreview = getClassicInitialBuyPreview(
     draft.initialBuyEth,
     draft.buySwapFeePercent,
+    enableV4 ? draft.classicLiquidityPreset : "standard",
   );
   const initialBuyTokenLabel = draft.tokenSymbol.trim()
     ? `$${draft.tokenSymbol.trim().toUpperCase()}`
@@ -3358,6 +3511,50 @@ function EnhancedClassicFeeStep({
         <h2 id="classic-v3-fees">Fees and rewards</h2>
       </div>
 
+      {enableV4 ? (
+        <fieldset className="classic-v3-liquidity-presets">
+          <legend>Liquidity depth</legend>
+          <div className="classic-v3-liquidity-options">
+            {(
+              [
+                ["standard", "Standard", "Full one-sided launch range"],
+                [
+                  "deep-30",
+                  "Deeper",
+                  "About 30% higher active liquidity at launch",
+                ],
+              ] as const
+            ).map(([value, label, description]) => (
+              <label
+                className="classic-v3-liquidity-option"
+                data-selected={draft.classicLiquidityPreset === value}
+                key={value}
+              >
+                <input
+                  type="radio"
+                  name="classic-liquidity-preset"
+                  value={value}
+                  checked={draft.classicLiquidityPreset === value}
+                  aria-describedby="classic-liquidity-note"
+                  onChange={() =>
+                    updateClassicV3Draft({ classicLiquidityPreset: value })
+                  }
+                />
+                <span>
+                  <strong>{label}</strong>
+                  <small>{description}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="classic-v3-liquidity-note" id="classic-liquidity-note">
+            {draft.classicLiquidityPreset === "deep-30"
+              ? "Uses one bounded liquidity range up to about 18.9× the opening price, with about 5.9 ETH of net curve capacity. It is not deeper at every price. One v4 pool and one permanently locked position."
+              : "Uses the full one-sided launch range. One v4 pool and one permanently locked position."}
+          </p>
+        </fieldset>
+      ) : null}
+
       <div className="classic-v3-core">
         <fieldset className="classic-v3-fees">
           <legend>Swap fees</legend>
@@ -3367,6 +3564,17 @@ function EnhancedClassicFeeStep({
                 direction === "buy"
                   ? "buySwapFeePercent"
                   : "sellSwapFeePercent";
+              if (enableV4) {
+                return (
+                  <ClassicFeeControl
+                    direction={direction}
+                    value={draft[key]}
+                    onChange={(value) => updateClassicV3Draft({ [key]: value })}
+                    key={direction}
+                  />
+                );
+              }
+
               const totalFeeBps = Number(draft[key]) * 100;
               const creatorFeeBps = Math.max(0, totalFeeBps - PLATFORM_FEE_BPS);
               return (
@@ -3559,7 +3767,7 @@ function EnhancedClassicFeeStep({
             />
             <button
               type="button"
-              disabled={settingMaxBuy || !classicV3LaunchAvailable}
+              disabled={settingMaxBuy || !classicV3LaunchAvailable || enableV4}
               onClick={onMaximumDevBuy}
             >
               {settingMaxBuy ? "Checking" : "Max"}

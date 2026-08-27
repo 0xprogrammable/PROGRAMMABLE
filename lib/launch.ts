@@ -15,11 +15,16 @@ export const MEME_MIN_INITIAL_BUY_ETH = "0.0006";
 export const MEME_MIN_INITIAL_BUY_ETH_LABEL =
   `${MEME_MIN_INITIAL_BUY_ETH} ETH`;
 const MEME_MIN_USABLE_TICK = -887_200;
+const CLASSIC_DEEP_30_TICK_LOWER = 174_800;
 const MEME_INITIAL_SQRT_PRICE = 1.0001 ** (MEME_INITIAL_TICK / 2);
 const MEME_MIN_SQRT_PRICE = 1.0001 ** (MEME_MIN_USABLE_TICK / 2);
+const CLASSIC_DEEP_30_SQRT_PRICE = 1.0001 ** (CLASSIC_DEEP_30_TICK_LOWER / 2);
 const MEME_INITIAL_LIQUIDITY =
   MEME_TOKEN_SUPPLY_WHOLE /
   (MEME_INITIAL_SQRT_PRICE - MEME_MIN_SQRT_PRICE);
+const CLASSIC_DEEP_30_INITIAL_LIQUIDITY =
+  MEME_TOKEN_SUPPLY_WHOLE /
+  (MEME_INITIAL_SQRT_PRICE - CLASSIC_DEEP_30_SQRT_PRICE);
 export const ADAPTIVE_MIN_FDV_INDEX = -887_272;
 export const ADAPTIVE_MAX_FDV_INDEX = 887_272;
 export const ADAPTIVE_MIN_FEE_BPS = 100;
@@ -29,6 +34,9 @@ export const ADAPTIVE_MAX_CURVE_POINTS = 8;
 export const CLASSIC_V3_MIN_FEE_BPS = 100;
 export const CLASSIC_V3_MAX_FEE_BPS = 1_000;
 export const CLASSIC_V3_FEE_STEP_BPS = 100;
+export const CLASSIC_V4_MIN_FEE_BPS = 10;
+export const CLASSIC_V4_MAX_FEE_BPS = 1_000;
+export const CLASSIC_V4_FEE_STEP_BPS = 10;
 export const CLASSIC_V3_MAX_REWARD_BENEFICIARIES = 5;
 export const CLASSIC_INITIAL_BUY_MIN_DURATION_DAYS = 1;
 export const CLASSIC_INITIAL_BUY_MAX_DURATION_DAYS = 3_650;
@@ -50,6 +58,7 @@ export type LaunchModel =
   | "deep"
   | "stock-paired";
 export type RewardDestinationMode = "launcher" | "external" | "split";
+export type ClassicLiquidityPreset = "standard" | "deep-30";
 export type ClassicInitialBuyCustodyMode =
   | "unlocked"
   | "fixed-lock"
@@ -113,6 +122,7 @@ export type LaunchDraft = {
   adaptiveCurvePoints: AdaptiveCurvePointDraft[];
   buySwapFeePercent: string;
   sellSwapFeePercent: string;
+  classicLiquidityPreset: ClassicLiquidityPreset;
   rewardDestinationMode: RewardDestinationMode;
   rewardExternalAddress: string;
   rewardSplits: RewardSplitDraft[];
@@ -163,6 +173,7 @@ export function createEmptyDraft(): LaunchDraft {
     adaptiveCurvePoints: [],
     buySwapFeePercent: "1",
     sellSwapFeePercent: "1",
+    classicLiquidityPreset: "standard",
     rewardDestinationMode: "launcher",
     rewardExternalAddress: "",
     rewardSplits: [
@@ -183,6 +194,7 @@ export function createClassicV3Draft(): LaunchDraft {
     selectedBehaviors: ["fixed-fee"],
     buySwapFeePercent: "1",
     sellSwapFeePercent: "1",
+    classicLiquidityPreset: "standard",
     rewardDestinationMode: "launcher",
     initialBuyCustodyMode: "unlocked",
     initialBuyDurationDays: "30",
@@ -243,6 +255,27 @@ export function parseTotalSwapFeeBps(value: string) {
     : null;
 }
 
+export function parseClassicFeePercentToBps(value: string) {
+  const normalized = value.trim();
+  if (!/^(?:0|[1-9]|10)(?:\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const [whole, fraction = ""] = normalized.split(".");
+  const basisPoints = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return basisPoints >= CLASSIC_V4_MIN_FEE_BPS &&
+    basisPoints <= CLASSIC_V4_MAX_FEE_BPS &&
+    basisPoints % CLASSIC_V4_FEE_STEP_BPS === 0
+    ? basisPoints
+    : null;
+}
+
+export function normalizeClassicLiquidityPreset(
+  value: unknown,
+): ClassicLiquidityPreset {
+  return value === "deep-30" ? "deep-30" : "standard";
+}
+
 export function parseInitialBuyWei(value: string | null | undefined) {
   const normalized = typeof value === "string" ? value.trim() : "";
   if (
@@ -264,21 +297,17 @@ export function parseInitialBuyWei(value: string | null | undefined) {
 export function getClassicInitialBuyPreview(
   initialBuyEth: string,
   buyFeePercent: string,
+  liquidityPreset: ClassicLiquidityPreset = "standard",
 ): ClassicInitialBuyPreview | null {
   const initialBuyWei = parseInitialBuyWei(initialBuyEth);
-  const normalizedFeePercent = Number(buyFeePercent.trim());
+  const buyFeeBps = parseClassicFeePercentToBps(buyFeePercent);
 
-  if (
-    initialBuyWei === null ||
-    !Number.isInteger(normalizedFeePercent) ||
-    normalizedFeePercent < 1 ||
-    normalizedFeePercent > 10
-  ) {
+  if (initialBuyWei === null || buyFeeBps === null) {
     return null;
   }
 
   const grossEthAmount = Number(formatEther(initialBuyWei));
-  const poolEthAmount = grossEthAmount * (1 - normalizedFeePercent / 100);
+  const poolEthAmount = grossEthAmount * (1 - buyFeeBps / 10_000);
 
   if (
     !Number.isFinite(grossEthAmount) ||
@@ -288,16 +317,18 @@ export function getClassicInitialBuyPreview(
     return null;
   }
 
+  const initialLiquidity =
+    normalizeClassicLiquidityPreset(liquidityPreset) === "deep-30"
+      ? CLASSIC_DEEP_30_INITIAL_LIQUIDITY
+      : MEME_INITIAL_LIQUIDITY;
   const nextSqrtPrice =
-    (MEME_INITIAL_LIQUIDITY * MEME_INITIAL_SQRT_PRICE) /
-    (MEME_INITIAL_LIQUIDITY +
-      poolEthAmount * MEME_INITIAL_SQRT_PRICE);
+    (initialLiquidity * MEME_INITIAL_SQRT_PRICE) /
+    (initialLiquidity + poolEthAmount * MEME_INITIAL_SQRT_PRICE);
   const tokenAmount = Math.max(
     0,
     Math.min(
       MEME_TOKEN_SUPPLY_WHOLE,
-      MEME_INITIAL_LIQUIDITY *
-        (MEME_INITIAL_SQRT_PRICE - nextSqrtPrice),
+      initialLiquidity * (MEME_INITIAL_SQRT_PRICE - nextSqrtPrice),
     ),
   );
 
