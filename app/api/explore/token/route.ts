@@ -24,7 +24,7 @@ import { readProductionCustomExploreDirectoryV1 } from
 import { readProductionSourceVerificationDisplayV1 } from
   "../../../../lib/server/custom-launch/source-verification-display-v1";
 import { routerTradeProjectForEntryV1 } from
-  "../../../../lib/custom-launch/router-trade-adapter-v1";
+  "../../../../lib/custom-launch/router-trade-adapters-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../lib/server/custom-launch/public-readiness";
 import { readPublicCreatorArticleV1 } from

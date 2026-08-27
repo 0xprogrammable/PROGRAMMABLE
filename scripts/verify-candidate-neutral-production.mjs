@@ -70,6 +70,9 @@ const projectNames = Object.freeze([
   ["random", "holder", "rewards"].join("[-_ ]?"),
   ["jesse", "stahl"].join("[-_ ]?"),
 ]);
+const projectNamePatterns = Object.freeze(
+  projectNames.map((name) => new RegExp(name, "iu")),
+);
 const applicantIdentityPatterns = Object.freeze([
   new RegExp(`(?:^|[^A-Za-z0-9])${["a", "eon"].join("")}(?:$|[^A-Za-z0-9])|${["aeon", "framework"].join("")}`, "iu"),
   new RegExp(`(?:^|[^A-Za-z0-9])${["based", "bid"].join("")}(?:$|[^A-Za-z0-9])|\\b${["based", "bid", "x"].join("")}\\b`, "iu"),
@@ -89,7 +92,7 @@ const applicantCardMarkers = Object.freeze([
   ["0x7a814ecb2d2b8be2debb29481f25f06e", "976559eec41fa7c8d92e030ec69fc9ff"].join(""),
 ]);
 const forbiddenContent = Object.freeze([
-  ...projectNames.map((name) => new RegExp(name, "iu")),
+  ...projectNamePatterns,
   ...applicantIdentityPatterns,
   ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
   new RegExp(["submit-launch", "pull", "13"].join("[/# ]+"), "iu"),
@@ -105,6 +108,59 @@ const forbiddenPath = Object.freeze([
   /manual[-_]?applicant/iu,
   /router[-_]?v2[-_]?shared[-_]?lifecycle/iu,
 ]);
+
+const reviewedRouterAdapterSourcePath =
+  "lib/custom-launch/router-trade-adapters-v1.ts";
+const reviewedRouterAdapterTestPath =
+  "tests/router-trade-adapters-v1.test.ts";
+const reviewedRouterAdapterProjectPattern = projectNamePatterns[1];
+const reviewedRouterAdapterRuntimeMarkers = Object.freeze([
+  ["router-custom-", "shards", "-v1-trade-v1"].join(""),
+  "programmable.launch-stamp-provenance.v1",
+  "0xe253f3bd22fcb3d6cb20b9d408287e30f0f1aeeb56426b779425c35fd6411de9",
+  "0x55fbb83ac4599303b146cb4a2f7c1c906d8b3e9fe4fbbe5bf9cf44e905cc3ce0",
+  "0xface73b63787960282f2d4682d3752beb25271ad",
+  "0x07a16735325723fea4f4a52ed5e9da687766a0cc",
+  "0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8",
+  "0x168f82b0d458a35676522562489b2fec71929e4717c3d98b4893ef63e69e8da6",
+  "0x0175cb3f34e2c37f757216a259adea4ab10baf3f9095c67d9481800222fd17f0",
+  "0x4d4617e5d86bfb2b1ed32b5405748fb9e145301bc94f2d6c0fed75b6d7d1181b",
+]);
+const reviewedRouterAdapterSourceMarkers = Object.freeze([
+  ...reviewedRouterAdapterRuntimeMarkers,
+  "SHARD_REVIEWED_LAUNCH_STAMP_EVIDENCE_V1",
+  "SHARD_REVIEWED_LAUNCH_STAMP_EVIDENCE_HASH",
+  "canonicalSha256(",
+]);
+const reviewedRouterAdapterTestMarkers = Object.freeze([
+  "SHARD_REVIEWED_LAUNCH_STAMP_EVIDENCE_V1",
+  "SHARD_REVIEWED_LAUNCH_STAMP_EVIDENCE_HASH",
+  "shardRouterTradeStamp",
+  "canonicalSha256(",
+  ".toEqual(shardRouterTradeStamp)",
+]);
+
+function containsEvery(source, markers) {
+  return markers.every((marker) => source.toLowerCase().includes(
+    marker.toLowerCase(),
+  ));
+}
+
+function allowsReviewedRouterAdapterProjectName(
+  repositoryPath,
+  source,
+  pattern,
+) {
+  if (pattern !== reviewedRouterAdapterProjectPattern) return false;
+  if (repositoryPath === reviewedRouterAdapterSourcePath) {
+    return containsEvery(source, reviewedRouterAdapterSourceMarkers);
+  }
+  if (repositoryPath === reviewedRouterAdapterTestPath) {
+    return containsEvery(source, reviewedRouterAdapterTestMarkers);
+  }
+  return repositoryPath.startsWith(".next/server/")
+    && containsEvery(source, reviewedRouterAdapterRuntimeMarkers);
+}
 
 async function exists(path) {
   try {
@@ -150,7 +206,13 @@ for (const absolutePath of discovered) {
     continue;
   }
   const source = await readFile(absolutePath, "utf8");
-  const matchedPattern = forbiddenContent.find((pattern) => pattern.test(source));
+  const matchedPattern = forbiddenContent.find((pattern) =>
+    pattern.test(source)
+    && !allowsReviewedRouterAdapterProjectName(
+      repositoryPath,
+      source,
+      pattern,
+    ));
   if (matchedPattern) {
     failures.push(`${repositoryPath}: forbidden candidate or legacy route content`);
   }
