@@ -224,6 +224,11 @@ async function releaseFixture(t) {
     sourceTree: backend.tree,
     migrationInventorySha256: prettySha256(inventory),
     apiContractSha256: prettySha256(contract),
+    walletAdminSecurity: {
+      assertionVersion: "2",
+      assertionMode: "compatibility",
+      legacyBearerRequestsAccepted: true,
+    },
     publicProfile: {
       profileId: profile.profileId,
       profileVersion: profile.profileVersion,
@@ -307,6 +312,10 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.equal(binding.website.candidateCommitSha, fixture.website.commit);
   assert.equal(binding.website.candidateTreeSha, fixture.website.tree);
   assert.equal(binding.api.profileVersion, "3.2.0");
+  assert.equal(
+    binding.api.readinessIdentitySha256,
+    sha256(Buffer.from(canonicalize(fixture.readiness), "utf8")),
+  );
   assert.match(binding.api.publicProfilePath, /admission-profile\.v3\.json$/u);
   assert.equal(binding.fly.imageTag, `main-${fixture.backend.commit.slice(0, 12)}`);
   assert.equal(binding.fly.imageDigest, `sha256:${"9".repeat(64)}`);
@@ -326,6 +335,36 @@ test("binding generator derives exact revision 3 artifacts and retained database
     /repository is not clean|output already exists/u,
   );
   assert.deepEqual(await readFile(result.outputPath), beforeRetry);
+});
+
+test("binding generator requires the exact compatibility wallet-admin security identity", async (t) => {
+  const mutations = Object.freeze([
+    (readiness) => { delete readiness.walletAdminSecurity; },
+    (readiness) => { readiness.walletAdminSecurity.assertionVersion = "1"; },
+    (readiness) => { readiness.walletAdminSecurity.assertionMode = "enforced"; },
+    (readiness) => { readiness.walletAdminSecurity.legacyBearerRequestsAccepted = false; },
+    (readiness) => { readiness.walletAdminSecurity.unexpected = true; },
+  ]);
+
+  for (const mutate of mutations) {
+    const fixture = await releaseFixture(t);
+    const mutatedReadiness = structuredClone(fixture.readiness);
+    mutate(mutatedReadiness);
+    await json(fixture.paths.readiness, mutatedReadiness);
+    await assert.rejects(
+      materializeCustomLaunchApiReleaseBindingV1({
+        websiteRoot: fixture.websiteRoot,
+        backendRoot: fixture.backendRoot,
+        flyReleases: fixture.paths.releases,
+        flyMachines: fixture.paths.machines,
+        flyImages: fixture.paths.images,
+        apiReadiness: fixture.paths.readiness,
+        supabaseMigrationList: fixture.paths.migrationList,
+        databaseSchemaEvidenceOutput: fixture.paths.databaseEvidence,
+      }),
+      /readiness differs from the exact backend artifacts/u,
+    );
+  }
 });
 
 test("rollback snapshot retains only exact deployment and env metadata", async (t) => {
