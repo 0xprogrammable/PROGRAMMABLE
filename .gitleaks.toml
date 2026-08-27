@@ -128,6 +128,7 @@ condition = "AND"
 regexTarget = "match"
 paths = [
   '''lib/custom-launch/router-trade-adapters-v1\.ts''',
+  '''tests/router-trade-adapters-v1\.test\.ts''',
   '''tests/shard-router-trade-fixture\.ts''',
 ]
 regexes = [

@@ -1,4 +1,6 @@
 import type { ExploreEntry } from "./tokens";
+import { SHARD_PUBLIC_PRESENTATION_V1 } from
+  "./custom-launch/router-trade-adapters-v1";
 
 /**
  * Finalized Router identities that remain addressable by their direct token
@@ -34,6 +36,29 @@ const EXCLUDED_LAUNCH_IDENTITIES = new Set(
       `${chainId}:${tokenAddress.toLowerCase()}:${launchId.toLowerCase()}`,
   ),
 );
+
+export function publicExplorePresentationEntryV1<T extends ExploreEntry>(
+  entry: T,
+): T {
+  if (entry.exploreKind !== "token") return entry;
+  const provenance = entry.launchStampProvenance;
+  if (
+    provenance === undefined ||
+    provenance.chainId !== SHARD_PUBLIC_PRESENTATION_V1.chainId ||
+    entry.tokenAddress.toLowerCase() !==
+      SHARD_PUBLIC_PRESENTATION_V1.tokenAddress.toLowerCase() ||
+    provenance.launchId.toLowerCase() !==
+      SHARD_PUBLIC_PRESENTATION_V1.launchId.toLowerCase() ||
+    provenance.stampHash.toLowerCase() !==
+      SHARD_PUBLIC_PRESENTATION_V1.stampHash.toLowerCase()
+  ) return entry;
+  return Object.freeze({
+    ...entry,
+    description: SHARD_PUBLIC_PRESENTATION_V1.description,
+    imageUrl: SHARD_PUBLIC_PRESENTATION_V1.imageUrl,
+    links: [...SHARD_PUBLIC_PRESENTATION_V1.links],
+  }) as T;
+}
 
 export function publicExploreCatalogEntriesV1(
   entries: readonly ExploreEntry[],

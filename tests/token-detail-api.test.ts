@@ -73,7 +73,10 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
 }));
 
 import { GET } from "../app/api/explore/token/route";
-import { SHARD_ROUTER_TRADE_PROJECT_ID } from
+import {
+  SHARD_PUBLIC_PRESENTATION_V1,
+  SHARD_ROUTER_TRADE_PROJECT_ID,
+} from
   "../lib/custom-launch/router-trade-adapters-v1";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 import { fadeRouterTradeEntry } from "./fade-router-trade-fixture";
@@ -445,6 +448,11 @@ describe("Token detail static identity and Dexscreener market contract", () => {
 
     expect(response.status).toBe(200);
     expect(body.token.tokenAddress).toBe(shardRouterTradeEntry.tokenAddress);
+    expect(body.token).toMatchObject({
+      description: SHARD_PUBLIC_PRESENTATION_V1.description,
+      imageUrl: "/brand/projects/shard-token-v1.png",
+      links: SHARD_PUBLIC_PRESENTATION_V1.links,
+    });
     expect(body.customProject).toBeNull();
     expect(body.routerTradeProject).toMatchObject({
       customProjectId: SHARD_ROUTER_TRADE_PROJECT_ID,

@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ValuedExploreEntry } from "../lib/explore-financial-data";
+import { SHARD_PUBLIC_PRESENTATION_V1 } from
+  "../lib/custom-launch/router-trade-adapters-v1";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
@@ -305,14 +307,17 @@ describe("Explore static identity and Dexscreener market contract", () => {
       launchId: `0x${string}`,
       name: string,
       symbol: string,
+      stampHash = customGraphExploreEntry.launchStampProvenance.stampHash,
     ): ExploreEntry => {
       const launchStampProvenance = {
         ...customGraphExploreEntry.launchStampProvenance,
         launchId,
+        stampHash,
         tokenProof: {
           ...customGraphExploreEntry.launchStampProvenance.tokenProof,
           tokenAddress,
           launchId,
+          stampHash,
         },
       };
       return {
@@ -325,6 +330,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
         launchCategoryProvenance: {
           ...customGraphExploreEntry.launchCategoryProvenance,
           launchId,
+          stampHash,
         },
       };
     };
@@ -333,6 +339,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       "0xe253f3bd22fcb3d6cb20b9d408287e30f0f1aeeb56426b779425c35fd6411de9",
       "Shard",
       "SHARD",
+      "0x55fbb83ac4599303b146cb4a2f7c1c906d8b3e9fe4fbbe5bf9cf44e905cc3ce0",
     );
     mocks.readRouter.mockResolvedValue([
       shard,
@@ -368,6 +375,9 @@ describe("Explore static identity and Dexscreener market contract", () => {
       tokenAddress: shard.tokenAddress,
       name: "Shard",
       symbol: "SHARD",
+      description: SHARD_PUBLIC_PRESENTATION_V1.description,
+      imageUrl: "/brand/projects/shard-token-v1.png",
+      links: SHARD_PUBLIC_PRESENTATION_V1.links,
     });
     expect(body.catalog).toMatchObject({
       identityCount: TOKEN_COUNT + 1,
@@ -376,7 +386,26 @@ describe("Explore static identity and Dexscreener market contract", () => {
         projectedIdentityCount: 1,
       },
     });
-    expect(mocks.readDex.mock.calls.at(-1)?.[0]).toEqual([shard]);
+    expect(mocks.readDex.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({
+        tokenAddress: shard.tokenAddress,
+        description: SHARD_PUBLIC_PRESENTATION_V1.description,
+        imageUrl: SHARD_PUBLIC_PRESENTATION_V1.imageUrl,
+        links: SHARD_PUBLIC_PRESENTATION_V1.links,
+      }),
+    ]);
+
+    const withSocials = await json(await GET(
+      request("sort=newest&page=1&limit=100&model=custom&socials=yes"),
+    ));
+    expect(withSocials.total).toBe(1);
+    expect(withSocials.tokens[0].tokenAddress).toBe(shard.tokenAddress);
+
+    const withoutSocials = await json(await GET(
+      request("sort=newest&page=1&limit=100&model=custom&socials=no"),
+    ));
+    expect(withoutSocials.total).toBe(0);
+    expect(withoutSocials.tokens).toEqual([]);
   });
 
   it("filters Classic and Custom launch categories before pagination", async () => {

@@ -25,6 +25,8 @@ import { readProductionSourceVerificationDisplayV1 } from
   "../../../../lib/server/custom-launch/source-verification-display-v1";
 import { routerTradeProjectForEntryV1 } from
   "../../../../lib/custom-launch/router-trade-adapters-v1";
+import { publicExplorePresentationEntryV1 } from
+  "../../../../lib/public-explore-catalog-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../lib/server/custom-launch/public-readiness";
 import { readPublicCreatorArticleV1 } from
@@ -236,9 +238,12 @@ export async function GET(request: NextRequest) {
     routerCustomStatus = "unavailable";
     routerReadFailed = true;
   }
-  const entry: ExploreEntry | null = identityEntries.find(
+  const identityEntry: ExploreEntry | null = identityEntries.find(
     (candidate) => tokenAddress(candidate) === address,
   ) ?? null;
+  const entry = identityEntry === null
+    ? null
+    : publicExplorePresentationEntryV1(identityEntry);
   if (
     catalog === null &&
     (routerReadResult.snapshot === null ||
@@ -421,7 +426,9 @@ export async function GET(request: NextRequest) {
     const marketAsOf = valuedEntry.valuation.status === "available"
       ? valuedEntry.valuation.asOfTime
       : undefined;
-    const publicEntry = publicExploreEntryV1(valuedEntry);
+    const publicEntry = publicExploreEntryV1(
+      publicExplorePresentationEntryV1(valuedEntry),
+    );
 
     return NextResponse.json(
       {
@@ -454,10 +461,12 @@ export async function GET(request: NextRequest) {
     });
     // Unexpected adapter failures remain fail-soft: the already verified
     // identity is returned without valuation rather than hidden behind a 503.
-    const publicEntry = publicExploreEntryV1({
-      ...entry,
-      valuation: { status: "unavailable", reason: "source-unavailable" },
-    });
+    const publicEntry = publicExploreEntryV1(
+      publicExplorePresentationEntryV1({
+        ...entry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }),
+    );
     const creatorArticle = await readPublicCreatorArticleV1(entry.tokenAddress!);
     return NextResponse.json(
       {

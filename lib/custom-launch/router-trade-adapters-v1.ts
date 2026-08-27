@@ -160,6 +160,19 @@ const SHARD_HOOK_RUNTIME_KECCAK256 =
 const SHARD_HOOK_RUNTIME_SHA256 =
   "sha256:64010636d11620eb3e646793b19a051573097bd1859958b6413e6c6c15469493" as const;
 
+export const SHARD_PUBLIC_PRESENTATION_V1 = Object.freeze({
+  chainId: 1,
+  tokenAddress: "0xFAce73B63787960282f2d4682d3752Beb25271Ad",
+  launchId: SHARD_LAUNCH_ID,
+  stampHash: SHARD_STAMP_HASH,
+  description: "The NFT bonding curve built directly on UNI v4",
+  imageUrl: "/brand/projects/shard-token-v1.png",
+  links: Object.freeze([
+    Object.freeze({ kind: "website" as const, url: "https://shards.gallery/" }),
+    Object.freeze({ kind: "x" as const, url: "https://x.com/ShardsToken" }),
+  ]),
+});
+
 const SHARD_COMPONENTS = Object.freeze([
   Object.freeze({
     label: "SHARD hook",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  SHARD_PUBLIC_PRESENTATION_V1,
   SHARD_ROUTER_TRADE_ADAPTER_V1,
   SHARD_ROUTER_TRADE_CAPABILITY_V1,
   SHARD_ROUTER_TRADE_MARKET_ID,
@@ -26,6 +27,23 @@ import {
 } from "./shard-router-trade-fixture";
 
 describe("reviewed Router trade adapter registry v1", () => {
+  it("binds the public SHARD presentation to the reviewed launch identity", () => {
+    expect(SHARD_PUBLIC_PRESENTATION_V1).toEqual({
+      chainId: 1,
+      tokenAddress: "0xFAce73B63787960282f2d4682d3752Beb25271Ad",
+      launchId:
+        "0xe253f3bd22fcb3d6cb20b9d408287e30f0f1aeeb56426b779425c35fd6411de9",
+      stampHash:
+        "0x55fbb83ac4599303b146cb4a2f7c1c906d8b3e9fe4fbbe5bf9cf44e905cc3ce0",
+      description: "The NFT bonding curve built directly on UNI v4",
+      imageUrl: "/brand/projects/shard-token-v1.png",
+      links: [
+        { kind: "website", url: "https://shards.gallery/" },
+        { kind: "x", url: "https://x.com/ShardsToken" },
+      ],
+    });
+  });
+
   it("preserves the exact FADE adapter while adding the exact SHARD adapter", () => {
     expect(resolveRouterTradeAdapterV1(fadeRouterTradeEntry)).toMatchObject({
       projectId: FADE_ROUTER_TRADE_PROJECT_ID,

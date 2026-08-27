@@ -22,7 +22,10 @@ import {
   ROUTER_CUSTOM_LAUNCH_SOURCE,
 } from "../../../lib/alchemy/router-custom-public.server";
 import { parseExploreSort } from "../../../lib/onchain/query";
-import { publicExploreCatalogEntriesV1 } from
+import {
+  publicExploreCatalogEntriesV1,
+  publicExplorePresentationEntryV1,
+} from
   "../../../lib/public-explore-catalog-v1";
 import { safeOperationalRpcError } from
   "../../../lib/onchain/operational-rpc-failover.server";
@@ -434,6 +437,9 @@ export async function GET(request: NextRequest) {
     const publicIdentityEntries = publicExploreCatalogEntriesV1(
       identityEntries,
     );
+    const presentedPublicEntries = publicIdentityEntries.map(
+      publicExplorePresentationEntryV1,
+    );
     const identityCommitment = catalog === null
       ? canonicalSha256("programmable.public-identity-fallback.v1", {
           chainId: 1,
@@ -477,7 +483,7 @@ export async function GET(request: NextRequest) {
     let marketQualifiedEntryCount = 0;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
       const filtered = filterExploreEntries(
-        publicIdentityEntries,
+        presentedPublicEntries,
         options.query,
         options.socials,
         options.model,
@@ -498,7 +504,7 @@ export async function GET(request: NextRequest) {
       });
     } else {
       const identityPage = paginateExploreEntriesV1(
-        publicIdentityEntries,
+        presentedPublicEntries,
         options,
       );
       const valued = await readDexscreenerExploreEntriesV1(
@@ -508,7 +514,9 @@ export async function GET(request: NextRequest) {
       marketRead = valued.marketRead;
       paginated = { ...identityPage, tokens: [...valued.entries] };
     }
-    const pageEntries = paginated.tokens as ValuedExploreEntry[];
+    const pageEntries = paginated.tokens.map(
+      publicExplorePresentationEntryV1,
+    ) as ValuedExploreEntry[];
     const dataQuality = buildExploreDataQuality({
       entries: pageEntries,
       generatedAt: identityGeneratedAt,
