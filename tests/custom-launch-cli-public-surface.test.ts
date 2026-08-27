@@ -881,47 +881,48 @@ describe("public Custom Launch CLI surface", () => {
     expect(outputForStage("funding-signature-required")).toBeDefined();
     expect(outputForStage("funding-signature-verified")).toBeDefined();
 
-    const simulatingOutput = outputForStage("simulating");
-    expect(simulatingOutput.required).toEqual([
-      "schemaVersion",
-      "integrationState",
-      "stage",
-      "actionRequired",
-      "fundingBoundary",
-      "launchProfileHash",
-      "initializerTargetId",
-      "fundingMode",
-      "permitWindow",
-      "artifact",
-      "signedPermit",
-      "observationWindow",
-      "onchain",
-      "walletTransaction",
-      "transactionPreimageHash",
-      "simulation",
-    ]);
-    expect(simulatingOutput.properties).toMatchObject({
-      stage: { const: "simulating" },
-      actionRequired: { type: "null" },
-      artifact: {
-        $ref: "#/components/schemas/PreparedLaunchArtifactV3",
+    expect(outputForStage("simulating")).toBeUndefined();
+    const simulatingResourceContract = v3.components.schemas
+      .CustomLaunchResourceV3.allOf.find(
+        (constraint: { if?: { properties?: { status?: { const?: string } } } }) =>
+          constraint.if?.properties?.status?.const === "simulating",
+      );
+    expect(simulatingResourceContract).toEqual({
+      if: {
+        properties: { status: { const: "simulating" } },
+        required: ["status"],
       },
-      signedPermit: {
-        $ref: "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1",
+      then: {
+        properties: { output: { type: "null" } },
+        required: ["output"],
       },
-      observationWindow: {
-        $ref: "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1",
-      },
-      onchain: { type: "null" },
-      walletTransaction: {
-        $ref: "#/components/schemas/ExactWalletTransactionV3",
-      },
-      transactionPreimageHash: {
-        $ref: "./custom-launch-v2.json#/components/schemas/Sha256Digest",
-      },
-      simulation: { type: "null" },
     });
-    expect(simulatingOutput.additionalProperties).toBe(false);
+    const authorizedRouterEnvelopeContract = v3.components.schemas
+      .CustomLaunchResourceV3.allOf.find(
+        (constraint: {
+          if?: { properties?: { output?: { anyOf?: unknown[] } } };
+        }) => Array.isArray(constraint.if?.properties?.output?.anyOf),
+      );
+    expect(authorizedRouterEnvelopeContract).toEqual({
+      if: {
+        properties: {
+          output: {
+            type: "object",
+            anyOf: [
+              { required: ["signedPermit"] },
+              { required: ["walletTransaction"] },
+            ],
+          },
+        },
+        required: ["output"],
+      },
+      then: {
+        properties: {
+          status: { enum: ["authorized", "submitted", "finalized"] },
+        },
+        required: ["status"],
+      },
+    });
 
     const walletOutput = outputForStage("router-transaction-required");
     expect(walletOutput.required).toEqual([
@@ -963,6 +964,11 @@ describe("public Custom Launch CLI surface", () => {
       },
     });
     expect(walletOutput.additionalProperties).toBe(false);
+    expect(outputVariants.filter(
+      (variant: { properties: Record<string, unknown> }) =>
+        Object.hasOwn(variant.properties, "signedPermit") ||
+        Object.hasOwn(variant.properties, "walletTransaction"),
+    )).toEqual([walletOutput]);
     expect(v3.components.schemas.ExactSimulationEvidenceV3.required).toEqual([
       "outcome",
       "transactionPreimageHash",

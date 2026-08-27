@@ -5028,86 +5028,6 @@
               "stage",
               "actionRequired",
               "fundingBoundary",
-              "launchProfileHash",
-              "initializerTargetId",
-              "fundingMode",
-              "permitWindow",
-              "artifact",
-              "signedPermit",
-              "observationWindow",
-              "onchain",
-              "walletTransaction",
-              "transactionPreimageHash",
-              "simulation"
-            ],
-            "properties": {
-              "schemaVersion": {
-                "const": "programmable.custom-launch-authorization-result.v3"
-              },
-              "integrationState": {
-                "const": "ready"
-              },
-              "stage": {
-                "const": "simulating"
-              },
-              "actionRequired": {
-                "type": "null"
-              },
-              "fundingBoundary": {
-                "$ref": "#/components/schemas/FundingBoundaryV3"
-              },
-              "platformAdmission": {
-                "$ref": "#/components/schemas/PlatformAdmissionStatusV1"
-              },
-              "launchProfileHash": {
-                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
-              },
-              "initializerTargetId": {
-                "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
-              },
-              "fundingMode": {
-                "enum": [
-                  "none",
-                  "wallet-transaction-value",
-                  "eip-3009-receive-with-authorization"
-                ]
-              },
-              "permitWindow": {
-                "$ref": "#/components/schemas/DirectNativePermitWindowV1"
-              },
-              "artifact": {
-                "$ref": "#/components/schemas/PreparedLaunchArtifactV3"
-              },
-              "signedPermit": {
-                "$ref": "./custom-launch-v2.json#/components/schemas/SignedPreparedLaunchPermitV1"
-              },
-              "observationWindow": {
-                "$ref": "./custom-launch-v2.json#/components/schemas/CustomLaunchObservationWindowV1"
-              },
-              "onchain": {
-                "type": "null"
-              },
-              "walletTransaction": {
-                "$ref": "#/components/schemas/ExactWalletTransactionV3"
-              },
-              "transactionPreimageHash": {
-                "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
-              },
-              "simulation": {
-                "type": "null"
-              }
-            },
-            "description": "Durable exact Router simulation input. No controller-wallet action is exposed before simulation passes.",
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "schemaVersion",
-              "integrationState",
-              "stage",
-              "actionRequired",
-              "fundingBoundary",
               "artifact",
               "signedPermit",
               "observationWindow",
@@ -5428,7 +5348,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Null while simulating. The signed permit and exact wallet transaction are exposed only after the resource reaches authorized."
           },
           "failure": {
             "oneOf": [
@@ -5480,6 +5401,66 @@
                 "required": ["launchProfileVersion", "projectMetadata", "projectMetadataHash"]
               }
             ]
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "simulating"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "output": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "output"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "anyOf": [
+                    {
+                      "required": [
+                        "signedPermit"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "walletTransaction"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "output"
+              ]
+            },
+            "then": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "authorized",
+                    "submitted",
+                    "finalized"
+                  ]
+                }
+              },
+              "required": [
+                "status"
+              ]
+            }
           }
         ],
         "additionalProperties": false
