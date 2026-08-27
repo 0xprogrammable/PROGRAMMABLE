@@ -123,16 +123,26 @@ jobs:
           echo "tag=programmable-launch-v$EXPECTED_VERSION" >> "$GITHUB_OUTPUT"
           echo "asset_glob=$RUNNER_TEMP/programmable-launch-release/*" >> "$GITHUB_OUTPUT"
 
-      - name: Require immutable releases and protected CLI tags
+      - name: Require protected CLI tags and a fresh release identity
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.identity.outputs.tag }}
         run: |
           set -euo pipefail
-          test "$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq '.enabled')" = "true"
-          ruleset_id="$(gh api "repos/$GITHUB_REPOSITORY/rulesets" --jq '.[] | select(.name == "Protect Programmable Launch CLI release tags" and .target == "tag" and .enforcement == "active") | .id')"
-          test -n "$ruleset_id"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/rulesets/$ruleset_id" --jq '(.conditions.ref_name.include == ["refs/tags/programmable-launch-v*"]) and (.conditions.ref_name.exclude == []) and ([.rules[].type] | sort == ["deletion", "update"]) and (.bypass_actors == [])')" = "true"
+          rulesets="$RUNNER_TEMP/programmable-launch-tag-rulesets.json"
+          curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/rulesets" \
+            --output "$rulesets"
+          ruleset_id="$(jq -r '.[] | select(.name == "Protect Programmable Launch CLI release tags" and .target == "tag" and .enforcement == "active") | .id' "$rulesets")"
+          test "$ruleset_id" = "21679403"
+          curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/rulesets/$ruleset_id" \
+            --output "$rulesets"
+          test "$(jq -r '(.id == 21679403) and (.updated_at == "2026-08-27T20:27:05.716Z") and (.conditions.ref_name.include == ["refs/tags/programmable-launch-v*"]) and (.conditions.ref_name.exclude == []) and ([.rules[].type] | sort == ["deletion", "update"])' "$rulesets")" = "true"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release already exists and will not be changed." >&2
             exit 1
