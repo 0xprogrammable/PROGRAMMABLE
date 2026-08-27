@@ -317,6 +317,16 @@ export function routerCustomSnapshotPreservesFinalizedIdentitiesV1(
   }
 }
 
+function routerCustomSnapshotsShareFinalizedIdentityBoundaryV1(
+  left: RouterCustomIdentitySnapshotV1,
+  right: RouterCustomIdentitySnapshotV1,
+) {
+  return left.asOfBlock === right.asOfBlock &&
+    left.asOfBlockHash.toLowerCase() === right.asOfBlockHash.toLowerCase() &&
+    routerCustomSnapshotPreservesFinalizedIdentitiesV1(left, right) &&
+    routerCustomSnapshotPreservesFinalizedIdentitiesV1(right, left);
+}
+
 function jsonRecord(
   value: JsonValue | undefined,
 ): Readonly<Record<string, JsonValue>> {
@@ -457,7 +467,13 @@ async function persistDurableRouterCustomIdentitySnapshotV1(
       return;
     }
     if (previousBlock === nextBlock) {
-      if (existing.snapshot.identityCommitment !== snapshot.identityCommitment) {
+      if (
+        existing.snapshot.identityCommitment !== snapshot.identityCommitment &&
+        !routerCustomSnapshotsShareFinalizedIdentityBoundaryV1(
+          existing.snapshot,
+          snapshot,
+        )
+      ) {
         throw new RouterCustomSnapshotConflictError(
           "Router Custom durable snapshot conflicts at one block",
         );
@@ -572,9 +588,18 @@ export function createRouterCustomIdentitySnapshotReaderV1(
                 durable.asOfBlockHash.toLowerCase() ||
               previous.identityCommitment !== durable.identityCommitment)
           ) {
-            throw new RouterCustomSnapshotConflictError(
-              "Router Custom cached and durable snapshots conflict",
-            );
+            if (!routerCustomSnapshotsShareFinalizedIdentityBoundaryV1(
+              previous,
+              durable,
+            )) {
+              throw new RouterCustomSnapshotConflictError(
+                "Router Custom cached and durable snapshots conflict",
+              );
+            }
+            // Observation-only finality fields can be rehydrated at a later
+            // head without changing launch identity. Prefer the shared durable
+            // bytes so cold serverless instances publish one stable boundary.
+            previous = durable;
           }
           if (
             durableBlock > previousBlock &&
@@ -606,8 +631,16 @@ export function createRouterCustomIdentitySnapshotReaderV1(
               snapshot.asOfBlockHash.toLowerCase() ||
             previous.identityCommitment !== snapshot.identityCommitment)
         ) {
-          throw new RouterCustomSnapshotConflictError(
-            "Router Custom snapshots conflict at one boundary",
+          if (!routerCustomSnapshotsShareFinalizedIdentityBoundaryV1(
+            previous,
+            snapshot,
+          )) {
+            throw new RouterCustomSnapshotConflictError(
+              "Router Custom snapshots conflict at one boundary",
+            );
+          }
+          return cacheSnapshot(
+            lastKnownGoodRouterCustomSnapshotV1(previous),
           );
         }
         if (

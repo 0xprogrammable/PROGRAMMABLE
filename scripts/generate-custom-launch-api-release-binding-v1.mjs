@@ -164,12 +164,25 @@ const ADDRESS_KEYS = Object.freeze([
   "poolManager",
   "permitAuthority",
 ]);
+const DEFAULT_WALLET_ADMIN_ASSERTION_MODE = "compatibility";
+const WALLET_ADMIN_SECURITY_BY_ASSERTION_MODE = Object.freeze({
+  compatibility: Object.freeze({
+    assertionVersion: "2",
+    assertionMode: "compatibility",
+    legacyBearerRequestsAccepted: true,
+  }),
+  enforced: Object.freeze({
+    assertionVersion: "2",
+    assertionMode: "enforced",
+    legacyBearerRequestsAccepted: false,
+  }),
+});
 const COMMIT = /^(?!0{40}$)[0-9a-f]{40}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const ADDRESS = /^0x[0-9A-Fa-f]{40}$/u;
 const CODE_HASH = /^0x[0-9a-f]{64}$/u;
 const SECRET_FIELD = /(?:authorization|cookie|password|private.?key|secret|token)/iu;
-const ARGUMENTS = Object.freeze([
+const PATH_ARGUMENTS = Object.freeze([
   "websiteRoot",
   "backendRoot",
   "flyReleases",
@@ -179,6 +192,8 @@ const ARGUMENTS = Object.freeze([
   "supabaseMigrationList",
   "databaseSchemaEvidenceOutput",
 ]);
+const OPTIONAL_ARGUMENTS = Object.freeze(["walletAdminAssertionMode"]);
+const ARGUMENTS = Object.freeze([...PATH_ARGUMENTS, ...OPTIONAL_ARGUMENTS]);
 
 function sha256(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -205,6 +220,15 @@ function exactKeys(value, keys) {
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function expectedWalletAdminSecurity(assertionModeInput) {
+  const assertionMode = assertionModeInput ?? DEFAULT_WALLET_ADMIN_ASSERTION_MODE;
+  if (typeof assertionMode !== "string"
+    || !Object.hasOwn(WALLET_ADMIN_SECURITY_BY_ASSERTION_MODE, assertionMode)) {
+    throw new Error("wallet-admin assertion mode is unsupported");
+  }
+  return WALLET_ADMIN_SECURITY_BY_ASSERTION_MODE[assertionMode];
 }
 
 async function readBoundedFile(path, label) {
@@ -426,7 +450,14 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
   }
 }
 
-function validateReadiness(readiness, backend, inventory, contract, profile) {
+function validateReadiness(
+  readiness,
+  backend,
+  inventory,
+  contract,
+  profile,
+  walletAdminSecurity,
+) {
   const profileSha256 = sha256(Buffer.from(canonicalize(profile), "utf8"));
   const migrationInventorySha256 = prettyJsonSha256(inventory);
   const apiContractSha256 = prettyJsonSha256(contract);
@@ -439,9 +470,12 @@ function validateReadiness(readiness, backend, inventory, contract, profile) {
     || readiness.migrationInventorySha256 !== migrationInventorySha256
     || readiness.apiContractSha256 !== apiContractSha256
     || !exactKeys(readiness.walletAdminSecurity, WALLET_ADMIN_SECURITY_KEYS)
-    || readiness.walletAdminSecurity.assertionVersion !== "2"
-    || readiness.walletAdminSecurity.assertionMode !== "compatibility"
-    || readiness.walletAdminSecurity.legacyBearerRequestsAccepted !== true
+    || readiness.walletAdminSecurity.assertionVersion
+      !== walletAdminSecurity.assertionVersion
+    || readiness.walletAdminSecurity.assertionMode
+      !== walletAdminSecurity.assertionMode
+    || readiness.walletAdminSecurity.legacyBearerRequestsAccepted
+      !== walletAdminSecurity.legacyBearerRequestsAccepted
     || !exactKeys(readiness.publicProfile, PUBLIC_PROFILE_KEYS)
     || readiness.publicProfile.profileId !== profile.profileId
     || readiness.publicProfile.profileVersion !== profile.profileVersion
@@ -545,6 +579,9 @@ async function databaseSchemaEvidence(backendRoot, migrationList) {
 }
 
 export async function materializeCustomLaunchApiReleaseBindingV1(input) {
+  const walletAdminSecurity = expectedWalletAdminSecurity(
+    input.walletAdminAssertionMode,
+  );
   const [website, backend] = await Promise.all([
     repositoryIdentity(
       input.websiteRoot,
@@ -596,6 +633,7 @@ export async function materializeCustomLaunchApiReleaseBindingV1(input) {
     inventory,
     apiContractDocument.value,
     profileDocument.value,
+    walletAdminSecurity,
   );
   const databaseEvidence = await databaseSchemaEvidence(
     backend.root,
@@ -676,30 +714,37 @@ export async function materializeCustomLaunchApiReleaseBindingV1(input) {
   });
 }
 
-function parseArguments(argv) {
-  if (argv.length !== ARGUMENTS.length * 2) throw new Error("invalid command arguments");
+export function parseCustomLaunchApiReleaseBindingArguments(argv) {
+  if (argv.length !== PATH_ARGUMENTS.length * 2
+    && argv.length !== ARGUMENTS.length * 2) {
+    throw new Error("invalid command arguments");
+  }
   const parsed = Object.create(null);
   for (let index = 0; index < argv.length; index += 2) {
     const rawKey = argv[index];
     const value = argv[index + 1];
     if (typeof rawKey !== "string" || !rawKey.startsWith("--")
-      || typeof value !== "string" || !isAbsolute(value)) {
-      throw new Error("all command arguments must be absolute file or repository paths");
-    }
+      || typeof value !== "string") throw new Error("invalid command arguments");
     const key = rawKey.slice(2).replace(/-([a-z])/gu, (_, letter) => letter.toUpperCase());
     if (!ARGUMENTS.includes(key) || parsed[key] !== undefined) {
       throw new Error("invalid command arguments");
     }
+    if (PATH_ARGUMENTS.includes(key) && !isAbsolute(value)) {
+      throw new Error("all path arguments must be absolute file or repository paths");
+    }
+    if (key === "walletAdminAssertionMode") expectedWalletAdminSecurity(value);
     parsed[key] = value;
   }
-  if (ARGUMENTS.some((key) => parsed[key] === undefined)) {
+  if (PATH_ARGUMENTS.some((key) => parsed[key] === undefined)) {
     throw new Error("required command argument is unavailable");
   }
   return parsed;
 }
 
 async function main(argv) {
-  const result = await materializeCustomLaunchApiReleaseBindingV1(parseArguments(argv));
+  const result = await materializeCustomLaunchApiReleaseBindingV1(
+    parseCustomLaunchApiReleaseBindingArguments(argv),
+  );
   if (!SHA256.test(result.documentSha256)
     || !SHA256.test(result.databaseSchemaEvidenceSha256)) {
     throw new Error("release evidence digest is invalid");
