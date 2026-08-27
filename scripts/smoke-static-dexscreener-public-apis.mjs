@@ -487,7 +487,7 @@ function exactCatalogSnapshot(
       launchSource: catalog.launchSource,
     });
   }
-  const expectedLaunchSource = [
+  const launchSource = [
     source,
     ...(registryCustomStatus === "current"
       ? ["registry.custom-launched"]
@@ -518,7 +518,7 @@ function exactCatalogSnapshot(
     ISO_TIMESTAMP.test(String(generatedAt ?? "")) &&
     new Date(Date.parse(generatedAt)).toISOString() === generatedAt &&
     catalog.identityCount === response.body?.total &&
-    catalog.launchSource === expectedLaunchSource &&
+    catalog.launchSource === launchSource &&
     ["current", "last-known-good"].includes(catalog.completeness?.classic) &&
     catalog.completeness?.stock === "excluded" &&
     customStatus === expectedCustomStatus &&
@@ -553,9 +553,9 @@ function exactCatalogSnapshot(
     POSITIVE_INTEGER.test(String(catalog.asOfBlock ?? "")) &&
     /^0x[0-9a-f]{64}$/u.test(String(catalog.asOfBlockHash ?? "")) &&
     response.headers.get("x-programmable-launch-source") ===
-      expectedLaunchSource &&
+      launchSource &&
     response.headers.get("x-programmable-read-source") ===
-      `${expectedLaunchSource}+dexscreener` &&
+      `${launchSource}+dexscreener` &&
     response.headers.get("x-programmable-identity-last-indexed-at") ===
       generatedAt &&
     (
@@ -579,7 +579,7 @@ function exactCatalogSnapshot(
     scope: catalog.scope,
     evidenceDeployment: catalog.evidence.deployment,
     evidenceSourceCommit: catalog.evidence.sourceCommit,
-    launchSource: expectedLaunchSource,
+    launchSource,
   });
 }
 
