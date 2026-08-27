@@ -33,7 +33,7 @@ submitted bytes. Build the real graph rather than fitting the project into a sam
 
 Collect and bind:
 
-- project name, token symbol, description, optional image, and sorted canonical public links;
+- project name, token symbol, description, an exact source-bound image, and sorted canonical public links;
 - exact Solidity Standard JSON source content and matching compiler output;
 - full solc version, optimizer and EVM settings, libraries, ABI, creation/runtime bytecode, metadata, and constructor
   or initializer arguments;

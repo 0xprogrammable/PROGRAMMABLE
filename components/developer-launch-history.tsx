@@ -142,7 +142,13 @@ export type LaunchResource = Readonly<{
   ownerWallet: `0x${string}`;
   status: LaunchStatus;
   requestHash: `sha256:${string}`;
-  launchProfileVersion: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0" | null;
+  launchProfileVersion:
+    | "2.0.0"
+    | "3.0.0"
+    | "3.1.0"
+    | "3.2.0"
+    | "3.3.0"
+    | null;
   launchProfileHash: `sha256:${string}` | null;
   launchIntentHash: `sha256:${string}` | null;
   projectMetadata: CustomLaunchProjectMetadataV1 | null;
@@ -653,7 +659,8 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     && (value.launchProfileVersion === "2.0.0"
       || value.launchProfileVersion === "3.0.0"
       || value.launchProfileVersion === "3.1.0"
-      || value.launchProfileVersion === "3.2.0")
+      || value.launchProfileVersion === "3.2.0"
+      || value.launchProfileVersion === "3.3.0")
     ? value.launchProfileVersion
     : null;
   if (v3 && launchProfileVersion === null) return null;
@@ -678,13 +685,15 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
         || launchProfileVersion === "3.1.0") && (
         projectMetadata !== null || projectMetadataHash !== null
       ))
-      || (launchProfileVersion === "3.2.0" && (
+      || ((launchProfileVersion === "3.2.0"
+        || launchProfileVersion === "3.3.0") && (
         projectMetadata === null || projectMetadataHash === null
       ))
     )
   ) return null;
   if (
-    launchProfileVersion === "3.2.0"
+    (launchProfileVersion === "3.2.0"
+      || launchProfileVersion === "3.3.0")
     && projectMetadata
     && projectMetadataHash
     && browserProjectMetadataHashV1(projectMetadata) !== projectMetadataHash
@@ -988,6 +997,16 @@ type WalletLegacyProjectBindingV1 = Readonly<{
 type WalletProjectRequestBindingV1 = WalletProjectMetadataBindingV1
   | WalletLegacyProjectBindingV1;
 
+export type WalletProjectMetadataRequirementsV1 = Readonly<{
+  name: boolean;
+  symbol: boolean;
+  description: boolean;
+  image: boolean;
+  website: boolean;
+  x: boolean;
+  complete: boolean;
+}>;
+
 const artifactProjectMetadataKeys = Object.freeze([
   "unboundGraphBundleHash",
   "projectMetadata",
@@ -1032,12 +1051,38 @@ function artifactProjectMetadataKeyCount(
     Object.hasOwn(artifact, key)).length;
 }
 
+/**
+ * Current-profile launches must carry the public identity people will see on
+ * Programmable and downstream indexers before either wallet boundary opens.
+ * This is intentionally derived from the immutable metadata object, never
+ * from a mutable form or caller-provided display fallback.
+ */
+export function walletProjectMetadataRequirementsV1(
+  projectMetadata: CustomLaunchProjectMetadataV1,
+): WalletProjectMetadataRequirementsV1 {
+  const requirements = {
+    name: projectMetadata.token.name.trim().length > 0,
+    symbol: projectMetadata.token.symbol.trim().length > 0,
+    description: projectMetadata.presentation.description.trim().length > 0,
+    image: projectMetadata.presentation.image !== null,
+    website: projectMetadata.presentation.links.some(
+      (link) => link.kind === "website",
+    ),
+    x: projectMetadata.presentation.links.some((link) => link.kind === "x"),
+  };
+  return Object.freeze({
+    ...requirements,
+    complete: Object.values(requirements).every(Boolean),
+  });
+}
+
 export function walletProjectMetadataSummaryV1(
   launch: LaunchResource,
 ): WalletProjectMetadataBindingV1 | null {
   if (
     launch.routeId !== "custom-launch:create:v3"
-    || launch.launchProfileVersion !== "3.2.0"
+    || (launch.launchProfileVersion !== "3.2.0"
+      && launch.launchProfileVersion !== "3.3.0")
     || !launch.launchIntentHash
     || !launch.projectMetadata
     || !launch.projectMetadataHash
@@ -1057,7 +1102,11 @@ export function walletProjectMetadataBindingV1(
   launch: LaunchResource,
 ): WalletProjectMetadataBindingV1 | null {
   const summary = walletProjectMetadataSummaryV1(launch);
-  if (!summary) return null;
+  if (
+    !summary
+    || (launch.launchProfileVersion === "3.3.0"
+      && !walletProjectMetadataRequirementsV1(summary.projectMetadata).complete)
+  ) return null;
   const artifact = launch.output?.artifact;
   if (artifact !== undefined) {
     if (!isRecord(artifact)) return null;
@@ -1546,6 +1595,11 @@ function ProjectMetadataReview({
   const initials = [...token.symbol].slice(0, 2).join("").toUpperCase();
   const imagePreview = useVerifiedProjectImageV1(presentation.image);
   const linkLabels = projectMetadataLinkDisplayLabels(presentation.links);
+  const requirements = walletProjectMetadataRequirementsV1(projectMetadata);
+  const completeForProfile = launch.launchProfileVersion !== "3.3.0"
+    || requirements.complete;
+  const website = presentation.links.find((link) => link.kind === "website");
+  const xLink = presentation.links.find((link) => link.kind === "x");
   return (
     <section
       className={styles.projectReview}
@@ -1572,8 +1626,65 @@ function ProjectMetadataReview({
           <strong>${token.symbol}</strong>
         </div>
       </div>
+      <div className={styles.projectRequirementHeading}>
+        <h5>
+          {launch.launchProfileVersion === "3.3.0"
+            ? "Required launch details"
+            : "Bound legacy launch details"}
+        </h5>
+        <span data-complete={completeForProfile ? "true" : "false"}>
+          {completeForProfile ? "Bound" : "Action required"}
+        </span>
+      </div>
+      <dl className={styles.projectRequirements}>
+        <div data-complete={requirements.name ? "true" : "false"}>
+          <dt>Name</dt>
+          <dd>{requirements.name ? token.name : "Missing"}</dd>
+        </div>
+        <div data-complete={requirements.symbol ? "true" : "false"}>
+          <dt>Ticker</dt>
+          <dd>{requirements.symbol ? `$${token.symbol}` : "Missing"}</dd>
+        </div>
+        <div data-complete={requirements.description ? "true" : "false"}>
+          <dt>Coin description</dt>
+          <dd>{requirements.description ? "Included below" : "Missing"}</dd>
+        </div>
+        <div data-complete={requirements.image ? "true" : "false"}>
+          <dt>Profile image</dt>
+          <dd>{requirements.image ? "Digest bound" : "Missing"}</dd>
+        </div>
+        <div data-complete={requirements.website ? "true" : "false"}>
+          <dt>Website</dt>
+          <dd>
+            {website ? (
+              <a href={website.uri} rel="noreferrer" target="_blank">
+                {new URL(website.uri).hostname.replace(/^www\./u, "")}
+                <span className={styles.visuallyHidden}>, opens in a new tab</span>
+              </a>
+            ) : "Missing"}
+          </dd>
+        </div>
+        <div data-complete={requirements.x ? "true" : "false"}>
+          <dt>X</dt>
+          <dd>
+            {xLink ? (
+              <a href={xLink.uri} rel="noreferrer" target="_blank">
+                {new URL(xLink.uri).hostname.replace(/^www\./u, "")}
+                <span className={styles.visuallyHidden}>, opens in a new tab</span>
+              </a>
+            ) : "Missing"}
+          </dd>
+        </div>
+      </dl>
       {presentation.description ? (
-        <p className={styles.projectDescription}>{presentation.description}</p>
+        <div className={styles.projectDescription}>
+          <strong>Coin description</strong>
+          <p>{presentation.description}</p>
+        </div>
+      ) : launch.launchProfileVersion === "3.3.0" ? (
+        <p className={styles.projectMissing} role="alert">
+          Add a coin description and repack this request before signing.
+        </p>
       ) : null}
       {presentation.image && imagePreview.state !== "verified" ? (
         <p className={styles.projectAssetNote} role="status">
@@ -1616,10 +1727,17 @@ function ProjectMetadataReview({
           </dd>
         </div>
       </dl>
-      <p className={styles.projectBoundary}>
-        Review this immutable summary before either wallet step. Changing any
-        field requires a newly packed request.
-      </p>
+      {completeForProfile ? (
+        <p className={styles.projectBoundary}>
+          Review this immutable summary before either wallet step. Changing any
+          bound field requires a newly packed request.
+        </p>
+      ) : (
+        <p className={styles.projectBoundary}>
+          Every required launch detail must be present in the immutable request
+          before a wallet signature or transaction can open.
+        </p>
+      )}
     </section>
   );
 }
@@ -2831,9 +2949,17 @@ export function DeveloperLaunchHistory({
             const projectMetadataSummary = walletProjectMetadataSummaryV1(
               reviewLaunch,
             );
+            const projectMetadataRequirements = projectMetadataSummary
+              ? walletProjectMetadataRequirementsV1(
+                  projectMetadataSummary.projectMetadata,
+                )
+              : null;
             const projectMetadataBinding = walletProjectMetadataBindingV1(
               reviewLaunch,
             );
+            const projectMetadataReadyForProfile = projectMetadataSummary !== null
+              && (reviewLaunch.launchProfileVersion !== "3.3.0"
+                || projectMetadataRequirements?.complete === true);
             const projectRequestBinding = walletProjectRequestBindingV1(
               reviewLaunch,
             );
@@ -2939,6 +3065,21 @@ export function DeveloperLaunchHistory({
                   </div>
                 ) : null}
                 {projectMetadataSummary
+                  && projectMetadataRequirements
+                  && reviewLaunch.launchProfileVersion === "3.3.0"
+                  && !projectMetadataRequirements.complete ? (
+                    <div className={styles.metadataUnavailable} role="alert">
+                      <strong>Required launch details are missing</strong>
+                      <p>
+                        Name, ticker, coin description, profile image, website
+                        and X must all be bound before signing. Repack this
+                        request with the missing details; no wallet action can
+                        open from this record.
+                      </p>
+                    </div>
+                  ) : null}
+                {projectMetadataSummary
+                  && projectMetadataReadyForProfile
                   && !projectMetadataBinding
                   && ["awaiting_funding_authorization", "authorized"]
                     .includes(reviewLaunch.status) ? (
@@ -3213,9 +3354,10 @@ export function DeveloperLaunchHistory({
                                 ? "Retry funding submission"
                                 : "Review and sign USDC authorization"}
                           </button>
-                        ) : projectMetadataSummary
-                          || projectRequestBinding?.mode
-                            === "legacy-exact-retry" ? (
+                        ) : (
+                          projectMetadataReadyForProfile
+                        ) || projectRequestBinding?.mode
+                          === "legacy-exact-retry" ? (
                           <button
                             className={styles.walletButton}
                             disabled={
@@ -3261,9 +3403,10 @@ export function DeveloperLaunchHistory({
                               ? "Opening wallet transaction review"
                               : "Review and send launch transaction"}
                           </button>
-                        ) : projectMetadataSummary
-                          || projectRequestBinding?.mode
-                            === "legacy-exact-retry" ? (
+                        ) : (
+                          projectMetadataReadyForProfile
+                        ) || projectRequestBinding?.mode
+                          === "legacy-exact-retry" ? (
                           <button
                             className={styles.walletButton}
                             disabled={

@@ -2293,6 +2293,26 @@
   border-radius: 10px;
 }
 
+.launchListItem {
+  background: #111;
+  border: 1px solid var(--webde-line);
+  border-radius: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.launchListItem .launchRow {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.launchPartnerAttribution {
+  color: var(--webde-dim);
+  margin: -2px 12px 9px 64px;
+  max-width: calc(100% - 76px);
+}
+
 .profileWorkspace {
   background: transparent;
   border: 0;

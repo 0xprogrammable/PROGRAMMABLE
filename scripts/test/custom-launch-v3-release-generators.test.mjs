@@ -139,28 +139,28 @@ async function releaseFixture(t) {
   const backendRoot = join(root, "backend");
   await json(join(websiteRoot, "public/openapi/custom-launch-v3.json"), {
     openapi: "3.1.0",
-    info: { title: "fixture", version: "3.3.5" },
+    info: { title: "fixture", version: "3.3.6" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.2.0",
+      profileVersion: "3.3.0",
       profileRevision: 3,
       productionLaunchAuthorized: true,
     },
     "x-programmable-admission-policy": {
-      currentProfileVersion: "3.2.0",
-      legacyExactProfileVersions: ["3.1.0", "3.0.0"],
+      currentProfileVersion: "3.3.0",
+      legacyExactProfileVersions: ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
       manualProjectAllowlist: false,
       hardBlockFindingRules: platformAdmissionPolicy.blockingFindingRules,
     },
   });
   await json(join(websiteRoot, "packages/launch/package.json"), {
     name: "@programmable/launch",
-    version: "3.3.5",
+    version: "3.3.6",
   });
   const profile = {
     schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.2.0",
+    profileVersion: "3.3.0",
     profileRevision: 3,
     productionLaunchAuthorized: true,
     platformAdmissionPolicy,
@@ -170,7 +170,7 @@ async function releaseFixture(t) {
     schemaVersion: "programmable.custom-launch-api-contract.v3",
     requestSchemaVersion: "programmable.custom-launch-create-request.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.2.0",
+    profileVersion: "3.3.0",
     routes: apiRoutes,
   };
   await json(join(
@@ -356,7 +356,7 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.equal(binding.backend.candidateTreeSha, fixture.backend.tree);
   assert.equal(binding.website.candidateCommitSha, fixture.website.commit);
   assert.equal(binding.website.candidateTreeSha, fixture.website.tree);
-  assert.equal(binding.api.profileVersion, "3.2.0");
+  assert.equal(binding.api.profileVersion, "3.3.0");
   assert.equal(
     binding.api.readinessIdentitySha256,
     sha256(Buffer.from(canonicalize(fixture.readiness), "utf8")),

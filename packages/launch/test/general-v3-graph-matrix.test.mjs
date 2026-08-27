@@ -17,6 +17,10 @@ import { validateLaunchFile } from "../src/validate.mjs";
 import { jsonResponse, validCapabilities } from "./fixtures/capabilities.mjs";
 
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 const FIXED_PERMISSIONS = [
   "beforeInitialize",
   "beforeSwap",
@@ -43,7 +47,11 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
 
     assert.equal(fixedValidation.reproducedFromConfig, true);
     assert.equal(fixedValidation.requestSha256, fixedPack.requestSha256);
-    assert.equal(fixedRequest.launchProfile.profileVersion, "3.2.0");
+    assert.equal(fixedRequest.launchProfile.profileVersion, "3.3.0");
+    assert.equal(
+      fixedRequest.launchProfile.projectMetadataPolicy.schemaVersion,
+      "programmable.project-metadata-policy.v1",
+    );
     assert.equal(fixedRequest.projectMetadata.token.name, "General Graph Token");
     assert.equal(fixedRequest.projectMetadata.token.symbol, "GGT");
     assert.match(fixedRequest.projectMetadataHash, /^sha256:[0-9a-f]{64}$/u);
@@ -114,6 +122,26 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
       vOffsetBytes: 68,
     });
     assert.equal(Object.hasOwn(fixedRequest, "signature"), false);
+
+    const legacyMetadataConfig = structuredClone(fixture.config);
+    legacyMetadataConfig.projectMetadata.presentation.description = "";
+    legacyMetadataConfig.projectMetadata.presentation.image = null;
+    legacyMetadataConfig.projectMetadata.presentation.links = [];
+    await writeFile(
+      fixture.configPath,
+      `${JSON.stringify(legacyMetadataConfig, null, 2)}\n`,
+      "utf8",
+    );
+    const legacyMetadataBuilt = await buildLaunch({
+      configPath: fixture.configPath,
+      directNativeProfileVersion: "3.2.0",
+    });
+    assert.equal(legacyMetadataBuilt.request.launchProfile.profileVersion, "3.2.0");
+    assert.equal(
+      Object.hasOwn(legacyMetadataBuilt.request.launchProfile, "projectMetadataPolicy"),
+      false,
+    );
+    assert.equal(legacyMetadataBuilt.request.projectMetadata.presentation.image, null);
 
     const legacyConfig = structuredClone(fixture.config);
     delete legacyConfig.projectMetadata;
@@ -265,6 +293,7 @@ async function materializeGeneralGraphFixture({
     mkdir(path.join(root, "src"), { recursive: true }),
     mkdir(path.join(root, "artifacts"), { recursive: true }),
     mkdir(path.join(root, "evidence"), { recursive: true }),
+    mkdir(path.join(root, "assets"), { recursive: true }),
   ]);
 
   const sources = {
@@ -444,6 +473,7 @@ contract AuxiliaryComponent {
     `compiler=${solc.version()}\nerrors=0\n`,
     "utf8",
   );
+  await writeFile(path.join(root, "assets", "token.png"), TINY_PNG);
 
   const launchWallet = "0x1111111111111111111111111111111111111111";
   const compilationUnitId = "general-v3-solc";
@@ -525,8 +555,14 @@ contract AuxiliaryComponent {
       token: { name: "General Graph Token", symbol: "GGT" },
       presentation: {
         description: "Nine-target general graph fixture",
-        image: null,
-        links: [{ kind: "website", uri: "https://example.com/general-v3-source" }],
+        image: {
+          sourcePath: "assets/token.png",
+          uri: "https://example.com/general-v3-token.png",
+        },
+        links: [
+          { kind: "website", uri: "https://example.com/general-v3-source" },
+          { kind: "x", uri: "https://x.com/general_v3" },
+        ],
       },
     },
     launchProfile: {

@@ -33,8 +33,8 @@ const LAUNCH_PACKAGE_MANIFEST_PATH = "packages/launch/package.json";
 const PUBLIC_PROFILE_SCHEMA_VERSION =
   "programmable.direct-native-hook-graph-admission-profile.v3";
 const PUBLIC_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
-const PUBLIC_PROFILE_VERSION = "3.2.0";
-const LAUNCH_PACKAGE_VERSION = "3.3.5";
+const PUBLIC_PROFILE_VERSION = "3.3.0";
+const LAUNCH_PACKAGE_VERSION = "3.3.6";
 const PLATFORM_ADMISSION_POLICY = Object.freeze({
   schemaVersion: "programmable.direct-native-platform-admission-policy.v1",
   mode: "deterministic-exact-source-graph-static-baseline-v1",
@@ -436,7 +436,12 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
     || openApi?.["x-programmable-admission-policy"]?.currentProfileVersion
       !== PUBLIC_PROFILE_VERSION
     || canonicalize(openApi?.["x-programmable-admission-policy"]
-      ?.legacyExactProfileVersions) !== canonicalize(["3.1.0", "3.0.0"])
+      ?.legacyExactProfileVersions) !== canonicalize([
+      "3.2.0",
+      "3.1.0",
+      "3.0.0",
+      "2.0.0",
+    ])
     || openApi?.["x-programmable-admission-policy"]?.manualProjectAllowlist !== false
     || canonicalize(openApi?.["x-programmable-admission-policy"]
       ?.hardBlockFindingRules) !== canonicalize(
@@ -446,7 +451,7 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
   }
   if (launchPackage?.name !== "@programmable/launch"
     || launchPackage?.version !== LAUNCH_PACKAGE_VERSION) {
-    throw new Error("launch package manifest is not the 3.3.5 public CLI contract");
+    throw new Error("launch package manifest is not the 3.3.6 public CLI contract");
   }
 }
 

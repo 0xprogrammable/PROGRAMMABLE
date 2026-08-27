@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
   "title": "Programmable Custom Launch V3 pack config",
-  "description": "Closed public input contract for @programmable/launch 3.3.5. Derived hashes, CREATE2 predictions, byte offsets, signatures, and wallet transactions are not applicant inputs.",
+  "description": "Closed public input contract for @programmable/launch 3.3.6. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -149,30 +149,54 @@
           "additionalProperties": false,
           "required": ["description", "image", "links"],
           "properties": {
-            "description": { "type": "string", "maxLength": 4096 },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "x-programmable-minUtf8Bytes": 20,
+              "x-programmable-minUnicodeLettersOrNumbers": 8,
+              "description": "Canonical NFC public description with at least 20 UTF-8 bytes and 8 Unicode letters or numbers, already trimmed, at most 4,096 UTF-8 bytes. The packer enforces byte and useful-text bounds that generic JSON Schema validators cannot express exactly."
+            },
             "image": {
-              "oneOf": [
-                { "type": "null" },
-                {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": ["sourcePath", "uri"],
-                  "properties": {
-                    "sourcePath": { "$ref": "#/$defs/relativePath" },
-                    "uri": {
-                      "type": "string",
-                      "format": "uri",
-                      "maxLength": 2048,
-                      "pattern": "^(?:https|ipfs|ar):"
-                    }
-                  }
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["sourcePath", "uri"],
+              "properties": {
+                "sourcePath": { "$ref": "#/$defs/relativePath" },
+                "uri": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "pattern": "^(?:https|ipfs|ar):"
                 }
-              ]
+              },
+              "description": "Required local PNG, JPEG, WebP, or GIF bytes and their stable public URI. The packer computes and binds the exact byte digest, length, media type, and dimensions."
             },
             "links": {
               "type": "array",
+              "minItems": 2,
               "maxItems": 32,
               "uniqueItems": true,
+              "allOf": [
+                {
+                  "contains": {
+                    "type": "object",
+                    "properties": { "kind": { "const": "website" } },
+                    "required": ["kind"]
+                  },
+                  "minContains": 1,
+                  "maxContains": 1
+                },
+                {
+                  "contains": {
+                    "type": "object",
+                    "properties": { "kind": { "const": "x" } },
+                    "required": ["kind"]
+                  },
+                  "minContains": 1,
+                  "maxContains": 1
+                }
+              ],
               "items": {
                 "type": "object",
                 "additionalProperties": false,
@@ -187,8 +211,25 @@
                     "maxLength": 2048,
                     "pattern": "^https://"
                   }
-                }
-              }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": { "kind": { "const": "x" } },
+                      "required": ["kind"]
+                    },
+                    "then": {
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "pattern": "^https://x\\.com/[A-Za-z0-9_]{1,64}$"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "description": "Exactly one website link and one canonical X profile link are required. Up to 30 additional public HTTPS links are optional."
             }
           }
         }

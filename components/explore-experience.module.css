@@ -1281,6 +1281,12 @@
   padding: 1px 8px 1px 14px;
 }
 
+.runnerPartnerAttribution {
+  flex: 1 0 100%;
+  order: 5;
+  padding-block: 2px 7px;
+}
+
 .runnerCategory,
 .runnerMarketStatus {
   color: var(--webde-dim);

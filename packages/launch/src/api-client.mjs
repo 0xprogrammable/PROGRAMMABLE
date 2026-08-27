@@ -14,6 +14,10 @@ import {
   DIRECT_NATIVE_PROFILE_REVISION,
   DIRECT_NATIVE_PROFILE_VERSION,
   MAX_REQUEST_BYTES,
+  PERMIT_REISSUE_CAPABILITY_SCHEMA_V1,
+  PERMIT_REISSUE_DISPOSITION_SCHEMA_V1,
+  PERMIT_REISSUE_PATH_TEMPLATE_V3,
+  PERMIT_REISSUE_REQUEST_SCHEMA_V1,
   PREFLIGHT_PATH_V3,
   PREFLIGHT_SCHEMA_V1,
   TERMINAL_STATUSES,
@@ -31,11 +35,14 @@ import {
   sha256Hex,
 } from "./io.mjs";
 import { canonicalizeJson, parseStrictJson } from "./canonical-json.mjs";
+import { validateDirectNativePermitWindow } from "./profile-direct-native-v1.mjs";
 import { validateLaunchFile } from "./validate.mjs";
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+const SHA256 = /^sha256:[0-9a-f]{64}$/u;
+const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
 const MAX_SUBMISSION_JOURNAL_BYTES = 12_582_912;
 const PREFLIGHT_DISPOSITIONS = new Set([
   "supported",
@@ -271,6 +278,7 @@ export async function statusLaunch(options) {
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
       const action = resourceActionSummary(resource);
+      const permitRecovery = permitRecoverySummary(resource);
       return {
         httpStatus: result.status,
         stopped,
@@ -284,10 +292,96 @@ export async function statusLaunch(options) {
             ? "router-transaction-required"
             : null,
         resource,
+        ...(permitRecovery === null ? {} : { permitRecovery }),
         ...action,
       };
     }
     await (options.sleepImpl ?? sleep)(pollIntervalMs);
+  }
+}
+
+/**
+ * Requests the deployed-contract permit-reissue disposition. Router V1 has no
+ * successful reissue path, so a conforming current server answers with a typed
+ * 409 that remains available on ProgrammableApiError.details.serverDetails.
+ */
+export async function requestPermitReissueDisposition(options) {
+  if (typeof options?.launchId !== "string" || !REQUEST_ID.test(options.launchId)) {
+    throw new TypeError("permit reissue disposition requires the Custom launch UUID");
+  }
+  if (typeof options.expectedRequestHash !== "string"
+    || !SHA256.test(options.expectedRequestHash)) {
+    throw new TypeError("expectedRequestHash must be a lowercase sha256 digest");
+  }
+  if (typeof options.expectedLaunchIntentHash !== "string"
+    || !SHA256.test(options.expectedLaunchIntentHash)) {
+    throw new TypeError("expectedLaunchIntentHash must be a lowercase sha256 digest");
+  }
+  if (typeof options.replacementNonce !== "string"
+    || !NONZERO_HEX32.test(options.replacementNonce)) {
+    throw new TypeError("replacementNonce must be a nonzero lowercase 0x-prefixed 32-byte value");
+  }
+  const replacementPermitWindow = validateDirectNativePermitWindow(
+    options.replacementPermitWindow,
+  );
+  const idempotencyKey = normalizeIdempotencyKey(options.idempotencyKey);
+  const request = {
+    schemaVersion: PERMIT_REISSUE_REQUEST_SCHEMA_V1,
+    expectedRequestHash: options.expectedRequestHash,
+    expectedLaunchIntentHash: options.expectedLaunchIntentHash,
+    replacementNonce: options.replacementNonce,
+    replacementPermitWindow,
+  };
+  const apiOrigin = productionApiOrigin(options.apiOrigin);
+  const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
+  const requestPath = PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
+    "{launchId}",
+    encodeURIComponent(options.launchId),
+  );
+  try {
+    const result = await requestWithRetry({
+      method: "POST",
+      url: `${apiOrigin}${requestPath}`,
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: Buffer.from(canonicalizeJson(request), "utf8"),
+      maxAttempts: options.maxAttempts,
+      timeoutMs: options.timeoutMs,
+      fetchImpl: options.fetchImpl,
+      sleepImpl: options.sleepImpl,
+    });
+    throw new ProgrammableApiError(
+      "Custom Launch API returned a success response for an unsupported Router V1 permit reissue",
+      {
+        code: "PERMIT_REISSUE_CONTRACT_INVALID",
+        httpStatus: result.status,
+        serverDetails: { expectedHttpStatus: 409 },
+      },
+    );
+  } catch (error) {
+    if (!(error instanceof ProgrammableApiError) || error.details?.httpStatus !== 409) throw error;
+    const allowedCodes = new Set([
+      "PERMIT_REISSUE_UNSUPPORTED",
+      "PERMIT_REISSUE_NOT_APPLICABLE",
+      "PERMIT_REISSUE_RESOURCE_BINDING_MISMATCH",
+    ]);
+    if (!allowedCodes.has(error.details.code)
+      || error.details.serverDetails?.schemaVersion
+        !== PERMIT_REISSUE_DISPOSITION_SCHEMA_V1) {
+      throw new ProgrammableApiError(
+        "Custom Launch API returned an invalid permit-reissue disposition",
+        {
+          code: "PERMIT_REISSUE_CONTRACT_INVALID",
+          httpStatus: 409,
+          serverDetails: { observedCode: error.details.code ?? null },
+        },
+      );
+    }
+    throw error;
   }
 }
 
@@ -509,6 +603,7 @@ function assertCapabilitiesResponse(value) {
     list: CREATE_PATH_V3,
     finalizedMetadata: "/v3/finalized-custom-launches",
     capabilities: CAPABILITIES_PATH_V3,
+    permitReissue: PERMIT_REISSUE_PATH_TEMPLATE_V3,
   })) {
     assertCapabilitiesField(value.routes?.[field] === expected, `routes.${field}`);
   }
@@ -519,6 +614,7 @@ function assertCapabilitiesResponse(value) {
     status: "bearer-api-key",
     finalizedMetadata: "none",
     capabilities: "none",
+    permitReissue: "bearer-api-key",
   })) {
     assertCapabilitiesField(
       value.authentication?.[field] === expected,
@@ -547,6 +643,123 @@ function assertCapabilitiesResponse(value) {
   })) {
     assertCapabilitiesField(value.preflight?.[field] === expected, `preflight.${field}`);
   }
+  assertCapabilitiesField(isPlainObject(value.projectMetadata), "projectMetadata");
+  for (const [field, expected] of Object.entries({
+    schemaVersion: "programmable.project-metadata.v1",
+    inputSchemaVersion: "programmable.project-metadata-input.v1",
+    requiredForProfileVersion: DIRECT_NATIVE_PROFILE_VERSION,
+    strictNewPackPolicyProfileVersion: DIRECT_NATIVE_PROFILE_VERSION,
+    imageMayBeNull: false,
+    maximumLinks: 32,
+    exactlyOneRequiredLinkPerKind: true,
+    websiteUriPolicy: "canonical-public-credential-free-https",
+    xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
+    projectMetadataHashDomain: "programmable.project-metadata.v1",
+    graphBundleHashBindingDomain: "programmable.custom-graph-project-metadata.v1",
+    postDeploymentTokenReadbackRequired: true,
+  })) {
+    assertCapabilitiesField(
+      value.projectMetadata?.[field] === expected,
+      `projectMetadata.${field}`,
+    );
+  }
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.requiredFields) === canonicalizeJson([
+      "token.name",
+      "token.symbol",
+      "presentation.description",
+      "presentation.image",
+      "presentation.links",
+    ]),
+    "projectMetadata.requiredFields",
+  );
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.requiredForProfileVersions)
+      === canonicalizeJson(["3.2.0", "3.3.0"]),
+    "projectMetadata.requiredForProfileVersions",
+  );
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.legacyMetadataProfileVersions)
+      === canonicalizeJson(["3.2.0"]),
+    "projectMetadata.legacyMetadataProfileVersions",
+  );
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.legacyWithoutMetadataProfileVersions)
+      === canonicalizeJson(["2.0.0", "3.0.0", "3.1.0"]),
+    "projectMetadata.legacyWithoutMetadataProfileVersions",
+  );
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.requiredLinkKinds) === canonicalizeJson([
+      "website",
+      "x",
+    ]),
+    "projectMetadata.requiredLinkKinds",
+  );
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.legacyImageMayBeNullProfileVersions)
+      === canonicalizeJson(["3.2.0"]),
+    "projectMetadata.legacyImageMayBeNullProfileVersions",
+  );
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.profilePolicy) === canonicalizeJson({
+      schemaVersion: "programmable.project-metadata-policy.v1",
+      descriptionMinimumUtf8Bytes: 20,
+      descriptionMaximumUtf8Bytes: 4_096,
+      descriptionMinimumUnicodeLettersOrNumbers: 8,
+      imageRequired: true,
+      imageReceiptSourceManifestBindingRequired: true,
+      imageMediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+      linksMaximumCount: 32,
+      requiredLinkKinds: ["website", "x"],
+      exactlyOneRequiredLinkPerKind: true,
+      websiteUriPolicy: "canonical-public-credential-free-https",
+      xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
+    }),
+    "projectMetadata.profilePolicy",
+  );
+  assertCapabilitiesField(
+    canonicalizeJson(value.projectMetadata?.enforcement) === canonicalizeJson({
+      routes: ["POST /v3/custom-launches/preflight", "POST /v3/custom-launches"],
+      serverSide: true,
+      clientBypassAccepted: false,
+      failureCode: "PROJECT_METADATA_POLICY_INVALID",
+      legacyProfilesNotRetrofitted: true,
+    }),
+    "projectMetadata.enforcement",
+  );
+  assertCapabilitiesField(isPlainObject(value.permitReissue), "permitReissue");
+  for (const [field, expected] of Object.entries({
+    schemaVersion: PERMIT_REISSUE_CAPABILITY_SCHEMA_V1,
+    endpoint: PERMIT_REISSUE_PATH_TEMPLATE_V3,
+    requestSchemaVersion: PERMIT_REISSUE_REQUEST_SCHEMA_V1,
+    dispositionSchemaVersion: PERMIT_REISSUE_DISPOSITION_SCHEMA_V1,
+    disposition: "unsupported",
+    httpStatus: 409,
+    reasonCode: "ROUTER_V1_PERMIT_NONCE_IS_CREATE2_ROUTE_NONCE",
+    authenticationScope: "custom-launch:create",
+    idempotencyKeyRequired: true,
+    noReplacementNonceReserved: true,
+    noReplacementPermitIssued: true,
+    oldPermitStateRequired: "expired-and-unconsumed",
+    oldPermitInvalidation: "original-signature-expired-by-signed-deadline",
+    currentReleaseRecovery: "repack-and-submit-new-launch-request",
+  })) {
+    assertCapabilitiesField(
+      value.permitReissue?.[field] === expected,
+      `permitReissue.${field}`,
+    );
+  }
+  assertCapabilitiesField(
+    canonicalizeJson(value.permitReissue?.resourceBindingRequired)
+      === canonicalizeJson(["launchId", "expectedRequestHash", "expectedLaunchIntentHash"]),
+    "permitReissue.resourceBindingRequired",
+  );
+  assertCapabilitiesField(
+    Array.isArray(value.permitReissue?.futureContractRequirements)
+      && value.permitReissue.futureContractRequirements.length > 0
+      && value.permitReissue.futureContractRequirements.every(nonemptyString),
+    "permitReissue.futureContractRequirements",
+  );
   assertCapabilitiesField(
     safeWalletHandoffBase(value.walletHandoffBaseUrl) !== null,
     "walletHandoffBaseUrl",
@@ -659,6 +872,32 @@ function resourceActionSummary(resource, { walletHandoffBaseUrl } = {}) {
   ));
   if (remediations !== null) summary.remediations = remediations;
   return summary;
+}
+
+function permitRecoverySummary(resource) {
+  if (resource?.status !== "failed"
+    || resource?.failure?.code !== "PERMIT_EXPIRED"
+    || resource?.onchainLaunchId !== null) {
+    return null;
+  }
+  const launchId = typeof resource.launchId === "string"
+    ? resource.launchId
+    : typeof resource.requestId === "string"
+      ? resource.requestId
+      : null;
+  return {
+    action: "repack-and-submit-new-launch-request",
+    requiresFreshNonce: true,
+    requiresNewIdempotencyKey: true,
+    predictedAddressesMayChange: true,
+    automaticReissue: false,
+    permitReissueEndpoint: launchId === null
+      ? PERMIT_REISSUE_PATH_TEMPLATE_V3
+      : PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
+          "{launchId}",
+          encodeURIComponent(launchId),
+        ),
+  };
 }
 
 function safeWalletHandoffUrl(value, advertisedBaseUrl) {

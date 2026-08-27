@@ -31,6 +31,8 @@ import {
   useInterfacePreview,
 } from "@/components/interface-preview";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
+import { PartnerLaunchAttribution } from
+  "@/components/partner-launch-attribution";
 import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
 import {
   buildExploreDataQuality,
@@ -53,6 +55,8 @@ import {
   getTokenCardImageSource,
 } from "@/lib/token-image";
 import { safePublicImageUrl } from "@/lib/safe-public-image-url";
+import { parseLaunchPartnerAttributionV1, type LaunchPartnerAttributionV1 } from
+  "@/lib/launch-partner-attribution";
 import {
   isLaunchStampProvenanceV1,
   type ExploreEntry,
@@ -83,6 +87,7 @@ type TokenCard = {
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
   launchCategory: "Classic" | "Custom";
+  partnerAttribution?: LaunchPartnerAttributionV1;
 };
 
 export function exploreMarketStatusLabel(
@@ -675,6 +680,10 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
         .map(parseTokenLink)
         .filter((link): link is TokenLink => link !== null)
     : [];
+  const partnerAttribution = value.partnerAttribution === undefined
+    ? undefined
+    : parseLaunchPartnerAttributionV1(value.partnerAttribution);
+  if (value.partnerAttribution !== undefined && !partnerAttribution) return null;
 
   return {
     ...(value as unknown as LauncherToken),
@@ -682,6 +691,7 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     description:
       typeof value.description === "string" ? value.description : undefined,
     imageUrl: safePublicImageUrl(value.imageUrl),
+    ...(partnerAttribution ? { partnerAttribution } : {}),
   };
 }
 
@@ -876,6 +886,10 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
     return null;
   const markets = parseCustomExploreMarkets(value.markets, value.chainId);
   if (markets === null) return null;
+  const partnerAttribution = value.partnerAttribution === undefined
+    ? undefined
+    : parseLaunchPartnerAttributionV1(value.partnerAttribution);
+  if (value.partnerAttribution !== undefined && !partnerAttribution) return null;
   return {
     exploreKind: "custom-project",
     id: value.id,
@@ -914,6 +928,7 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
       ExploreEntry,
       { exploreKind: "custom-project" }
     >["launchCategoryProvenance"],
+    ...(partnerAttribution ? { partnerAttribution } : {}),
   };
 }
 
@@ -2245,6 +2260,9 @@ export function getTokenCards(
         token.launchCategoryProvenance.category === "classic"
           ? "Classic"
           : "Custom",
+      ...(token.partnerAttribution
+        ? { partnerAttribution: token.partnerAttribution }
+        : {}),
     };
   });
 }
@@ -3000,6 +3018,13 @@ export function ExploreView({
                   <span className="sr-only">Launch type: </span>
                   {token.launchCategory}
                 </span>
+                {token.partnerAttribution ? (
+                  <PartnerLaunchAttribution
+                    attribution={token.partnerAttribution}
+                    className={styles.runnerPartnerAttribution}
+                    compact
+                  />
+                ) : null}
                 {token.tokenAddress ? (
                   <div className={styles.runnerContract}>
                     <code title={token.tokenAddress}>

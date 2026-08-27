@@ -43,15 +43,8 @@ export async function readPreservedBackendPublicErrorV1(
   if (!PRESERVED_STATUSES.has(response.status)) return null;
 
   try {
-    const declaredLength = Number(response.headers.get("content-length") ?? "0");
-    if (
-      Number.isFinite(declaredLength)
-      && declaredLength > MAXIMUM_ERROR_BODY_BYTES
-    ) return null;
-    const text = await response.text();
-    if (!text || Buffer.byteLength(text, "utf8") > MAXIMUM_ERROR_BODY_BYTES) {
-      return null;
-    }
+    const text = await readBoundedText(response, MAXIMUM_ERROR_BODY_BYTES);
+    if (text === null) return null;
     const value = parseStrictJson(text, {
       maximumBytes: MAXIMUM_ERROR_BODY_BYTES,
       maximumDepth: 8,
@@ -118,4 +111,32 @@ export async function readPreservedBackendPublicErrorV1(
   } catch {
     return null;
   }
+}
+
+async function readBoundedText(response: Response, maximumBytes: number) {
+  const declaredLength = Number(response.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (response.body === null) return null;
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      totalBytes += chunk.value.byteLength;
+      if (totalBytes > maximumBytes) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(Buffer.from(chunk.value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (totalBytes === 0) return null;
+  return Buffer.concat(chunks, totalBytes).toString("utf8");
 }

@@ -154,17 +154,17 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.3.5",
+        cliReleaseVersion: "3.3.6",
         cliChecksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
         cliTarballSha256:
-          "sha256:d9df0c0bb4d492d0303bc849ea74b2a337dc5aef217c954192ad5c14576039ca",
+          "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.2.0",
-        compatibleProfileVersions: ["3.1.0", "3.0.0"],
+        profileVersion: "3.3.0",
+        compatibleProfileVersions: ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
         chainId: "1",
         productionLaunchAuthorized: true,
       },
@@ -276,7 +276,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.3.5");
+    expect(openApi.info.version).toBe("3.3.6");
     const v2Patch =
       openApi.components.schemas.FundingAuthorizationPatchDescriptorV2;
     expect(v2Patch.required).toEqual([
@@ -324,8 +324,8 @@ describe("Custom Launch cold-agent remediation contract", () => {
     expect(catalog.automaticAdmission).toMatchObject({
       manualAllowlist: false,
       manualProjectApproval: false,
-      currentProfileVersion: "3.2.0",
-      legacyExactProfileVersions: ["3.1.0", "3.0.0"],
+      currentProfileVersion: "3.3.0",
+      legacyExactProfileVersions: ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
       routerSimulationBeforeAuthorization: true,
       blockingStatus: "action_required",
       warningDisposition: "continue-to-router-simulation",

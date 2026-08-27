@@ -2,14 +2,32 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { after, test } from "node:test";
 
 import { hashGraphBundle } from "../src/graph.mjs";
 import {
-  buildProjectMetadata,
+  buildProjectMetadata as buildProjectMetadataForProfile,
   hashProjectMetadata,
   validateProjectMetadata,
 } from "../src/project-metadata.mjs";
+
+const buildProjectMetadata = (input, options) => buildProjectMetadataForProfile(input, {
+  ...options,
+  requireComplete: true,
+});
+
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+const METADATA_SOURCE_ROOT = await mkdtemp(
+  path.join(os.tmpdir(), "programmable-project-metadata-shared-"),
+);
+await mkdir(path.join(METADATA_SOURCE_ROOT, "assets"), { recursive: true });
+await writeFile(path.join(METADATA_SOURCE_ROOT, "assets", "token.png"), TINY_PNG);
+after(async () => {
+  await rm(METADATA_SOURCE_ROOT, { recursive: true, force: true });
+});
 
 const HASH_VECTOR_METADATA = {
   schemaVersion: "programmable.project-metadata.v1",
@@ -20,8 +38,18 @@ const HASH_VECTOR_METADATA = {
   presentation: {
     schemaVersion: "programmable.launch-presentation-draft.v1",
     description: "Créateurs build hooks 🪝",
-    image: null,
-    links: [],
+    image: {
+      uri: "ipfs://QmYwAPJzv5CZsnAzt8auVZRnGi1Wm4eQNf6gMss5QZb7S6",
+      contentSha256: "sha256:431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460",
+      mediaType: "image/png",
+      byteLength: 68,
+      width: 1,
+      height: 1,
+    },
+    links: [
+      { kind: "website", uri: "https://atelier.example/" },
+      { kind: "x", uri: "https://x.com/hookatelier" },
+    ],
   },
   tokenMetadataBinding: {
     schemaVersion: "programmable.project-token-metadata-binding.v1",
@@ -65,7 +93,7 @@ test("project metadata and graph binding match the frozen cross-runtime hash vec
 
   assert.equal(
     projectMetadataHash,
-    "sha256:30c982d0b06d840b3692de0b45a34405e7d1cce38e039ce66c0599a90adcdffe",
+    "sha256:7afb14ee0e4b85d2f6fe34ac7d60062c07969a6d20a3a9cae1eeec12badeaebb",
   );
   assert.equal(
     hashes.unboundGraphBundleHash,
@@ -73,7 +101,7 @@ test("project metadata and graph binding match the frozen cross-runtime hash vec
   );
   assert.equal(
     hashes.graphBundleHash,
-    "sha256:a23258d5ebed819f2393eb864ad26a09f9954f5c0f0e2a54c3d7d4091838f20e",
+    "sha256:b9288966cdf899edbcaaa254c6f9fc231e8c79dd9c806c1fb8543efb957cfbd6",
   );
 });
 
@@ -82,10 +110,7 @@ test("pack metadata hashes exact image bytes, sorts public links and binds ABI t
   try {
     const imagePath = path.join(sourceRoot, "assets", "token.png");
     await mkdir(path.dirname(imagePath), { recursive: true });
-    await writeFile(imagePath, Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
-    ));
+    await writeFile(imagePath, TINY_PNG);
     const result = await buildProjectMetadata({
       schemaVersion: "programmable.project-metadata-input.v1",
       token: { name: "Café Hook 🪝", symbol: "ATELIER" },
@@ -131,7 +156,10 @@ test("pack metadata hashes exact image bytes, sorts public links and binds ABI t
       },
       postDeploymentReadback: "required",
     });
-    assert.equal(result.projectMetadataHash, hashProjectMetadata(result.projectMetadata));
+    assert.equal(
+      result.projectMetadataHash,
+      hashProjectMetadata(result.projectMetadata, { requireComplete: true }),
+    );
   } finally {
     await rm(sourceRoot, { recursive: true, force: true });
   }
@@ -140,14 +168,14 @@ test("pack metadata hashes exact image bytes, sorts public links and binds ABI t
 test("token metadata mismatch fails only when one exact static ABI source is available", async () => {
   await assert.rejects(
     buildProjectMetadata(metadataInput({ symbol: "WRONG" }), {
-      sourceRoot: process.cwd(),
+      sourceRoot: METADATA_SOURCE_ROOT,
       tokenTarget: tokenTarget(),
     }),
     /projectMetadata\.token\.symbol does not match constructor-argument _symbol/u,
   );
 
   const arbitrary = await buildProjectMetadata(metadataInput(), {
-    sourceRoot: process.cwd(),
+    sourceRoot: METADATA_SOURCE_ROOT,
     tokenTarget: {
       componentKind: "token",
       targetId: "project-token",
@@ -169,6 +197,51 @@ test("token metadata mismatch fails only when one exact static ABI source is ava
 });
 
 test("project metadata rejects noncanonical token text, URLs and content-address paths", async () => {
+  const missingImage = metadataInput();
+  missingImage.presentation.image = null;
+  await assert.rejects(
+    buildProjectMetadata(missingImage, {
+      sourceRoot: METADATA_SOURCE_ROOT,
+      tokenTarget: tokenTarget(),
+    }),
+    /projectMetadata\.presentation\.image must name a non-empty local/u,
+  );
+
+  const shortDescription = metadataInput();
+  shortDescription.presentation.description = "Short placeholder";
+  await assert.rejects(
+    buildProjectMetadata(shortDescription, {
+      sourceRoot: METADATA_SOURCE_ROOT,
+      tokenTarget: tokenTarget(),
+    }),
+    /projectMetadata\.presentation\.description.*at least 20 UTF-8 bytes/u,
+  );
+
+  for (const [links, expected] of [
+    [[{ kind: "x", uri: "https://x.com/hookatelier" }], /exactly one website link/u],
+    [[{ kind: "website", uri: "https://atelier.example/" }], /exactly one x link/u],
+  ]) {
+    const missingRequiredLink = metadataInput();
+    missingRequiredLink.presentation.links = links;
+    await assert.rejects(
+      buildProjectMetadata(missingRequiredLink, {
+        sourceRoot: METADATA_SOURCE_ROOT,
+        tokenTarget: tokenTarget(),
+      }),
+      expected,
+    );
+  }
+
+  const legacyTwitterLink = metadataInput();
+  legacyTwitterLink.presentation.links[1].uri = "https://twitter.com/hookatelier";
+  await assert.rejects(
+    buildProjectMetadata(legacyTwitterLink, {
+      sourceRoot: METADATA_SOURCE_ROOT,
+      tokenTarget: tokenTarget(),
+    }),
+    /canonical X profile URL like https:\/\/x\.com\/project_handle/u,
+  );
+
   for (const input of [
     metadataInput({ name: " Café Hook 🪝" }),
     metadataInput({ name: "Hook\nAtelier" }),
@@ -178,7 +251,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
     metadataInput({ symbol: "😀😀😀😀😀" }),
   ]) {
     await assert.rejects(
-      buildProjectMetadata(input, { sourceRoot: process.cwd(), tokenTarget: tokenTarget() }),
+      buildProjectMetadata(input, { sourceRoot: METADATA_SOURCE_ROOT, tokenTarget: tokenTarget() }),
       /canonical public token metadata/u,
     );
   }
@@ -187,7 +260,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
   c1Description.presentation.description = "Project\u0085description";
   await assert.rejects(
     buildProjectMetadata(c1Description, {
-      sourceRoot: process.cwd(),
+      sourceRoot: METADATA_SOURCE_ROOT,
       tokenTarget: tokenTarget(),
     }),
     /canonical public text/u,
@@ -209,7 +282,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
     secretDescription.presentation.description = secret;
     await assert.rejects(
       buildProjectMetadata(secretDescription, {
-        sourceRoot: process.cwd(),
+        sourceRoot: METADATA_SOURCE_ROOT,
         tokenTarget: tokenTarget(),
       }),
       /canonical public text/u,
@@ -224,7 +297,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
   }];
   await assert.rejects(
     buildProjectMetadata(encodedSecretLink, {
-      sourceRoot: process.cwd(),
+      sourceRoot: METADATA_SOURCE_ROOT,
       tokenTarget: tokenTarget(),
     }),
     /invalid|credential-like/u,
@@ -234,7 +307,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
   noncanonicalLink.presentation.links = [{ kind: "website", uri: "https://atelier.example" }];
   await assert.rejects(
     buildProjectMetadata(noncanonicalLink, {
-      sourceRoot: process.cwd(),
+      sourceRoot: METADATA_SOURCE_ROOT,
       tokenTarget: tokenTarget(),
     }),
     /not canonical/u,
@@ -323,7 +396,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
     localLink.presentation.links = [{ kind: "website", uri }];
     await assert.rejects(
       buildProjectMetadata(localLink, {
-        sourceRoot: process.cwd(),
+        sourceRoot: METADATA_SOURCE_ROOT,
         tokenTarget: tokenTarget(),
       }),
       /public credential-free HTTPS/u,
@@ -337,7 +410,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
   }];
   await assert.rejects(
     buildProjectMetadata(c1Link, {
-      sourceRoot: process.cwd(),
+      sourceRoot: METADATA_SOURCE_ROOT,
       tokenTarget: tokenTarget(),
     }),
     /is invalid/u,
@@ -351,7 +424,7 @@ test("project metadata rejects noncanonical token text, URLs and content-address
     }];
     await assert.rejects(
       buildProjectMetadata(controlLink, {
-        sourceRoot: process.cwd(),
+        sourceRoot: METADATA_SOURCE_ROOT,
         tokenTarget: tokenTarget(),
       }),
       /is invalid/u,
@@ -379,7 +452,10 @@ function metadataInput({ name = "Café Hook 🪝", symbol = "ATELIER" } = {}) {
     token: { name, symbol },
     presentation: {
       description: "Project-owned token and hook\nExact public source",
-      image: null,
+      image: {
+        sourcePath: "assets/token.png",
+        uri: "ipfs://QmYwAPJzv5CZsnAzt8auVZRnGi1Wm4eQNf6gMss5QZb7S6",
+      },
       links: [
         { kind: "website", uri: "https://atelier.example/" },
         { kind: "x", uri: "https://x.com/hookatelier" },

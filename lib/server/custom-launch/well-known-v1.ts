@@ -110,15 +110,15 @@ export function programmableWellKnownDocumentV1(
       cli: Object.freeze({
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.5",
+        releaseVersion: "3.3.6",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.5",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.6",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
         tarballSha256:
-          "sha256:d9df0c0bb4d492d0303bc849ea74b2a337dc5aef217c954192ad5c14576039ca",
+          "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25",
       }),
       compatibility: Object.freeze({
         v1: Object.freeze({
@@ -143,15 +143,15 @@ export function programmableWellKnownDocumentV1(
         cli: Object.freeze({
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.3.5",
+          releaseVersion: "3.3.6",
           releaseUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.5",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.6",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
           tarballSha256:
-            "sha256:d9df0c0bb4d492d0303bc849ea74b2a337dc5aef217c954192ad5c14576039ca",
+            "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25",
         }),
       }),
       generalHookProfile: Object.freeze({
@@ -159,10 +159,12 @@ export function programmableWellKnownDocumentV1(
         apiVersion: "3" as const,
         profileId: "programmable.direct-native-hook-graph.v1" as const,
         profileRevision: 3 as const,
-        profileVersion: "3.2.0" as const,
+        profileVersion: "3.3.0" as const,
         compatibleProfileVersions: Object.freeze([
+          "3.2.0",
           "3.1.0",
           "3.0.0",
+          "2.0.0",
         ] as const),
         legacyProfileSemantics:
           "readable-and-byte-identical-retryable-only" as const,
@@ -173,16 +175,24 @@ export function programmableWellKnownDocumentV1(
         finalizedMetadataPath: "/v3/finalized-custom-launches" as const,
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.3.5" as const,
+        cliReleaseVersion: "3.3.6" as const,
         projectMetadata: Object.freeze({
           schemaVersion: "programmable.project-metadata.v1" as const,
           inputSchemaVersion:
             "programmable.project-metadata-input.v1" as const,
-          requiredForProfileVersion: "3.2.0" as const,
+          requiredForProfileVersion: "3.3.0" as const,
+          requiredForProfileVersions: Object.freeze([
+            "3.2.0",
+            "3.3.0",
+          ] as const),
+          strictNewPackPolicyProfileVersion: "3.3.0" as const,
           legacyWithoutMetadataProfileVersions: Object.freeze([
             "2.0.0",
             "3.0.0",
             "3.1.0",
+          ] as const),
+          legacyMetadataProfileVersions: Object.freeze([
+            "3.2.0",
           ] as const),
           requiredFields: Object.freeze([
             "token.name",
@@ -191,7 +201,10 @@ export function programmableWellKnownDocumentV1(
             "presentation.image",
             "presentation.links",
           ] as const),
-          imageMayBeNull: true as const,
+          imageMayBeNull: false as const,
+          legacyImageMayBeNullProfileVersions: Object.freeze([
+            "3.2.0",
+          ] as const),
           maximumLinks: 32 as const,
           linkKinds: Object.freeze([
             "website",
@@ -251,10 +264,12 @@ export function programmableWellKnownDocumentV1(
           "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1" as const,
         profileRevision: 3 as const,
-        profileVersion: "3.2.0" as const,
+        profileVersion: "3.3.0" as const,
         compatibleProfileVersions: Object.freeze([
+          "3.2.0",
           "3.1.0",
           "3.0.0",
+          "2.0.0",
         ] as const),
         requestSchemaVersion:
           "programmable.custom-launch-create-request.v3" as const,
@@ -313,16 +328,16 @@ export function programmableWellKnownDocumentV1(
         artifactPublished: true as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.5",
-        releaseTag: "programmable-launch-v3.3.5",
+        releaseVersion: "3.3.6",
+        releaseTag: "programmable-launch-v3.3.6",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.5",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.6",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
         tarballSha256:
-          "sha256:d9df0c0bb4d492d0303bc849ea74b2a337dc5aef217c954192ad5c14576039ca",
+          "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({

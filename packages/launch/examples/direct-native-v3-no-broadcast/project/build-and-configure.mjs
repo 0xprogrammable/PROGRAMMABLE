@@ -23,7 +23,7 @@ const ENTRYPOINTS = Object.freeze([
 ]);
 
 if (process.argv.includes("--help")) {
-  process.stdout.write(`direct-native V3 no-broadcast build\n\nRequired environment:\n  PROGRAMMABLE_LAUNCH_WALLET       nonzero Ethereum address\n  PROGRAMMABLE_SOURCE_REVISION     exact lowercase 40-character public Git commit\n  PROGRAMMABLE_LAUNCH_NONCE        nonzero lowercase bytes32\n\nOptional public environment:\n  PROGRAMMABLE_PUBLIC_ORIGIN       credential-free HTTPS URL\n  PROGRAMMABLE_CHECKED_AT          canonical UTC timestamp with milliseconds\n  PROGRAMMABLE_SOURCE_LINEAGE_NONCE canonical uint256 (default 1)\n  PROGRAMMABLE_QUOTE_CURRENCY      native zero address or ERC-20 address\n  PROGRAMMABLE_POOL_FEE            integer 0..999999 (default 3000)\n  PROGRAMMABLE_TICK_SPACING        integer 1..32767 (default 60)\n  PROGRAMMABLE_SELECTED_BUY_RATE   integer 0..999999 (default 1000)\n  PROGRAMMABLE_SELECTED_SELL_RATE  integer 0..999999 (default 1000)\n  PROGRAMMABLE_FUNDING_VALUE       nonzero USDC base-unit uint256 (default 30000000)\n  PROGRAMMABLE_FUNDING_VALID_AFTER uint64 earlier than now\n  PROGRAMMABLE_FUNDING_VALID_BEFORE uint64 later than now; window <=3600 seconds\n  PROGRAMMABLE_TOKEN_NAME          token display name, 1..64 UTF-8 bytes\n  PROGRAMMABLE_TOKEN_SYMBOL        token symbol, 1..16 UTF-8 bytes\n  PROGRAMMABLE_TOKEN_SUPPLY        nonzero uint256 token base units\n  PROGRAMMABLE_PROJECT_DESCRIPTION public description, at most 4096 UTF-8 bytes\n  PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH relative local PNG/JPEG/WebP/GIF path\n  PROGRAMMABLE_PROJECT_IMAGE_URI   matching canonical HTTPS, ipfs, or ar URI\n  PROGRAMMABLE_WEBSITE_URL         optional public HTTPS link\n  PROGRAMMABLE_X_URL               optional public HTTPS link\n  PROGRAMMABLE_DISCORD_URL         optional public HTTPS link\n  PROGRAMMABLE_TELEGRAM_URL        optional public HTTPS link\n`);
+  process.stdout.write(`direct-native V3 no-broadcast build\n\nRequired environment:\n  PROGRAMMABLE_LAUNCH_WALLET       nonzero Ethereum address\n  PROGRAMMABLE_SOURCE_REVISION     exact lowercase 40-character public Git commit\n  PROGRAMMABLE_LAUNCH_NONCE        nonzero lowercase bytes32\n  PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH relative local PNG/JPEG/WebP/GIF path\n  PROGRAMMABLE_PROJECT_IMAGE_URI   matching canonical HTTPS, ipfs, or ar URI\n  PROGRAMMABLE_WEBSITE_URL         canonical public HTTPS project website\n  PROGRAMMABLE_X_URL               canonical https://x.com/<project_handle> profile\n\nOptional public environment:\n  PROGRAMMABLE_PUBLIC_ORIGIN       credential-free HTTPS URL\n  PROGRAMMABLE_CHECKED_AT          canonical UTC timestamp with milliseconds\n  PROGRAMMABLE_SOURCE_LINEAGE_NONCE canonical uint256 (default 1)\n  PROGRAMMABLE_QUOTE_CURRENCY      native zero address or ERC-20 address\n  PROGRAMMABLE_POOL_FEE            integer 0..999999 (default 3000)\n  PROGRAMMABLE_TICK_SPACING        integer 1..32767 (default 60)\n  PROGRAMMABLE_SELECTED_BUY_RATE   integer 0..999999 (default 1000)\n  PROGRAMMABLE_SELECTED_SELL_RATE  integer 0..999999 (default 1000)\n  PROGRAMMABLE_FUNDING_VALUE       nonzero USDC base-unit uint256 (default 30000000)\n  PROGRAMMABLE_FUNDING_VALID_AFTER uint64 earlier than now\n  PROGRAMMABLE_FUNDING_VALID_BEFORE uint64 later than now; window <=3600 seconds\n  PROGRAMMABLE_TOKEN_NAME          token display name, 1..64 UTF-8 bytes\n  PROGRAMMABLE_TOKEN_SYMBOL        token symbol, 1..16 UTF-8 bytes\n  PROGRAMMABLE_TOKEN_SUPPLY        nonzero uint256 token base units\n  PROGRAMMABLE_PROJECT_DESCRIPTION public description, 20+ characters and at most 4096 UTF-8 bytes\n  PROGRAMMABLE_DISCORD_URL         optional public HTTPS link\n  PROGRAMMABLE_TELEGRAM_URL        optional public HTTPS link\n`);
   process.exit(0);
 }
 if (process.argv.length !== 2) {
@@ -101,24 +101,29 @@ const projectDescription = publicText(
   process.env.PROGRAMMABLE_PROJECT_DESCRIPTION ?? "Deterministic no-broadcast V3 reference launch",
   "PROGRAMMABLE_PROJECT_DESCRIPTION",
   4096,
-  { empty: true, multiline: true },
+  { multiline: true },
 );
-const imageSourcePath = process.env.PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH;
-const imageUri = process.env.PROGRAMMABLE_PROJECT_IMAGE_URI;
-if ((imageSourcePath === undefined) !== (imageUri === undefined)) {
+if ([...projectDescription].length < 20
+  || [...projectDescription.matchAll(/[\p{L}\p{N}]/gu)].length < 8) {
   throw new TypeError(
-    "PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH and PROGRAMMABLE_PROJECT_IMAGE_URI must be supplied together",
+    "PROGRAMMABLE_PROJECT_DESCRIPTION must contain at least 20 characters and 8 letters or numbers",
   );
 }
-const projectImage = imageSourcePath === undefined
-  ? null
-  : {
-      sourcePath: publicText(imageSourcePath, "PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH", 2048),
-      uri: publicText(imageUri, "PROGRAMMABLE_PROJECT_IMAGE_URI", 2048),
-    };
+const projectImage = {
+  sourcePath: publicText(
+    required("PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH"),
+    "PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH",
+    2048,
+  ),
+  uri: publicText(
+    required("PROGRAMMABLE_PROJECT_IMAGE_URI"),
+    "PROGRAMMABLE_PROJECT_IMAGE_URI",
+    2048,
+  ),
+};
 const projectLinks = [
-  ["website", process.env.PROGRAMMABLE_WEBSITE_URL],
-  ["x", process.env.PROGRAMMABLE_X_URL],
+  ["website", required("PROGRAMMABLE_WEBSITE_URL")],
+  ["x", required("PROGRAMMABLE_X_URL")],
   ["discord", process.env.PROGRAMMABLE_DISCORD_URL],
   ["telegram", process.env.PROGRAMMABLE_TELEGRAM_URL],
 ].filter(([, uri]) => uri !== undefined).map(([kind, uri]) => ({
@@ -211,7 +216,7 @@ const evidence = {
   schemaVersion: "programmable.direct-native-v3-no-broadcast-evidence.v3",
   profile: {
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.2.0",
+    profileVersion: "3.3.0",
     profileRevision: 3,
     productionLaunchAuthorized: true,
   },
@@ -407,7 +412,7 @@ await writeFile(
 process.stdout.write(`${JSON.stringify({
   schemaVersion: "programmable.direct-native-v3-config-result.v3",
   profileId: config.launchProfile.profileId,
-  profileVersion: "3.2.0",
+  profileVersion: "3.3.0",
   profileRevision: config.launchProfile.profileRevision,
   productionLaunchAuthorized: true,
   configPath: path.join(root, "programmable-launch.config.json"),

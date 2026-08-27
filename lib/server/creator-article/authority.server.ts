@@ -10,6 +10,8 @@ import {
   isLaunchStampProvenanceV1,
   type ExploreEntry,
 } from "../../tokens";
+import type { LaunchPartnerAttributionV1 } from
+  "../../launch-partner-attribution";
 import { readProductionCustomExploreDirectoryV1 } from
   "../custom-launch/explore-directory-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
@@ -30,6 +32,7 @@ export type CreatorArticleAuthorityV1 = Readonly<{
   name: string;
   symbol: string | null;
   imageUrl: string | null;
+  partnerAttribution?: LaunchPartnerAttributionV1;
   hasArticle?: boolean;
 }>;
 
@@ -109,6 +112,9 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
           name: entry.name,
           symbol: entry.symbol ?? null,
           imageUrl: entry.imageUrl ?? null,
+          ...(entry.partnerAttribution
+            ? { partnerAttribution: entry.partnerAttribution }
+            : {}),
         }));
       }
       return Object.freeze(projects.sort((left, right) =>

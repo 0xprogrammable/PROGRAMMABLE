@@ -212,7 +212,9 @@ export async function loadApiKey() {
 }
 
 function validateApiKey(value) {
-  if (!/^pm_live_[A-Za-z0-9_-]{16,512}$/.test(value)) {
+  const walletKey = /^pm_live_[A-Za-z0-9_-]{16,512}$/u;
+  const partnerKey = /^pm_partner_(?:root_)?[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
+  if (!walletKey.test(value) && !partnerKey.test(value)) {
     throw new TypeError("PROGRAMMABLE_API_KEY has an invalid shape");
   }
   return value;

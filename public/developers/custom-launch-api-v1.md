@@ -64,8 +64,8 @@ Retrying unchanged bytes or asking for a manual allowlist cannot bypass it.
 
 The `programmable.direct-native-hook-graph.v1` document is the V3 production request, resource and wallet-handoff
 contract. The default profile uses `schemaVersion: programmable.direct-native-hook-graph-profile.v3`,
-`profileRevision: 3` and `profileVersion: 3.2.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact metadata-absent `3.1.0` and `3.0.0` requests remain readable and
+`profileRevision: 3` and `profileVersion: 3.3.0`; its selection binding uses
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact `3.2.0` requests retain their original metadata rules; metadata-absent `3.1.0` and `3.0.0` requests remain readable and
 byte-identical retryable under their original immutable policy; revision 2 also remains a compatible profile contract
 for existing clients and resources. The Router primitive supports 2-16 targets; the direct
 native profile requires 3-16 because token, hook and initializer roles are distinct. It accepts a project-owned token,
@@ -151,16 +151,16 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.5.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.5.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.5.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.5.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.5`. The package name is
+Continue only after the checksum command reports `OK` and the version command prints `3.3.6`. The package name is
 `@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:
@@ -177,18 +177,50 @@ predictions, evidence digests, canonical hashes and exact source verification bu
 compiler artifacts and evidence files. It accepts no hand written derived hashes. `validate` recomputes those
 commitments and, with `--config`, requires byte identical reproduction of `launch.json`.
 
-Current profile `3.2.0` also requires `projectMetadata`. The pack input contains `token.name`, `token.symbol` and
-`presentation` with required `description`, `image` and `links` keys. Image is deliberately `null` when the project
-has no image; otherwise it names a local PNG, JPEG, WebP or GIF plus the matching canonical HTTPS, `ipfs://`, or
-`ar://` public URI. Links are public canonical HTTPS and use `website`, `documentation`, `x`, `telegram`, `discord`,
-`github`, or `other`. Use at most 64 UTF-8 bytes for the NFC trimmed name, 16 for the whitespace-free symbol, 4096 for
-the description, 20 MiB and 8192 pixels per image dimension, and 32 links. The CLI sorts links, includes image bytes
-in the source manifest and derives all metadata hashes.
+Current profile `3.3.0` requires `projectMetadata`: owner-supplied token name and symbol, a useful 20–4,096 UTF-8 byte
+description with at least eight Unicode letters or numbers, non-empty local PNG/JPEG/WebP/GIF bytes, exactly one public
+HTTPS website and exactly one canonical `https://x.com/<handle>` profile. Other link kinds remain optional. The CLI
+binds the exact image digest, byte length, media type, dimensions, and source-manifest file; it never invents or uploads
+metadata. Exact `3.2.0` retries preserve their older permissive metadata semantics.
 
 Use a stable content URI and make HTTPS image bytes browser-readable with CORS. Wallet review fetches the raw bytes
 and checks the bound SHA-256, length, type and dimensions before rendering; IPFS and Arweave use fixed public gateways.
 An unavailable or mismatched remote image remains a digest plus placeholder. The platform does not upload or replace
 the image, mutate the launch, or sign automatically.
+
+Partner root keys and subkeys use the same `PROGRAMMABLE_API_KEY` and canonical V3 flow as wallet keys. The server
+derives immutable `partnerAttribution`; callers cannot set it, and it is provenance only, not a safety or verification
+claim. The controller wallet remains the signer and broadcaster. Router V1 permit reissue defines only typed `409`
+responses; recover by repacking a new request with a fresh nonce and Idempotency-Key, with full gates rerun.
+
+### Public partner subkeys
+
+A partner root with `partner-subkeys:manage` may list, issue, rotate, and revoke bounded child credentials at the four
+public `/v1/partner/subkeys` operations in the V3 OpenAPI. The root credential is read only from
+`PROGRAMMABLE_API_KEY`. Children
+may hold `custom-launch:create` and/or `custom-launch:read`, never `partner-subkeys:manage`, and cannot exceed the root's
+budgets or expiry. Private partner and root administration routes are not public.
+
+```sh
+curl --fail-with-body \
+  --header "Authorization: Bearer $PROGRAMMABLE_API_KEY" \
+  https://api.programmable.market/v1/partner/subkeys
+
+curl --fail-with-body \
+  --request POST \
+  --header "Authorization: Bearer $PROGRAMMABLE_API_KEY" \
+  --header "Content-Type: application/json" \
+  --header "Idempotency-Key: $PROGRAMMABLE_IDEMPOTENCY_KEY" \
+  --data-binary @partner-subkey.json \
+  https://api.programmable.market/v1/partner/subkeys
+```
+
+The closed `programmable.partner-subkey-request.v1` body contains `displayName`, one or both child launch scopes,
+`prepareRequestsPerHour`, `readRequestsPerMinute`, and a millisecond UTC `expiresAt`. The first committed issue or
+rotation returns `201` with `secretState: delivered-once` and the one-time `apiKey`; an exact replay returns `200` with
+`secretState: already-delivered` and `apiKey: null`. Keep the exact body and Idempotency-Key for retry. Rotation is
+`POST /v1/partner/subkeys/{subkeyId}/rotate`; revocation is `DELETE /v1/partner/subkeys/{subkeyId}`. Honor
+`Retry-After` on `429`. Every error includes a correlation `requestId`, and a bounded `500` never includes secrets.
 
 When the selected token ABI and exact constructor or initializer values expose one unambiguous name or symbol string,
 the declaration must match. Arbitrary tokens are not forced into one constructor shape: non-extractable declarations

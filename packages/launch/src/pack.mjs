@@ -12,6 +12,7 @@ import {
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
   DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
   MAINNET_CHAIN_ID,
@@ -114,19 +115,25 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     }));
   }
   const diagnostics = [];
-  const metadataRequired = directNativeProfile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
+  const metadataRequired = new Set([
+    DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
+  ]).has(directNativeProfile?.profileVersion);
+  const completeMetadataRequired =
+    directNativeProfile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
   if (metadataRequired !== Object.hasOwn(config, "projectMetadata")) {
     throw new TypeError(metadataRequired
       ? `current direct-native ${DIRECT_NATIVE_PROFILE_VERSION_V3} launches require projectMetadata`
-      : "legacy exact retries must not add projectMetadata");
+      : "this legacy exact profile must not add projectMetadata");
   }
   const metadata = metadataRequired
     ? await buildProjectMetadata(config.projectMetadata, {
-        sourceRoot,
-        tokenTarget: targets.find(
-          ({ targetId }) => targetId === launchProfileSelection.targetRoles.tokenTargetId,
-        ),
-      })
+      sourceRoot,
+      tokenTarget: targets.find(
+        ({ targetId }) => targetId === launchProfileSelection.targetRoles.tokenTargetId,
+      ),
+      requireComplete: completeMetadataRequired,
+    })
     : null;
 
   const attestationEvidence = await buildAttestationEvidence(
