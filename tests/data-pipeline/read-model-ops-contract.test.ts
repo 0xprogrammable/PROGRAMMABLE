@@ -1010,7 +1010,7 @@ describe("read-model operations source contract", () => {
     const smoke = readFileSync(resolve(ROOT, path), "utf8");
     expect(smoke).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-      sourceOverrides: { [path]: smoke.replace(needle, replacement) },
+      sourceOverrides: { [path]: smoke.replaceAll(needle, replacement) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-protected-public-provider-stage-smoke",
