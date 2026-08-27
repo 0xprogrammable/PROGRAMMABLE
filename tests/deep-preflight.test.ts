@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
 
 import { POST } from "../app/api/launch/preflight/route";
 

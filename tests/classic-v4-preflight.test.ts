@@ -1,13 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import {
+  concat,
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeFunctionData,
   keccak256,
+  parseAbi,
+  parseAbiParameters,
   stringToHex,
+  toHex,
   type Address,
+  type Hex,
 } from "viem";
+
+vi.mock("server-only", () => ({}));
 
 import {
   CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+  classicV4LaunchAbi,
   encodeClassicV4Launch,
 } from "../lib/classic-v4";
 import {
@@ -33,6 +44,32 @@ const account = "0x1111111111111111111111111111111111111111" as Address;
 const launcher = "0x4444444444444444444444444444444444444444" as Address;
 const salt =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const zeroAddress = "0x0000000000000000000000000000000000000000";
+
+const routerAbi = parseAbi([
+  "function launchAndStampV1((uint256 chainId,address router,address launchWallet,uint8 kind,bytes32 routePayloadHash,bytes32 expectedResultHash,bytes32 stampRequestHash,bytes32 nonce,uint64 validAfter,uint64 deadline,uint256 value) permit,(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bytes32 hookRuntimeCodeHash,(uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope)[] components) stampRequest,bytes routePayload,bytes signature) payable returns (bytes32 stampHash)",
+]);
+const routeParameters = parseAbiParameters(
+  "(address launcher,bytes32 launcherRuntimeCodeHash,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters,(address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) expectedResult) route",
+);
+const resultAddressesTypehash = keccak256(stringToHex(
+  "ProgrammableClassicResultAddressesV1(address token,address rewardVault,address positionRecipient,address initialBuyCustody)",
+));
+const resultAmountsTypehash = keccak256(stringToHex(
+  "ProgrammableClassicResultAmountsV1(uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount)",
+));
+const resultTypehash = keccak256(stringToHex(
+  "ProgrammableClassicLaunchResultV1(bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash)",
+));
+const componentTypehash = keccak256(stringToHex(
+  "ProgrammableLaunchComponentV1(uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope)",
+));
+const poolKeyTypehash = keccak256(stringToHex(
+  "ProgrammablePoolKeyV1(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)",
+));
+const stampRequestTypehash = keccak256(stringToHex(
+  "ProgrammableStampRequestV1(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash)",
+));
 
 function digest(
   value: Record<string, unknown>,
@@ -709,6 +746,227 @@ function v4Draft(): LaunchDraft {
   };
 }
 
+function preparedV4RouterTransaction(
+  draft: LaunchDraft,
+  manifest: ReturnType<typeof publiclyAvailableReleaseManifest>,
+) {
+  const initialBuy = 600_000_000_000_000n;
+  const token = address(30);
+  const rewardVault = address(31);
+  const positionRecipient = address(32);
+  const hook = manifest.addresses.feeHook;
+  const poolKey = {
+    currency0: zeroAddress as Address,
+    currency1: token,
+    fee: 0,
+    tickSpacing: 200,
+    hooks: hook,
+  } as const;
+  const poolId = keccak256(encodeAbiParameters(
+    parseAbiParameters(
+      "address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks",
+    ),
+    [
+      poolKey.currency0,
+      poolKey.currency1,
+      poolKey.fee,
+      poolKey.tickSpacing,
+      poolKey.hooks,
+    ],
+  ));
+  const expectedResult = {
+    token,
+    rewardVault,
+    positionRecipient,
+    positionTokenId: 123n,
+    tokenLiquidityAmount: 999_000_000n * 10n ** 18n,
+    lockedTokenDust: 1n,
+    initialBuyNativeAmount: initialBuy,
+    initialBuyTokenAmount: 42_000n * 10n ** 18n,
+    initialBuyCustody: zeroAddress as Address,
+    poolId,
+    launchHash: hash("router-launch-result"),
+  } as const;
+  const tokenRuntimeCodeHash = hash("router-token-runtime");
+  const hookRuntimeCodeHash = manifest.runtimeCodeHashes.feeHook;
+  const components = [
+    {
+      resultIndex: 255,
+      account: hook,
+      runtimeCodeHash: hookRuntimeCodeHash,
+      kind: 2,
+      scope: 2,
+    },
+    {
+      resultIndex: 0,
+      account: token,
+      runtimeCodeHash: tokenRuntimeCodeHash,
+      kind: 1,
+      scope: 1,
+    },
+    {
+      resultIndex: 1,
+      account: rewardVault,
+      runtimeCodeHash: hash("router-reward-runtime"),
+      kind: 0,
+      scope: 1,
+    },
+    {
+      resultIndex: 2,
+      account: positionRecipient,
+      runtimeCodeHash: hash("router-position-runtime"),
+      kind: 0,
+      scope: 1,
+    },
+  ].sort((left, right) =>
+    BigInt(left.account) < BigInt(right.account) ? -1 : 1
+  );
+  const direct = decodeFunctionData({
+    abi: classicV4LaunchAbi,
+    data: encodeClassicV4Launch(draft, salt, account),
+  });
+  if (direct.functionName !== "launchFor") throw new Error("fixture");
+  const route = {
+    launcher: manifest.addresses.launcher,
+    launcherRuntimeCodeHash: manifest.runtimeCodeHashes.launcher,
+    parameters: direct.args[1],
+    expectedResult,
+  } as const;
+  const routePayload = encodeAbiParameters(routeParameters, [route]);
+
+  const addressesHash = keccak256(encodeAbiParameters(
+    parseAbiParameters(
+      "bytes32 typehash,address token,address rewardVault,address positionRecipient,address initialBuyCustody",
+    ),
+    [
+      resultAddressesTypehash,
+      token,
+      rewardVault,
+      positionRecipient,
+      zeroAddress,
+    ],
+  ));
+  const amountsHash = keccak256(encodeAbiParameters(
+    parseAbiParameters(
+      "bytes32 typehash,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount",
+    ),
+    [
+      resultAmountsTypehash,
+      expectedResult.positionTokenId,
+      expectedResult.tokenLiquidityAmount,
+      expectedResult.lockedTokenDust,
+      expectedResult.initialBuyNativeAmount,
+      expectedResult.initialBuyTokenAmount,
+    ],
+  ));
+  const expectedResultHash = keccak256(encodeAbiParameters(
+    parseAbiParameters(
+      "bytes32 typehash,bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash",
+    ),
+    [
+      resultTypehash,
+      addressesHash,
+      amountsHash,
+      expectedResult.poolId,
+      expectedResult.launchHash,
+    ],
+  ));
+  const componentHashes = components.map((component) =>
+    keccak256(encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope",
+      ),
+      [
+        componentTypehash,
+        component.resultIndex,
+        component.account,
+        component.runtimeCodeHash,
+        component.kind,
+        component.scope,
+      ],
+    ))
+  );
+  const componentSetHash = keccak256(concat(
+    componentHashes as [Hex, ...Hex[]],
+  ));
+  const poolKeyHash = keccak256(encodeAbiParameters(
+    parseAbiParameters(
+      "bytes32 typehash,address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks",
+    ),
+    [
+      poolKeyTypehash,
+      poolKey.currency0,
+      poolKey.currency1,
+      poolKey.fee,
+      poolKey.tickSpacing,
+      poolKey.hooks,
+    ],
+  ));
+  const stampRequest = {
+    launchId: hash("router-launch-id"),
+    token,
+    tokenRuntimeCodeHash,
+    poolKey,
+    hookRuntimeCodeHash,
+    components,
+  } as const;
+  const stampRequestHash = keccak256(encodeAbiParameters(
+    parseAbiParameters(
+      "bytes32 typehash,bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash",
+    ),
+    [
+      stampRequestTypehash,
+      stampRequest.launchId,
+      stampRequest.token,
+      stampRequest.tokenRuntimeCodeHash,
+      poolKeyHash,
+      stampRequest.hookRuntimeCodeHash,
+      componentSetHash,
+    ],
+  ));
+  const permit = {
+    chainId: 1n,
+    router: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+    launchWallet: account,
+    kind: 2,
+    routePayloadHash: keccak256(routePayload),
+    expectedResultHash,
+    stampRequestHash,
+    nonce: hash("router-permit-nonce"),
+    validAfter: 100n,
+    deadline: 430n,
+    value: initialBuy,
+  } as const;
+  const signature = concat([
+    toHex(1n, { size: 32 }),
+    toHex(1n, { size: 32 }),
+    "0x1b",
+  ]);
+  const data = encodeFunctionData({
+    abi: routerAbi,
+    functionName: "launchAndStampV1",
+    args: [permit, stampRequest, routePayload, signature],
+  });
+  const transaction = {
+    kind: "launch" as const,
+    chainId: 1 as const,
+    to: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+    data,
+    value: initialBuy.toString(),
+    gasLimit: "2500000",
+  };
+  return {
+    transaction,
+    planHash: buildPlanHash(account, {
+      kind: "launch",
+      chainId: 1,
+      to: transaction.to,
+      data: transaction.data,
+      value: transaction.value,
+    }),
+  };
+}
+
 describe("Classic V4 release and launch preflight", () => {
   it("rejects an unknown contract release instead of silently using V3", async () => {
     const response = await POST(
@@ -802,7 +1060,7 @@ describe("Classic V4 release and launch preflight", () => {
     expect(parseClassicV4PublicRelease(missingFinality)).toBeNull();
   });
 
-  it("rejects direct V4 launcher calldata until a signed Router handoff is installed", () => {
+  it("accepts only the exact signed Router handoff for the public release", () => {
     const draft = v4Draft();
     const data = encodeClassicV4Launch(draft, salt, account);
     const transaction = {
@@ -865,18 +1123,24 @@ describe("Classic V4 release and launch preflight", () => {
         browserBinding,
       ),
     ).toThrow("canonical Launch Stamp Router");
-    expect(() =>
+    const prepared = preparedV4RouterTransaction(draft, manifest);
+    const routerInput = {
+      ...input,
+      transaction: prepared.transaction,
+      planHash: prepared.planHash,
+    };
+    expect(
       validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
-        {
-          ...input,
-          transaction: {
-            ...transaction,
-            to: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
-          },
-        },
+        routerInput,
         browserBinding,
       ),
-    ).toThrow("Router handoff validator is not installed");
+    ).toEqual(prepared.transaction);
+    expect(() =>
+      validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
+        { ...routerInput, planHash: hash("tampered plan") },
+        browserBinding,
+      ),
+    ).toThrow("connected wallet");
     expect(CLASSIC_V4_PUBLIC_RELEASE_BINDING).toBeNull();
     expect(() => validatePreparedClassicV4LaunchTransaction(input)).toThrow(
       "browser release binding",

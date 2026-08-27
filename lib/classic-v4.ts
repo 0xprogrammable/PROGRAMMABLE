@@ -149,6 +149,17 @@ export function validateClassicV4LaunchDraft(
   if (activationBuy.status !== "ready") {
     throw new LaunchInputError("Enter a valid Activation Buy");
   }
+  const initialBuyCustody = validateClassicInitialBuyCustody(draft);
+  if (
+    initialBuyCustody.mode !== "unlocked" ||
+    initialBuyCustody.modeCode !== 0 ||
+    initialBuyCustody.durationDays !== 0 ||
+    initialBuyCustody.cliffDays !== 0
+  ) {
+    throw new LaunchInputError(
+      "Classic V4 Activation Buy tokens are available immediately",
+    );
+  }
 
   return {
     fees: {
@@ -159,7 +170,7 @@ export function validateClassicV4LaunchDraft(
       platformFeeBps: PLATFORM_FEE_BPS,
     },
     rewards: validateRewardConfiguration(draft, launcherAccount),
-    initialBuyCustody: validateClassicInitialBuyCustody(draft),
+    initialBuyCustody,
   };
 }
 

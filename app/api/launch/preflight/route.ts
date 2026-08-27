@@ -40,6 +40,7 @@ import {
   classicV4PositionPlannerAbi,
   CLASSIC_V4_LAUNCH_STAMP_ROUTER,
   CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+  encodeClassicV4Launch,
   validateClassicV4LaunchDraft,
 } from "@/lib/classic-v4";
 import {
@@ -142,6 +143,11 @@ import {
 } from "@/lib/launch-model-gating";
 import { getWebsiteReadOnchainDeployment } from "@/lib/onchain/config";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
+import {
+  CLASSIC_LAUNCH_AUTHORIZATION_REQUEST_SCHEMA_V1,
+  ClassicLaunchAuthorizationBridgeErrorV1,
+  getProductionClassicLaunchAuthorizationBridgeV1,
+} from "@/lib/server/custom-launch/classic-launch-authorization-bridge-v1";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -1945,6 +1951,7 @@ async function assertClassicV4Infrastructure(
 }
 
 async function prepareClassicV4Launch(
+  request: Request,
   account: Address,
   draft: LaunchDraft,
   connectedWalletCheck: LaunchPreflightCheck,
@@ -2012,17 +2019,6 @@ async function prepareClassicV4Launch(
       draft.launchSalt,
     ],
   });
-  const predictedRewardVault = await rpcClient.readContract({
-    address: launcher,
-    abi: classicV4LaunchAbi,
-    functionName: "predictRewardVault",
-    args: [
-      predictedToken,
-      account,
-      configuration.rewards.beneficiaries,
-      configuration.rewards.sharesBps,
-    ],
-  });
   const existingCode = await rpcClient.getCode({ address: predictedToken });
   if (existingCode && existingCode !== "0x") {
     throw new LaunchInputError(
@@ -2030,11 +2026,83 @@ async function prepareClassicV4Launch(
     );
   }
 
+  const launcherCalldata = encodeClassicV4Launch(
+    draft,
+    draft.launchSalt,
+    account,
+  );
+  let authorization;
+  try {
+    authorization = await getProductionClassicLaunchAuthorizationBridgeV1()
+      .authorize(request, {
+        schemaVersion: CLASSIC_LAUNCH_AUTHORIZATION_REQUEST_SCHEMA_V1,
+        chainId: "1",
+        launchWallet: account,
+        releaseManifestDigest: release.manifestDigest,
+        launcher: release.addresses.launcher,
+        launcherRuntimeCodeHash: release.runtimeCodeHashes.launcher,
+        feeHook: release.addresses.feeHook,
+        feeHookRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+        valueWei: initialBuyWei.toString(),
+        launcherCalldata,
+      });
+  } catch (error) {
+    if (!(error instanceof ClassicLaunchAuthorizationBridgeErrorV1)) {
+      throw error;
+    }
+    if (error.status === 400) {
+      throw new LaunchInputError(
+        "The Classic setup changed. Review the current values and try again",
+      );
+    }
+    return response({
+      status: "blocked",
+      mode: "classic-v3",
+      title: error.status === 401 || error.status === 403
+        ? "Reconnect the launch wallet"
+        : "Classic V4 authorization is temporarily unavailable",
+      detail: error.status === 401 || error.status === 403
+        ? "The connected wallet session could not be verified"
+        : "No wallet transaction is returned until the exact Router launch passes again",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Classic V4 contracts",
+          status: "pass",
+          detail:
+            "Release evidence, runtime bytecode, immutable dependencies, fee bounds and the canonical locked liquidity range match",
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "blocked",
+          detail: "The signed Router authorization could not be completed",
+        },
+      ],
+    });
+  }
+  if (
+    authorization.predictedToken.toLowerCase() !== predictedToken.toLowerCase()
+    || authorization.predictedHook.toLowerCase()
+      !== release.addresses.feeHook.toLowerCase()
+  ) {
+    throw new Error("Classic V4 authorization prediction mismatch");
+  }
+  const launchBase = {
+    kind: "launch" as const,
+    chainId: 1 as const,
+    to: authorization.transaction.to,
+    data: authorization.transaction.calldata,
+    value: authorization.transaction.valueWei,
+  };
+
   return response({
-    status: "blocked",
+    status: "ready",
     mode: "classic-v3",
-    title: "Classic V4 Router authorization is pending",
-    detail: `The deterministic token ${predictedToken.slice(0, 8)}…${predictedToken.slice(-6)} and reward vault ${predictedRewardVault.slice(0, 8)}…${predictedRewardVault.slice(-6)} match, but no permit-attached canonical Router handoff is installed. A direct launcher transaction is intentionally never returned.`,
+    title: "Ready for wallet review",
+    detail: "The exact Classic launch passed the signed Router simulation",
     checks: [
       tokenCheck,
       connectedWalletCheck,
@@ -2048,14 +2116,19 @@ async function prepareClassicV4Launch(
       {
         id: "simulation",
         label: "Simulation",
-        status: "blocked",
-        detail: "Waiting for a signed launchAndStampV1 Router artifact",
+        status: "pass",
+        detail: "The permit attached launchAndStampV1 transaction succeeds",
       },
     ],
+    transaction: {
+      ...launchBase,
+      gasLimit: authorization.transaction.gasLimit,
+    },
     predictedToken,
     predictedHook: release.addresses.feeHook,
     releaseLauncher: release.addresses.launcher,
     releaseManifestDigest: release.manifestDigest,
+    planHash: buildPlanHash(account, launchBase),
   });
 }
 
@@ -3389,6 +3462,7 @@ export async function POST(request: NextRequest) {
         );
         if (connectedWalletCheck.status !== "pass") {
           return await prepareClassicV4Launch(
+            request,
             account,
             draft,
             connectedWalletCheck,
@@ -3398,6 +3472,7 @@ export async function POST(request: NextRequest) {
         }
         return await withClassicLaunchRpcFailover((rpcClient) =>
           prepareClassicV4Launch(
+            request,
             account,
             draft,
             connectedWalletCheck,

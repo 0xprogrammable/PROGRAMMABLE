@@ -73,7 +73,7 @@ describe("Classic launch plan", () => {
     );
   });
 
-  it("routes V4 through the manifest gate and fails closed before a signed Router handoff", () => {
+  it("routes V4 through the manifest gate and returns only a signed Router handoff", () => {
     const preflightSource = readFileSync(
       new URL("../app/api/launch/preflight/route.ts", import.meta.url),
       "utf8",
@@ -95,14 +95,13 @@ describe("Classic launch plan", () => {
       "if (!isClassicV4PublicActionRelease(release))",
     );
     expect(preflightSource).toContain("prepareClassicV4Launch(");
+    expect(classicV4Section).toContain(".authorize(request, {");
+    expect(classicV4Section).toContain('title: "Ready for wallet review"');
     expect(classicV4Section).toContain(
-      'title: "Classic V4 Router authorization is pending"',
-    );
-    expect(classicV4Section).toContain(
-      'detail: "Waiting for a signed launchAndStampV1 Router artifact"',
+      'detail: "The exact Classic launch passed the signed Router simulation"',
     );
     expect(classicV4Section).not.toContain("rpcClient.call({");
-    expect(classicV4Section).not.toContain("transaction:");
+    expect(classicV4Section).toContain("transaction: {");
     expect(classicV4Section).toContain(
       "releaseManifestDigest: release.manifestDigest",
     );

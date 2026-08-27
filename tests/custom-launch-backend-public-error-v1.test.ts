@@ -85,6 +85,7 @@ describe("preserved Custom Launch backend public errors", () => {
     "LAUNCH_UNAVAILABLE",
     "CUSTOM_LAUNCH_V3_UNAVAILABLE",
     "WALLET_ADMIN_UNAVAILABLE",
+    "CLASSIC_LAUNCH_AUTHORIZATION_UNAVAILABLE",
   ])("preserves safe 503 %s responses and retry metadata", async (code) => {
     const error = await readPreservedBackendPublicErrorV1(
       backendError(503, code, { retryAfter: "17" }),

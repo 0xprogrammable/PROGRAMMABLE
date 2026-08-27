@@ -159,4 +159,17 @@ describe("Classic V4 launch configuration", () => {
       ),
     ).toThrow("Activation Buy exceeds the Classic liquidity range");
   });
+
+  it("keeps V4 on one launch path with immediately available Activation Buy tokens", () => {
+    expect(() =>
+      validateClassicV4LaunchDraft(
+        {
+          ...draft(),
+          initialBuyCustodyMode: "fixed-lock",
+          initialBuyDurationDays: "30",
+        },
+        account,
+      ),
+    ).toThrow("available immediately");
+  });
 });

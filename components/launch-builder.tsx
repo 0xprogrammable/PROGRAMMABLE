@@ -993,10 +993,15 @@ export function normalizeClassicV3Draft(
     buySwapFeePercent: initialDraft.buySwapFeePercent || "1",
     sellSwapFeePercent: initialDraft.sellSwapFeePercent || "1",
     rewardDestinationMode: initialDraft.rewardDestinationMode || "launcher",
-    initialBuyCustodyMode:
-      initialDraft.initialBuyCustodyMode || "unlocked",
-    initialBuyDurationDays: initialDraft.initialBuyDurationDays || "30",
-    initialBuyCliffDays: initialDraft.initialBuyCliffDays || "7",
+    initialBuyCustodyMode: enableV4
+      ? "unlocked"
+      : initialDraft.initialBuyCustodyMode || "unlocked",
+    initialBuyDurationDays: enableV4
+      ? "0"
+      : initialDraft.initialBuyDurationDays || "30",
+    initialBuyCliffDays: enableV4
+      ? "0"
+      : initialDraft.initialBuyCliffDays || "7",
   };
 }
 
@@ -1271,8 +1276,14 @@ function LaunchBuilderFormView({
   onBackToModels: () => void;
   stockPairedPublicLaunchEnabled: boolean;
 }) {
-  const { wallet, openWallet, readNativeBalance, sendTransaction } =
-    useWallet();
+  const {
+    wallet,
+    openWallet,
+    readNativeBalance,
+    sendTransaction,
+    getAccessToken,
+    getIdentityToken,
+  } = useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1695,12 +1706,30 @@ function LaunchBuilderFormView({
     connectedWallet: NonNullable<typeof wallet>,
   ) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    const timeout = window.setTimeout(() => controller.abort(), 65_000);
 
     try {
+      const headers = new Headers({ "Content-Type": "application/json" });
+      if (
+        classicV4UiReleaseEnabled
+        && checkedDraft.launchModel === "classic-v3"
+        && checkedDraft.classicContractRelease === "classic-v4"
+      ) {
+        const [accessToken, identityToken] = await Promise.all([
+          getAccessToken(),
+          getIdentityToken().catch(() => null),
+        ]);
+        if (!accessToken) {
+          throw new Error("Reconnect the launch wallet and try again");
+        }
+        headers.set("Authorization", `Bearer ${accessToken}`);
+        if (identityToken) {
+          headers.set("X-Privy-Identity-Token", identityToken);
+        }
+      }
       const response = await fetch("/api/launch/preflight", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           account: connectedWallet.account,
           walletChainId: connectedWallet.chainId,
@@ -3867,67 +3896,69 @@ export function EnhancedClassicFeeStep({
           ) : null}
         </div>
 
-        <fieldset
-          className="classic-v3-custody"
-          data-mode={draft.initialBuyCustodyMode}
-        >
-          <legend className="sr-only">Dev supply</legend>
-          <label>
-            <span>Dev supply</span>
-            <LaunchSelect
-              id="classic-initial-buy-access"
-              label="Dev supply access"
-              value={draft.initialBuyCustodyMode}
-              options={initialBuyAccessOptions}
-              placement="top"
-              onChange={(value) =>
-                updateClassicV3Draft({
-                  initialBuyCustodyMode: value,
-                })
-              }
-            />
-          </label>
-          {draft.initialBuyCustodyMode !== "unlocked" ? (
+        {!enableV4 ? (
+          <fieldset
+            className="classic-v3-custody"
+            data-mode={draft.initialBuyCustodyMode}
+          >
+            <legend className="sr-only">Dev supply</legend>
             <label>
-              <span>
-                {draft.initialBuyCustodyMode === "fixed-lock"
-                  ? "Lock period"
-                  : "Vesting period"}
-              </span>
-              <span className="classic-v3-days-input">
-                <input
-                  inputMode="numeric"
-                  value={draft.initialBuyDurationDays}
-                  maxLength={4}
-                  onChange={(event) =>
-                    updateClassicV3Draft({
-                      initialBuyDurationDays: event.target.value,
-                    })
-                  }
-                />
-                <span>days</span>
-              </span>
+              <span>Dev supply</span>
+              <LaunchSelect
+                id="classic-initial-buy-access"
+                label="Dev supply access"
+                value={draft.initialBuyCustodyMode}
+                options={initialBuyAccessOptions}
+                placement="top"
+                onChange={(value) =>
+                  updateClassicV3Draft({
+                    initialBuyCustodyMode: value,
+                  })
+                }
+              />
             </label>
-          ) : null}
-          {draft.initialBuyCustodyMode === "cliff-linear" ? (
-            <label>
-              <span>Cliff</span>
-              <span className="classic-v3-days-input">
-                <input
-                  inputMode="numeric"
-                  value={draft.initialBuyCliffDays}
-                  maxLength={4}
-                  onChange={(event) =>
-                    updateClassicV3Draft({
-                      initialBuyCliffDays: event.target.value,
-                    })
-                  }
-                />
-                <span>days</span>
-              </span>
-            </label>
-          ) : null}
-        </fieldset>
+            {draft.initialBuyCustodyMode !== "unlocked" ? (
+              <label>
+                <span>
+                  {draft.initialBuyCustodyMode === "fixed-lock"
+                    ? "Lock period"
+                    : "Vesting period"}
+                </span>
+                <span className="classic-v3-days-input">
+                  <input
+                    inputMode="numeric"
+                    value={draft.initialBuyDurationDays}
+                    maxLength={4}
+                    onChange={(event) =>
+                      updateClassicV3Draft({
+                        initialBuyDurationDays: event.target.value,
+                      })
+                    }
+                  />
+                  <span>days</span>
+                </span>
+              </label>
+            ) : null}
+            {draft.initialBuyCustodyMode === "cliff-linear" ? (
+              <label>
+                <span>Cliff</span>
+                <span className="classic-v3-days-input">
+                  <input
+                    inputMode="numeric"
+                    value={draft.initialBuyCliffDays}
+                    maxLength={4}
+                    onChange={(event) =>
+                      updateClassicV3Draft({
+                        initialBuyCliffDays: event.target.value,
+                      })
+                    }
+                  />
+                  <span>days</span>
+                </span>
+              </label>
+            ) : null}
+          </fieldset>
+        ) : null}
       </div>
     </section>
   );
