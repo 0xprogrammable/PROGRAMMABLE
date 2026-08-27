@@ -112,6 +112,31 @@ regexes = [
 ]
 
 [[allowlists]]
+description = "Public Explore exclusions pin finalized public Ethereum token identities"
+condition = "AND"
+regexTarget = "match"
+paths = ['''lib/public-explore-catalog-v1\.ts''']
+regexes = [
+  '''(?i)0xd0f3e1e5c985d2b37a66cf07fecb0d8191c0445f''',
+  '''(?i)0x69d278968abf120f878f2e1e016ab615d3686c19''',
+  '''(?i)0x9deeb39d2590b0cad5fc473f755c5f97dcc8f7ce''',
+]
+
+[[allowlists]]
+description = "Reviewed Router trade evidence pins public onchain identities and hashes"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''lib/custom-launch/router-trade-adapters-v1\.ts''',
+  '''tests/shard-router-trade-fixture\.ts''',
+]
+regexes = [
+  '''(?i)0xface73b63787960282f2d4682d3752beb25271ad''',
+  '''(?i)0x0175cb3f34e2c37f757216a259adea4ab10baf3f9095c67d9481800222fd17f0''',
+  '''(?i)0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8''',
+]
+
+[[allowlists]]
 description = "Launch stamp docs pin the public PCAN canary token address"
 condition = "AND"
 regexTarget = "match"
