@@ -1365,10 +1365,55 @@ jobs:
           grep -Fx "deployment_id=$EXPECTED_DEPLOYMENT_ID" "$binding_output"
           grep -Fx "target_url=$STAGED_TARGET_URL" "$binding_output"
 
+      - name: Bind exact candidate to stable protected preview
+        id: stable-preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          EXPECTED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
+          EXPECTED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          STABLE_PREVIEW_HOST: launcher-v4-aficialais-projects.vercel.app
+          VERCEL_SCOPE: aficialais-projects
+        run: |
+          set -euo pipefail
+          test "$STABLE_PREVIEW_HOST" = launcher-v4-aficialais-projects.vercel.app
+          test "$STABLE_PREVIEW_HOST" != programmable.market
+          test "$VERCEL_SCOPE" = aficialais-projects
+          vercel alias set "$EXPECTED_DEPLOYMENT_ID" "$STABLE_PREVIEW_HOST" \
+            --scope="$VERCEL_SCOPE" \
+            --token="$VERCEL_TOKEN"
+          inspect_output="$RUNNER_TEMP/stable-preview-inspect.json"
+          test ! -e "$inspect_output"
+          umask 077
+          vercel inspect "$STABLE_PREVIEW_HOST" --format=json \
+            --scope="$VERCEL_SCOPE" \
+            --token="$VERCEL_TOKEN" > "$inspect_output"
+          INSPECT_OUTPUT="$inspect_output" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const expectedTarget = new URL(process.env.EXPECTED_TARGET_URL);
+          const inspected = JSON.parse(
+            readFileSync(process.env.INSPECT_OUTPUT, "utf8"),
+          );
+          if (
+            expectedTarget.protocol !== "https:" ||
+            expectedTarget.pathname !== "/" ||
+            !expectedTarget.hostname.endsWith(".vercel.app") ||
+            inspected.id !== process.env.EXPECTED_DEPLOYMENT_ID ||
+            inspected.url !== expectedTarget.hostname ||
+            inspected.readyState !== "READY"
+          ) {
+            throw new Error(
+              "stable preview alias is not bound to the exact staged deployment",
+            );
+          }
+          NODE
+          echo "stable_preview_url=https://$STABLE_PREVIEW_HOST/" >> "$GITHUB_OUTPUT"
+
       - name: Record staged candidate handoff
         env:
           DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          STABLE_PREVIEW_URL: ${{ steps.stable-preview.outputs.stable_preview_url }}
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
@@ -1386,6 +1431,7 @@ jobs:
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Deployment ID: \`$DEPLOYMENT_ID\`"
             echo "- Target: $STAGED_TARGET_URL"
+            echo "- Stable protected preview: $STABLE_PREVIEW_URL"
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Launch identities: validated Envio Classic V3 catalog"

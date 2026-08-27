@@ -404,6 +404,89 @@ function exactCatalogSnapshot(
   const routerCustomAvailable =
     routerCustomStatus === "current" ||
     routerCustomStatus === "last-known-good";
+  const routerOnlyFallback =
+    catalog?.launchSource === "canonical-launch-stamp-router";
+  if (routerOnlyFallback) {
+    const routerStamp = catalog?.routerStamp;
+    if (!(
+      source === "envio-classic-v3" &&
+      catalog?.status === "last-known-good" &&
+      ISO_TIMESTAMP.test(String(generatedAt ?? "")) &&
+      new Date(Date.parse(generatedAt)).toISOString() === generatedAt &&
+      Number.isSafeInteger(catalog.identityCount) &&
+      catalog.identityCount > 0 &&
+      catalog.identityCount === response.body?.total &&
+      catalog.completeness?.classic === "unavailable" &&
+      catalog.completeness?.stock === "excluded" &&
+      customStatus === "unavailable" &&
+      registryCustomStatus === "unavailable" &&
+      routerCustomAvailable &&
+      JSON.stringify(catalog.scope?.included) === JSON.stringify([
+        "canonical-launch-stamp-router",
+      ]) &&
+      JSON.stringify(catalog.scope?.excluded) === JSON.stringify([
+        "classic-v1",
+        "classic-v2",
+        "stock-paired-v1",
+        "stock-paired-v2",
+        "stock-paired-v3",
+      ]) &&
+      JSON.stringify(catalog.scope?.publicCategories) ===
+        JSON.stringify(["classic", "custom"]) &&
+      /^sha256:[0-9a-f]{64}$/u.test(
+        String(catalog.identityCommitment ?? ""),
+      ) &&
+      catalog.evidence === undefined &&
+      POSITIVE_INTEGER.test(String(catalog.asOfBlock ?? "")) &&
+      /^0x[0-9a-f]{64}$/u.test(String(catalog.asOfBlockHash ?? "")) &&
+      routerStamp?.source === "canonical-launch-stamp-router" &&
+      routerStamp.status === routerCustomStatus &&
+      routerStamp.finalityConfirmations === 64 &&
+      Number.isSafeInteger(routerStamp.verifiedIdentityCount) &&
+      routerStamp.verifiedIdentityCount >= catalog.identityCount &&
+      routerStamp.projectedIdentityCount === catalog.identityCount &&
+      routerStamp.generatedAt === generatedAt &&
+      routerStamp.asOfBlock === catalog.asOfBlock &&
+      routerStamp.asOfBlockHash === catalog.asOfBlockHash &&
+      /^sha256:[0-9a-f]{64}$/u.test(
+        String(routerStamp.identityCommitment ?? ""),
+      ) &&
+      response.headers.get("x-programmable-launch-source") ===
+        "canonical-launch-stamp-router" &&
+      response.headers.get("x-programmable-read-source") ===
+        "canonical-launch-stamp-router+dexscreener" &&
+      response.headers.get("x-programmable-canonical-read-status") ===
+        "unavailable" &&
+      response.headers.get("x-programmable-router-read-status") ===
+        routerCustomStatus &&
+      response.headers.get("x-programmable-identity-last-indexed-at") ===
+        generatedAt &&
+      (
+        options.requireLaunchIdentity === false ||
+        (
+          launchIdentity?.custom === "unavailable" &&
+          launchIdentity?.canonical === "unavailable" &&
+          launchIdentity?.status === "partial" &&
+          Number.isSafeInteger(launchIdentity.ageMs) &&
+          launchIdentity.ageMs >= 0
+        )
+      )
+    )) return null;
+    return JSON.stringify({
+      source,
+      identityCount: catalog.identityCount,
+      identityCommitment: catalog.identityCommitment,
+      completeness: catalog.completeness,
+      scope: catalog.scope,
+      evidenceDeployment: null,
+      evidenceSourceCommit: null,
+      routerEvidence: {
+        asOfBlock: routerStamp.asOfBlock,
+        identityCommitment: routerStamp.identityCommitment,
+      },
+      launchSource: catalog.launchSource,
+    });
+  }
   const launchSource = [
     source,
     ...(registryCustomStatus === "current"
@@ -469,7 +552,8 @@ function exactCatalogSnapshot(
     ) &&
     POSITIVE_INTEGER.test(String(catalog.asOfBlock ?? "")) &&
     /^0x[0-9a-f]{64}$/u.test(String(catalog.asOfBlockHash ?? "")) &&
-    response.headers.get("x-programmable-launch-source") === launchSource &&
+    response.headers.get("x-programmable-launch-source") ===
+      launchSource &&
     response.headers.get("x-programmable-read-source") ===
       `${launchSource}+dexscreener` &&
     response.headers.get("x-programmable-identity-last-indexed-at") ===
