@@ -40,6 +40,11 @@ const token = {
   liquidityPath: "meme",
 } satisfies LauncherToken;
 
+const classicV4Token = {
+  ...token,
+  launchModelVersion: "classic-v4",
+} satisfies LauncherToken;
+
 const canonicalToken = {
   ...token,
   exploreKind: "token",
@@ -54,6 +59,10 @@ const canonicalToken = {
 } satisfies CanonicalTokenExploreEntry;
 
 describe("token detail metrics", () => {
+  it("accepts the canonical Classic V4 release marker", () => {
+    expect(classicV4Token.launchModelVersion).toBe("classic-v4");
+  });
+
   it("keeps client retries bounded beyond the route provider budget", () => {
     expect(TOKEN_DETAIL_REQUEST_TIMEOUT_MS).toBeGreaterThan(8_000);
     expect(TOKEN_DETAIL_REQUEST_TIMEOUT_MS).toBeLessThanOrEqual(10_000);

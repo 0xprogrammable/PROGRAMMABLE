@@ -164,7 +164,23 @@ describe("Classic V4 launch configuration", () => {
       ],
       liquidity:
         "Deeper · about 30% higher active liquidity at launch · bounded to about 18.9× the opening price and about 5.9 ETH net curve capacity · one position, permanently locked",
+      activationBuy:
+        "0.0006 ETH plus network gas · 5.895041 ETH net curve capacity remains",
       initialBuyCustody: "Available immediately",
     });
+  });
+
+  it("fails closed when an Activation Buy exceeds the Deeper range", () => {
+    expect(() =>
+      validateClassicV4LaunchDraft(
+        {
+          ...draft(),
+          classicLiquidityPreset: "deep-30",
+          buySwapFeePercent: "0.1",
+          initialBuyEth: "5.9016",
+        },
+        account,
+      ),
+    ).toThrow("Activation Buy exceeds the Deeper curve");
   });
 });

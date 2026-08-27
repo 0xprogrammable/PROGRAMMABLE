@@ -2,9 +2,12 @@
 pragma solidity 0.8.26;
 
 import { ReentrancyGuardTransient } from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { CustomRevert } from "@uniswap/v4-core/src/libraries/CustomRevert.sol";
+import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import { PoolSwapTest } from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
+import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import { Currency, CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -105,6 +108,8 @@ contract ClassicV4ReentrantBeneficiary {
 }
 
 contract EthCreatorFeeHookV4SecurityTest is Deployers {
+    using SafeCast for uint256;
+
     EthCreatorFeeHookFactoryV4 internal hookFactory;
     FeeSplitVaultFactoryV1 internal vaultFactory;
     EthCreatorFeeHookV4 internal hook;
@@ -236,11 +241,100 @@ contract EthCreatorFeeHookV4SecurityTest is Deployers {
         _assertNoFeesAccrued();
     }
 
+    function test_tightBuyExactOutputChargesOnlyTheExecutedNativeAndClaimsSettle() public {
+        uint256 requestedTokenOutput = 0.1 ether;
+        uint256 tokenBalanceBefore = token.balanceOf(address(this));
+
+        BalanceDelta delta = swapRouter.swap{ value: 1 ether }(
+            hookKey,
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: requestedTokenOutput.toInt256(),
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(-1)
+            }),
+            settings,
+            ""
+        );
+
+        uint256 executedTokenOutput = uint256(int256(delta.amount1()));
+        assertGt(executedTokenOutput, 0);
+        assertLt(executedTokenOutput, requestedTokenOutput);
+        assertEq(token.balanceOf(address(this)) - tokenBalanceBefore, executedTokenOutput);
+
+        (,,,,, uint256 creatorFees) = hook.poolFeeConfig(poolId);
+        uint256 launcherFees = hook.launcherFeesAccrued();
+        uint256 grossNativeInput = uint256(-int256(delta.amount0()));
+        uint256 executedNativeInput = grossNativeInput - creatorFees - launcherFees;
+        (uint256 expectedCreatorFees, uint256 expectedLauncherFees) =
+            hook.quoteExactOutputFees(executedNativeInput, 110);
+
+        assertEq(creatorFees, expectedCreatorFees);
+        assertEq(launcherFees, expectedLauncherFees);
+        _claimAllFeesAndAssertSettled(creatorFees, launcherFees);
+    }
+
+    function test_tightSellExactInputChargesOnlyTheExecutedNativeAndLeavesUnspentTokens() public {
+        uint256 requestedTokenInput = 0.1 ether;
+        uint256 tokenBalanceBefore = token.balanceOf(address(this));
+
+        BalanceDelta delta = swapRouter.swap(
+            hookKey,
+            SwapParams({
+                zeroForOne: false,
+                amountSpecified: -requestedTokenInput.toInt256(),
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(1)
+            }),
+            settings,
+            ""
+        );
+
+        uint256 executedTokenInput = uint256(-int256(delta.amount1()));
+        assertGt(executedTokenInput, 0);
+        assertLt(executedTokenInput, requestedTokenInput);
+        assertEq(tokenBalanceBefore - token.balanceOf(address(this)), executedTokenInput);
+
+        (,,,,, uint256 creatorFees) = hook.poolFeeConfig(poolId);
+        uint256 launcherFees = hook.launcherFeesAccrued();
+        uint256 executedGrossNativeOutput = uint256(int256(delta.amount0())) + creatorFees + launcherFees;
+        (uint256 expectedCreatorFees, uint256 expectedLauncherFees) =
+            hook.quoteGrossFees(executedGrossNativeOutput, 370);
+
+        assertEq(creatorFees, expectedCreatorFees);
+        assertEq(launcherFees, expectedLauncherFees);
+        _claimAllFeesAndAssertSettled(creatorFees, launcherFees);
+    }
+
+    function test_feeDeltaAboveInt128RevertsBeforeTakingClaims() public {
+        uint256 firstUnsafeFee = uint256(uint128(type(int128).max)) + 1;
+        uint256 grossNativeInput = FullMath.mulDivRoundingUp(firstUnsafeFee, 10_000, 110);
+        (uint256 creatorFees, uint256 launcherFees) = hook.quoteGrossFees(grossNativeInput, 110);
+        uint256 totalFee = creatorFees + launcherFees;
+        assertGt(totalFee, uint256(uint128(type(int128).max)));
+        assertLe(totalFee, type(uint128).max);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(SafeCast.SafeCastOverflowedIntDowncast.selector, uint8(128), totalFee.toInt256())
+        );
+        vm.prank(address(manager));
+        hook.beforeSwap(
+            address(this),
+            hookKey,
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: -grossNativeInput.toInt256(),
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            ""
+        );
+
+        _assertNoFeesAccrued();
+    }
+
     function _buyExactInput(uint256 amount) private {
         swapRouter.swap{ value: amount }(
             hookKey,
             SwapParams({
-                zeroForOne: true, amountSpecified: -int256(amount), sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+                zeroForOne: true, amountSpecified: -amount.toInt256(), sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
             }),
             settings,
             ""
@@ -250,6 +344,21 @@ contract EthCreatorFeeHookV4SecurityTest is Deployers {
     function _assertNoFeesAccrued() private view {
         (,,,,, uint256 creatorFees) = hook.poolFeeConfig(poolId);
         assertEq(creatorFees, 0);
+        assertEq(hook.launcherFeesAccrued(), 0);
+        assertEq(hook.totalNativeFeesAccrued(), 0);
+        assertEq(manager.balanceOf(address(hook), CurrencyLibrary.ADDRESS_ZERO.toId()), 0);
+    }
+
+    function _claimAllFeesAndAssertSettled(uint256 creatorFees, uint256 launcherFees) private {
+        uint256 beneficiaryNativeBefore = beneficiary.receivedNative();
+        uint256 treasuryNativeBefore = treasury.receivedNative();
+        assertEq(beneficiary.claim(), creatorFees);
+        assertEq(treasury.claim(), launcherFees);
+        assertEq(beneficiary.receivedNative() - beneficiaryNativeBefore, creatorFees);
+        assertEq(treasury.receivedNative() - treasuryNativeBefore, launcherFees);
+
+        (,,,,, uint256 creatorFeesAfter) = hook.poolFeeConfig(poolId);
+        assertEq(creatorFeesAfter, 0);
         assertEq(hook.launcherFeesAccrued(), 0);
         assertEq(hook.totalNativeFeesAccrued(), 0);
         assertEq(manager.balanceOf(address(hook), CurrencyLibrary.ADDRESS_ZERO.toId()), 0);

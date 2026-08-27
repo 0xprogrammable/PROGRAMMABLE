@@ -127,6 +127,8 @@ export type LaunchPreflightResponse = {
   transaction?: PreparedLaunchTransaction;
   predictedToken?: Address;
   predictedHook?: Address;
+  releaseLauncher?: Address;
+  releaseManifestDigest?: Hex;
   draftPatch?: Partial<LaunchDraft>;
   planHash?: Hex;
 };

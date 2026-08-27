@@ -132,6 +132,33 @@ describe("public indexer fee disclosure", () => {
     ).toBe(true);
   });
 
+  it("preserves the exact Classic V4 release in feeds and token lists", () => {
+    const classicV4Token: LauncherToken = {
+      ...token,
+      id: "classic-v4",
+      launchModel: "classic",
+      launchModelVersion: "classic-v4",
+    };
+    const serialized = serializeIndexerToken(classicV4Token, 1);
+    const model = {
+      ...readyModel,
+      tokens: [classicV4Token],
+    } satisfies ExploreReadModel;
+
+    expect(serialized.launch).toMatchObject({
+      model: "classic",
+      modelId: "classic",
+      modelVersion: "classic-v4",
+      category: "classic",
+    });
+    expect(buildIndexerFeed(model, 1).tokens[0]?.launch.modelVersion)
+      .toBe("classic-v4");
+    expect(
+      buildUniswapTokenList(model, 1).tokens[0]?.extensions.programmable
+        .launchModelVersion,
+    ).toBe("classic-v4");
+  });
+
   it("publishes the complete verified Deep V2 launch provenance", () => {
     const deepToken: LauncherToken = {
       ...token,

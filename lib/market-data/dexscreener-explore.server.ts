@@ -53,20 +53,24 @@ export async function readDexscreenerExploreEntriesV1(
   }
 
   const observedAtMs = Date.now();
+  const requestedIdentityKeys = new Set(
+    identities.map((identity) => identityKey({ identity })),
+  );
   const byIdentity = new Map(
     snapshot.results.map((result) => [identityKey(result), result]),
   );
   const valuedEntries = entries.map((entry) =>
     valuedEntry(entry, byIdentity, observedAtMs)
   );
-  const qualifiedCount = snapshot.results.filter((result) =>
+  const qualifiedCount = new Set(snapshot.results.filter((result) =>
+    requestedIdentityKeys.has(identityKey(result)) &&
     result.status === "available" &&
     result.fdvQualification.status === "qualified" &&
     dexscreenerObservationFreshnessV1(
       result.observation.fetchedAt,
       observedAtMs,
     ) === "provider-recent"
-  ).length;
+  ).map(identityKey)).size;
   return {
     entries: valuedEntries,
     marketRead: {
@@ -159,5 +163,11 @@ function identityKey(
   result: Pick<DexscreenerShadowResultV1, "identity">,
 ) {
   const identity = result.identity;
-  return `${identity.tokenAddress}:${identity.poolId}:${identity.quoteAddress}`;
+  return [
+    identity.chainId,
+    identity.protocol,
+    identity.tokenAddress,
+    identity.poolId,
+    identity.quoteAddress,
+  ].join(":");
 }

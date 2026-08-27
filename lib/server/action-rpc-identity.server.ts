@@ -14,6 +14,10 @@ import {
   isClassicV3ReleaseVerified,
 } from "../classic-v3-release";
 import {
+  getConfiguredClassicV4PublicRelease,
+  isClassicV4PublicActionRelease,
+} from "../classic-v4-release";
+import {
   memeTokenLaunchedEvent,
   uerc20ReadAbi,
 } from "../onchain/abis";
@@ -47,7 +51,7 @@ type ClassicPoolKeyState = readonly [Address, Address, number, number, Address];
 
 type ActionRelease =
   | Readonly<{
-      kind: "classic-v2" | "classic-v3";
+      kind: "classic-v2" | "classic-v3" | "classic-v4";
       launcher: Address;
       hook: Address;
       launcherRuntimeCodeHash: Hex;
@@ -127,10 +131,42 @@ function productionClassicV3Release(): ActionRelease {
   };
 }
 
+function productionClassicV4Release(): ActionRelease | null {
+  const release = getConfiguredClassicV4PublicRelease("production");
+  if (!release) return null;
+  if (
+    !isClassicV4PublicActionRelease(release) ||
+    release.chainId !== 1 ||
+    release.model !== "classic" ||
+    release.internalContractRelease !== "classic-v4" ||
+    release.verification.deploymentLive !== true ||
+    release.verification.deploymentFinalized !== true ||
+    release.verification.runtimeCodeVerified !== true ||
+    release.verification.constructorBindingsVerified !== true ||
+    release.verification.sourceVerified !== true ||
+    release.verification.lifecycleVerified !== true ||
+    release.verification.indexerActivated !== true
+  ) {
+    throw new ActionRpcIdentityError(
+      "identity-mismatch",
+      "The canonical Classic V4 release is not configured",
+    );
+  }
+  return {
+    kind: "classic-v4",
+    launcher: release.addresses.launcher,
+    hook: release.addresses.feeHook,
+    launcherRuntimeCodeHash: release.runtimeCodeHashes.launcher,
+    hookRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+  };
+}
+
 function productionActionReleases(): readonly ActionRelease[] {
+  const classicV4 = productionClassicV4Release();
   return [
     productionClassicV2Release(),
     productionClassicV3Release(),
+    ...(classicV4 ? [classicV4] : []),
     ...getConfiguredStockPairedReleases().map((release) => ({
       kind: "stock-paired" as const,
       launcher: release.addresses.launcher,
@@ -394,8 +430,8 @@ export async function readTradeActionModelFromRpc(input: {
       launchedAt: new Date(0).toISOString(),
       totalSwapFeeBps: null,
       launchModel: "classic",
-      ...(release.kind === "classic-v3"
-        ? { launchModelVersion: "classic-v3" as const }
+      ...(release.kind === "classic-v3" || release.kind === "classic-v4"
+        ? { launchModelVersion: release.kind }
         : {}),
       liquidityPath: "meme",
     },

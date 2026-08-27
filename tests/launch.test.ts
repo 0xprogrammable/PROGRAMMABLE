@@ -6,6 +6,7 @@ import {
   buildPlainTextPlan,
   createClassicV3Draft,
   createEmptyDraft,
+  getClassicInitialBuyCurveQuote,
   getClassicInitialBuyPreview,
   getDraftAssetLabel,
   getInitialBuyEthLabel,
@@ -68,6 +69,31 @@ describe("Classic launch plan", () => {
     );
     expect(preflightSource).toContain(
       "await assertClassicV3Infrastructure(",
+    );
+  });
+
+  it("routes V4 through the manifest gate and complete call simulation", () => {
+    const preflightSource = readFileSync(
+      new URL("../app/api/launch/preflight/route.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(preflightSource).toContain(
+      'draft.classicContractRelease === "classic-v4"',
+    );
+    expect(preflightSource).toContain(
+      "getConfiguredClassicV4PublicRelease(",
+    );
+    expect(preflightSource).toContain(
+      "if (!isClassicV4PublicActionRelease(release))",
+    );
+    expect(preflightSource).toContain("prepareClassicV4Launch(");
+    expect(preflightSource).toContain("const simulation = await rpcClient.call({");
+    expect(preflightSource).toContain(
+      'functionName: "launch",\n    data: simulation.data,',
+    );
+    expect(preflightSource).toContain(
+      "releaseManifestDigest: release.manifestDigest",
     );
   });
 
@@ -195,6 +221,37 @@ describe("Classic launch plan", () => {
     expect(deeper?.tokenAmount).toBeCloseTo(21_544_712.788, 2);
     expect(deeper?.tokenAmount).toBeGreaterThan(standard?.tokenAmount ?? 0);
     expect(deeper?.poolEthAmount).toBe(standard?.poolEthAmount);
+    expect(deeper?.curveCapacityWei).toBe(5_895_641_055_945_908_140n);
+    expect(deeper?.remainingCurveCapacityWei).toBe(
+      5_865_941_055_945_908_140n,
+    );
+    expect(deeper?.endPriceMultipleWad).toBe(
+      18_913_066_072_547_532_342n,
+    );
+  });
+
+  it("uses exact fee rounding and rejects rather than clamps over-capacity Deeper buys", () => {
+    const exact = getClassicInitialBuyCurveQuote(
+      "5.901542598544452592",
+      "0.1",
+      "deep-30",
+    );
+    const over = getClassicInitialBuyCurveQuote(
+      "5.901542598544452593",
+      "0.1",
+      "deep-30",
+    );
+
+    expect(exact.status).toBe("ready");
+    if (exact.status === "ready") {
+      expect(exact.preview.poolEthWei).toBeLessThanOrEqual(
+        exact.preview.curveCapacityWei ?? 0n,
+      );
+      expect(exact.preview.tokenAmountWei).toBeLessThanOrEqual(
+        1_000_000_000n * 10n ** 18n,
+      );
+    }
+    expect(over.status).toBe("over-capacity");
   });
 
   it("copies the selected Dev Buy into the launch summary", () => {

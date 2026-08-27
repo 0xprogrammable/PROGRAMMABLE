@@ -40,6 +40,19 @@ export const PROGRAMMABLE_EVENT_SIGNATURES = {
     "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed caller, uint256 amount)",
     "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed caller, uint256 amount)",
   ],
+  ClassicV4Launcher: [
+    "MemeTokenLaunchedV2(address indexed deployer, address indexed token, bytes32 indexed poolId, address feeHook, address rewardVault, address positionRecipient, uint256 positionTokenId, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash, bytes32 launchHash)",
+    "MemeLiquidityConfiguredV2(address indexed token, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)",
+    "MemeCreatorInitialBuyV2(address indexed deployer, address indexed token, bytes32 indexed poolId, uint256 nativeAmount, uint256 tokenAmount, bytes32 launchHash)",
+    "MemeCreatorInitialBuyCustodyV2(address indexed deployer, address indexed token, address indexed custody, uint8 mode, uint16 durationDays, uint16 cliffDays, bytes32 configurationHash, bytes32 launchHash)",
+  ],
+  ClassicV4Hook: [
+    "PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed rewardVault, address registrar, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash)",
+    "PoolFeeDisclosure(bytes32 indexed poolId, address indexed token, address indexed rewardVault, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, uint16 buyCreatorFeeBps, uint16 sellCreatorFeeBps, uint16 launcherFeeBps, uint16 transferTaxBps, uint24 lpFeePips)",
+    "NativeSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, bool indexed isBuy, uint16 appliedTotalSwapFeeBps, uint256 grossNativeAmount, uint256 creatorFee, uint256 launcherFee)",
+    "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed caller, uint256 amount)",
+    "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed caller, uint256 amount)",
+  ],
   ClassicV3RewardVaultFactory: [
     "ClassicRewardVaultDeployed(address indexed vault, bytes32 indexed poolId, address indexed feeHook, bytes32 salt, bytes32 configurationHash)",
   ],
@@ -109,15 +122,18 @@ export const PROGRAMMABLE_EVENT_SIGNATURES = {
 /**
  * Events consumed by the legacy Classic/Stock read-model projector.
  *
- * Custom Registry events have their own projection path and are still part of
+ * Custom Registry and the separately activated Classic V4 Envio release have
+ * their own projection paths and are still part of
  * PROGRAMMABLE_EVENT_SIGNATURES for strict provider decoding. Keeping this
- * subset explicit prevents a Registry ABI addition from silently becoming a
- * Classic/Stock projector rule.
+ * subset explicit prevents either ABI from silently becoming a legacy
+ * projector rule.
  */
 export const PROJECTOR_EVENT_SIGNATURES = Object.freeze(
   Object.fromEntries(
     Object.entries(PROGRAMMABLE_EVENT_SIGNATURES).filter(
-      ([contractName]) => !contractName.startsWith("Custom"),
+      ([contractName]) =>
+        !contractName.startsWith("Custom") &&
+        !contractName.startsWith("ClassicV4"),
     ),
   ),
 ) as Readonly<Record<string, readonly string[]>>;

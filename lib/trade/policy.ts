@@ -1,0 +1,4 @@
+export const DEFAULT_TRADE_SLIPPAGE_BPS = 100;
+export const MAX_TRADE_SLIPPAGE_BPS = 1_000;
+export const TRADE_SLIPPAGE_PRESET_BPS = [50, 100, 300] as const;
+export const TRADE_QUOTE_VALIDITY_SECONDS = 300;

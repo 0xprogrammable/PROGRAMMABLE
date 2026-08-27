@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import {
+  EXPECTED_MODEL_BY_RELEASE,
   getDataPipelineReleaseBinding,
   parseDataPipelineReleaseBinding,
 } from "../lib/data-pipeline/release-binding.server";
@@ -87,6 +88,14 @@ describe("data pipeline release binding", () => {
           : source,
       ),
     };
+    const zeroSourceAddress = {
+      ...valid,
+      sources: valid.sources.map((source, index) =>
+        index === 0
+          ? { ...source, address: `0x${"00".repeat(20)}` }
+          : source,
+      ),
+    };
     const unreviewedEndpoint = {
       ...valid,
       envio: {
@@ -108,6 +117,9 @@ describe("data pipeline release binding", () => {
       parseDataPipelineReleaseBinding(zeroArtifactCommitment),
     ).toThrow("Invalid data pipeline release binding");
     expect(() => parseDataPipelineReleaseBinding(zeroRuntimeCommitment)).toThrow(
+      "Invalid data pipeline release binding",
+    );
+    expect(() => parseDataPipelineReleaseBinding(zeroSourceAddress)).toThrow(
       "Invalid data pipeline release binding",
     );
     expect(() => parseDataPipelineReleaseBinding(unreviewedEndpoint)).toThrow(
@@ -168,6 +180,34 @@ describe("data pipeline release binding", () => {
     );
     expect(() =>
       parseDataPipelineReleaseBinding(invalidModelReleaseTuple),
+    ).toThrow("Invalid data pipeline release binding");
+  });
+
+  it("recognizes Classic V4 only as an additive classic release identity", () => {
+    expect(EXPECTED_MODEL_BY_RELEASE["classic-v4"]).toBe("classic");
+
+    const valid = getDataPipelineReleaseBinding();
+    const relabeledV3Sources = {
+      ...valid,
+      releases: [
+        ...valid.releases,
+        {
+          model: "classic",
+          releaseVersion: "classic-v4",
+          activationBlock: 25_639_596,
+          sourceContracts: [
+            "ClassicV3RewardVaultFactory",
+            "ClassicV3VestingWalletFactory",
+            "ClassicV3Hook",
+            "ClassicV3Launcher",
+          ],
+          dynamicContracts: ["ClassicV3RewardVault"],
+        },
+      ],
+    };
+
+    expect(() =>
+      parseDataPipelineReleaseBinding(relabeledV3Sources),
     ).toThrow("Invalid data pipeline release binding");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { encodeFunctionData } from "viem";
+import { encodeFunctionData, type Address, type Hex } from "viem";
 
 import { classicRewardVaultAbi } from "../lib/classic-v3";
 import {
@@ -26,6 +26,7 @@ function rewardResponse() {
     chainId: 1,
     rewards: [
       {
+        releaseVersion: "classic-v3",
         tokenAddress: token,
         tokenName: "Directional",
         tokenSymbol: "DIR",
@@ -287,6 +288,7 @@ describe("Classic V3 profile rewards", () => {
         {
           status: "ready",
           action: "claim",
+          releaseVersion: "classic-v3",
           account,
           vaultAddress: vault,
           transaction,
@@ -296,6 +298,7 @@ describe("Classic V3 profile rewards", () => {
           account,
           vaultAddress: vault,
           chainId: 1,
+          releaseVersion: "classic-v3",
         },
       ).transaction,
     ).toEqual(transaction);
@@ -304,6 +307,7 @@ describe("Classic V3 profile rewards", () => {
         {
           status: "ready",
           action: "claim",
+          releaseVersion: "classic-v3",
           account,
           vaultAddress: vault,
           transaction: { ...transaction, from: other },
@@ -313,6 +317,7 @@ describe("Classic V3 profile rewards", () => {
           account,
           vaultAddress: vault,
           chainId: 1,
+          releaseVersion: "classic-v3",
         },
       ),
     ).toThrow("not canonical");
@@ -339,6 +344,7 @@ describe("Classic V3 profile rewards", () => {
       new Response(JSON.stringify({
         status: "ready",
         action: "claim",
+        releaseVersion: "classic-v3",
         account,
         vaultAddress: vault,
         transaction,
@@ -355,6 +361,7 @@ describe("Classic V3 profile rewards", () => {
       account,
       vaultAddress: vault,
       chainId: 1,
+      releaseVersion: "classic-v3",
     }, undefined, fetcher, { wait })).resolves.toMatchObject({
       action: "claim",
       account,
@@ -362,6 +369,61 @@ describe("Classic V3 profile rewards", () => {
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(wait).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires a publicly available browser binding for Classic V4 rewards", () => {
+    const transaction = {
+      kind: "claim-classic-v3-rewards" as const,
+      chainId: 1 as const,
+      from: account,
+      to: vault,
+      data: encodeFunctionData({
+        abi: classicRewardVaultAbi,
+        functionName: "claim",
+      }),
+      value: "0",
+      gasLimit: "120000",
+    };
+    const response = {
+      status: "ready",
+      action: "claim",
+      releaseVersion: "classic-v4",
+      account,
+      vaultAddress: vault,
+      transaction,
+    };
+    const expected = {
+      action: "claim" as const,
+      account,
+      vaultAddress: vault,
+      chainId: 1,
+      releaseVersion: "classic-v4" as const,
+    };
+    const publicBinding = {
+      chainId: 1 as const,
+      launcher: account as Address,
+      manifestDigest: `0x${"11".repeat(32)}` as Hex,
+      releaseStatus: "publicly-available" as const,
+      publicAvailable: true as const,
+    };
+
+    expect(() =>
+      validatePreparedClassicV3RewardAction(response, expected),
+    ).toThrow("browser release binding");
+    expect(() =>
+      validatePreparedClassicV3RewardAction(response, expected, {
+        ...publicBinding,
+        releaseStatus: "indexer-activated",
+        publicAvailable: false,
+      }),
+    ).toThrow("browser release binding");
+    expect(
+      validatePreparedClassicV3RewardAction(
+        response,
+        expected,
+        publicBinding,
+      ).transaction,
+    ).toEqual(transaction);
   });
 
   it("updates payout in one step without changing claim authority", () => {
@@ -383,6 +445,7 @@ describe("Classic V3 profile rewards", () => {
         {
           status: "ready",
           action: "update-payout",
+          releaseVersion: "classic-v3",
           account,
           vaultAddress: vault,
           transaction,
@@ -394,6 +457,7 @@ describe("Classic V3 profile rewards", () => {
           newPayoutAddress: payout,
           allocationIndex: 0,
           chainId: 1,
+          releaseVersion: "classic-v3",
         },
       ).transaction.from,
     ).toBe(account);

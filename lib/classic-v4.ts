@@ -1,4 +1,4 @@
-import { encodeFunctionData, parseAbi, type Hex } from "viem";
+import { encodeFunctionData, formatEther, parseAbi, type Hex } from "viem";
 
 import {
   formatClassicV3Percent,
@@ -9,6 +9,7 @@ import {
   type ClassicV3RewardConfiguration,
 } from "./classic-v3";
 import {
+  getClassicInitialBuyCurveQuote,
   parseClassicFeePercentToBps,
   PLATFORM_FEE_BPS,
   type ClassicLiquidityPreset,
@@ -38,6 +39,37 @@ export const classicV4LaunchAbi = parseAbi([
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
   "function MAX_REWARD_BENEFICIARIES() view returns (uint256)",
   "function REWARD_SHARE_BASIS_POINTS() view returns (uint16)",
+  "function TOKEN_SUPPLY() view returns (uint256)",
+  "function INITIAL_TICK() view returns (int24)",
+  "function TICK_SPACING() view returns (int24)",
+  "function LP_FEE_PIPS() view returns (uint24)",
+]);
+
+export const classicV4HookAbi = parseAbi([
+  "function poolManager() view returns (address)",
+  "function launcherFeeRecipient() view returns (address)",
+  "function feeSplitVaultFactory() view returns (address)",
+  "function LAUNCHER_FEE_BPS() view returns (uint16)",
+  "function MIN_TOTAL_SWAP_FEE_BPS() view returns (uint16)",
+  "function MAX_TOTAL_SWAP_FEE_BPS() view returns (uint16)",
+  "function TOTAL_SWAP_FEE_STEP_BPS() view returns (uint16)",
+  "function TRANSFER_TAX_BPS() view returns (uint16)",
+  "function LP_FEE_PIPS() view returns (uint24)",
+  "function TICK_SPACING() view returns (int24)",
+]);
+
+export const classicV4HookFactoryAbi = parseAbi([
+  "function isFactoryHook(address hook) view returns (bool)",
+  "function REQUIRED_HOOK_FLAGS() view returns (uint160)",
+]);
+
+export const classicV4PositionPlannerAbi = parseAbi([
+  "function STANDARD_PRESET() view returns (uint8)",
+  "function DEEP30_PRESET() view returns (uint8)",
+  "function TOKEN_SUPPLY() view returns (uint256)",
+  "function INITIAL_TICK() view returns (int24)",
+  "function DEEP30_TICK_LOWER() view returns (int24)",
+  "function TICK_SPACING() view returns (int24)",
 ]);
 
 export type ClassicV4LiquidityConfiguration = {
@@ -60,8 +92,15 @@ export type ClassicV4LaunchDisclosure = {
     share: string;
   }[];
   liquidity: string;
+  activationBuy: string;
   initialBuyCustody: string;
 };
+
+function compactEther(value: bigint, maximumFractionDigits = 6) {
+  const [whole, fraction = ""] = formatEther(value).split(".");
+  const trimmed = fraction.slice(0, maximumFractionDigits).replace(/0+$/, "");
+  return trimmed ? `${whole}.${trimmed}` : whole;
+}
 
 function requireClassicV4FeeBps(value: string, label: string) {
   const basisPoints = parseClassicFeePercentToBps(value);
@@ -108,6 +147,19 @@ export function validateClassicV4LaunchDraft(
   const liquidity = readLiquidityPreset(
     (draft as Partial<LaunchDraft>).classicLiquidityPreset,
   );
+  const activationBuy = getClassicInitialBuyCurveQuote(
+    draft.initialBuyEth,
+    draft.buySwapFeePercent,
+    liquidity.preset,
+  );
+  if (activationBuy.status === "over-capacity") {
+    throw new LaunchInputError(
+      `Activation Buy exceeds the ${liquidity.preset === "deep-30" ? "Deeper" : "Classic"} curve. Use at most ${compactEther(activationBuy.maximumGrossActivationBuyWei)} ETH at this buy fee`,
+    );
+  }
+  if (activationBuy.status !== "ready") {
+    throw new LaunchInputError("Enter a valid Activation Buy");
+  }
 
   return {
     fees: {
@@ -176,6 +228,15 @@ export function buildClassicV4LaunchDisclosure(
       creatorBps,
     )} creator · ${formatClassicV3Percent(PLATFORM_FEE_BPS)} Programmable`;
 
+  const activationBuy = getClassicInitialBuyCurveQuote(
+    draft.initialBuyEth,
+    draft.buySwapFeePercent,
+    configuration.liquidity.preset,
+  );
+  if (activationBuy.status !== "ready") {
+    throw new LaunchInputError("Enter a valid Activation Buy");
+  }
+
   return {
     buyFee: feeLine(
       configuration.fees.buySwapFeeBps,
@@ -193,6 +254,10 @@ export function buildClassicV4LaunchDisclosure(
       configuration.liquidity.preset === "deep-30"
         ? "Deeper · about 30% higher active liquidity at launch · bounded to about 18.9× the opening price and about 5.9 ETH net curve capacity · one position, permanently locked"
         : "Standard · full one-sided range · one position, permanently locked",
+    activationBuy:
+      activationBuy.preview.remainingCurveCapacityWei === null
+        ? `${compactEther(activationBuy.preview.grossEthWei)} ETH plus network gas`
+        : `${compactEther(activationBuy.preview.grossEthWei)} ETH plus network gas · ${compactEther(activationBuy.preview.remainingCurveCapacityWei)} ETH net curve capacity remains`,
     initialBuyCustody:
       configuration.initialBuyCustody.mode === "unlocked"
         ? "Available immediately"

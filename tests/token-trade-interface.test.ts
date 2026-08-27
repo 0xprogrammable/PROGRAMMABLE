@@ -7,6 +7,10 @@ const source = readFileSync(
   join(root, "components/token-trade.tsx"),
   "utf8",
 );
+const detailSource = readFileSync(
+  join(root, "components/token-detail-view.tsx"),
+  "utf8",
+);
 const styles = readFileSync(
   join(root, "components/token-experience.module.css"),
   "utf8",
@@ -46,6 +50,31 @@ describe("token trade amount interface", () => {
     );
     expect(styles).toMatch(
       /\.sideButton\s*\{[^}]*min-height:\s*44px;/s,
+    );
+  });
+
+  it("keeps Classic V4 hook costs distinct without relabeling legacy trades", () => {
+    expect(source).toContain(
+      'feePresentation = "legacy-pool"',
+    );
+    expect(source).toContain('"Hook swap fee"');
+    expect(source).toContain('"Curve price impact"');
+    expect(source).toContain("Total execution cost");
+    expect(source).toContain("TRADE_SLIPPAGE_PRESET_BPS.map");
+    expect(detailSource).toContain(
+      'token.launchModelVersion === "classic-v4"',
+    );
+    expect(
+      detailSource.match(/feePresentation=\{classicTradeFeePresentation\}/gu),
+    ).toHaveLength(2);
+    expect(detailSource).toContain(
+      "Math.floor(Date.now() / 1_000) + TRADE_QUOTE_VALIDITY_SECONDS",
+    );
+    expect(detailSource).toContain(
+      "const next = await prepareNextTrade(submitted)",
+    );
+    expect(detailSource).not.toContain(
+      "Math.floor(Date.now() / 1_000) + 1_200",
     );
   });
 });

@@ -25,6 +25,10 @@ import {
   getConfiguredClassicV3Release,
   isClassicV3ReleaseVerified,
 } from "@/lib/classic-v3-release";
+import {
+  getConfiguredClassicV4PublicRelease,
+  isClassicV4PublicActionRelease,
+} from "@/lib/classic-v4-release";
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { getWebsiteReadOnchainDeployment } from "@/lib/onchain";
 import {
@@ -59,6 +63,17 @@ type ClassicActionRewardIdentity = Readonly<{
   transferTaxBps: number;
   lpFeePips: number;
 }>;
+type ClassicActionReleaseVersion = "classic-v3" | "classic-v4";
+type ClassicActionRelease = Readonly<{
+  releaseVersion: ClassicActionReleaseVersion;
+  launcher: Address;
+  hook: Address;
+  rewardVaultFactory: Address;
+  launcherRuntimeCodeHash: Hex;
+  hookRuntimeCodeHash: Hex;
+  rewardVaultFactoryRuntimeCodeHash: Hex;
+  launcherDeploymentBlock: bigint;
+}>;
 const classicV3LaunchEvent = parseAbiItem(
   "event MemeTokenLaunchedV2(address indexed deployer,address indexed token,bytes32 indexed poolId,address feeHook,address rewardVault,address positionRecipient,uint256 positionTokenId,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 rewardConfigurationHash,bytes32 launchHash)",
 );
@@ -73,6 +88,168 @@ const manifest = appDeployments[
 const releaseManifest =
   getConfiguredClassicV3Release(environment).releaseManifest;
 const chain = environment === "rehearsal" ? sepolia : mainnet;
+
+function runtimeCodeHash(value: unknown, label: string): Hex {
+  if (
+    typeof value !== "string" ||
+    !isHex(value, { strict: true }) ||
+    value.length !== 66
+  ) {
+    throw new Error(`${label} is not pinned`);
+  }
+  return value as Hex;
+}
+
+function classicRewardFactoryPin() {
+  if (
+    typeof manifest.classicRewardVaultFactoryV1 !== "string" ||
+    !isAddress(manifest.classicRewardVaultFactoryV1) ||
+    typeof releaseManifest.addresses?.rewardVaultFactory !== "string" ||
+    !isAddress(releaseManifest.addresses.rewardVaultFactory)
+  ) {
+    throw new Error("Classic reward factory is not pinned");
+  }
+  const address = getAddress(manifest.classicRewardVaultFactoryV1);
+  const releaseAddress = getAddress(
+    releaseManifest.addresses.rewardVaultFactory,
+  );
+  const pinnedRuntimeCodeHash = runtimeCodeHash(
+    manifest.runtimeCodeHashes?.classicRewardVaultFactoryV1,
+    "Classic reward factory runtime",
+  );
+  const releaseRuntimeCodeHash = runtimeCodeHash(
+    releaseManifest.runtimeCodeHashes?.rewardVaultFactory,
+    "Classic release reward factory runtime",
+  );
+  if (
+    address.toLowerCase() !== releaseAddress.toLowerCase() ||
+    pinnedRuntimeCodeHash.toLowerCase() !==
+      releaseRuntimeCodeHash.toLowerCase()
+  ) {
+    throw new Error("Classic reward factory pins do not match");
+  }
+  return {
+    address,
+    runtimeCodeHash: pinnedRuntimeCodeHash,
+  } as const;
+}
+
+function configuredClassicV3ActionRelease(): ClassicActionRelease | null {
+  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
+    return null;
+  }
+  const rewardVaultFactory = classicRewardFactoryPin();
+  return {
+    releaseVersion: "classic-v3",
+    launcher: getAddress(manifest.memeLaunchV2 as string),
+    hook: getAddress(manifest.ethCreatorFeeHookV3 as string),
+    rewardVaultFactory: rewardVaultFactory.address,
+    launcherRuntimeCodeHash: runtimeCodeHash(
+      manifest.runtimeCodeHashes?.memeLaunchV2,
+      "Classic V3 launcher runtime",
+    ),
+    hookRuntimeCodeHash: runtimeCodeHash(
+      manifest.runtimeCodeHashes?.ethCreatorFeeHookV3,
+      "Classic V3 hook runtime",
+    ),
+    rewardVaultFactoryRuntimeCodeHash: rewardVaultFactory.runtimeCodeHash,
+    launcherDeploymentBlock: BigInt(
+      manifest.deploymentBlocks?.memeLaunchV2 as number,
+    ),
+  };
+}
+
+function configuredClassicV4ActionRelease(
+  requirePublicAvailability = false,
+): ClassicActionRelease | null {
+  const release = getConfiguredClassicV4PublicRelease(environment);
+  if (!release) return null;
+  if (
+    requirePublicAvailability &&
+    !isClassicV4PublicActionRelease(release)
+  ) {
+    return null;
+  }
+  if (
+    environment !== "production" ||
+    release.chainId !== chain.id ||
+    release.model !== "classic" ||
+    release.internalContractRelease !== "classic-v4" ||
+    release.verification.deploymentLive !== true ||
+    release.verification.deploymentFinalized !== true ||
+    release.verification.runtimeCodeVerified !== true ||
+    release.verification.constructorBindingsVerified !== true ||
+    release.verification.sourceVerified !== true ||
+    release.verification.lifecycleVerified !== true ||
+    release.verification.indexerActivated !== true
+  ) {
+    throw new Error("Classic V4 public release is not active");
+  }
+
+  const rewardVaultFactory = classicRewardFactoryPin();
+  const releaseFactory = getAddress(release.addresses.rewardVaultFactory);
+  const sharedFactory = release.sharedDependencies.rewardVaultFactory;
+  const releaseFactoryRuntimeCodeHash = runtimeCodeHash(
+    release.runtimeCodeHashes.rewardVaultFactory,
+    "Classic V4 reward factory runtime",
+  );
+  if (
+    releaseFactory.toLowerCase() !== rewardVaultFactory.address.toLowerCase() ||
+    getAddress(sharedFactory.address).toLowerCase() !==
+      rewardVaultFactory.address.toLowerCase() ||
+    releaseFactoryRuntimeCodeHash.toLowerCase() !==
+      rewardVaultFactory.runtimeCodeHash.toLowerCase() ||
+    runtimeCodeHash(
+      sharedFactory.runtimeCodeHash,
+      "Classic V4 shared reward factory runtime",
+    ).toLowerCase() !== rewardVaultFactory.runtimeCodeHash.toLowerCase()
+  ) {
+    throw new Error("Classic V4 reward factory does not match the shared pin");
+  }
+  if (
+    !Number.isSafeInteger(release.deploymentBlocks.launcher) ||
+    release.deploymentBlocks.launcher < 1
+  ) {
+    throw new Error("Classic V4 launcher deployment block is not pinned");
+  }
+
+  return {
+    releaseVersion: "classic-v4",
+    launcher: getAddress(release.addresses.launcher),
+    hook: getAddress(release.addresses.feeHook),
+    rewardVaultFactory: rewardVaultFactory.address,
+    launcherRuntimeCodeHash: runtimeCodeHash(
+      release.runtimeCodeHashes.launcher,
+      "Classic V4 launcher runtime",
+    ),
+    hookRuntimeCodeHash: runtimeCodeHash(
+      release.runtimeCodeHashes.feeHook,
+      "Classic V4 hook runtime",
+    ),
+    rewardVaultFactoryRuntimeCodeHash: rewardVaultFactory.runtimeCodeHash,
+    launcherDeploymentBlock: BigInt(release.deploymentBlocks.launcher),
+  };
+}
+
+function configuredClassicActionReleases(
+  requirePublicAvailability = false,
+) {
+  const v3 = configuredClassicV3ActionRelease();
+  const v4 = configuredClassicV4ActionRelease(requirePublicAvailability);
+  const releases = [
+    ...(v3 ? [v3] : []),
+    ...(v4 ? [v4] : []),
+  ];
+  if (
+    new Set(releases.map((release) => release.launcher.toLowerCase())).size !==
+      releases.length ||
+    new Set(releases.map((release) => release.hook.toLowerCase())).size !==
+      releases.length
+  ) {
+    throw new Error("Classic release identities overlap");
+  }
+  return releases;
+}
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -129,22 +306,6 @@ async function assertCodeHashAtBlock(
   }
 }
 
-async function assertCodeHash(
-  client: PublicClient,
-  address: Address,
-  expectedHash: string,
-  label: string,
-) {
-  const code = await client.getCode({ address });
-  if (
-    !code ||
-    code === "0x" ||
-    keccak256(code).toLowerCase() !== expectedHash.toLowerCase()
-  ) {
-    throw new Error(`${label} does not match the Classic manifest`);
-  }
-}
-
 function minimum(left: bigint, right: bigint) {
   return left < right ? left : right;
 }
@@ -181,38 +342,74 @@ async function readLaunchByTransactionFromClient(
   transactionHash: Hex,
   client: PublicClient,
 ) {
-  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
+  const releases = configuredClassicActionReleases();
+  if (releases.length === 0) {
     return { status: "not-deployed" as const, launch: null };
   }
-  const launcher = getAddress(manifest.memeLaunchV2 as string);
-  await assertCodeHash(
-    client,
-    launcher,
-    manifest.runtimeCodeHashes?.memeLaunchV2 as string,
-    "Classic launcher",
-  );
   const latestBlock = await client.getBlockNumber();
   const snapshotBlock = latestBlock > CONFIRMATIONS
     ? latestBlock - CONFIRMATIONS
     : latestBlock;
-  const deploymentBlock = BigInt(
-    manifest.deploymentBlocks?.memeLaunchV2 as number,
-  );
-  const logs = deploymentBlock <= snapshotBlock
-    ? await readLaunchLogs(
+  await Promise.all(
+    releases.flatMap((release) => [
+      assertCodeHashAtBlock(
         client,
-        launcher,
-        deploymentBlock,
+        release.launcher,
+        release.launcherRuntimeCodeHash,
         snapshotBlock,
-        account,
-      )
-    : [];
-  const launch = logs.find(
-    (candidate) =>
-      !candidate.removed &&
-      candidate.transactionHash.toLowerCase() === transactionHash.toLowerCase(),
+        `${release.releaseVersion} launcher`,
+      ),
+      assertCodeHashAtBlock(
+        client,
+        release.hook,
+        release.hookRuntimeCodeHash,
+        snapshotBlock,
+        `${release.releaseVersion} hook`,
+      ),
+      assertCodeHashAtBlock(
+        client,
+        release.rewardVaultFactory,
+        release.rewardVaultFactoryRuntimeCodeHash,
+        snapshotBlock,
+        "Classic reward factory",
+      ),
+    ]),
   );
-  if (!launch) return { status: "ready" as const, launch: null };
+  const launches = (
+    await Promise.all(
+      releases.map(async (release) => ({
+        release,
+        logs: release.launcherDeploymentBlock <= snapshotBlock
+          ? await readLaunchLogs(
+              client,
+              release.launcher,
+              release.launcherDeploymentBlock,
+              snapshotBlock,
+              account,
+            )
+          : [],
+      })),
+    )
+  ).flatMap(({ release, logs }) =>
+    logs
+      .filter(
+        (candidate) =>
+          !candidate.removed &&
+          candidate.transactionHash.toLowerCase() ===
+            transactionHash.toLowerCase(),
+      )
+      .map((launch) => ({ release, launch }))
+  );
+  if (launches.length === 0) {
+    return { status: "ready" as const, launch: null };
+  }
+  if (launches.length !== 1) {
+    throw new Error("Classic launch transaction identity is ambiguous");
+  }
+  const { release, launch } = launches[0];
+  if (getAddress(launch.args.feeHook) !== release.hook) {
+    throw new Error("Classic launch hook does not match its release");
+  }
   const tokenAddress = getAddress(launch.args.token);
   const [name, symbol] = await Promise.all([
     client.readContract({
@@ -264,36 +461,39 @@ function prospectiveAllocation(
 
 async function readClassicActionState(input: {
   client: PublicClient;
+  release: ClassicActionRelease;
   reward: ClassicActionRewardIdentity;
   account: Address;
   blockNumber: bigint;
   allocationIndex?: number;
 }) {
-  const { client, reward, account, blockNumber, allocationIndex } = input;
-  const hook = getAddress(manifest.ethCreatorFeeHookV3 as string);
-  const launcher = getAddress(manifest.memeLaunchV2 as string);
-  const vaultFactory = getAddress(
-    manifest.classicRewardVaultFactoryV1 as string,
-  );
+  const {
+    client,
+    release,
+    reward,
+    account,
+    blockNumber,
+    allocationIndex,
+  } = input;
   await Promise.all([
     assertCodeHashAtBlock(
       client,
-      launcher,
-      manifest.runtimeCodeHashes?.memeLaunchV2 as string,
+      release.launcher,
+      release.launcherRuntimeCodeHash,
       blockNumber,
-      "Classic launcher",
+      `${release.releaseVersion} launcher`,
     ),
     assertCodeHashAtBlock(
       client,
-      hook,
-      manifest.runtimeCodeHashes?.ethCreatorFeeHookV3 as string,
+      release.hook,
+      release.hookRuntimeCodeHash,
       blockNumber,
-      "Classic hook",
+      `${release.releaseVersion} hook`,
     ),
     assertCodeHashAtBlock(
       client,
-      vaultFactory,
-      manifest.runtimeCodeHashes?.classicRewardVaultFactoryV1 as string,
+      release.rewardVaultFactory,
+      release.rewardVaultFactoryRuntimeCodeHash,
       blockNumber,
       "Classic reward factory",
     ),
@@ -312,7 +512,7 @@ async function readClassicActionState(input: {
   ] = await Promise.all([
     client.getCode({ address: reward.vaultAddress, blockNumber }),
     client.readContract({
-      address: vaultFactory,
+      address: release.rewardVaultFactory,
       abi: classicRewardVaultFactoryAbi,
       functionName: "isFactoryVault",
       args: [reward.vaultAddress],
@@ -358,14 +558,14 @@ async function readClassicActionState(input: {
       blockNumber,
     }),
     client.readContract({
-      address: hook,
+      address: release.hook,
       abi: classicV3HookAbi,
       functionName: "feeDisclosure",
       args: [reward.poolId],
       blockNumber,
     }),
     client.readContract({
-      address: hook,
+      address: release.hook,
       abi: classicV3HookAbi,
       functionName: "poolFeeConfig",
       args: [reward.poolId],
@@ -376,13 +576,14 @@ async function readClassicActionState(input: {
     !vaultCode ||
     vaultCode === "0x" ||
     !factoryVault ||
-    getAddress(vaultHook).toLowerCase() !== hook.toLowerCase() ||
+    getAddress(vaultHook).toLowerCase() !== release.hook.toLowerCase() ||
     vaultPoolId.toLowerCase() !== reward.poolId.toLowerCase() ||
     beneficiaryCount < 1n ||
     beneficiaryCount > 5n ||
     disclosure[7].toLowerCase() !== reward.vaultAddress.toLowerCase() ||
     poolConfig[0].toLowerCase() !== reward.vaultAddress.toLowerCase() ||
-    getAddress(poolConfig[1]).toLowerCase() !== launcher.toLowerCase() ||
+    getAddress(poolConfig[1]).toLowerCase() !==
+      release.launcher.toLowerCase() ||
     !poolConfig[4] ||
     Number(disclosure[0]) !== reward.buySwapFeeBps ||
     Number(disclosure[1]) !== reward.sellSwapFeeBps ||
@@ -470,7 +671,8 @@ async function readRewardsFromClient(
   account: Address,
   client: PublicClient,
 ) {
-  if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
+  const releases = configuredClassicActionReleases();
+  if (releases.length === 0) {
     return {
       status: "not-deployed" as const,
       account,
@@ -478,48 +680,64 @@ async function readRewardsFromClient(
       rewards: [],
     };
   }
-
-  const launcher = getAddress(manifest.memeLaunchV2 as string);
-  const hook = getAddress(manifest.ethCreatorFeeHookV3 as string);
-  const vaultFactory = getAddress(
-    manifest.classicRewardVaultFactoryV1 as string,
-  );
-  await Promise.all([
-    assertCodeHash(
-      client,
-      launcher,
-      manifest.runtimeCodeHashes?.memeLaunchV2 as string,
-      "Classic launcher",
-    ),
-    assertCodeHash(
-      client,
-      hook,
-      manifest.runtimeCodeHashes?.ethCreatorFeeHookV3 as string,
-      "Classic hook",
-    ),
-    assertCodeHash(
-      client,
-      vaultFactory,
-      manifest.runtimeCodeHashes?.classicRewardVaultFactoryV1 as string,
-      "Classic reward factory",
-    ),
-  ]);
-
   const latestBlock = await client.getBlockNumber();
   const snapshotBlock =
     latestBlock > CONFIRMATIONS ? latestBlock - CONFIRMATIONS : latestBlock;
-  const deploymentBlock = BigInt(
-    manifest.deploymentBlocks?.memeLaunchV2 as number,
+  await Promise.all(
+    releases.flatMap((release) => [
+      assertCodeHashAtBlock(
+        client,
+        release.launcher,
+        release.launcherRuntimeCodeHash,
+        snapshotBlock,
+        `${release.releaseVersion} launcher`,
+      ),
+      assertCodeHashAtBlock(
+        client,
+        release.hook,
+        release.hookRuntimeCodeHash,
+        snapshotBlock,
+        `${release.releaseVersion} hook`,
+      ),
+      assertCodeHashAtBlock(
+        client,
+        release.rewardVaultFactory,
+        release.rewardVaultFactoryRuntimeCodeHash,
+        snapshotBlock,
+        "Classic reward factory",
+      ),
+    ]),
   );
-  const logs =
-    deploymentBlock <= snapshotBlock
-      ? await readLaunchLogs(client, launcher, deploymentBlock, snapshotBlock)
-      : [];
+  const logs = (
+    await Promise.all(
+      releases.map(async (release) => ({
+        release,
+        logs: release.launcherDeploymentBlock <= snapshotBlock
+          ? await readLaunchLogs(
+              client,
+              release.launcher,
+              release.launcherDeploymentBlock,
+              snapshotBlock,
+            )
+          : [],
+      })),
+    )
+  ).flatMap(({ release, logs: releaseLogs }) =>
+    releaseLogs
+      .filter((log) => !log.removed)
+      .map((log) => ({ release, log }))
+  );
+  if (
+    new Set(
+      logs.map(({ log }) => getAddress(log.args.rewardVault).toLowerCase()),
+    ).size !== logs.length
+  ) {
+    throw new Error("Classic reward vault identity is ambiguous");
+  }
 
   const relevant = (
     await Promise.all(
-      logs.map(async (log) => {
-        if (log.removed) return null;
+      logs.map(async ({ release, log }) => {
         const vaultAddress = getAddress(log.args.rewardVault);
         const [share, checkpointed, claimed] = await Promise.all([
           client.readContract({
@@ -544,15 +762,15 @@ async function readRewardsFromClient(
             blockNumber: snapshotBlock,
           }),
         ]);
-        return share > 0 || checkpointed > 0n || claimed > 0n
-          ? { log, share, checkpointed, claimed }
+        return Number(share) > 0 || checkpointed > 0n || claimed > 0n
+          ? { release, log, share, checkpointed, claimed }
           : null;
       }),
     )
   ).filter((item) => item !== null);
 
   const rewards = await Promise.all(
-    relevant.map(async ({ log, share, checkpointed, claimed }) => {
+    relevant.map(async ({ release, log, share, checkpointed, claimed }) => {
       const tokenAddress = getAddress(log.args.token);
       const vaultAddress = getAddress(log.args.rewardVault);
       const poolId = log.args.poolId;
@@ -561,6 +779,8 @@ async function readRewardsFromClient(
         tokenSymbol,
         beneficiaryCount,
         factoryVault,
+        vaultHook,
+        vaultPoolId,
         disclosure,
         poolConfig,
       ] = await Promise.all([
@@ -583,21 +803,33 @@ async function readRewardsFromClient(
           blockNumber: snapshotBlock,
         }),
         client.readContract({
-          address: vaultFactory,
+          address: release.rewardVaultFactory,
           abi: classicRewardVaultFactoryAbi,
           functionName: "isFactoryVault",
           args: [vaultAddress],
           blockNumber: snapshotBlock,
         }),
         client.readContract({
-          address: hook,
+          address: vaultAddress,
+          abi: classicRewardVaultAbi,
+          functionName: "feeHook",
+          blockNumber: snapshotBlock,
+        }),
+        client.readContract({
+          address: vaultAddress,
+          abi: classicRewardVaultAbi,
+          functionName: "poolId",
+          blockNumber: snapshotBlock,
+        }),
+        client.readContract({
+          address: release.hook,
           abi: classicV3HookAbi,
           functionName: "feeDisclosure",
           args: [poolId],
           blockNumber: snapshotBlock,
         }),
         client.readContract({
-          address: hook,
+          address: release.hook,
           abi: classicV3HookAbi,
           functionName: "poolFeeConfig",
           args: [poolId],
@@ -606,14 +838,26 @@ async function readRewardsFromClient(
       ]);
       if (
         !factoryVault ||
+        getAddress(log.args.feeHook).toLowerCase() !==
+          release.hook.toLowerCase() ||
+        getAddress(vaultHook).toLowerCase() !== release.hook.toLowerCase() ||
+        vaultPoolId.toLowerCase() !== poolId.toLowerCase() ||
         disclosure[7].toLowerCase() !== vaultAddress.toLowerCase() ||
         poolConfig[0].toLowerCase() !== vaultAddress.toLowerCase() ||
+        getAddress(poolConfig[1]).toLowerCase() !==
+          release.launcher.toLowerCase() ||
         !poolConfig[4] ||
-        disclosure[0] !== log.args.buySwapFeeBps ||
-        disclosure[1] !== log.args.sellSwapFeeBps ||
-        disclosure[4] !== 10 ||
-        disclosure[5] !== 0 ||
-        disclosure[6] !== 0
+        Number(disclosure[0]) !== Number(log.args.buySwapFeeBps) ||
+        Number(disclosure[1]) !== Number(log.args.sellSwapFeeBps) ||
+        Number(disclosure[2]) + Number(disclosure[4]) !==
+          Number(disclosure[0]) ||
+        Number(disclosure[3]) + Number(disclosure[4]) !==
+          Number(disclosure[1]) ||
+        Number(disclosure[4]) !== 10 ||
+        Number(disclosure[5]) !== 0 ||
+        Number(disclosure[6]) !== 0 ||
+        Number(poolConfig[2]) !== Number(disclosure[0]) ||
+        Number(poolConfig[3]) !== Number(disclosure[1])
       ) {
         throw new Error("Classic reward configuration is inconsistent");
       }
@@ -643,10 +887,20 @@ async function readRewardsFromClient(
             allocationIndex: index,
             beneficiary: getAddress(payoutAddress),
             payoutAddress: getAddress(payoutAddress),
-            shareBps: allocationShare,
+            shareBps: Number(allocationShare),
           };
         }),
       );
+      if (
+        new Set(
+          beneficiaries.map((item) => item.payoutAddress.toLowerCase()),
+        ).size !== beneficiaries.length ||
+        beneficiaries.some((item) => item.shareBps <= 0) ||
+        beneficiaries.reduce((sum, item) => sum + item.shareBps, 0) !==
+          10_000
+      ) {
+        throw new Error("Classic reward allocation is invalid");
+      }
       const prospective = prospectiveAllocation(
         poolConfig[5],
         beneficiaries,
@@ -657,8 +911,15 @@ async function readRewardsFromClient(
         (item) =>
           item.payoutAddress.toLowerCase() === account.toLowerCase(),
       );
+      if (
+        ownedAllocations.reduce((sum, item) => sum + item.shareBps, 0) !==
+          Number(share)
+      ) {
+        throw new Error("Classic reward allocation does not match the account");
+      }
 
       return {
+        releaseVersion: release.releaseVersion,
         tokenAddress,
         tokenName,
         tokenSymbol,
@@ -666,7 +927,7 @@ async function readRewardsFromClient(
         vaultAddress,
         beneficiary: account,
         payoutAddress: account,
-        shareBps: share,
+        shareBps: Number(share),
         ownedAllocations,
         claimableWei: claimable.toString(),
         claimableEth: formatUnits(claimable, 18),
@@ -814,25 +1075,50 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (!isClassicV3ReleaseVerified(manifest, releaseManifest, chain.id)) {
-      return json({ error: "Classic is not deployed yet" }, 409);
-    }
     const catalog = await readEnvioClassicV3CatalogV1({
       signal: request.signal,
       deadlineMs: Date.now() + 7_000,
     });
-    const catalogReward = catalog.entries.find(
+    const catalogRewards = catalog.entries.filter(
       (candidate): candidate is CanonicalTokenExploreEntry =>
         candidate.exploreKind === "token" &&
-        candidate.launchModelVersion === "classic-v3" &&
         candidate.rewardVaultAddress?.toLowerCase() ===
           vaultAddress.toLowerCase(),
     );
+    const catalogReward = catalogRewards.length === 1
+      ? catalogRewards[0]
+      : null;
     if (
       !catalogReward ||
       catalogReward.rewardVaultAddress === undefined ||
+      (catalogReward.launchModelVersion !== "classic-v3" &&
+        catalogReward.launchModelVersion !== "classic-v4") ||
+      !isAddress(catalogReward.hookAddress) ||
+      !isHex(catalogReward.poolId, { strict: true }) ||
+      catalogReward.poolId.length !== 66 ||
       typeof catalogReward.buyHookFeeBps !== "number" ||
-      typeof catalogReward.sellHookFeeBps !== "number"
+      !Number.isSafeInteger(catalogReward.buyHookFeeBps) ||
+      typeof catalogReward.sellHookFeeBps !== "number" ||
+      !Number.isSafeInteger(catalogReward.sellHookFeeBps) ||
+      typeof catalogReward.lpFeePips !== "number" ||
+      !Number.isSafeInteger(catalogReward.lpFeePips)
+    ) {
+      return json(
+        { error: "Only a current or historic payout wallet can continue" },
+        403,
+      );
+    }
+    const release = catalogReward.launchModelVersion === "classic-v3"
+      ? configuredClassicV3ActionRelease()
+      : configuredClassicActionReleases(true).find(
+          (candidate) => candidate.releaseVersion === "classic-v4",
+        ) ?? null;
+    if (!release) {
+      return json({ error: "This Classic release is not active" }, 409);
+    }
+    if (
+      getAddress(catalogReward.hookAddress).toLowerCase() !==
+        release.hook.toLowerCase()
     ) {
       return json(
         { error: "Only a current or historic payout wallet can continue" },
@@ -840,7 +1126,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const reward: ClassicActionRewardIdentity = {
-      vaultAddress: catalogReward.rewardVaultAddress,
+      vaultAddress: getAddress(catalogReward.rewardVaultAddress),
       poolId: catalogReward.poolId,
       buySwapFeeBps: catalogReward.buyHookFeeBps,
       sellSwapFeeBps: catalogReward.sellHookFeeBps,
@@ -848,7 +1134,7 @@ export async function POST(request: NextRequest) {
       sellCreatorFeeBps: null,
       launcherFeeBps: 10,
       transferTaxBps: 0,
-      lpFeePips: catalogReward.lpFeePips ?? 0,
+      lpFeePips: catalogReward.lpFeePips,
     };
     const deployment = classicActionDeployment();
     const prepared = await withOperationalRpcFailover(
@@ -858,6 +1144,7 @@ export async function POST(request: NextRequest) {
         const blockNumber = await currentActionBlock(client);
         const actionState = await readClassicActionState({
           client,
+          release,
           reward,
           account,
           blockNumber,
@@ -919,6 +1206,7 @@ export async function POST(request: NextRequest) {
           body: {
             status: "ready",
             action,
+            releaseVersion: release.releaseVersion,
             account,
             vaultAddress,
             transaction: {

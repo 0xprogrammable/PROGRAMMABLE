@@ -146,7 +146,7 @@ function request(side: "buy" | "sell") {
     side,
     amountIn: 1_000n,
     slippageBps: 100,
-    deadline: 10_900n,
+    deadline: 10_300n,
   } as const;
 }
 

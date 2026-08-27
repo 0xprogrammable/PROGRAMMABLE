@@ -57,6 +57,7 @@ import {
   getTokenCardImageSource,
 } from "@/lib/token-image";
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
+import { TRADE_QUOTE_VALIDITY_SECONDS } from "@/lib/trade/policy";
 import {
   isLaunchStampProvenanceV1,
   isPlatformFeePolicyReadbackV2,
@@ -1599,6 +1600,9 @@ function TokenDetailContent({
   const classicSwapFeeBps = typeof defaultSwapFeeBps === "number"
     ? defaultSwapFeeBps
     : null;
+  const classicTradeFeePresentation = token.launchModelVersion === "classic-v4"
+    ? "classic-v4-hook" as const
+    : "legacy-pool" as const;
   const visibleCreatorArticle = publishedCreatorArticle
       && (!creatorArticle || publishedCreatorArticle.revision >= creatorArticle.revision)
     ? publishedCreatorArticle
@@ -1715,7 +1719,9 @@ function TokenDetailContent({
       side: source.side,
       amountIn: source.quote.amountIn,
       slippageBps: source.quote.slippageBps,
-      deadline: String(Math.floor(Date.now() / 1_000) + 1_200),
+      deadline: String(
+        Math.floor(Date.now() / 1_000) + TRADE_QUOTE_VALIDITY_SECONDS,
+      ),
     };
     const response = await fetch("/api/trade/prepare", {
       method: "POST",
@@ -1733,6 +1739,7 @@ function TokenDetailContent({
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
       launchModel: classicTradeLaunchModel,
+      launchModelVersion: token.launchModelVersion,
       quoteAsset: token.quoteAssetAddress
         ? getAddress(token.quoteAssetAddress)
         : undefined,
@@ -1803,6 +1810,7 @@ function TokenDetailContent({
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
       launchModel: classicTradeLaunchModel,
+      launchModelVersion: token.launchModelVersion,
       quoteAsset: token.quoteAssetAddress
         ? getAddress(token.quoteAssetAddress)
         : undefined,
@@ -2036,6 +2044,7 @@ function TokenDetailContent({
               tokenPriceEth={token.tokenPriceEth}
               tokenPriceUsdWad={derivedTokenPriceUsdWad(token)}
               launchModel={classicTradeLaunchModel}
+              launchModelVersion={token.launchModelVersion}
               quoteAsset={
                 token.quoteAssetAddress
                   ? getAddress(token.quoteAssetAddress)
@@ -2045,6 +2054,7 @@ function TokenDetailContent({
               tokenPriceQuote={token.tokenPriceQuote}
               buySwapFeeBps={token.buyHookFeeBps ?? classicSwapFeeBps}
               sellSwapFeeBps={token.sellHookFeeBps ?? classicSwapFeeBps}
+              feePresentation={classicTradeFeePresentation}
               readBalances={readTokenBalances}
               onConnect={openWallet}
               onPrepared={submitPreparedTrade}
@@ -2061,6 +2071,7 @@ function TokenDetailContent({
                   ? (token.buyHookFeeBps ?? classicSwapFeeBps)
                   : (token.sellHookFeeBps ?? classicSwapFeeBps)
               }
+              feePresentation={classicTradeFeePresentation}
               pending={tradeFlow.submitting}
               error={tradeFlow.error}
               onBack={() => setTradeFlow({ phase: "form" })}

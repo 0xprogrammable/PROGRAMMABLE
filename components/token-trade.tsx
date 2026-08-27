@@ -15,11 +15,23 @@ import {
   validatePreparedTradeResponse,
   type PreparedTokenTrade,
 } from "../lib/trade/client";
+import {
+  calculateNativeHookTradeCosts,
+  formatFixedBasisPoints,
+} from "../lib/trade/metrics";
+import {
+  DEFAULT_TRADE_SLIPPAGE_BPS,
+  MAX_TRADE_SLIPPAGE_BPS,
+  TRADE_QUOTE_VALIDITY_SECONDS,
+  TRADE_SLIPPAGE_PRESET_BPS,
+} from "../lib/trade/policy";
 import styles from "./token-experience.module.css";
 
 export type { PreparedTokenTrade } from "../lib/trade/client";
+export { DEFAULT_TRADE_SLIPPAGE_BPS } from "../lib/trade/policy";
 
 type TradeSide = "buy" | "sell";
+export type TradeFeePresentation = "legacy-pool" | "classic-v4-hook";
 type WalletTradeBalanceState =
   | {
       owner: Address;
@@ -33,7 +45,6 @@ type WalletTradeBalanceState =
       status: "error";
     };
 
-export const DEFAULT_TRADE_SLIPPAGE_BPS = 500;
 export const MIN_BUY_GAS_RESERVE_WEI = parseEther("0.003");
 const BUY_GAS_RESERVE_UNITS = 500_000n;
 const BUY_GAS_RESERVE_MULTIPLIER = 150n;
@@ -47,7 +58,11 @@ export function parseTradeSlippageBps(value: string) {
   const [wholePart, decimalPart = ""] = normalized.split(".");
   const basisPoints =
     Number(wholePart) * 100 + Number(decimalPart.padEnd(2, "0"));
-  if (!Number.isSafeInteger(basisPoints) || basisPoints < 1 || basisPoints > 1_000) {
+  if (
+    !Number.isSafeInteger(basisPoints) ||
+    basisPoints < 1 ||
+    basisPoints > MAX_TRADE_SLIPPAGE_BPS
+  ) {
     throw new Error("Slippage must be between 0.01% and 10%");
   }
   return basisPoints;
@@ -194,9 +209,7 @@ function formatEstimatedOutput(value: number | null, unit: string) {
 }
 
 function formatBasisPoints(value: number) {
-  return `${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 2,
-  }).format(value / 100)}%`;
+  return formatFixedBasisPoints(value);
 }
 
 function formatAmountForInput(value: bigint, decimals: number) {
@@ -256,7 +269,7 @@ export function buildTokenTradeApiRequest(input: {
   if (
     !Number.isInteger(input.slippageBps) ||
     input.slippageBps < 1 ||
-    input.slippageBps > 1_000
+    input.slippageBps > MAX_TRADE_SLIPPAGE_BPS
   ) {
     throw new Error("Slippage must be between 0.01% and 10%");
   }
@@ -285,7 +298,7 @@ export function buildTokenTradeApiRequest(input: {
     side: input.side,
     amountIn: amountIn.toString(),
     slippageBps: input.slippageBps,
-    deadline: String(input.nowSeconds + 1_200),
+    deadline: String(input.nowSeconds + TRADE_QUOTE_VALIDITY_SECONDS),
   };
 }
 
@@ -328,9 +341,11 @@ export function TokenTrade({
   quoteAssetSymbol,
   tokenPriceQuote,
   launchModel,
+  launchModelVersion,
   quoteAsset,
   buySwapFeeBps,
   sellSwapFeeBps,
+  feePresentation = "legacy-pool",
   readBalances,
   onConnect,
   onPrepared,
@@ -345,11 +360,13 @@ export function TokenTrade({
   tokenPriceEth?: string;
   tokenPriceUsdWad?: string;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  launchModelVersion?: string;
   quoteAsset?: Address;
   quoteAssetSymbol?: string;
   tokenPriceQuote?: string;
   buySwapFeeBps: number;
   sellSwapFeeBps: number;
+  feePresentation?: TradeFeePresentation;
   readBalances(inputAsset: Address): Promise<WalletTradeBalances>;
   onConnect(): void;
   onPrepared(prepared: PreparedTokenTrade): void | Promise<void>;
@@ -371,6 +388,7 @@ export function TokenTrade({
   const amountInputId = useId();
   const amountErrorId = useId();
   const slippageInputId = useId();
+  const slippagePresetsId = useId();
   const amountInputRef = useRef<HTMLInputElement>(null);
   const slippageInputRef = useRef<HTMLInputElement>(null);
   const activeSwapFeeBps = side === "buy" ? buySwapFeeBps : sellSwapFeeBps;
@@ -567,6 +585,7 @@ export function TokenTrade({
         hook,
         poolId,
         launchModel,
+        launchModelVersion,
         quoteAsset,
         side: body.side,
         amountIn: body.amountIn,
@@ -618,6 +637,7 @@ export function TokenTrade({
         tokenPriceEth={tokenPriceEth}
         launchModel={launchModel}
         totalSwapFeeBps={activeSwapFeeBps}
+        feePresentation={feePresentation}
         pending={pending}
         error={error}
         onBack={() => {
@@ -717,7 +737,11 @@ export function TokenTrade({
 
       <dl className={`${styles.tradeFacts} ${styles.tradeSettings}`}>
         <div>
-          <dt>Pool fee</dt>
+          <dt>
+            {feePresentation === "classic-v4-hook"
+              ? "Hook swap fee"
+              : "Pool fee"}
+          </dt>
           <dd>{formatBasisPoints(activeSwapFeeBps)}</dd>
         </div>
         <div>
@@ -737,6 +761,7 @@ export function TokenTrade({
                 aria-describedby={slippageInvalid ? amountErrorId : undefined}
                 autoComplete="off"
                 inputMode="decimal"
+                list={slippagePresetsId}
                 maxLength={5}
                 value={slippagePercent}
                 onChange={(event) => {
@@ -745,6 +770,14 @@ export function TokenTrade({
                   if (slippageInvalid) setSlippageInvalid(false);
                 }}
               />
+              <datalist id={slippagePresetsId}>
+                {TRADE_SLIPPAGE_PRESET_BPS.map((basisPoints) => (
+                  <option
+                    key={basisPoints}
+                    value={String(basisPoints / 100)}
+                  />
+                ))}
+              </datalist>
               <span aria-hidden="true">%</span>
             </span>
           </dd>
@@ -785,6 +818,7 @@ export function PreparedTradeReview({
   tokenPriceEth,
   launchModel,
   totalSwapFeeBps,
+  feePresentation = "legacy-pool",
   pending,
   error,
   onBack,
@@ -796,6 +830,7 @@ export function PreparedTradeReview({
   tokenPriceEth?: string;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
   totalSwapFeeBps: number;
+  feePresentation?: TradeFeePresentation;
   pending: boolean;
   error?: string;
   onBack(): void;
@@ -818,12 +853,14 @@ export function PreparedTradeReview({
     tokenDecimals,
     symbol,
   );
-  const priceImpact = calculatePriceImpactPercent({
+  const costs = calculateNativeHookTradeCosts({
     side: prepared.side,
     amountIn: prepared.quote.amountIn,
     amountOut: prepared.quote.amountOut,
     tokenDecimals,
     tokenPriceEth,
+    hookSwapFeeBps:
+      feePresentation === "classic-v4-hook" ? totalSwapFeeBps : 0,
   });
   const approval =
     prepared.transaction.kind === "token-to-permit2"
@@ -857,17 +894,35 @@ export function PreparedTradeReview({
           </div>
         ) : null}
         <div>
-          <dt>{launchModel === "deep" ? "Deep fee" : "Pool fee"}</dt>
+          <dt>
+            {feePresentation === "classic-v4-hook"
+              ? "Hook swap fee"
+              : launchModel === "deep"
+                ? "Deep fee"
+                : "Pool fee"}
+          </dt>
           <dd>{formatBasisPoints(totalSwapFeeBps)}</dd>
         </div>
         {!approval ? (
           <div>
-            <dt>Estimated price impact</dt>
+            <dt>
+              {feePresentation === "classic-v4-hook"
+                ? "Curve price impact"
+                : "Estimated price impact"}
+            </dt>
             <dd>
-              {priceImpact === null
+              {costs === null
                 ? "Unavailable"
-                : `${priceImpact.toFixed(2)}%`}
+                : formatFixedBasisPoints(costs.curvePriceImpactBps)}
             </dd>
+          </div>
+        ) : null}
+        {!approval &&
+        feePresentation === "classic-v4-hook" &&
+        costs !== null ? (
+          <div>
+            <dt>Total execution cost</dt>
+            <dd>{formatFixedBasisPoints(costs.totalExecutionCostBps)}</dd>
           </div>
         ) : null}
         <div>
@@ -911,46 +966,4 @@ export function PreparedTradeReview({
       </div>
     </div>
   );
-}
-
-export function calculatePriceImpactPercent(input: {
-  side: TradeSide;
-  amountIn: string;
-  amountOut: string;
-  tokenDecimals: number;
-  tokenPriceEth?: string;
-}) {
-  if (!input.tokenPriceEth || !/^\d+(?:\.\d+)?$/.test(input.tokenPriceEth)) {
-    return null;
-  }
-  const spot = Number(input.tokenPriceEth);
-  const amountIn = Number(
-    formatUnits(
-      BigInt(input.amountIn),
-      input.side === "buy" ? 18 : input.tokenDecimals,
-    ),
-  );
-  const amountOut = Number(
-    formatUnits(
-      BigInt(input.amountOut),
-      input.side === "buy" ? input.tokenDecimals : 18,
-    ),
-  );
-  if (
-    !Number.isFinite(spot) ||
-    !Number.isFinite(amountIn) ||
-    !Number.isFinite(amountOut) ||
-    spot <= 0 ||
-    amountIn <= 0 ||
-    amountOut <= 0
-  ) {
-    return null;
-  }
-  const execution =
-    input.side === "buy" ? amountIn / amountOut : amountOut / amountIn;
-  const impact =
-    input.side === "buy"
-      ? (execution / spot - 1) * 100
-      : (1 - execution / spot) * 100;
-  return Math.max(0, impact);
 }

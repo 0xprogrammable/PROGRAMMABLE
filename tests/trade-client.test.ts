@@ -116,7 +116,7 @@ function swapResponse(
           amountIn: AMOUNT_IN,
           quotedAmountOut: AMOUNT_OUT,
           slippageBps: SLIPPAGE_BPS,
-          now: DEADLINE - 1_200n,
+          now: DEADLINE - 300n,
           deadline: DEADLINE,
         }),
       ),
@@ -140,7 +140,7 @@ function approvalResponse(
           deployment,
           token: TOKEN,
           amountIn: AMOUNT_IN,
-          now: DEADLINE - 1_200n,
+          now: DEADLINE - 300n,
           deadline: DEADLINE,
         });
   return {
@@ -174,6 +174,38 @@ describe("prepared trade client boundary", () => {
         }).transaction.kind,
       ).toBe(kind);
     }
+  });
+
+  it("requires a publicly available browser binding for Classic V4", () => {
+    const v4Context = {
+      ...context,
+      launchModelVersion: "classic-v4",
+    };
+    const publicBinding = {
+      chainId: 1 as const,
+      launcher: OTHER,
+      manifestDigest: `0x${"11".repeat(32)}` as Hex,
+      releaseStatus: "publicly-available" as const,
+      publicAvailable: true as const,
+    };
+
+    expect(() =>
+      validatePreparedTradeResponse(swapResponse(), v4Context),
+    ).toThrow("browser release binding");
+    expect(() =>
+      validatePreparedTradeResponse(swapResponse(), v4Context, {
+        ...publicBinding,
+        releaseStatus: "indexer-activated",
+        publicAvailable: false,
+      }),
+    ).toThrow("browser release binding");
+    expect(
+      validatePreparedTradeResponse(
+        swapResponse(),
+        v4Context,
+        publicBinding,
+      ).transaction.kind,
+    ).toBe("swap");
   });
 
   it("rejects a wrong router, selector or ETH value", () => {

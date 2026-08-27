@@ -19,6 +19,7 @@ import {
   classicUniversalRouterAbi,
   type ClassicTradeSide,
 } from "./classic";
+import { MAX_TRADE_SLIPPAGE_BPS } from "./policy";
 
 const QUOTE_URL =
   "https://trade-api.gateway.uniswap.org/v1/quote";
@@ -803,7 +804,7 @@ export async function prepareOfficialUniswapApiTrade(
     rawInput.amountIn > UINT128_MAX ||
     !Number.isInteger(rawInput.slippageBps) ||
     rawInput.slippageBps < 1 ||
-    rawInput.slippageBps > 1_000
+    rawInput.slippageBps > MAX_TRADE_SLIPPAGE_BPS
   ) {
     unavailable();
   }

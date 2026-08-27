@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   decodeFunctionData,
   encodeFunctionResult,
@@ -7,6 +7,20 @@ import {
   type Address,
   type Hex,
 } from "viem";
+
+const classicV4ReleaseMocks = vi.hoisted(() => ({
+  getConfiguredRelease: vi.fn(),
+}));
+
+vi.mock("../lib/classic-v4-release", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/classic-v4-release")>();
+  return {
+    ...actual,
+    getConfiguredClassicV4PublicRelease:
+      classicV4ReleaseMocks.getConfiguredRelease,
+  };
+});
 
 import {
   classicGasReserve,
@@ -22,6 +36,7 @@ import {
   prepareClassicTrade,
   resolveClassicTradeDeployment,
   resolveClassicV3TradeDeployment,
+  resolveClassicV4TradeDeployment,
   resolveTradeDeployment,
   type ClassicTradeRelease,
   type ClassicTradeRuntimeClient,
@@ -29,6 +44,7 @@ import {
 import type { LaunchModelReleaseManifest } from "../lib/launch-model-gating";
 import type { ExploreReadModel } from "../lib/onchain/types";
 import type { LauncherToken } from "../lib/tokens";
+import type { ClassicV4PublicRelease } from "../lib/classic-v4-release";
 import { DEEP_V2_MANIFEST_FIXED_POLICY } from "../lib/deep-v2";
 import appDeployments from "../contracts/config/app-deployments.v1.json";
 
@@ -86,6 +102,53 @@ const DEEP_V2_BLOCK_HASH = `0x${"33".repeat(32)}` as Hex;
 const DEEP_V2_TRANSACTION_HASH = `0x${"34".repeat(32)}` as Hex;
 const MOCK_RUNTIME_CODE = "0x6000" as Hex;
 const MOCK_RUNTIME_CODE_HASH = keccak256(MOCK_RUNTIME_CODE);
+const CLASSIC_V4_HOOK = getAddress(
+  "0x4444444444444444444444444444444444444444",
+);
+
+function classicV4PublicRelease(
+  publicAvailable = true,
+): ClassicV4PublicRelease {
+  const official = getPinnedOfficialTradeStack(1);
+  return {
+    chainId: 1,
+    model: "classic",
+    internalContractRelease: "classic-v4",
+    releaseStatus: publicAvailable
+      ? "publicly-available"
+      : "indexer-activated",
+    addresses: { feeHook: CLASSIC_V4_HOOK },
+    runtimeCodeHashes: { feeHook: MOCK_RUNTIME_CODE_HASH },
+    officialDependencies: {
+      poolManager: {
+        address: official.poolManager,
+        runtimeCodeHash: MOCK_RUNTIME_CODE_HASH,
+      },
+      v4Quoter: {
+        address: official.v4Quoter,
+        runtimeCodeHash: MOCK_RUNTIME_CODE_HASH,
+      },
+      universalRouter: {
+        address: official.universalRouter,
+        runtimeCodeHash: MOCK_RUNTIME_CODE_HASH,
+      },
+      permit2: {
+        address: official.permit2,
+        runtimeCodeHash: MOCK_RUNTIME_CODE_HASH,
+      },
+    },
+    verification: {
+      deploymentLive: true,
+      deploymentFinalized: true,
+      runtimeCodeVerified: true,
+      constructorBindingsVerified: true,
+      sourceVerified: true,
+      lifecycleVerified: true,
+      indexerActivated: true,
+      publicAvailable,
+    },
+  } as ClassicV4PublicRelease;
+}
 
 function rehearsalDeployment(): ClassicTradeRelease {
   return {
@@ -298,12 +361,13 @@ function request(overrides: Record<string, unknown> = {}) {
     side: "buy",
     amountIn: "1000",
     slippageBps: 250,
-    deadline: "10900",
+    deadline: "10300",
     ...overrides,
   };
 }
 
 function runtimeClient(input?: {
+  deployment?: ClassicTradeRelease;
   chainId?: number;
   tokenAllowance?: bigint;
   tokenBalance?: bigint;
@@ -316,10 +380,11 @@ function runtimeClient(input?: {
   swapSimulationFailure?: boolean;
   estimatedSwapGas?: bigint;
 }) {
+  const deployment = input?.deployment ?? rehearsalDeployment();
   const codeChecks: Address[] = [];
   const client: ClassicTradeRuntimeClient = {
     async getChainId() {
-      return input?.chainId ?? 11155111;
+      return input?.chainId ?? deployment.chainId;
     },
     async getBlock() {
       return { timestamp: 10_000n };
@@ -343,7 +408,6 @@ function runtimeClient(input?: {
       throw new Error(`Unexpected read ${address}:${functionName}`);
     },
     async estimateGas(args) {
-      const deployment = rehearsalDeployment();
       if (args.to.toLowerCase() !== deployment.universalRouter.toLowerCase()) {
         throw new Error("Only swap gas estimation is expected");
       }
@@ -372,7 +436,6 @@ function runtimeClient(input?: {
         };
       }
 
-      const deployment = rehearsalDeployment();
       if (args.to.toLowerCase() === deployment.universalRouter.toLowerCase()) {
         if (input?.swapSimulationFailure) {
           throw new Error("swap simulation reverted");
@@ -406,6 +469,10 @@ function runtimeClient(input?: {
   return { client, codeChecks };
 }
 
+beforeEach(() => {
+  classicV4ReleaseMocks.getConfiguredRelease.mockReset();
+});
+
 describe("Trade request boundary", () => {
   it("accepts only explicit JSON-safe trade fields", () => {
     expect(parseClassicTradeRequest(request())).toEqual({
@@ -415,7 +482,7 @@ describe("Trade request boundary", () => {
       side: "buy",
       amountIn: 1_000n,
       slippageBps: 250,
-      deadline: 10_900n,
+      deadline: 10_300n,
     });
 
     expect(() =>
@@ -511,6 +578,73 @@ describe("Trade request boundary", () => {
     expect(deployment.hook).not.toBe(resolveClassicTradeDeployment(1).hook);
   });
 
+  it("routes indexed Classic V4 launches through the exact public release", () => {
+    const release = classicV4PublicRelease();
+    classicV4ReleaseMocks.getConfiguredRelease.mockReturnValue(release);
+    const deployment = resolveClassicV4TradeDeployment(1);
+    const registry = readyRegistry(TOKEN, {}, deployment, {
+      launchModelVersion: "classic-v4",
+    });
+
+    expect(resolveTradeDeployment(1, registry, TOKEN)).toEqual(deployment);
+    expect(deployment).toMatchObject({
+      chainId: release.chainId,
+      launchModel: "classic",
+      hook: release.addresses.feeHook,
+      poolManager: release.officialDependencies.poolManager.address,
+      v4Quoter: release.officialDependencies.v4Quoter.address,
+      universalRouter: release.officialDependencies.universalRouter.address,
+      permit2: release.officialDependencies.permit2.address,
+      poolManagerRuntimeCodeHash:
+        release.officialDependencies.poolManager.runtimeCodeHash,
+      v4QuoterRuntimeCodeHash:
+        release.officialDependencies.v4Quoter.runtimeCodeHash,
+      universalRouterRuntimeCodeHash:
+        release.officialDependencies.universalRouter.runtimeCodeHash,
+      permit2RuntimeCodeHash:
+        release.officialDependencies.permit2.runtimeCodeHash,
+      hookRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+    });
+  });
+
+  it("fails closed when a Classic V4 release or indexed pool identity does not match", () => {
+    const release = classicV4PublicRelease();
+    classicV4ReleaseMocks.getConfiguredRelease.mockReturnValue(release);
+    const deployment = resolveClassicV4TradeDeployment(1);
+    const registry = readyRegistry(TOKEN, {}, deployment, {
+      launchModelVersion: "classic-v4",
+    });
+
+    for (const mismatch of [
+      { hookAddress: REHEARSAL_HOOK },
+      { poolId: `0x${"99".repeat(32)}` as Hex },
+    ]) {
+      const mismatched = structuredClone(registry);
+      mismatched.tokens[0] = { ...mismatched.tokens[0], ...mismatch };
+      expect(() => resolveTradeDeployment(1, mismatched, TOKEN)).toThrow(
+        "verified Programmable pool",
+      );
+    }
+
+    classicV4ReleaseMocks.getConfiguredRelease.mockReturnValue(null);
+    expect(() => resolveTradeDeployment(1, registry, TOKEN)).toThrow(
+      "no verified public release",
+    );
+    expect(() => resolveClassicV4TradeDeployment(11_155_111)).toThrow(
+      "not supported",
+    );
+  });
+
+  it("does not resolve an indexer-only Classic V4 release for trading", () => {
+    classicV4ReleaseMocks.getConfiguredRelease.mockReturnValue(
+      classicV4PublicRelease(false),
+    );
+
+    expect(() => resolveClassicV4TradeDeployment(1)).toThrow(
+      "no verified public release",
+    );
+  });
+
   it("rejects a Deep registry record with the wrong release hook", () => {
     const deployment = deepDeployment();
     const registry = readyRegistry(TOKEN, {}, deployment);
@@ -564,6 +698,65 @@ describe("Trade request boundary", () => {
 });
 
 describe("Token trade preparation", () => {
+  it.each(["buy", "sell"] as const)(
+    "prepares an indexed Classic V4 %s against its manifest-bound stack",
+    async (side) => {
+      const release = classicV4PublicRelease();
+      classicV4ReleaseMocks.getConfiguredRelease.mockReturnValue(release);
+      const expected = resolveClassicV4TradeDeployment(1);
+      const registry = readyRegistry(TOKEN, {}, expected, {
+        launchModelVersion: "classic-v4",
+      });
+      const deployment = resolveTradeDeployment(1, registry, TOKEN);
+      const prepared = await prepareClassicTrade(
+        runtimeClient({
+          deployment,
+          tokenAllowance: 100_000n,
+          permit2Allowance: 100_000n,
+          permit2Expiration: 50_000,
+        }).client,
+        deployment,
+        parseClassicTradeRequest(
+          request({ chainId: 1, side, deadline: "10300" }),
+        ),
+        registry,
+      );
+
+      expect(prepared).toMatchObject({
+        status: "ready",
+        chainId: 1,
+        side,
+        transaction: {
+          kind: "swap",
+          to: release.officialDependencies.universalRouter.address,
+        },
+      });
+    },
+  );
+
+  it("enforces the five minute block-time window only for canonical Classic V4", async () => {
+    const deployment = rehearsalDeployment();
+    await expect(
+      prepareClassicTrade(
+        runtimeClient().client,
+        deployment,
+        parseClassicTradeRequest(request({ deadline: "10900" })),
+        readyRegistry(TOKEN, {}, deployment, {
+          launchModelVersion: "classic-v4",
+        }),
+      ),
+    ).rejects.toThrow("5 minute quote window");
+
+    await expect(
+      prepareClassicTrade(
+        runtimeClient().client,
+        deployment,
+        parseClassicTradeRequest(request({ deadline: "10900" })),
+        readyRegistry(),
+      ),
+    ).resolves.toMatchObject({ status: "ready" });
+  });
+
   it("quotes a buy and returns an unsigned native ETH swap transaction", async () => {
     const deployment = rehearsalDeployment();
     const { client, codeChecks } = runtimeClient();
@@ -585,7 +778,7 @@ describe("Token trade preparation", () => {
         amountOutMinimum: "9750",
         gasEstimate: "222000",
         slippageBps: 250,
-        deadline: "10900",
+        deadline: "10300",
       },
       transaction: {
         kind: "swap",
@@ -650,7 +843,7 @@ describe("Token trade preparation", () => {
     const { client } = runtimeClient({
       tokenAllowance: 100_000n,
       permit2Allowance: 100_000n,
-      permit2Expiration: 10_600,
+      permit2Expiration: 10_300,
     });
     const prepared = await prepareClassicTrade(
       client,
@@ -674,7 +867,7 @@ describe("Token trade preparation", () => {
     });
     expect(call.args[1]).toBe(deployment.universalRouter);
     expect(call.args[2]).toBe(1_000n);
-    expect(call.args[3]).toBe(10_900);
+    expect(call.args[3]).toBe(10_600);
   });
 
   it("returns an unsigned sell swap when both approvals are sufficient", async () => {

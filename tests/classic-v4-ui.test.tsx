@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
+  classicMaximumCheckDraft,
   classicV4TransactionBlockReason,
   EnhancedClassicFeeStep,
   normalizeClassicV3Draft,
@@ -23,6 +24,21 @@ function renderFeeStep(draft: LaunchDraft, enableV4 = true) {
 }
 
 describe("Classic V4 launch controls", () => {
+  it("lets Max repair an invalid or over-capacity Activation Buy", () => {
+    const overCapacity = {
+      ...createClassicV3Draft(),
+      classicLiquidityPreset: "deep-30" as const,
+      initialBuyEth: "5.9016",
+    };
+
+    const checked = classicMaximumCheckDraft(overCapacity, true);
+    expect(checked).toMatchObject({
+      classicLiquidityPreset: "deep-30",
+      initialBuyEth: "0.0006",
+    });
+    expect(overCapacity.initialBuyEth).toBe("5.9016");
+  });
+
   it("fails closed before any wallet path while the V4 UI is preview-only", () => {
     expect(classicV4TransactionBlockReason("classic-v3", true)).toContain(
       "Wallet transactions stay disabled",
@@ -106,5 +122,36 @@ describe("Classic V4 launch controls", () => {
     expect(deeperHtml).toContain(
       "One v4 pool and one permanently locked position",
     );
+    expect(deeperHtml).toContain("Activation Buy amount");
+    expect(deeperHtml).toContain("paid in addition to network gas");
+    expect(deeperHtml).toContain("reaches the curve after fees");
+    expect(deeperHtml).toContain("net capacity remains");
+  });
+
+  it("shows a fail-closed range error instead of a clamped token estimate", () => {
+    const maximumActivationBuy = "5.901542598544452592";
+    const html = renderFeeStep({
+      ...createClassicV3Draft(),
+      buySwapFeePercent: "0.1",
+      classicLiquidityPreset: "deep-30",
+      initialBuyEth: "5.9016",
+    });
+
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Activation Buy exceeds the Deeper range");
+    expect(html).toContain(`Maximum ${maximumActivationBuy} ETH`);
+    expect(html).toContain(
+      "<small>Estimated tokens</small><strong>—</strong>",
+    );
+
+    const boundaryHtml = renderFeeStep({
+      ...createClassicV3Draft(),
+      buySwapFeePercent: "0.1",
+      classicLiquidityPreset: "deep-30",
+      initialBuyEth: maximumActivationBuy,
+    });
+    expect(boundaryHtml).not.toContain('role="alert"');
+    expect(boundaryHtml).toContain("reaches the curve after fees");
+    expect(boundaryHtml).toContain("fully consumes the Deeper range");
   });
 });

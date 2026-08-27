@@ -192,6 +192,18 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(feeHook.totalNativeFeesAccrued(), 0);
     }
 
+    function test_invalidBuyFeeRevertsBeforeTokenVaultPoolOrPositionCreation() public {
+        MemeLaunchV3.LaunchParameters memory parameters = _parameters(keccak256("invalid-buy-fee"), 0);
+        parameters.buySwapFeeBps = 11;
+        _assertInvalidFeePreflight(parameters, 11);
+    }
+
+    function test_invalidSellFeeRevertsBeforeTokenVaultPoolOrPositionCreation() public {
+        MemeLaunchV3.LaunchParameters memory parameters = _parameters(keccak256("invalid-sell-fee"), 0);
+        parameters.sellSwapFeeBps = 999;
+        _assertInvalidFeePreflight(parameters, 999);
+    }
+
     function test_launcherPinsPlannerRuntimeCodehashAndRejectsImpostor() public {
         assertEq(address(launcher.positionPlanner()), address(positionPlanner));
         assertEq(address(positionPlanner).codehash, keccak256(type(ClassicPositionPlannerV1).runtimeCode));
@@ -235,7 +247,7 @@ contract MemeLaunchV3Test is Deployers {
         uint160 sqrtPriceLowerX96 = TickMath.getSqrtPriceAtTick(positionPlanner.DEEP30_TICK_LOWER());
         uint256 sqrtPriceRatioWad = FullMath.mulDiv(sqrtPriceUpperX96, 1 ether, sqrtPriceLowerX96);
         uint256 tokenPriceMultipleWad = FullMath.mulDiv(sqrtPriceRatioWad, sqrtPriceRatioWad, 1 ether);
-        assertApproxEqAbs(capacity, 5_895_641_055_945_908_139, 1 gwei);
+        assertEq(capacity, 5_895_641_055_945_908_140);
         assertApproxEqAbs(tokenPriceMultipleWad, 18_913_066_072_547_532_342, 1 gwei);
 
         MemeLaunchV3.LaunchResult memory result = _launch(_parameters(bytes32("deep30-before-limit"), 1), grossInput);
@@ -249,9 +261,23 @@ contract MemeLaunchV3Test is Deployers {
         assertEq(address(launcher).balance, 0);
     }
 
+    function test_deep30InitialBuyAtRangeLimitExecutesExactlyToLowerTick() public {
+        uint256 capacity = _deep30NetCapacity();
+        uint256 grossInput = _grossForNetTarget(capacity);
+
+        MemeLaunchV3.LaunchResult memory result = _launch(_parameters(bytes32("deep30-at-limit"), 1), grossInput);
+        (uint160 sqrtPriceX96,,,) = manager.getSlot0(PoolId.wrap(result.poolId));
+
+        assertEq(result.initialBuyNativeAmount, grossInput);
+        assertGt(result.initialBuyTokenAmount, 0);
+        assertEq(_netAtMinimumFee(grossInput), capacity);
+        assertEq(sqrtPriceX96, TickMath.getSqrtPriceAtTick(positionPlanner.DEEP30_TICK_LOWER()));
+        assertEq(address(launcher).balance, 0);
+    }
+
     function test_deep30InitialBuyOverRangeLimitRevertsAtomicallyWithoutLostEthOrFees() public {
         uint256 capacity = _deep30NetCapacity();
-        uint256 targetNet = capacity + RANGE_BOUNDARY_MARGIN;
+        uint256 targetNet = capacity + 1;
         uint256 grossInput = _grossForNetTarget(targetNet);
         MemeLaunchV3.LaunchParameters memory parameters = _parameters(bytes32("deep30-over-limit"), 1);
         (address predictedToken,) =
@@ -268,7 +294,7 @@ contract MemeLaunchV3Test is Deployers {
 
         (,,,, bool registered,) = feeHook.poolFeeConfig(predictedPoolId);
         assertEq(_netAtMinimumFee(grossInput), targetNet);
-        assertEq(targetNet - capacity, RANGE_BOUNDARY_MARGIN);
+        assertEq(targetNet - capacity, 1);
         assertEq(deployer.balance, deployerBalanceBefore);
         assertEq(predictedToken.code.length, 0);
         assertEq(positionManager.nextTokenId(), nextTokenIdBefore);
@@ -313,6 +339,37 @@ contract MemeLaunchV3Test is Deployers {
     {
         vm.prank(deployer);
         result = launcher.launch{ value: value }(parameters);
+    }
+
+    function _assertInvalidFeePreflight(MemeLaunchV3.LaunchParameters memory parameters, uint16 invalidFee) private {
+        (address predictedToken,) =
+            launcher.predictTokenAddress(parameters.name, parameters.symbol, deployer, parameters.creatorSalt);
+        uint256 nextTokenIdBefore = positionManager.nextTokenId();
+        bytes memory unexpectedDeploymentWork = abi.encodeWithSignature("UnexpectedDeploymentWork()");
+
+        vm.mockCallRevert(
+            address(vaultFactory), ClassicRewardVaultFactoryV1.deployOrGet.selector, unexpectedDeploymentWork
+        );
+        vm.mockCallRevert(
+            address(positionForwarderFactory),
+            LockedPositionFeeForwarderFactoryV1.deploy.selector,
+            unexpectedDeploymentWork
+        );
+        vm.mockCallRevert(address(tokenFactory), UERC20Factory.createToken.selector, unexpectedDeploymentWork);
+        vm.mockCallRevert(address(feeHook), EthCreatorFeeHookV4.registerPool.selector, unexpectedDeploymentWork);
+        vm.mockCallRevert(address(manager), IPoolManager.initialize.selector, unexpectedDeploymentWork);
+        vm.mockCallRevert(
+            address(positionManager), PositionManager.modifyLiquidities.selector, unexpectedDeploymentWork
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(EthCreatorFeeHookV4.InvalidTotalSwapFee.selector, invalidFee));
+        vm.prank(deployer);
+        launcher.launch{ value: MIN_INITIAL_BUY_WEI }(parameters);
+
+        assertEq(predictedToken.code.length, 0);
+        assertEq(positionManager.nextTokenId(), nextTokenIdBefore);
+        assertEq(feeHook.launcherFeesAccrued(), 0);
+        assertEq(feeHook.totalNativeFeesAccrued(), 0);
     }
 
     function _parameters(bytes32 salt, uint8 liquidityPreset)

@@ -19,6 +19,7 @@ import {
 import type { AbiEvent } from "viem";
 
 import { deploymentIdentityFromEnvironment } from "./lib/deployment-identity.js";
+import { verifyClassicV4CustodyEvidence } from "./lib/classic-v4-custody.js";
 import { launchEntityId, poolEntityId } from "./lib/ids.js";
 import {
   canonicalPayloadJson,
@@ -57,6 +58,11 @@ const DYNAMIC_VAULT_CONTRACTS = new Set([
   "StockV2V3RewardVault",
 ]);
 
+const CLASSIC_V4_STATIC_CONTRACTS = new Set([
+  "ClassicV4Hook",
+  "ClassicV4Launcher",
+]);
+
 const LAUNCH_IDENTITY_FIELDS = new Set<keyof Launch>([
   "token",
   "creator",
@@ -72,6 +78,7 @@ const LAUNCH_IDENTITY_FIELDS = new Set<keyof Launch>([
 
 const CLASSIC_V2_HOOK = sourceAddress("ClassicV2Hook");
 const CLASSIC_V3_HOOK = sourceAddress("ClassicV3Hook");
+const CLASSIC_V4_HOOK = optionalSourceAddress("ClassicV4Hook");
 const STOCK_V1_HOOK = sourceAddress("StockV1Hook");
 const STOCK_V2_V3_HOOK = sourceAddress("StockV2V3Hook");
 
@@ -88,6 +95,7 @@ async function handleEvent(args: {
   switch (event.contractName) {
     case "ClassicV2Launcher":
     case "ClassicV3Launcher":
+    case "ClassicV4Launcher":
     case "StockV1Launcher":
     case "StockV2Launcher":
     case "StockV3Launcher":
@@ -100,6 +108,7 @@ async function handleEvent(args: {
       return;
     case "ClassicV2Hook":
     case "ClassicV3Hook":
+    case "ClassicV4Hook":
     case "StockV1Hook":
     case "StockV2V3Hook":
       await handleHookEvent(event, context, occurrence);
@@ -110,7 +119,7 @@ async function handleEvent(args: {
       await handleVaultFactoryEvent(event, context, occurrence);
       return;
     case "ClassicV3VestingWalletFactory":
-      handleVestingFactoryEvent(event, context, occurrence);
+      await handleVestingFactoryEvent(event, context, occurrence);
       return;
     case "ClassicV3RewardVault":
     case "StockV1RewardVault":
@@ -133,6 +142,19 @@ async function recordOccurrence(
   const data = lower(encoded.data);
   const decodedPayload = canonicalPayloadJson(event.params);
   const payloadHash = lower(encoded.payloadHash);
+  const configuredSource = SOURCE_REGISTRY.find(
+    (source) => source.contractName === event.contractName,
+  );
+  if (
+    CLASSIC_V4_STATIC_CONTRACTS.has(event.contractName) &&
+    (configuredSource === undefined ||
+      !sameValue(provenance.sourceAddress, configuredSource.address) ||
+      provenance.blockNumber < BigInt(configuredSource.startBlock))
+  ) {
+    throw new Error(
+      `Unapproved source for ${event.contractName} at ${provenance.sourceAddress}`,
+    );
+  }
   const candidateRelease = staticReleaseForContract(event.contractName) ?? {
     model: "unresolved",
     releaseVersion: "unresolved",
@@ -294,6 +316,7 @@ async function handleLauncherEvent(
       contractName:
         | "ClassicV2Launcher"
         | "ClassicV3Launcher"
+        | "ClassicV4Launcher"
         | "StockV1Launcher"
         | "StockV2Launcher"
         | "StockV3Launcher";
@@ -353,7 +376,10 @@ async function handleLauncherEvent(
     return;
   }
 
-  if (event.contractName === "ClassicV3Launcher") {
+  if (
+    event.contractName === "ClassicV3Launcher" ||
+    event.contractName === "ClassicV4Launcher"
+  ) {
     if (event.eventName === "MemeTokenLaunchedV2") {
       const params = event.params;
       const launch = await upsertLaunch(context, release, params.launchHash, {
@@ -417,12 +443,20 @@ async function handleLauncherEvent(
       configurationHash: lower(params.configurationHash),
     };
     context.InitialBuyCustody.set(custody);
-    const launch = await upsertLaunch(context, release, params.launchHash, {
+    const custodyVerification = event.contractName === "ClassicV4Launcher"
+      ? await verifyAndRelabelVestingWallet(context, custody)
+      : { complete: true, conflict: false };
+    const launch: Mutable<Launch> = {
+      ...await upsertLaunch(context, release, params.launchHash, {
       token: custody.token,
       creator: custody.deployer,
       custodyOccurrenceId: occurrence.provenance.id,
-      hasCustodyEvent: true,
-    }, "custody", occurrence);
+      hasCustodyEvent: custodyVerification.complete,
+      }, "custody", occurrence),
+    };
+    if (custodyVerification.conflict) {
+      launch.provenanceValid = false;
+    }
     await reconcileLaunch(context, launch);
     return;
   }
@@ -642,9 +676,13 @@ function launchIsComplete(launch: Launch): boolean {
     launch.hasPoolFeeDisclosureEvent &&
     (launch.releaseVersion === "classic-v2" ||
       launch.hasRewardVaultFactoryEvent);
-  return launch.releaseVersion === "classic-v3"
+  return classicReleaseNeedsCustody(launch.releaseVersion)
     ? base && launch.hasCustodyEvent
     : base;
+}
+
+function classicReleaseNeedsCustody(releaseVersion: string): boolean {
+  return releaseVersion === "classic-v3" || releaseVersion === "classic-v4";
 }
 
 function applyPoolConfigurationToLaunch(
@@ -657,7 +695,7 @@ function applyPoolConfigurationToLaunch(
   launch.hasPoolFeeDisclosureEvent =
     configInput.disclosureOccurrenceId !== undefined;
   if (
-    launch.releaseVersion !== "classic-v3" &&
+    !classicReleaseNeedsCustody(launch.releaseVersion) &&
     launch.rewardConfigurationHash === undefined &&
     configInput.rewardConfigurationHash !== undefined
   ) {
@@ -674,7 +712,7 @@ function applyPoolConfigurationToLaunch(
     optionalMatches(configInput.token, launch.token) &&
     optionalMatches(configInput.quoteAsset, launch.quoteAsset) &&
     optionalMatches(configInput.rewardVault, launch.rewardVault) &&
-    (launch.releaseVersion !== "classic-v3" ||
+    (!classicReleaseNeedsCustody(launch.releaseVersion) ||
       !launch.hasPoolRegistrationEvent ||
       exactOptionalValueMatch(
         configInput.rewardConfigurationHash,
@@ -716,7 +754,7 @@ function applyRewardVaultToLaunch(
     sameValue(vaultInput.poolId, launch.poolId) &&
     sameValue(vaultInput.hook, launch.hook) &&
     optionalMatches(vaultInput.quoteAsset, launch.quoteAsset) &&
-    (launch.releaseVersion !== "classic-v3" ||
+    (!classicReleaseNeedsCustody(launch.releaseVersion) ||
       exactOptionalValueMatch(
         vaultInput.configurationHash,
         launch.rewardConfigurationHash,
@@ -822,6 +860,31 @@ async function reconcileLaunch(
   context.Launch.set(launch);
 }
 
+async function verifyAndRelabelVestingWallet(
+  context: EvmOnEventContext,
+  custody: InitialBuyCustody,
+): Promise<{ complete: boolean; conflict: boolean }> {
+  const wallets = await context.VestingWallet.getWhere({
+    wallet: { _eq: custody.custody },
+  });
+  const vestingFactory = sourceAddress("ClassicV3VestingWalletFactory");
+  const verification = verifyClassicV4CustodyEvidence(
+    custody,
+    wallets,
+    vestingFactory,
+  );
+  if (!verification.complete || verification.matchingWalletIndex === undefined) {
+    return verification;
+  }
+  const matching = wallets[verification.matchingWalletIndex]!;
+  context.VestingWallet.set({
+    ...matching,
+    model: custody.model,
+    releaseVersion: custody.releaseVersion,
+  });
+  return verification;
+}
+
 async function relabelPoolScopedEntities(
   context: EvmOnEventContext,
   launch: Launch,
@@ -902,6 +965,7 @@ async function handleHookEvent(
       contractName:
         | "ClassicV2Hook"
         | "ClassicV3Hook"
+        | "ClassicV4Hook"
         | "StockV1Hook"
         | "StockV2V3Hook";
     }
@@ -934,6 +998,7 @@ async function handlePoolConfigurationEvent(
       contractName:
         | "ClassicV2Hook"
         | "ClassicV3Hook"
+        | "ClassicV4Hook"
         | "StockV1Hook"
         | "StockV2V3Hook";
       eventName: "PoolRegistered" | "PoolFeeDisclosure";
@@ -987,7 +1052,10 @@ async function handlePoolConfigurationEvent(
       next.lpFeePips = exactInt(typedParams.lpFeePips, "lpFeePips");
       next.disclosureOccurrenceId = occurrence.provenance.id;
     }
-  } else if (event.contractName === "ClassicV3Hook") {
+  } else if (
+    event.contractName === "ClassicV3Hook" ||
+    event.contractName === "ClassicV4Hook"
+  ) {
     mergeIdentity("rewardVault", lowerAddress(event.params.rewardVault));
     if (event.eventName === "PoolRegistered") {
       const typedParams = event.params;
@@ -1109,6 +1177,7 @@ async function handleFeeAccrualEvent(
       contractName:
         | "ClassicV2Hook"
         | "ClassicV3Hook"
+        | "ClassicV4Hook"
         | "StockV1Hook"
         | "StockV2V3Hook";
       eventName: "NativeSwapFeesAccrued" | "QuoteSwapFeesAccrued";
@@ -1179,6 +1248,7 @@ function handleCreatorFeeClaim(
       contractName:
         | "ClassicV2Hook"
         | "ClassicV3Hook"
+        | "ClassicV4Hook"
         | "StockV1Hook"
         | "StockV2V3Hook";
       eventName: "CreatorFeesClaimed";
@@ -1224,6 +1294,7 @@ function handleLauncherFeeClaim(
       contractName:
         | "ClassicV2Hook"
         | "ClassicV3Hook"
+        | "ClassicV4Hook"
         | "StockV1Hook"
         | "StockV2V3Hook";
       eventName: "LauncherFeesClaimed";
@@ -1277,7 +1348,7 @@ async function handleVaultFactoryEvent(
         };
   const existing = await context.RewardVault.get(vault);
   if (existing !== undefined) {
-    return;
+    throw new Error(`Duplicate reward vault factory identity ${vault}`);
   }
   const quoteAsset =
     event.contractName === "ClassicV3RewardVaultFactory"
@@ -1327,7 +1398,7 @@ async function handleVaultFactoryEvent(
   }
 }
 
-function handleVestingFactoryEvent(
+async function handleVestingFactoryEvent(
   event: Extract<
     EvmEvent,
     {
@@ -1337,7 +1408,7 @@ function handleVestingFactoryEvent(
   >,
   context: EvmOnEventContext,
   occurrence: RecordedOccurrence,
-): void {
+): Promise<void> {
   const params = event.params;
   const wallet: VestingWallet = {
     ...immutableFields(occurrence),
@@ -1347,7 +1418,39 @@ function handleVestingFactoryEvent(
     salt: lower(params.salt),
     configurationHash: lower(params.configurationHash),
   };
+  const existingWallets = await context.VestingWallet.getWhere({
+    wallet: { _eq: wallet.wallet },
+  });
+  if (existingWallets.length !== 0) {
+    throw new Error(`Duplicate vesting wallet factory identity ${wallet.wallet}`);
+  }
   context.VestingWallet.set(wallet);
+
+  const custodies = await context.InitialBuyCustody.getWhere({
+    custody: { _eq: wallet.wallet },
+  });
+  for (const custody of custodies) {
+    if (custody.releaseVersion !== "classic-v4") {
+      continue;
+    }
+    const launchId = launchEntityId(
+      CHAIN_ID,
+      custody.releaseVersion,
+      custody.launchHash,
+    );
+    const launch = await context.Launch.get(launchId);
+    if (launch === undefined) {
+      continue;
+    }
+    const verification = await verifyAndRelabelVestingWallet(context, custody);
+    const next: Mutable<Launch> = {
+      ...launch,
+      hasCustodyEvent: verification.complete,
+      provenanceValid: launch.provenanceValid && !verification.conflict,
+      isComplete: false,
+    };
+    await reconcileLaunch(context, next);
+  }
 }
 
 async function handleRewardVaultEvent(
@@ -1526,6 +1629,17 @@ function eventBlockFilter(contractName: string): {
   return { block: { number: { _gte: startBlock } } };
 }
 
+function optionalEventBlockFilter(contractName: string): {
+  readonly where?: {
+    readonly block: { readonly number: { readonly _gte: number } };
+  };
+} {
+  const startBlock = sourceStartBlock(contractName);
+  return startBlock === undefined
+    ? {}
+    : { where: { block: { number: { _gte: startBlock } } } };
+}
+
 function sourceAddress(contractName: string): string {
   const source = SOURCE_REGISTRY.find(
     (entry) => entry.contractName === contractName,
@@ -1536,12 +1650,21 @@ function sourceAddress(contractName: string): string {
   return lowerAddress(source.address);
 }
 
+function optionalSourceAddress(contractName: string): string | undefined {
+  const source = SOURCE_REGISTRY.find(
+    (entry) => entry.contractName === contractName,
+  );
+  return source === undefined ? undefined : lowerAddress(source.address);
+}
+
 function hookForRelease(releaseVersion: string): string | undefined {
   switch (releaseVersion) {
     case "classic-v2":
       return CLASSIC_V2_HOOK;
     case "classic-v3":
       return CLASSIC_V3_HOOK;
+    case "classic-v4":
+      return CLASSIC_V4_HOOK;
     case "stock-paired-v1":
       return STOCK_V1_HOOK;
     case "stock-paired-v2":
@@ -1741,6 +1864,79 @@ indexer.onEvent(
     contract: "ClassicV3Hook",
     event: "LauncherFeesClaimed",
     where: eventBlockFilter("ClassicV3Hook"),
+  },
+  handleEvent,
+);
+
+indexer.onEvent(
+  {
+    contract: "ClassicV4Launcher",
+    event: "MemeTokenLaunchedV2",
+    ...optionalEventBlockFilter("ClassicV4Launcher"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Launcher",
+    event: "MemeLiquidityConfiguredV2",
+    ...optionalEventBlockFilter("ClassicV4Launcher"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Launcher",
+    event: "MemeCreatorInitialBuyV2",
+    ...optionalEventBlockFilter("ClassicV4Launcher"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Launcher",
+    event: "MemeCreatorInitialBuyCustodyV2",
+    ...optionalEventBlockFilter("ClassicV4Launcher"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Hook",
+    event: "PoolRegistered",
+    ...optionalEventBlockFilter("ClassicV4Hook"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Hook",
+    event: "PoolFeeDisclosure",
+    ...optionalEventBlockFilter("ClassicV4Hook"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Hook",
+    event: "NativeSwapFeesAccrued",
+    ...optionalEventBlockFilter("ClassicV4Hook"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Hook",
+    event: "CreatorFeesClaimed",
+    ...optionalEventBlockFilter("ClassicV4Hook"),
+  },
+  handleEvent,
+);
+indexer.onEvent(
+  {
+    contract: "ClassicV4Hook",
+    event: "LauncherFeesClaimed",
+    ...optionalEventBlockFilter("ClassicV4Hook"),
   },
   handleEvent,
 );

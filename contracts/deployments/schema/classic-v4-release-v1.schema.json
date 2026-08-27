@@ -1,0 +1,1149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/classic-v4-release-v1.schema.json",
+  "title": "Programmable Classic V4 Mainnet release manifest",
+  "$comment": "manifestDigest uses programmable.classic-v4.release-manifest.v1. Embedded source and lifecycle evidence use their dedicated v1 domains. Digests serialize typed canonical values and canonicalize hexadecimal strings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "model",
+    "internalContractRelease",
+    "releaseStatus",
+    "chainId",
+    "releaseCommit",
+    "releaseTree",
+    "sourceCommitment",
+    "planDigest",
+    "capturedAt",
+    "startBlock",
+    "addresses",
+    "deploymentTransactions",
+    "deploymentBlocks",
+    "deploymentVerification",
+    "runtimeCodeHashes",
+    "runtimeTemplateHashes",
+    "officialDependencies",
+    "sharedDependencies",
+    "verification",
+    "sourceVerification",
+    "lifecycleEvidence",
+    "indexerHandoff",
+    "manifestDigest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "model": { "const": "classic" },
+    "internalContractRelease": { "const": "classic-v4" },
+    "releaseStatus": {
+      "enum": [
+        "deployment-source-and-lifecycle-verified",
+        "indexer-activated",
+        "publicly-available"
+      ]
+    },
+    "chainId": { "const": 1 },
+    "releaseCommit": { "$ref": "#/$defs/gitObject" },
+    "releaseTree": { "$ref": "#/$defs/gitObject" },
+    "sourceCommitment": { "$ref": "#/$defs/bytes32" },
+    "planDigest": { "$ref": "#/$defs/bytes32" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "startBlock": { "$ref": "#/$defs/blockNumber" },
+    "addresses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deployer",
+        "launcherFeeRecipient",
+        "ctoAuthority",
+        "rewardVaultFactory",
+        "initialBuyVestingWalletFactory",
+        "launchPolicy",
+        "positionForwarderFactory",
+        "hookFactory",
+        "feeHook",
+        "positionPlanner",
+        "launcher"
+      ],
+      "properties": {
+        "deployer": { "$ref": "#/$defs/address" },
+        "launcherFeeRecipient": { "$ref": "#/$defs/address" },
+        "ctoAuthority": { "$ref": "#/$defs/address" },
+        "rewardVaultFactory": { "$ref": "#/$defs/address" },
+        "initialBuyVestingWalletFactory": { "$ref": "#/$defs/address" },
+        "launchPolicy": { "$ref": "#/$defs/address" },
+        "positionForwarderFactory": { "$ref": "#/$defs/address" },
+        "hookFactory": { "$ref": "#/$defs/address" },
+        "feeHook": { "$ref": "#/$defs/address" },
+        "positionPlanner": { "$ref": "#/$defs/address" },
+        "launcher": { "$ref": "#/$defs/address" }
+      }
+    },
+    "deploymentTransactions": { "$ref": "#/$defs/newContractHashes" },
+    "deploymentBlocks": { "$ref": "#/$defs/newContractBlocks" },
+    "deploymentVerification": {
+      "$ref": "#/$defs/deploymentVerification"
+    },
+    "runtimeCodeHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ctoAuthority",
+        "rewardVaultFactory",
+        "initialBuyVestingWalletFactory",
+        "launchPolicy",
+        "positionForwarderFactory",
+        "hookFactory",
+        "feeHook",
+        "positionPlanner",
+        "launcher"
+      ],
+      "properties": {
+        "ctoAuthority": { "$ref": "#/$defs/bytes32" },
+        "rewardVaultFactory": { "$ref": "#/$defs/bytes32" },
+        "initialBuyVestingWalletFactory": { "$ref": "#/$defs/bytes32" },
+        "launchPolicy": { "$ref": "#/$defs/bytes32" },
+        "positionForwarderFactory": { "$ref": "#/$defs/bytes32" },
+        "hookFactory": { "$ref": "#/$defs/bytes32" },
+        "feeHook": { "$ref": "#/$defs/bytes32" },
+        "positionPlanner": { "$ref": "#/$defs/bytes32" },
+        "launcher": { "$ref": "#/$defs/bytes32" }
+      }
+    },
+    "runtimeTemplateHashes": { "$ref": "#/$defs/newContractHashes" },
+    "officialDependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "poolManager",
+        "positionManager",
+        "stateView",
+        "v4Quoter",
+        "uerc20Factory",
+        "permit2",
+        "universalRouter"
+      ],
+      "properties": {
+        "poolManager": { "$ref": "#/$defs/addressHash" },
+        "positionManager": { "$ref": "#/$defs/addressHash" },
+        "stateView": { "$ref": "#/$defs/addressHash" },
+        "v4Quoter": { "$ref": "#/$defs/addressHash" },
+        "uerc20Factory": { "$ref": "#/$defs/addressHash" },
+        "permit2": { "$ref": "#/$defs/addressHash" },
+        "universalRouter": { "$ref": "#/$defs/addressHash" }
+      }
+    },
+    "sharedDependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ctoAuthority",
+        "rewardVaultFactory",
+        "initialBuyVestingWalletFactory",
+        "launchPolicy",
+        "positionForwarderFactory"
+      ],
+      "properties": {
+        "ctoAuthority": { "$ref": "#/$defs/addressHash" },
+        "rewardVaultFactory": { "$ref": "#/$defs/addressHash" },
+        "initialBuyVestingWalletFactory": { "$ref": "#/$defs/addressHash" },
+        "launchPolicy": { "$ref": "#/$defs/addressHash" },
+        "positionForwarderFactory": { "$ref": "#/$defs/addressHash" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deploymentLive",
+        "deploymentFinalized",
+        "independentRpcCount",
+        "runtimeCodeVerified",
+        "constructorBindingsVerified",
+        "sourceVerified",
+        "lifecycleVerified",
+        "indexerActivated",
+        "publicAvailable"
+      ],
+      "properties": {
+        "deploymentLive": { "const": true },
+        "deploymentFinalized": { "const": true },
+        "independentRpcCount": { "type": "integer", "minimum": 2 },
+        "runtimeCodeVerified": { "const": true },
+        "constructorBindingsVerified": { "const": true },
+        "sourceVerified": { "const": true },
+        "lifecycleVerified": { "const": true },
+        "indexerActivated": { "type": "boolean" },
+        "publicAvailable": { "type": "boolean" }
+      }
+    },
+    "sourceVerification": { "$ref": "#/$defs/sourceEvidence" },
+    "lifecycleEvidence": { "$ref": "#/$defs/lifecycleEvidence" },
+    "indexerHandoff": { "$ref": "#/$defs/indexerHandoff" },
+    "manifestDigest": {
+      "$ref": "#/$defs/bytes32",
+      "description": "Domain-separated digest of the typed canonical unsigned release manifest."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "releaseStatus": {
+            "const": "deployment-source-and-lifecycle-verified"
+          }
+        },
+        "required": ["releaseStatus"]
+      },
+      "then": {
+        "properties": {
+          "verification": {
+            "type": "object",
+            "properties": {
+              "indexerActivated": { "const": false },
+              "publicAvailable": { "const": false }
+            }
+          },
+          "indexerHandoff": {
+            "type": "object",
+            "properties": {
+              "indexerBindingDigest": { "type": "null" },
+              "activated": { "const": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "releaseStatus": { "const": "indexer-activated" }
+        },
+        "required": ["releaseStatus"]
+      },
+      "then": {
+        "properties": {
+          "verification": {
+            "type": "object",
+            "properties": {
+              "indexerActivated": { "const": true },
+              "publicAvailable": { "const": false }
+            }
+          },
+          "indexerHandoff": {
+            "type": "object",
+            "properties": {
+              "indexerBindingDigest": { "$ref": "#/$defs/bytes32" },
+              "activated": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "releaseStatus": { "const": "publicly-available" }
+        },
+        "required": ["releaseStatus"]
+      },
+      "then": {
+        "properties": {
+          "verification": {
+            "type": "object",
+            "properties": {
+              "indexerActivated": { "const": true },
+              "publicAvailable": { "const": true }
+            }
+          },
+          "indexerHandoff": {
+            "type": "object",
+            "properties": {
+              "indexerBindingDigest": { "$ref": "#/$defs/bytes32" },
+              "activated": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x(?!0{40}$)[0-9a-fA-F]{40}$"
+    },
+    "anyAddress": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-fA-F]{64}$"
+    },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^(?!0{40}$)[0-9a-f]{40}$"
+    },
+    "blockNumber": { "type": "integer", "minimum": 1 },
+    "decimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "signedDecimal": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)$"
+    },
+    "addressHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "runtimeCodeHash"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "runtimeCodeHash": { "$ref": "#/$defs/bytes32" }
+      }
+    },
+    "newContractHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
+      "properties": {
+        "hookFactory": { "$ref": "#/$defs/bytes32" },
+        "feeHook": { "$ref": "#/$defs/bytes32" },
+        "positionPlanner": { "$ref": "#/$defs/bytes32" },
+        "launcher": { "$ref": "#/$defs/bytes32" }
+      }
+    },
+    "newContractBlocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
+      "properties": {
+        "hookFactory": { "$ref": "#/$defs/blockNumber" },
+        "feeHook": { "$ref": "#/$defs/blockNumber" },
+        "positionPlanner": { "$ref": "#/$defs/blockNumber" },
+        "launcher": { "$ref": "#/$defs/blockNumber" }
+      }
+    },
+    "newContractConfirmations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
+      "properties": {
+        "hookFactory": { "type": "integer", "minimum": 12 },
+        "feeHook": { "type": "integer", "minimum": 12 },
+        "positionPlanner": { "type": "integer", "minimum": 12 },
+        "launcher": { "type": "integer", "minimum": 12 }
+      }
+    },
+    "deploymentVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceDigest",
+        "checkedAt",
+        "verificationBlock",
+        "verificationBlockHash",
+        "contractBlockHashes",
+        "confirmations"
+      ],
+      "properties": {
+        "evidenceDigest": {
+          "$ref": "#/$defs/bytes32",
+          "description": "programmable.classic-v4.deployment-evidence.v1 digest"
+        },
+        "checkedAt": { "type": "string", "format": "date-time" },
+        "verificationBlock": { "$ref": "#/$defs/blockNumber" },
+        "verificationBlockHash": { "$ref": "#/$defs/bytes32" },
+        "contractBlockHashes": { "$ref": "#/$defs/newContractHashes" },
+        "confirmations": { "$ref": "#/$defs/newContractConfirmations" }
+      }
+    },
+    "sourcifyProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "url"],
+      "properties": {
+        "name": { "const": "Sourcify" },
+        "status": { "const": "exact-match" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "etherscanProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "url"],
+      "properties": {
+        "name": { "const": "Etherscan" },
+        "status": { "const": "exact-match" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "sourceContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "contractName",
+        "fqcn",
+        "encodedConstructorArguments",
+        "deploymentTransaction",
+        "deploymentBlock",
+        "status",
+        "providers"
+      ],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "contractName": { "type": "string", "minLength": 1 },
+        "fqcn": { "type": "string", "minLength": 1 },
+        "encodedConstructorArguments": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-fA-F]{2})*$"
+        },
+        "deploymentTransaction": { "$ref": "#/$defs/bytes32" },
+        "deploymentBlock": { "$ref": "#/$defs/blockNumber" },
+        "status": { "const": "exact-match" },
+        "providers": {
+          "oneOf": [
+            {
+              "type": "array",
+              "prefixItems": [
+                { "$ref": "#/$defs/sourcifyProvider" }
+              ],
+              "items": false,
+              "minItems": 1,
+              "maxItems": 1
+            },
+            {
+              "type": "array",
+              "prefixItems": [
+                { "$ref": "#/$defs/sourcifyProvider" },
+                { "$ref": "#/$defs/etherscanProvider" }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ]
+        }
+      }
+    },
+    "sourceEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "chainId",
+        "planDigest",
+        "sourceCommitment",
+        "status",
+        "checkedAt",
+        "contracts",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "chainId": { "const": 1 },
+        "planDigest": { "$ref": "#/$defs/bytes32" },
+        "sourceCommitment": { "$ref": "#/$defs/bytes32" },
+        "status": { "const": "verified" },
+        "checkedAt": { "type": "string", "format": "date-time" },
+        "evidenceDigest": {
+          "$ref": "#/$defs/bytes32",
+          "description": "programmable.classic-v4.source-evidence.v1 digest"
+        },
+        "contracts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
+          "properties": {
+            "hookFactory": { "$ref": "#/$defs/sourceContract" },
+            "feeHook": { "$ref": "#/$defs/sourceContract" },
+            "positionPlanner": { "$ref": "#/$defs/sourceContract" },
+            "launcher": { "$ref": "#/$defs/sourceContract" }
+          }
+        }
+      }
+    },
+    "eventIndices": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "lifecycleAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transactionHash",
+        "inputHash",
+        "blockNumber",
+        "blockHash",
+        "blockTimestamp",
+        "transactionIndex",
+        "nonce",
+        "from",
+        "to",
+        "value",
+        "confirmations",
+        "success",
+        "events"
+      ],
+      "properties": {
+        "transactionHash": { "$ref": "#/$defs/bytes32" },
+        "inputHash": { "$ref": "#/$defs/bytes32" },
+        "blockNumber": { "$ref": "#/$defs/blockNumber" },
+        "blockHash": { "$ref": "#/$defs/bytes32" },
+        "blockTimestamp": { "$ref": "#/$defs/positiveDecimal" },
+        "transactionIndex": { "type": "integer", "minimum": 0 },
+        "nonce": { "type": "integer", "minimum": 0 },
+        "from": { "$ref": "#/$defs/address" },
+        "to": { "$ref": "#/$defs/address" },
+        "value": { "$ref": "#/$defs/decimal" },
+        "confirmations": { "type": "integer", "minimum": 12 },
+        "success": { "const": true },
+        "events": { "$ref": "#/$defs/eventIndices" }
+      }
+    },
+    "swapLifecycleAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transactionHash",
+        "inputHash",
+        "blockNumber",
+        "blockHash",
+        "blockTimestamp",
+        "transactionIndex",
+        "nonce",
+        "from",
+        "to",
+        "value",
+        "confirmations",
+        "success",
+        "events",
+        "side",
+        "exactness"
+      ],
+      "properties": {
+        "transactionHash": { "$ref": "#/$defs/bytes32" },
+        "inputHash": { "$ref": "#/$defs/bytes32" },
+        "blockNumber": { "$ref": "#/$defs/blockNumber" },
+        "blockHash": { "$ref": "#/$defs/bytes32" },
+        "blockTimestamp": { "$ref": "#/$defs/positiveDecimal" },
+        "transactionIndex": { "type": "integer", "minimum": 0 },
+        "nonce": { "type": "integer", "minimum": 0 },
+        "from": { "$ref": "#/$defs/address" },
+        "to": { "$ref": "#/$defs/address" },
+        "value": { "$ref": "#/$defs/decimal" },
+        "confirmations": { "type": "integer", "minimum": 12 },
+        "success": { "const": true },
+        "events": { "$ref": "#/$defs/eventIndices" },
+        "side": { "enum": ["buy", "sell"] },
+        "exactness": { "enum": ["exact-input", "exact-output"] }
+      }
+    },
+    "lifecycleQuote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "function",
+        "blockNumber",
+        "blockHash",
+        "exactAmount",
+        "quotedAmount",
+        "gasEstimate",
+        "slippageBps",
+        "bound"
+      ],
+      "properties": {
+        "policy": { "const": "canonical-v4-quoter-at-parent-block" },
+        "function": {
+          "enum": [
+            "V4Quoter.quoteExactInputSingle",
+            "V4Quoter.quoteExactOutputSingle"
+          ]
+        },
+        "blockNumber": { "$ref": "#/$defs/blockNumber" },
+        "blockHash": { "$ref": "#/$defs/bytes32" },
+        "exactAmount": { "$ref": "#/$defs/positiveDecimal" },
+        "quotedAmount": { "$ref": "#/$defs/positiveDecimal" },
+        "gasEstimate": { "$ref": "#/$defs/positiveDecimal" },
+        "slippageBps": { "const": 100 },
+        "bound": { "$ref": "#/$defs/positiveDecimal" }
+      }
+    },
+    "lifecycleSwap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "side",
+        "exactness",
+        "poolAmount0",
+        "poolAmount1",
+        "grossNativeAmount",
+        "creatorFee",
+        "launcherFee",
+        "totalFee",
+        "appliedTotalSwapFeeBps",
+        "inputBound",
+        "outputBound",
+        "routerDeadline",
+        "executionPath",
+        "quote"
+      ],
+      "properties": {
+        "side": { "enum": ["buy", "sell"] },
+        "exactness": { "enum": ["exact-input", "exact-output"] },
+        "poolAmount0": { "$ref": "#/$defs/signedDecimal" },
+        "poolAmount1": { "$ref": "#/$defs/signedDecimal" },
+        "grossNativeAmount": { "$ref": "#/$defs/positiveDecimal" },
+        "creatorFee": { "$ref": "#/$defs/positiveDecimal" },
+        "launcherFee": { "$ref": "#/$defs/positiveDecimal" },
+        "totalFee": { "$ref": "#/$defs/positiveDecimal" },
+        "appliedTotalSwapFeeBps": { "enum": [100, 200] },
+        "inputBound": { "$ref": "#/$defs/positiveDecimal" },
+        "outputBound": { "$ref": "#/$defs/positiveDecimal" },
+        "routerDeadline": { "$ref": "#/$defs/positiveDecimal" },
+        "executionPath": { "const": "single-hop-all" },
+        "quote": { "$ref": "#/$defs/lifecycleQuote" }
+      }
+    },
+    "hookAccounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rewardVault",
+        "registrar",
+        "buySwapFeeBps",
+        "sellSwapFeeBps",
+        "registered",
+        "creatorFeesAccrued",
+        "launcherFeesAccrued",
+        "totalNativeFeesAccrued",
+        "poolManagerNativeClaims",
+        "poolManagerTokenClaims",
+        "rawNativeBalance"
+      ],
+      "properties": {
+        "rewardVault": { "$ref": "#/$defs/anyAddress" },
+        "registrar": { "$ref": "#/$defs/anyAddress" },
+        "buySwapFeeBps": { "type": "integer", "minimum": 0 },
+        "sellSwapFeeBps": { "type": "integer", "minimum": 0 },
+        "registered": { "type": "boolean" },
+        "creatorFeesAccrued": { "$ref": "#/$defs/decimal" },
+        "launcherFeesAccrued": { "$ref": "#/$defs/decimal" },
+        "totalNativeFeesAccrued": { "$ref": "#/$defs/decimal" },
+        "poolManagerNativeClaims": { "$ref": "#/$defs/decimal" },
+        "poolManagerTokenClaims": { "$ref": "#/$defs/decimal" },
+        "rawNativeBalance": { "$ref": "#/$defs/decimal" }
+      }
+    },
+    "vaultAccounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalCreatorFeesReceived",
+        "totalCreatorFeesClaimed",
+        "beneficiaryClaimed",
+        "beneficiaryClaimable",
+        "rawNativeBalance"
+      ],
+      "properties": {
+        "totalCreatorFeesReceived": { "$ref": "#/$defs/decimal" },
+        "totalCreatorFeesClaimed": { "$ref": "#/$defs/decimal" },
+        "beneficiaryClaimed": { "$ref": "#/$defs/decimal" },
+        "beneficiaryClaimable": { "$ref": "#/$defs/decimal" },
+        "rawNativeBalance": { "$ref": "#/$defs/decimal" }
+      }
+    },
+    "hookCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockNumber", "hook"],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/blockNumber" },
+        "hook": { "$ref": "#/$defs/hookAccounting" }
+      }
+    },
+    "vaultCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockNumber", "hook", "vault"],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/blockNumber" },
+        "hook": { "$ref": "#/$defs/hookAccounting" },
+        "vault": { "$ref": "#/$defs/vaultAccounting" }
+      }
+    },
+    "feeConservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "creatorAccrualTotal",
+        "launcherAccrualTotal",
+        "totalAccrual",
+        "checkpoints"
+      ],
+      "properties": {
+        "creatorAccrualTotal": { "$ref": "#/$defs/positiveDecimal" },
+        "launcherAccrualTotal": { "$ref": "#/$defs/positiveDecimal" },
+        "totalAccrual": { "$ref": "#/$defs/positiveDecimal" },
+        "checkpoints": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "preLaunch",
+            "beforeCreatorClaim",
+            "afterCreatorClaim",
+            "beforeLauncherClaim",
+            "final"
+          ],
+          "properties": {
+            "preLaunch": { "$ref": "#/$defs/hookCheckpoint" },
+            "beforeCreatorClaim": { "$ref": "#/$defs/vaultCheckpoint" },
+            "afterCreatorClaim": { "$ref": "#/$defs/vaultCheckpoint" },
+            "beforeLauncherClaim": { "$ref": "#/$defs/hookCheckpoint" },
+            "final": { "$ref": "#/$defs/vaultCheckpoint" }
+          }
+        }
+      }
+    },
+    "lifecyclePostState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "launchMappings",
+        "poolFeeConfig",
+        "rewardVault",
+        "positionLock",
+        "tokenCustody",
+        "derivedCodeHashes"
+      ],
+      "properties": {
+        "launchMappings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["launchHash", "rewardVault", "initialBuyCustody"],
+          "properties": {
+            "launchHash": { "$ref": "#/$defs/bytes32" },
+            "rewardVault": { "$ref": "#/$defs/address" },
+            "initialBuyCustody": { "$ref": "#/$defs/anyAddress" }
+          }
+        },
+        "poolFeeConfig": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rewardVault",
+            "registrar",
+            "buySwapFeeBps",
+            "sellSwapFeeBps",
+            "registered",
+            "creatorFeesAccrued"
+          ],
+          "properties": {
+            "rewardVault": { "$ref": "#/$defs/address" },
+            "registrar": { "$ref": "#/$defs/address" },
+            "buySwapFeeBps": { "const": 100 },
+            "sellSwapFeeBps": { "const": 200 },
+            "registered": { "const": true },
+            "creatorFeesAccrued": { "$ref": "#/$defs/decimal" }
+          }
+        },
+        "rewardVault": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "configurationHash",
+            "activeConfigurationHash",
+            "configurationEpoch",
+            "beneficiary",
+            "shareBps"
+          ],
+          "properties": {
+            "configurationHash": { "$ref": "#/$defs/bytes32" },
+            "activeConfigurationHash": { "$ref": "#/$defs/bytes32" },
+            "configurationEpoch": { "const": 1 },
+            "beneficiary": { "$ref": "#/$defs/address" },
+            "shareBps": { "const": 10000 }
+          }
+        },
+        "positionLock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "owner",
+            "approved",
+            "tokenId",
+            "positionLiquidity",
+            "activePoolLiquidity",
+            "tickLower",
+            "tickUpper",
+            "manager",
+            "operator",
+            "timelockBlockNumber",
+            "feeRecipient",
+            "factoryConfigurationHash"
+          ],
+          "properties": {
+            "owner": { "$ref": "#/$defs/address" },
+            "approved": { "$ref": "#/$defs/anyAddress" },
+            "tokenId": { "$ref": "#/$defs/positiveDecimal" },
+            "positionLiquidity": { "$ref": "#/$defs/positiveDecimal" },
+            "activePoolLiquidity": { "$ref": "#/$defs/positiveDecimal" },
+            "tickLower": { "const": 174800 },
+            "tickUpper": { "const": 204200 },
+            "manager": { "$ref": "#/$defs/address" },
+            "operator": { "$ref": "#/$defs/anyAddress" },
+            "timelockBlockNumber": { "$ref": "#/$defs/positiveDecimal" },
+            "feeRecipient": { "$ref": "#/$defs/address" },
+            "factoryConfigurationHash": { "$ref": "#/$defs/bytes32" }
+          }
+        },
+        "tokenCustody": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "totalSupply",
+            "lockedTokenDust",
+            "launcherBalance",
+            "positionManagerBalance"
+          ],
+          "properties": {
+            "totalSupply": { "$ref": "#/$defs/positiveDecimal" },
+            "lockedTokenDust": { "$ref": "#/$defs/decimal" },
+            "launcherBalance": { "$ref": "#/$defs/decimal" },
+            "positionManagerBalance": { "$ref": "#/$defs/decimal" }
+          }
+        },
+        "derivedCodeHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "token",
+            "rewardVault",
+            "positionForwarder",
+            "rewardVaultPredeployed",
+            "positionForwarderPredeployed"
+          ],
+          "properties": {
+            "token": { "$ref": "#/$defs/bytes32" },
+            "rewardVault": { "$ref": "#/$defs/bytes32" },
+            "positionForwarder": { "$ref": "#/$defs/bytes32" },
+            "rewardVaultPredeployed": { "type": "boolean" },
+            "positionForwarderPredeployed": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "lifecycleObservations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exclusiveHookActivity", "sellApprovals"],
+      "properties": {
+        "exclusiveHookActivity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fromBlock",
+            "toBlock",
+            "nativeAccrualEvents",
+            "creatorClaimEvents",
+            "launcherClaimEvents"
+          ],
+          "properties": {
+            "fromBlock": { "$ref": "#/$defs/blockNumber" },
+            "toBlock": { "$ref": "#/$defs/blockNumber" },
+            "nativeAccrualEvents": { "const": 5 },
+            "creatorClaimEvents": { "const": 1 },
+            "launcherClaimEvents": { "const": 1 }
+          }
+        },
+        "sellApprovals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sellExactInput", "sellExactOutput"],
+          "properties": {
+            "sellExactInput": { "$ref": "#/$defs/sellApproval" },
+            "sellExactOutput": { "$ref": "#/$defs/sellApproval" }
+          }
+        }
+      }
+    },
+    "sellApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockNumber",
+        "erc20AllowanceToPermit2",
+        "permit2AllowanceToRouter",
+        "permit2Expiration",
+        "permit2Nonce",
+        "requiredAmount"
+      ],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/blockNumber" },
+        "erc20AllowanceToPermit2": { "$ref": "#/$defs/decimal" },
+        "permit2AllowanceToRouter": { "$ref": "#/$defs/decimal" },
+        "permit2Expiration": { "$ref": "#/$defs/decimal" },
+        "permit2Nonce": { "$ref": "#/$defs/decimal" },
+        "requiredAmount": { "$ref": "#/$defs/positiveDecimal" }
+      }
+    },
+    "lifecycleInvariants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "launchVerified",
+        "positionLockVerified",
+        "buyExactInputVerified",
+        "buyExactOutputVerified",
+        "sellExactInputVerified",
+        "sellExactOutputVerified",
+        "creatorClaimVerified",
+        "launcherClaimVerified",
+        "feeConservationVerified"
+      ],
+      "properties": {
+        "launchVerified": { "const": true },
+        "positionLockVerified": { "const": true },
+        "buyExactInputVerified": { "const": true },
+        "buyExactOutputVerified": { "const": true },
+        "sellExactInputVerified": { "const": true },
+        "sellExactOutputVerified": { "const": true },
+        "creatorClaimVerified": { "const": true },
+        "launcherClaimVerified": { "const": true },
+        "feeConservationVerified": { "const": true }
+      }
+    },
+    "lifecycleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "chainId",
+        "planDigest",
+        "sourceCommitment",
+        "status",
+        "checkedAt",
+        "independentRpcCount",
+        "releaseEligible",
+        "canaryPlanDigest",
+        "releaseBindingDigest",
+        "deploymentEvidenceDigest",
+        "sourceEvidenceDigest",
+        "verificationBlock",
+        "verificationBlockHash",
+        "latestLifecycleBlock",
+        "confirmations",
+        "operatorWallet",
+        "launcher",
+        "feeHook",
+        "canaryToken",
+        "rewardVault",
+        "poolId",
+        "positionRecipient",
+        "positionTokenId",
+        "actions",
+        "swaps",
+        "claims",
+        "postState",
+        "feeConservation",
+        "observations",
+        "invariants",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "chainId": { "const": 1 },
+        "planDigest": { "$ref": "#/$defs/bytes32" },
+        "sourceCommitment": { "$ref": "#/$defs/bytes32" },
+        "status": { "const": "verified-current-release" },
+        "checkedAt": { "type": "string", "format": "date-time" },
+        "independentRpcCount": { "const": 2 },
+        "releaseEligible": { "const": true },
+        "canaryPlanDigest": { "$ref": "#/$defs/bytes32" },
+        "releaseBindingDigest": { "$ref": "#/$defs/bytes32" },
+        "deploymentEvidenceDigest": { "$ref": "#/$defs/bytes32" },
+        "sourceEvidenceDigest": { "$ref": "#/$defs/bytes32" },
+        "verificationBlock": { "$ref": "#/$defs/blockNumber" },
+        "verificationBlockHash": { "$ref": "#/$defs/bytes32" },
+        "latestLifecycleBlock": { "$ref": "#/$defs/blockNumber" },
+        "confirmations": { "type": "integer", "minimum": 12 },
+        "operatorWallet": { "$ref": "#/$defs/address" },
+        "launcher": { "$ref": "#/$defs/address" },
+        "feeHook": { "$ref": "#/$defs/address" },
+        "canaryToken": { "$ref": "#/$defs/address" },
+        "rewardVault": { "$ref": "#/$defs/address" },
+        "poolId": { "$ref": "#/$defs/bytes32" },
+        "positionRecipient": { "$ref": "#/$defs/address" },
+        "positionTokenId": { "$ref": "#/$defs/positiveDecimal" },
+        "actions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "launch",
+            "buyExactInput",
+            "buyExactOutput",
+            "sellExactInput",
+            "sellExactOutput",
+            "creatorClaim",
+            "launcherClaim"
+          ],
+          "properties": {
+            "launch": { "$ref": "#/$defs/lifecycleAction" },
+            "buyExactInput": { "$ref": "#/$defs/swapLifecycleAction" },
+            "buyExactOutput": { "$ref": "#/$defs/swapLifecycleAction" },
+            "sellExactInput": { "$ref": "#/$defs/swapLifecycleAction" },
+            "sellExactOutput": { "$ref": "#/$defs/swapLifecycleAction" },
+            "creatorClaim": { "$ref": "#/$defs/lifecycleAction" },
+            "launcherClaim": { "$ref": "#/$defs/lifecycleAction" }
+          }
+        },
+        "swaps": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "buyExactInput",
+            "buyExactOutput",
+            "sellExactInput",
+            "sellExactOutput"
+          ],
+          "properties": {
+            "buyExactInput": { "$ref": "#/$defs/lifecycleSwap" },
+            "buyExactOutput": { "$ref": "#/$defs/lifecycleSwap" },
+            "sellExactInput": { "$ref": "#/$defs/lifecycleSwap" },
+            "sellExactOutput": { "$ref": "#/$defs/lifecycleSwap" }
+          }
+        },
+        "claims": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["creator", "launcher"],
+          "properties": {
+            "creator": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["amount", "vaultCheckpointAmount", "beneficiaryAmount"],
+              "properties": {
+                "amount": { "$ref": "#/$defs/positiveDecimal" },
+                "vaultCheckpointAmount": { "$ref": "#/$defs/positiveDecimal" },
+                "beneficiaryAmount": { "$ref": "#/$defs/positiveDecimal" }
+              }
+            },
+            "launcher": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["amount"],
+              "properties": {
+                "amount": { "$ref": "#/$defs/positiveDecimal" }
+              }
+            }
+          }
+        },
+        "postState": { "$ref": "#/$defs/lifecyclePostState" },
+        "feeConservation": { "$ref": "#/$defs/feeConservation" },
+        "observations": { "$ref": "#/$defs/lifecycleObservations" },
+        "invariants": { "$ref": "#/$defs/lifecycleInvariants" },
+        "evidenceDigest": {
+          "$ref": "#/$defs/bytes32",
+          "description": "programmable.classic-v4.lifecycle-evidence.v1 digest"
+        }
+      }
+    },
+    "indexerLauncherSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "startBlock", "events"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "startBlock": { "$ref": "#/$defs/blockNumber" },
+        "events": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "MemeTokenLaunchedV2" },
+            { "const": "MemeLiquidityConfiguredV2" },
+            { "const": "MemeCreatorInitialBuyV2" },
+            { "const": "MemeCreatorInitialBuyCustodyV2" }
+          ],
+          "items": false,
+          "minItems": 4,
+          "maxItems": 4
+        }
+      }
+    },
+    "indexerHookSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "startBlock", "events"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "startBlock": { "$ref": "#/$defs/blockNumber" },
+        "events": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "PoolRegistered" },
+            { "const": "PoolFeeDisclosure" },
+            { "const": "NativeSwapFeesAccrued" },
+            { "const": "CreatorFeesClaimed" },
+            { "const": "LauncherFeesClaimed" }
+          ],
+          "items": false,
+          "minItems": 5,
+          "maxItems": 5
+        }
+      }
+    },
+    "indexerHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "chainId",
+        "model",
+        "releaseVersion",
+        "releaseCommit",
+        "sourceCommitment",
+        "startBlock",
+        "sources",
+        "sourceVerified",
+        "lifecycleVerified",
+        "activationEligible",
+        "indexerBindingDigest",
+        "activated"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "chainId": { "const": 1 },
+        "model": { "const": "classic" },
+        "releaseVersion": { "const": "classic-v4" },
+        "releaseCommit": { "$ref": "#/$defs/gitObject" },
+        "sourceCommitment": { "$ref": "#/$defs/bytes32" },
+        "startBlock": { "$ref": "#/$defs/blockNumber" },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["launcher", "feeHook"],
+          "properties": {
+            "launcher": { "$ref": "#/$defs/indexerLauncherSource" },
+            "feeHook": { "$ref": "#/$defs/indexerHookSource" }
+          }
+        },
+        "sourceVerified": { "const": true },
+        "lifecycleVerified": { "const": true },
+        "activationEligible": { "const": true },
+        "indexerBindingDigest": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/bytes32" }
+          ]
+        },
+        "activated": { "type": "boolean" }
+      }
+    }
+  }
+}

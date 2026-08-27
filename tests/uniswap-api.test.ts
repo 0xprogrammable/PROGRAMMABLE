@@ -70,7 +70,7 @@ function adapterInput(
     side: "buy" as const,
     amountIn: 1_000n,
     slippageBps: 100,
-    deadline: 1_600n,
+    deadline: 1_300n,
     ...overrides,
   };
 }
@@ -89,7 +89,7 @@ function swapCalldata(overrides: {
     quotedAmountOut: 2_000n,
     slippageBps: 100,
     now: 1_000n,
-    deadline: overrides.deadline ?? 1_600n,
+    deadline: overrides.deadline ?? 1_300n,
   }).data;
   const decoded = decodeFunctionData({
     abi: classicUniversalRouterAbi,
@@ -248,7 +248,7 @@ describe("official Uniswap Trading API adapter", () => {
         amountOut: "2000",
         amountOutMinimum: "1980",
         slippageBps: 100,
-        deadline: "1600",
+        deadline: "1300",
         requestId: "quote-request",
       },
       transaction: {
@@ -297,7 +297,7 @@ describe("official Uniswap Trading API adapter", () => {
       refreshGasPrice: true,
       simulateTransaction: true,
       safetyMode: "SAFE",
-      deadline: 1600,
+      deadline: 1300,
     });
     expect(swapBody.quote).toEqual(quoteResponse().quote);
     expect(JSON.stringify(swapBody)).not.toContain(API_KEY);
@@ -362,7 +362,7 @@ describe("official Uniswap Trading API adapter", () => {
     {
       name: "calldata with a different deadline",
       quote: quoteResponse(),
-      swap: swapResponse({ data: swapCalldata({ deadline: 1_601n }) }),
+      swap: swapResponse({ data: swapCalldata({ deadline: 1_301n }) }),
     },
     {
       name: "calldata with a different safety recipient",

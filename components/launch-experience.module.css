@@ -895,6 +895,11 @@
   grid-template-columns: minmax(128px, 0.8fr) minmax(190px, 1.2fr);
 }
 
+.formPage :global(.classic-v3-amount-label small) {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .formPage :global(.classic-v3-custody) {
   align-content: start;
 }

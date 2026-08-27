@@ -585,6 +585,9 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
     }
 
     function _validateLaunch(LaunchParameters calldata parameters) private view {
+        // Reuse the hook's canonical fee validation before any token, vault, position or pool work.
+        feeHook.quoteGrossFees(0, parameters.buySwapFeeBps);
+        feeHook.quoteGrossFees(0, parameters.sellSwapFeeBps);
         // Fail closed before token/factory deployment; the pinned planner owns the preset-to-range mapping.
         positionPlanner.tickLowerForPreset(parameters.liquidityPreset);
         launchPolicy.validate(

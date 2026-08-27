@@ -14,6 +14,10 @@ import {
 } from "viem";
 
 import { computeOfficialV4PoolId } from "../uniswap/liquidity-launcher-sdk";
+import {
+  MAX_TRADE_SLIPPAGE_BPS,
+  TRADE_QUOTE_VALIDITY_SECONDS,
+} from "./policy";
 
 export const NATIVE_ETH =
   "0x0000000000000000000000000000000000000000" as Address;
@@ -21,13 +25,16 @@ export const CLASSIC_POOL_FEE = 0;
 export const CLASSIC_TICK_SPACING = 200;
 export const CLASSIC_MIN_DEADLINE_SECONDS = 60n;
 export const CLASSIC_MAX_DEADLINE_SECONDS = 3_600n;
-export const CLASSIC_PERMIT2_SAFETY_SECONDS = 600n;
+export const CLASSIC_DEADLINE_CLOCK_SKEW_SECONDS = 30n;
+export const CLASSIC_V4_MAX_DEADLINE_SECONDS =
+  BigInt(TRADE_QUOTE_VALIDITY_SECONDS) +
+  CLASSIC_DEADLINE_CLOCK_SKEW_SECONDS;
+export const CLASSIC_PERMIT2_SAFETY_SECONDS = 300n;
 export const CLASSIC_GAS_PRICE_BUFFER_BPS = 12_500n;
 
 const UINT128_MAX = (1n << 128n) - 1n;
 const UINT48_MAX = (1n << 48n) - 1n;
 const BPS_DENOMINATOR = 10_000n;
-const MAX_SLIPPAGE_BPS = 1_000;
 
 export const classicQuoterAbi = parseAbi([
   "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
@@ -252,7 +259,7 @@ export function amountOutMinimum(
   if (
     !Number.isInteger(slippageBps) ||
     slippageBps < 1 ||
-    slippageBps > MAX_SLIPPAGE_BPS
+    slippageBps > MAX_TRADE_SLIPPAGE_BPS
   ) {
     throw new ClassicTradeInputError(
       "Slippage must be an integer from 1 to 1000 basis points",
@@ -340,6 +347,18 @@ export function assertClassicDeadline(
   if (deadline > now + CLASSIC_MAX_DEADLINE_SECONDS) {
     throw new ClassicTradeInputError(
       "The deadline must be within 1 hour",
+    );
+  }
+}
+
+export function assertClassicV4Deadline(
+  now: bigint,
+  deadline: bigint,
+) {
+  assertClassicDeadline(now, deadline);
+  if (deadline > now + CLASSIC_V4_MAX_DEADLINE_SECONDS) {
+    throw new ClassicTradeInputError(
+      "The deadline must be within the 5 minute quote window",
     );
   }
 }
@@ -561,12 +580,7 @@ export function buildClassicPermit2ApprovalTransaction(input: {
     input.deployment,
   ).currency1;
   assertClassicDeadline(input.now, input.deadline);
-  const minimumUsefulExpiration =
-    input.now + CLASSIC_PERMIT2_SAFETY_SECONDS + 1n;
-  const expiration =
-    input.deadline > minimumUsefulExpiration
-      ? input.deadline
-      : minimumUsefulExpiration;
+  const expiration = input.deadline + CLASSIC_PERMIT2_SAFETY_SECONDS;
   if (expiration > UINT48_MAX) {
     throw new ClassicTradeInputError(
       "The Permit2 expiration exceeds the supported limit",

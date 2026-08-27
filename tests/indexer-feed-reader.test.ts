@@ -6,13 +6,15 @@ import { readIndexedFeedSnapshotWithModel } from "../app/api/indexers/v1/read-in
 import type { PostgresTransaction } from "../lib/data-pipeline/postgres";
 
 const NOW = Date.parse("2026-07-31T12:00:00.000Z");
-const RELEASES = [
+const BASE_RELEASES = [
   "classic-v2",
   "classic-v3",
   "stock-paired-v1",
   "stock-paired-v2",
   "stock-paired-v3",
 ] as const;
+const EXPANDED_RELEASES = [...BASE_RELEASES, "classic-v4"] as const;
+type ReleaseVersion = (typeof EXPANDED_RELEASES)[number];
 const BLOCK_HASH = `0x${"11".repeat(32)}`;
 const BLOCK_HASH_BYTEA = `\\x${"11".repeat(32)}`;
 const PUBLICATION = `0x${"22".repeat(32)}`;
@@ -23,12 +25,12 @@ function uuid(index: number) {
   return `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 }
 
-function modelFor(release: (typeof RELEASES)[number]) {
+function modelFor(release: ReleaseVersion) {
   return release.startsWith("classic-") ? "classic" : "stock-paired";
 }
 
 function releasePointer(
-  release: (typeof RELEASES)[number],
+  release: ReleaseVersion,
   index: number,
 ) {
   return {
@@ -49,7 +51,7 @@ function releasePointer(
 }
 
 function routeEvidence(
-  release: (typeof RELEASES)[number],
+  release: ReleaseVersion,
   index: number,
 ) {
   return {
@@ -64,9 +66,10 @@ function routeEvidence(
   };
 }
 
-function tokenSource() {
+function tokenSource(release: ReleaseVersion = "classic-v2") {
+  const index = EXPANDED_RELEASES.indexOf(release);
   return {
-    ...releasePointer("classic-v2", 0),
+    ...releasePointer(release, index),
     snapshotCommitment: BLOCK_HASH,
     projectionRunId: uuid(70),
     publicationCommitment: PUBLICATION,
@@ -75,9 +78,9 @@ function tokenSource() {
   };
 }
 
-function rawToken() {
+function rawToken(release: ReleaseVersion = "classic-v2") {
   return {
-    source: tokenSource(),
+    source: tokenSource(release),
     tokenAddress: "0x1111111111111111111111111111111111111111",
     hookAddress: "0x2222222222222222222222222222222222222222",
     poolId: `0x${"55".repeat(32)}`,
@@ -133,14 +136,23 @@ function rawToken() {
   };
 }
 
-function feedRow() {
-  const pointers = RELEASES.map(releasePointer);
-  const evidence = RELEASES.map(routeEvidence);
-  const token = rawToken();
+function feedRow(input: Readonly<{
+  releases?: readonly ReleaseVersion[];
+  tokenRelease?: ReleaseVersion;
+}> = {}) {
+  const releases = input.releases ?? BASE_RELEASES;
+  const tokenRelease = input.tokenRelease ?? "classic-v2";
+  if (!releases.includes(tokenRelease)) {
+    throw new Error("Test token release must be present in the feed scope");
+  }
+  const pointers = releases.map(releasePointer);
+  const evidence = releases.map(routeEvidence);
+  const token = rawToken(tokenRelease);
+  const parity = evidence[releases.indexOf(tokenRelease)]!;
   const source = {
     tokenAddress: token.tokenAddress,
     source: token.source,
-    parity: evidence[0],
+    parity,
   };
   const snapshot = {
     adapterVersion: "indexed-route-adapters-v2",
@@ -168,7 +180,7 @@ function feedRow() {
     payload_complete: true,
     record_count: "1",
     record_scopes: [
-      { model: "classic", releaseVersion: "classic-v2" },
+      { model: modelFor(tokenRelease), releaseVersion: tokenRelease },
     ],
     comparison_checkpoint_block_number: "100",
     comparison_checkpoint_block_hash: BLOCK_HASH_BYTEA,
@@ -210,7 +222,7 @@ function readModel(rows: readonly Record<string, unknown>[] = [feedRow()]) {
 }
 
 describe("indexed GMGN feed reader", () => {
-  it("reads the complete feed through one API-reader snapshot", async () => {
+  it("keeps the frozen Base-5 PG feed ready independently of Envio catalog promotion", async () => {
     const fixture = readModel();
 
     const result = await readIndexedFeedSnapshotWithModel(fixture.model, NOW);
@@ -222,7 +234,7 @@ describe("indexed GMGN feed reader", () => {
       capturedAt: "2026-07-31T11:59:00.000Z",
       reconciledAt: "2026-07-31T11:59:30.000Z",
       projectionLag: 2,
-      releaseVersions: RELEASES,
+      releaseVersions: BASE_RELEASES,
       snapshotCommitment: BLOCK_HASH,
       model: {
         status: "ready",
@@ -244,6 +256,41 @@ describe("indexed GMGN feed reader", () => {
       },
     });
     expect(result.sourceCommitment).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it("admits Classic V4 only with the explicit expanded readiness scope", async () => {
+    const row = feedRow({
+      releases: EXPANDED_RELEASES,
+      tokenRelease: "classic-v4",
+    });
+
+    const result = await readIndexedFeedSnapshotWithModel(
+      readModel([row]).model,
+      NOW,
+      { includeClassicV4: true },
+    );
+
+    expect(result.releaseVersions).toEqual(EXPANDED_RELEASES);
+    expect(result.model.tokens[0]).toMatchObject({
+      launchModel: "classic",
+      launchModelVersion: "classic-v4",
+    });
+  });
+
+  it("fails closed when the V4 catalog gate and PG readiness scope disagree", async () => {
+    await expect(readIndexedFeedSnapshotWithModel(
+      readModel([feedRow()]).model,
+      NOW,
+      { includeClassicV4: true },
+    )).rejects.toThrow("Indexed feed is not ready");
+
+    await expect(readIndexedFeedSnapshotWithModel(
+      readModel([feedRow({
+        releases: EXPANDED_RELEASES,
+        tokenRelease: "classic-v4",
+      })]).model,
+      NOW,
+    )).rejects.toThrow("Indexed feed is not ready");
   });
 
   it("retains canonical market fields needed for full-corpus sorting", async () => {
