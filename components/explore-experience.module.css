@@ -1223,6 +1223,16 @@
   width: 100% !important;
 }
 
+.runnerArtPreserved {
+  background: #321a2b;
+}
+
+.runnerImagePreserved {
+  background: transparent;
+  object-fit: contain;
+  object-position: center;
+}
+
 .runnerBody {
   min-height: 118px;
   padding: 18px 18px 14px;

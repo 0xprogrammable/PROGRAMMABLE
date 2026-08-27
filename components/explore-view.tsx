@@ -90,6 +90,11 @@ type TokenCard = {
   partnerAttribution?: LaunchPartnerAttributionV1;
 };
 
+const EXPLORE_CARD_IMAGE_SIZES =
+  "(max-width: 520px) calc((100vw - 38px) / 2), (max-width: 900px) calc((100vw - 48px) / 2), (max-width: 1280px) calc((100vw - 88px) / 3), 416px";
+const SHARD_ORIGINAL_ARTWORK_SOURCE =
+  "/brand/projects/shard-token-v1.png";
+
 export function exploreMarketStatusLabel(
   entry: ExploreEntry | ValuedExploreEntry,
 ): ExploreMarketStatus | undefined {
@@ -2955,22 +2960,35 @@ export function ExploreView({
             ? `/token/${token.tokenAddress}`
             : null;
           const imageSource = getTokenCardImageSource(token.imageUrl);
+          const preserveArtworkAspectRatio =
+            imageSource === SHARD_ORIGINAL_ARTWORK_SOURCE;
           const valuationLabel = token.valuation
             ? formatMarketCapMetric(token.valuation)
             : null;
           const eagerImage = !embedded && index < Math.min(pageSize, 4);
           const cardContent = (
             <>
-              <div className={styles.runnerArt}>
+              <div
+                className={`${styles.runnerArt} ${
+                  preserveArtworkAspectRatio ? styles.runnerArtPreserved : ""
+                }`}
+              >
                 <Image
-                  className={styles.runnerImage}
+                  className={`${styles.runnerImage} ${
+                    preserveArtworkAspectRatio
+                      ? styles.runnerImagePreserved
+                      : ""
+                  }`}
                   src={imageSource}
                   alt={token.usesFallbackImage ? "" : `${token.name} artwork`}
                   fill
                   loading={eagerImage ? "eager" : "lazy"}
                   priority={eagerImage}
-                  sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"
-                  unoptimized={!canOptimizeTokenImage(imageSource)}
+                  sizes={EXPLORE_CARD_IMAGE_SIZES}
+                  unoptimized={
+                    preserveArtworkAspectRatio ||
+                    !canOptimizeTokenImage(imageSource)
+                  }
                   referrerPolicy="no-referrer"
                   draggable={false}
                   onError={(event) => {
