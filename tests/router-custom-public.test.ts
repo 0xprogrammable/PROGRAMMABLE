@@ -3,9 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
+  blobGet: vi.fn(),
+  blobPut: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
   readAlchemyRouterCustomIdentitySourceV1: vi.fn(),
   enrichRouterCustomSnapshotWithFinalizedMetadataV1: vi.fn(),
+}));
+
+vi.mock("@vercel/blob", () => ({
+  get: mocks.blobGet,
+  put: mocks.blobPut,
 }));
 
 vi.mock("../lib/alchemy/explore.server", () => ({
@@ -28,6 +35,7 @@ import {
   mergeRouterCustomCreatorProfileV1,
   mergeRouterCustomExploreEntriesV1,
   normalizeRouterCustomSnapshotBlobEtagV1,
+  persistRouterCustomIdentitySnapshotFromSourceV1,
   publicLaunchSourceV1,
   readFinalizedRouterCustomExploreEntriesV1,
   ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS,
@@ -131,6 +139,7 @@ function profile(blockNumber = "25740000"): CreatorProfile {
 describe("finalized Router Custom public projection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     mocks.readAlchemyExploreModel.mockResolvedValue(model());
     mocks.readAlchemyRouterCustomIdentitySourceV1.mockResolvedValue(source());
     mocks.enrichRouterCustomSnapshotWithFinalizedMetadataV1
@@ -320,6 +329,85 @@ describe("finalized Router Custom public projection", () => {
       asOfBlock: "25740001",
       entries: [customGraphExploreEntry],
     });
+  });
+
+  it("keeps one durable boundary when only finality observation fields drift", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const reobservedSource = source([
+      {
+        ...customGraphToken,
+        launchStampProvenance: {
+          ...customGraphToken.launchStampProvenance!,
+          finalizedAtBlockNumber: "25740123",
+          finalizedAtBlockHash: `0x${"df".repeat(32)}` as `0x${string}`,
+        },
+      },
+      stampedClassicToken,
+    ]);
+    const reobserved = routerCustomIdentitySnapshotFromSourceV1(
+      reobservedSource,
+    );
+    const persistDurableSnapshot = vi.fn().mockResolvedValue(undefined);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"),
+      readCurrentSource: vi.fn().mockResolvedValue(reobservedSource),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot,
+    });
+
+    expect(reobserved.identityCommitment).not.toBe(durable.identityCommitment);
+    expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+      durable,
+      reobserved,
+    )).toBe(true);
+    expect(routerCustomSnapshotPreservesFinalizedIdentitiesV1(
+      reobserved,
+      durable,
+    )).toBe(true);
+    await expect(reader()).resolves.toMatchObject({
+      status: "last-known-good",
+      identityCommitment: durable.identityCommitment,
+      entries: [customGraphExploreEntry],
+    });
+    expect(persistDurableSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite the durable Blob for observation-only same-block drift", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const reobservedSource = source([
+      {
+        ...customGraphToken,
+        launchStampProvenance: {
+          ...customGraphToken.launchStampProvenance!,
+          finalizedAtBlockNumber: "25740123",
+          finalizedAtBlockHash: `0x${"df".repeat(32)}` as `0x${string}`,
+        },
+      },
+      stampedClassicToken,
+    ]);
+    const body = JSON.stringify({
+      schemaVersion:
+        "programmable.router-custom-identity-snapshot-envelope.v1",
+      binding: LAUNCH_STAMP_ROUTER_BINDING,
+      snapshot: durable,
+    });
+    mocks.blobGet.mockResolvedValue({
+      statusCode: 200,
+      stream: new Response(body).body,
+      blob: {
+        size: Buffer.byteLength(body, "utf8"),
+        etag: `W/"${"ab".repeat(16)}"`,
+      },
+    });
+    vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test");
+
+    await expect(
+      persistRouterCustomIdentitySnapshotFromSourceV1(reobservedSource),
+    ).resolves.toMatchObject({
+      asOfBlock: durable.asOfBlock,
+    });
+    expect(mocks.blobGet).toHaveBeenCalledOnce();
+    expect(mocks.blobPut).not.toHaveBeenCalled();
   });
 
   it("accepts a newer boundary only when every finalized identity is unchanged", () => {
