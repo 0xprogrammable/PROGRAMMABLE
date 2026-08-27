@@ -154,11 +154,11 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.3.3",
+        cliReleaseVersion: "3.3.4",
         cliChecksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
         cliTarballSha256:
-          "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+          "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",

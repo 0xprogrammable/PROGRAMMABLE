@@ -110,15 +110,15 @@ export function programmableWellKnownDocumentV1(
       cli: Object.freeze({
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.3",
+        releaseVersion: "3.3.4",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.3",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.4",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
         tarballSha256:
-          "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+          "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
       }),
       compatibility: Object.freeze({
         v1: Object.freeze({
@@ -143,15 +143,15 @@ export function programmableWellKnownDocumentV1(
         cli: Object.freeze({
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.3.3",
+          releaseVersion: "3.3.4",
           releaseUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.3",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.4",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
           tarballSha256:
-            "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+            "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
         }),
       }),
       generalHookProfile: Object.freeze({
@@ -173,7 +173,7 @@ export function programmableWellKnownDocumentV1(
         finalizedMetadataPath: "/v3/finalized-custom-launches" as const,
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.3.3" as const,
+        cliReleaseVersion: "3.3.4" as const,
         projectMetadata: Object.freeze({
           schemaVersion: "programmable.project-metadata.v1" as const,
           inputSchemaVersion:
@@ -308,17 +308,21 @@ export function programmableWellKnownDocumentV1(
         errorCode: null,
       }),
       releaseCandidate: Object.freeze({
-        status: "candidate-unpublished" as const,
+        status: "promoted-to-public" as const,
         publicAuthorization: true as const,
-        artifactPublished: false as const,
+        artifactPublished: true as const,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
         releaseVersion: "3.3.4",
         releaseTag: "programmable-launch-v3.3.4",
-        releaseUrl: null,
-        tarballUrl: null,
-        checksumUrl: null,
-        tarballSha256: null,
+        releaseUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.4",
+        tarballUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
+        checksumUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
+        tarballSha256:
+          "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({

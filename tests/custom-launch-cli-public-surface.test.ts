@@ -35,13 +35,13 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.3",
+        releaseVersion: "3.3.4",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
         tarballSha256:
-          "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+          "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
       },
       compatibility: {
         v1: {
@@ -62,13 +62,13 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.3.3",
+          releaseVersion: "3.3.4",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
           tarballSha256:
-            "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+            "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
         },
       },
       generalHookProfile: {
@@ -85,7 +85,7 @@ describe("public Custom Launch CLI surface", () => {
         preflightPath: "/v3/custom-launches/preflight",
         finalizedMetadataPath: "/v3/finalized-custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.3.3",
+        cliReleaseVersion: "3.3.4",
         admissionPolicy: {
           manualProjectAllowlist: false,
           hardBlockFindingRules: [
@@ -151,17 +151,21 @@ describe("public Custom Launch CLI surface", () => {
         errorCode: null,
       },
       releaseCandidate: {
-        status: "candidate-unpublished",
+        status: "promoted-to-public",
         publicAuthorization: true,
-        artifactPublished: false,
+        artifactPublished: true,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
         releaseVersion: "3.3.4",
         releaseTag: "programmable-launch-v3.3.4",
-        releaseUrl: null,
-        tarballUrl: null,
-        checksumUrl: null,
-        tarballSha256: null,
+        releaseUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.4",
+        tarballUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
+        checksumUrl:
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
+        tarballSha256:
+          "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -227,7 +231,7 @@ describe("public Custom Launch CLI surface", () => {
     expect(JSON.stringify(document)).not.toContain("prelaunch");
   });
 
-  it("packs candidate bytes without claiming an unpublished release digest", () => {
+  it("reproduces the published CLI release digest from the exact source tree", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "programmable-launch-release-"));
     try {
       execFileSync("npm", [
@@ -248,11 +252,13 @@ describe("public Custom Launch CLI surface", () => {
       expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/u);
       expect(tarball.byteLength).toBeGreaterThan(0);
       expect(document.customLaunchApi.releaseCandidate).toMatchObject({
-        artifactPublished: false,
+        status: "promoted-to-public",
+        artifactPublished: true,
         releaseVersion: "3.3.4",
-        tarballSha256: null,
+        tarballSha256:
+          "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
       });
-      expect(digest).not.toBe(document.customLaunchApi.cli.tarballSha256);
+      expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

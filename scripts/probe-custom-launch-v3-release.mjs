@@ -20,13 +20,13 @@ const HARD_BLOCK_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
 ]);
 const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
-  version: "3.3.3",
+  version: "3.3.4",
   tarballUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
   checksumUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
   tarballSha256:
-    "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+    "sha256:c376157a2812d640e041367a562580189d184cd425df1b27b10c235799f8720d",
 });
 
 function canonicalize(value) {
@@ -182,7 +182,7 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.3.3"
+    openApi?.info?.version !== "3.3.4"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
     || openApi?.["x-programmable-profile"]?.profileVersion !== "3.2.0"

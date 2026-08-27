@@ -185,6 +185,28 @@ test("backend binding schema pairs current 3.2 and compatible 3.1/3.0/2.0 eviden
   assert.match(current.api.publicProfilePath, /admission-profile\.v3\.json$/u);
   assert.match(current.database.lastMigration, /0011_custom_launch_project_metadata_v3/u);
 
+  const reliability = clone(current);
+  reliability.database.lastMigration =
+    "migrations/0012_custom_launch_api_reliability_v1.sql";
+  const reliabilityBytes = Buffer.from(`${JSON.stringify(reliability, null, 2)}\n`);
+  assert.equal(
+    parseDeterministicCustomLaunchApiReleaseBindingV1(reliabilityBytes)
+      .database.lastMigration,
+    "migrations/0012_custom_launch_api_reliability_v1.sql",
+  );
+
+  const unknownMigration = clone(current);
+  unknownMigration.database.lastMigration = "migrations/0013_unknown.sql";
+  const unknownMigrationBytes = Buffer.from(
+    `${JSON.stringify(unknownMigration, null, 2)}\n`,
+  );
+  assert.throws(
+    () => parseDeterministicCustomLaunchApiReleaseBindingV1(
+      unknownMigrationBytes,
+    ),
+    /binding schema is invalid/u,
+  );
+
   const prior = clone(current);
   prior.api.profileVersion = "3.1.0";
   prior.database.lastMigration =
@@ -472,7 +494,7 @@ test("Fly readback accepts the real tag-only release ref and exact machine diges
 test("stage probe is GET-only and returns redacted no-broadcast evidence", async () => {
   const { observation } = await stagingFixture();
   const openApi = {
-    info: { version: "3.3.3" },
+    info: { version: "3.3.4" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileVersion: "3.2.0",
@@ -531,15 +553,15 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
   const launchTarballBytes = Buffer.from("fixture programmable launch package", "utf8");
   const launchTarballSha256 = digest(launchTarballBytes);
   const expectedLaunchPackageRelease = {
-    version: "3.3.3",
+    version: "3.3.4",
     tarballUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz",
     checksumUrl:
-      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
+      "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256",
     tarballSha256: launchTarballSha256,
   };
   const launchChecksumBytes = Buffer.from(
-    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.3.3.tgz\n`,
+    `${launchTarballSha256.slice("sha256:".length)}  programmable-launch-3.3.4.tgz\n`,
     "utf8",
   );
   let launchTarballBody = launchTarballBytes;
@@ -683,7 +705,7 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     calls.find(({ url }) => url.includes("/v3/custom-launches?limit=1"))?.authorization,
     "Bearer canary-secret-value",
   );
-  assert.equal(evidence.website.cli.releaseVersion, "3.3.3");
+  assert.equal(evidence.website.cli.releaseVersion, "3.3.4");
   assert.equal(evidence.website.cli.tarballSha256, launchTarballSha256);
   assert.equal(evidence.api.capabilitiesStatus, 200);
   assert.equal(evidence.api.capabilitiesSchemaVersion,
