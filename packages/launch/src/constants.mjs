@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "3.3.5";
+export const PACKAGE_VERSION = "3.3.6";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -56,7 +56,8 @@ export const DIRECT_NATIVE_PROFILE_REVISION = DIRECT_NATIVE_PROFILE_REVISION_V3;
 export const DIRECT_NATIVE_PROFILE_VERSION_V2 = "2.0.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY = "3.0.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA = "3.1.0";
-export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.2.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY = "3.2.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.3.0";
 export const DIRECT_NATIVE_PROFILE_VERSION = DIRECT_NATIVE_PROFILE_VERSION_V3;
 export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2 =
   "programmable.direct-native-hook-graph-profile.v2";
@@ -118,6 +119,14 @@ export const CREATE_PATH = CREATE_PATH_V3;
 export const CAPABILITIES_PATH_V3 = "/v3/capabilities";
 export const PREFLIGHT_PATH_V3 = "/v3/custom-launches/preflight";
 export const PREFLIGHT_SCHEMA_V1 = "programmable.custom-launch-preflight.v1";
+export const PERMIT_REISSUE_PATH_TEMPLATE_V3 =
+  "/v3/custom-launches/{launchId}/permit-reissues";
+export const PERMIT_REISSUE_REQUEST_SCHEMA_V1 =
+  "programmable.custom-launch-permit-reissue-request.v1";
+export const PERMIT_REISSUE_CAPABILITY_SCHEMA_V1 =
+  "programmable.custom-launch-permit-reissue-capability.v1";
+export const PERMIT_REISSUE_DISPOSITION_SCHEMA_V1 =
+  "programmable.custom-launch-permit-reissue-disposition.v1";
 export const READY_PATH = "/readyz";
 export const OPENAPI_URL_V1 = "https://programmable.market/openapi/custom-launch-v1.json";
 export const OPENAPI_URL_V2 = "https://programmable.market/openapi/custom-launch-v2.json";
@@ -135,8 +144,8 @@ export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.3.5";
-export const RELEASE_TARBALL = "programmable-launch-3.3.5.tgz";
+export const RELEASE_TAG = "programmable-launch-v3.3.6";
+export const RELEASE_TARBALL = "programmable-launch-3.3.6.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =

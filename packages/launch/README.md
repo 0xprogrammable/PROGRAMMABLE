@@ -8,16 +8,16 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.5.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.5.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.5.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.5.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.3.5`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.3.6`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
 The release includes `npm-shrinkwrap.json` so the runtime dependency closure is integrity-pinned. Release operators
@@ -41,9 +41,10 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-Package `3.3.5` supports production general profile
-`programmable.direct-native-hook-graph.v1` version `3.2.0`. New packs use metadata-bound `3.2.0`; exact metadata-absent
-`3.1.0` and `3.0.0` requests remain reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
+Package `3.3.6` supports production general profile
+`programmable.direct-native-hook-graph.v1` version `3.3.0`. New packs use complete-metadata `3.3.0`; exact `3.2.0`
+requests retain their original permissive metadata semantics, while metadata-absent `3.1.0`, `3.0.0`, and `2.0.0`
+requests remain reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
 
 The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook
@@ -178,7 +179,7 @@ The top-level fields are:
 - `launchProfile`: target roles, liquidity model, funding mode, fee accounting and claim binding
 - `agentAttestation`: stable agent ID, explicit millisecond UTC `checkedAt`, and checks that point to exact evidence files
 
-Current profile `3.2.0` requires this exact public metadata input. Ask the project owner for these values; do not invent
+Current profile `3.3.0` requires this exact public metadata input. Ask the project owner for these values; do not invent
 them and do not hand-write either derived hash:
 
 ```json
@@ -189,7 +190,7 @@ them and do not hand-write either derived hash:
     "symbol": "HOOK"
   },
   "presentation": {
-    "description": "What the project does",
+    "description": "Example Hook adds project-defined swap behavior for its token.",
     "image": {
       "sourcePath": "assets/token.png",
       "uri": "https://example.org/token.png"
@@ -203,12 +204,12 @@ them and do not hand-write either derived hash:
 ```
 
 `token.name` is 1–64 UTF-8 bytes and `token.symbol` is 1–16 UTF-8 bytes. Both are NFC, already trimmed public
-text; the symbol contains no whitespace. `presentation.description` is present even when it is the empty string.
-`presentation.image` is either `null` or a local PNG, JPEG, WebP or GIF of at most 20 MiB and 8192 pixels per
-dimension paired with its canonical public URI. HTTPS image URIs have no credentials, query or fragment; canonical
-`ipfs://<CID>` and `ar://<transaction-id>` are also accepted. `links` is present even when empty and contains at most
-32 public canonical HTTPS entries of kind `website`, `documentation`, `x`, `telegram`, `discord`, `github`, or
-`other`. The packer sorts links and hashes and adds non-null local image bytes to the source manifest.
+text; the symbol contains no whitespace. `presentation.description` must contain 20–4,096 UTF-8 bytes and at least
+eight Unicode letters or numbers. `presentation.image` must name a non-empty local PNG, JPEG, WebP, or GIF of at most
+20 MiB and 8192 pixels per dimension plus its canonical public URI. The packer derives and binds the exact SHA-256,
+byte length, media type, dimensions, and source-manifest file entry; it never invents or uploads an image. `links`
+must contain exactly one credential-free public HTTPS `website` and exactly one canonical X profile matching
+`https://x.com/<handle>`. Up to 30 `documentation`, `telegram`, `discord`, `github`, or `other` HTTPS links are optional.
 
 Use a stable content URI. For an HTTPS image, enable browser-readable CORS so the wallet review can fetch the raw
 bytes and verify SHA-256, byte length, media type and dimensions before rendering. IPFS and Arweave use the website's
@@ -227,8 +228,8 @@ truth; it never silently rewrites the owner's declaration.
 The launch identity uses a metadata-bound `graphBundleHash`: SHA-256 of UTF-8
 `programmable.custom-graph-project-metadata.v1`, one NUL byte, and JCS
 `{graphBundleHash:<unbound graph SHA-256>,projectMetadataHash}`. The receipt exposes both hashes so the website wallet
-review and finalized public read model can verify the same identity. Exact legacy profile `3.1.0` and `3.0.0` retries preserve
-their original unbound graph hash and omit metadata rather than inventing it.
+review and finalized public read model can verify the same identity. Exact legacy `3.2.0` retries preserve their original
+metadata rules. Exact `3.1.0`, `3.0.0`, and `2.0.0` retries omit metadata rather than inventing it.
 
 Each target has exactly `targetId`, `compilationUnitId`, `artifact`, `applicantSalt`, `constructorArguments`,
 `initializer`, `deploymentValueWei`, `initializerValueWei`, `componentKind`, `declaredHookPermissions`, and
@@ -259,7 +260,7 @@ For new requests the patch input contains exactly `targetId`, `nonceArgumentPath
 and `vArgumentPath`. Each path is a non-empty array of zero-based ABI indices: its first index selects a top-level
 initializer input and later indices descend only static tuples or fixed-size static arrays. The four distinct zero
 leaves must resolve to `bytes32`, `bytes32`, `bytes32`, and `uint8`. The CLI derives and proves them from the compiled
-ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.5
+ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.6
 schema. Legacy r/s/v-only v1 descriptors remain readable for exact retries and emit
 `FUNDING_SIGNATURE_PATCH_V1_LEGACY`, but new integrations must use v2.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
@@ -330,6 +331,16 @@ before the first network call. State defaults to the OS application state direct
 
 The API key is never written to the journal or output. For support, send only the response `requestId`, HTTP status,
 UTC time, and the public error code. Never send the API key.
+
+Wallet keys, partner root keys, and bounded partner subkeys all use the same `PROGRAMMABLE_API_KEY`, CLI commands, and
+V3 endpoints. Launch operations use `custom-launch:create` and reads use `custom-launch:read`; only a root partner key
+may hold `partner-subkeys:manage`. The controller wallet still owns the launch and separately signs and broadcasts.
+When a partner credential is used, the server may return immutable `partnerAttribution`; callers cannot supply or
+override it. “Launched via” is provenance only, never verification, a safety mark, endorsement, or an economic category.
+
+For a failed, unconsumed `PERMIT_EXPIRED` launch, the Router V1 permit-reissue endpoint returns a typed `409`; this
+release defines no `2xx` reissue response and reserves no replacement nonce or permit. Repack and submit a new launch
+request with a fresh nonce and new Idempotency-Key. All fee and security gates run again and predicted addresses may change.
 
 API errors retain the server's structured `error.details` on `ProgrammableApiError.details.serverDetails` for
 programmatic diagnosis and expose validated `programmable.custom-launch-remediation.v1` objects separately. CLI

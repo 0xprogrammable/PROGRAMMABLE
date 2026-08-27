@@ -80,8 +80,8 @@ of `external-concentrated-liquidity`, `launch-seeded-concentrated-liquidity` or
 The versioned [`programmable.direct-native-hook-graph.v1` OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 defines the live create, list and single-resource shapes. The default profile uses
 `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
-`profileVersion: 3.2.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact metadata-absent `3.1.0` and `3.0.0` requests remain readable and
+`profileVersion: 3.3.0`; its selection binding uses
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Exact `3.2.0` requests retain their original metadata rules; metadata-absent `3.1.0` and `3.0.0` requests remain readable and
 byte-identical retryable under their original immutable policy; revision 2 also remains a compatible profile contract
 for existing clients and resources. Discovery reports `productionLaunchAuthorized: true`. Do not fall back
 to a different create version.
@@ -213,16 +213,16 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.5.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.5.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.5.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.5.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.5`.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.6`.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
 matching solc artifacts. Its generated evidence is limited to `pre-submit`. The deterministic permission salt grind
@@ -325,7 +325,7 @@ are:
 | `sourceDescriptor` | One `DeterministicSourceBundleV2` descriptor |
 | `sourceBundleManifest` | One complete, non-empty, UTF-8 path-sorted manifest |
 | `graphBundle` | One executable `CustomGraphBundleV1` |
-| `projectMetadata` | Canonical token declaration and presentation, required by current profile `3.2.0` |
+| `projectMetadata` | Canonical token declaration and presentation, required by current profile `3.3.0` |
 | `projectMetadataHash` | Domain-framed SHA-256 bound into the graph hash and launch identity |
 | `agentAttestation` | One self-attestation for the exact graph subject |
 | `permitWindow` | The exact bounded Router permit window |
@@ -337,8 +337,9 @@ are:
 
 The pack config asks explicitly for `token.name`, `token.symbol`, `presentation.description`,
 `presentation.image`, and `presentation.links`. Name and symbol are owner-supplied canonical public text bounded to 64
-and 16 UTF-8 bytes. Image is either an explicit `null` or exact local PNG/JPEG/WebP/GIF bytes paired with a canonical
-public HTTPS, `ipfs://`, or `ar://` URI; links are at most 32 canonical public HTTPS entries. The packer includes image
+and 16 UTF-8 bytes. Profile `3.3.0` requires a useful description (20–4,096 UTF-8 bytes and at least eight Unicode
+letters or numbers), exact non-empty local PNG/JPEG/WebP/GIF bytes, one public HTTPS website and one canonical
+`https://x.com/<handle>` profile. Other links are optional. The packer includes image
 bytes in the source manifest, sorts links and derives `projectMetadata`, `projectMetadataHash` and the metadata-bound
 `graphBundleHash`. It statically compares an unambiguous constructor or initializer name/symbol argument when one
 exists, without forcing arbitrary tokens into a specific constructor. Finalized launches expose the declaration plus
@@ -348,6 +349,61 @@ Use a stable content URI and enable browser-readable CORS for HTTPS image bytes.
 against the bound SHA-256, length, media type and dimensions before rendering; IPFS and Arweave use fixed public
 gateways. If the bytes cannot be read or do not match, the review uses the digest and a placeholder. It never uploads
 or substitutes content, mutates the launch, or signs automatically.
+
+Wallet and partner root/subkeys use the same `PROGRAMMABLE_API_KEY`, CLI, and V3 routes. Partner attribution is
+snapshotted by the server from the authenticated credential and cannot be supplied in the create body. It is a
+“Launched via” provenance label only, not verification, safety, endorsement, or an economic category. The controller
+wallet still signs and broadcasts. Router V1 permit reissue has no successful response; expired permits require a new
+pack and request with a fresh nonce and Idempotency-Key, and predicted addresses may change.
+
+### Manage partner subkeys
+
+A partner root with `partner-subkeys:manage` may create bounded child credentials through the public API. The root uses
+the same encrypted `PROGRAMMABLE_API_KEY` environment variable as the launch CLI. A child may hold only
+`custom-launch:create` and/or `custom-launch:read`; its budgets and expiry cannot exceed the authenticated root. Wallet
+keys and child subkeys cannot manage other credentials. Partner creation, root issuance, suspension, and other admin
+routes are private platform operations and are not part of the public OpenAPI.
+
+List child metadata without exposing any secret:
+
+```sh
+curl --fail-with-body \
+  --header "Authorization: Bearer $PROGRAMMABLE_API_KEY" \
+  https://api.programmable.market/v1/partner/subkeys
+```
+
+Create `partner-subkey.json` with the exact closed body, then preserve the same file and
+`$PROGRAMMABLE_IDEMPOTENCY_KEY` for an ambiguous retry:
+
+```json
+{
+  "schemaVersion": "programmable.partner-subkey-request.v1",
+  "displayName": "Production launches",
+  "scopes": ["custom-launch:create", "custom-launch:read"],
+  "budgets": {
+    "prepareRequestsPerHour": 100,
+    "readRequestsPerMinute": 300
+  },
+  "expiresAt": "2026-12-31T23:59:59.000Z"
+}
+```
+
+```sh
+curl --fail-with-body \
+  --request POST \
+  --header "Authorization: Bearer $PROGRAMMABLE_API_KEY" \
+  --header "Content-Type: application/json" \
+  --header "Idempotency-Key: $PROGRAMMABLE_IDEMPOTENCY_KEY" \
+  --data-binary @partner-subkey.json \
+  https://api.programmable.market/v1/partner/subkeys
+```
+
+The first committed issue or rotation returns `201`, `secretState: delivered-once`, and the one-time `apiKey`. Move it
+directly into the child's encrypted `PROGRAMMABLE_API_KEY`; do not put it in chat, source, logs, screenshots, or a URL.
+An exact replay returns `200`, `secretState: already-delivered`, and `apiKey: null`. Rotation uses
+`POST /v1/partner/subkeys/{subkeyId}/rotate` with the same body and idempotency contract. Revocation uses
+`DELETE /v1/partner/subkeys/{subkeyId}` and returns `revoked` or `already_revoked`. On `429`, honor `Retry-After` and
+retry only the same operation. Error bodies contain a support `requestId`; a bounded `500` never contains a secret.
 
 `verificationBundle` is required in V3. Its compilation units
 are uniquely UTF-8 sorted by `compilationUnitId`; its components are uniquely UTF-8 sorted by `targetId` and exactly

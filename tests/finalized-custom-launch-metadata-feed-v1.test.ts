@@ -21,6 +21,21 @@ const METADATA_OVERLAY_SCHEMA =
   "programmable.router-custom-metadata-overlay.v1";
 const SYNTHETIC_PROGRAMMABLE_API_KEY =
   `pm_live_${"a".repeat(22)}_${"b".repeat(43)}`;
+const PARTNER_ATTRIBUTION_SNAPSHOT = Object.freeze({
+  schemaVersion: "programmable.launch-partner-attribution.v1" as const,
+  partnerId: "018f3e2a-7b4c-7d5e-8f90-123456789abc",
+  name: "Partner Studio",
+  website: "https://partner.example/",
+  attributionSource: "authenticated-partner-api-key" as const,
+  attributionVersion: 1 as const,
+});
+const PARTNER_ATTRIBUTION = Object.freeze({
+  ...PARTNER_ATTRIBUTION_SNAPSHOT,
+  snapshotDigest: canonicalSha256(
+    "programmable.launch-partner-attribution.v1",
+    PARTNER_ATTRIBUTION_SNAPSHOT,
+  ),
+});
 
 function hex32(byte: string) {
   return `0x${byte.repeat(32)}` as `0x${string}`;
@@ -129,6 +144,7 @@ type LaunchFixtureOptions = Readonly<{
   observedAt?: string | null;
   standardReadModel?: Readonly<{ name: boolean; symbol: boolean }>;
   imageUri?: string;
+  partnerAttribution?: typeof PARTNER_ATTRIBUTION;
 }>;
 
 function launchFixture(input: LaunchFixtureOptions = {}) {
@@ -172,6 +188,9 @@ function launchFixture(input: LaunchFixtureOptions = {}) {
     poolId: customGraphExploreEntry.poolId,
     projectMetadata: metadata,
     projectMetadataHash,
+    ...(input.partnerAttribution
+      ? { partnerAttribution: input.partnerAttribution }
+      : {}),
     bindings: {
       requestHash: digest("33"),
       launchIntentHash: digest("34"),
@@ -295,6 +314,49 @@ afterEach(() => {
 });
 
 describe("finalized Custom launch metadata feed v1", () => {
+  it("binds immutable partner attribution into the public Router overlay", async () => {
+    const feed = await parsedFeed(launchFixture({
+      partnerAttribution: PARTNER_ATTRIBUTION,
+    }));
+    const result = await enrichRouterCustomSnapshotWithFinalizedMetadataV1(
+      routerSnapshot(),
+      { readFeed: async () => feed },
+    );
+    expect(feed.launches[0]?.partnerAttribution).toEqual(PARTNER_ATTRIBUTION);
+    expect((result.entries[0] as typeof result.entries[number] & {
+      partnerAttribution?: typeof PARTNER_ATTRIBUTION;
+    })?.partnerAttribution).toEqual(PARTNER_ATTRIBUTION);
+    expect((result as typeof result & {
+      metadataOverlay?: { appliedBindings: readonly Record<string, unknown>[] };
+    }).metadataOverlay?.appliedBindings[0]?.partnerAttribution).toEqual(
+      PARTNER_ATTRIBUTION,
+    );
+  });
+
+  it("rejects caller-shaped partner attribution instead of projecting it", async () => {
+    await expect(parsedFeed({
+      ...launchFixture(),
+      partnerAttribution: {
+        ...PARTNER_ATTRIBUTION,
+        attributionSource: "request-body",
+      },
+    } as unknown as ReturnType<typeof launchFixture>)).rejects.toThrow(
+      "partner attribution is invalid",
+    );
+  });
+
+  it("rejects altered partner attribution with a stale snapshot digest", async () => {
+    await expect(parsedFeed({
+      ...launchFixture(),
+      partnerAttribution: {
+        ...PARTNER_ATTRIBUTION,
+        name: "Altered partner",
+      },
+    } as unknown as ReturnType<typeof launchFixture>)).rejects.toThrow(
+      "partner attribution digest is invalid",
+    );
+  });
+
   it("strictly parses and hash-binds every page of the finalized inventory", async () => {
     const first = launchFixture();
     const second = launchFixture({

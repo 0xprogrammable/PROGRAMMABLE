@@ -20,13 +20,13 @@ const HARD_BLOCK_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
 ]);
 const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
-  version: "3.3.5",
+  version: "3.3.6",
   tarballUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz",
   checksumUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.5/programmable-launch-3.3.5.tgz.sha256",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
   tarballSha256:
-    "sha256:d9df0c0bb4d492d0303bc849ea74b2a337dc5aef217c954192ad5c14576039ca",
+    "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25",
 });
 
 function canonicalize(value) {
@@ -182,12 +182,17 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.3.5"
+    openApi?.info?.version !== "3.3.6"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
-    || openApi?.["x-programmable-profile"]?.profileVersion !== "3.2.0"
+    || openApi?.["x-programmable-profile"]?.profileVersion !== "3.3.0"
     || canonicalize(openApi?.["x-programmable-profile"]
-      ?.compatibleProfileVersions) !== canonicalize(["3.1.0", "3.0.0"])
+      ?.compatibleProfileVersions) !== canonicalize([
+      "3.2.0",
+      "3.1.0",
+      "3.0.0",
+      "2.0.0",
+    ])
     || openApi?.["x-programmable-profile"]?.profileRevision !== 3
     || openApi?.["x-programmable-profile"]?.productionLaunchAuthorized !== true
     || openApi?.["x-programmable-profile"]?.platformAdmissionReceiptRequired !== true
@@ -195,9 +200,14 @@ export async function probeCustomLaunchV3Release(input) {
     || openApi?.["x-programmable-profile"]?.safetyClaim !== false
     || openApi?.["x-programmable-profile"]?.feeBehaviorClaim !== false
     || openApi?.["x-programmable-admission-policy"]?.currentProfileVersion
-      !== "3.2.0"
+      !== "3.3.0"
     || canonicalize(openApi?.["x-programmable-admission-policy"]
-      ?.legacyExactProfileVersions) !== canonicalize(["3.1.0", "3.0.0"])
+      ?.legacyExactProfileVersions) !== canonicalize([
+      "3.2.0",
+      "3.1.0",
+      "3.0.0",
+      "2.0.0",
+    ])
     || openApi?.["x-programmable-admission-policy"]?.manualProjectAllowlist !== false
     || canonicalize(openApi?.["x-programmable-admission-policy"]
       ?.hardBlockFindingRules) !== canonicalize(HARD_BLOCK_FINDING_RULES)
@@ -310,7 +320,7 @@ export async function probeCustomLaunchV3Release(input) {
     || capabilities?.profile?.profileId
       !== "programmable.direct-native-hook-graph.v1"
     || capabilities?.profile?.profileRevision !== 3
-    || capabilities?.profile?.profileVersion !== "3.2.0"
+    || capabilities?.profile?.profileVersion !== "3.3.0"
     || capabilities?.profile?.productionLaunchAuthorized !== true
     || capabilities?.routes?.capabilities !== "/v3/capabilities"
     || capabilities?.routes?.preflight !== "/v3/custom-launches/preflight"
@@ -321,8 +331,35 @@ export async function probeCustomLaunchV3Release(input) {
     || canonicalize(capabilities?.projectMetadata) !== canonicalize({
       schemaVersion: "programmable.project-metadata.v1",
       inputSchemaVersion: "programmable.project-metadata-input.v1",
-      requiredForProfileVersion: "3.2.0",
+      requiredForProfileVersion: "3.3.0",
+      requiredForProfileVersions: ["3.2.0", "3.3.0"],
+      strictNewPackPolicyProfileVersion: "3.3.0",
+      enforcement: {
+        routes: [
+          "POST /v3/custom-launches/preflight",
+          "POST /v3/custom-launches",
+        ],
+        serverSide: true,
+        clientBypassAccepted: false,
+        failureCode: "PROJECT_METADATA_POLICY_INVALID",
+        legacyProfilesNotRetrofitted: true,
+      },
+      profilePolicy: {
+        schemaVersion: "programmable.project-metadata-policy.v1",
+        descriptionMinimumUtf8Bytes: 20,
+        descriptionMaximumUtf8Bytes: 4096,
+        descriptionMinimumUnicodeLettersOrNumbers: 8,
+        imageRequired: true,
+        imageReceiptSourceManifestBindingRequired: true,
+        imageMediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+        linksMaximumCount: 32,
+        requiredLinkKinds: ["website", "x"],
+        exactlyOneRequiredLinkPerKind: true,
+        websiteUriPolicy: "canonical-public-credential-free-https",
+        xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
+      },
       legacyWithoutMetadataProfileVersions: ["2.0.0", "3.0.0", "3.1.0"],
+      legacyMetadataProfileVersions: ["3.2.0"],
       requiredFields: [
         "token.name",
         "token.symbol",
@@ -330,7 +367,25 @@ export async function probeCustomLaunchV3Release(input) {
         "presentation.image",
         "presentation.links",
       ],
-      imageMayBeNull: true,
+      imageMayBeNull: false,
+      legacyImageMayBeNullProfileVersions: ["3.2.0"],
+      description: {
+        minimumUtf8Bytes: 20,
+        maximumUtf8Bytes: 4096,
+        minimumUnicodeLettersOrNumbers: 8,
+        nfcAndTrimmedRequired: true,
+      },
+      image: {
+        required: true,
+        exactContentSha256Required: true,
+        exactByteLengthRequired: true,
+        sourceManifestFileBindingRequired: true,
+        mediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+      },
+      exactlyOneRequiredLinkPerKind: true,
+      requiredLinkKinds: ["website", "x"],
+      websiteUriPolicy: "canonical-public-credential-free-https",
+      xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
       maximumLinks: 32,
       linkKinds: [
         "website",

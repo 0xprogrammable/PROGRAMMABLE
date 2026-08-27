@@ -8,13 +8,25 @@ const schema = JSON.parse(await readFile(
   new URL("../schemas/programmable-launch-pack-config-v3.json", import.meta.url),
   "utf8",
 ));
-const validate = new Ajv2020({
+const ajv = new Ajv2020({
   allErrors: true,
   strict: true,
   strictRequired: false,
   validateFormats: false,
-})
-  .compile(schema);
+});
+ajv.addKeyword({
+  keyword: "x-programmable-minUtf8Bytes",
+  type: "string",
+  schemaType: "number",
+  validate: (minimum, value) => Buffer.byteLength(value, "utf8") >= minimum,
+});
+ajv.addKeyword({
+  keyword: "x-programmable-minUnicodeLettersOrNumbers",
+  type: "string",
+  schemaType: "number",
+  validate: (minimum, value) => [...value.matchAll(/[\p{L}\p{N}]/gu)].length >= minimum,
+});
+const validate = ajv.compile(schema);
 
 test("published V3 pack-config schema accepts v2 nested authorization paths", () => {
   const config = baseConfig();
@@ -73,6 +85,33 @@ test("published V3 pack-config schema uses the parser's literal runtime-immutabl
     value: "0x1111111111111111111111111111111111111111",
   };
   assert.equal(validate(config), false);
+});
+
+test("published V3 pack-config schema requires complete indexable project metadata", () => {
+  const cases = [
+    ["null image", (config) => { config.projectMetadata.presentation.image = null; }],
+    ["short description", (config) => {
+      config.projectMetadata.presentation.description = "Placeholder";
+    }],
+    ["missing website", (config) => {
+      config.projectMetadata.presentation.links = [
+        { kind: "x", uri: "https://x.com/schema_token" },
+      ];
+    }],
+    ["missing X profile", (config) => {
+      config.projectMetadata.presentation.links = [
+        { kind: "website", uri: "https://example.com/" },
+      ];
+    }],
+    ["noncanonical X profile", (config) => {
+      config.projectMetadata.presentation.links[1].uri = "https://twitter.com/schema_token";
+    }],
+  ];
+  for (const [label, mutate] of cases) {
+    const config = baseConfig();
+    mutate(config);
+    assert.equal(validate(config), false, label);
+  }
 });
 
 test("published V3 pack-config schema binds exact ordered liquidity assessment vectors", () => {
@@ -199,9 +238,15 @@ function baseConfig() {
       schemaVersion: "programmable.project-metadata-input.v1",
       token: { name: "Schema Token", symbol: "SCHEMA" },
       presentation: {
-        description: "Schema fixture",
-        image: null,
-        links: [{ kind: "website", uri: "https://example.com/" }],
+        description: "Schema metadata fixture for a public launch",
+        image: {
+          sourcePath: "assets/token.png",
+          uri: "https://example.com/token.png",
+        },
+        links: [
+          { kind: "website", uri: "https://example.com/" },
+          { kind: "x", uri: "https://x.com/schema_token" },
+        ],
       },
     },
     launchProfile: {

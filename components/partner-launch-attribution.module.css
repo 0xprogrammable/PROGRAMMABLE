@@ -1,0 +1,56 @@
+.attribution {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 620;
+  gap: 5px;
+  line-height: 1.35;
+  max-width: 100%;
+  min-height: 24px;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.attribution span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attribution svg {
+  flex: 0 0 auto;
+}
+
+.attribution:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
+}
+
+.attribution:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.attribution[data-compact="true"] {
+  font-size: 11px;
+}
+
+.visuallyHidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (forced-colors: active) {
+  .attribution:focus-visible {
+    outline-color: Highlight;
+  }
+}

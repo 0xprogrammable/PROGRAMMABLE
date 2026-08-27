@@ -64,6 +64,7 @@ for (const [pathName, method] of [
   ["/v3/custom-launches", "post"],
   ["/v3/custom-launches", "get"],
   ["/v3/custom-launches/{launchId}", "get"],
+  ["/v3/custom-launches/{launchId}/permit-reissues", "post"],
 ]) {
   assertPlainObject(v3.paths[pathName]?.[method], `V3 operation ${method.toUpperCase()} ${pathName}`);
 }
@@ -72,7 +73,7 @@ assertJsonEqual(
   {
     type: "http",
     scheme: "bearer",
-    bearerFormat: "pm_live_<22-char-key-id>_<43-char-secret>",
+    bearerFormat: "pm_live_* | pm_partner_root_<22>_<43> | pm_partner_<22>_<43>",
     description: v3.components.securitySchemes.CustomLaunchApiKey.description,
   },
   "API-key security scheme",

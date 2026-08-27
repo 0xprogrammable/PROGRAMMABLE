@@ -10,7 +10,7 @@ Public V3 general-hook creation and lifecycle reads are live on Ethereum Mainnet
 
 Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.
 
-The 3.3.5 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
+The 3.3.6 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
 compiles real project-owned token, hook and initializer targets with exact
 `solc 0.8.26+commit.8a97fa7a`, then runs deterministic `pack` and `validate` without submitting, signing, broadcasting
 or creating a Mainnet coin.
@@ -39,10 +39,10 @@ key across timeout, `429` and `503` retries and honor `Retry-After`. Follow the 
 guide](../developers/custom-launch.md) for the exact public contract.
 
 The default direct-native profile uses `programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
-`profileVersion: 3.2.0`. It requires canonical project name, symbol, description, an optional image and sorted public
+`profileVersion: 3.3.0`. It requires canonical project name, symbol, description, an exact source-bound image and sorted public
 links. The CLI hashes those values and binds the metadata digest into the graph and launch intent; token `name()` and
-`symbol()` are read back after deployment. Exact `3.1.0` and `3.0.0` requests remain readable and byte-identical
-retryable under their original immutable policies; revision 2 also remains compatible. Profile 3.2.0 runs role-aware exact-source static admission with exactly
+`symbol()` are read back after deployment. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and byte-identical
+retryable under their original immutable policies; revision 2 also remains compatible. Profile `3.2.0` keeps its original nullable-image metadata semantics. Profile 3.3.0 runs role-aware exact-source static admission with exactly
 seven objective hard-block rules. Proxy/delegatecall, mint/tax/pause controls, liquidity custody and return-delta
 custom accounting require evidence instead of categorical rejection. A hard-block match moves the request to
 `action_required`; other findings remain visible needs-evidence or warning conditions. There is no manual project

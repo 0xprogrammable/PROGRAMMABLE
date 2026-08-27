@@ -152,7 +152,12 @@ export type DeveloperCustomLaunchV3 = Readonly<{
   ownerWallet: `0x${string}`;
   status: string;
   requestHash: string;
-  launchProfileVersion: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0";
+  launchProfileVersion:
+    | "2.0.0"
+    | "3.0.0"
+    | "3.1.0"
+    | "3.2.0"
+    | "3.3.0";
   launchProfileHash: `sha256:${string}`;
   launchIntentHash: `sha256:${string}`;
   projectMetadata: DeveloperCustomLaunchProjectMetadataV1 | null;
@@ -1159,7 +1164,12 @@ function canonicalDomainHashV1(
 function parseV3ProjectMetadataPair(
   record: Readonly<Record<string, JsonValue>>,
   output: Readonly<Record<string, JsonValue>> | null,
-  launchProfileVersion: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0",
+  launchProfileVersion:
+    | "2.0.0"
+    | "3.0.0"
+    | "3.1.0"
+    | "3.2.0"
+    | "3.3.0",
   requireAuthorizedArtifactBinding: boolean,
 ) {
   if (
@@ -1180,7 +1190,10 @@ function parseV3ProjectMetadataPair(
     ? 0
     : artifactMetadataKeys.filter((key) => Object.hasOwn(artifact, key)).length;
 
-  if (launchProfileVersion !== "3.2.0") {
+  if (
+    launchProfileVersion !== "3.2.0"
+    && launchProfileVersion !== "3.3.0"
+  ) {
     if (
       record.projectMetadata !== null
       || record.projectMetadataHash !== null
@@ -1292,6 +1305,7 @@ function parseLaunch(
       || record.launchProfileVersion === "3.0.0"
       || record.launchProfileVersion === "3.1.0"
       || record.launchProfileVersion === "3.2.0"
+      || record.launchProfileVersion === "3.3.0"
     )
     ? record.launchProfileVersion
     : null;

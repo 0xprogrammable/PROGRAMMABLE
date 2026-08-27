@@ -60,6 +60,9 @@ export function createCreatorArticleApiHandlersV1(input: Readonly<{
             name: project.name,
             symbol: project.symbol,
             imageUrl: project.imageUrl,
+            ...(project.partnerAttribution
+              ? { partnerAttribution: project.partnerAttribution }
+              : {}),
             source: project.source,
             article: article === null
               ? null

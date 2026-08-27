@@ -16,6 +16,7 @@ import {
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
   DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
   GRAPH_BUNDLE_SCHEMA,
@@ -265,7 +266,12 @@ function validateV2LaunchRequest(request) {
 
 function validateV3LaunchRequest(request) {
   const fundingMode = request?.launchProfile?.fundingPolicy?.mode;
-  const metadataRequired = request?.launchProfile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
+  const profileVersion = request?.launchProfile?.profileVersion;
+  const metadataRequired = new Set([
+    DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
+  ]).has(profileVersion);
+  const completeMetadataRequired = profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
   assertExactKeys(request, [
     "schemaVersion",
     "launchWallet",
@@ -287,11 +293,15 @@ function validateV3LaunchRequest(request) {
     "verificationBundle",
   ], "launch request");
   const projectMetadata = metadataRequired
-    ? validateProjectMetadata(request.projectMetadata)
+    ? validateProjectMetadata(request.projectMetadata, {
+        requireComplete: completeMetadataRequired,
+      })
     : null;
   const projectMetadataHash = projectMetadata === null
     ? null
-    : hashProjectMetadata(projectMetadata);
+    : hashProjectMetadata(projectMetadata, {
+        requireComplete: completeMetadataRequired,
+      });
   if (projectMetadata !== null && request.projectMetadataHash !== projectMetadataHash) {
     throw new TypeError("projectMetadataHash does not match canonical projectMetadata");
   }

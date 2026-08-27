@@ -7,7 +7,8 @@ tree:
 - chain: Ethereum Mainnet, chain ID `1`
 - profile ID: `programmable.direct-native-hook-graph.v1`
 - profile revision: `3`
-- profile version: `3.2.0`
+- current profile version: `3.3.0`
+- compatible immutable profile versions: `3.2.0`, `3.1.0`, `3.0.0`, `2.0.0`
 - create: `POST /v3/custom-launches`, Bearer `custom-launch:create`
 - preflight: `POST /v3/custom-launches/preflight`, Bearer `custom-launch:create`
 - list: `GET /v3/custom-launches`, Bearer `custom-launch:read`
