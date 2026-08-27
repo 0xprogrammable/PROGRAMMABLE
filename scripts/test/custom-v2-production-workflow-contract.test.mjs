@@ -126,7 +126,7 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   assert.match(deploy, /name: custom-v2-stage-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u);
   assert.match(deploy, /retention-days: 90/u);
   assert.match(deploy, /vercel deploy --prebuilt --prod --skip-domain/u);
-  assert.doesNotMatch(deploy, /vercel (?:promote|rollback|alias)|--scope-production-alias/u);
+  assert.doesNotMatch(deploy, /vercel (?:promote|rollback)|--scope-production-alias/u);
   assert.match(deploy, /Stage-only: no production promotion was attempted\./u);
   assert.ok(
     deploy.indexOf("Resolve exact staged deployment")
@@ -135,6 +135,33 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   assert.ok(
     deploy.indexOf("Gate exact unaliased Custom V2 staged candidate")
       < deploy.indexOf("Reverify staged candidate binding"),
+  );
+  const stablePreview = stepBlock(
+    deploy,
+    "Bind exact candidate to stable protected preview",
+  );
+  assert.match(
+    stablePreview,
+    /STABLE_PREVIEW_HOST: launcher-v4-aficialais-projects\.vercel\.app/u,
+  );
+  assert.match(
+    stablePreview,
+    /vercel alias set "\$EXPECTED_DEPLOYMENT_ID" "\$STABLE_PREVIEW_HOST"/u,
+  );
+  assert.match(stablePreview, /vercel inspect "\$STABLE_PREVIEW_HOST" --format=json/u);
+  assert.match(stablePreview, /inspected\.id !== process\.env\.EXPECTED_DEPLOYMENT_ID/u);
+  assert.match(stablePreview, /inspected\.url !== expectedTarget\.hostname/u);
+  assert.doesNotMatch(stablePreview, /inspected\.aliases/u);
+  assert.match(
+    stablePreview,
+    /test "\$STABLE_PREVIEW_HOST" != programmable\.market/u,
+  );
+  assert.doesNotMatch(stablePreview, /\*\.vercel\.app/u);
+  assert.equal(deploy.match(/vercel alias set/gu)?.length, 1);
+  assert.doesNotMatch(deploy.replace(stablePreview, ""), /vercel alias/u);
+  assert.ok(
+    deploy.indexOf("Reverify staged candidate binding")
+      < deploy.indexOf("Bind exact candidate to stable protected preview"),
   );
 });
 
@@ -244,7 +271,7 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
     standaloneReconcile,
     /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u,
   );
-  assert.doesNotMatch(deploy, /vercel (?:promote|alias)/u);
+  assert.doesNotMatch(deploy, /vercel promote/u);
 });
 
 test("new stage and cleanup HTTP consumers share the bounded streaming reader", () => {
