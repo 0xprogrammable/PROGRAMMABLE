@@ -1372,16 +1372,20 @@ jobs:
           EXPECTED_DEPLOYMENT_ID: ${{ steps.staged-deployment.outputs.deployment_id }}
           EXPECTED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           STABLE_PREVIEW_HOST: launcher-v4-aficialais-projects.vercel.app
+          VERCEL_SCOPE: aficialais-projects
         run: |
           set -euo pipefail
           test "$STABLE_PREVIEW_HOST" = launcher-v4-aficialais-projects.vercel.app
           test "$STABLE_PREVIEW_HOST" != programmable.market
+          test "$VERCEL_SCOPE" = aficialais-projects
           vercel alias set "$EXPECTED_DEPLOYMENT_ID" "$STABLE_PREVIEW_HOST" \
+            --scope="$VERCEL_SCOPE" \
             --token="$VERCEL_TOKEN"
           inspect_output="$RUNNER_TEMP/stable-preview-inspect.json"
           test ! -e "$inspect_output"
           umask 077
           vercel inspect "$STABLE_PREVIEW_HOST" --format=json \
+            --scope="$VERCEL_SCOPE" \
             --token="$VERCEL_TOKEN" > "$inspect_output"
           INSPECT_OUTPUT="$inspect_output" node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";

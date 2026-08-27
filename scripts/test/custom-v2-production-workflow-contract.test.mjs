@@ -144,11 +144,19 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
     stablePreview,
     /STABLE_PREVIEW_HOST: launcher-v4-aficialais-projects\.vercel\.app/u,
   );
+  assert.match(stablePreview, /VERCEL_SCOPE: aficialais-projects/u);
   assert.match(
     stablePreview,
-    /vercel alias set "\$EXPECTED_DEPLOYMENT_ID" "\$STABLE_PREVIEW_HOST"/u,
+    /test "\$VERCEL_SCOPE" = aficialais-projects/u,
   );
-  assert.match(stablePreview, /vercel inspect "\$STABLE_PREVIEW_HOST" --format=json/u);
+  assert.match(
+    stablePreview,
+    /vercel alias set "\$EXPECTED_DEPLOYMENT_ID" "\$STABLE_PREVIEW_HOST" \\\n+            --scope="\$VERCEL_SCOPE"/u,
+  );
+  assert.match(
+    stablePreview,
+    /vercel inspect "\$STABLE_PREVIEW_HOST" --format=json \\\n+            --scope="\$VERCEL_SCOPE"/u,
+  );
   assert.match(stablePreview, /inspected\.id !== process\.env\.EXPECTED_DEPLOYMENT_ID/u);
   assert.match(stablePreview, /inspected\.url !== expectedTarget\.hostname/u);
   assert.doesNotMatch(stablePreview, /inspected\.aliases/u);
