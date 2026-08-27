@@ -4,7 +4,6 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CLASSIC_V4_PUBLIC_RELEASE_BINDING } from "../../lib/classic-v4-public-release";
 import baseReleaseBinding from "../../config/data-pipeline-release.v1.json";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
@@ -32,8 +31,18 @@ afterEach(async () => {
 });
 
 describe("Classic V4 browser release activation", () => {
-  it("keeps the base browser trust root disabled", () => {
-    expect(CLASSIC_V4_PUBLIC_RELEASE_BINDING).toBeNull();
+  it("keeps the base browser trust root disabled", async () => {
+    const source = await readFile(
+      new URL("../../lib/classic-v4-public-release.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf("// CLASSIC_V4_PUBLIC_RELEASE_BINDING_START");
+    const end = source.indexOf("// CLASSIC_V4_PUBLIC_RELEASE_BINDING_END");
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const bindingBlock = source.slice(start, end);
+    expect(bindingBlock).toContain("| null = null;");
+    expect(bindingBlock).not.toContain("launcher:");
   });
 
   it("refuses activation without an immutable Envio release audit", async () => {
