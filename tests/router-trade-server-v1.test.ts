@@ -30,6 +30,11 @@ import {
   FADE_ROUTER_TRADE_CAPABILITY_V1,
   FADE_ROUTER_TRADE_PROJECT_ID,
 } from "../lib/custom-launch/router-trade-adapter-v1";
+import {
+  SHARD_ROUTER_TRADE_CAPABILITY_V1,
+  SHARD_ROUTER_TRADE_MARKET_ID,
+  SHARD_ROUTER_TRADE_PROJECT_ID,
+} from "../lib/custom-launch/router-trade-adapters-v1";
 import { parseCustomMarketTradeRequestV1 } from
   "../lib/custom-launch/trade-v1";
 import {
@@ -37,6 +42,7 @@ import {
   type CustomMarketTradeRuntimeClientV1,
 } from "../lib/server/custom-launch/trade-v1";
 import { fadeRouterTradeEntry } from "./fade-router-trade-fixture";
+import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 
 const OWNER = "0x4000000000000000000000000000000000000000" as const;
 
@@ -60,6 +66,23 @@ function request(
   });
 }
 
+function shardRequest() {
+  return parseCustomMarketTradeRequestV1({
+    schemaVersion: "programmable.custom-market-trade-prepare-request.v1",
+    projectId: SHARD_ROUTER_TRADE_PROJECT_ID,
+    marketId: SHARD_ROUTER_TRADE_MARKET_ID,
+    tradeCapabilityBindingHash:
+      SHARD_ROUTER_TRADE_CAPABILITY_V1.tradeCapabilityBindingHash,
+    chainId: 1,
+    owner: OWNER,
+    recipient: OWNER,
+    side: "quote-to-base",
+    amountIn: "10000000000000",
+    slippageBps: 500,
+    deadline: "2000",
+  });
+}
+
 const unusedRuntimeClient = Object.freeze({
   getChainId: vi.fn(async () => 1),
   getBlock: vi.fn(async () => ({ number: 1n, timestamp: 1_000n })),
@@ -71,7 +94,7 @@ const unusedRuntimeClient = Object.freeze({
   call: vi.fn(async () => ({ data: "0x" as const })),
 }) satisfies CustomMarketTradeRuntimeClientV1;
 
-describe("FADE Router trade server boundary", () => {
+describe("reviewed Router trade server boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.readRouter.mockResolvedValue([]);
@@ -119,6 +142,22 @@ describe("FADE Router trade server boundary", () => {
     await expect(prepareCustomMarketTradeV1({
       client: unusedRuntimeClient,
       request: request(),
+    })).rejects.toThrow("runtime code no longer matches");
+
+    expect(mocks.readRouter).toHaveBeenCalledOnce();
+    expect(mocks.assertProductionReadiness).not.toHaveBeenCalled();
+    expect(mocks.findRegistryProject).not.toHaveBeenCalled();
+  });
+
+  it("selects SHARD by project when multiple reviewed Router entries exist", async () => {
+    mocks.readRouter.mockResolvedValue([
+      fadeRouterTradeEntry,
+      shardRouterTradeEntry,
+    ]);
+
+    await expect(prepareCustomMarketTradeV1({
+      client: unusedRuntimeClient,
+      request: shardRequest(),
     })).rejects.toThrow("runtime code no longer matches");
 
     expect(mocks.readRouter).toHaveBeenCalledOnce();

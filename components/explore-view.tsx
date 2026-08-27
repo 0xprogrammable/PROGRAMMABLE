@@ -52,6 +52,7 @@ import {
   canOptimizeTokenImage,
   getTokenCardImageSource,
 } from "@/lib/token-image";
+import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 import {
   isLaunchStampProvenanceV1,
   type ExploreEntry,
@@ -571,22 +572,6 @@ function isBytes32(value: unknown): value is `0x${string}` {
   return typeof value === "string" && /^0x[a-fA-F0-9]{64}$/.test(value);
 }
 
-function safeImageUrl(value: unknown) {
-  if (typeof value !== "string") return undefined;
-
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      url.hostname
-      ? value
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function parseTokenLink(value: unknown): TokenLink | null {
   if (!isRecord(value)) return null;
   if (
@@ -696,7 +681,7 @@ function parseLauncherToken(value: unknown): LauncherToken | null {
     links,
     description:
       typeof value.description === "string" ? value.description : undefined,
-    imageUrl: safeImageUrl(value.imageUrl),
+    imageUrl: safePublicImageUrl(value.imageUrl),
   };
 }
 
@@ -899,7 +884,7 @@ function parseCustomExploreEntry(value: unknown): ExploreEntry | null {
     ...(typeof value.description === "string"
       ? { description: value.description }
       : {}),
-    ...(safeImageUrl(value.imageUrl)
+    ...(safePublicImageUrl(value.imageUrl)
       ? { imageUrl: value.imageUrl as string }
       : {}),
     links: links as TokenLink[],

@@ -48,6 +48,77 @@ test("rejects candidate identities in production source", async () => {
   assert.match(result.stderr, /components\/launch-console\.tsx/u);
 });
 
+test("allows only the exact reviewed Router adapter evidence path", async () => {
+  const projectName = ["sh", "ards"].join("");
+  const runtimeMarkers = [
+    ["router-custom-", projectName, "-v1-trade-v1"].join(""),
+    "programmable.launch-stamp-provenance.v1",
+    "0xe253f3bd22fcb3d6cb20b9d408287e30f0f1aeeb56426b779425c35fd6411de9",
+    "0x55fbb83ac4599303b146cb4a2f7c1c906d8b3e9fe4fbbe5bf9cf44e905cc3ce0",
+    "0xface73b63787960282f2d4682d3752beb25271ad",
+    "0x07a16735325723fea4f4a52ed5e9da687766a0cc",
+    "0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8",
+    "0x168f82b0d458a35676522562489b2fec71929e4717c3d98b4893ef63e69e8da6",
+    "0x0175cb3f34e2c37f757216a259adea4ab10baf3f9095c67d9481800222fd17f0",
+    "0x4d4617e5d86bfb2b1ed32b5405748fb9e145301bc94f2d6c0fed75b6d7d1181b",
+  ];
+  const sourceMarkers = [
+    ...runtimeMarkers,
+    "SHARD_REVIEWED_LAUNCH_STAMP_EVIDENCE_V1",
+    "SHARD_REVIEWED_LAUNCH_STAMP_EVIDENCE_HASH",
+    "canonicalSha256(",
+  ];
+  const exactSource = `${sourceMarkers.join("\n")}\n`;
+  const acceptedRoot = await fixture({
+    "lib/custom-launch/router-trade-adapters-v1.ts": exactSource,
+  });
+  const accepted = verify(acceptedRoot);
+  assert.equal(accepted.status, 0, accepted.stderr);
+
+  const incompleteRoot = await fixture({
+    "lib/custom-launch/router-trade-adapters-v1.ts":
+      `${sourceMarkers.slice(0, -1).join("\n")}\n`,
+  });
+  const incomplete = verify(incompleteRoot);
+  assert.equal(incomplete.status, 1);
+  assert.match(incomplete.stderr, /router-trade-adapters-v1\.ts/u);
+
+  const wrongPathRoot = await fixture({
+    "lib/custom-launch/unreviewed-adapter.ts": exactSource,
+  });
+  const wrongPath = verify(wrongPathRoot);
+  assert.equal(wrongPath.status, 1);
+  assert.match(wrongPath.stderr, /unreviewed-adapter\.ts/u);
+});
+
+test("allows exact reviewed adapter evidence only in server output", async () => {
+  const projectName = ["sh", "ards"].join("");
+  const exactServerBundle = [
+    ["router-custom-", projectName, "-v1-trade-v1"].join(""),
+    "programmable.launch-stamp-provenance.v1",
+    "0xe253f3bd22fcb3d6cb20b9d408287e30f0f1aeeb56426b779425c35fd6411de9",
+    "0x55fbb83ac4599303b146cb4a2f7c1c906d8b3e9fe4fbbe5bf9cf44e905cc3ce0",
+    "0xface73b63787960282f2d4682d3752beb25271ad",
+    "0x07a16735325723fea4f4a52ed5e9da687766a0cc",
+    "0xb2737fd93f2ff31e850e2be773e6e7a92a239b28091be1d4b122ff864cd7aae8",
+    "0x168f82b0d458a35676522562489b2fec71929e4717c3d98b4893ef63e69e8da6",
+    "0x0175cb3f34e2c37f757216a259adea4ab10baf3f9095c67d9481800222fd17f0",
+    "0x4d4617e5d86bfb2b1ed32b5405748fb9e145301bc94f2d6c0fed75b6d7d1181b",
+  ].join("\n");
+  const serverRoot = await fixture({
+    ".next/server/app/api/explore/token/route.js": exactServerBundle,
+  });
+  const serverResult = verify(serverRoot, "--include-build");
+  assert.equal(serverResult.status, 0, serverResult.stderr);
+
+  const clientRoot = await fixture({
+    ".next/static/chunks/explore.js": exactServerBundle,
+  });
+  const clientResult = verify(clientRoot, "--include-build");
+  assert.equal(clientResult.status, 1);
+  assert.match(clientResult.stderr, /.next\/static\/chunks\/explore\.js/u);
+});
+
 test("rejects legacy applicant route paths even when their source is generic", async () => {
   const legacySegment = ["manual", "router"].join("-");
   const root = await fixture({

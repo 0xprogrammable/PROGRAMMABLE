@@ -17,6 +17,10 @@ describe("Custom market selector UI", () => {
     expect(tradeSource).toContain("if (markets.length === 1)");
     expect(tradeSource).toContain("styles.customMarketValue");
     expect(tradeSource).toContain("customMarketLabel(selected)");
+    expect(tradeSource).toContain(
+      "`${assetLabel(market.baseAsset)} / ${assetLabel(market.quoteAsset)}`",
+    );
+    expect(tradeSource).not.toContain("`${market.marketId} · ${market.kind}`");
   });
 
   it("uses branded native radio semantics when more markets exist", () => {
@@ -27,6 +31,19 @@ describe("Custom market selector UI", () => {
     expect(tradeSource).toContain("onChange={() => onChange(market.marketId)}");
     expect(tradeSource).not.toContain("<select");
     expect(tradeStyles).not.toContain(".customMarketSelect select");
+  });
+
+  it("opens the canonical two-sided market on Buy and lists Buy first", () => {
+    expect(tradeSource).toContain(
+      'supported.includes("quote-to-base")',
+    );
+    expect(tradeSource).toContain(
+      "preferredCustomTradeSide(capability)",
+    );
+    expect(tradeSource).toContain("{sideOptions.map((candidate) => {");
+    expect(tradeSource).not.toContain(
+      "capability.supportedSides.map((candidate) => {",
+    );
   });
 
   it("keeps the branded options touch-sized with visible keyboard focus", () => {
