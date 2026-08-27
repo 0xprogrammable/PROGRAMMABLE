@@ -14,6 +14,7 @@ import {
 } from "../src/constants.mjs";
 import { buildLaunch, packLaunch } from "../src/pack.mjs";
 import { validateLaunchFile } from "../src/validate.mjs";
+import { jsonResponse, validCapabilities } from "./fixtures/capabilities.mjs";
 
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
 const FIXED_PERMISSIONS = [
@@ -209,9 +210,9 @@ test("V2 authorization patch preserves final-graph nonce diagnostics through sub
     );
     assert.deepEqual(validation.diagnostics, packed.diagnostics);
 
-    const apiOrigin = "http://127.0.0.1:43211";
+    const apiOrigin = "https://api.programmable.market";
     const requestId = "9c2f751c-d7cf-4288-8de8-9c39d85f0e31";
-    const walletHandoffUrl = `${apiOrigin}/wallet/${requestId}`;
+    const walletHandoffUrl = `https://programmable.market/developers/api-keys/${requestId}`;
     let networkCalls = 0;
     const submitted = await submitLaunch({
       launchPath,
@@ -220,8 +221,11 @@ test("V2 authorization patch preserves final-graph nonce diagnostics through sub
       apiOrigin,
       stateDirectory: path.join(fixture.root, "state"),
       maxAttempts: 1,
-      fetchImpl: async () => {
+      fetchImpl: async (url) => {
         networkCalls += 1;
+        if (url.endsWith("/v3/capabilities")) {
+          return jsonResponse(validCapabilities());
+        }
         return new Response(JSON.stringify({
           schemaVersion: "programmable.custom-launch.v3",
           requestId,
@@ -239,7 +243,7 @@ test("V2 authorization patch preserves final-graph nonce diagnostics through sub
       loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
     });
 
-    assert.equal(networkCalls, 1);
+    assert.equal(networkCalls, 2);
     assert.deepEqual(submitted.diagnostics, validation.diagnostics);
     assert.equal(submitted.walletHandoffUrl, walletHandoffUrl);
     assert.ok(

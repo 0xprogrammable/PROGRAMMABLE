@@ -24,11 +24,13 @@ advertised machine-readable remediation catalog:
 the pinned CLI release are the complete public integration path. There is no project allowlist or private approval
 step.
 
-Fetch public `GET https://api.programmable.market/v3/capabilities`, then use the exact quickstart
-`pack -> validate --remote -> submit -> wallet -> status`. `validate --remote` first repeats local byte-identical
+Fetch public `GET https://api.programmable.market/v3/capabilities`, then use the exact state machine
+`pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until
+finalized`. `validate --remote` first repeats local byte-identical
 validation and then posts those same bytes to Bearer-authenticated `POST /v3/custom-launches/preflight`. The preflight
 uses scope `custom-launch:create`, consumes no launch quota, allocates no nonce, persists no launch, requires a later
 wallet signature and never broadcasts. `wallet` is a separate connected-controller action, not a CLI command.
+Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`; there is no origin override.
 
 For an existing repository, pin the exact public source object, compile every direct graph target with
 `solc 0.8.26+commit.8a97fa7a`, map the distinct token, hook and initializer roles plus all address dependencies, declare
@@ -149,16 +151,16 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.3.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.3.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.3.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.3.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.4.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.4.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.4.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.4.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.3`. The package name is
+Continue only after the checksum command reports `OK` and the version command prints `3.3.4`. The package name is
 `@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:

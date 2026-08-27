@@ -151,16 +151,17 @@ describe("public Custom Launch CLI surface", () => {
         errorCode: null,
       },
       releaseCandidate: {
-        status: "promoted-to-public",
+        status: "candidate-unpublished",
         publicAuthorization: true,
-        releaseVersion: "3.3.3",
-        releaseTag: "programmable-launch-v3.3.3",
-        tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz",
-        checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz.sha256",
-        tarballSha256:
-          "sha256:14968f99a05bedc4424cee143006a3ae5d27db4fafdb06ae93faec3611116209",
+        artifactPublished: false,
+        packageName: "@programmable/launch",
+        binary: "programmable-launch",
+        releaseVersion: "3.3.4",
+        releaseTag: "programmable-launch-v3.3.4",
+        releaseUrl: null,
+        tarballUrl: null,
+        checksumUrl: null,
+        tarballSha256: null,
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -226,7 +227,7 @@ describe("public Custom Launch CLI surface", () => {
     expect(JSON.stringify(document)).not.toContain("prelaunch");
   });
 
-  it("binds the advertised CLI checksum to the exact local package bytes", () => {
+  it("packs candidate bytes without claiming an unpublished release digest", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "programmable-launch-release-"));
     try {
       execFileSync("npm", [
@@ -238,14 +239,20 @@ describe("public Custom Launch CLI surface", () => {
         "--json",
       ], { cwd: root, stdio: "pipe" });
       const tarball = readFileSync(
-        join(temporaryRoot, "programmable-launch-3.3.3.tgz"),
+        join(temporaryRoot, "programmable-launch-3.3.4.tgz"),
       );
       const digest = `sha256:${createHash("sha256").update(tarball).digest("hex")}`;
       const document = programmableWellKnownDocumentV1(
         PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
       );
-      expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
-      expect(tarball.byteLength).toBe(260_514);
+      expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/u);
+      expect(tarball.byteLength).toBeGreaterThan(0);
+      expect(document.customLaunchApi.releaseCandidate).toMatchObject({
+        artifactPublished: false,
+        releaseVersion: "3.3.4",
+        tarballSha256: null,
+      });
+      expect(digest).not.toBe(document.customLaunchApi.cli.tarballSha256);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -448,7 +455,7 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v3.openapi).toBe("3.1.0");
-    expect(v3.info.version).toBe("3.3.3");
+    expect(v3.info.version).toBe("3.3.4");
     expect(v3["x-programmable-availability"]).toMatchObject({
       status: "live",
       publicAuthorized: true,
@@ -1121,7 +1128,7 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "Package `3.3.3` supports production general profile",
+      "Package `3.3.4` supports production general profile",
     );
     expect(packageGuide).toContain(
       "`programmable.direct-native-hook-graph.v1` version `3.2.0`",

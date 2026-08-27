@@ -31,7 +31,7 @@ const customLaunchPreflightUrl =
 const customLaunchFinalizedMetadataUrl =
   "https://api.programmable.market/v3/finalized-custom-launches";
 const customLaunchCliReleaseUrl =
-  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.3/programmable-launch-3.3.3.tgz";
+  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.4/programmable-launch-3.3.4.tgz";
 
 const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
@@ -90,15 +90,15 @@ export function buildDeveloperDocsMarkdown(): string {
     "Verify the pinned public CLI checksum before installation:",
     "```sh",
     'programmable_cli_dir="$(mktemp -d)"',
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.3.tgz" ${customLaunchCliReleaseUrl}`,
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.3.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.3.tgz.sha256)',
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.3.tgz"',
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.4.tgz" ${customLaunchCliReleaseUrl}`,
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.4.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.4.tgz.sha256)',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.4.tgz"',
     "programmable-launch --version",
     "```",
-    "Continue only after the checksum reports `OK` and the version is `3.3.3`. The package is `@programmable/launch` and the binary is `programmable-launch`.",
+    "Continue only after the checksum reports `OK` and the version is `3.3.4`. The package is `@programmable/launch` and the binary is `programmable-launch`.",
     "",
-    "Use `pack -> validate --remote -> submit -> wallet -> status`. Remote validation repeats local byte-identical validation, fetches public capabilities and preflights those exact bytes without consuming launch quota, allocating a nonce or persisting a launch. Wallet is a separate connected-controller action, not a CLI command. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. The CLI never signs or broadcasts.",
+    "Use `pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized`. Remote validation repeats local byte-identical validation, fails closed on profile, revision, version, route or authentication drift, and preflights those exact bytes without consuming launch quota, allocating a nonce or persisting a launch. Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`. Wallet is a separate connected-controller action, not a CLI command. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. The CLI never signs or broadcasts.",
     "",
     `Connect a wallet and create a key at ${apiKeysUrl}. Store the one-time \`pm_live_\` secret only as the encrypted environment secret \`PROGRAMMABLE_API_KEY\` or in the OS secret store. Put only \`$PROGRAMMABLE_API_KEY\` in chat, prompts and agent setup.`,
     "",
@@ -423,7 +423,7 @@ export function buildProgrammableLlmsIndex(): string {
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Custom Launch API readiness: ${customLaunchReadyzUrl}`,
-    `- Programmable Launch CLI 3.3.3: ${customLaunchCliReleaseUrl}`,
+    `- Programmable Launch CLI 3.3.4: ${customLaunchCliReleaseUrl}`,
     `- V1 write fence: POST ${customLaunchApiOrigin}/v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY`,
     `- Create or list wallet-owned Custom launches: POST or GET ${customLaunchApiOrigin}/v3/custom-launches`,
     `- Discover V3 capabilities without authentication: GET ${customLaunchCapabilitiesUrl}`,

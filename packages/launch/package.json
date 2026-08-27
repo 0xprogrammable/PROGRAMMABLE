@@ -1,6 +1,6 @@
 {
   "name": "@programmable/launch",
-  "version": "3.3.3",
+  "version": "3.3.4",
   "description": "Deterministic pack, validation, submission, and status tooling for the Programmable Custom Launch API",
   "type": "module",
   "bin": {
@@ -15,11 +15,14 @@
     "src",
     "schemas",
     "examples",
+    "npm-shrinkwrap.json",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "pack:dry-run": "npm pack --dry-run"
+    "test": "npm run verify:machine-contracts && node --test test/*.test.mjs",
+    "verify:machine-contracts": "node scripts/verify-public-machine-contracts.mjs",
+    "pack:dry-run": "npm pack --dry-run",
+    "sbom": "npm sbom --package-lock-only --omit=dev --sbom-format=cyclonedx --sbom-type=application"
   },
   "engines": {
     "node": ">=24.14.0 <25"
@@ -31,7 +34,7 @@
     "ajv": "8.17.1",
     "solc": "0.8.26"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/0xprogrammable/PROGRAMMABLE.git",
