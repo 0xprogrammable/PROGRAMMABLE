@@ -321,7 +321,12 @@ describe("Explore UI contract", () => {
       /\.runnerHeading h3\s*\{[^}]*line-height:\s*1\.15;/s,
     );
     expect(source).toContain(
-      'sizes="(max-width: 700px) calc((100vw - 42px) / 2), (max-width: 900px) 330px, 299px"',
+      '"(max-width: 520px) calc((100vw - 38px) / 2), (max-width: 900px) calc((100vw - 48px) / 2), (max-width: 1280px) calc((100vw - 88px) / 3), 416px"',
+    );
+    expect(source).toContain("preserveArtworkAspectRatio");
+    expect(source).toContain("styles.runnerImagePreserved");
+    expect(styles).toMatch(
+      /\.runnerImagePreserved\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
     );
     expect(source).not.toContain("<small>CA</small>");
     expect(source).toContain("<small>Market cap</small>");
