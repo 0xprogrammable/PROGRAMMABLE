@@ -132,8 +132,14 @@ const READINESS_KEYS = Object.freeze([
   "sourceTree",
   "migrationInventorySha256",
   "apiContractSha256",
+  "walletAdminSecurity",
   "publicProfile",
   "chain",
+]);
+const WALLET_ADMIN_SECURITY_KEYS = Object.freeze([
+  "assertionVersion",
+  "assertionMode",
+  "legacyBearerRequestsAccepted",
 ]);
 const PUBLIC_PROFILE_KEYS = Object.freeze([
   "profileId",
@@ -432,6 +438,10 @@ function validateReadiness(readiness, backend, inventory, contract, profile) {
     || readiness.sourceTree !== backend.treeSha
     || readiness.migrationInventorySha256 !== migrationInventorySha256
     || readiness.apiContractSha256 !== apiContractSha256
+    || !exactKeys(readiness.walletAdminSecurity, WALLET_ADMIN_SECURITY_KEYS)
+    || readiness.walletAdminSecurity.assertionVersion !== "2"
+    || readiness.walletAdminSecurity.assertionMode !== "compatibility"
+    || readiness.walletAdminSecurity.legacyBearerRequestsAccepted !== true
     || !exactKeys(readiness.publicProfile, PUBLIC_PROFILE_KEYS)
     || readiness.publicProfile.profileId !== profile.profileId
     || readiness.publicProfile.profileVersion !== profile.profileVersion
