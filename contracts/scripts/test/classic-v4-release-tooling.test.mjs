@@ -1013,6 +1013,7 @@ test("downstream sealed builds reject forged fixed-out artifacts and arbitrary s
     sourcePins,
     CLASSIC_V4_DIGEST_DOMAINS.sourcePins,
   );
+  let buildInvocations = 0;
   const sealedOptions = {
     environment: { PATH: "/usr/bin" },
     identityReader: async () => ({
@@ -1028,7 +1029,10 @@ test("downstream sealed builds reject forged fixed-out artifacts and arbitrary s
       ),
     dependencyGitStatesReader: async () =>
       exactPinnedDependencyGitStates(),
-    artifactBuilder: async () => structuredClone(artifacts),
+    artifactBuilder: async () => {
+      buildInvocations += 1;
+      return structuredClone(artifacts);
+    },
   };
   const sealedPlan = preparationPlan({
     releaseCommit,
@@ -1039,6 +1043,7 @@ test("downstream sealed builds reject forged fixed-out artifacts and arbitrary s
     await loadClassicV4SealedBuild(sealedPlan, sealedOptions),
     artifacts,
   );
+  assert.equal(buildInvocations, 1);
 
   const forgedArtifacts = structuredClone(artifacts);
   forgedArtifacts.launcher.bytecode.object =
@@ -1055,6 +1060,7 @@ test("downstream sealed builds reject forged fixed-out artifacts and arbitrary s
     loadClassicV4SealedBuild(arbitraryPinPlan, sealedOptions),
     /source pins differ from the sealed dependency checkout/,
   );
+  assert.equal(buildInvocations, 1);
 
   const selfConsistentForgedPlan = preparationPlan({
     artifactSet: forgedArtifacts,
@@ -1066,6 +1072,37 @@ test("downstream sealed builds reject forged fixed-out artifacts and arbitrary s
     loadClassicV4SealedBuild(selfConsistentForgedPlan, sealedOptions),
     /build or dependency closure differs|source commitment differs/,
   );
+  assert.equal(buildInvocations, 2);
+});
+
+test("every downstream release entry point consumes a sealed tracked-source build", async () => {
+  for (const operator of [
+    "verify-classic-v4-mainnet-deployment.mjs",
+    "verify-classic-v4-mainnet-sources.mjs",
+    "prepare-classic-v4-lifecycle-canary.mjs",
+    "verify-classic-v4-lifecycle-canary.mjs",
+    "capture-classic-v4-mainnet-release.mjs",
+  ]) {
+    const source = await readFile(
+      path.join(repositoryRoot, "contracts/scripts", operator),
+      "utf8",
+    );
+    assert.match(
+      source,
+      /import \{ loadClassicV4SealedBuild \} from "\.\/prepare-classic-v4-mainnet-release\.mjs";/,
+      `${operator} must import the tracked-source build seal`,
+    );
+    assert.match(
+      source,
+      /const artifacts = await loadClassicV4SealedBuild\(plan\);/,
+      `${operator} must rebuild and verify the reviewed plan before use`,
+    );
+    assert.doesNotMatch(
+      source,
+      /loadClassicV4ArtifactsFromOutput/,
+      `${operator} must not trust a repository artifact directory`,
+    );
+  }
 });
 
 test("deployment replay rejects a plan observed block hash that is not canonical", async () => {
