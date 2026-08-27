@@ -170,9 +170,11 @@ describe("wallet recovery state", () => {
     expect(provider).toContain("onPointerEnter={preloadWallet}");
     expect(provider).toContain("onFocus={preloadWallet}");
     expect(provider).toContain("globalThis.setTimeout(preload, 0)");
+    expect(provider).toContain("const hydrationPending = !authReady");
     expect(provider).toContain(
-      "const hydrationPending = connecting || !authReady",
+      "const openingWallet = connecting && authReady",
     );
+    expect(provider).toMatch(/openingWallet\s*\?\s*"Opening wallet"/u);
     expect(provider).toMatch(/hydrationPending\s*\?\s*"Loading wallet"/u);
     expect(provider).toContain("wallet-button-hydrating");
     expect(provider).not.toContain("requestIdleCallback");
