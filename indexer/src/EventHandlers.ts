@@ -2,7 +2,6 @@ import {
   indexer,
   type BeneficiaryClaim,
   type ChainEvent,
-  type ClassicBondingState,
   type CreatorFeeClaim,
   type EvmEvent,
   type EvmOnEventContext,
@@ -73,8 +72,6 @@ const LAUNCH_IDENTITY_FIELDS = new Set<keyof Launch>([
   "rewardVault",
   "positionRecipient",
   "positionTokenId",
-  "graduationVault",
-  "finalPositionRecipient",
   "rewardConfigurationHash",
   "quoteConfigurationHash",
 ]);
@@ -433,35 +430,6 @@ async function handleLauncherEvent(
       await reconcileLaunch(context, launch);
       return;
     }
-    if (
-      event.contractName === "ClassicV4Launcher" &&
-      event.eventName === "MemeBondingConfiguredV1"
-    ) {
-      const params = event.params;
-      const launch = await upsertLaunch(context, release, params.launchHash, {
-        token: lowerAddress(params.token),
-        poolId: lower(params.poolId),
-        graduationVault: lowerAddress(params.graduationVault),
-        finalPositionRecipient: lowerAddress(params.finalPositionRecipient),
-        positionTokenId: params.bondingPositionTokenId,
-        graduationReserveAmount: params.graduationReserveAmount,
-        bondingLiquidity: params.bondingLiquidity,
-        finalLiquidity: params.finalLiquidity,
-        bondingEndpointTick: exactInt(params.endpointTick, "bonding endpointTick"),
-        graduationFinalTickLower: exactInt(
-          params.finalTickLower,
-          "graduation finalTickLower",
-        ),
-        graduationFinalTickUpper: exactInt(
-          params.finalTickUpper,
-          "graduation finalTickUpper",
-        ),
-        bondingLaunchOccurrenceId: occurrence.provenance.id,
-        hasBondingConfigurationEvent: true,
-      }, "bonding", occurrence);
-      await reconcileLaunch(context, launch);
-      return;
-    }
     const params = event.params;
     const custody: InitialBuyCustody = {
       ...immutableFields(occurrence),
@@ -578,13 +546,7 @@ async function upsertLaunch(
   release: ReleaseIdentity,
   launchHashValue: string,
   patch: Partial<Launch>,
-  kind:
-    | "launch"
-    | "liquidity"
-    | "initial-buy"
-    | "custody"
-    | "coordinator"
-    | "bonding",
+  kind: "launch" | "liquidity" | "initial-buy" | "custody" | "coordinator",
   occurrence: RecordedOccurrence,
   authorization: Readonly<{
     expectedCoordinatorSource?: string;
@@ -690,40 +652,11 @@ function defaultLaunch(
     initialBuyOccurrenceId: undefined,
     custodyOccurrenceId: undefined,
     coordinatorOccurrenceId: undefined,
-    bondingLaunchOccurrenceId: undefined,
-    graduationVault: undefined,
-    finalPositionRecipient: undefined,
-    graduationReserveAmount: undefined,
-    bondingLiquidity: undefined,
-    finalLiquidity: undefined,
-    bondingEndpointTick: undefined,
-    graduationFinalTickLower: undefined,
-    graduationFinalTickUpper: undefined,
-    bondingStatus: undefined,
-    bondingController: undefined,
-    bondingEndpointSqrtPriceX96: undefined,
-    bondingReachedSqrtPriceX96: undefined,
-    bondingProgressBps: undefined,
-    bondingTokenRemaining: undefined,
-    bondingNativeRemainingNet: undefined,
-    bondingConfiguredOccurrenceId: undefined,
-    bondingActivatedOccurrenceId: undefined,
-    bondingReachedOccurrenceId: undefined,
-    graduationBegunOccurrenceId: undefined,
-    graduationOccurrenceId: undefined,
-    graduationFinalRecipient: undefined,
-    graduationOldPositionTokenId: undefined,
-    graduationNewPositionTokenId: undefined,
-    graduationNativeAmount: undefined,
-    graduationTokenAmount: undefined,
-    graduationTickLower: undefined,
-    graduationTickUpper: undefined,
     hasLaunchEvent: false,
     hasLiquidityEvent: false,
     hasInitialBuyEvent: false,
     hasCustodyEvent: false,
     hasCoordinatorEvent: false,
-    hasBondingConfigurationEvent: false,
     hasPoolRegistrationEvent: false,
     hasPoolFeeDisclosureEvent: false,
     hasRewardVaultFactoryEvent: false,
@@ -743,12 +676,9 @@ function launchIsComplete(launch: Launch): boolean {
     launch.hasPoolFeeDisclosureEvent &&
     (launch.releaseVersion === "classic-v2" ||
       launch.hasRewardVaultFactoryEvent);
-  const withCustody = classicReleaseNeedsCustody(launch.releaseVersion)
+  return classicReleaseNeedsCustody(launch.releaseVersion)
     ? base && launch.hasCustodyEvent
     : base;
-  return withCustody &&
-    (launch.graduationVault === undefined ||
-      launch.hasBondingConfigurationEvent);
 }
 
 function classicReleaseNeedsCustody(releaseVersion: string): boolean {
@@ -894,13 +824,6 @@ async function reconcileLaunch(
     const reconciled = applyPoolConfigurationToLaunch(launch, config);
     launch = { ...reconciled.launch };
     context.PoolFeeConfig.set(reconciled.config);
-  }
-
-  const bonding = await context.ClassicBondingState.get(relationId);
-  if (bonding !== undefined) {
-    const reconciled = applyClassicBondingToLaunch(launch, bonding);
-    launch = { ...reconciled.launch };
-    context.ClassicBondingState.set(reconciled.bonding);
   }
 
   const poolVaults = await context.RewardVault.getWhere({
@@ -1065,223 +988,7 @@ async function handleHookEvent(
     case "LauncherFeesClaimed":
       handleLauncherFeeClaim(event, context, occurrence);
       return;
-    case "ClassicBondingConfigured":
-    case "ClassicBondingPositionActivated":
-    case "ClassicBondingReached":
-    case "ClassicGraduationBegun":
-    case "ClassicLiquidityGraduated":
-      await handleClassicBondingEvent(event, context, occurrence);
-      return;
   }
-}
-
-function applyClassicBondingToLaunch(
-  launchInput: Launch,
-  bondingInput: ClassicBondingState,
-): { launch: Launch; bonding: ClassicBondingState } {
-  const launch: Mutable<Launch> = { ...launchInput };
-  const valid =
-    bondingInput.provenanceValid &&
-    launch.releaseVersion === "classic-v4" &&
-    launch.poolId !== undefined &&
-    launch.token !== undefined &&
-    sameValue(bondingInput.poolId, launch.poolId) &&
-    sameValue(bondingInput.token, launch.token) &&
-    (!launch.hasBondingConfigurationEvent ||
-      (launch.graduationVault !== undefined &&
-        launch.finalPositionRecipient !== undefined &&
-        launch.positionTokenId !== undefined &&
-        sameValue(bondingInput.controller, launch.graduationVault) &&
-        (bondingInput.bondingLiquidity === undefined ||
-          bondingInput.bondingLiquidity === launch.bondingLiquidity) &&
-        (bondingInput.oldPositionTokenId === undefined ||
-          bondingInput.oldPositionTokenId === launch.positionTokenId) &&
-        (bondingInput.finalRecipient === undefined ||
-          sameValue(
-            bondingInput.finalRecipient,
-            launch.finalPositionRecipient,
-          ))));
-  if (!valid) launch.provenanceValid = false;
-
-  launch.bondingStatus = bondingInput.status;
-  launch.bondingController = bondingInput.controller;
-  launch.bondingEndpointSqrtPriceX96 = bondingInput.endpointSqrtPriceX96;
-  launch.bondingReachedSqrtPriceX96 = bondingInput.reachedSqrtPriceX96;
-  launch.bondingProgressBps = bondingInput.progressBps;
-  launch.bondingTokenRemaining = bondingInput.tokenRemaining;
-  launch.bondingNativeRemainingNet = bondingInput.nativeRemainingNet;
-  launch.bondingConfiguredOccurrenceId = bondingInput.configuredOccurrenceId;
-  launch.bondingActivatedOccurrenceId = bondingInput.activatedOccurrenceId;
-  launch.bondingReachedOccurrenceId = bondingInput.reachedOccurrenceId;
-  launch.graduationBegunOccurrenceId = bondingInput.begunOccurrenceId;
-  launch.graduationOccurrenceId = bondingInput.graduationOccurrenceId;
-  launch.graduationFinalRecipient = bondingInput.finalRecipient;
-  launch.graduationOldPositionTokenId = bondingInput.oldPositionTokenId;
-  launch.graduationNewPositionTokenId = bondingInput.newPositionTokenId;
-  launch.graduationNativeAmount = bondingInput.nativeAmount;
-  launch.graduationTokenAmount = bondingInput.tokenAmount;
-  launch.graduationTickLower = bondingInput.tickLower;
-  launch.graduationTickUpper = bondingInput.tickUpper;
-  launch.updatedBlock = bondingInput.blockNumber > launch.updatedBlock
-    ? bondingInput.blockNumber
-    : launch.updatedBlock;
-  launch.isComplete = launchIsComplete(launch);
-
-  return {
-    launch,
-    bonding: {
-      ...bondingInput,
-      model: launch.model,
-      releaseVersion: launch.releaseVersion,
-      provenanceValid: valid,
-    },
-  };
-}
-
-async function handleClassicBondingEvent(
-  event: Extract<
-    EvmEvent,
-    {
-      contractName: "ClassicV4Hook";
-      eventName:
-        | "ClassicBondingConfigured"
-        | "ClassicBondingPositionActivated"
-        | "ClassicBondingReached"
-        | "ClassicGraduationBegun"
-        | "ClassicLiquidityGraduated";
-    }
-  >,
-  context: EvmOnEventContext,
-  occurrence: RecordedOccurrence,
-): Promise<void> {
-  const params = event.params;
-  const poolId = lower(params.poolId);
-  const token = lowerAddress(params.token);
-  const id = poolEntityId(CHAIN_ID, poolId);
-  const existing = await context.ClassicBondingState.get(id);
-  const next: Mutable<ClassicBondingState> = existing === undefined
-    ? {
-        id,
-        chainId: CHAIN_ID,
-        poolId,
-        token,
-        controller: undefined,
-        endpointSqrtPriceX96: undefined,
-        reachedSqrtPriceX96: undefined,
-        bondingLiquidity: undefined,
-        status: "AwaitingPosition",
-        progressBps: undefined,
-        tokenRemaining: undefined,
-        nativeRemainingNet: undefined,
-        configuredOccurrenceId: undefined,
-        activatedOccurrenceId: undefined,
-        reachedOccurrenceId: undefined,
-        begunOccurrenceId: undefined,
-        graduationOccurrenceId: undefined,
-        finalRecipient: undefined,
-        oldPositionTokenId: undefined,
-        newPositionTokenId: undefined,
-        nativeAmount: undefined,
-        tokenAmount: undefined,
-        tickLower: undefined,
-        tickUpper: undefined,
-        model: occurrence.release.model,
-        releaseVersion: occurrence.release.releaseVersion,
-        provenanceValid: true,
-        blockNumber: occurrence.provenance.blockNumber,
-      }
-    : { ...existing };
-
-  let valid = next.provenanceValid && sameValue(next.token, token);
-  if (event.eventName === "ClassicBondingConfigured") {
-    const typedParams = event.params;
-    const controller = lowerAddress(typedParams.controller);
-    const endpointSqrtPriceX96 = typedParams.endpointSqrtPriceX96;
-    valid = valid && endpointSqrtPriceX96 > 0n &&
-      (next.controller === undefined || sameValue(next.controller, controller)) &&
-      (next.endpointSqrtPriceX96 === undefined ||
-        next.endpointSqrtPriceX96 === endpointSqrtPriceX96) &&
-      (next.configuredOccurrenceId === undefined ||
-        next.configuredOccurrenceId === occurrence.provenance.id);
-    next.controller = controller;
-    next.endpointSqrtPriceX96 = endpointSqrtPriceX96;
-    next.configuredOccurrenceId = occurrence.provenance.id;
-    if (next.activatedOccurrenceId === undefined) {
-      next.status = "AwaitingPosition";
-    }
-  } else if (event.eventName === "ClassicBondingPositionActivated") {
-    const typedParams = event.params;
-    const bondingLiquidity = typedParams.bondingLiquidity;
-    valid = valid && bondingLiquidity > 0n &&
-      (next.bondingLiquidity === undefined ||
-        next.bondingLiquidity === bondingLiquidity) &&
-      (next.activatedOccurrenceId === undefined ||
-        next.activatedOccurrenceId === occurrence.provenance.id);
-    next.bondingLiquidity = bondingLiquidity;
-    next.activatedOccurrenceId = occurrence.provenance.id;
-    if (next.status !== "Ready" && next.status !== "Migrating" &&
-      next.status !== "Graduated") {
-      next.status = "Bonding";
-    }
-  } else if (event.eventName === "ClassicBondingReached") {
-    const typedParams = event.params;
-    const reachedSqrtPriceX96 = typedParams.endpointSqrtPriceX96;
-    valid = valid && reachedSqrtPriceX96 > 0n &&
-      (next.endpointSqrtPriceX96 === undefined ||
-        next.endpointSqrtPriceX96 === reachedSqrtPriceX96) &&
-      (next.reachedOccurrenceId === undefined ||
-        next.reachedOccurrenceId === occurrence.provenance.id);
-    next.reachedSqrtPriceX96 = reachedSqrtPriceX96;
-    next.reachedOccurrenceId = occurrence.provenance.id;
-    if (next.status !== "Graduated") next.status = "Ready";
-    next.progressBps = 10_000;
-    next.tokenRemaining = 0n;
-    next.nativeRemainingNet = 0n;
-  } else if (event.eventName === "ClassicGraduationBegun") {
-    const typedParams = event.params;
-    const controller = lowerAddress(typedParams.controller);
-    valid = valid &&
-      (next.controller === undefined || sameValue(next.controller, controller)) &&
-      (next.begunOccurrenceId === undefined ||
-        next.begunOccurrenceId === occurrence.provenance.id);
-    next.controller = controller;
-    next.begunOccurrenceId = occurrence.provenance.id;
-    if (next.status !== "Graduated") next.status = "Migrating";
-  } else {
-    const typedParams = event.params;
-    valid = valid &&
-      (next.graduationOccurrenceId === undefined ||
-        next.graduationOccurrenceId === occurrence.provenance.id) &&
-      typedParams.finalPositionTokenId !==
-        typedParams.bondingPositionTokenId;
-    next.status = "Graduated";
-    next.progressBps = 10_000;
-    next.tokenRemaining = 0n;
-    next.nativeRemainingNet = 0n;
-    next.graduationOccurrenceId = occurrence.provenance.id;
-    next.finalRecipient = lowerAddress(typedParams.finalPositionRecipient);
-    next.oldPositionTokenId = typedParams.bondingPositionTokenId;
-    next.newPositionTokenId = typedParams.finalPositionTokenId;
-    next.nativeAmount = typedParams.nativeAmount;
-    next.tokenAmount = typedParams.tokenAmount;
-    next.tickLower = exactInt(typedParams.tickLower, "graduation tickLower");
-    next.tickUpper = exactInt(typedParams.tickUpper, "graduation tickUpper");
-    valid = valid && next.tickLower === 9800 && next.tickUpper === 225_200;
-  }
-
-  next.provenanceValid = valid;
-  next.blockNumber = occurrence.provenance.blockNumber > next.blockNumber
-    ? occurrence.provenance.blockNumber
-    : next.blockNumber;
-  context.ClassicBondingState.set(next);
-
-  const relation = await context.PoolRelease.get(id);
-  if (relation === undefined) return;
-  const launch = await context.Launch.get(relation.launchId);
-  if (launch === undefined) return;
-  const reconciled = applyClassicBondingToLaunch(launch, next);
-  context.ClassicBondingState.set(reconciled.bonding);
-  context.Launch.set(reconciled.launch);
 }
 
 async function handlePoolConfigurationEvent(
@@ -2017,7 +1724,6 @@ function isEventFlag(key: keyof Launch): boolean {
     key === "hasInitialBuyEvent" ||
     key === "hasCustodyEvent" ||
     key === "hasCoordinatorEvent" ||
-    key === "hasBondingConfigurationEvent" ||
     key === "hasPoolRegistrationEvent" ||
     key === "hasPoolFeeDisclosureEvent" ||
     key === "hasRewardVaultFactoryEvent"
@@ -2196,14 +1902,6 @@ indexer.onEvent(
 );
 indexer.onEvent(
   {
-    contract: "ClassicV4Launcher",
-    event: "MemeBondingConfiguredV1",
-    ...optionalEventBlockFilter("ClassicV4Launcher"),
-  },
-  handleEvent,
-);
-indexer.onEvent(
-  {
     contract: "ClassicV4Hook",
     event: "PoolRegistered",
     ...optionalEventBlockFilter("ClassicV4Hook"),
@@ -2238,46 +1936,6 @@ indexer.onEvent(
   {
     contract: "ClassicV4Hook",
     event: "LauncherFeesClaimed",
-    ...optionalEventBlockFilter("ClassicV4Hook"),
-  },
-  handleEvent,
-);
-indexer.onEvent(
-  {
-    contract: "ClassicV4Hook",
-    event: "ClassicBondingConfigured",
-    ...optionalEventBlockFilter("ClassicV4Hook"),
-  },
-  handleEvent,
-);
-indexer.onEvent(
-  {
-    contract: "ClassicV4Hook",
-    event: "ClassicBondingPositionActivated",
-    ...optionalEventBlockFilter("ClassicV4Hook"),
-  },
-  handleEvent,
-);
-indexer.onEvent(
-  {
-    contract: "ClassicV4Hook",
-    event: "ClassicBondingReached",
-    ...optionalEventBlockFilter("ClassicV4Hook"),
-  },
-  handleEvent,
-);
-indexer.onEvent(
-  {
-    contract: "ClassicV4Hook",
-    event: "ClassicGraduationBegun",
-    ...optionalEventBlockFilter("ClassicV4Hook"),
-  },
-  handleEvent,
-);
-indexer.onEvent(
-  {
-    contract: "ClassicV4Hook",
-    event: "ClassicLiquidityGraduated",
     ...optionalEventBlockFilter("ClassicV4Hook"),
   },
   handleEvent,

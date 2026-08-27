@@ -1,4 +1,9 @@
-import { getAddress, toHex, type Address, type Hex } from "viem";
+import {
+  getAddress,
+  toHex,
+  type Address,
+  type Hex,
+} from "viem";
 
 import { ROBINHOOD_CHAIN_ID } from "./chains";
 
@@ -16,8 +21,6 @@ export type PreparedTransactionKind =
   | "token-to-permit2"
   | "permit2-to-router"
   | "swap"
-  | "bonding-max-buy"
-  | "bonding-graduate"
   | "claim-creator-fees"
   | "claim-classic-v3-rewards"
   | "update-classic-v3-payout"
@@ -48,20 +51,9 @@ type PreparedSwapTransaction = PreparedTransactionBase & {
   from?: never;
 };
 
-export type PreparedBondingMaxBuyTransaction = PreparedTransactionBase & {
-  kind: "bonding-max-buy";
-  gasLimit: string;
-  from?: never;
-};
-
-export type PreparedBondingGraduationTransaction = PreparedTransactionBase & {
-  kind: "bonding-graduate";
-  gasLimit: string;
-  from?: never;
-};
-
 export type PreparedTradeTransaction =
-  PreparedApprovalTransaction | PreparedSwapTransaction;
+  | PreparedApprovalTransaction
+  | PreparedSwapTransaction;
 
 type PreparedLaunchTransaction = PreparedTransactionBase & {
   kind: "launch";
@@ -103,8 +95,6 @@ type PreparedClaimTransaction =
 
 export type PreparedTransaction =
   | PreparedTradeTransaction
-  | PreparedBondingMaxBuyTransaction
-  | PreparedBondingGraduationTransaction
   | PreparedLaunchTransaction
   | PreparedPredictionMarketTransaction
   | PreparedClaimTransaction;
@@ -124,8 +114,6 @@ const kinds = new Set<PreparedTransactionKind>([
   "token-to-permit2",
   "permit2-to-router",
   "swap",
-  "bonding-max-buy",
-  "bonding-graduate",
   "claim-creator-fees",
   "claim-classic-v3-rewards",
   "update-classic-v3-payout",
@@ -179,10 +167,16 @@ function readUintString(
 }
 
 function readCalldata(value: unknown) {
-  if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) {
+  if (
+    typeof value !== "string" ||
+    !/^0x[0-9a-fA-F]+$/.test(value)
+  ) {
     throw new Error("The transaction calldata is invalid");
   }
-  if (value.length < 10 || value.length % 2 !== 0) {
+  if (
+    value.length < 10 ||
+    value.length % 2 !== 0
+  ) {
     throw new Error("The transaction must contain function calldata");
   }
   if (value.length > 131_074) {
@@ -191,8 +185,14 @@ function readCalldata(value: unknown) {
   return value as Hex;
 }
 
-export function parsePreparedTransaction(input: unknown): PreparedTransaction {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+export function parsePreparedTransaction(
+  input: unknown,
+): PreparedTransaction {
+  if (
+    typeof input !== "object" ||
+    input === null ||
+    Array.isArray(input)
+  ) {
     throw new Error("The prepared transaction is invalid");
   }
 
@@ -227,9 +227,7 @@ export function parsePreparedTransaction(input: unknown): PreparedTransaction {
     kind === "prediction-market-action"
   ) {
     if (record.chainId !== ROBINHOOD_CHAIN_ID) {
-      throw new Error(
-        "Prediction market launches are limited to Robinhood Chain",
-      );
+      throw new Error("Prediction market launches are limited to Robinhood Chain");
     }
   } else if (
     record.chainId !== ETHEREUM_MAINNET_CHAIN_ID &&
@@ -272,11 +270,7 @@ export function parsePreparedTransaction(input: unknown): PreparedTransaction {
       gasLimit: readUintString(record.gasLimit, "gas limit", false),
     };
   }
-  if (
-    kind === "swap" ||
-    kind === "bonding-max-buy" ||
-    kind === "bonding-graduate"
-  ) {
+  if (kind === "swap") {
     return {
       ...base,
       kind,
@@ -290,7 +284,11 @@ export function parsePreparedTransaction(input: unknown): PreparedTransaction {
     ...(record.gasLimit === undefined
       ? {}
       : {
-          gasLimit: readUintString(record.gasLimit, "gas limit", false),
+          gasLimit: readUintString(
+            record.gasLimit,
+            "gas limit",
+            false,
+          ),
         }),
   };
 }
@@ -349,7 +347,10 @@ export function buildEip1193TransactionRequest(
 }
 
 export function parseSubmittedTransactionHash(value: unknown): Hex {
-  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+  if (
+    typeof value !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(value)
+  ) {
     throw new Error("The wallet returned an invalid transaction hash");
   }
 
@@ -443,22 +444,6 @@ export function getPreparedTransactionReview(
       description: "Submit the prepared swap through Uniswap v4",
       buttonText: "Submit swap",
       successHeader: "Swap submitted",
-    };
-  }
-  if (kind === "bonding-max-buy") {
-    return {
-      description:
-        "Buy the exact remaining Bonding curve and create the final locked LP",
-      buttonText: "Buy & graduate",
-      successHeader: "Bonding completion submitted",
-    };
-  }
-  if (kind === "bonding-graduate") {
-    return {
-      description:
-        "Create the final permanently locked LP for the completed Bonding curve",
-      buttonText: "Complete graduation",
-      successHeader: "Graduation submitted",
     };
   }
   return {

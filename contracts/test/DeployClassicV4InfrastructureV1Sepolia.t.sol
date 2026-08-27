@@ -10,7 +10,7 @@ contract DeployClassicV4InfrastructureV1SepoliaTest is DeployClassicV4Infrastruc
         _selectFork("SEPOLIA_RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com", SNAPSHOT_BLOCK);
     }
 
-    function test_sepoliaReusesExactV3DependenciesAndDeploysStandardReleasePrep() public {
-        _assertDeterministicDeploymentAndLaunch(0);
+    function test_sepoliaReusesExactV3DependenciesAndDeploysCanonicalLiquidityReleasePrep() public {
+        _assertDeterministicDeploymentAndLaunch();
     }
 }

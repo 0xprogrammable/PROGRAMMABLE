@@ -26,7 +26,10 @@ describe("prepared transaction boundary", () => {
       }),
     ).toMatchObject({ kind: "launch", chainId: 1, value: "12" });
 
-    for (const kind of ["token-to-permit2", "permit2-to-router"] as const) {
+    for (const kind of [
+      "token-to-permit2",
+      "permit2-to-router",
+    ] as const) {
       expect(
         parsePreparedTransaction({
           kind,
@@ -47,26 +50,6 @@ describe("prepared transaction boundary", () => {
         gasLimit: "250000",
       }),
     ).toMatchObject({ kind: "swap", gasLimit: "250000" });
-    expect(
-      parsePreparedTransaction({
-        kind: "bonding-max-buy",
-        chainId: 1,
-        to: TO,
-        data: DATA,
-        value: "12",
-        gasLimit: "900000",
-      }),
-    ).toMatchObject({ kind: "bonding-max-buy", gasLimit: "900000" });
-    expect(
-      parsePreparedTransaction({
-        kind: "bonding-graduate",
-        chainId: 1,
-        to: TO,
-        data: DATA,
-        value: "0",
-        gasLimit: "700000",
-      }),
-    ).toMatchObject({ kind: "bonding-graduate", gasLimit: "700000" });
 
     expect(
       parsePreparedTransaction({
@@ -98,21 +81,21 @@ describe("prepared transaction boundary", () => {
     expect(
       parsePreparedTransaction({ ...valid, chainId: 11_155_111 }),
     ).toMatchObject({ chainId: 11_155_111 });
-    expect(() => parsePreparedTransaction({ ...valid, chainId: 8453 })).toThrow(
-      "Ethereum Mainnet or Sepolia",
-    );
-    expect(() => parsePreparedTransaction({ ...valid, to: "0x1234" })).toThrow(
-      "destination",
-    );
+    expect(() =>
+      parsePreparedTransaction({ ...valid, chainId: 8453 }),
+    ).toThrow("Ethereum Mainnet or Sepolia");
+    expect(() =>
+      parsePreparedTransaction({ ...valid, to: "0x1234" }),
+    ).toThrow("destination");
     expect(() =>
       parsePreparedTransaction({ ...valid, data: "0x12zz" }),
     ).toThrow("calldata");
-    expect(() => parsePreparedTransaction({ ...valid, data: "0x12" })).toThrow(
-      "function calldata",
-    );
-    expect(() => parsePreparedTransaction({ ...valid, value: "-1" })).toThrow(
-      "value",
-    );
+    expect(() =>
+      parsePreparedTransaction({ ...valid, data: "0x12" }),
+    ).toThrow("function calldata");
+    expect(() =>
+      parsePreparedTransaction({ ...valid, value: "-1" }),
+    ).toThrow("value");
     expect(() =>
       parsePreparedTransaction({ ...valid, integratorFeeBps: 10 }),
     ).toThrow("unsupported field");
@@ -206,24 +189,6 @@ describe("prepared transaction boundary", () => {
     expect(() =>
       parsePreparedTransaction({
         kind: "swap",
-        chainId: 1,
-        to: TO,
-        data: DATA,
-        value: "0",
-      }),
-    ).toThrow("gas limit");
-    expect(() =>
-      parsePreparedTransaction({
-        kind: "bonding-max-buy",
-        chainId: 1,
-        to: TO,
-        data: DATA,
-        value: "1",
-      }),
-    ).toThrow("gas limit");
-    expect(() =>
-      parsePreparedTransaction({
-        kind: "bonding-graduate",
         chainId: 1,
         to: TO,
         data: DATA,
@@ -328,10 +293,9 @@ describe("prepared transaction boundary", () => {
       gasLimit: "120000",
     };
 
-    expect(parsePreparedTransactionForAccount(claim, FROM)).toMatchObject({
-      kind: "claim-creator-fees",
-      from: FROM,
-    });
+    expect(
+      parsePreparedTransactionForAccount(claim, FROM),
+    ).toMatchObject({ kind: "claim-creator-fees", from: FROM });
     expect(() =>
       parsePreparedTransactionForAccount(
         claim,
@@ -366,18 +330,6 @@ describe("Privy transaction review copy", () => {
       "Submit the prepared swap through Uniswap v4",
       "Submit swap",
       "Swap submitted",
-    ],
-    [
-      "bonding-max-buy",
-      "Buy the exact remaining Bonding curve and create the final locked LP",
-      "Buy & graduate",
-      "Bonding completion submitted",
-    ],
-    [
-      "bonding-graduate",
-      "Create the final permanently locked LP for the completed Bonding curve",
-      "Complete graduation",
-      "Graduation submitted",
     ],
     [
       "claim-creator-fees",

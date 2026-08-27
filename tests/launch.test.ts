@@ -223,33 +223,33 @@ describe("Classic launch plan", () => {
     expect(getClassicInitialBuyPreview("0.03", "11")).toBeNull();
   });
 
-  it("uses the 80% allocation for the Bonding preset", () => {
+  it("makes the initial-buy preview aware of the bounded Deeper preset", () => {
     const standard = getClassicInitialBuyPreview("0.03", "1", "standard");
-    const bonding = getClassicInitialBuyPreview("0.03", "1", "bonding");
+    const deeper = getClassicInitialBuyPreview("0.03", "1", "deep-30");
 
     expect(standard?.tokenAmount).toBeCloseTo(21_438_505.518, 2);
-    expect(bonding?.tokenAmount).toBeCloseTo(21_455_721.588, 2);
-    expect(bonding?.tokenAmount).toBeGreaterThan(standard?.tokenAmount ?? 0);
-    expect(bonding?.poolEthAmount).toBe(standard?.poolEthAmount);
-    expect(bonding?.curveCapacityWei).toBe(4_716_512_844_756_726_512n);
-    expect(bonding?.remainingCurveCapacityWei).toBe(
-      4_686_812_844_756_726_512n,
+    expect(deeper?.tokenAmount).toBeCloseTo(21_544_712.788, 2);
+    expect(deeper?.tokenAmount).toBeGreaterThan(standard?.tokenAmount ?? 0);
+    expect(deeper?.poolEthAmount).toBe(standard?.poolEthAmount);
+    expect(deeper?.curveCapacityWei).toBe(5_895_641_055_945_908_140n);
+    expect(deeper?.remainingCurveCapacityWei).toBe(
+      5_865_941_055_945_908_140n,
     );
-    expect(bonding?.endPriceMultipleWad).toBe(
+    expect(deeper?.endPriceMultipleWad).toBe(
       18_913_066_072_547_532_342n,
     );
   });
 
-  it("uses exact fee rounding and rejects rather than clamps over-capacity Bonding buys", () => {
+  it("uses exact fee rounding and rejects rather than clamps over-capacity Deeper buys", () => {
     const exact = getClassicInitialBuyCurveQuote(
-      "4.721234078835562074",
+      "5.901542598544452592",
       "0.1",
-      "bonding",
+      "deep-30",
     );
     const over = getClassicInitialBuyCurveQuote(
-      "4.721234078835562075",
+      "5.901542598544452593",
       "0.1",
-      "bonding",
+      "deep-30",
     );
 
     expect(exact.status).toBe("ready");
@@ -258,7 +258,7 @@ describe("Classic launch plan", () => {
         exact.preview.curveCapacityWei ?? 0n,
       );
       expect(exact.preview.tokenAmountWei).toBeLessThanOrEqual(
-        800_000_000n * 10n ** 18n,
+        1_000_000_000n * 10n ** 18n,
       );
     }
     expect(over.status).toBe("over-capacity");

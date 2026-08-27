@@ -21,8 +21,6 @@ import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPosition
 
 import { ClassicInitialBuyCustodyConfig, ClassicInitialBuyCustodyMode } from "./ClassicInitialBuyVestingWalletV1.sol";
 import { ClassicInitialBuyVestingWalletFactoryV1 } from "./ClassicInitialBuyVestingWalletFactoryV1.sol";
-import { ClassicGraduationConfigV1, ClassicGraduationVaultV1 } from "./ClassicGraduationVaultV1.sol";
-import { ClassicGraduationVaultFactoryV1 } from "./ClassicGraduationVaultFactoryV1.sol";
 import { ClassicLaunchPolicyV1 } from "./ClassicLaunchPolicyV1.sol";
 import { ClassicPositionPlannerV1 } from "./ClassicPositionPlannerV1.sol";
 import { ClassicRewardVaultFactoryV1 } from "./ClassicRewardVaultFactoryV1.sol";
@@ -31,17 +29,14 @@ import { LockedPositionFeeForwarderFactoryV1 } from "./LockedPositionFeeForwarde
 import { IClassicFeeHookV3 } from "./interfaces/IClassicFeeHookV3.sol";
 
 /// @title MemeLaunchV3
-/// @notice Launches a fixed-supply Classic token with immutable directional fees and a reviewed liquidity preset.
-/// @dev Preset 0 preserves the legacy permanent position. Preset 1 sells 80% on a finite bonding range, then
-///      permissionlessly replaces that position with a permanently locked, wider position in the same v4 pool.
+/// @notice Launches a fixed-supply Classic token with immutable directional fees and one canonical liquidity design.
+/// @dev Preserves the V2 event surface, single permanently locked LP NFT, initial-buy custody and reward-vault
+///      lifecycle. Every launch uses the complete-supply concentrated range with about 29.86% more active liquidity
+///      at launch than the previous Classic range. There is no selectable mode, graduation or migration lifecycle.
 contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
     using CurrencySettler for Currency;
     using SafeCast for *;
 
-    uint8 public constant STANDARD_LIQUIDITY_PRESET = 0;
-    uint8 public constant BONDING_LIQUIDITY_PRESET = 1;
-    /// @notice Compatibility alias for integrations compiled against the earlier preset name.
-    uint8 public constant DEEP30_LIQUIDITY_PRESET = BONDING_LIQUIDITY_PRESET;
     uint8 public constant TOKEN_DECIMALS = 18;
     uint256 public constant TOKEN_SUPPLY = 1_000_000_000 ether;
     uint256 public constant MIN_INITIAL_BUY_WEI = 0.0006 ether;
@@ -50,8 +45,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
     int24 public constant INITIAL_TICK = 204_200;
     int24 public constant TICK_SPACING = 200;
     uint24 public constant LP_FEE_PIPS = 0;
-    uint256 private constant LIQUIDITY_PRESET_SHIFT = 248;
-    uint256 private constant LIQUIDITY_PRESET_MASK = uint256(type(uint8).max) << LIQUIDITY_PRESET_SHIFT;
     // Slither 0.11.5 cannot build IR for unlockCallback and consequently misses the native settlement use.
     // slither-disable-next-line unused-state
     Currency private constant NATIVE = Currency.wrap(address(0));
@@ -65,7 +58,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
     ClassicInitialBuyVestingWalletFactoryV1 public immutable initialBuyVestingWalletFactory;
     ClassicLaunchPolicyV1 public immutable launchPolicy;
     LockedPositionFeeForwarderFactoryV1 public immutable positionForwarderFactory;
-    ClassicGraduationVaultFactoryV1 public immutable graduationVaultFactory;
     // Canonical Mainnet Launch Stamp Router. Classic launches are intentionally router-only.
     // slither-disable-next-line naming-convention
     address public constant ROUTER = 0x8622DD5bAb44185f2A458ac90384Ac99248f8d56;
@@ -73,8 +65,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
     mapping(address token => bytes32 launchHash) public launchHashOf;
     mapping(address token => address rewardVault) public rewardVaultOf;
     mapping(address token => address custody) public initialBuyCustodyOf;
-    mapping(address token => address vault) public graduationVaultOf;
-    mapping(address token => address recipient) public finalPositionRecipientOf;
 
     struct LaunchParameters {
         string name;
@@ -100,21 +90,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         address initialBuyCustody;
         bytes32 poolId;
         bytes32 launchHash;
-        address graduationVault;
-        address finalPositionRecipient;
-        uint256 graduationReserveAmount;
-        uint256 finalPositionTokenId;
-        uint128 finalLiquidity;
-    }
-
-    struct Positioning {
-        Plan plan;
-        Position position;
-        address positionRecipient;
-        address finalPositionRecipient;
-        address graduationVault;
-        uint128 finalLiquidity;
-        uint256 graduationReserveAmount;
     }
 
     struct InitialBuyCallbackData {
@@ -132,17 +107,12 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
     error InvalidInitialTick(int24 actual, int24 expected);
     error InvalidPositionManager(address expectedPoolManager, address actualPoolManager);
     error InvalidPositionManagerFactory(address expectedPositionManager, address actualPositionManager);
-    error InvalidGraduationVaultFactory(address factory);
-    error InvalidBondingPosition();
     error InvalidPositionPlanner(address planner, bytes32 actualCodeHash, bytes32 expectedCodeHash);
     error InvalidSharedHook(address expectedPoolManager, uint24 lpFeePips, int24 tickSpacing);
     error InvalidVaultFactory(address expected, address actual);
     error TokenAddressMismatch(address actual, address predicted);
     error TokenAlreadyExists(address token);
     error TokenCustodyMismatch(uint256 launcherBalance, uint256 positionManagerBalance);
-    error PositionRecipientTokenBalanceMismatch(uint256 actual, uint256 expected);
-    error GraduationUnavailable(address token);
-    error InvalidLiquidityPresetSalt(bytes32 creatorSalt);
     error UnauthorizedRouter(address caller, address expectedRouter);
     error UnauthorizedUnlockCallback(address caller);
     error ZeroLaunchWallet();
@@ -190,20 +160,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         bytes32 configurationHash,
         bytes32 launchHash
     );
-    event MemeBondingConfiguredV1(
-        address indexed token,
-        bytes32 indexed poolId,
-        address indexed graduationVault,
-        address finalPositionRecipient,
-        uint256 bondingPositionTokenId,
-        uint256 graduationReserveAmount,
-        uint128 bondingLiquidity,
-        uint128 finalLiquidity,
-        int24 endpointTick,
-        int24 finalTickLower,
-        int24 finalTickUpper,
-        bytes32 launchHash
-    );
 
     constructor(
         IPoolManager poolManager_,
@@ -214,8 +170,7 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         ClassicRewardVaultFactoryV1 rewardVaultFactory_,
         ClassicInitialBuyVestingWalletFactoryV1 initialBuyVestingWalletFactory_,
         ClassicLaunchPolicyV1 launchPolicy_,
-        LockedPositionFeeForwarderFactoryV1 positionForwarderFactory_,
-        ClassicGraduationVaultFactoryV1 graduationVaultFactory_
+        LockedPositionFeeForwarderFactoryV1 positionForwarderFactory_
     ) {
         _requireContract(address(poolManager_));
         _requireContract(address(positionManager_));
@@ -226,7 +181,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         _requireContract(address(initialBuyVestingWalletFactory_));
         _requireContract(address(launchPolicy_));
         _requireContract(address(positionForwarderFactory_));
-        _requireContract(address(graduationVaultFactory_));
 
         bytes32 expectedPlannerCodeHash = keccak256(type(ClassicPositionPlannerV1).runtimeCode);
         bytes32 actualPlannerCodeHash = address(positionPlanner_).codehash;
@@ -241,12 +195,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         address factoryPositionManager = address(positionForwarderFactory_.positionManager());
         if (factoryPositionManager != address(positionManager_)) {
             revert InvalidPositionManagerFactory(address(positionManager_), factoryPositionManager);
-        }
-        if (
-            address(graduationVaultFactory_.positionManager()) != address(positionManager_)
-                || address(graduationVaultFactory_.positionForwarderFactory()) != address(positionForwarderFactory_)
-        ) {
-            revert InvalidGraduationVaultFactory(address(graduationVaultFactory_));
         }
         if (
             address(feeHook_.poolManager()) != address(poolManager_) || feeHook_.LP_FEE_PIPS() != LP_FEE_PIPS
@@ -268,7 +216,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         initialBuyVestingWalletFactory = initialBuyVestingWalletFactory_;
         launchPolicy = launchPolicy_;
         positionForwarderFactory = positionForwarderFactory_;
-        graduationVaultFactory = graduationVaultFactory_;
     }
 
     function predictTokenAddress(string calldata name, string calldata symbol, address deployer, bytes32 creatorSalt)
@@ -294,8 +241,7 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
     }
 
     /// @notice Creates, registers, initializes and permanently positions a Classic launch atomically.
-    /// @dev The top byte of creatorSalt is a versioned preset selector: 0 = Standard, 1 = Bonding.
-    ///      The remaining 248 bits retain deterministic creator entropy. Only the canonical Router may call.
+    /// @dev Only the canonical Launch Stamp Router may call; `launchWallet` remains the creator in every binding.
     function launchFor(address launchWallet, LaunchParameters calldata parameters)
         external
         payable
@@ -318,103 +264,42 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
 
         PoolKey memory key = _poolKey(result.token);
         result.poolId = PoolId.unwrap(key.toId());
-        _createToken(parameters, effectiveGraffiti, result.token);
         result.rewardVault = _deployOrReuseRewardVault(
             result.token, launchWallet, result.poolId, parameters.rewardBeneficiaries, parameters.rewardSharesBps
         );
-        result.positionTokenId = positionManager.nextTokenId();
-        Positioning memory positioning = _preparePositioning(
-            key, result.token, launchWallet, result.positionTokenId, liquidityPresetForSalt(parameters.creatorSalt)
-        );
-        result.positionRecipient = positioning.positionRecipient;
-        result.finalPositionRecipient = positioning.finalPositionRecipient;
-        result.graduationVault = positioning.graduationVault;
-        result.graduationReserveAmount = positioning.graduationReserveAmount;
-        result.finalLiquidity = positioning.finalLiquidity;
-        result.tokenLiquidityAmount = positioning.position.amount1;
-        result.lockedTokenDust = TOKEN_SUPPLY - positioning.position.amount1;
+        result.positionRecipient = _deployOrReusePositionRecipient(result.token, launchWallet);
+        _createToken(parameters, effectiveGraffiti, result.token);
 
         bytes32 registeredPoolId =
-            _registerPool(parameters, result, key, liquidityPresetForSalt(parameters.creatorSalt));
+            feeHook.registerPool(key, result.rewardVault, parameters.buySwapFeeBps, parameters.sellSwapFeeBps);
         assert(registeredPoolId == result.poolId);
 
         uint160 initialSqrtPriceX96 = TickMath.getSqrtPriceAtTick(INITIAL_TICK);
         int24 initializedTick = poolManager.initialize(key, initialSqrtPriceX96);
         if (initializedTick != INITIAL_TICK) revert InvalidInitialTick(initializedTick, INITIAL_TICK);
 
+        (Plan memory plan, Position memory position, uint256 lockedTokenDust) =
+            positionPlanner.buildOneSidedPlan(key, result.positionRecipient);
+        result.positionTokenId = positionManager.nextTokenId();
+        result.tokenLiquidityAmount = position.amount1;
+        result.lockedTokenDust = lockedTokenDust;
+
         Currency.wrap(result.token).transfer(address(positionManager), TOKEN_SUPPLY);
-        positionManager.modifyLiquidities(
-            abi.encode(positioning.plan.actions, positioning.plan.params), block.timestamp
-        );
+        positionManager.modifyLiquidities(abi.encode(plan.actions, plan.params), block.timestamp);
 
         uint256 launcherTokenBalance = IERC20(result.token).balanceOf(address(this));
         uint256 positionManagerTokenBalance = IERC20(result.token).balanceOf(address(positionManager));
         if (launcherTokenBalance != 0 || positionManagerTokenBalance != 0) {
             revert TokenCustodyMismatch(launcherTokenBalance, positionManagerTokenBalance);
         }
-        uint256 positionRecipientTokenBalance = IERC20(result.token).balanceOf(result.positionRecipient);
-        if (positionRecipientTokenBalance != result.lockedTokenDust) {
-            revert PositionRecipientTokenBalanceMismatch(positionRecipientTokenBalance, result.lockedTokenDust);
-        }
 
-        return _completeLaunch(launchWallet, parameters, key, positioning.position, result);
-    }
-
-    function liquidityPresetForSalt(bytes32 creatorSalt) public pure returns (uint8 preset) {
-        // The mask leaves exactly one byte before the narrowing cast.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        preset = uint8(uint256(creatorSalt & bytes32(LIQUIDITY_PRESET_MASK)) >> LIQUIDITY_PRESET_SHIFT);
-        if (preset > BONDING_LIQUIDITY_PRESET) revert InvalidLiquidityPresetSalt(creatorSalt);
-    }
-
-    function _completeLaunch(
-        address launchWallet,
-        LaunchParameters calldata parameters,
-        PoolKey memory key,
-        Position memory position,
-        LaunchResult memory result
-    ) private returns (LaunchResult memory) {
-        result.initialBuyCustody = _deployOrReuseInitialBuyCustody(
-            result.token, launchWallet, parameters.initialBuyCustody
-        );
+        result.initialBuyCustody =
+            _deployOrReuseInitialBuyCustody(result.token, launchWallet, parameters.initialBuyCustody);
         address initialBuyRecipient = result.initialBuyCustody == address(0) ? launchWallet : result.initialBuyCustody;
         result.initialBuyTokenAmount = _executeInitialBuy(key, initialBuyRecipient, result.initialBuyNativeAmount);
         // ReentrancyGuardTransient protects the complete launch; Slither does not model its transient lock.
         // slither-disable-next-line reentrancy-benign
-        result.launchHash =
-            _recordLaunch(parameters, result, position, launchWallet, liquidityPresetForSalt(parameters.creatorSalt));
-        if (result.graduationVault != address(0)) {
-            (bool ready,,) = feeHook.bondingState(result.poolId);
-            if (ready) {
-                ClassicGraduationVaultV1(payable(result.graduationVault)).graduate();
-                result.finalPositionTokenId =
-                    ClassicGraduationVaultV1(payable(result.graduationVault)).finalPositionTokenId();
-            }
-        }
-        return result;
-    }
-
-    /// @notice Permissionlessly completes a Bonding launch once its exact endpoint has been reached.
-    function graduate(address token) external nonReentrant returns (uint256 finalPositionTokenId) {
-        address vaultAddress = graduationVaultOf[token];
-        if (vaultAddress == address(0)) revert GraduationUnavailable(token);
-        ClassicGraduationVaultV1 vault = ClassicGraduationVaultV1(payable(vaultAddress));
-        vault.graduate();
-        finalPositionTokenId = vault.finalPositionTokenId();
-    }
-
-    /// @notice Consumes the exact remaining Bonding curve and graduates the same pool in one transaction.
-    /// @dev The fixed launcher destination lets app clients validate the wallet transaction without trusting
-    ///      an indexer-provided per-token vault address. The ownerless vault still validates the exact value.
-    function maxBuyAndGraduate(address token, address recipient)
-        external
-        payable
-        nonReentrant
-        returns (uint256 tokenAmount, uint256 finalPositionTokenId)
-    {
-        address vaultAddress = graduationVaultOf[token];
-        if (vaultAddress == address(0)) revert GraduationUnavailable(token);
-        return ClassicGraduationVaultV1(payable(vaultAddress)).maxBuyAndGraduate{ value: msg.value }(recipient);
+        result.launchHash = _recordLaunch(parameters, result, position, launchWallet);
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
@@ -450,74 +335,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         return _poolKey(token);
     }
 
-    function _preparePositioning(
-        PoolKey memory key,
-        address token,
-        address deployer,
-        uint256 bondingPositionTokenId,
-        uint8 preset
-    ) private returns (Positioning memory positioning) {
-        positioning.finalPositionRecipient = _deployOrReusePositionRecipient(token, deployer);
-        if (preset == STANDARD_LIQUIDITY_PRESET) {
-            positioning.positionRecipient = positioning.finalPositionRecipient;
-            (positioning.plan, positioning.position,) =
-                positionPlanner.buildOneSidedPlan(key, positioning.positionRecipient, preset);
-            return positioning;
-        }
-
-        (, Position memory draftPosition, uint256 draftCurveDust) =
-            positionPlanner.buildOneSidedPlan(key, address(this), preset);
-        uint128 bondingLiquidity = draftPosition.liquidity.toUint128();
-        (positioning.finalLiquidity,,) = positionPlanner.finalPositionForBonding(bondingLiquidity);
-
-        ClassicGraduationConfigV1 memory config = ClassicGraduationConfigV1({
-            poolKey: key,
-            bondingPositionTokenId: bondingPositionTokenId,
-            finalPositionRecipient: positioning.finalPositionRecipient,
-            bondingTickLower: draftPosition.tickLower,
-            bondingTickUpper: draftPosition.tickUpper,
-            bondingLiquidity: bondingLiquidity,
-            finalLiquidity: positioning.finalLiquidity
-        });
-        positioning.graduationVault =
-            address(graduationVaultFactory.deployOrGet(_graduationVaultSalt(token, deployer), config));
-        positioning.positionRecipient = positioning.graduationVault;
-        positioning.graduationReserveAmount = positionPlanner.GRADUATION_TOKEN_RESERVE();
-
-        uint256 curveDust;
-        (positioning.plan, positioning.position, curveDust) =
-            positionPlanner.buildOneSidedPlan(key, positioning.positionRecipient, preset);
-        if (
-            positioning.position.recipient != positioning.graduationVault
-                || positioning.position.liquidity != draftPosition.liquidity
-                || positioning.position.amount0 != draftPosition.amount0
-                || positioning.position.amount1 != draftPosition.amount1
-                || positioning.position.tickLower != draftPosition.tickLower
-                || positioning.position.tickUpper != draftPosition.tickUpper || curveDust != draftCurveDust
-        ) {
-            revert InvalidBondingPosition();
-        }
-    }
-
-    function _registerPool(
-        LaunchParameters calldata parameters,
-        LaunchResult memory result,
-        PoolKey memory key,
-        uint8 liquidityPreset
-    ) private returns (bytes32 poolId) {
-        if (liquidityPreset == STANDARD_LIQUIDITY_PRESET) {
-            return feeHook.registerPool(key, result.rewardVault, parameters.buySwapFeeBps, parameters.sellSwapFeeBps);
-        }
-        return feeHook.registerPool(
-            key,
-            result.rewardVault,
-            parameters.buySwapFeeBps,
-            parameters.sellSwapFeeBps,
-            result.graduationVault,
-            TickMath.getSqrtPriceAtTick(positionPlanner.BONDING_TICK_LOWER())
-        );
-    }
-
     function _executeInitialBuy(PoolKey memory key, address recipient, uint256 nativeAmount)
         private
         returns (uint256 tokenAmount)
@@ -544,20 +361,17 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         LaunchParameters calldata parameters,
         LaunchResult memory result,
         Position memory position,
-        address deployer,
-        uint8 liquidityPreset
+        address deployer
     ) private returns (bytes32 launchHash) {
         bytes32 rewardConfigurationHash = rewardVaultFactory.configurationHashOf(result.rewardVault);
         bytes32 custodyConfigurationHash = _initialBuyCustodyConfigurationHash(parameters, result, deployer);
         bytes32 infrastructureHash =
             _infrastructureHash(result, deployer, rewardConfigurationHash, custodyConfigurationHash);
-        bytes32 economicsHash = _economicsHash(parameters, result, position, custodyConfigurationHash, liquidityPreset);
+        bytes32 economicsHash = _economicsHash(parameters, result, position, custodyConfigurationHash);
         launchHash = keccak256(abi.encode(block.chainid, address(this), infrastructureHash, economicsHash));
         launchHashOf[result.token] = launchHash;
         rewardVaultOf[result.token] = result.rewardVault;
         initialBuyCustodyOf[result.token] = result.initialBuyCustody;
-        graduationVaultOf[result.token] = result.graduationVault;
-        finalPositionRecipientOf[result.token] = result.finalPositionRecipient;
 
         _emitLaunchEvents(
             parameters, result, position, deployer, rewardConfigurationHash, custodyConfigurationHash, launchHash
@@ -603,22 +417,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
             custodyConfigurationHash,
             launchHash
         );
-        if (result.graduationVault != address(0)) {
-            emit MemeBondingConfiguredV1(
-                result.token,
-                result.poolId,
-                result.graduationVault,
-                result.finalPositionRecipient,
-                result.positionTokenId,
-                result.graduationReserveAmount,
-                position.liquidity.toUint128(),
-                result.finalLiquidity,
-                positionPlanner.BONDING_TICK_LOWER(),
-                positionPlanner.FINAL_TICK_LOWER(),
-                positionPlanner.FINAL_TICK_UPPER(),
-                launchHash
-            );
-        }
     }
 
     function _emitTokenLaunched(
@@ -649,41 +447,35 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         bytes32 rewardConfigurationHash,
         bytes32 custodyConfigurationHash
     ) private view returns (bytes32) {
-        bytes32 tokenAndRewardHash = keccak256(
-            abi.encode(deployer, result.token, address(feeHook), result.rewardVault, rewardConfigurationHash)
-        );
-        bytes32 custodyHash = keccak256(
-            abi.encode(address(initialBuyVestingWalletFactory), result.initialBuyCustody, custodyConfigurationHash)
-        );
-        bytes32 positionHash = keccak256(
+        return keccak256(
             abi.encode(
+                deployer,
+                result.token,
+                address(feeHook),
+                result.rewardVault,
+                rewardConfigurationHash,
+                address(initialBuyVestingWalletFactory),
+                result.initialBuyCustody,
+                custodyConfigurationHash,
                 result.positionRecipient,
                 result.positionTokenId,
-                address(graduationVaultFactory),
-                result.graduationVault,
-                result.finalPositionRecipient,
                 result.poolId
             )
         );
-        return keccak256(abi.encode(tokenAndRewardHash, custodyHash, positionHash));
     }
 
     function _economicsHash(
         LaunchParameters calldata parameters,
         LaunchResult memory result,
         Position memory position,
-        bytes32 custodyConfigurationHash,
-        uint8 liquidityPreset
+        bytes32 custodyConfigurationHash
     ) private view returns (bytes32) {
-        // The resolved lower tick is the immutable canonical binding for the selected liquidity preset.
+        // The resolved ticks bind the one canonical complete-supply Classic liquidity design.
         bytes32 liquidityHash = keccak256(
             abi.encode(
                 TOKEN_SUPPLY,
                 result.tokenLiquidityAmount,
                 result.lockedTokenDust,
-                result.graduationReserveAmount,
-                result.finalLiquidity,
-                liquidityPreset,
                 INITIAL_TICK,
                 position.tickLower,
                 position.tickUpper,
@@ -802,8 +594,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
         // Reuse the hook's canonical fee validation before any token, vault, position or pool work.
         feeHook.quoteGrossFees(0, parameters.buySwapFeeBps);
         feeHook.quoteGrossFees(0, parameters.sellSwapFeeBps);
-        // Fail closed before token/factory deployment; the pinned planner owns the preset-to-range mapping.
-        positionPlanner.tickLowerForPreset(liquidityPresetForSalt(parameters.creatorSalt));
         launchPolicy.validate(
             parameters.name,
             parameters.symbol,
@@ -824,10 +614,6 @@ contract MemeLaunchV3 is IUnlockCallback, ReentrancyGuardTransient {
 
     function _rewardVaultSalt(address token, address deployer) private pure returns (bytes32) {
         return keccak256(abi.encode("programmable.classic-reward-vault.v1", token, deployer));
-    }
-
-    function _graduationVaultSalt(address token, address deployer) private pure returns (bytes32) {
-        return keccak256(abi.encode("programmable.classic-graduation-vault.v1", token, deployer));
     }
 
     // Slither cannot build IR for the caller and therefore misses this use.

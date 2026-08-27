@@ -27,16 +27,16 @@ describe("Classic V4 launch controls", () => {
   it("lets Max repair an invalid or over-capacity Activation Buy", () => {
     const overCapacity = {
       ...createClassicV3Draft(),
-      classicLiquidityPreset: "bonding" as const,
-      initialBuyEth: "4.7213",
+      classicLiquidityPreset: "deep-30" as const,
+      initialBuyEth: "5.9016",
     };
 
     const checked = classicMaximumCheckDraft(overCapacity, true);
     expect(checked).toMatchObject({
-      classicLiquidityPreset: "bonding",
+      classicLiquidityPreset: "deep-30",
       initialBuyEth: "0.0006",
     });
-    expect(overCapacity.initialBuyEth).toBe("4.7213");
+    expect(overCapacity.initialBuyEth).toBe("5.9016");
   });
 
   it("fails closed before any wallet path while the V4 UI is preview-only", () => {
@@ -50,7 +50,7 @@ describe("Classic V4 launch controls", () => {
   it("leaves the live V3 controls unchanged when the preview flag is off", () => {
     const html = renderFeeStep(createClassicV3Draft(), false);
 
-    expect(html).not.toContain("Liquidity mode");
+    expect(html).not.toContain("Liquidity depth");
     expect(html).not.toContain('id="classic-buy-fee" type="text"');
     expect(html).toContain('aria-label="Buy fee"');
     expect(html).toContain("1.00%");
@@ -67,11 +67,11 @@ describe("Classic V4 launch controls", () => {
     expect(
       normalizeClassicV3Draft({
         ...createClassicV3Draft(),
-        classicLiquidityPreset: "deep-30" as unknown as "bonding",
+        classicLiquidityPreset: "deep-30",
       }),
     ).toMatchObject({
       launchModel: "classic-v3",
-      classicLiquidityPreset: "bonding",
+      classicLiquidityPreset: "deep-30",
     });
     expect(
       normalizeClassicV3Draft({
@@ -104,38 +104,41 @@ describe("Classic V4 launch controls", () => {
     expect(html).toContain("0.00%");
   });
 
-  it("uses native radios and discloses the Bonding lifecycle", () => {
+  it("uses native radios and discloses the bounded Deeper range", () => {
     const standardHtml = renderFeeStep(createClassicV3Draft());
     const deeperHtml = renderFeeStep({
       ...createClassicV3Draft(),
-      classicLiquidityPreset: "bonding",
+      classicLiquidityPreset: "deep-30",
     });
 
-    expect(standardHtml).toContain("<legend>Liquidity mode</legend>");
+    expect(standardHtml).toContain("<legend>Liquidity depth</legend>");
     expect(standardHtml.match(/type="radio"/g)).toHaveLength(2);
     expect(standardHtml).toContain('name="classic-liquidity-preset"');
     expect(standardHtml).toContain("Full one-sided launch range");
-    expect(deeperHtml).toContain("80% curve · 20% final locked LP");
-    expect(deeperHtml).toContain("reserves 20% for the final permanently locked LP");
-    expect(deeperHtml).toContain("Max completes Bonding automatically");
-    expect(deeperHtml).toContain("same token and pool");
+    expect(deeperHtml).toContain("About 30% higher active liquidity at launch");
+    expect(deeperHtml).toContain("18.9× the opening price");
+    expect(deeperHtml).toContain("5.9 ETH of net curve capacity");
+    expect(deeperHtml).toContain("It is not deeper at every price");
+    expect(deeperHtml).toContain(
+      "One v4 pool and one permanently locked position",
+    );
     expect(deeperHtml).toContain("Activation Buy amount");
     expect(deeperHtml).toContain("paid in addition to network gas");
     expect(deeperHtml).toContain("reaches the curve after fees");
-    expect(deeperHtml).toContain("net remains until graduation");
+    expect(deeperHtml).toContain("net capacity remains");
   });
 
   it("shows a fail-closed range error instead of a clamped token estimate", () => {
-    const maximumActivationBuy = "4.721234078835562074";
+    const maximumActivationBuy = "5.901542598544452592";
     const html = renderFeeStep({
       ...createClassicV3Draft(),
       buySwapFeePercent: "0.1",
-      classicLiquidityPreset: "bonding",
-      initialBuyEth: "4.7213",
+      classicLiquidityPreset: "deep-30",
+      initialBuyEth: "5.9016",
     });
 
     expect(html).toContain('role="alert"');
-    expect(html).toContain("Activation Buy exceeds the Bonding curve");
+    expect(html).toContain("Activation Buy exceeds the Deeper range");
     expect(html).toContain(`Maximum ${maximumActivationBuy} ETH`);
     expect(html).toContain(
       "<small>Estimated tokens</small><strong>—</strong>",
@@ -144,11 +147,11 @@ describe("Classic V4 launch controls", () => {
     const boundaryHtml = renderFeeStep({
       ...createClassicV3Draft(),
       buySwapFeePercent: "0.1",
-      classicLiquidityPreset: "bonding",
+      classicLiquidityPreset: "deep-30",
       initialBuyEth: maximumActivationBuy,
     });
     expect(boundaryHtml).not.toContain('role="alert"');
     expect(boundaryHtml).toContain("reaches the curve after fees");
-    expect(boundaryHtml).toContain("completes Bonding");
+    expect(boundaryHtml).toContain("fully consumes the Deeper range");
   });
 });

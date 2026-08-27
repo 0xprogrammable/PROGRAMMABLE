@@ -41,12 +41,11 @@
     "contracts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hookFactory", "feeHook", "positionPlanner", "graduationVaultFactory", "launcher"],
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
       "properties": {
         "hookFactory": { "$ref": "#/$defs/contract" },
         "feeHook": { "$ref": "#/$defs/contract" },
         "positionPlanner": { "$ref": "#/$defs/contract" },
-        "graduationVaultFactory": { "$ref": "#/$defs/contract" },
         "launcher": { "$ref": "#/$defs/contract" }
       }
     }

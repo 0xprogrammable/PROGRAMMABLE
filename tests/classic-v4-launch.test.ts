@@ -108,15 +108,15 @@ describe("Classic V4 launch configuration", () => {
         } as unknown as LaunchDraft,
         account,
       ),
-    ).toThrow("valid Classic liquidity mode");
+    ).toThrow("valid Classic liquidity depth");
   });
 
-  it("encodes the immutable fee, reward and Bonding preset settings", () => {
+  it("encodes the immutable fee, reward and Deeper preset settings", () => {
     const launchDraft = {
       ...draft(),
       buySwapFeePercent: "0.1",
       sellSwapFeePercent: "7",
-      classicLiquidityPreset: "bonding" as const,
+      classicLiquidityPreset: "deep-30" as const,
       rewardDestinationMode: "split" as const,
       rewardSplits: [
         { beneficiary: external, sharePercent: "25" },
@@ -141,13 +141,13 @@ describe("Classic V4 launch configuration", () => {
     });
   });
 
-  it("discloses the exact split and Bonding lifecycle before signing", () => {
+  it("discloses the exact split and bounded liquidity before signing", () => {
     const disclosure = buildClassicV4LaunchDisclosure(
       {
         ...draft(),
         buySwapFeePercent: "0.1",
         sellSwapFeePercent: "7",
-        classicLiquidityPreset: "bonding",
+        classicLiquidityPreset: "deep-30",
         rewardDestinationMode: "split",
         rewardSplits: [
           { beneficiary: external, sharePercent: "25" },
@@ -165,24 +165,24 @@ describe("Classic V4 launch configuration", () => {
         { beneficiary: third, share: "75.00%" },
       ],
       liquidity:
-        "Bonding · 80% sold on the launch curve · 20% reserved for the final permanently locked liquidity position · Max completes the same pool automatically",
+        "Deeper · about 30% higher active liquidity at launch · bounded to about 18.9× the opening price and about 5.9 ETH net curve capacity · one position, permanently locked",
       activationBuy:
-        "0.0006 ETH plus network gas · 4.715913 ETH net curve capacity remains",
+        "0.0006 ETH plus network gas · 5.895041 ETH net curve capacity remains",
       initialBuyCustody: "Available immediately",
     });
   });
 
-  it("fails closed when an Activation Buy exceeds the Bonding range", () => {
+  it("fails closed when an Activation Buy exceeds the Deeper range", () => {
     expect(() =>
       validateClassicV4LaunchDraft(
         {
           ...draft(),
-          classicLiquidityPreset: "bonding",
+          classicLiquidityPreset: "deep-30",
           buySwapFeePercent: "0.1",
-          initialBuyEth: "4.7213",
+          initialBuyEth: "5.9016",
         },
         account,
       ),
-    ).toThrow("Activation Buy exceeds the Bonding curve");
+    ).toThrow("Activation Buy exceeds the Deeper curve");
   });
 });

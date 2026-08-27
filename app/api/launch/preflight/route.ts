@@ -34,14 +34,12 @@ import {
   validateClassicV3LaunchDraft,
 } from "@/lib/classic-v3";
 import {
-  classicGraduationVaultFactoryV1Abi,
   classicV4HookAbi,
   classicV4HookFactoryAbi,
   classicV4LaunchAbi,
   classicV4PositionPlannerAbi,
   CLASSIC_V4_LAUNCH_STAMP_ROUTER,
   CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
-  encodeClassicV4PresetSalt,
   validateClassicV4LaunchDraft,
 } from "@/lib/classic-v4";
 import {
@@ -94,14 +92,10 @@ import {
 } from "@/lib/launch-transaction";
 import {
   createEmptyDraft,
-  CLASSIC_BONDING_TICK_LOWER,
-  CLASSIC_BONDING_TOKEN_ALLOCATION_WEI,
-  CLASSIC_GRADUATION_TOKEN_RESERVE_WEI,
-  CLASSIC_STANDARD_TICK_LOWER,
+  CLASSIC_LIQUIDITY_TICK_LOWER,
   MEME_INITIAL_TICK,
   MEME_MIN_INITIAL_BUY_WEI,
   MEME_TOKEN_SUPPLY_WEI,
-  normalizeClassicLiquidityPreset,
   parseOptionalInitialBuyWei,
   parseInitialBuyWei,
   type LaunchDraft,
@@ -154,7 +148,6 @@ export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 50_000;
 const REQUIRED_FEE_HOOK_FLAGS = 8_396n;
-const CLASSIC_V4_REQUIRED_FEE_HOOK_FLAGS = 12_236n;
 const HOOK_FLAG_MASK = (1n << 14n) - 1n;
 const STOCK_PAIRED_CURRENCY0_SEARCH_BATCH_SIZE = 64;
 const LAUNCH_RPC_MULTICALL_BATCH_BYTES = 16_384;
@@ -463,15 +456,6 @@ function parseDraft(input: unknown): LaunchDraft {
     if (typeof raw[field] === "string") {
       draft[field] = raw[field];
     }
-  }
-  if (
-    raw.classicLiquidityPreset === "standard" ||
-    raw.classicLiquidityPreset === "bonding" ||
-    raw.classicLiquidityPreset === "deep-30"
-  ) {
-    draft.classicLiquidityPreset = normalizeClassicLiquidityPreset(
-      raw.classicLiquidityPreset,
-    );
   }
   if (
     raw.classicContractRelease === "classic-v3" ||
@@ -1581,7 +1565,6 @@ async function assertClassicV4Infrastructure(
         "hookFactory",
         "feeHook",
         "positionPlanner",
-        "graduationVaultFactory",
         "launcher",
       ] as const
     ).map(
@@ -1608,7 +1591,6 @@ async function assertClassicV4Infrastructure(
     launcherPolicy,
     launcherPositionFactory,
     launcherPlanner,
-    launcherGraduationVaultFactory,
     launcherRouter,
     minimumInitialBuyWei,
     maximumLauncherRewardBeneficiaries,
@@ -1627,21 +1609,11 @@ async function assertClassicV4Infrastructure(
     transferTaxBps,
     hookLpFeePips,
     hookTickSpacing,
-    hookBondingTickLower,
-    hookBondingTickUpper,
-    hookFinalTickLower,
-    hookFinalTickUpper,
     factoryRecognizesHook,
     factoryRequiredFlags,
-    plannerStandardPreset,
-    plannerBondingPreset,
     plannerTokenSupply,
-    plannerBondingTokenAllocation,
-    plannerGraduationTokenReserve,
     plannerInitialTick,
-    plannerBondingTickLower,
-    plannerFinalTickLower,
-    plannerFinalTickUpper,
+    plannerLiquidityTickLower,
     plannerTickSpacing,
     configuredCtoAuthority,
     configuredCtoAuthorityAccount,
@@ -1655,8 +1627,6 @@ async function assertClassicV4Infrastructure(
     maximumPolicyRewardBeneficiaries,
     policyRewardShareBasisPoints,
     forwarderPositionManager,
-    graduationFactoryPositionManager,
-    graduationFactoryForwarderFactory,
   ] = await Promise.all([
     rpcClient.readContract({
       address: launcher,
@@ -1702,11 +1672,6 @@ async function assertClassicV4Infrastructure(
       address: launcher,
       abi: classicV4LaunchAbi,
       functionName: "positionPlanner",
-    }),
-    rpcClient.readContract({
-      address: launcher,
-      abi: classicV4LaunchAbi,
-      functionName: "graduationVaultFactory",
     }),
     rpcClient.readContract({
       address: launcher,
@@ -1799,26 +1764,6 @@ async function assertClassicV4Infrastructure(
       functionName: "TICK_SPACING",
     }),
     rpcClient.readContract({
-      address: hook,
-      abi: classicV4HookAbi,
-      functionName: "BONDING_TICK_LOWER",
-    }),
-    rpcClient.readContract({
-      address: hook,
-      abi: classicV4HookAbi,
-      functionName: "BONDING_TICK_UPPER",
-    }),
-    rpcClient.readContract({
-      address: hook,
-      abi: classicV4HookAbi,
-      functionName: "FINAL_TICK_LOWER",
-    }),
-    rpcClient.readContract({
-      address: hook,
-      abi: classicV4HookAbi,
-      functionName: "FINAL_TICK_UPPER",
-    }),
-    rpcClient.readContract({
       address: addresses.hookFactory,
       abi: classicV4HookFactoryAbi,
       functionName: "isFactoryHook",
@@ -1832,27 +1777,7 @@ async function assertClassicV4Infrastructure(
     rpcClient.readContract({
       address: planner,
       abi: classicV4PositionPlannerAbi,
-      functionName: "STANDARD_PRESET",
-    }),
-    rpcClient.readContract({
-      address: planner,
-      abi: classicV4PositionPlannerAbi,
-      functionName: "BONDING_PRESET",
-    }),
-    rpcClient.readContract({
-      address: planner,
-      abi: classicV4PositionPlannerAbi,
       functionName: "TOKEN_SUPPLY",
-    }),
-    rpcClient.readContract({
-      address: planner,
-      abi: classicV4PositionPlannerAbi,
-      functionName: "BONDING_TOKEN_ALLOCATION",
-    }),
-    rpcClient.readContract({
-      address: planner,
-      abi: classicV4PositionPlannerAbi,
-      functionName: "GRADUATION_TOKEN_RESERVE",
     }),
     rpcClient.readContract({
       address: planner,
@@ -1862,17 +1787,7 @@ async function assertClassicV4Infrastructure(
     rpcClient.readContract({
       address: planner,
       abi: classicV4PositionPlannerAbi,
-      functionName: "BONDING_TICK_LOWER",
-    }),
-    rpcClient.readContract({
-      address: planner,
-      abi: classicV4PositionPlannerAbi,
-      functionName: "FINAL_TICK_LOWER",
-    }),
-    rpcClient.readContract({
-      address: planner,
-      abi: classicV4PositionPlannerAbi,
-      functionName: "FINAL_TICK_UPPER",
+      functionName: "LIQUIDITY_TICK_LOWER",
     }),
     rpcClient.readContract({
       address: planner,
@@ -1939,16 +1854,6 @@ async function assertClassicV4Infrastructure(
       abi: lockedPositionFeeForwarderFactoryAbi,
       functionName: "positionManager",
     }),
-    rpcClient.readContract({
-      address: addresses.graduationVaultFactory,
-      abi: classicGraduationVaultFactoryV1Abi,
-      functionName: "positionManager",
-    }),
-    rpcClient.readContract({
-      address: addresses.graduationVaultFactory,
-      abi: classicGraduationVaultFactoryV1Abi,
-      functionName: "positionForwarderFactory",
-    }),
   ]);
 
   const expectedAddresses = [
@@ -1977,11 +1882,6 @@ async function assertClassicV4Infrastructure(
       "position factory",
     ],
     [launcherPlanner, planner, "position planner"],
-    [
-      launcherGraduationVaultFactory,
-      addresses.graduationVaultFactory,
-      "graduation vault factory",
-    ],
     [launcherRouter, CLASSIC_V4_LAUNCH_STAMP_ROUTER, "Launch Stamp Router"],
     [hookPoolManager, officialDependencies.poolManager.address, "hook PoolManager"],
     [hookTreasury, addresses.launcherFeeRecipient, "treasury"],
@@ -1997,16 +1897,6 @@ async function assertClassicV4Infrastructure(
       officialDependencies.positionManager.address,
       "position factory PositionManager",
     ],
-    [
-      graduationFactoryPositionManager,
-      officialDependencies.positionManager.address,
-      "graduation factory PositionManager",
-    ],
-    [
-      graduationFactoryForwarderFactory,
-      addresses.positionForwarderFactory,
-      "graduation factory position forwarder factory",
-    ],
   ] as const;
   for (const [actual, expected, label] of expectedAddresses) {
     if (actual.toLowerCase() !== expected.toLowerCase()) {
@@ -2018,8 +1908,8 @@ async function assertClassicV4Infrastructure(
 
   if (
     !factoryRecognizesHook ||
-    factoryRequiredFlags !== CLASSIC_V4_REQUIRED_FEE_HOOK_FLAGS ||
-    (BigInt(hook) & HOOK_FLAG_MASK) !== CLASSIC_V4_REQUIRED_FEE_HOOK_FLAGS ||
+    factoryRequiredFlags !== REQUIRED_FEE_HOOK_FLAGS ||
+    (BigInt(hook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS ||
     launcherFeeBps !== 10 ||
     minimumFeeBps !== 10 ||
     maximumFeeBps !== 1_000 ||
@@ -2027,10 +1917,6 @@ async function assertClassicV4Infrastructure(
     transferTaxBps !== 0 ||
     hookLpFeePips !== 0 ||
     hookTickSpacing !== 200 ||
-    hookBondingTickLower !== CLASSIC_BONDING_TICK_LOWER ||
-    hookBondingTickUpper !== MEME_INITIAL_TICK ||
-    hookFinalTickLower !== 9_800 ||
-    hookFinalTickUpper !== 225_200 ||
     minimumInitialBuyWei !== MEME_MIN_INITIAL_BUY_WEI ||
     maximumLauncherRewardBeneficiaries !== 5n ||
     launcherRewardShareBasisPoints !== 10_000 ||
@@ -2038,17 +1924,10 @@ async function assertClassicV4Infrastructure(
     launcherInitialTick !== MEME_INITIAL_TICK ||
     launcherTickSpacing !== 200 ||
     launcherLpFeePips !== 0 ||
-    plannerStandardPreset !== 0 ||
-    plannerBondingPreset !== 1 ||
     plannerTokenSupply !== MEME_TOKEN_SUPPLY_WEI ||
-    plannerBondingTokenAllocation !== CLASSIC_BONDING_TOKEN_ALLOCATION_WEI ||
-    plannerGraduationTokenReserve !== CLASSIC_GRADUATION_TOKEN_RESERVE_WEI ||
     plannerInitialTick !== MEME_INITIAL_TICK ||
-    plannerBondingTickLower !== CLASSIC_BONDING_TICK_LOWER ||
-    plannerFinalTickLower !== 9_800 ||
-    plannerFinalTickUpper !== 225_200 ||
+    plannerLiquidityTickLower !== CLASSIC_LIQUIDITY_TICK_LOWER ||
     plannerTickSpacing !== 200 ||
-    CLASSIC_STANDARD_TICK_LOWER !== -887_200 ||
     minimumCustodyDurationDays !== 1 ||
     maximumCustodyDurationDays !== 3_650 ||
     maximumTokenNameBytes !== BigInt(MAX_TOKEN_NAME_BYTES) ||
@@ -2082,7 +1961,7 @@ async function prepareClassicV4Launch(
     id: "token",
     label: "Token setup",
     status: "pass",
-    detail: `Immutable ${(configuration.fees.buySwapFeeBps / 100).toFixed(2)}% buy and ${(configuration.fees.sellSwapFeeBps / 100).toFixed(2)}% sell fees, ${configuration.liquidity.preset === "bonding" ? "the 80/20 Bonding lifecycle" : "the Standard range"}, and the Activation Buy are valid`,
+    detail: `Immutable ${(configuration.fees.buySwapFeeBps / 100).toFixed(2)}% buy and ${(configuration.fees.sellSwapFeeBps / 100).toFixed(2)}% sell fees, the canonical deeper locked range, and the Activation Buy are valid`,
   };
 
   if (connectedWalletCheck.status !== "pass") {
@@ -2122,10 +2001,6 @@ async function prepareClassicV4Launch(
 
   await assertClassicV4Infrastructure(release, rpcClient);
   const launcher = release.addresses.launcher;
-  const presetSalt = encodeClassicV4PresetSalt(
-    draft.launchSalt,
-    configuration.liquidity.presetCode,
-  );
   const [predictedToken] = await rpcClient.readContract({
     address: launcher,
     abi: classicV4LaunchAbi,
@@ -2134,7 +2009,7 @@ async function prepareClassicV4Launch(
       draft.tokenName.trim(),
       draft.tokenSymbol.trim(),
       account,
-      presetSalt,
+      draft.launchSalt,
     ],
   });
   const predictedRewardVault = await rpcClient.readContract({
@@ -2168,7 +2043,7 @@ async function prepareClassicV4Launch(
         label: "Classic V4 contracts",
         status: "pass",
         detail:
-          "Release evidence, runtime bytecode, immutable dependencies, fee bounds and both liquidity modes match",
+          "Release evidence, runtime bytecode, immutable dependencies, fee bounds and the canonical locked liquidity range match",
       },
       {
         id: "simulation",

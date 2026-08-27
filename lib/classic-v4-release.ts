@@ -27,7 +27,6 @@ const NEW_CONTRACTS = [
   "hookFactory",
   "feeHook",
   "positionPlanner",
-  "graduationVaultFactory",
   "launcher",
 ] as const;
 const SHARED_CONTRACTS = [
@@ -87,7 +86,6 @@ const LIFECYCLE_ACTIONS = [
 ] as const;
 const LIFECYCLE_INVARIANTS = [
   "launchVerified",
-  "bondingLifecycleVerified",
   "positionLockVerified",
   "buyExactInputVerified",
   "buyExactOutputVerified",
@@ -119,11 +117,8 @@ const ACTION_EVENT_KEYS = {
     "MemeLiquidityConfiguredV2",
     "MemeCreatorInitialBuyV2",
     "MemeCreatorInitialBuyCustodyV2",
-    "MemeBondingConfiguredV1",
     "PoolRegistered",
     "PoolFeeDisclosure",
-    "ClassicBondingConfigured",
-    "ClassicBondingPositionActivated",
     "NativeSwapFeesAccrued",
     "HookFee",
     "HookSwap",
@@ -449,7 +444,6 @@ function validRichLifecycleEvidence(input: {
     !address(lifecycle.canaryToken) ||
     !address(lifecycle.rewardVault) ||
     !address(lifecycle.positionRecipient) ||
-    !address(lifecycle.finalPositionRecipient) ||
     !bytes32(lifecycle.poolId) ||
     decimalBigInt(lifecycle.positionTokenId, { positive: true }) === null ||
     !bytes32(lifecycle.evidenceDigest) ||
@@ -782,7 +776,6 @@ function validRichLifecycleEvidence(input: {
   const launchMappings = postState && record(postState.launchMappings);
   const poolFeeConfig = postState && record(postState.poolFeeConfig);
   const rewardVault = postState && record(postState.rewardVault);
-  const bondingLifecycle = postState && record(postState.bondingLifecycle);
   const positionLock = postState && record(postState.positionLock);
   const tokenCustody = postState && record(postState.tokenCustody);
   const derivedCodeHashes = postState && record(postState.derivedCodeHashes);
@@ -791,21 +784,12 @@ function validRichLifecycleEvidence(input: {
     !launchMappings ||
     !poolFeeConfig ||
     !rewardVault ||
-    !bondingLifecycle ||
     !positionLock ||
     !tokenCustody ||
     !derivedCodeHashes ||
     !bytes32(launchMappings.launchHash) ||
     !sameAddressValue(launchMappings.rewardVault, lifecycle.rewardVault) ||
     !sameAddressValue(launchMappings.initialBuyCustody, ZERO_ADDRESS) ||
-    !sameAddressValue(
-      launchMappings.graduationVault,
-      lifecycle.positionRecipient,
-    ) ||
-    !sameAddressValue(
-      launchMappings.finalPositionRecipient,
-      lifecycle.finalPositionRecipient,
-    ) ||
     !sameAddressValue(poolFeeConfig.rewardVault, lifecycle.rewardVault) ||
     !sameAddressValue(poolFeeConfig.registrar, lifecycle.launcher) ||
     poolFeeConfig.buySwapFeeBps !== 100 ||
@@ -817,35 +801,7 @@ function validRichLifecycleEvidence(input: {
     rewardVault.configurationEpoch !== 1 ||
     rewardVault.shareBps !== 10_000 ||
     !sameAddressValue(rewardVault.beneficiary, lifecycle.operatorWallet) ||
-    !sameAddressValue(
-      bondingLifecycle.graduationVault,
-      lifecycle.positionRecipient,
-    ) ||
-    !sameAddressValue(
-      bondingLifecycle.finalPositionRecipient,
-      lifecycle.finalPositionRecipient,
-    ) ||
-    !sameAddressValue(
-      bondingLifecycle.factory,
-      addresses.graduationVaultFactory,
-    ) ||
-    !bytes32(bondingLifecycle.factoryConfigurationHash) ||
-    String(bondingLifecycle.poolId).toLowerCase() !==
-      String(lifecycle.poolId).toLowerCase() ||
-    bondingLifecycle.state !== "bonding" ||
-    !Number.isSafeInteger(bondingLifecycle.progressBps) ||
-    Number(bondingLifecycle.progressBps) <= 0 ||
-    Number(bondingLifecycle.progressBps) >= 10_000 ||
-    decimalBigInt(bondingLifecycle.tokenRemaining, { positive: true }) === null ||
-    decimalBigInt(bondingLifecycle.nativeRemainingNet, { positive: true }) ===
-      null ||
-    bondingLifecycle.graduated !== false ||
-    decimalBigInt(bondingLifecycle.finalPositionTokenId) !== 0n ||
     !sameAddressValue(positionLock.owner, lifecycle.positionRecipient) ||
-    !sameAddressValue(
-      positionLock.finalPositionRecipient,
-      lifecycle.finalPositionRecipient,
-    ) ||
     !sameAddressValue(positionLock.approved, ZERO_ADDRESS) ||
     !sameAddressValue(positionLock.manager, positionManager) ||
     !sameAddressValue(positionLock.operator, ZERO_ADDRESS) ||
@@ -866,10 +822,8 @@ function validRichLifecycleEvidence(input: {
     decimalBigInt(tokenCustody.positionManagerBalance) !== 0n ||
     !bytes32(derivedCodeHashes.token) ||
     !bytes32(derivedCodeHashes.rewardVault) ||
-    !bytes32(derivedCodeHashes.graduationVault) ||
     !bytes32(derivedCodeHashes.positionForwarder) ||
     typeof derivedCodeHashes.rewardVaultPredeployed !== "boolean" ||
-    typeof derivedCodeHashes.graduationVaultPredeployed !== "boolean" ||
     typeof derivedCodeHashes.positionForwarderPredeployed !== "boolean"
   ) {
     return false;

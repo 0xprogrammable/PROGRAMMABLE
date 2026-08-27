@@ -63,7 +63,6 @@
         "hookFactory",
         "feeHook",
         "positionPlanner",
-        "graduationVaultFactory",
         "launcher"
       ],
       "properties": {
@@ -77,7 +76,6 @@
         "hookFactory": { "$ref": "#/$defs/address" },
         "feeHook": { "$ref": "#/$defs/address" },
         "positionPlanner": { "$ref": "#/$defs/address" },
-        "graduationVaultFactory": { "$ref": "#/$defs/address" },
         "launcher": { "$ref": "#/$defs/address" }
       }
     },
@@ -98,7 +96,6 @@
         "hookFactory",
         "feeHook",
         "positionPlanner",
-        "graduationVaultFactory",
         "launcher"
       ],
       "properties": {
@@ -110,7 +107,6 @@
         "hookFactory": { "$ref": "#/$defs/bytes32" },
         "feeHook": { "$ref": "#/$defs/bytes32" },
         "positionPlanner": { "$ref": "#/$defs/bytes32" },
-        "graduationVaultFactory": { "$ref": "#/$defs/bytes32" },
         "launcher": { "$ref": "#/$defs/bytes32" }
       }
     },
@@ -313,36 +309,33 @@
     "newContractHashes": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hookFactory", "feeHook", "positionPlanner", "graduationVaultFactory", "launcher"],
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
       "properties": {
         "hookFactory": { "$ref": "#/$defs/bytes32" },
         "feeHook": { "$ref": "#/$defs/bytes32" },
         "positionPlanner": { "$ref": "#/$defs/bytes32" },
-        "graduationVaultFactory": { "$ref": "#/$defs/bytes32" },
         "launcher": { "$ref": "#/$defs/bytes32" }
       }
     },
     "newContractBlocks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hookFactory", "feeHook", "positionPlanner", "graduationVaultFactory", "launcher"],
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
       "properties": {
         "hookFactory": { "$ref": "#/$defs/blockNumber" },
         "feeHook": { "$ref": "#/$defs/blockNumber" },
         "positionPlanner": { "$ref": "#/$defs/blockNumber" },
-        "graduationVaultFactory": { "$ref": "#/$defs/blockNumber" },
         "launcher": { "$ref": "#/$defs/blockNumber" }
       }
     },
     "newContractConfirmations": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hookFactory", "feeHook", "positionPlanner", "graduationVaultFactory", "launcher"],
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
       "properties": {
         "hookFactory": { "type": "integer", "minimum": 12 },
         "feeHook": { "type": "integer", "minimum": 12 },
         "positionPlanner": { "type": "integer", "minimum": 12 },
-        "graduationVaultFactory": { "type": "integer", "minimum": 12 },
         "launcher": { "type": "integer", "minimum": 12 }
       }
     },
@@ -465,12 +458,11 @@
         "contracts": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["hookFactory", "feeHook", "positionPlanner", "graduationVaultFactory", "launcher"],
+          "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
           "properties": {
             "hookFactory": { "$ref": "#/$defs/sourceContract" },
             "feeHook": { "$ref": "#/$defs/sourceContract" },
             "positionPlanner": { "$ref": "#/$defs/sourceContract" },
-            "graduationVaultFactory": { "$ref": "#/$defs/sourceContract" },
             "launcher": { "$ref": "#/$defs/sourceContract" }
           }
         }
@@ -727,7 +719,6 @@
         "launchMappings",
         "poolFeeConfig",
         "rewardVault",
-        "bondingLifecycle",
         "positionLock",
         "tokenCustody",
         "derivedCodeHashes"
@@ -736,13 +727,11 @@
         "launchMappings": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["launchHash", "rewardVault", "initialBuyCustody", "graduationVault", "finalPositionRecipient"],
+          "required": ["launchHash", "rewardVault", "initialBuyCustody"],
           "properties": {
             "launchHash": { "$ref": "#/$defs/bytes32" },
             "rewardVault": { "$ref": "#/$defs/address" },
-            "initialBuyCustody": { "$ref": "#/$defs/anyAddress" },
-            "graduationVault": { "$ref": "#/$defs/address" },
-            "finalPositionRecipient": { "$ref": "#/$defs/address" }
+            "initialBuyCustody": { "$ref": "#/$defs/anyAddress" }
           }
         },
         "poolFeeConfig": {
@@ -783,36 +772,6 @@
             "shareBps": { "const": 10000 }
           }
         },
-        "bondingLifecycle": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "graduationVault",
-            "finalPositionRecipient",
-            "factory",
-            "factoryConfigurationHash",
-            "poolId",
-            "state",
-            "progressBps",
-            "tokenRemaining",
-            "nativeRemainingNet",
-            "graduated",
-            "finalPositionTokenId"
-          ],
-          "properties": {
-            "graduationVault": { "$ref": "#/$defs/address" },
-            "finalPositionRecipient": { "$ref": "#/$defs/address" },
-            "factory": { "$ref": "#/$defs/address" },
-            "factoryConfigurationHash": { "$ref": "#/$defs/bytes32" },
-            "poolId": { "$ref": "#/$defs/bytes32" },
-            "state": { "const": "bonding" },
-            "progressBps": { "type": "integer", "minimum": 1, "maximum": 9999 },
-            "tokenRemaining": { "$ref": "#/$defs/positiveDecimal" },
-            "nativeRemainingNet": { "$ref": "#/$defs/positiveDecimal" },
-            "graduated": { "const": false },
-            "finalPositionTokenId": { "const": "0" }
-          }
-        },
         "positionLock": {
           "type": "object",
           "additionalProperties": false,
@@ -824,7 +783,6 @@
             "activePoolLiquidity",
             "tickLower",
             "tickUpper",
-            "finalPositionRecipient",
             "manager",
             "operator",
             "timelockBlockNumber",
@@ -839,7 +797,6 @@
             "activePoolLiquidity": { "$ref": "#/$defs/positiveDecimal" },
             "tickLower": { "const": 174800 },
             "tickUpper": { "const": 204200 },
-            "finalPositionRecipient": { "$ref": "#/$defs/address" },
             "manager": { "$ref": "#/$defs/address" },
             "operator": { "$ref": "#/$defs/anyAddress" },
             "timelockBlockNumber": { "$ref": "#/$defs/positiveDecimal" },
@@ -869,19 +826,15 @@
           "required": [
             "token",
             "rewardVault",
-            "graduationVault",
             "positionForwarder",
             "rewardVaultPredeployed",
-            "graduationVaultPredeployed",
             "positionForwarderPredeployed"
           ],
           "properties": {
             "token": { "$ref": "#/$defs/bytes32" },
             "rewardVault": { "$ref": "#/$defs/bytes32" },
-            "graduationVault": { "$ref": "#/$defs/bytes32" },
             "positionForwarder": { "$ref": "#/$defs/bytes32" },
             "rewardVaultPredeployed": { "type": "boolean" },
-            "graduationVaultPredeployed": { "type": "boolean" },
             "positionForwarderPredeployed": { "type": "boolean" }
           }
         }
@@ -946,7 +899,6 @@
       "additionalProperties": false,
       "required": [
         "launchVerified",
-        "bondingLifecycleVerified",
         "positionLockVerified",
         "buyExactInputVerified",
         "buyExactOutputVerified",
@@ -958,7 +910,6 @@
       ],
       "properties": {
         "launchVerified": { "const": true },
-        "bondingLifecycleVerified": { "const": true },
         "positionLockVerified": { "const": true },
         "buyExactInputVerified": { "const": true },
         "buyExactOutputVerified": { "const": true },
@@ -996,7 +947,6 @@
         "rewardVault",
         "poolId",
         "positionRecipient",
-        "finalPositionRecipient",
         "positionTokenId",
         "actions",
         "swaps",
@@ -1031,7 +981,6 @@
         "rewardVault": { "$ref": "#/$defs/address" },
         "poolId": { "$ref": "#/$defs/bytes32" },
         "positionRecipient": { "$ref": "#/$defs/address" },
-        "finalPositionRecipient": { "$ref": "#/$defs/address" },
         "positionTokenId": { "$ref": "#/$defs/positiveDecimal" },
         "actions": {
           "type": "object",
@@ -1119,12 +1068,11 @@
             { "const": "MemeTokenLaunchedV2" },
             { "const": "MemeLiquidityConfiguredV2" },
             { "const": "MemeCreatorInitialBuyV2" },
-            { "const": "MemeCreatorInitialBuyCustodyV2" },
-            { "const": "MemeBondingConfiguredV1" }
+            { "const": "MemeCreatorInitialBuyCustodyV2" }
           ],
           "items": false,
-          "minItems": 5,
-          "maxItems": 5
+          "minItems": 4,
+          "maxItems": 4
         }
       }
     },
@@ -1142,16 +1090,11 @@
             { "const": "PoolFeeDisclosure" },
             { "const": "NativeSwapFeesAccrued" },
             { "const": "CreatorFeesClaimed" },
-            { "const": "LauncherFeesClaimed" },
-            { "const": "ClassicBondingConfigured" },
-            { "const": "ClassicBondingPositionActivated" },
-            { "const": "ClassicBondingReached" },
-            { "const": "ClassicGraduationBegun" },
-            { "const": "ClassicLiquidityGraduated" }
+            { "const": "LauncherFeesClaimed" }
           ],
           "items": false,
-          "minItems": 10,
-          "maxItems": 10
+          "minItems": 5,
+          "maxItems": 5
         }
       }
     },

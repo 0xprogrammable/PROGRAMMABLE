@@ -26,7 +26,7 @@ export const CLASSIC_V4_RELEASE = "classic-v4";
 export const CLASSIC_V4_CHAIN_ID = 1;
 export const CLASSIC_V4_CHAIN_ID_HEX = "0x1";
 export const CLASSIC_V4_FINALITY_CONFIRMATIONS = 12;
-export const CLASSIC_V4_REQUIRED_HOOK_FLAGS = 12_236n;
+export const CLASSIC_V4_REQUIRED_HOOK_FLAGS = 8_396n;
 export const CLASSIC_V4_HOOK_ADDRESS_MASK = (1n << 14n) - 1n;
 export const CLASSIC_V4_MAX_HOOK_SALT = 160_444n;
 export const CLASSIC_V4_SOLC_VERSION = "0.8.26+commit.8a97fa7a";
@@ -107,10 +107,6 @@ export const CLASSIC_V4_ARTIFACT_PATHS = Object.freeze({
   feeHook: "EthCreatorFeeHookV4.sol/EthCreatorFeeHookV4.json",
   positionPlanner:
     "ClassicPositionPlannerV1.sol/ClassicPositionPlannerV1.json",
-  graduationVault:
-    "ClassicGraduationVaultV1.sol/ClassicGraduationVaultV1.json",
-  graduationVaultFactory:
-    "ClassicGraduationVaultFactoryV1.sol/ClassicGraduationVaultFactoryV1.json",
   launcher: "MemeLaunchV3.sol/MemeLaunchV3.json",
 });
 
@@ -127,11 +123,6 @@ export const CLASSIC_V4_SOURCE_TARGETS = Object.freeze({
     contractName: "ClassicPositionPlannerV1",
     fqcn: "src/ClassicPositionPlannerV1.sol:ClassicPositionPlannerV1",
   }),
-  graduationVaultFactory: Object.freeze({
-    contractName: "ClassicGraduationVaultFactoryV1",
-    fqcn:
-      "src/ClassicGraduationVaultFactoryV1.sol:ClassicGraduationVaultFactoryV1",
-  }),
   launcher: Object.freeze({
     contractName: "MemeLaunchV3",
     fqcn: "src/MemeLaunchV3.sol:MemeLaunchV3",
@@ -142,16 +133,6 @@ export const CLASSIC_V4_NEW_CONTRACTS = Object.freeze([
   "hookFactory",
   "feeHook",
   "positionPlanner",
-  "graduationVaultFactory",
-  "launcher",
-]);
-
-export const CLASSIC_V4_BUILD_CONTRACTS = Object.freeze([
-  "hookFactory",
-  "feeHook",
-  "positionPlanner",
-  "graduationVault",
-  "graduationVaultFactory",
   "launcher",
 ]);
 
@@ -170,7 +151,6 @@ export const CLASSIC_V4_INDEXER_LAUNCHER_EVENTS = Object.freeze([
   "MemeLiquidityConfiguredV2",
   "MemeCreatorInitialBuyV2",
   "MemeCreatorInitialBuyCustodyV2",
-  "MemeBondingConfiguredV1",
 ]);
 
 export const CLASSIC_V4_INDEXER_HOOK_EVENTS = Object.freeze([
@@ -179,11 +159,6 @@ export const CLASSIC_V4_INDEXER_HOOK_EVENTS = Object.freeze([
   "NativeSwapFeesAccrued",
   "CreatorFeesClaimed",
   "LauncherFeesClaimed",
-  "ClassicBondingConfigured",
-  "ClassicBondingPositionActivated",
-  "ClassicBondingReached",
-  "ClassicGraduationBegun",
-  "ClassicLiquidityGraduated",
 ]);
 
 const hookFactoryAbi = parseAbi([
@@ -427,10 +402,10 @@ export async function loadClassicV4ArtifactsFromOutput(outputDirectory) {
 }
 
 export function computeClassicV4BuildCommitments(artifacts) {
-  assertExactKeys(artifacts, CLASSIC_V4_BUILD_CONTRACTS, "build artifacts");
+  assertExactKeys(artifacts, CLASSIC_V4_NEW_CONTRACTS, "build artifacts");
   const sources = new Map();
   const artifactDescriptors = {};
-  for (const name of CLASSIC_V4_BUILD_CONTRACTS) {
+  for (const name of CLASSIC_V4_NEW_CONTRACTS) {
     const artifact = artifacts[name];
     const metadata = validatedArtifactMetadata(artifact, name);
     artifactDescriptors[name] = artifactRuntimeDescriptor(artifact, name);
@@ -529,30 +504,26 @@ export function computeClassicV4EconomicsCommitment() {
     encodeAbiParameters(
       [
         { type: "uint256" },
-        { type: "uint256" },
-        { type: "uint256" },
-        { type: "int256" },
-        { type: "int256" },
         { type: "int256" },
         { type: "int256" },
         { type: "uint256" },
         { type: "uint256" },
         { type: "bytes32" },
+        { type: "bytes32" },
       ],
       [
         1_000_000_000n * 10n ** 18n,
-        800_000_000n * 10n ** 18n,
-        200_000_000n * 10n ** 18n,
         204_200n,
         174_800n,
-        9_800n,
-        225_200n,
         0n,
         1n,
         keccak256(
           stringToHex(
-            "standard-or-bonding-same-pool-with-ownerless-one-shot-graduation",
+            "standard-or-deep30-single-permanently-locked-official-v4-position",
           ),
+        ),
+        keccak256(
+          stringToHex("deep30-has-a-declared-reachable-liquidity-endpoint"),
         ),
       ],
     ),
@@ -575,10 +546,8 @@ export function computeClassicV4SourceCommitment(
 ) {
   const bytecodeCommitment = keccak256(
     encodeAbiParameters(
-      Array.from({ length: CLASSIC_V4_BUILD_CONTRACTS.length }, () => ({
-        type: "bytes32",
-      })),
-      CLASSIC_V4_BUILD_CONTRACTS.map((name) =>
+      Array.from({ length: 4 }, () => ({ type: "bytes32" })),
+      CLASSIC_V4_NEW_CONTRACTS.map((name) =>
         keccak256(creationCode(artifacts[name], name)),
       ),
     ),
@@ -684,23 +653,12 @@ export function buildClassicV4PreparationPlan({
     from: canonicalDeployer,
     nonce: BigInt(nonce + 2),
   });
-  const graduationVaultFactory = getContractAddress({
+  const launcher = getContractAddress({
     from: canonicalDeployer,
     nonce: BigInt(nonce + 3),
   });
-  const launcher = getContractAddress({
-    from: canonicalDeployer,
-    nonce: BigInt(nonce + 4),
-  });
-  const graduationVaultFactoryConstructorArguments = encodeAbiParameters(
-    [{ type: "address" }, { type: "address" }],
-    [
-      CLASSIC_V4_OFFICIAL_DEPENDENCIES.positionManager.address,
-      CLASSIC_V4_SHARED_DEPENDENCIES.positionForwarderFactory.address,
-    ],
-  );
   const launcherConstructorArguments = encodeAbiParameters(
-    Array.from({ length: 10 }, () => ({ type: "address" })),
+    Array.from({ length: 9 }, () => ({ type: "address" })),
     [
       CLASSIC_V4_OFFICIAL_DEPENDENCIES.poolManager.address,
       CLASSIC_V4_OFFICIAL_DEPENDENCIES.positionManager.address,
@@ -711,7 +669,6 @@ export function buildClassicV4PreparationPlan({
       CLASSIC_V4_SHARED_DEPENDENCIES.initialBuyVestingWalletFactory.address,
       CLASSIC_V4_SHARED_DEPENDENCIES.launchPolicy.address,
       CLASSIC_V4_SHARED_DEPENDENCIES.positionForwarderFactory.address,
-      graduationVaultFactory,
     ],
   );
   const transactionData = {
@@ -727,9 +684,6 @@ export function buildClassicV4PreparationPlan({
       ],
     }),
     positionPlanner: creationCode(artifacts.positionPlanner, "positionPlanner"),
-    graduationVaultFactory:
-      creationCode(artifacts.graduationVaultFactory, "graduationVaultFactory") +
-      graduationVaultFactoryConstructorArguments.slice(2),
     launcher:
       creationCode(artifacts.launcher, "launcher") +
       launcherConstructorArguments.slice(2),
@@ -738,21 +692,18 @@ export function buildClassicV4PreparationPlan({
     hookFactory: "0x",
     feeHook: hookConstructorArguments,
     positionPlanner: "0x",
-    graduationVaultFactory: graduationVaultFactoryConstructorArguments,
     launcher: launcherConstructorArguments,
   };
   const addresses = {
     hookFactory,
     feeHook: minedHook.address,
     positionPlanner,
-    graduationVaultFactory,
     launcher,
   };
   const transactionTypes = {
     hookFactory: "CREATE",
     feeHook: "CALL_CREATE2",
     positionPlanner: "CREATE",
-    graduationVaultFactory: "CREATE",
     launcher: "CREATE",
   };
   const transactions = CLASSIC_V4_NEW_CONTRACTS.map((name, index) => ({
@@ -779,7 +730,7 @@ export function buildClassicV4PreparationPlan({
     );
   }
   assert(
-    runtimeTemplates.launcher.bytes <= 24_000,
+    runtimeTemplates.launcher.bytes <= 23_000,
     "launcher exceeds the reviewed runtime budget",
   );
   const sourceCommitment = computeClassicV4SourceCommitment(artifacts);
@@ -967,13 +918,9 @@ export function validateClassicV4PreparationPlan(plan, artifacts) {
     from: deployer,
     nonce: BigInt(nonce + 2),
   });
-  const graduationVaultFactory = getContractAddress({
-    from: deployer,
-    nonce: BigInt(nonce + 3),
-  });
   const launcher = getContractAddress({
     from: deployer,
-    nonce: BigInt(nonce + 4),
+    nonce: BigInt(nonce + 3),
   });
   const hookConstructorArguments = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }, { type: "address" }],
@@ -1005,7 +952,6 @@ export function validateClassicV4PreparationPlan(plan, artifacts) {
     hookFactory,
     feeHook,
     positionPlanner,
-    graduationVaultFactory,
     launcher,
   };
   assertExactKeys(
@@ -1046,15 +992,8 @@ export function validateClassicV4PreparationPlan(plan, artifacts) {
       `Classic V4 plan ${name} artifact descriptor differs`,
     );
   }
-  const graduationVaultFactoryArguments = encodeAbiParameters(
-    [{ type: "address" }, { type: "address" }],
-    [
-      CLASSIC_V4_OFFICIAL_DEPENDENCIES.positionManager.address,
-      CLASSIC_V4_SHARED_DEPENDENCIES.positionForwarderFactory.address,
-    ],
-  );
   const launcherArguments = encodeAbiParameters(
-    Array.from({ length: 10 }, () => ({ type: "address" })),
+    Array.from({ length: 9 }, () => ({ type: "address" })),
     [
       CLASSIC_V4_OFFICIAL_DEPENDENCIES.poolManager.address,
       CLASSIC_V4_OFFICIAL_DEPENDENCIES.positionManager.address,
@@ -1065,7 +1004,6 @@ export function validateClassicV4PreparationPlan(plan, artifacts) {
       CLASSIC_V4_SHARED_DEPENDENCIES.initialBuyVestingWalletFactory.address,
       CLASSIC_V4_SHARED_DEPENDENCIES.launchPolicy.address,
       CLASSIC_V4_SHARED_DEPENDENCIES.positionForwarderFactory.address,
-      graduationVaultFactory,
     ],
   );
   const expectedData = {
@@ -1081,9 +1019,6 @@ export function validateClassicV4PreparationPlan(plan, artifacts) {
       ],
     }),
     positionPlanner: creationCode(artifacts.positionPlanner, "positionPlanner"),
-    graduationVaultFactory:
-      creationCode(artifacts.graduationVaultFactory, "graduationVaultFactory") +
-      graduationVaultFactoryArguments.slice(2),
     launcher:
       creationCode(artifacts.launcher, "launcher") + launcherArguments.slice(2),
   };
@@ -1091,7 +1026,6 @@ export function validateClassicV4PreparationPlan(plan, artifacts) {
     hookFactory: "0x",
     feeHook: hookConstructorArguments,
     positionPlanner: "0x",
-    graduationVaultFactory: graduationVaultFactoryArguments,
     launcher: launcherArguments,
   };
   assertExactKeys(
@@ -1107,14 +1041,13 @@ export function validateClassicV4PreparationPlan(plan, artifacts) {
     );
   }
   assert(
-    Array.isArray(plan.transactions) && plan.transactions.length === 5,
-    "Classic V4 plan must contain exactly five transactions",
+    Array.isArray(plan.transactions) && plan.transactions.length === 4,
+    "Classic V4 plan must contain exactly four transactions",
   );
   const expectedTransactionTypes = {
     hookFactory: "CREATE",
     feeHook: "CALL_CREATE2",
     positionPlanner: "CREATE",
-    graduationVaultFactory: "CREATE",
     launcher: "CREATE",
   };
   for (const [index, name] of CLASSIC_V4_NEW_CONTRACTS.entries()) {
@@ -1669,7 +1602,6 @@ export function validateClassicV4LifecycleEvidence(
       "rewardVault",
       "poolId",
       "positionRecipient",
-      "finalPositionRecipient",
       "positionTokenId",
       "actions",
       "swaps",
@@ -1726,10 +1658,6 @@ export function validateClassicV4LifecycleEvidence(
   canonicalNonzeroAddress(evidence.canaryToken, "canary token");
   canonicalNonzeroAddress(evidence.rewardVault, "reward vault");
   canonicalNonzeroAddress(evidence.positionRecipient, "position recipient");
-  canonicalNonzeroAddress(
-    evidence.finalPositionRecipient,
-    "final position recipient",
-  );
   assertNonzeroBytes32(evidence.poolId, "canary pool id");
   decimalBigInt(evidence.positionTokenId, "position token ID", { positive: true });
   assertNonNegativeInteger(evidence.verificationBlock, "lifecycle verification block");
@@ -1750,11 +1678,8 @@ export function validateClassicV4LifecycleEvidence(
       "MemeLiquidityConfiguredV2",
       "MemeCreatorInitialBuyV2",
       "MemeCreatorInitialBuyCustodyV2",
-      "MemeBondingConfiguredV1",
       "PoolRegistered",
       "PoolFeeDisclosure",
-      "ClassicBondingConfigured",
-      "ClassicBondingPositionActivated",
       "NativeSwapFeesAccrued",
       "HookFee",
       "HookSwap",
@@ -2317,7 +2242,6 @@ export function validateClassicV4LifecycleEvidence(
       "launchMappings",
       "poolFeeConfig",
       "rewardVault",
-      "bondingLifecycle",
       "positionLock",
       "tokenCustody",
       "derivedCodeHashes",
@@ -2326,13 +2250,7 @@ export function validateClassicV4LifecycleEvidence(
   );
   assertExactKeys(
     postState.launchMappings,
-    [
-      "launchHash",
-      "rewardVault",
-      "initialBuyCustody",
-      "graduationVault",
-      "finalPositionRecipient",
-    ],
+    ["launchHash", "rewardVault", "initialBuyCustody"],
     "Launch mappings",
   );
   assertNonzeroBytes32(postState.launchMappings.launchHash, "launch hash");
@@ -2345,16 +2263,6 @@ export function validateClassicV4LifecycleEvidence(
     postState.launchMappings.initialBuyCustody,
     "0x0000000000000000000000000000000000000000",
     "Initial buy custody",
-  );
-  assertSameAddress(
-    postState.launchMappings.graduationVault,
-    evidence.positionRecipient,
-    "Mapped graduation vault",
-  );
-  assertSameAddress(
-    postState.launchMappings.finalPositionRecipient,
-    evidence.finalPositionRecipient,
-    "Mapped final position recipient",
   );
   assertExactKeys(
     postState.poolFeeConfig,
@@ -2405,67 +2313,6 @@ export function validateClassicV4LifecycleEvidence(
     "Reward vault configuration differs",
   );
   assertExactKeys(
-    postState.bondingLifecycle,
-    [
-      "graduationVault",
-      "finalPositionRecipient",
-      "factory",
-      "factoryConfigurationHash",
-      "poolId",
-      "state",
-      "progressBps",
-      "tokenRemaining",
-      "nativeRemainingNet",
-      "graduated",
-      "finalPositionTokenId",
-    ],
-    "Bonding lifecycle",
-  );
-  assertSameAddress(
-    postState.bondingLifecycle.graduationVault,
-    evidence.positionRecipient,
-    "Graduation vault",
-  );
-  assertSameAddress(
-    postState.bondingLifecycle.finalPositionRecipient,
-    evidence.finalPositionRecipient,
-    "Final position recipient",
-  );
-  assertSameAddress(
-    postState.bondingLifecycle.factory,
-    plan.predictedAddresses.graduationVaultFactory,
-    "Graduation vault factory",
-  );
-  assertNonzeroBytes32(
-    postState.bondingLifecycle.factoryConfigurationHash,
-    "graduation vault factory configuration hash",
-  );
-  assertNonzeroBytes32(postState.bondingLifecycle.poolId, "Bonding pool ID");
-  assert(
-    normalizeHex(postState.bondingLifecycle.poolId) ===
-      normalizeHex(evidence.poolId) &&
-      postState.bondingLifecycle.state === "bonding" &&
-      Number.isInteger(postState.bondingLifecycle.progressBps) &&
-      postState.bondingLifecycle.progressBps > 0 &&
-      postState.bondingLifecycle.progressBps < 10_000 &&
-      decimalBigInt(
-        postState.bondingLifecycle.tokenRemaining,
-        "remaining Bonding tokens",
-        { positive: true },
-      ) > 0n &&
-      decimalBigInt(
-        postState.bondingLifecycle.nativeRemainingNet,
-        "remaining Bonding principal",
-        { positive: true },
-      ) > 0n &&
-      postState.bondingLifecycle.graduated === false &&
-      decimalBigInt(
-        postState.bondingLifecycle.finalPositionTokenId,
-        "final position token ID",
-      ) === 0n,
-    "Bonding lifecycle state differs",
-  );
-  assertExactKeys(
     postState.positionLock,
     [
       "owner",
@@ -2475,7 +2322,6 @@ export function validateClassicV4LifecycleEvidence(
       "activePoolLiquidity",
       "tickLower",
       "tickUpper",
-      "finalPositionRecipient",
       "manager",
       "operator",
       "timelockBlockNumber",
@@ -2485,11 +2331,6 @@ export function validateClassicV4LifecycleEvidence(
     "Position lock",
   );
   assertSameAddress(postState.positionLock.owner, evidence.positionRecipient, "Position owner");
-  assertSameAddress(
-    postState.positionLock.finalPositionRecipient,
-    evidence.finalPositionRecipient,
-    "Final position recipient",
-  );
   assertSameAddress(
     postState.positionLock.approved,
     "0x0000000000000000000000000000000000000000",
@@ -2528,7 +2369,7 @@ export function validateClassicV4LifecycleEvidence(
       postState.positionLock.tickUpper === 204_200 &&
       decimalBigInt(postState.positionLock.timelockBlockNumber, "position timelock") ===
         (1n << 256n) - 1n,
-    "Bonding position custody differs",
+    "Permanent Deep30 position lock differs",
   );
   assertExactKeys(
     postState.tokenCustody,
@@ -2553,26 +2394,17 @@ export function validateClassicV4LifecycleEvidence(
     [
       "token",
       "rewardVault",
-      "graduationVault",
       "positionForwarder",
       "rewardVaultPredeployed",
-      "graduationVaultPredeployed",
       "positionForwarderPredeployed",
     ],
     "Derived code hashes",
   );
-  for (const name of [
-    "token",
-    "rewardVault",
-    "graduationVault",
-    "positionForwarder",
-  ]) {
+  for (const name of ["token", "rewardVault", "positionForwarder"]) {
     assertNonzeroBytes32(postState.derivedCodeHashes[name], `${name} code hash`);
   }
   assert(
     typeof postState.derivedCodeHashes.rewardVaultPredeployed === "boolean" &&
-      typeof postState.derivedCodeHashes.graduationVaultPredeployed ===
-        "boolean" &&
       typeof postState.derivedCodeHashes.positionForwarderPredeployed === "boolean",
     "Derived deployment provenance differs",
   );
@@ -2642,7 +2474,6 @@ export function validateClassicV4LifecycleEvidence(
 
   const invariantKeys = [
     "launchVerified",
-    "bondingLifecycleVerified",
     "positionLockVerified",
     "buyExactInputVerified",
     "buyExactOutputVerified",
@@ -2878,7 +2709,7 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
       custodyMode: "unlocked",
       beneficiarySharesBps: [10_000],
       reason:
-        "Bonding exercises the finite 80/20 curve and non-minimum fees make both claim paths non-zero.",
+        "Deep30 exercises the new range and non-minimum fees make both claim paths non-zero.",
     },
     swapFixture: {
       quotePolicy: "canonical-v4-quoter-at-parent-block",
@@ -2958,7 +2789,7 @@ export function buildClassicV4LifecycleCanaryPlan(manifest, wallet) {
     ],
     requiredReadbacks: [
       "pool key and pool id",
-      "bonding vault, position owner, final lock and liquidity",
+      "position owner, operator, timelock and liquidity",
       "all four swap receipts and HookSwap/HookFee reconciliation",
       "creator and launcher accrual before and after claims",
       "fee conservation across PoolManager claims and hook accounting",

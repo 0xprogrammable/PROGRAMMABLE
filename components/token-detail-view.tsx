@@ -2,7 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Check, Copy, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  ExternalLink,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatUnits,
@@ -24,7 +29,8 @@ import {
 import { TokenDetailShell } from "@/components/token-detail-shell";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
 import { CreatorArticle } from "@/components/creator-article";
-import { CreatorArticleEditAction } from "@/components/creator-article-edit-action";
+import { CreatorArticleEditAction } from
+  "@/components/creator-article-edit-action";
 import {
   getExplorePreviewCreatorArticle,
   getExplorePreviewCustomProject,
@@ -34,7 +40,8 @@ import { useInterfacePreview } from "@/components/interface-preview";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
 import { useWallet } from "@/components/wallet-provider";
-import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
+import { parseDiscoverableMarketTradeCapabilityV1 } from
+  "@/lib/custom-launch/trade-capability-v1";
 import {
   exploreValuation,
   isExploreValuation,
@@ -50,10 +57,7 @@ import {
   getTokenCardImageSource,
 } from "@/lib/token-image";
 import { safePublicImageUrl } from "@/lib/safe-public-image-url";
-import {
-  validatePreparedBondingGraduationResponse,
-  validatePreparedTradeResponse,
-} from "@/lib/trade/client";
+import { validatePreparedTradeResponse } from "@/lib/trade/client";
 import { TRADE_QUOTE_VALIDITY_SECONDS } from "@/lib/trade/policy";
 import {
   isLaunchStampProvenanceV1,
@@ -67,21 +71,20 @@ import {
   parseCreatorArticleV1,
   type CreatorArticleV1,
 } from "@/lib/creator-article/contract-v1";
-import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from "@/lib/creator-article/programmable-example-v1";
+import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
+  "@/lib/creator-article/programmable-example-v1";
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import styles from "./token-experience.module.css";
 
-type DetailToken = LauncherToken &
-  Readonly<{
-    valuation: ExploreValuation;
-    marketData?: TokenMarketDataV1;
-  }>;
+type DetailToken = LauncherToken & Readonly<{
+  valuation: ExploreValuation;
+  marketData?: TokenMarketDataV1;
+}>;
 
-type DetailCustomProject = CustomProjectExploreEntry &
-  Readonly<{
-    valuation?: ExploreValuation;
-    marketData?: TokenMarketDataV1;
-  }>;
+type DetailCustomProject = CustomProjectExploreEntry & Readonly<{
+  valuation?: ExploreValuation;
+  marketData?: TokenMarketDataV1;
+}>;
 
 type RouterTradeProject = Pick<
   CustomProjectExploreEntry,
@@ -151,11 +154,10 @@ function chartCurrentMarketCapUsd(input: {
   valuation?: ExploreValuation;
   fdvUsdWad?: string;
 }) {
-  const valueWad =
-    input.valuation?.status === "available" &&
-    input.valuation.currency === "usd"
-      ? input.valuation.valueWad
-      : input.fdvUsdWad;
+  const valueWad = input.valuation?.status === "available" &&
+      input.valuation.currency === "usd"
+    ? input.valuation.valueWad
+    : input.fdvUsdWad;
   return valueWad && /^\d+$/u.test(valueWad)
     ? formatUnits(BigInt(valueWad), 18)
     : undefined;
@@ -326,82 +328,56 @@ function parseCustomAuthorityInventory(
   expectedWallet: Readonly<{ namespace: string; value: string }>,
   expectedHash: string,
 ): PostLaunchAuthorityInventoryV1 | null {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, [
-      "schemaVersion",
-      "launchingWallet",
-      "addressBindings",
-      "declaredIdentityBindings",
-      "postLaunchAuthorities",
-      "confirmation",
-      "postLaunchActionPolicy",
-      "githubAuthority",
+  if (!isRecord(value)
+    || !hasOnlyKeys(value, [
+      "schemaVersion", "launchingWallet", "addressBindings",
+      "declaredIdentityBindings", "postLaunchAuthorities", "confirmation",
+      "postLaunchActionPolicy", "githubAuthority",
       "postLaunchAuthorityInventoryHash",
-    ]) ||
-    value.schemaVersion !== "programmable.post-launch-authority-inventory.v1" ||
-    value.postLaunchActionPolicy !== "declared-onchain-authority-only" ||
-    value.githubAuthority !== "provenance-only-never-post-launch-authority" ||
-    value.postLaunchAuthorityInventoryHash !== expectedHash ||
-    !Array.isArray(value.addressBindings) ||
-    !Array.isArray(value.declaredIdentityBindings) ||
-    !Array.isArray(value.postLaunchAuthorities) ||
-    !isRecord(value.launchingWallet) ||
-    value.launchingWallet.namespace !== expectedWallet.namespace ||
-    value.launchingWallet.value !== expectedWallet.value ||
-    !isRecord(value.confirmation) ||
-    value.confirmation.mode !== "artifact-bound-launching-wallet-intent" ||
-    value.confirmation.userVisibleDisclosureRequired !== true ||
-    !isRecord(value.confirmation.confirmingIdentity) ||
-    value.confirmation.confirmingIdentity.namespace !==
-      expectedWallet.namespace ||
-    value.confirmation.confirmingIdentity.value !== expectedWallet.value
-  )
-    return null;
+    ])
+    || value.schemaVersion !== "programmable.post-launch-authority-inventory.v1"
+    || value.postLaunchActionPolicy !== "declared-onchain-authority-only"
+    || value.githubAuthority !== "provenance-only-never-post-launch-authority"
+    || value.postLaunchAuthorityInventoryHash !== expectedHash
+    || !Array.isArray(value.addressBindings)
+    || !Array.isArray(value.declaredIdentityBindings)
+    || !Array.isArray(value.postLaunchAuthorities)
+    || !isRecord(value.launchingWallet)
+    || value.launchingWallet.namespace !== expectedWallet.namespace
+    || value.launchingWallet.value !== expectedWallet.value
+    || !isRecord(value.confirmation)
+    || value.confirmation.mode !== "artifact-bound-launching-wallet-intent"
+    || value.confirmation.userVisibleDisclosureRequired !== true
+    || !isRecord(value.confirmation.confirmingIdentity)
+    || value.confirmation.confirmingIdentity.namespace !== expectedWallet.namespace
+    || value.confirmation.confirmingIdentity.value !== expectedWallet.value
+  ) return null;
   let previousAuthorityId = "";
   for (const candidate of value.postLaunchAuthorities) {
-    if (
-      !isRecord(candidate) ||
-      !hasOnlyKeys(candidate, [
-        "authorityId",
-        "role",
-        "authorityKind",
-        "identity",
-        "source",
-        "postLaunchActions",
-        "feeRole",
-        "disclosure",
-        "authorization",
-      ]) ||
-      typeof candidate.authorityId !== "string" ||
-      candidate.authorityId <= previousAuthorityId ||
-      typeof candidate.role !== "string" ||
-      !["eoa", "multisig", "contract"].includes(
-        String(candidate.authorityKind),
-      ) ||
-      !["none", "creator", "project"].includes(String(candidate.feeRole)) ||
-      candidate.authorization !== "declared-onchain-authority-only" ||
-      !isRecord(candidate.identity) ||
-      typeof candidate.identity.namespace !== "string" ||
-      typeof candidate.identity.value !== "string" ||
-      !/^eip155:[1-9][0-9]*$/u.test(candidate.identity.namespace) ||
-      !/^0x[0-9a-f]{40}$/u.test(candidate.identity.value) ||
-      !isRecord(candidate.source) ||
-      ![
-        "launching-wallet",
-        "declared-identity",
-        "launch-produced-contract",
-        "reviewed-external-contract",
-      ].includes(String(candidate.source.kind)) ||
-      !Array.isArray(candidate.postLaunchActions) ||
-      candidate.postLaunchActions.some(
-        (action) => typeof action !== "string",
-      ) ||
-      !isRecord(candidate.disclosure) ||
-      typeof candidate.disclosure.label !== "string" ||
-      typeof candidate.disclosure.description !== "string"
-    )
-      return null;
+    if (!isRecord(candidate)
+      || !hasOnlyKeys(candidate, [
+        "authorityId", "role", "authorityKind", "identity", "source",
+        "postLaunchActions", "feeRole", "disclosure", "authorization",
+      ])
+      || typeof candidate.authorityId !== "string"
+      || candidate.authorityId <= previousAuthorityId
+      || typeof candidate.role !== "string"
+      || !["eoa", "multisig", "contract"].includes(String(candidate.authorityKind))
+      || !["none", "creator", "project"].includes(String(candidate.feeRole))
+      || candidate.authorization !== "declared-onchain-authority-only"
+      || !isRecord(candidate.identity)
+      || typeof candidate.identity.namespace !== "string"
+      || typeof candidate.identity.value !== "string"
+      || !/^eip155:[1-9][0-9]*$/u.test(candidate.identity.namespace)
+      || !/^0x[0-9a-f]{40}$/u.test(candidate.identity.value)
+      || !isRecord(candidate.source)
+      || !["launching-wallet", "declared-identity", "launch-produced-contract", "reviewed-external-contract"].includes(String(candidate.source.kind))
+      || !Array.isArray(candidate.postLaunchActions)
+      || candidate.postLaunchActions.some((action) => typeof action !== "string")
+      || !isRecord(candidate.disclosure)
+      || typeof candidate.disclosure.label !== "string"
+      || typeof candidate.disclosure.description !== "string"
+    ) return null;
     previousAuthorityId = candidate.authorityId;
   }
   return value as unknown as PostLaunchAuthorityInventoryV1;
@@ -456,21 +432,19 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     return null;
   }
   const provenance = value.launchCategoryProvenance;
-  const platformFeePolicy =
-    value.platformFeePolicy === undefined
-      ? undefined
-      : isPlatformFeePolicyReadbackV2(value.platformFeePolicy, {
-            tokenAddress: value.tokenAddress,
-            hookAddress: value.hookAddress,
-            poolId: value.poolId,
-          })
-        ? value.platformFeePolicy
-        : null;
+  const platformFeePolicy = value.platformFeePolicy === undefined
+    ? undefined
+    : isPlatformFeePolicyReadbackV2(value.platformFeePolicy, {
+        tokenAddress: value.tokenAddress,
+        hookAddress: value.hookAddress,
+        poolId: value.poolId,
+      })
+      ? value.platformFeePolicy
+      : null;
   if (
-    platformFeePolicy === null ||
-    (platformFeePolicy && (!stamp || stamp.kind !== "custom-graph"))
-  )
-    return null;
+    platformFeePolicy === null
+    || (platformFeePolicy && (!stamp || stamp.kind !== "custom-graph"))
+  ) return null;
   if (stamp) {
     const unknownStampedFees = value.totalSwapFeeBps === null;
     if (
@@ -507,8 +481,7 @@ function parseLauncherToken(value: unknown): DetailToken | null {
       provenance.blockNumber !== stamp.blockNumber ||
       provenance.transactionIndex !== stamp.transactionIndex ||
       provenance.logIndex !== stamp.launchLogIndex
-    )
-      return null;
+    ) return null;
   } else if (
     value.launchModel === "custom-graph" ||
     value.totalSwapFeeBps === null ||
@@ -541,18 +514,16 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     uniswapV4Pool: uniswapV4Pool ?? undefined,
     ...(platformFeePolicy ? { platformFeePolicy } : {}),
   };
-  const valuation =
-    value.valuation === undefined
-      ? exploreValuation(token)
-      : isExploreValuation(value.valuation)
-        ? value.valuation
-        : null;
-  const marketData =
-    value.marketData === undefined
-      ? undefined
-      : isTokenMarketDataV1(value.marketData)
-        ? value.marketData
-        : null;
+  const valuation = value.valuation === undefined
+    ? exploreValuation(token)
+    : isExploreValuation(value.valuation)
+      ? value.valuation
+      : null;
+  const marketData = value.marketData === undefined
+    ? undefined
+    : isTokenMarketDataV1(value.marketData)
+      ? value.marketData
+      : null;
   return valuation === null || marketData === null
     ? null
     : {
@@ -567,22 +538,21 @@ function parseSourceVerificationDisplay(
 ): SourceVerificationDisplay | null {
   if (value === null || value === undefined) return null;
   if (
-    !isRecord(value) ||
-    value.schemaVersion !== "programmable.source-verification-display.v1" ||
-    !["verified", "in-progress", "not-verified"].includes(
+    !isRecord(value)
+    || value.schemaVersion !== "programmable.source-verification-display.v1"
+    || !["verified", "in-progress", "not-verified"].includes(
       String(value.status),
-    ) ||
-    (value.updatedAt !== null &&
-      (typeof value.updatedAt !== "string" ||
-        !Number.isFinite(Date.parse(value.updatedAt))))
-  )
-    return null;
-  const expectedLabel =
-    value.status === "verified"
-      ? "Source verified"
-      : value.status === "in-progress"
-        ? "Verification in progress"
-        : "Source not verified";
+    )
+    || (value.updatedAt !== null && (
+      typeof value.updatedAt !== "string"
+      || !Number.isFinite(Date.parse(value.updatedAt))
+    ))
+  ) return null;
+  const expectedLabel = value.status === "verified"
+    ? "Source verified"
+    : value.status === "in-progress"
+      ? "Verification in progress"
+      : "Source not verified";
   if (value.label !== expectedLabel) return null;
   return {
     schemaVersion: "programmable.source-verification-display.v1",
@@ -593,67 +563,58 @@ function parseSourceVerificationDisplay(
 }
 
 function parseCustomProject(value: unknown): DetailCustomProject | null {
-  if (
-    !isRecord(value) ||
-    value.exploreKind !== "custom-project" ||
-    typeof value.id !== "string" ||
-    typeof value.name !== "string" ||
-    typeof value.launchedAt !== "string" ||
-    typeof value.finalizedAt !== "string" ||
-    typeof value.chainId !== "string" ||
-    typeof value.modelId !== "string" ||
-    typeof value.customProjectId !== "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(value.customProjectId) ||
-    typeof value.customLaunchId !== "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(value.customLaunchId) ||
-    !isRecord(value.launchingWallet) ||
-    typeof value.launchingWallet.namespace !== "string" ||
-    !/^eip155:[1-9][0-9]*$/u.test(value.launchingWallet.namespace) ||
-    typeof value.launchingWallet.value !== "string" ||
-    !/^0x[0-9a-f]{40}$/u.test(value.launchingWallet.value) ||
-    typeof value.postLaunchAuthorityInventoryHash !== "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(value.postLaunchAuthorityInventoryHash) ||
-    !isTokenAddress(value.tokenAddress) ||
-    !Array.isArray(value.markets) ||
-    !Array.isArray(value.links) ||
-    !isRecord(value.launchCategoryProvenance) ||
-    value.launchCategoryProvenance.schemaVersion !==
-      "programmable.explore-launch-category-provenance.v1" ||
-    value.launchCategoryProvenance.category !== "custom" ||
-    (value.launchCategoryProvenance.source !== "registry.custom-launched" &&
-      value.launchCategoryProvenance.source !== "interface-preview") ||
-    value.launchCategoryProvenance.projectId !== value.customProjectId ||
-    value.launchCategoryProvenance.launchId !== value.customLaunchId ||
-    typeof value.launchCategoryProvenance.sourceRecordBindingHash !==
-      "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(
+  if (!isRecord(value)
+    || value.exploreKind !== "custom-project"
+    || typeof value.id !== "string"
+    || typeof value.name !== "string"
+    || typeof value.launchedAt !== "string"
+    || typeof value.finalizedAt !== "string"
+    || typeof value.chainId !== "string"
+    || typeof value.modelId !== "string"
+    || typeof value.customProjectId !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.customProjectId)
+    || typeof value.customLaunchId !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.customLaunchId)
+    || !isRecord(value.launchingWallet)
+    || typeof value.launchingWallet.namespace !== "string"
+    || !/^eip155:[1-9][0-9]*$/u.test(value.launchingWallet.namespace)
+    || typeof value.launchingWallet.value !== "string"
+    || !/^0x[0-9a-f]{40}$/u.test(value.launchingWallet.value)
+    || typeof value.postLaunchAuthorityInventoryHash !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.postLaunchAuthorityInventoryHash)
+    || !isTokenAddress(value.tokenAddress)
+    || !Array.isArray(value.markets)
+    || !Array.isArray(value.links)
+    || !isRecord(value.launchCategoryProvenance)
+    || value.launchCategoryProvenance.schemaVersion
+      !== "programmable.explore-launch-category-provenance.v1"
+    || value.launchCategoryProvenance.category !== "custom"
+    || (value.launchCategoryProvenance.source !== "registry.custom-launched"
+      && value.launchCategoryProvenance.source !== "interface-preview")
+    || value.launchCategoryProvenance.projectId !== value.customProjectId
+    || value.launchCategoryProvenance.launchId !== value.customLaunchId
+    || typeof value.launchCategoryProvenance.sourceRecordBindingHash !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(
       value.launchCategoryProvenance.sourceRecordBindingHash,
-    ) ||
-    typeof value.launchCategoryProvenance.finalizedLaunchBindingHash !==
-      "string" ||
-    !/^sha256:[0-9a-f]{64}$/u.test(
+    )
+    || typeof value.launchCategoryProvenance.finalizedLaunchBindingHash !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(
       value.launchCategoryProvenance.finalizedLaunchBindingHash,
     )
-  )
-    return null;
-  if (
-    value.launchCategoryProvenance.source === "registry.custom-launched" &&
-    (!isTokenAddress(value.launchCategoryProvenance.registryAddress) ||
-      typeof value.launchCategoryProvenance.registryStartBlock !== "string" ||
-      !/^[1-9][0-9]*$/u.test(
-        value.launchCategoryProvenance.registryStartBlock,
-      ) ||
-      !isBytes32(value.launchCategoryProvenance.transactionHash) ||
-      !isBytes32(value.launchCategoryProvenance.blockHash) ||
-      typeof value.launchCategoryProvenance.blockNumber !== "string" ||
-      !/^[1-9][0-9]*$/u.test(value.launchCategoryProvenance.blockNumber) ||
-      !Number.isSafeInteger(value.launchCategoryProvenance.transactionIndex) ||
-      Number(value.launchCategoryProvenance.transactionIndex) < 0 ||
-      !Number.isSafeInteger(value.launchCategoryProvenance.logIndex) ||
-      Number(value.launchCategoryProvenance.logIndex) < 0 ||
-      !isBytes32(value.launchCategoryProvenance.configurationHash))
-  )
-    return null;
+  ) return null;
+  if (value.launchCategoryProvenance.source === "registry.custom-launched"
+    && (!isTokenAddress(value.launchCategoryProvenance.registryAddress)
+      || typeof value.launchCategoryProvenance.registryStartBlock !== "string"
+      || !/^[1-9][0-9]*$/u.test(value.launchCategoryProvenance.registryStartBlock)
+      || !isBytes32(value.launchCategoryProvenance.transactionHash)
+      || !isBytes32(value.launchCategoryProvenance.blockHash)
+      || typeof value.launchCategoryProvenance.blockNumber !== "string"
+      || !/^[1-9][0-9]*$/u.test(value.launchCategoryProvenance.blockNumber)
+      || !Number.isSafeInteger(value.launchCategoryProvenance.transactionIndex)
+      || Number(value.launchCategoryProvenance.transactionIndex) < 0
+      || !Number.isSafeInteger(value.launchCategoryProvenance.logIndex)
+      || Number(value.launchCategoryProvenance.logIndex) < 0
+      || !isBytes32(value.launchCategoryProvenance.configurationHash))) return null;
   const links = value.links.map(parseTokenLink);
   if (links.some((link) => link === null)) return null;
   const launchingWallet = {
@@ -669,64 +630,49 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
   type CustomMarket = CustomProjectExploreEntry["markets"][number];
   const markets: CustomMarket[] = [];
   for (const candidate of value.markets) {
-    if (
-      !isRecord(candidate) ||
-      typeof candidate.marketId !== "string" ||
-      typeof candidate.kind !== "string" ||
-      !["active", "paused", "closed", "verification_pending"].includes(
+    if (!isRecord(candidate)
+      || typeof candidate.marketId !== "string"
+      || typeof candidate.kind !== "string"
+      || !["active", "paused", "closed", "verification_pending"].includes(
         String(candidate.status),
-      ) ||
-      (candidate.poolId !== undefined && !isBytes32(candidate.poolId))
-    )
-      return null;
-    const asset = (assetValue: unknown) => {
-      if (
-        !isRecord(assetValue) ||
-        typeof assetValue.assetId !== "string" ||
-        !isRecord(assetValue.identity) ||
-        typeof assetValue.identity.namespace !== "string" ||
-        typeof assetValue.identity.value !== "string" ||
-        (assetValue.decimals !== undefined &&
-          (!Number.isSafeInteger(assetValue.decimals) ||
-            Number(assetValue.decimals) < 0 ||
-            Number(assetValue.decimals) > 255))
       )
-        return null;
+      || (candidate.poolId !== undefined && !isBytes32(candidate.poolId))) return null;
+    const asset = (assetValue: unknown) => {
+      if (!isRecord(assetValue)
+        || typeof assetValue.assetId !== "string"
+        || !isRecord(assetValue.identity)
+        || typeof assetValue.identity.namespace !== "string"
+        || typeof assetValue.identity.value !== "string"
+        || (assetValue.decimals !== undefined
+          && (!Number.isSafeInteger(assetValue.decimals)
+            || Number(assetValue.decimals) < 0
+            || Number(assetValue.decimals) > 255))) return null;
       return {
         assetId: assetValue.assetId,
         identity: {
           namespace: assetValue.identity.namespace,
           value: assetValue.identity.value,
         },
-        ...(typeof assetValue.name === "string"
-          ? { name: assetValue.name }
-          : {}),
-        ...(typeof assetValue.symbol === "string"
-          ? { symbol: assetValue.symbol }
-          : {}),
+        ...(typeof assetValue.name === "string" ? { name: assetValue.name } : {}),
+        ...(typeof assetValue.symbol === "string" ? { symbol: assetValue.symbol } : {}),
         ...(assetValue.decimals === undefined
-          ? {}
-          : { decimals: Number(assetValue.decimals) }),
+          ? {} : { decimals: Number(assetValue.decimals) }),
       };
     };
     const baseAsset = asset(candidate.baseAsset);
     const quoteAsset = asset(candidate.quoteAsset);
     if (baseAsset === null || quoteAsset === null) return null;
-    const capability =
-      candidate.tradeCapability === undefined
-        ? undefined
-        : parseDiscoverableMarketTradeCapabilityV1({
-            value: candidate.tradeCapability,
-            chainId: value.chainId,
-            marketId: candidate.marketId,
-            baseAssetId: baseAsset.assetId,
-            quoteAssetId: quoteAsset.assetId,
-            ...(candidate.poolId === undefined
-              ? {}
-              : { poolId: candidate.poolId }),
-          });
-    if (candidate.tradeCapability !== undefined && capability === null)
-      return null;
+    const capability = candidate.tradeCapability === undefined
+      ? undefined
+      : parseDiscoverableMarketTradeCapabilityV1({
+          value: candidate.tradeCapability,
+          chainId: value.chainId,
+          marketId: candidate.marketId,
+          baseAssetId: baseAsset.assetId,
+          quoteAssetId: quoteAsset.assetId,
+          ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
+        });
+    if (candidate.tradeCapability !== undefined && capability === null) return null;
     markets.push({
       marketId: candidate.marketId,
       kind: candidate.kind,
@@ -739,18 +685,16 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
         : { tradeCapability: capability as CustomMarket["tradeCapability"] }),
     });
   }
-  const valuation =
-    value.valuation === undefined
-      ? undefined
-      : isExploreValuation(value.valuation)
-        ? value.valuation
-        : null;
-  const marketData =
-    value.marketData === undefined
-      ? undefined
-      : isTokenMarketDataV1(value.marketData)
-        ? value.marketData
-        : null;
+  const valuation = value.valuation === undefined
+    ? undefined
+    : isExploreValuation(value.valuation)
+      ? value.valuation
+      : null;
+  const marketData = value.marketData === undefined
+    ? undefined
+    : isTokenMarketDataV1(value.marketData)
+      ? value.marketData
+      : null;
   if (valuation === null || marketData === null) return null;
   return {
     exploreKind: "custom-project",
@@ -776,14 +720,13 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
       value.postLaunchAuthorityInventoryHash as `sha256:${string}`,
     markets,
     tokenAddress: value.tokenAddress,
-    ...(typeof value.tokenDecimals === "number" &&
-    Number.isSafeInteger(value.tokenDecimals) &&
-    value.tokenDecimals >= 0 &&
-    value.tokenDecimals <= 255
+    ...(typeof value.tokenDecimals === "number"
+      && Number.isSafeInteger(value.tokenDecimals)
+      && value.tokenDecimals >= 0
+      && value.tokenDecimals <= 255
       ? { tokenDecimals: value.tokenDecimals }
       : {}),
-    launchCategoryProvenance:
-      value.launchCategoryProvenance as CustomProjectExploreEntry["launchCategoryProvenance"],
+    launchCategoryProvenance: value.launchCategoryProvenance as CustomProjectExploreEntry["launchCategoryProvenance"],
     ...(valuation === undefined ? {} : { valuation }),
     ...(marketData === undefined ? {} : { marketData }),
   };
@@ -900,21 +843,17 @@ export function parseDetailPayload(value: unknown): DetailPayload {
   if (value.token !== null && token === null) {
     throw new Error("The token registry returned an invalid token record");
   }
-  const customProject =
-    value.customProject === null || value.customProject === undefined
-      ? null
-      : parseCustomProject(value.customProject);
-  if (
-    value.customProject !== null &&
-    value.customProject !== undefined &&
-    customProject === null
-  ) {
+  const customProject = value.customProject === null
+    || value.customProject === undefined
+    ? null
+    : parseCustomProject(value.customProject);
+  if (value.customProject !== null
+    && value.customProject !== undefined
+    && customProject === null) {
     throw new Error("The token registry returned an invalid custom project");
   }
   if (token !== null && customProject !== null) {
-    throw new Error(
-      "The token registry returned conflicting launch categories",
-    );
+    throw new Error("The token registry returned conflicting launch categories");
   }
   const routerTradeProject =
     value.routerTradeProject === null ||
@@ -927,17 +866,15 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     value.routerTradeProject !== undefined &&
     routerTradeProject === null
   ) {
-    throw new Error(
-      "The token registry returned an invalid Router trade route",
-    );
+    throw new Error("The token registry returned an invalid Router trade route");
   }
   const sourceVerification = parseSourceVerificationDisplay(
     value.sourceVerification,
   );
   if (
-    value.sourceVerification !== null &&
-    value.sourceVerification !== undefined &&
-    sourceVerification === null
+    value.sourceVerification !== null
+    && value.sourceVerification !== undefined
+    && sourceVerification === null
   ) {
     throw new Error("The token registry returned invalid source verification");
   }
@@ -1013,7 +950,7 @@ function detailStateFromResponse(
   if (payload.customProject) {
     if (
       payload.customProject.tokenAddress?.toLowerCase() !==
-      tokenAddress.toLowerCase()
+        tokenAddress.toLowerCase()
     ) {
       throw new Error("The token registry returned the wrong custom project");
     }
@@ -1039,12 +976,12 @@ function detailStateFromResponse(
     throw new Error("The token registry returned no finalized snapshot");
   }
 
-  return {
-    phase: "ready",
-    token: payload.token!,
-    routerTradeProject: payload.routerTradeProject,
-    sourceVerification: payload.sourceVerification,
-    creatorArticle: payload.creatorArticle,
+    return {
+      phase: "ready",
+      token: payload.token!,
+      routerTradeProject: payload.routerTradeProject,
+      sourceVerification: payload.sourceVerification,
+      creatorArticle: payload.creatorArticle,
     chainId: payload.snapshot.chainId,
     requestKey,
   };
@@ -1191,8 +1128,8 @@ function derivedTokenPriceUsdWad(token: LauncherToken) {
   }
   const supply = BigInt(token.totalSupplyRaw);
   if (supply <= 0n) return undefined;
-  const price =
-    (BigInt(token.fdvUsdWad) * 10n ** BigInt(token.tokenDecimals)) / supply;
+  const price = (BigInt(token.fdvUsdWad) * 10n ** BigInt(token.tokenDecimals)) /
+    supply;
   return price > 0n ? price.toString() : undefined;
 }
 
@@ -1257,11 +1194,10 @@ export function getValuationMetricLabel(
 }
 
 export function buildTokenDetailMetrics(
-  token: LauncherToken &
-    Readonly<{
-      valuation?: ExploreValuation;
-      marketData?: TokenMarketDataV1;
-    }>,
+  token: LauncherToken & Readonly<{
+    valuation?: ExploreValuation;
+    marketData?: TokenMarketDataV1;
+  }>,
   fdvOverride?: string | null,
   volumeOverride?: TokenMetric,
 ): TokenMetric[] {
@@ -1269,33 +1205,31 @@ export function buildTokenDetailMetrics(
     (pool) => pool.identity.poolId === token.marketData?.primaryPoolId,
   );
   const marketVolumeUsd = formatUsdWadAmount(primaryMarket?.volume24hUsdWad);
-  const marketLiquidityUsd =
-    primaryMarket?.liquidity?.freshness === "current"
-      ? formatUsdWadAmount(primaryMarket.liquidity.valueUsdWad)
-      : null;
+  const marketLiquidityUsd = primaryMarket?.liquidity?.freshness === "current"
+    ? formatUsdWadAmount(primaryMarket.liquidity.valueUsdWad)
+    : null;
   const explicitValuation = (token as { valuation?: unknown }).valuation;
   const valuation = isExploreValuation(explicitValuation)
     ? explicitValuation
     : exploreValuation(token);
-  const safeFdvOverride =
-    valuation.status === "available" &&
-    valuation.metric === "fdv" &&
-    fdvOverride?.trim() &&
-    !/^(?:Unavailable|Not available yet|—)$/u.test(fdvOverride.trim())
-      ? fdvOverride
-      : null;
-  const formattedFdv =
-    valuation.status === "available"
-      ? (safeFdvOverride ??
-        (valuation.currency === "usd"
+  const safeFdvOverride = valuation.status === "available" &&
+      valuation.metric === "fdv" &&
+      fdvOverride?.trim() &&
+      !/^(?:Unavailable|Not available yet|—)$/u.test(fdvOverride.trim())
+    ? fdvOverride
+    : null;
+  const formattedFdv = valuation.status === "available"
+    ? safeFdvOverride ?? (
+        valuation.currency === "usd"
           ? formatUsd(valuation.valueWad, "amount")
           : valuation.currency === "eth"
             ? formatEth(formatUnits(BigInt(valuation.valueWad), 18), "amount")
             : formatQuoteAmount(
                 formatUnits(BigInt(valuation.valueWad), 18),
                 valuation.quoteSymbol,
-              )))
-      : null;
+              )
+      )
+    : null;
   const values: Array<TokenMetric | null> = [
     {
       label: getValuationMetricLabel(valuation),
@@ -1319,13 +1253,12 @@ export function buildTokenDetailMetrics(
               : "Initialized",
         }
       : null,
-    volumeOverride ??
-      (marketVolumeUsd !== null
-        ? {
-            label: "24h volume",
-            value: marketVolumeUsd,
-          }
-        : null),
+    volumeOverride ?? (marketVolumeUsd !== null
+      ? {
+          label: "24h volume",
+          value: marketVolumeUsd,
+        }
+      : null),
     marketLiquidityUsd !== null
       ? {
           label: "Liquidity",
@@ -1647,42 +1580,39 @@ function TokenDetailContent({
     ? token.launchStampProvenance?.launchWallet
     : token.creatorAddress;
   const canUseClassicTrade = canUseClassicTokenTrade(token);
-  const classicTradeLaunchModel =
-    token.launchModel === "custom-graph" ? undefined : token.launchModel;
+  const classicTradeLaunchModel = token.launchModel === "custom-graph"
+    ? undefined
+    : token.launchModel;
   const defaultSwapFeeBps = token.totalSwapFeeBps;
-  const classicSwapFeeBps =
-    typeof defaultSwapFeeBps === "number" ? defaultSwapFeeBps : null;
-  const classicTradeFeePresentation =
-    token.launchModelVersion === "classic-v4"
-      ? ("classic-v4-hook" as const)
-      : ("legacy-pool" as const);
-  const visibleCreatorArticle =
-    publishedCreatorArticle &&
-    (!creatorArticle ||
-      publishedCreatorArticle.revision >= creatorArticle.revision)
-      ? publishedCreatorArticle
-      : creatorArticle;
+  const classicSwapFeeBps = typeof defaultSwapFeeBps === "number"
+    ? defaultSwapFeeBps
+    : null;
+  const classicTradeFeePresentation = token.launchModelVersion === "classic-v4"
+    ? "classic-v4-hook" as const
+    : "legacy-pool" as const;
+  const visibleCreatorArticle = publishedCreatorArticle
+      && (!creatorArticle || publishedCreatorArticle.revision >= creatorArticle.revision)
+    ? publishedCreatorArticle
+    : creatorArticle;
   const creatorProject = useMemo(() => {
     if (
-      preview ||
-      chainId !== 1 ||
-      !creatorAddress ||
-      !isAddress(creatorAddress)
-    )
-      return null;
+      preview
+      || chainId !== 1
+      || !creatorAddress
+      || !isAddress(creatorAddress)
+    ) return null;
     return Object.freeze({
       chainId: 1 as const,
       tokenAddress: getAddress(token.tokenAddress),
       name: token.name,
       symbol: token.symbol || null,
       imageUrl: token.imageUrl?.trim() || null,
-      source:
-        token.tokenAddress.toLowerCase() ===
-        PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()
-          ? ("official-main-token" as const)
-          : isRouterStamped
-            ? ("canonical-launch-stamp-router" as const)
-            : ("envio-classic-v3" as const),
+      source: token.tokenAddress.toLowerCase()
+          === PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()
+        ? "official-main-token" as const
+        : isRouterStamped
+          ? "canonical-launch-stamp-router" as const
+          : "envio-classic-v3" as const,
       article: visibleCreatorArticle
         ? Object.freeze({
             revision: visibleCreatorArticle.revision,
@@ -1860,40 +1790,26 @@ function TokenDetailContent({
       throw new Error("The trade network does not match this token");
     }
 
-    const validated =
-      prepared.transaction.kind === "bonding-max-buy" ||
-      prepared.transaction.kind === "bonding-graduate"
-        ? validatePreparedBondingGraduationResponse(prepared, {
-            chainId: 1,
-            owner: getAddress(wallet.account),
-            token: getAddress(token.tokenAddress),
-            hook: getAddress(token.hookAddress),
-            poolId: token.poolId,
-          })
-        : validatePreparedTradeResponse(prepared, {
-            chainId,
-            owner: getAddress(wallet.account),
-            token: getAddress(token.tokenAddress),
-            hook: getAddress(token.hookAddress),
-            poolId: token.poolId,
-            launchModel: classicTradeLaunchModel,
-            launchModelVersion: token.launchModelVersion,
-            quoteAsset: token.quoteAssetAddress
-              ? getAddress(token.quoteAssetAddress)
-              : undefined,
-            side: prepared.side,
-            amountIn: prepared.quote.amountIn,
-            slippageBps: prepared.quote.slippageBps,
-            deadline: prepared.quote.deadline,
-          });
+    const validated = validatePreparedTradeResponse(prepared, {
+      chainId,
+      owner: getAddress(wallet.account),
+      token: getAddress(token.tokenAddress),
+      hook: getAddress(token.hookAddress),
+      poolId: token.poolId,
+      launchModel: classicTradeLaunchModel,
+      launchModelVersion: token.launchModelVersion,
+      quoteAsset: token.quoteAssetAddress
+        ? getAddress(token.quoteAssetAddress)
+        : undefined,
+      side: prepared.side,
+      amountIn: prepared.quote.amountIn,
+      slippageBps: prepared.quote.slippageBps,
+      deadline: prepared.quote.deadline,
+    });
     const transaction = validated.transaction;
 
     const hash = await sendTransaction(transaction);
-    if (
-      transaction.kind === "swap" ||
-      transaction.kind === "bonding-max-buy" ||
-      transaction.kind === "bonding-graduate"
-    ) {
+    if (transaction.kind === "swap") {
       setTradeFlow({
         phase: "submitted",
         submitted: prepared,
@@ -1950,7 +1866,9 @@ function TokenDetailContent({
             <div className={styles.image}>
               <Image
                 src={imageSource}
-                alt={token.imageUrl?.trim() ? `${token.name} artwork` : ""}
+                alt={
+                  token.imageUrl?.trim() ? `${token.name} artwork` : ""
+                }
                 fill
                 priority
                 sizes="(max-width: 720px) 88px, 132px"
@@ -2027,11 +1945,9 @@ function TokenDetailContent({
                 <p
                   className={styles.sourceVerification}
                   data-status={sourceVerification.status}
-                  title={
-                    sourceVerification.updatedAt
-                      ? `Checked ${sourceVerification.updatedAt}`
-                      : undefined
-                  }
+                  title={sourceVerification.updatedAt
+                    ? `Checked ${sourceVerification.updatedAt}`
+                    : undefined}
                 >
                   {sourceVerification.label}
                 </p>
@@ -2171,13 +2087,9 @@ function TokenDetailContent({
           ) : (
             <div className={styles.submitted} role="status">
               <strong>
-                {tradeFlow.submitted.transaction.kind === "bonding-max-buy"
-                  ? "Bonding completion submitted"
-                  : tradeFlow.submitted.transaction.kind === "bonding-graduate"
-                    ? "Graduation submitted"
-                    : tradeFlow.submitted.transaction.kind === "swap"
-                      ? "Swap submitted"
-                      : "Approval submitted"}
+                {tradeFlow.submitted.transaction.kind === "swap"
+                  ? "Swap submitted"
+                  : "Approval submitted"}
               </strong>
               <p>
                 Transaction{" "}
@@ -2197,8 +2109,7 @@ function TokenDetailContent({
                 </a>
               ) : null}
 
-              {(preparedForDisplay?.transaction.kind === "swap" ||
-                preparedForDisplay?.transaction.kind === "bonding-max-buy") &&
+              {preparedForDisplay?.transaction.kind === "swap" &&
               preparedMinimum ? (
                 <p>Minimum received {preparedMinimum}</p>
               ) : null}
@@ -2209,9 +2120,7 @@ function TokenDetailContent({
                 </p>
               ) : null}
 
-              {tradeFlow.submitted.transaction.kind === "swap" ||
-              tradeFlow.submitted.transaction.kind === "bonding-max-buy" ||
-              tradeFlow.submitted.transaction.kind === "bonding-graduate" ? (
+              {tradeFlow.submitted.transaction.kind === "swap" ? (
                 <button
                   className={styles.secondaryAction}
                   type="button"
@@ -2247,18 +2156,17 @@ function TokenDetailContent({
         token.tokenReserveRaw ? (
           <DeepLiquiditySummary token={token} />
         ) : null}
+
       </div>
       <CreatorArticle
         article={visibleCreatorArticle}
-        editAction={
-          creatorProject && creatorAddress ? (
-            <CreatorArticleEditAction
-              project={creatorProject}
-              creatorAddress={getAddress(creatorAddress)}
-              onPublished={setPublishedCreatorArticle}
-            />
-          ) : null
-        }
+        editAction={creatorProject && creatorAddress ? (
+          <CreatorArticleEditAction
+            project={creatorProject}
+            creatorAddress={getAddress(creatorAddress)}
+            onPublished={setPublishedCreatorArticle}
+          />
+        ) : null}
       />
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
@@ -2286,27 +2194,25 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
     (pool) => pool.identity.poolId === project.marketData?.primaryPoolId,
   );
   const valuation = project.valuation;
-  const valuationValue =
-    valuation?.status === "available"
-      ? valuation.currency === "usd"
-        ? formatUsd(valuation.valueWad, "amount")
-        : valuation.currency === "eth"
-          ? formatEth(formatUnits(BigInt(valuation.valueWad), 18), "amount")
-          : formatQuoteAmount(
-              formatUnits(BigInt(valuation.valueWad), 18),
-              valuation.quoteSymbol,
-            )
-      : null;
-  const marketStatus =
-    project.marketData?.status === "waiting-for-first-trade"
-      ? "Waiting for first trade"
-      : project.marketData?.status === "stale"
-        ? "Last verified"
-        : project.marketData?.status === "current"
-          ? "Current"
-          : project.marketData?.status === "partial"
-            ? "Limited"
-            : "";
+  const valuationValue = valuation?.status === "available"
+    ? valuation.currency === "usd"
+      ? formatUsd(valuation.valueWad, "amount")
+      : valuation.currency === "eth"
+        ? formatEth(formatUnits(BigInt(valuation.valueWad), 18), "amount")
+        : formatQuoteAmount(
+            formatUnits(BigInt(valuation.valueWad), 18),
+            valuation.quoteSymbol,
+          )
+    : null;
+  const marketStatus = project.marketData?.status === "waiting-for-first-trade"
+    ? "Waiting for first trade"
+    : project.marketData?.status === "stale"
+      ? "Last verified"
+      : project.marketData?.status === "current"
+        ? "Current"
+        : project.marketData?.status === "partial"
+          ? "Limited"
+          : "";
   return [
     {
       label: getValuationMetricLabel(valuation),
@@ -2314,20 +2220,16 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
     },
     { label: "Market data", value: marketStatus },
     ...(primary?.volume24hUsdWad
-      ? [
-          {
-            label: "24h volume",
-            value: formatUsdWadAmount(primary.volume24hUsdWad) ?? "",
-          },
-        ]
+      ? [{
+          label: "24h volume",
+          value: formatUsdWadAmount(primary.volume24hUsdWad) ?? "",
+        }]
       : []),
     ...(primary?.liquidity?.freshness === "current"
-      ? [
-          {
-            label: "Liquidity",
-            value: formatUsdWadAmount(primary.liquidity.valueUsdWad) ?? "",
-          },
-        ]
+      ? [{
+          label: "Liquidity",
+          value: formatUsdWadAmount(primary.liquidity.valueUsdWad) ?? "",
+        }]
       : []),
   ];
 }
@@ -2353,28 +2255,23 @@ function CustomProjectDetailContent({
   const [publishedCreatorArticle, setPublishedCreatorArticle] =
     useState<CreatorArticleV1 | null>(null);
   const copyResetTimer = useRef<number | null>(null);
-  const imageUrl =
-    project.imageUrl?.trim() ||
-    getFallbackTokenImage(project.tokenAddress ?? project.customProjectId);
+  const imageUrl = project.imageUrl?.trim()
+    || getFallbackTokenImage(project.tokenAddress ?? project.customProjectId);
   const imageSource = getTokenCardImageSource(imageUrl);
-  const authorities =
-    project.postLaunchAuthorityInventory.postLaunchAuthorities;
+  const authorities = project.postLaunchAuthorityInventory.postLaunchAuthorities;
   const metrics = customMarketMetrics(project);
-  const visibleCreatorArticle =
-    publishedCreatorArticle &&
-    (!creatorArticle ||
-      publishedCreatorArticle.revision >= creatorArticle.revision)
-      ? publishedCreatorArticle
-      : creatorArticle;
+  const visibleCreatorArticle = publishedCreatorArticle
+      && (!creatorArticle || publishedCreatorArticle.revision >= creatorArticle.revision)
+    ? publishedCreatorArticle
+    : creatorArticle;
   const creatorProject = useMemo(() => {
     if (
-      chainId !== 1 ||
-      !project.tokenAddress ||
-      project.chainId !== "1" ||
-      project.launchingWallet.namespace !== "eip155:1" ||
-      !isAddress(project.launchingWallet.value)
-    )
-      return null;
+      chainId !== 1
+      || !project.tokenAddress
+      || project.chainId !== "1"
+      || project.launchingWallet.namespace !== "eip155:1"
+      || !isAddress(project.launchingWallet.value)
+    ) return null;
     return Object.freeze({
       chainId: 1 as const,
       tokenAddress: getAddress(project.tokenAddress),
@@ -2392,18 +2289,13 @@ function CustomProjectDetailContent({
     });
   }, [chainId, project, visibleCreatorArticle]);
 
-  useEffect(
-    () => () => {
-      if (copyResetTimer.current !== null)
-        window.clearTimeout(copyResetTimer.current);
-    },
-    [],
-  );
+  useEffect(() => () => {
+    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
+  }, []);
 
   async function copyAddress() {
     if (project.tokenAddress === undefined) return;
-    if (copyResetTimer.current !== null)
-      window.clearTimeout(copyResetTimer.current);
+    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
     setCopyError("");
     try {
       await navigator.clipboard.writeText(project.tokenAddress);
@@ -2447,9 +2339,7 @@ function CustomProjectDetailContent({
           </div>
           <div className={styles.identityCopy}>
             <div className={styles.tokenSymbolRow}>
-              {project.symbol ? (
-                <span className={styles.symbol}>${project.symbol}</span>
-              ) : null}
+              {project.symbol ? <span className={styles.symbol}>${project.symbol}</span> : null}
               <span className={styles.categoryBadge}>Custom</span>
             </div>
             <h1 className={styles.name}>{project.name}</h1>
@@ -2475,19 +2365,13 @@ function CustomProjectDetailContent({
                 <button
                   className={styles.address}
                   type="button"
-                  aria-label={
-                    copied
-                      ? `${project.name} contract address copied`
-                      : `Copy ${project.name} contract address`
-                  }
+                  aria-label={copied
+                    ? `${project.name} contract address copied`
+                    : `Copy ${project.name} contract address`}
                   onClick={() => void copyAddress()}
                 >
                   <code>{project.tokenAddress}</code>
-                  {copied ? (
-                    <Check aria-hidden="true" size={14} />
-                  ) : (
-                    <Copy aria-hidden="true" size={14} />
-                  )}
+                  {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
                 </button>
               </div>
             ) : null}
@@ -2512,10 +2396,7 @@ function CustomProjectDetailContent({
           </section>
         ) : null}
 
-        <section
-          className={styles.customMarketPanel}
-          aria-labelledby="custom-market-heading"
-        >
+        <section className={styles.customMarketPanel} aria-labelledby="custom-market-heading">
           <div className={styles.customPanelHeading}>
             <div>
               <span>Canonical market record</span>
@@ -2524,83 +2405,53 @@ function CustomProjectDetailContent({
             <span className={styles.categoryBadge}>Custom</span>
           </div>
           <dl className={styles.customFacts}>
-            <div>
-              <dt>Type</dt>
-              <dd>Custom</dd>
-            </div>
-            <div>
-              <dt>Model</dt>
-              <dd>{project.modelId}</dd>
-            </div>
-            <div>
-              <dt>Chain</dt>
-              <dd>{getNetworkLabel(chainId)}</dd>
-            </div>
-            <div>
-              <dt>Markets</dt>
-              <dd>{project.markets.length}</dd>
-            </div>
+            <div><dt>Type</dt><dd>Custom</dd></div>
+            <div><dt>Model</dt><dd>{project.modelId}</dd></div>
+            <div><dt>Chain</dt><dd>{getNetworkLabel(chainId)}</dd></div>
+            <div><dt>Markets</dt><dd>{project.markets.length}</dd></div>
             {project.markets.map((market) => (
               <div className={styles.customWideFact} key={market.marketId}>
                 <dt>{market.marketId}</dt>
                 <dd>
                   {market.kind} · {market.status}
-                  {market.poolId ? (
-                    <>
-                      <br />
-                      <code>{market.poolId}</code>
-                    </>
-                  ) : null}
+                  {market.poolId ? <><br /><code>{market.poolId}</code></> : null}
                 </dd>
               </div>
             ))}
           </dl>
         </section>
 
-        <aside
-          className={`${styles.tradeShell} liquid-glass-surface`}
-          aria-label={`${project.name} market access`}
-        >
-          {(chainId === 1 || chainId === 11_155_111) &&
-          project.markets.some(
-            ({ tradeCapability }) => tradeCapability !== undefined,
-          ) ? (
-            <CustomMarketTrade
-              project={project}
-              chainId={chainId}
-              owner={wallet ? getAddress(wallet.account) : null}
-              readNativeBalance={readNativeBalance}
-              readBalances={readTradeBalances}
-              onConnect={openWallet}
-              onSubmit={(transaction) => sendTransaction(transaction)}
-            />
-          ) : (
-            <div className={styles.customTradeState} role="status">
-              <span>Programmable trading</span>
-              <h2>Unavailable for this Custom market</h2>
-              <p>
-                The canonical launch record does not include a reviewed trade
-                preparation route. Programmable will not infer a router from a
-                token address or pool.
-              </p>
-              <dl className={styles.customTradeFacts}>
-                <div>
-                  <dt>Market state</dt>
-                  <dd>{customMarketStatus(project)}</dd>
-                </div>
-                <div>
-                  <dt>Route</dt>
-                  <dd>Not bound</dd>
-                </div>
-              </dl>
-            </div>
-          )}
+        <aside className={`${styles.tradeShell} liquid-glass-surface`} aria-label={`${project.name} market access`}>
+          {(chainId === 1 || chainId === 11_155_111)
+            && project.markets.some(({ tradeCapability }) =>
+              tradeCapability !== undefined) ? (
+              <CustomMarketTrade
+                project={project}
+                chainId={chainId}
+                owner={wallet ? getAddress(wallet.account) : null}
+                readNativeBalance={readNativeBalance}
+                readBalances={readTradeBalances}
+                onConnect={openWallet}
+                onSubmit={(transaction) => sendTransaction(transaction)}
+              />
+            ) : (
+              <div className={styles.customTradeState} role="status">
+                <span>Programmable trading</span>
+                <h2>Unavailable for this Custom market</h2>
+                <p>
+                  The canonical launch record does not include a reviewed trade
+                  preparation route. Programmable will not infer a router from a
+                  token address or pool.
+                </p>
+                <dl className={styles.customTradeFacts}>
+                  <div><dt>Market state</dt><dd>{customMarketStatus(project)}</dd></div>
+                  <div><dt>Route</dt><dd>Not bound</dd></div>
+                </dl>
+              </div>
+            )}
         </aside>
 
-        <section
-          className={styles.customAuthorityPanel}
-          aria-labelledby="custom-authorities-heading"
-        >
+        <section className={styles.customAuthorityPanel} aria-labelledby="custom-authorities-heading">
           <div className={styles.customPanelHeading}>
             <div>
               <span>Canonical inventory</span>
@@ -2608,18 +2459,14 @@ function CustomProjectDetailContent({
             </div>
           </div>
           {authorities.length === 0 ? (
-            <p className={styles.customMuted}>
-              No post-launch authority is declared.
-            </p>
+            <p className={styles.customMuted}>No post-launch authority is declared.</p>
           ) : (
             <ul className={styles.authorityList}>
               {authorities.map((authority) => (
                 <li key={authority.authorityId}>
                   <div>
                     <strong>{authority.disclosure.label}</strong>
-                    <span>
-                      {authority.role} · {authority.authorityKind}
-                    </span>
+                    <span>{authority.role} · {authority.authorityKind}</span>
                   </div>
                   <p>{authority.disclosure.description}</p>
                   <code>{authority.identity.value}</code>
@@ -2634,10 +2481,7 @@ function CustomProjectDetailContent({
           )}
         </section>
 
-        <section
-          className={styles.customProvenancePanel}
-          aria-labelledby="custom-provenance-heading"
-        >
+        <section className={styles.customProvenancePanel} aria-labelledby="custom-provenance-heading">
           <div className={styles.customPanelHeading}>
             <div>
               <span>Launch provenance</span>
@@ -2653,21 +2497,17 @@ function CustomProjectDetailContent({
       </div>
       <CreatorArticle
         article={visibleCreatorArticle}
-        editAction={
-          creatorProject && isAddress(project.launchingWallet.value) ? (
-            <CreatorArticleEditAction
-              project={creatorProject}
-              creatorAddress={getAddress(project.launchingWallet.value)}
-              onPublished={setPublishedCreatorArticle}
-            />
-          ) : null
-        }
+        editAction={creatorProject && isAddress(project.launchingWallet.value) ? (
+          <CreatorArticleEditAction
+            project={creatorProject}
+            creatorAddress={getAddress(project.launchingWallet.value)}
+            onPublished={setPublishedCreatorArticle}
+          />
+        ) : null}
       />
       {copyError ? (
         <div className="toast-region" aria-live="assertive" aria-atomic="true">
-          <p className="toast" role="alert">
-            {copyError}
-          </p>
+          <p className="toast" role="alert">{copyError}</p>
         </div>
       ) : null}
     </div>
@@ -2699,11 +2539,7 @@ export function TokenDetailView({
   });
   const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
   const [initialState] = useState(() =>
-    createTokenDetailInitialState(
-      initialResponse,
-      normalizedAddress,
-      requestKey,
-    ),
+    createTokenDetailInitialState(initialResponse, normalizedAddress, requestKey)
   );
   const [state, setState] = useState<DetailState>(
     () => initialState ?? { phase: "loading", requestKey },
@@ -2733,23 +2569,22 @@ export function TokenDetailView({
         );
         const body: unknown = await response.json().catch(() => null);
 
-        setState(
-          detailStateFromResponse(
-            { status: response.status, body },
-            tokenAddress,
-            requestKey,
-          ),
-        );
+        setState(detailStateFromResponse(
+          { status: response.status, body },
+          tokenAddress,
+          requestKey,
+        ));
       } catch (error) {
         if (controller.signal.aborted && !timedOut) return;
-        const message = timedOut
-          ? "Token details took too long to load"
-          : error instanceof Error
+        const message =
+          timedOut
+            ? "Token details took too long to load"
+            : error instanceof Error
             ? error.message
             : "Token data is temporarily unavailable";
         setState((current) =>
-          (current.phase === "ready" || current.phase === "custom-ready") &&
-          current.requestKey === requestKey
+          (current.phase === "ready" || current.phase === "custom-ready")
+            && current.requestKey === requestKey
             ? current
             : { phase: "error", requestKey, message },
         );
@@ -2774,7 +2609,9 @@ export function TokenDetailView({
 
   if (!normalizedAddress) {
     return (
-      <TokenDetailMessage message="This is not a valid Ethereum token address" />
+      <TokenDetailMessage
+        message="This is not a valid Ethereum token address"
+      />
     );
   }
 
@@ -2794,7 +2631,10 @@ export function TokenDetailView({
 
   if (previewCustomProject) {
     return (
-      <CustomProjectDetailContent project={previewCustomProject} chainId={1} />
+      <CustomProjectDetailContent
+        project={previewCustomProject}
+        chainId={1}
+      />
     );
   }
 

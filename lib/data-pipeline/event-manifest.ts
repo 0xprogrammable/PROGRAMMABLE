@@ -45,7 +45,6 @@ export const PROGRAMMABLE_EVENT_SIGNATURES = {
     "MemeLiquidityConfiguredV2(address indexed token, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)",
     "MemeCreatorInitialBuyV2(address indexed deployer, address indexed token, bytes32 indexed poolId, uint256 nativeAmount, uint256 tokenAmount, bytes32 launchHash)",
     "MemeCreatorInitialBuyCustodyV2(address indexed deployer, address indexed token, address indexed custody, uint8 mode, uint16 durationDays, uint16 cliffDays, bytes32 configurationHash, bytes32 launchHash)",
-    "MemeBondingConfiguredV1(address indexed token, bytes32 indexed poolId, address indexed graduationVault, address finalPositionRecipient, uint256 bondingPositionTokenId, uint256 graduationReserveAmount, uint128 bondingLiquidity, uint128 finalLiquidity, int24 endpointTick, int24 finalTickLower, int24 finalTickUpper, bytes32 launchHash)",
   ],
   ClassicV4Hook: [
     "PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed rewardVault, address registrar, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash)",
@@ -53,11 +52,6 @@ export const PROGRAMMABLE_EVENT_SIGNATURES = {
     "NativeSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, bool indexed isBuy, uint16 appliedTotalSwapFeeBps, uint256 grossNativeAmount, uint256 creatorFee, uint256 launcherFee)",
     "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed caller, uint256 amount)",
     "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed caller, uint256 amount)",
-    "ClassicBondingConfigured(bytes32 indexed poolId, address indexed token, address indexed controller, uint160 endpointSqrtPriceX96)",
-    "ClassicBondingPositionActivated(bytes32 indexed poolId, address indexed token, uint128 bondingLiquidity)",
-    "ClassicBondingReached(bytes32 indexed poolId, address indexed token, uint160 endpointSqrtPriceX96)",
-    "ClassicGraduationBegun(bytes32 indexed poolId, address indexed token, address indexed controller)",
-    "ClassicLiquidityGraduated(bytes32 indexed poolId, address indexed token, address indexed finalPositionRecipient, uint256 bondingPositionTokenId, uint256 finalPositionTokenId, uint256 nativeAmount, uint256 tokenAmount, int24 tickLower, int24 tickUpper)",
   ],
   ClassicV3RewardVaultFactory: [
     "ClassicRewardVaultDeployed(address indexed vault, bytes32 indexed poolId, address indexed feeHook, bytes32 salt, bytes32 configurationHash)",

@@ -87,7 +87,6 @@ import {
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
   MEME_TOKEN_SUPPLY_WHOLE,
-  normalizeClassicLiquidityPreset,
   parseClassicFeePercentToBps,
   parseInitialBuyWei,
   PLATFORM_FEE_BPS,
@@ -974,9 +973,6 @@ function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
         : initialDraft.initialBuyEth.trim(),
     customHookAddress: "",
     customHookSource: "",
-    classicLiquidityPreset: normalizeClassicLiquidityPreset(
-      (initialDraft as Partial<LaunchDraft>).classicLiquidityPreset,
-    ),
   };
 }
 
@@ -1786,7 +1782,6 @@ function LaunchBuilderFormView({
         const curve = getClassicInitialBuyCurveQuote(
           MEME_MIN_INITIAL_BUY_ETH,
           checkedDraft.buySwapFeePercent,
-          checkedDraft.classicLiquidityPreset,
         );
         if (
           curve.status === "ready" &&
@@ -1982,7 +1977,6 @@ function LaunchBuilderFormView({
           ? getClassicInitialBuyPreview(
               checkedDraft.initialBuyEth,
               checkedDraft.buySwapFeePercent,
-              checkedDraft.classicLiquidityPreset,
             )
           : null;
       const pendingSubmission: PendingLaunchSubmission = {
@@ -2734,8 +2728,8 @@ function LaunchSuccessDialog({
               <div>
                 <dt>Liquidity</dt>
                 <dd>
-                  {classicConfiguration.liquidity.preset === "bonding"
-                    ? "Bonding · curve then locked final LP"
+                  {classicConfiguration.liquidity.preset === "deep-30"
+                    ? "Deeper · bounded launch range"
                     : "Standard · full launch range"}
                 </dd>
               </div>
@@ -3573,25 +3567,24 @@ export function EnhancedClassicFeeStep({
   const initialBuyCurveQuote = getClassicInitialBuyCurveQuote(
     draft.initialBuyEth,
     draft.buySwapFeePercent,
-    enableV4 ? draft.classicLiquidityPreset : "standard",
   );
   const initialBuyPreview =
     initialBuyCurveQuote.status === "ready"
       ? initialBuyCurveQuote.preview
       : null;
   const activationBuyCapacityNote =
-    !enableV4 || draft.classicLiquidityPreset !== "bonding"
+    !enableV4
       ? ""
       : initialBuyCurveQuote.status === "over-capacity"
-        ? `Activation Buy exceeds the Bonding curve. Maximum ${formatEther(initialBuyCurveQuote.maximumGrossActivationBuyWei)} ETH at this buy fee.`
+        ? `Activation Buy exceeds the Classic liquidity range. Maximum ${formatEther(initialBuyCurveQuote.maximumGrossActivationBuyWei)} ETH at this buy fee.`
         : initialBuyCurveQuote.status === "ready" &&
             initialBuyCurveQuote.preview.remainingCurveCapacityWei !== null
-          ? `${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.poolEthWei)))} ETH reaches the curve after fees. ${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.remainingCurveCapacityWei)))} ETH net remains until graduation.${
+          ? `${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.poolEthWei)))} ETH reaches the curve after fees. ${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.remainingCurveCapacityWei)))} ETH net capacity remains before the 18.91× end price.${
               initialBuyCurveQuote.preview.remainingCurveCapacityWei === 0n
-                ? " This completes Bonding and creates the final locked LP automatically."
+                ? " This fully consumes the Classic range; another buy requires a sell or outside liquidity first."
                 : ""
             }`
-          : "Enter a valid Activation Buy to check the remaining Bonding capacity.";
+          : "Enter a valid Activation Buy to check the remaining Classic capacity.";
   const initialBuyTokenLabel = draft.tokenSymbol.trim()
     ? `$${draft.tokenSymbol.trim().toUpperCase()}`
     : "tokens";
@@ -3607,50 +3600,6 @@ export function EnhancedClassicFeeStep({
       <div className="classic-section-heading">
         <h2 id="classic-v3-fees">Fees and rewards</h2>
       </div>
-
-      {enableV4 ? (
-        <fieldset className="classic-v3-liquidity-presets">
-          <legend>Liquidity mode</legend>
-          <div className="classic-v3-liquidity-options">
-            {(
-              [
-                ["standard", "Standard", "Full one-sided launch range"],
-                [
-                  "bonding",
-                  "Bonding",
-                  "80% curve · 20% final locked LP",
-                ],
-              ] as const
-            ).map(([value, label, description]) => (
-              <label
-                className="classic-v3-liquidity-option"
-                data-selected={draft.classicLiquidityPreset === value}
-                key={value}
-              >
-                <input
-                  type="radio"
-                  name="classic-liquidity-preset"
-                  value={value}
-                  checked={draft.classicLiquidityPreset === value}
-                  aria-describedby="classic-liquidity-note"
-                  onChange={() =>
-                    updateClassicV3Draft({ classicLiquidityPreset: value })
-                  }
-                />
-                <span>
-                  <strong>{label}</strong>
-                  <small>{description}</small>
-                </span>
-              </label>
-            ))}
-          </div>
-          <p className="classic-v3-liquidity-note" id="classic-liquidity-note">
-            {draft.classicLiquidityPreset === "bonding"
-              ? "Sells 80% on the launch curve and reserves 20% for the final permanently locked LP. Max completes Bonding automatically in the same token and pool."
-              : "Uses the full one-sided launch range. One v4 pool and one permanently locked position."}
-          </p>
-        </fieldset>
-      ) : null}
 
       <div className="classic-v3-core">
         <fieldset className="classic-v3-fees">

@@ -18,7 +18,6 @@ import {
   getClassicInitialBuyCurveQuote,
   parseClassicFeePercentToBps,
   PLATFORM_FEE_BPS,
-  type ClassicLiquidityPreset,
   type LaunchDraft,
 } from "./launch";
 import {
@@ -30,7 +29,7 @@ import {
 } from "./launch-transaction";
 
 export const classicV4LaunchAbi = parseAbi([
-  "function launchFor(address launchWallet,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash,address graduationVault,address finalPositionRecipient,uint256 graduationReserveAmount,uint256 finalPositionTokenId,uint128 finalLiquidity) result)",
+  "function launchFor(address launchWallet,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters) payable returns ((address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) result)",
   "function predictTokenAddress(string name,string symbol,address deployer,bytes32 creatorSalt) view returns (address token,bytes32 effectiveGraffiti)",
   "function predictRewardVault(address token,address deployer,address[] beneficiaries,uint16[] sharesBps) view returns (address)",
   "function poolManager() view returns (address)",
@@ -42,15 +41,7 @@ export const classicV4LaunchAbi = parseAbi([
   "function launchPolicy() view returns (address)",
   "function positionForwarderFactory() view returns (address)",
   "function positionPlanner() view returns (address)",
-  "function graduationVaultFactory() view returns (address)",
-  "function graduationVaultOf(address token) view returns (address)",
-  "function finalPositionRecipientOf(address token) view returns (address)",
-  "function graduate(address token) returns (uint256 finalPositionTokenId)",
-  "function maxBuyAndGraduate(address token,address recipient) payable returns (uint256 tokenAmount,uint256 finalPositionTokenId)",
   "function ROUTER() view returns (address)",
-  "function liquidityPresetForSalt(bytes32 creatorSalt) pure returns (uint8)",
-  "function STANDARD_LIQUIDITY_PRESET() view returns (uint8)",
-  "function BONDING_LIQUIDITY_PRESET() view returns (uint8)",
   "function MIN_INITIAL_BUY_WEI() view returns (uint256)",
   "function MAX_REWARD_BENEFICIARIES() view returns (uint256)",
   "function REWARD_SHARE_BASIS_POINTS() view returns (uint16)",
@@ -76,14 +67,6 @@ export const classicV4HookAbi = parseAbi([
   "function TRANSFER_TAX_BPS() view returns (uint16)",
   "function LP_FEE_PIPS() view returns (uint24)",
   "function TICK_SPACING() view returns (int24)",
-  "function BASIS_POINTS() view returns (uint16)",
-  "function BONDING_TICK_LOWER() view returns (int24)",
-  "function BONDING_TICK_UPPER() view returns (int24)",
-  "function FINAL_TICK_LOWER() view returns (int24)",
-  "function FINAL_TICK_UPPER() view returns (int24)",
-  "function bondingState(bytes32 poolId) view returns (bool ready,bool completed,uint160 endpointSqrtPriceX96)",
-  "function bondingProgress(bytes32 poolId) view returns (uint8 state,uint16 progressBps,uint256 tokenRemaining,uint256 nativeRemainingNet)",
-  "function totalSwapFeeBpsFor(bytes32 poolId,bool isBuy) view returns (uint16)",
 ]);
 
 export const classicV4HookFactoryAbi = parseAbi([
@@ -92,43 +75,14 @@ export const classicV4HookFactoryAbi = parseAbi([
 ]);
 
 export const classicV4PositionPlannerAbi = parseAbi([
-  "function STANDARD_PRESET() view returns (uint8)",
-  "function BONDING_PRESET() view returns (uint8)",
-  "function DEEP30_PRESET() view returns (uint8)",
   "function TOKEN_SUPPLY() view returns (uint256)",
-  "function BONDING_TOKEN_ALLOCATION() view returns (uint256)",
-  "function GRADUATION_TOKEN_RESERVE() view returns (uint256)",
   "function INITIAL_TICK() view returns (int24)",
-  "function BONDING_TICK_LOWER() view returns (int24)",
-  "function DEEP30_TICK_LOWER() view returns (int24)",
-  "function FINAL_TICK_LOWER() view returns (int24)",
-  "function FINAL_TICK_UPPER() view returns (int24)",
+  "function LIQUIDITY_TICK_LOWER() view returns (int24)",
   "function TICK_SPACING() view returns (int24)",
 ]);
 
-export const classicGraduationVaultV1Abi = parseAbi([
-  "function bondingMaxBuyQuote() view returns (uint256 grossNativeAmount,uint256 netNativeAmount)",
-  "function maxBuyAndGraduate(address recipient) payable returns (uint256 tokenAmount,uint256 finalPositionTokenId)",
-  "function graduate()",
-  "function graduated() view returns (bool)",
-  "function finalPositionTokenId() view returns (uint256)",
-  "function poolId() view returns (bytes32)",
-]);
-
-export const classicGraduationVaultFactoryV1Abi = parseAbi([
-  "function positionManager() view returns (address)",
-  "function positionForwarderFactory() view returns (address)",
-  "function isFactoryVault(address vault) view returns (bool)",
-]);
-
-export type ClassicV4LiquidityConfiguration = {
-  preset: ClassicLiquidityPreset;
-  presetCode: 0 | 1;
-};
-
 export type ClassicV4LaunchConfiguration = {
   fees: ClassicV3FeeConfiguration;
-  liquidity: ClassicV4LiquidityConfiguration;
   rewards: ClassicV3RewardConfiguration;
   initialBuyCustody: ClassicInitialBuyCustodyConfiguration;
 };
@@ -161,16 +115,6 @@ function requireClassicV4FeeBps(value: string, label: string) {
   return basisPoints;
 }
 
-function readLiquidityPreset(value: unknown): ClassicV4LiquidityConfiguration {
-  if (value === undefined || value === null || value === "standard") {
-    return { preset: "standard", presetCode: 0 };
-  }
-  if (value === "bonding" || value === "deep-30") {
-    return { preset: "bonding", presetCode: 1 };
-  }
-  throw new LaunchInputError("Choose a valid Classic liquidity mode");
-}
-
 export function validateClassicV4LaunchDraft(
   draft: LaunchDraft,
   launcherAccount: string,
@@ -193,17 +137,13 @@ export function validateClassicV4LaunchDraft(
     draft.sellSwapFeePercent,
     "Sell fee",
   );
-  const liquidity = readLiquidityPreset(
-    (draft as Partial<LaunchDraft>).classicLiquidityPreset,
-  );
   const activationBuy = getClassicInitialBuyCurveQuote(
     draft.initialBuyEth,
     draft.buySwapFeePercent,
-    liquidity.preset,
   );
   if (activationBuy.status === "over-capacity") {
     throw new LaunchInputError(
-      `Activation Buy exceeds the ${liquidity.preset === "bonding" ? "Bonding" : "Classic"} curve. Use at most ${compactEther(activationBuy.maximumGrossActivationBuyWei)} ETH at this buy fee`,
+      `Activation Buy exceeds the Classic liquidity range. Use at most ${compactEther(activationBuy.maximumGrossActivationBuyWei)} ETH at this buy fee`,
     );
   }
   if (activationBuy.status !== "ready") {
@@ -218,7 +158,6 @@ export function validateClassicV4LaunchDraft(
       sellCreatorFeeBps: sellSwapFeeBps - PLATFORM_FEE_BPS,
       platformFeeBps: PLATFORM_FEE_BPS,
     },
-    liquidity,
     rewards: validateRewardConfiguration(draft, launcherAccount),
     initialBuyCustody: validateClassicInitialBuyCustody(draft),
   };
@@ -230,10 +169,9 @@ export function encodeClassicV4Launch(
   launcherAccount: Address,
 ) {
   const configuration = validateClassicV4LaunchDraft(draft, launcherAccount);
-  const presetSalt = encodeClassicV4PresetSalt(
-    creatorSalt,
-    configuration.liquidity.presetCode,
-  );
+  if (!/^0x[0-9a-fA-F]{64}$/.test(creatorSalt)) {
+    throw new LaunchInputError("The Classic launch salt is invalid");
+  }
   return encodeFunctionData({
     abi: classicV4LaunchAbi,
     functionName: "launchFor",
@@ -244,7 +182,7 @@ export function encodeClassicV4Launch(
         symbol: draft.tokenSymbol.trim(),
         buySwapFeeBps: configuration.fees.buySwapFeeBps,
         sellSwapFeeBps: configuration.fees.sellSwapFeeBps,
-        creatorSalt: presetSalt,
+        creatorSalt,
         metadata: {
           description: draft.tokenDescription.trim(),
           website: normalizeOptionalHttpsUrl(
@@ -271,16 +209,6 @@ export function encodeClassicV4Launch(
   });
 }
 
-export function encodeClassicV4PresetSalt(
-  creatorSalt: Hex,
-  presetCode: 0 | 1,
-): Hex {
-  if (!/^0x[0-9a-fA-F]{64}$/.test(creatorSalt)) {
-    throw new LaunchInputError("The Classic launch salt is invalid");
-  }
-  return `0x${presetCode.toString(16).padStart(2, "0")}${creatorSalt.slice(4).toLowerCase()}` as Hex;
-}
-
 export function buildClassicV4LaunchDisclosure(
   draft: LaunchDraft,
   launcherAccount: string,
@@ -294,7 +222,6 @@ export function buildClassicV4LaunchDisclosure(
   const activationBuy = getClassicInitialBuyCurveQuote(
     draft.initialBuyEth,
     draft.buySwapFeePercent,
-    configuration.liquidity.preset,
   );
   if (activationBuy.status !== "ready") {
     throw new LaunchInputError("Enter a valid Activation Buy");
@@ -314,9 +241,7 @@ export function buildClassicV4LaunchDisclosure(
       share: formatClassicV3Percent(configuration.rewards.sharesBps[index]),
     })),
     liquidity:
-      configuration.liquidity.preset === "bonding"
-        ? "Bonding · 80% sold on the launch curve · 20% reserved for the final permanently locked liquidity position · Max completes the same pool automatically"
-        : "Standard · full one-sided range · one position, permanently locked",
+      "About 29.86% more active liquidity at launch · bounded to about 18.9× the opening price and about 5.9 ETH net capacity · one position, permanently locked",
     activationBuy:
       activationBuy.preview.remainingCurveCapacityWei === null
         ? `${compactEther(activationBuy.preview.grossEthWei)} ETH plus network gas`

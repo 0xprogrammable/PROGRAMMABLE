@@ -263,16 +263,16 @@ describe("Envio release candidate identity", () => {
       deployment: `production-${SOURCE_COMMIT.slice(0, 7)}`,
       sourceCommit: SOURCE_COMMIT,
       configSha256:
-        "0xb2f016864dedd4ca141782e0e4b68a5c73f298d3127af68af2b5a4c407e7eb9d",
+        "0x0286e176b7e8f9baf49a6751390abb6ca97c246e717d00fda34dbe023830d2a6",
       schemaSha256:
-        "0x3712cc92558215f7ca0078ad151b3d2e83faae6fface11ff95ff97c67343db8c",
+        "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
       handlerSha256:
-        "0x8f006e799af9ab6792bb063fd862c13a7ae42bfacd0114c78a36592e97e935c0",
+        "0x3249c4d6e733e271ce1cd9a9407a1e3881fa79491500143b08e77c1d7e5e1fdf",
       sourceRegistrySha256:
         "0x98d6a49f606f198340f1938127744ee5d12b786e0d1b7cd1e31a1b1b4a713ef0",
       eventSetSha256:
-        "0xb6e9aab1124ad1339cecfa4757583753ebe1498924f6d013289cb73407fbd4b2",
-      eventCount: 66,
+        "0x79bd6a7e9c4e4c76141ff72dd1a295b32c8115d85cd6826c7c9a403a4ed3c63f",
+      eventCount: 60,
     });
   });
 
