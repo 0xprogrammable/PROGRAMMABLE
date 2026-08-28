@@ -2253,6 +2253,26 @@ export async function validateClassicV4ArchivedArmBindings(
   return preparationBlocks;
 }
 
+export function assertClassicV4PersistedReceiptTime(
+  record,
+  receiptBlock,
+  armTime,
+) {
+  const receiptTime = Number(receiptBlock.timestamp * 1_000n);
+  const maximumClockLead = Number(MAXIMUM_CLOCK_LEAD_SECONDS * 1_000n);
+  if (
+    new Date(record.confirmedAt).valueOf() +
+      maximumClockLead < receiptTime ||
+    !(armTime instanceof Date) ||
+    Number.isNaN(armTime.valueOf()) ||
+    armTime.valueOf() > receiptTime + maximumClockLead
+  ) fail(`${record.prepared.action} persisted timestamps differ from Mainnet`);
+
+  // submittedAt records when a hash reached this console, not when the wallet
+  // broadcast it. Manual recovery may therefore observe an already-mined hash.
+  return true;
+}
+
 async function validatePersistedJournalBindings(
   canaryPlan,
   identity,
@@ -2337,13 +2357,11 @@ async function validatePersistedJournalBindings(
     if (normalizeHex(receiptBlock.hash) !== normalizeHex(record.blockHash)) {
       fail(`${record.prepared.action} confirmed block changed`);
     }
-    if (
-      new Date(record.confirmedAt).valueOf() +
-        Number(MAXIMUM_CLOCK_LEAD_SECONDS * 1_000n) <
-        Number(receiptBlock.timestamp * 1_000n) ||
-      new Date(record.submittedAt).valueOf() >
-        Number((receiptBlock.timestamp + MAXIMUM_HEAD_AGE_SECONDS) * 1_000n)
-    ) fail(`${record.prepared.action} persisted timestamps differ from Mainnet`);
+    assertClassicV4PersistedReceiptTime(
+      record,
+      receiptBlock,
+      currentClassicV4ArmTime(journal, record.prepared),
+    );
     if (record.prepared.action === "launch") {
       const realized = await realizedLaunchIdentityAtReceipt(
         canaryPlan,
