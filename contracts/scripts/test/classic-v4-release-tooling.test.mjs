@@ -1121,6 +1121,10 @@ test("release build rejects inherited Foundry overrides and reads only its fresh
   assert.equal(removed, temporaryRoot);
   assert.equal(executed.command, "forge");
   assert.equal(
+    executed.args.filter((argument) => argument === "--no-metadata").length,
+    1,
+  );
+  assert.equal(
     executed.args[executed.args.indexOf("--out") + 1],
     path.join(temporaryRoot, "out"),
   );
