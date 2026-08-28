@@ -220,8 +220,8 @@ describe("Classic V4 source-only Envio configuration", () => {
         startBlock: "25_851_137",
       },
       ClassicV4Launcher: {
-        address: "0x1af508f9af9f8f5cf7bf712b7d2974d4ee7a6681",
-        startBlock: "25_851_150",
+        address: "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699",
+        startBlock: "25_853_086",
       },
     } as const;
     for (const contractName of ["ClassicV4Hook", "ClassicV4Launcher"] as const) {

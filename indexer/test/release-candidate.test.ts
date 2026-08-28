@@ -277,13 +277,13 @@ describe("Envio release candidate identity", () => {
       deployment: `production-${SOURCE_COMMIT.slice(0, 7)}`,
       sourceCommit: SOURCE_COMMIT,
       configSha256:
-        "0xb589a1f73e92393d4b415a266c60109248ce874f5d48fa71de0565c5617dfe12",
+        "0xb2d34d55b7d733452b011c5030ad773e9cafd0fd3d18364f2de5699e02fd7a43",
       schemaSha256:
         "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
       handlerSha256:
         "0x4b6299cddeffaa900bcd7da8428bb715b65c6289d662e908c20f27ef483329fc",
       sourceRegistrySha256:
-        "0x46d8c08e7d3d0e60e5cc1921fd0feee8d89163769db8c0de6d14ac54bddb3a07",
+        "0xfcb55c4aab63ae77d483b59f068f4ef152aa479bf5e8a9f1ec630b8392c28bd9",
       eventSetSha256:
         "0x932d5f9f56fd1baaa9d78188dc071f8937c653785a673f2019c11c3bc8a5b7c7",
       eventCount: 75,
