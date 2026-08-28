@@ -1,9 +1,9 @@
 {
   "schemaVersion": "programmable.custom-launch-release-record.v2",
-  "recordStatus": "live",
-  "createdAt": "2026-08-26T22:39:26Z",
+  "recordStatus": "staging_approved",
+  "createdAt": "2026-08-28T19:44:52Z",
   "releaseIntent": {
-    "releaseId": "custom-launch-api-v3-20260826-002",
+    "releaseId": "custom-launch-api-v3-20260828-001",
     "product": "custom_launch_api_v3",
     "chainId": "1",
     "targetMode": "enabled"
@@ -11,26 +11,26 @@
   "subject": {
     "website": {
       "repository": "0xprogrammable/programmable",
-      "commitSha": "04c74d9f4a4cfc733d84bb5f6f8d28189ae4766a",
-      "treeSha": "c6c6ca65a3b02938ddf3c34bc208a7eedd158b68",
-      "reviewedDiffBaseSha": "96ae149591ed27bce366d6d7d423ed307ced2cdc",
-      "reviewedDiffSha256": "sha256:3a70dde1065f45c47e16bf375b54964b29218ae7e7bb920c6069c18510d581e8",
-      "publicOpenApiSha256": "sha256:7d36a08b2a37b5afd5279e65e0bcf211c1ed32a3b6d4e51fb8e520897075e259",
-      "launchPackageManifestSha256": "sha256:9cfd7c71b51f0bfdeabfab7c0457a4b2494c69f6d9bd8f4aca3fe5eebe6d332d"
+      "commitSha": "ff51e713feb52e4e13f3c553d1c726f3c8f2858c",
+      "treeSha": "53a8ce252d98703008ba17408f6c24555b8be45e",
+      "reviewedDiffBaseSha": "3693c7cdc28b8fdba98001158f23ad45013f1f17",
+      "reviewedDiffSha256": "sha256:213717b96113d9167741b7121e93f7397593ed77bfeaf4471f3a91dd27efc657",
+      "publicOpenApiSha256": "sha256:8c7f90255f62bb8c27083c868dfdef5a7cc15d9ed0815248c55b67b7b9302b6a",
+      "launchPackageManifestSha256": "sha256:e93a6536fd1bbeff2d7e98ee4bfc5e2f426268181cc5a610460be8501fddfa61"
     },
     "apiService": {
       "repository": "0xprogrammable/programmable-open-hook-v2-internal",
       "servicePath": "services/custom-launch-api-v1",
-      "bindingAttestationCommitSha": "6fc73ff0ac11bec4f34619a4a575ec472fa2cb94",
+      "bindingAttestationCommitSha": "7a317a20ad583a852d54e15aeb9b654b1bb01c09",
       "bindingDocumentPath": "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json",
-      "bindingDocumentSha256": "sha256:a44520285f5210d9d134ca7517a6437c7b69213f4ae6b57b7da2f84b998c598e",
-      "candidateCommitSha": "5d712fabd7eeb8f9d7bb07f9e4ae320ce2b6bce5",
-      "candidateTreeSha": "69bcd752483a14f3c1a49474358dd868683afbf5",
-      "imageDigest": "sha256:559d6a5fca26bcad167c33f85947177c7c17010ef99319550d4a0aeda295306e",
-      "flyReleaseVersion": 17,
-      "migrationInventorySha256": "sha256:1f96a2cbc749b1e7869a3ff192fe4a2613e619b197283c727da2c5d04f8ca425",
-      "apiContractSha256": "sha256:e71f50646f2f2e7c28f0768d8d2ab17db49b447d4e683faf467fc589f8e58377",
-      "readinessIdentitySha256": "sha256:82c21ceb1f7e648e5481f5885686108663e63b1f6c47a80df8ee8f70a16aeb2d"
+      "bindingDocumentSha256": "sha256:59b294c91ab37e26903e82090e41d814d1591be56efa7aaeb5bee6625363c579",
+      "candidateCommitSha": "20afa26d4f97ce4f4990e03f4632ce99c75a164b",
+      "candidateTreeSha": "219c72f7b8a03e05cd3f48f2154f9f99d2199a9c",
+      "imageDigest": "sha256:29c7a320092b8985128169876fc4af1c932e5bc43b664191d929a14d8fdced33",
+      "flyReleaseVersion": 36,
+      "migrationInventorySha256": "sha256:2417002ae5cc95772e249dbdb83e32b8c6c274513d905f43324e358e6a466dce",
+      "apiContractSha256": "sha256:d313d978fd150619322051ecc46052bc9a917d647b3c3475ec126e9df6cfbe53",
+      "readinessIdentitySha256": "sha256:24d43d0be605dcc02343f06b0a329c0bd52a83df7507e7184d78cef1965faf96"
     },
     "chain": {
       "chainId": "1",
@@ -43,144 +43,144 @@
       "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
       "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
     },
-    "releaseSubjectSha256": "sha256:005c94a32f15662956ac1377c4abdd10c19db3fee1d9b017e02785422e2893a7"
+    "releaseSubjectSha256": "sha256:2bd283557856d59aed2216f3ccd25853033402223f56d03de4a9bdf3dfa8662d"
   },
   "releaseApproval": {
     "authority": "release_owner",
     "status": "approved",
-    "decisionId": "custom-launch-v3-owner-authorization-002-01a03762-20260826t173616z",
-    "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
-    "decidedAt": "2026-08-26T17:36:16Z",
-    "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
-    "releaseSubjectSha256": "sha256:005c94a32f15662956ac1377c4abdd10c19db3fee1d9b017e02785422e2893a7"
+    "decisionId": "custom-launch-v3-staging-approval-20260828t194452z",
+    "immutableReference": "codex-task://01a049b7-27ea-7540-af46-e3c2f61abb6e",
+    "decidedAt": "2026-08-28T19:44:52Z",
+    "statementSha256": "sha256:6f4212d1f05aa3e95749e3c4842f57ea5c202d9c23befaa4274e2258fd554199",
+    "releaseSubjectSha256": "sha256:2bd283557856d59aed2216f3ccd25853033402223f56d03de4a9bdf3dfa8662d"
   },
   "validation": {
     "gates": [
       {
         "id": "website_release",
         "result": "passed",
-        "evidenceSha256": "sha256:3ec3ff187ed973625da8b4cd0d3ce258d180b757c97a7ad92684811b2ecac641",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/website_release.json",
-        "completedAt": "2026-08-26T22:39:26Z"
+        "evidenceSha256": "sha256:c095a78369223164d0ecf0129bad7efbd3e9834dc2bac650cc9c196099bfbf93",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "custom_launch_api_release",
         "result": "passed",
-        "evidenceSha256": "sha256:bae19664ed815b2a91e509685d123e5c5bfad3359787a2fb60fe4cd2d1911752",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/custom_launch_api_release.json",
-        "completedAt": "2026-08-26T22:28:16Z"
+        "evidenceSha256": "sha256:dc0bef3d94dc7a5939ae9eb7a650dc0afb9cf8a75c9723204a59c64401b48f65",
+        "evidenceLocator": "https://github.com/0xprogrammable/programmable-open-hook-v2-internal/commit/7a317a20ad583a852d54e15aeb9b654b1bb01c09",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "database_migrations",
         "result": "passed",
-        "evidenceSha256": "sha256:2f2a50261d5de72f22b22251c47dcd0ca109cf600a632e5c30d03238f62b7902",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/database_migrations.json",
-        "completedAt": "2026-08-26T21:29:43Z"
+        "evidenceSha256": "sha256:123b41e091208d60687e117934a4b302b84ef254ff2c9ecb4496c491afbac161",
+        "evidenceLocator": "https://github.com/0xprogrammable/programmable-open-hook-v2-internal/commit/20afa26d4f97ce4f4990e03f4632ce99c75a164b",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "security",
         "result": "passed",
-        "evidenceSha256": "sha256:58023d9cf88a497561b4816a458b4d2fc18dfe7356341d19e2a91cd9c449f263",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/security.json",
-        "completedAt": "2026-08-26T22:32:20Z"
+        "evidenceSha256": "sha256:31b72339a34572b827c432392ca4ea53ae56bc12777d1c8a9bd42fdd1b5c566b",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371/job/98960611190",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "public_contract",
         "result": "passed",
-        "evidenceSha256": "sha256:b1f880c6077772196c94f339b83df5b4fa22612f0cbad6b245cc8573e11ccfc6",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/public_contract.json",
-        "completedAt": "2026-08-26T22:27:47Z"
+        "evidenceSha256": "sha256:cee02e707c66d25de65d6d689abf0e706d1ff0c7130a646ef66a5cfbabb2ed3a",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "source_verification_pipeline",
         "result": "passed",
-        "evidenceSha256": "sha256:113c0364583e0af59ee9d8b28b00f1b8a048b59a396e460b40ddc5e17936737e",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/source_verification_pipeline.json",
-        "completedAt": "2026-08-26T22:33:00Z"
+        "evidenceSha256": "sha256:3f7ccc8b99872693102cd843fb59ec64d655965c8c2ba04060af0ea3c562c0bb",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371/job/98960611131",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "browser_qa",
         "result": "passed",
-        "evidenceSha256": "sha256:3a4c2531d7615d28537a6bda7785bae721697e9505c208536338226a0463ccf1",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/browser_qa.json",
-        "completedAt": "2026-08-26T21:05:52Z"
+        "evidenceSha256": "sha256:c170f8c103b9ea4df03cdf9c9bc8d450376b05efefbf973b5062e05b8116e0c1",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371/job/98960611104",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "rollback_snapshot",
         "result": "passed",
-        "evidenceSha256": "sha256:8c80f4d350b46c048b10df53183d407a493be5346b0e51afa587cccc3f991587",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/rollback_snapshot.json",
-        "completedAt": "2026-08-26T21:33:24Z"
+        "evidenceSha256": "sha256:e3eebbc9ffbb8a804227c1be370440f6dcb10cfd5f33fd79f022ec93883a1823",
+        "evidenceLocator": "codex-task://01a049b7-27ea-7540-af46-e3c2f61abb6e/release-evidence/rollback_snapshot.json",
+        "completedAt": "2026-08-28T19:44:37Z"
       },
       {
         "id": "clean_room_no_broadcast",
         "result": "passed",
-        "evidenceSha256": "sha256:0911133c937d371dd590dae8b54ec365207b1f0255ce6b833f782f8f72de33b3",
-        "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/gates/clean_room_no_broadcast.json",
-        "completedAt": "2026-08-26T22:32:20Z"
+        "evidenceSha256": "sha256:2c7bd0a9ab2d599631175378f566692242a7bdd2a1b6cc12bcfa6bac643102f8",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
+        "completedAt": "2026-08-28T19:44:37Z"
       }
     ]
   },
   "rollback": {
     "website": {
-      "deploymentId": "dpl_ERJ5ZzYfSVkpobiTQT86A9CHLmn9",
-      "immutableDeploymentUrl": "https://launcher-v4-5jvietpvl-aficialais-projects.vercel.app",
-      "commitSha": "42cae21534de5d8e73db8c9c75d9a075797d773f",
-      "configurationSnapshotSha256": "sha256:4c916da9fb9990ba9af5b53ebac71af62ccfb29f93baf80e39a0db47be93966d",
-      "capturedAt": "2026-08-26T17:29:15Z"
+      "deploymentId": "dpl_43akerStdLUJ9RbPKpNZSLyGfDT8",
+      "immutableDeploymentUrl": "https://launcher-v4-ksppaf9qf-aficialais-projects.vercel.app",
+      "commitSha": "3693c7cdc28b8fdba98001158f23ad45013f1f17",
+      "configurationSnapshotSha256": "sha256:c162daa130eb94e90dffa1c6cdbd753ba0f117fb5c1c0aa78752959fa9593c5c",
+      "capturedAt": "2026-08-28T19:43:23Z"
     },
     "apiService": {
-      "flyReleaseVersion": 16,
-      "imageDigest": "sha256:042c1a0741f8de7e54be9f68938f477842a986dfa5dd385b23724a0c821a8a28",
-      "candidateCommitSha": "ff129bb0d3b2d0e22e0eb1b60c17af5d1419e920",
-      "capturedAt": "2026-08-26T21:33:24Z"
+      "flyReleaseVersion": 36,
+      "imageDigest": "sha256:29c7a320092b8985128169876fc4af1c932e5bc43b664191d929a14d8fdced33",
+      "candidateCommitSha": "20afa26d4f97ce4f4990e03f4632ce99c75a164b",
+      "capturedAt": "2026-08-28T19:43:23Z"
     }
   },
   "candidate": {
-    "workflowRunId": 33020517774,
-    "workflowRunAttempt": 1,
-    "workflowRunUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33020517774",
-    "websiteDeploymentId": "dpl_CcNXsCZxijd6FoBQw8MMDauZJKW5",
-    "immutableWebsiteUrl": "https://launcher-v4-d56qrwqkt-aficialais-projects.vercel.app",
-    "websiteCommitSha": "04c74d9f4a4cfc733d84bb5f6f8d28189ae4766a",
-    "apiOrigin": "https://programmable-custom-launch-api.fly.dev",
-    "apiReadinessIdentitySha256": "sha256:82c21ceb1f7e648e5481f5885686108663e63b1f6c47a80df8ee8f70a16aeb2d",
-    "verificationEvidenceSha256": "sha256:aa94d0c0ea3eaf209aaa4881ebed4ec21c51b20576b15a4e894f9a9ab02824c4",
-    "verifiedAt": "2026-08-26T22:46:42Z"
+    "workflowRunId": null,
+    "workflowRunAttempt": null,
+    "workflowRunUrl": null,
+    "websiteDeploymentId": null,
+    "immutableWebsiteUrl": null,
+    "websiteCommitSha": null,
+    "apiOrigin": null,
+    "apiReadinessIdentitySha256": null,
+    "verificationEvidenceSha256": null,
+    "verifiedAt": null
   },
   "promotionApproval": {
     "authority": "release_owner",
-    "status": "approved",
-    "decisionId": "custom-launch-v3-promotion-01a03762-20260826t224814z",
-    "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
-    "decidedAt": "2026-08-26T22:48:14Z",
-    "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
-    "releaseSubjectSha256": "sha256:005c94a32f15662956ac1377c4abdd10c19db3fee1d9b017e02785422e2893a7",
-    "candidateEvidenceSha256": "sha256:aa94d0c0ea3eaf209aaa4881ebed4ec21c51b20576b15a4e894f9a9ab02824c4"
+    "status": "pending",
+    "decisionId": null,
+    "immutableReference": null,
+    "decidedAt": null,
+    "statementSha256": null,
+    "releaseSubjectSha256": null,
+    "candidateEvidenceSha256": null
   },
   "promoted": {
-    "websiteDeploymentId": "dpl_CcNXsCZxijd6FoBQw8MMDauZJKW5",
-    "immutableWebsiteUrl": "https://launcher-v4-d56qrwqkt-aficialais-projects.vercel.app",
-    "productionAlias": "https://programmable.market",
-    "evidenceSha256": "sha256:3818813eb7268b3e593900fd2ee9523424ed6cbe858a49d6338750f4c17b3182",
-    "promotedAt": "2026-08-26T22:49:32Z"
+    "websiteDeploymentId": null,
+    "immutableWebsiteUrl": null,
+    "productionAlias": null,
+    "evidenceSha256": null,
+    "promotedAt": null
   },
   "canary": {
-    "status": "passed",
+    "status": "pending",
     "mode": "public-cli-wallet-handoff-no-broadcast",
-    "evidenceSha256": "sha256:b9b073c7c192f1dd265decead1ee6d4674dd6c49326723f97bdb4b89bd7c3f92",
-    "evidenceLocator": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867/evidence/custom-launch-api-v3-20260826-002/clean-room-remote/post-promotion-no-broadcast-v3.3.3.json",
-    "completedAt": "2026-08-26T22:56:18Z",
+    "evidenceSha256": null,
+    "evidenceLocator": null,
+    "completedAt": null,
     "walletSignatureObserved": false,
     "transactionBroadcastObserved": false
   },
   "liveDeclaration": {
     "authority": "release_owner",
-    "status": "declared_live",
-    "decisionId": "custom-launch-v3-live-01a03762-20260826t225654z",
-    "immutableReference": "codex-task://01a03762-728d-76c3-9b7e-e6ccc6291867",
-    "decidedAt": "2026-08-26T22:56:54Z",
-    "statementSha256": "sha256:a3f95a491683b9e7c6ab2709ad546e3213e24a31afc8aa68f6df2ab24dcb4d67",
-    "releaseSubjectSha256": "sha256:005c94a32f15662956ac1377c4abdd10c19db3fee1d9b017e02785422e2893a7"
+    "status": "pending",
+    "decisionId": null,
+    "immutableReference": null,
+    "decidedAt": null,
+    "statementSha256": null,
+    "releaseSubjectSha256": null
   }
 }
