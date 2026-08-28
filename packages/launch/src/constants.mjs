@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "3.3.7";
+export const PACKAGE_VERSION = "3.3.8";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -17,6 +17,12 @@ export const PROJECT_TOKEN_METADATA_BINDING_SCHEMA =
 export const PROJECT_METADATA_HASH_DOMAIN = PROJECT_METADATA_SCHEMA;
 export const PROJECT_METADATA_GRAPH_HASH_DOMAIN =
   "programmable.custom-graph-project-metadata.v1";
+export const BEHAVIOR_SCENARIO_INPUTS_SCHEMA =
+  "programmable.custom-launch-behavior-scenario-inputs.v1";
+export const MAX_BEHAVIOR_SCENARIO_STEPS = 128;
+export const MAX_BEHAVIOR_SCENARIO_CALLDATA_BYTES = 65_536;
+export const MAX_BEHAVIOR_SCENARIO_HOOK_DATA_BYTES = 16_384;
+export const MAX_BEHAVIOR_SCENARIO_BYTES = 1_048_576;
 export const AGENT_ATTESTATION_SCHEMA_V1 = "programmable.agent-launch-attestation.v1";
 export const AGENT_ATTESTATION_SCHEMA_V2 = "programmable.agent-launch-attestation.v2";
 export const AGENT_ATTESTATION_SCHEMA = AGENT_ATTESTATION_SCHEMA_V2;
@@ -57,7 +63,8 @@ export const DIRECT_NATIVE_PROFILE_VERSION_V2 = "2.0.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY = "3.0.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA = "3.1.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY = "3.2.0";
-export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.3.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY = "3.3.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.4.0";
 export const DIRECT_NATIVE_PROFILE_VERSION = DIRECT_NATIVE_PROFILE_VERSION_V3;
 export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2 =
   "programmable.direct-native-hook-graph-profile.v2";

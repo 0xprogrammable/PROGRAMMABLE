@@ -301,7 +301,7 @@ test("remote validation fails closed on profile, route, and auth capability drif
   const cases = [
     ["profile.profileId", (value) => { value.profile.profileId = "other.profile"; }],
     ["profile.profileRevision", (value) => { value.profile.profileRevision = 4; }],
-    ["profile.profileVersion", (value) => { value.profile.profileVersion = "3.4.0"; }],
+    ["profile.profileVersion", (value) => { value.profile.profileVersion = "3.3.0"; }],
     ["profile.productionLaunchAuthorized", (value) => {
       value.profile.productionLaunchAuthorized = false;
     }],
@@ -410,7 +410,7 @@ function validCapabilities() {
     profile: {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 3,
-      profileVersion: "3.3.0",
+      profileVersion: "3.4.0",
       productionLaunchAuthorized: true,
     },
     routes: {

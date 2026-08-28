@@ -16,6 +16,7 @@ import {
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
   DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
@@ -43,6 +44,10 @@ import {
 } from "./io.mjs";
 import { buildLaunch } from "./pack.mjs";
 import { hashProjectMetadata, validateProjectMetadata } from "./project-metadata.mjs";
+import {
+  hashBehaviorScenarioInputs,
+  validateBehaviorScenarioInputs,
+} from "./behavior-scenario-inputs.mjs";
 import {
   assertDeployableRuntimeCode,
   assertNoDelegatingRuntimeOpcodes,
@@ -269,9 +274,14 @@ function validateV3LaunchRequest(request) {
   const profileVersion = request?.launchProfile?.profileVersion;
   const metadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
     DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   ]).has(profileVersion);
-  const completeMetadataRequired = profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
+  const completeMetadataRequired = new Set([
+    DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
+  ]).has(profileVersion);
+  const behaviorScenarioRequired = profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
   assertExactKeys(request, [
     "schemaVersion",
     "launchWallet",
@@ -282,6 +292,9 @@ function validateV3LaunchRequest(request) {
     "sourceBundleManifest",
     "graphBundle",
     ...(metadataRequired ? ["projectMetadata", "projectMetadataHash"] : []),
+    ...(behaviorScenarioRequired
+      ? ["behaviorScenarioInputs", "behaviorScenarioInputsHash"]
+      : []),
     "launchProfile",
     "launchProfileSelection",
     "launchProfileHash",
@@ -308,6 +321,21 @@ function validateV3LaunchRequest(request) {
   const common = validateCommonRequest(request, {
     ...(projectMetadataHash === null ? {} : { projectMetadataHash }),
   });
+  const behaviorScenarioInputs = behaviorScenarioRequired
+    ? validateBehaviorScenarioInputs(
+        request.behaviorScenarioInputs,
+        common.graph.graphBundle.targets,
+      )
+    : null;
+  const behaviorScenarioInputsHash = behaviorScenarioInputs === null
+    ? null
+    : hashBehaviorScenarioInputs(behaviorScenarioInputs);
+  if (behaviorScenarioInputsHash !== null
+    && request.behaviorScenarioInputsHash !== behaviorScenarioInputsHash) {
+    throw new TypeError(
+      "behaviorScenarioInputsHash does not match canonical behaviorScenarioInputs",
+    );
+  }
   if (projectMetadata !== null && projectMetadata.presentation.image !== null) {
     const image = projectMetadata.presentation.image;
     if (!common.manifest.entries.some((entry) => entry.kind === "file"
@@ -384,6 +412,7 @@ function validateV3LaunchRequest(request) {
     common.graph.graphBundle,
   );
   validateDirectNativeProfileBuilds(
+    launchProfile,
     launchProfileSelection,
     common.graph.graphBundle,
     request.verificationBundle,
@@ -397,6 +426,7 @@ function validateV3LaunchRequest(request) {
     sourceBundleManifest: common.manifest,
     graphBundleHash: common.graph.graphBundleHash,
     ...(projectMetadataHash === null ? {} : { projectMetadataHash }),
+    ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
     verificationBundleHash: verification.verificationBundleHash,
     launchProfileHash,
     launchProfileSelection,
@@ -433,6 +463,7 @@ function validateV3LaunchRequest(request) {
           unboundGraphBundleHash: common.graph.unboundGraphBundleHash,
           projectMetadataHash,
         }),
+    ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
     verificationBundleHash: verification.verificationBundleHash,
     launchProfileHash,
     launchIntentHash,

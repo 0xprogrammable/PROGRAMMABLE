@@ -691,7 +691,7 @@ function assertCapabilitiesResponse(value) {
   );
   assertCapabilitiesField(
     canonicalizeJson(value.projectMetadata?.requiredForProfileVersions)
-      === canonicalizeJson(["3.2.0", "3.3.0"]),
+      === canonicalizeJson(["3.2.0", "3.3.0", "3.4.0"]),
     "projectMetadata.requiredForProfileVersions",
   );
   assertCapabilitiesField(

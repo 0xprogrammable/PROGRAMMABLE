@@ -6,9 +6,12 @@ import test from "node:test";
 
 import solc from "solc";
 
+import canonicalSettlementFeeVaultArtifact from "./fixtures/programmable-settlement-fee-vault-v1.json" with { type: "json" };
+
 import { submitLaunch } from "../src/api-client.mjs";
 import {
   HOOK_PERMISSION_BITS,
+  GRAPH_FACTORY,
   MAINNET_USDC,
   POOL_MANAGER,
 } from "../src/constants.mjs";
@@ -29,7 +32,7 @@ const FIXED_PERMISSIONS = [
   "afterSwapReturnDelta",
 ];
 
-test("V3 pack and validate cover a nine-target project graph and a second dynamic-fee mask", {
+test("V3 pack and validate preserve a nine-target project graph plus the canonical fee vault", {
   timeout: 120_000,
 }, async () => {
   const fixture = await materializeGeneralGraphFixture();
@@ -47,7 +50,7 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
 
     assert.equal(fixedValidation.reproducedFromConfig, true);
     assert.equal(fixedValidation.requestSha256, fixedPack.requestSha256);
-    assert.equal(fixedRequest.launchProfile.profileVersion, "3.3.0");
+    assert.equal(fixedRequest.launchProfile.profileVersion, "3.4.0");
     assert.equal(
       fixedRequest.launchProfile.projectMetadataPolicy.schemaVersion,
       "programmable.project-metadata-policy.v1",
@@ -58,13 +61,13 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
     assert.equal(fixedPack.projectMetadataHash, fixedRequest.projectMetadataHash);
     assert.match(fixedPack.unboundGraphBundleHash, /^sha256:[0-9a-f]{64}$/u);
     assert.notEqual(fixedPack.graphBundleHash, fixedPack.unboundGraphBundleHash);
-    assert.equal(fixedRequest.graphBundle.targets.length, 9);
-    assert.equal(fixedRequest.verificationBundle.components.length, 9);
+    assert.equal(fixedRequest.graphBundle.targets.length, 10);
+    assert.equal(fixedRequest.verificationBundle.components.length, 10);
     assert.deepEqual(fixedRequest.launchProfileSelection.targetRoles, {
       tokenTargetId: "project-token",
       hookTargetId: "project-hook",
       initializerTargetId: "funding-initializer",
-      platformFeeBindingTargetId: "project-hook",
+      platformFeeBindingTargetId: "settlement-fee-vault",
     });
     assert.equal(
       fixedRequest.graphBundle.targets.find(({ targetId }) => targetId === "project-token")
@@ -198,7 +201,7 @@ test("V3 pack and validate cover a nine-target project graph and a second dynami
 
     assert.equal(dynamicValidation.reproducedFromConfig, true);
     assert.equal(dynamicValidation.requestSha256, dynamicPack.requestSha256);
-    assert.equal(dynamicRequest.graphBundle.targets.length, 9);
+    assert.equal(dynamicRequest.graphBundle.targets.length, 10);
     assert.equal(dynamicRequest.graphBundle.pool.fee, 0x800000);
     assert.equal(
       dynamicRequest.launchProfileSelection.hookPermissionMask,
@@ -346,11 +349,17 @@ contract ProjectHook {
 
     address public controller;
     address public poolManager;
+    address public settlementFeeVault;
 
-    constructor(address controller_, address poolManager_) {
-        require(controller_ != address(0) && poolManager_ != address(0));
+    constructor(address controller_, address poolManager_, address settlementFeeVault_) {
+        require(
+            controller_ != address(0)
+                && poolManager_ != address(0)
+                && settlementFeeVault_ != address(0)
+        );
         controller = controller_;
         poolManager = poolManager_;
+        settlementFeeVault = settlementFeeVault_;
     }
 
     modifier onlyPoolManager() {
@@ -451,6 +460,33 @@ contract AuxiliaryComponent {
 
   const standardJsonPath = path.join(root, "standard-json.json");
   await writeFile(standardJsonPath, `${JSON.stringify(standardJson)}\n`, "utf8");
+  const settlementFeeVaultStandardJsonSource = (await readFile(
+    new URL(
+      "./fixtures/programmable-settlement-fee-vault-v1.standard-json.json",
+      import.meta.url,
+    ),
+    "utf8",
+  )).trimEnd();
+  const settlementFeeVaultStandardJson = JSON.parse(
+    settlementFeeVaultStandardJsonSource,
+  );
+  const settlementFeeVaultSource = settlementFeeVaultStandardJson.sources[
+    "src/ProgrammableSettlementFeeVaultV1.sol"
+  ].content;
+  const settlementFeeVaultStandardJsonPath = path.join(
+    root,
+    "settlement-fee-vault-standard-json.json",
+  );
+  await writeFile(
+    settlementFeeVaultStandardJsonPath,
+    settlementFeeVaultStandardJsonSource,
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "src", "ProgrammableSettlementFeeVaultV1.sol"),
+    settlementFeeVaultSource,
+    "utf8",
+  );
   const artifactPaths = {};
   for (const [sourcePath, contractName, artifactName] of [
     ["src/ProjectToken.sol", "ProjectToken", "project-token"],
@@ -468,6 +504,56 @@ contract AuxiliaryComponent {
     })}\n`, "utf8");
     artifactPaths[artifactName] = path.relative(root, artifactPath);
   }
+  const settlementFeeVaultArtifactPath = path.join(
+    root,
+    "artifacts",
+    "settlement-fee-vault.json",
+  );
+  await writeFile(settlementFeeVaultArtifactPath, `${JSON.stringify({
+    abi: [
+      {
+        type: "constructor",
+        stateMutability: "nonpayable",
+        inputs: [{ name: "bindingAuthority_", type: "address" }],
+      },
+      {
+        type: "function",
+        name: "bindRoute",
+        stateMutability: "nonpayable",
+        inputs: [{ name: "route", type: "address" }],
+        outputs: [],
+      },
+    ],
+    bytecode: {
+      object: canonicalSettlementFeeVaultArtifact.creationBytecode.slice(2),
+      linkReferences: {},
+    },
+    deployedBytecode: {
+      object: canonicalSettlementFeeVaultArtifact.runtimeBytecode.slice(2),
+      linkReferences: {},
+      immutableReferences: {},
+    },
+    metadata: JSON.stringify({
+      compiler: { version: "0.8.26+commit.8a97fa7a" },
+      language: "Solidity",
+      settings: {
+        compilationTarget: {
+          "src/ProgrammableSettlementFeeVaultV1.sol":
+            "ProgrammableSettlementFeeVaultV1",
+        },
+        optimizer: { enabled: true, runs: 1_000 },
+        evmVersion: "paris",
+        viaIR: false,
+        metadata: { bytecodeHash: "none", appendCBOR: false, useLiteralContent: false },
+        libraries: {},
+        remappings: ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"],
+      },
+    }),
+  })}\n`, "utf8");
+  artifactPaths["settlement-fee-vault"] = path.relative(
+    root,
+    settlementFeeVaultArtifactPath,
+  );
   await writeFile(
     path.join(root, "evidence", "exact-build.txt"),
     `compiler=${solc.version()}\nerrors=0\n`,
@@ -501,7 +587,13 @@ contract AuxiliaryComponent {
         revision: "11".repeat(20),
       },
     },
-    compilationUnits: [{ compilationUnitId, standardJson: path.basename(standardJsonPath) }],
+    compilationUnits: [
+      { compilationUnitId, standardJson: path.basename(standardJsonPath) },
+      {
+        compilationUnitId: "canonical-settlement-fee-vault-v1",
+        standardJson: path.basename(settlementFeeVaultStandardJsonPath),
+      },
+    ],
     targets: [
       {
         ...commonTarget,
@@ -520,7 +612,11 @@ contract AuxiliaryComponent {
           start: "0",
           maxAttempts: "262144",
         },
-        constructorArguments: [launchWallet, POOL_MANAGER],
+        constructorArguments: [
+          launchWallet,
+          POOL_MANAGER,
+          { target: "settlement-fee-vault" },
+        ],
         componentKind: "hook",
         declaredHookPermissions: FIXED_PERMISSIONS,
       },
@@ -534,6 +630,18 @@ contract AuxiliaryComponent {
           arguments: authorizationPatchV2
             ? [ZERO_BYTES32, ZERO_BYTES32, ZERO_BYTES32, 0]
             : [ZERO_BYTES32, ZERO_BYTES32, 0],
+        },
+      },
+      {
+        ...commonTarget,
+        targetId: "settlement-fee-vault",
+        compilationUnitId: "canonical-settlement-fee-vault-v1",
+        artifact: artifactPaths["settlement-fee-vault"],
+        applicantSalt: `0x${"09".repeat(32)}`,
+        constructorArguments: [GRAPH_FACTORY],
+        initializer: {
+          function: "bindRoute",
+          arguments: [{ target: "project-hook" }],
         },
       },
       ...Array.from({ length: 6 }, (_, index) => ({
@@ -565,6 +673,18 @@ contract AuxiliaryComponent {
         ],
       },
     },
+    behaviorScenarioInputs: {
+      schemaVersion: "programmable.custom-launch-behavior-scenario-inputs.v1",
+      steps: [{
+        stepId: "reference-swap",
+        phase: "swap",
+        actor: "secondary-user",
+        target: { kind: "runner-harness", harness: "v4-actions-v1" },
+        valueWei: "0",
+        calldata: "0x",
+        hookData: "0x",
+      }],
+    },
     launchProfile: {
       schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",
       profileId: "programmable.direct-native-hook-graph.v1",
@@ -573,7 +693,7 @@ contract AuxiliaryComponent {
         tokenTargetId: "project-token",
         hookTargetId: "project-hook",
         initializerTargetId: "funding-initializer",
-        platformFeeBindingTargetId: "project-hook",
+        platformFeeBindingTargetId: "settlement-fee-vault",
       },
       fundingMode: "eip-3009-receive-with-authorization",
       accountingMode: "inclusive-selected-total",

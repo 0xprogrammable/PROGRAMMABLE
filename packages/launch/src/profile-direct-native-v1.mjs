@@ -12,6 +12,10 @@ import {
 import { canonicalizeJson } from "./canonical-json.mjs";
 import { canonicalIdentifier } from "./build.mjs";
 import {
+  validateCanonicalSettlementFeeVaultV1Build,
+  validateCanonicalSettlementFeeVaultV1Graph,
+} from "./canonical-settlement-fee-vault-v1.mjs";
+import {
   DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V2,
   DIRECT_NATIVE_LAUNCH_INTENT_HASH_DOMAIN_V3,
   DIRECT_NATIVE_LIQUIDITY_MODEL_ASSESSMENT_SCHEMA,
@@ -29,6 +33,7 @@ import {
   DIRECT_NATIVE_PROFILE_SELECTION_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V2,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA,
@@ -312,7 +317,7 @@ export function resolveDirectNativeProfile(selection, options = {}) {
     fundingToken: MAINNET_USDC,
     fundingTokenRuntimeCodeHash: MAINNET_USDC_RUNTIME_CODE_HASH,
     graphPolicy: {
-      minimumTargets: 3,
+      minimumTargets: profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3 ? 4 : 3,
       maximumTargets: 16,
       directTargetsOnly: true,
     },
@@ -331,7 +336,8 @@ export function resolveDirectNativeProfile(selection, options = {}) {
       normalized.assessmentBase,
       normalized.feeCurrency,
     ),
-    ...(profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3
+    ...([DIRECT_NATIVE_PROFILE_VERSION_V3,
+      DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY].includes(profileVersion)
       ? { projectMetadataPolicy: PROJECT_METADATA_POLICY }
       : {}),
     ...(profileContract.profileRevision === DIRECT_NATIVE_PROFILE_REVISION_V2
@@ -497,10 +503,13 @@ export function validateDirectNativeProfileGraph(profile, binding, graphBundle) 
       !== binding.platformFeeBinding.feeCurrency) {
     throw new TypeError("direct-native embedded policy does not match its launch binding");
   }
+  const minimumTargets = profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3 ? 4 : 3;
   if (!Array.isArray(graphBundle.targets)
-    || graphBundle.targets.length < 3
+    || graphBundle.targets.length < minimumTargets
     || graphBundle.targets.length > 16) {
-    throw new TypeError("direct-native graph must contain between 3 and 16 direct targets");
+    throw new TypeError(
+      `direct-native graph must contain between ${minimumTargets} and 16 direct targets`,
+    );
   }
   if (!Number.isSafeInteger(graphBundle.pool?.fee)
     || graphBundle.pool.fee < 0
@@ -538,12 +547,29 @@ export function validateDirectNativeProfileGraph(profile, binding, graphBundle) 
   if (binding.platformFeeBinding.targetId !== roles.platformFeeBindingTargetId) {
     throw new TypeError("direct-native platform fee policy must bind its selected direct target");
   }
+  if (profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3) {
+    if (new Set([
+      roles.tokenTargetId,
+      roles.hookTargetId,
+      roles.initializerTargetId,
+      roles.platformFeeBindingTargetId,
+    ]).size !== 4) {
+      throw new TypeError(
+        "profile 3.4.0 requires a distinct canonical platform fee module target",
+      );
+    }
+    validateCanonicalSettlementFeeVaultV1Graph(
+      graphBundle,
+      roles.platformFeeBindingTargetId,
+    );
+  }
   validateFundingGraph(binding.fundingMode, graphBundle);
   validateLiquidityModelGraph(binding.liquidityModel, roles, byId);
   return binding;
 }
 
 export function validateDirectNativeProfileBuilds(
+  profile,
   binding,
   graphBundle,
   verificationBundle,
@@ -566,6 +592,13 @@ export function validateDirectNativeProfileBuilds(
         `PROFILE_BUILD_MISMATCH: ${targetId} is not bound to its exact materialized runtime`,
       );
     }
+  }
+  if (profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3) {
+    validateCanonicalSettlementFeeVaultV1Build(
+      graphBundle,
+      verificationBundle,
+      binding.targetRoles.platformFeeBindingTargetId,
+    );
   }
   return { subjectTargetIds: [...subjectTargetIds] };
 }
@@ -1811,6 +1844,7 @@ function directNativeProfileVersion(profileContract, requestedVersion) {
     return profileVersion;
   }
   if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
+    && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY) {

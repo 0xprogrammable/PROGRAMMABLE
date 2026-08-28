@@ -12,6 +12,7 @@ import {
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
   DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
@@ -46,6 +47,10 @@ import {
 } from "./io.mjs";
 import { buildSourceBundle } from "./source-bundle.mjs";
 import { buildProjectMetadata } from "./project-metadata.mjs";
+import {
+  hashBehaviorScenarioInputs,
+  validateBehaviorScenarioInputs,
+} from "./behavior-scenario-inputs.mjs";
 import { buildVerificationBundle } from "./verification.mjs";
 import {
   buildLaunchProfileBinding,
@@ -117,10 +122,13 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const diagnostics = [];
   const metadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
     DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   ]).has(directNativeProfile?.profileVersion);
-  const completeMetadataRequired =
-    directNativeProfile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
+  const completeMetadataRequired = new Set([
+    DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
+  ]).has(directNativeProfile?.profileVersion);
   if (metadataRequired !== Object.hasOwn(config, "projectMetadata")) {
     throw new TypeError(metadataRequired
       ? `current direct-native ${DIRECT_NATIVE_PROFILE_VERSION_V3} launches require projectMetadata`
@@ -135,6 +143,13 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
       requireComplete: completeMetadataRequired,
     })
     : null;
+  const behaviorScenarioInputs = directNativeProfile?.profileVersion
+    === DIRECT_NATIVE_PROFILE_VERSION_V3
+    ? validateBehaviorScenarioInputs(config.behaviorScenarioInputs, targets)
+    : null;
+  const behaviorScenarioInputsHash = behaviorScenarioInputs === null
+    ? null
+    : hashBehaviorScenarioInputs(behaviorScenarioInputs);
 
   const attestationEvidence = await buildAttestationEvidence(
     config.agentAttestation,
@@ -322,6 +337,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     const launchProfile = directNativeProfile;
     validateDirectNativeProfileGraph(launchProfile, launchProfileBinding, graphBundle);
     validateDirectNativeProfileBuilds(
+      launchProfile,
       launchProfileBinding,
       graphBundle,
       verificationBundle,
@@ -336,6 +352,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
       sourceBundleManifest: sourceBundle.manifest,
       graphBundleHash,
       ...(metadata === null ? {} : { projectMetadataHash: metadata.projectMetadataHash }),
+      ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
       verificationBundleHash,
       launchProfileHash,
       launchProfileSelection: launchProfileBinding,
@@ -381,6 +398,9 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
             projectMetadata: metadata.projectMetadata,
             projectMetadataHash: metadata.projectMetadataHash,
           }),
+      ...(behaviorScenarioInputs === null
+        ? {}
+        : { behaviorScenarioInputs, behaviorScenarioInputsHash }),
       launchProfile,
       launchProfileSelection: launchProfileBinding,
       launchProfileHash,
@@ -423,6 +443,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
           unboundGraphBundleHash,
           projectMetadataHash: metadata.projectMetadataHash,
         }),
+    ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
     verificationBundleHash,
     launchProfileHash,
     launchIntentHash,
@@ -454,6 +475,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
           unboundGraphBundleHash,
           projectMetadataHash: metadata.projectMetadataHash,
         }),
+    ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
     verificationBundleHash,
     predictions,
     ...(diagnostics.length === 0 ? {} : { diagnostics }),
@@ -485,6 +507,9 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
   if (built.projectMetadataHash !== undefined) {
     result.unboundGraphBundleHash = built.unboundGraphBundleHash;
     result.projectMetadataHash = built.projectMetadataHash;
+  }
+  if (built.behaviorScenarioInputsHash !== undefined) {
+    result.behaviorScenarioInputsHash = built.behaviorScenarioInputsHash;
   }
   if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V2
     || built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
@@ -559,6 +584,7 @@ function assertPackConfig(config) {
       ...commonKeys,
       "launchProfile",
       "permitWindow",
+      "behaviorScenarioInputs",
       ...(Object.hasOwn(config, "projectMetadata") ? ["projectMetadata"] : []),
       ...(launchProfile.fundingMode === "eip-3009-receive-with-authorization"
         ? ["fundingAuthorization", "fundingSignaturePatch"]
