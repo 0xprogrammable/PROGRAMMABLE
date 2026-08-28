@@ -25,6 +25,10 @@ import {
   parseLaunchPartnerNameV1,
   parseLaunchPartnerWebsiteV1,
 } from "@/lib/launch-partner-attribution";
+import {
+  PartnerAdminBrowserErrorV1,
+  partnerAdminBrowserErrorV1,
+} from "@/lib/partner-admin-browser-error";
 import styles from "@/components/partner-admin-console.module.css";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
@@ -49,20 +53,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function readJson(response: Response): Promise<unknown> {
   return response.json().catch(() => null);
-}
-
-function apiError(response: Response, value: unknown, fallback: string) {
-  if (!isRecord(value) || !isRecord(value.error)) return fallback;
-  const message = typeof value.error.message === "string" && value.error.message
-    ? value.error.message
-    : fallback;
-  const requestId = typeof value.error.requestId === "string"
-    ? value.error.requestId
-    : null;
-  const retryAfter = response.headers.get("retry-after");
-  return `${message}${retryAfter ? ` Try again in ${retryAfter} seconds.` : ""}${
-    requestId ? ` Request ID: ${requestId}.` : ""
-  }`;
 }
 
 function formatDate(value: string | null, fallback = "Never") {
@@ -145,6 +135,8 @@ export function PartnerAdminConsole() {
   const account = wallet?.account ?? null;
   const [partners, setPartners] = useState<PartnerSummaryV1[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
+  const [accessDenied, setAccessDenied] =
+    useState<PartnerAdminBrowserErrorV1 | null>(null);
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -192,14 +184,26 @@ export function PartnerAdminConsole() {
       );
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to load partners."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to load partners.",
+        );
       }
       const parsed = parsePartnerListV1(body);
       if (!parsed) throw new Error("The API returned an invalid partner list.");
       setPartners(parsed);
+      setAccessDenied(null);
       setLoadState("ready");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setPartners([]);
+        setAccessDenied(error);
+        setPageError("");
+        setLoadState("error");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : "Unable to load partners.");
       setLoadState("error");
     }
@@ -284,7 +288,11 @@ export function PartnerAdminConsole() {
       });
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to create the partner."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to create the partner.",
+        );
       }
       const mutation = parsePartnerRootKeyMutationV1(body);
       if (!mutation?.partner) throw new Error("The API returned an invalid partner.");
@@ -300,6 +308,11 @@ export function PartnerAdminConsole() {
         setStatusMessage(`${partner.displayName} already exists. Its secret cannot be shown again.`);
       }
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setFormError("");
+        return;
+      }
       setFormError(error instanceof Error ? error.message : "Unable to create the partner.");
     } finally {
       setBusy(null);
@@ -324,7 +337,11 @@ export function PartnerAdminConsole() {
       });
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to update the partner."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to update the partner.",
+        );
       }
       const partner = parsePartnerMutationV1(body);
       if (!partner) throw new Error("The API returned an invalid partner update.");
@@ -332,6 +349,11 @@ export function PartnerAdminConsole() {
       setConfirmation(null);
       setStatusMessage(success(partner));
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setPageError("");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : "Unable to update the partner.");
     } finally {
       setBusy(null);
@@ -391,7 +413,11 @@ export function PartnerAdminConsole() {
       });
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, `Unable to ${operation} the root key.`));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          `Unable to ${operation} the root key.`,
+        );
       }
       const mutation = parsePartnerRootKeyMutationV1(body);
       if (!mutation) throw new Error("The API returned an invalid root-key result.");
@@ -409,6 +435,11 @@ export function PartnerAdminConsole() {
       }
       void loadPartners();
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setPageError("");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : `Unable to ${operation} the root key.`);
     } finally {
       setBusy(null);
@@ -431,7 +462,11 @@ export function PartnerAdminConsole() {
       );
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to revoke the root key."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to revoke the root key.",
+        );
       }
       if (
         !isRecord(body)
@@ -443,6 +478,11 @@ export function PartnerAdminConsole() {
       setStatusMessage(`${partner.displayName} root key was revoked.`);
       await loadPartners();
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setPageError("");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : "Unable to revoke the root key.");
     } finally {
       setBusy(null);
@@ -504,6 +544,54 @@ export function PartnerAdminConsole() {
           <button type="button" disabled={connecting} onClick={openWallet}>
             {connecting ? "Connecting wallet" : "Connect wallet"}
           </button>
+        </section>
+      ) : accessDenied ? (
+        <section className={styles.statePanel} data-state="access-denied">
+          <p className={styles.kicker}>Access denied</p>
+          <h2>This wallet cannot manage partners</h2>
+          <p>
+            Your wallet session is valid, but partner administration access is
+            controlled by the server. If you expected access, send the Request
+            ID below to the Programmable team.
+          </p>
+          {accessDenied.requestId ? (
+            <p className={styles.requestId}>
+              <span>Request ID</span>
+              <code>{accessDenied.requestId}</code>
+            </p>
+          ) : null}
+          <button
+            type="button"
+            disabled={loadState === "loading"}
+            onClick={() => void loadPartners()}
+          >
+            {loadState === "loading" ? "Checking access" : "Check again"}
+          </button>
+        </section>
+      ) : loadState !== "ready" && partners.length === 0 ? (
+        <section
+          className={styles.statePanel}
+          data-state="access-check"
+          aria-busy={loadState === "idle" || loadState === "loading"}
+        >
+          {loadState === "error" ? null : (
+            <span className={styles.spinner} aria-hidden="true" />
+          )}
+          <h2>
+            {loadState === "error"
+              ? "Partner access is unavailable"
+              : "Checking partner access"}
+          </h2>
+          <p>
+            {loadState === "error"
+              ? pageError || "The server could not verify partner administration access."
+              : "The server is verifying this wallet before showing administration controls."}
+          </p>
+          {loadState === "error" ? (
+            <button type="button" onClick={() => void loadPartners()}>
+              Try again
+            </button>
+          ) : null}
         </section>
       ) : (
         <>

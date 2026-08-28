@@ -92,6 +92,45 @@
   margin: 5px 0 0;
 }
 
+.statePanel[data-state="access-denied"],
+.statePanel[data-state="access-check"] {
+  margin-top: 22px;
+  max-width: 680px;
+  padding: 28px;
+}
+
+.statePanel[data-state="access-denied"] > p:not(.kicker, .requestId),
+.statePanel[data-state="access-check"] > p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 12px 0 0;
+  max-width: 58ch;
+}
+
+.statePanel[data-state="access-denied"] > button,
+.statePanel[data-state="access-check"] > button {
+  margin-top: 18px;
+}
+
+.requestId {
+  display: grid;
+  gap: 5px;
+  margin: 18px 0 0;
+}
+
+.requestId span {
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.requestId code {
+  overflow-wrap: anywhere;
+}
+
 .createPanel > p:nth-of-type(2) {
   color: var(--muted);
   font-size: 12px;

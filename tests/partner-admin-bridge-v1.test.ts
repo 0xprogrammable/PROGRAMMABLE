@@ -871,6 +871,7 @@ describe("partner admin same-origin bridge", () => {
 
   it.each([
     [400, "REQUEST_SCHEMA_INVALID", null],
+    [403, "PARTNER_ADMIN_FORBIDDEN", null],
     [409, "PARTNER_SLUG_CONFLICT", null],
     [429, "PARTNER_ADMIN_RATE_LIMITED", "37"],
   ] as const)(
