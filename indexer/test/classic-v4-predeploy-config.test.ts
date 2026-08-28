@@ -7,7 +7,7 @@ import { buildClassicV4ActivationPlan } from "../scripts/activate-classic-v4.mjs
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
-} from "../../scripts/classic-v4-digest.mjs";
+} from "../scripts/classic-v4-digest.mjs";
 
 const configPath = fileURLToPath(new URL("../config.yaml", import.meta.url));
 const releaseMapPath = fileURLToPath(

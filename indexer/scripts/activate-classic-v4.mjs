@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
-} from "../../scripts/classic-v4-digest.mjs";
+} from "./classic-v4-digest.mjs";
 import * as classicV4ReleaseModule from "../../lib/classic-v4-release.ts";
 import * as classicV4PublicReleaseModule from "../../lib/classic-v4-public-release.ts";
 import { parseReleaseAuditArtifact } from "./release-candidate.mjs";

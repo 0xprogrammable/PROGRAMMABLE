@@ -10,7 +10,7 @@ import baseReleaseBinding from "../../config/data-pipeline-release.v1.json";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
-} from "../../scripts/classic-v4-digest.mjs";
+} from "../scripts/classic-v4-digest.mjs";
 import {
   assertClassicV4IndexerSourceBindings,
   buildClassicV4ExpandedReleaseBinding,
