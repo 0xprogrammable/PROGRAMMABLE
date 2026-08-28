@@ -80,6 +80,8 @@ import {
   "../lib/custom-launch/router-trade-adapters-v1";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 import { fadeRouterTradeEntry } from "./fade-router-trade-fixture";
+import { confirmedPlatformFeePolicyV2 } from
+  "./platform-fee-policy-fixture";
 import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
@@ -330,6 +332,12 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       label: "Source not verified",
       updatedAt: null,
     });
+    expect(body.platformFeeCertification).toEqual({
+      schemaVersion: "programmable.platform-fee-certification.v1",
+      status: "not-certified",
+      programmableFeeBps: null,
+      label: "Programmable fee: not certified for this launch",
+    });
     expect(mocks.readSourceVerification).toHaveBeenCalledWith(
       customGraphExploreEntry.tokenAddress,
       expect.any(AbortSignal),
@@ -337,6 +345,33 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3+canonical-launch-stamp-router",
     );
+  });
+
+  it("certifies 10 bps only from the exact bound platform fee readback", async () => {
+    const certifiedEntry = {
+      ...customGraphExploreEntry,
+      platformFeePolicy: confirmedPlatformFeePolicyV2,
+    };
+    mocks.readRouter.mockResolvedValue([certifiedEntry]);
+    mocks.mergeRouter.mockReturnValue([certifiedEntry]);
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...certifiedEntry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      marketRead: marketRead("unavailable"),
+    });
+
+    const response = await GET(request(certifiedEntry.tokenAddress));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.platformFeeCertification).toEqual({
+      schemaVersion: "programmable.platform-fee-certification.v1",
+      status: "certified",
+      programmableFeeBps: 10,
+      label: "Programmable fee: 10 bps certified for this launch",
+    });
   });
 
   it("serves the exact Router token when Envio is unavailable", async () => {

@@ -187,9 +187,48 @@ describe("token detail metrics", () => {
     expect(buildTokenDetailMetrics(confirmed).map((metric) => metric.label))
       .not.toContain("Programmable fee");
     expect(platformFeePolicyDisclosure(confirmed)).toBe(
-      "Platform fee policy recorded: 10 bps are configured for this stamped pool. This does not prove current accrual or a claimable balance.",
+      "Programmable fee: 10 bps certified for this launch",
     );
-    expect(platformFeePolicyDisclosure(customGraphToken)).toBeNull();
+    expect(platformFeePolicyDisclosure(customGraphToken)).toBe(
+      "Programmable fee: not certified for this launch",
+    );
+    expect(platformFeePolicyDisclosure(token)).toBeNull();
+  });
+
+  it("rejects an API fee claim that conflicts with the exact token proof", () => {
+    expect(() => parseDetailPayload({
+      status: "ready",
+      token: {
+        ...customGraphToken,
+        exploreKind: "token",
+        launchCategoryProvenance: {
+          schemaVersion: "programmable.explore-launch-category-provenance.v1",
+          category: "custom",
+          source: "canonical-launch-stamp-router",
+          launchId: customGraphToken.launchStampProvenance.launchId,
+          stampHash: customGraphToken.launchStampProvenance.stampHash,
+          routerAddress: customGraphToken.launchStampProvenance.routerAddress,
+          transactionHash:
+            customGraphToken.launchStampProvenance.transactionHash,
+          blockHash: customGraphToken.launchStampProvenance.blockHash,
+          blockNumber: customGraphToken.launchStampProvenance.blockNumber,
+          transactionIndex:
+            customGraphToken.launchStampProvenance.transactionIndex,
+          logIndex: customGraphToken.launchStampProvenance.launchLogIndex,
+        },
+      },
+      customProject: null,
+      routerTradeProject: null,
+      platformFeeCertification: {
+        schemaVersion: "programmable.platform-fee-certification.v1",
+        status: "certified",
+        programmableFeeBps: 10,
+        label: "Programmable fee: 10 bps certified for this launch",
+      },
+      sourceVerification: null,
+      creatorArticle: null,
+      snapshot: { chainId: 1 },
+    })).toThrow("conflicting fee certification");
   });
 
   it("shows unavailable instead of inventing FDV without reliable supply or liquidity", () => {
