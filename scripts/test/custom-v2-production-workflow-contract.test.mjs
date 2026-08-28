@@ -29,9 +29,15 @@ function stepBlock(source, name) {
 test("Custom V2 production proof is a dedicated versioned protected lane", () => {
   assert.match(proof, /programmable\.production-verify-proof\.v4/u);
   assert.match(proof, /"custom_v2"/u);
-  assert.match(proof, /id: "custom-v2", name: "Custom V2", scopeKey: "custom_v2"/u);
+  assert.match(
+    proof,
+    /id: "custom-v2", name: "Custom V2", scopeKey: "custom_v2"/u,
+  );
   assert.match(verify, /^  custom-v2:$/mu);
-  assert.match(verify, /name: Verify exact Custom V2 surface[\s\S]*npm run verify:custom-v2:ci/u);
+  assert.match(
+    verify,
+    /name: Verify exact Custom V2 surface[\s\S]*npm run verify:custom-v2:ci/u,
+  );
   const projectionDatabaseOperator = stepBlock(
     verify,
     "Verify exact Website projection database operator",
@@ -63,10 +69,7 @@ test("manual Generic release verification runs the complete current Custom V2 tr
   assert.match(scope, /VERIFICATION_MODE:/u);
   assert.match(scope, /test "\$GITHUB_EVENT_NAME" = workflow_dispatch/u);
   assert.match(scope, /test "\$GITHUB_REF" = refs\/heads\/production/u);
-  assert.match(
-    scope,
-    /classify-verify-paths\.mjs --custom-v2-release/u,
-  );
+  assert.match(scope, /classify-verify-paths\.mjs --custom-v2-release/u);
   assert.match(
     verify,
     /name: Bind production Verify proof[\s\S]*github\.event_name == 'workflow_dispatch'[\s\S]*inputs\.verification_mode == 'custom-v2-release'/u,
@@ -78,10 +81,7 @@ test("manual Generic release verification runs the complete current Custom V2 tr
     deploy,
     /PRODUCTION_VERIFY_MODE:[\s\S]*custom-v2-release[\s\S]*--verification-mode "\$PRODUCTION_VERIFY_MODE"/u,
   );
-  assert.match(
-    deploy,
-    /--verification-mode "\$VERIFY_MODE"/u,
-  );
+  assert.match(deploy, /--verification-mode "\$VERIFY_MODE"/u);
   assert.match(
     deploy,
     /--verification-mode "\$\{\{ needs\.release-gate\.outputs\.verification_mode \}\}"/u,
@@ -90,7 +90,10 @@ test("manual Generic release verification runs the complete current Custom V2 tr
 
 test("trusted-base classification bootstraps Custom V2 without narrowing legacy lanes", () => {
   const block = stepBlock(verify, "Classify changed paths");
-  assert.match(block, /git show "\$BASE_SHA:scripts\/ci\/classify-verify-paths\.mjs"/u);
+  assert.match(
+    block,
+    /git show "\$BASE_SHA:scripts\/ci\/classify-verify-paths\.mjs"/u,
+  );
   assert.match(block, /if ! grep -Eq '\^custom_v2=\(true\|false\)\$'/u);
   assert.match(block, /echo 'custom_v2=true'/u);
   assert.match(block, /changing or narrowing any trusted-base legacy result/u);
@@ -103,16 +106,34 @@ test("Custom V2 stage expectations are explicit, observational, and default disa
   ]) {
     assert.match(
       deploy,
-      new RegExp(`${input}:[\\s\\S]{0,240}default: false[\\s\\S]{0,80}type: boolean`, "u"),
+      new RegExp(
+        `${input}:[\\s\\S]{0,240}default: false[\\s\\S]{0,80}type: boolean`,
+        "u",
+      ),
     );
   }
   assert.match(deploy, /this does not change configuration/u);
   assert.match(deploy, /this does not activate them/u);
-  assert.match(deploy, /verified_custom_v2: \$\{\{ steps\.verify-proof\.outputs\.verified_custom_v2 \}\}/u);
-  const gate = stepBlock(deploy, "Gate exact unaliased Custom V2 staged candidate");
-  assert.match(gate, /if: needs\.release-gate\.outputs\.verified_custom_v2 == 'true'/u);
-  assert.match(gate, /STAGED_DEPLOYMENT_ID: \$\{\{ steps\.staged-deployment\.outputs\.deployment_id \}\}/u);
-  assert.match(gate, /STAGED_TARGET_URL: \$\{\{ steps\.staged-deployment\.outputs\.target_url \}\}/u);
+  assert.match(
+    deploy,
+    /verified_custom_v2: \$\{\{ steps\.verify-proof\.outputs\.verified_custom_v2 \}\}/u,
+  );
+  const gate = stepBlock(
+    deploy,
+    "Gate exact unaliased Custom V2 staged candidate",
+  );
+  assert.match(
+    gate,
+    /if: needs\.release-gate\.outputs\.verified_custom_v2 == 'true'/u,
+  );
+  assert.match(
+    gate,
+    /STAGED_DEPLOYMENT_ID: \$\{\{ steps\.staged-deployment\.outputs\.deployment_id \}\}/u,
+  );
+  assert.match(
+    gate,
+    /STAGED_TARGET_URL: \$\{\{ steps\.staged-deployment\.outputs\.target_url \}\}/u,
+  );
   assert.match(gate, /EXPECTED_GIT_HEAD: \$\{\{ github\.sha \}\}/u);
   assert.match(gate, /vercel env run --environment=production/u);
   assert.match(gate, /npm run probe:custom-v2:stage/u);
@@ -123,18 +144,24 @@ test("Custom V2 stage expectations are explicit, observational, and default disa
 });
 
 test("Custom V2 evidence is immutable while the workflow remains stage-only", () => {
-  assert.match(deploy, /name: custom-v2-stage-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u);
+  assert.match(
+    deploy,
+    /name: custom-v2-stage-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u,
+  );
   assert.match(deploy, /retention-days: 90/u);
   assert.match(deploy, /vercel deploy --prebuilt --prod --skip-domain/u);
-  assert.doesNotMatch(deploy, /vercel (?:promote|rollback)|--scope-production-alias/u);
+  assert.doesNotMatch(
+    deploy,
+    /vercel (?:promote|rollback)|--scope-production-alias/u,
+  );
   assert.match(deploy, /Stage-only: no production promotion was attempted\./u);
   assert.ok(
-    deploy.indexOf("Resolve exact staged deployment")
-      < deploy.indexOf("Gate exact unaliased Custom V2 staged candidate"),
+    deploy.indexOf("Resolve exact staged deployment") <
+      deploy.indexOf("Gate exact unaliased Custom V2 staged candidate"),
   );
   assert.ok(
-    deploy.indexOf("Gate exact unaliased Custom V2 staged candidate")
-      < deploy.indexOf("Reverify staged candidate binding"),
+    deploy.indexOf("Gate exact unaliased Custom V2 staged candidate") <
+      deploy.indexOf("Reverify staged candidate binding"),
   );
   const stablePreview = stepBlock(
     deploy,
@@ -145,10 +172,7 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
     /STABLE_PREVIEW_HOST: launcher-v4-aficialais-projects\.vercel\.app/u,
   );
   assert.match(stablePreview, /VERCEL_SCOPE: aficialais-projects/u);
-  assert.match(
-    stablePreview,
-    /test "\$VERCEL_SCOPE" = aficialais-projects/u,
-  );
+  assert.match(stablePreview, /test "\$VERCEL_SCOPE" = aficialais-projects/u);
   assert.match(
     stablePreview,
     /vercel alias set "\$EXPECTED_DEPLOYMENT_ID" "\$STABLE_PREVIEW_HOST" \\\n+            --scope="\$VERCEL_SCOPE"/u,
@@ -157,7 +181,10 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
     stablePreview,
     /vercel inspect "\$STABLE_PREVIEW_HOST" --format=json \\\n+            --scope="\$VERCEL_SCOPE"/u,
   );
-  assert.match(stablePreview, /inspected\.id !== process\.env\.EXPECTED_DEPLOYMENT_ID/u);
+  assert.match(
+    stablePreview,
+    /inspected\.id !== process\.env\.EXPECTED_DEPLOYMENT_ID/u,
+  );
   assert.match(stablePreview, /inspected\.url !== expectedTarget\.hostname/u);
   assert.doesNotMatch(stablePreview, /inspected\.aliases/u);
   assert.match(
@@ -168,8 +195,8 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   assert.equal(deploy.match(/vercel alias set/gu)?.length, 1);
   assert.doesNotMatch(deploy.replace(stablePreview, ""), /vercel alias/u);
   assert.ok(
-    deploy.indexOf("Reverify staged candidate binding")
-      < deploy.indexOf("Bind exact candidate to stable protected preview"),
+    deploy.indexOf("Reverify staged candidate binding") <
+      deploy.indexOf("Bind exact candidate to stable protected preview"),
   );
 });
 
@@ -177,8 +204,12 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   for (const input of [
     "custom_v2_generic_signer_probe_expected_json",
     "custom_v2_generic_signer_probe_expected_sha256",
-  ]) assert.match(deploy, new RegExp(`${input}:`, "u"));
-  const prepare = stepBlock(deploy, "Prepare one-shot Generic signer probe authority");
+  ])
+    assert.match(deploy, new RegExp(`${input}:`, "u"));
+  const prepare = stepBlock(
+    deploy,
+    "Prepare one-shot Generic signer probe authority",
+  );
   assert.match(prepare, /randomBytes\(32\)\.toString\("hex"\)/u);
   assert.match(prepare, /::add-mask::/u);
   assert.match(prepare, /generic-launch-read-stage-probe-operation\.v1/u);
@@ -201,7 +232,10 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   );
   assert.match(probeDeploy, /vercel deploy --prebuilt --prod --skip-domain/u);
   assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u);
-  assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON/u);
+  assert.match(
+    probeDeploy,
+    /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON/u,
+  );
   assert.match(probeDeploy, /programmableGenericSignerProbeRecoveryId/u);
   assert.match(probeDeploy, /programmableGenericSignerProbe=one-shot-v1/u);
   assert.match(probeDeploy, /programmableRepositoryId=1314365508/u);
@@ -215,8 +249,14 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
     "Reconcile every secret-bearing Generic signer probe deployment",
   );
   assert.match(reconciliation, /always\(\)/u);
-  assert.match(reconciliation, /generic-signer-probe-authority\.outcome == 'success'/u);
-  assert.doesNotMatch(reconciliation, /generic-signer-probe-deploy\.outcome == 'success'/u);
+  assert.match(
+    reconciliation,
+    /generic-signer-probe-authority\.outcome == 'success'/u,
+  );
+  assert.doesNotMatch(
+    reconciliation,
+    /generic-signer-probe-deploy\.outcome == 'success'/u,
+  );
   assert.match(
     reconciliation,
     /reconcile-generic-signer-probe-deployments\.mjs/u,
@@ -239,7 +279,10 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
     deploy,
     "Attest canonical Generic signer probe cleanup bundle",
   );
-  assert.match(attest, /actions\/attest@59d89421af93a897026c735860bf21b6eb4f7b26/u);
+  assert.match(
+    attest,
+    /actions\/attest@59d89421af93a897026c735860bf21b6eb4f7b26/u,
+  );
   assert.match(attest, /create-storage-record: false/u);
   assert.match(
     deploy,
@@ -248,23 +291,32 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   assert.match(deploy, /attestations: write/u);
   assert.match(deploy, /id-token: write/u);
   assert.ok(
-    deploy.indexOf("Reconcile every secret-bearing Generic signer probe deployment")
-      < deploy.indexOf("Stage production build without assigning domains"),
+    deploy.indexOf(
+      "Reconcile every secret-bearing Generic signer probe deployment",
+    ) < deploy.indexOf("Stage production build without assigning domains"),
   );
   assert.ok(
-    deploy.indexOf("Reconcile all residual Generic signer probes before new authority")
-      < deploy.indexOf("Prepare one-shot Generic signer probe authority"),
+    deploy.indexOf(
+      "Reconcile all residual Generic signer probes before new authority",
+    ) < deploy.indexOf("Prepare one-shot Generic signer probe authority"),
   );
   assert.ok(
-    deploy.indexOf("Preserve pre-mutation Generic signer probe operation record")
-      < deploy.indexOf("Deploy one-shot unaliased Generic signer probe candidate"),
+    deploy.indexOf(
+      "Preserve pre-mutation Generic signer probe operation record",
+    ) <
+      deploy.indexOf(
+        "Deploy one-shot unaliased Generic signer probe candidate",
+      ),
   );
   assert.match(deploy, /^  generic-signer-probe-reconcile:$/mu);
   assert.match(
     deploy,
     /generic-signer-probe-reconcile:[\s\S]*needs: \[release-gate, deploy\][\s\S]*always\(\)[\s\S]*Delete every residual exact probe deployment and prove absence[\s\S]*reconcile-generic-signer-probe-deployments\.mjs/u,
   );
-  assert.match(standaloneReconcile, /^name: Reconcile Generic Signer Probes$/mu);
+  assert.match(
+    standaloneReconcile,
+    /^name: Reconcile Generic Signer Probes$/mu,
+  );
   assert.match(standaloneReconcile, /^  workflow_dispatch:$/mu);
   assert.match(standaloneReconcile, /group: programmable-production/u);
   assert.match(standaloneReconcile, /cancel-in-progress: false/u);
@@ -313,16 +365,19 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.match(probe, /VERCEL_AUTOMATION_BYPASS_SECRET:/u);
   assert.match(probe, /\/api\/explore\?limit=1&page=1&sort=newest/u);
   assert.match(probe, /catalog\?\.source === "envio-classic-v3"/u);
+  assert.match(probe, /const classicCurrent =/u);
   assert.match(probe, /completeness\?\.classic === "current"/u);
+  assert.match(probe, /const routerOnlyFallback =/u);
+  assert.match(probe, /launchSource === "canonical-launch-stamp-router"/u);
+  assert.match(probe, /completeness\?\.classic === "unavailable"/u);
+  assert.match(
+    probe,
+    /routerStamp\.projectedIdentityCount === body\.catalog\.identityCount/u,
+  );
+  assert.match(probe, /classicCurrent \|\| routerOnlyFallback/u);
   assert.match(probe, /completeness\?\.stock === "excluded"/u);
-  assert.match(
-    probe,
-    /completeness\?\.registryCustom === "current"/u,
-  );
-  assert.match(
-    probe,
-    /routerCustomStatus === "last-known-good"/u,
-  );
+  assert.match(probe, /completeness\?\.registryCustom === "current"/u);
+  assert.match(probe, /routerCustomStatus === "last-known-good"/u);
   assert.match(
     probe,
     /envio-classic-v3\+registry\.custom-launched\+canonical-launch-stamp-router/u,
@@ -336,7 +391,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.match(probe, /response = undefined/u);
   assert.match(probe, /if \(attempt === 4\) throw error/u);
   assert.match(probe, /continue/u);
-  assert.match(probe, /if \(exactCatalog\) break/u);
+  assert.match(probe, /if \(exactCatalog\) \{/u);
   assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);
   assert.doesNotMatch(probe, /\n        if:/u);
 
@@ -361,9 +416,13 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   );
 
   const handoff = stepBlock(deploy, "Record staged candidate handoff");
-  assert.match(handoff, /Launch identities: validated Envio Classic V3 catalog/u);
-  assert.match(handoff, /Envio catalog progress block:/u);
-  assert.match(handoff, /Envio catalog identity count:/u);
+  assert.match(
+    handoff,
+    /Launch identities: validated current Classic or bounded Router fallback/u,
+  );
+  assert.match(handoff, /Catalog mode:/u);
+  assert.match(handoff, /Catalog progress block:/u);
+  assert.match(handoff, /Catalog identity count:/u);
   assert.match(
     handoff,
     /Market data provider: Dexscreener \(optional enrichment\)/u,
@@ -400,5 +459,8 @@ test("the staged public smoke is a separate bounded script", () => {
     /PROGRAMMABLE_WEBSITE_MAINNET_RPC|BITQUERY_API_KEY|runtimeProductionProviderEndpoints|readPrimaryRpc|readBitquery|fetchBitquery/iu,
   );
   assert.doesNotMatch(source, /https?:\/\/[^"'`]*(?:drpc|bitquery)/iu);
-  assert.doesNotMatch(source, /\/api\/explore\/profile\/claim|\/api\/trade\/prepare/u);
+  assert.doesNotMatch(
+    source,
+    /\/api\/explore\/profile\/claim|\/api\/trade\/prepare/u,
+  );
 });

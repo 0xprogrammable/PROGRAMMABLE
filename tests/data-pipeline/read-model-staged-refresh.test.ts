@@ -5,9 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import * as operationsSourceContracts from "../../scripts/perf/read-model-ops-source-contracts.mjs";
-const {
-  evaluateReadModelOperationsSourceContracts,
-} = operationsSourceContracts;
+const { evaluateReadModelOperationsSourceContracts } =
+  operationsSourceContracts;
 // @ts-expect-error Operational JavaScript modules intentionally have no declarations.
 import { refreshExactStagedReadModel } from "../../scripts/perf/read-model-staged-refresh.mjs";
 
@@ -103,8 +102,8 @@ function stagedFetch(
         return Response.json(
           input.prewarmBody?.(phase as string, body) ?? body,
           {
-          status: 200,
-          headers: { "cache-control": "no-store" },
+            status: 200,
+            headers: { "cache-control": "no-store" },
           },
         );
       }
@@ -159,9 +158,9 @@ describe("exact staged durable refresh runtime", () => {
     expect(requests[0]?.url.pathname).toBe(
       `/v13/deployments/${new URL(TARGET_URL).hostname}`,
     );
-    expect(requests.slice(1, 65).map(({ url }) =>
-      url.searchParams.get("phase")
-    )).toEqual([
+    expect(
+      requests.slice(1, 65).map(({ url }) => url.searchParams.get("phase")),
+    ).toEqual([
       ...Array.from({ length: 32 }, (_, index) => [
         `classic-primary-${String(index + 1).padStart(2, "0")}`,
         `classic-secondary-${String(index + 1).padStart(2, "0")}`,
@@ -240,8 +239,9 @@ describe("exact staged durable refresh runtime", () => {
               return phase === "classic-primary-05"
                 ? {
                     ...body,
-                    blockNumber: (BigInt(String(body.blockNumber)) + 1n)
-                      .toString(),
+                    blockNumber: (
+                      BigInt(String(body.blockNumber)) + 1n
+                    ).toString(),
                   }
                 : body;
             },
@@ -251,9 +251,10 @@ describe("exact staged durable refresh runtime", () => {
       ),
     ).rejects.toThrow("exact staged classic-primary-05 prewarm failed");
     expect(
-      requests.some(({ url }) =>
-        url.pathname === "/api/ops/index-v2" &&
-        !url.searchParams.has("phase")
+      requests.some(
+        ({ url }) =>
+          url.pathname === "/api/ops/index-v2" &&
+          !url.searchParams.has("phase"),
       ),
     ).toBe(false);
   });
@@ -284,16 +285,18 @@ describe("exact staged durable refresh runtime", () => {
     let maximumActivePrewarms = 0;
     const sleepImpl = vi.fn(async () => undefined);
     const baseFetch = stagedFetch();
-    const fetchImpl = async (request: URL | RequestInfo, init?: RequestInit) => {
+    const fetchImpl = async (
+      request: URL | RequestInfo,
+      init?: RequestInit,
+    ) => {
       const url = new URL(String(request));
-      if (/^classic-(?:primary|secondary)-[0-9]{2}$/u.test(
-        url.searchParams.get("phase") ?? "",
-      )) {
+      if (
+        /^classic-(?:primary|secondary)-[0-9]{2}$/u.test(
+          url.searchParams.get("phase") ?? "",
+        )
+      ) {
         activePrewarms += 1;
-        maximumActivePrewarms = Math.max(
-          maximumActivePrewarms,
-          activePrewarms,
-        );
+        maximumActivePrewarms = Math.max(maximumActivePrewarms, activePrewarms);
         try {
           await new Promise((resolve) => setTimeout(resolve, 1));
           if (
@@ -301,10 +304,13 @@ describe("exact staged durable refresh runtime", () => {
             transientFailures < 2
           ) {
             transientFailures += 1;
-            return Response.json({ ok: false }, {
-              status: 503,
-              headers: { "cache-control": "no-store" },
-            });
+            return Response.json(
+              { ok: false },
+              {
+                status: 503,
+                headers: { "cache-control": "no-store" },
+              },
+            );
           }
           return baseFetch(request, init);
         } finally {
@@ -314,11 +320,13 @@ describe("exact staged durable refresh runtime", () => {
       return baseFetch(request, init);
     };
     await expect(
-      refreshExactStagedReadModel(stagedRefreshInput(fetchImpl, {
-        requestAttempts: 3,
-        requestRetryDelayMs: 5_000,
-        sleepImpl,
-      })),
+      refreshExactStagedReadModel(
+        stagedRefreshInput(fetchImpl, {
+          requestAttempts: 3,
+          requestRetryDelayMs: 5_000,
+          sleepImpl,
+        }),
+      ),
     ).resolves.toMatchObject({ ok: true, tokenCount: 343 });
     expect(transientFailures).toBe(2);
     expect(maximumActivePrewarms).toBe(1);
@@ -329,10 +337,12 @@ describe("exact staged durable refresh runtime", () => {
   it("paces successful prewarm phases without overlapping providers", async () => {
     const sleepImpl = vi.fn(async (delayMs: number) => void delayMs);
     await expect(
-      refreshExactStagedReadModel(stagedRefreshInput(stagedFetch(), {
-        prewarmPhaseDelayMs: 1_000,
-        sleepImpl,
-      })),
+      refreshExactStagedReadModel(
+        stagedRefreshInput(stagedFetch(), {
+          prewarmPhaseDelayMs: 1_000,
+          sleepImpl,
+        }),
+      ),
     ).resolves.toMatchObject({ ok: true, tokenCount: 343 });
     expect(sleepImpl).toHaveBeenCalledTimes(63);
     expect(sleepImpl.mock.calls.every(([delay]) => delay === 1_000)).toBe(true);
@@ -342,38 +352,47 @@ describe("exact staged durable refresh runtime", () => {
     const requests: URL[] = [];
     const sleepImpl = vi.fn(async () => undefined);
     const baseFetch = stagedFetch();
-    const fetchImpl = async (request: URL | RequestInfo, init?: RequestInit) => {
+    const fetchImpl = async (
+      request: URL | RequestInfo,
+      init?: RequestInit,
+    ) => {
       const url = new URL(String(request));
       requests.push(url);
       if (url.searchParams.get("phase") === "classic-primary-01") {
-        return Response.json({ ok: false }, {
-          status: 503,
-          headers: { "cache-control": "no-store" },
-        });
+        return Response.json(
+          { ok: false },
+          {
+            status: 503,
+            headers: { "cache-control": "no-store" },
+          },
+        );
       }
       return baseFetch(request, init);
     };
     await expect(
-      refreshExactStagedReadModel(stagedRefreshInput(fetchImpl, {
-        requestAttempts: 3,
-        requestRetryDelayMs: 5_000,
-        sleepImpl,
-      })),
+      refreshExactStagedReadModel(
+        stagedRefreshInput(fetchImpl, {
+          requestAttempts: 3,
+          requestRetryDelayMs: 5_000,
+          sleepImpl,
+        }),
+      ),
     ).rejects.toThrow("classic-primary-01 prewarm failed (503)");
     expect(
-      requests.filter((url) =>
-        url.searchParams.get("phase") === "classic-primary-01"
+      requests.filter(
+        (url) => url.searchParams.get("phase") === "classic-primary-01",
       ),
     ).toHaveLength(3);
     expect(
-      requests.some((url) =>
-        url.searchParams.get("phase") === "classic-secondary-01"
+      requests.some(
+        (url) => url.searchParams.get("phase") === "classic-secondary-01",
       ),
     ).toBe(false);
     expect(
-      requests.some((url) =>
-        url.pathname === "/api/ops/index-v2" &&
-        !url.searchParams.has("phase")
+      requests.some(
+        (url) =>
+          url.pathname === "/api/ops/index-v2" &&
+          !url.searchParams.has("phase"),
       ),
     ).toBe(false);
     expect(sleepImpl.mock.calls).toEqual([[5_000], [10_000]]);
@@ -400,22 +419,42 @@ describe("staged Envio catalog probe source contract", () => {
     [
       "drops the exact Envio source",
       (step: string) =>
-        step.replace('              body?.catalog?.source === "envio-classic-v3" &&\n', ""),
+        step.replace(
+          '              body?.catalog?.source === "envio-classic-v3" &&\n',
+          "",
+        ),
     ],
     [
       "drops Classic catalog completeness",
       (step: string) =>
-        step.replace('              body.catalog.completeness?.classic === "current" &&\n', ""),
+        step.replace(
+          '              body?.catalog?.completeness?.classic === "current" &&\n',
+          "",
+        ),
+    ],
+    [
+      "drops the bounded Router-only fallback",
+      (step: string) =>
+        step.replace(
+          "            const routerOnlyFallback =\n",
+          "            const routerOnlyFallbackDisabled =\n",
+        ),
     ],
     [
       "allows stock families",
       (step: string) =>
-        step.replace('              body.catalog.completeness?.stock === "excluded" &&\n', ""),
+        step.replace(
+          '              body.catalog.completeness?.stock === "excluded" &&\n',
+          "",
+        ),
     ],
     [
       "accepts an empty catalog",
       (step: string) =>
-        step.replace("              Number.isSafeInteger(body.total) && body.total >= 1 &&\n", ""),
+        step.replace(
+          "              Number.isSafeInteger(body.total) && body.total >= 1 &&\n",
+          "",
+        ),
     ],
   ])("fails when the workflow %s", (_label, mutate) => {
     const path = ".github/workflows/deploy-production.yml";
