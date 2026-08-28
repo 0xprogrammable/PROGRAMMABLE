@@ -490,7 +490,7 @@ function classicV4ParametersMatch(
   );
 }
 
-function assertClassicV4ExpectedResult(
+export function assertClassicV4ExpectedResult(
   stampRequest: ReturnType<typeof readClassicV4RouterCall>["args"][1],
   result: ReturnType<typeof readClassicV4Route>["expectedResult"],
   initialBuy: bigint,
@@ -501,6 +501,7 @@ function assertClassicV4ExpectedResult(
     !nonzeroAddress(result.token)
     || !nonzeroAddress(result.rewardVault)
     || !nonzeroAddress(result.positionRecipient)
+    || result.positionTokenId !== 0n
     || result.tokenLiquidityAmount === 0n
     || result.initialBuyNativeAmount !== initialBuy
     || result.initialBuyTokenAmount === 0n

@@ -32,9 +32,6 @@ import {
   buildClassicV4LifecycleReleaseCandidate,
   digestJson,
   normalizeHex,
-  validateClassicV4DeploymentEvidence,
-  validateClassicV4PreparationPlan,
-  validateClassicV4SourceEvidence,
 } from "./classic-v4-release-core.mjs";
 import {
   CLASSIC_V4_AUTHORIZATION_SAFETY_SECONDS,
@@ -49,7 +46,9 @@ import {
   buildClassicV4TokenApprovalPrepared,
   buildClassicV4TransactionOutput,
   classicV4ExecutionHookAbi,
+  classicV4ExecutionLauncherAbi,
   classicV4ExecutionPermit2Abi,
+  classicV4ExecutionPositionManagerAbi,
   classicV4ExecutionRewardVaultAbi,
   classicV4ExecutionTokenAbi,
   classicV4LifecycleActionLabel,
@@ -58,6 +57,7 @@ import {
   confirmClassicV4JournalTransaction,
   createClassicV4ExecutionJournal,
   decodeClassicV4Quote,
+  deriveClassicV4RealizedLaunchIdentity,
   discardClassicV4ArmedAction,
   nextClassicV4LifecycleAction,
   recordClassicV4SubmittedTransaction,
@@ -66,8 +66,10 @@ import {
   validateClassicV4PreparedAction,
   validateClassicV4ExecutionJournal,
 } from "./classic-v4-lifecycle-console-core.mjs";
-import { loadClassicV4SealedBuild } from
-  "../contracts/scripts/prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "../contracts/scripts/classic-v4-release-validation.mjs";
 import { verifyClassicV4ReleasePrerequisites } from
   "../contracts/scripts/verify-classic-v4-release-prerequisites.mjs";
 
@@ -1738,6 +1740,79 @@ async function loadSubmittedTransaction(urls, hash, request, { wait = false } = 
   fail("Both RPCs have not observed the submitted transaction yet");
 }
 
+async function realizedLaunchIdentityAtReceipt(
+  canaryPlan,
+  expectedIdentity,
+  receipts,
+  urls,
+  receiptBlock,
+) {
+  const context = {
+    launcher: canaryPlan.launcher,
+    operatorWallet: canaryPlan.operatorWallet,
+    feeHook: canaryPlan.feeHook,
+    expectedIdentity,
+    buySwapFeeBps: canaryPlan.launchFixture.buySwapFeeBps,
+    sellSwapFeeBps: canaryPlan.launchFixture.sellSwapFeeBps,
+  };
+  const realized = receipts.map((receipt) =>
+    deriveClassicV4RealizedLaunchIdentity(receipt, context)
+  );
+  sameRpcValue(realized[0], realized[1], "the realized Classic V4 launch identity");
+  const identity = resolveClassicV4LifecycleIdentity(canaryPlan, realized[0]);
+  const [storedPositionTokenId, storedLaunchHash, storedRewardVault, custody, nftOwner] =
+    await Promise.all([
+      readContractBoth(
+        urls,
+        receiptBlock,
+        canaryPlan.launcher,
+        classicV4ExecutionLauncherAbi,
+        "positionTokenIdOf",
+        [identity.token],
+      ),
+      readContractBoth(
+        urls,
+        receiptBlock,
+        canaryPlan.launcher,
+        classicV4ExecutionLauncherAbi,
+        "launchHashOf",
+        [identity.token],
+      ),
+      readContractBoth(
+        urls,
+        receiptBlock,
+        canaryPlan.launcher,
+        classicV4ExecutionLauncherAbi,
+        "rewardVaultOf",
+        [identity.token],
+      ),
+      readContractBoth(
+        urls,
+        receiptBlock,
+        canaryPlan.launcher,
+        classicV4ExecutionLauncherAbi,
+        "initialBuyCustodyOf",
+        [identity.token],
+      ),
+      readContractBoth(
+        urls,
+        receiptBlock,
+        canaryPlan.dependencies.positionManager,
+        classicV4ExecutionPositionManagerAbi,
+        "ownerOf",
+        [BigInt(identity.positionTokenId)],
+      ),
+    ]);
+  if (
+    BigInt(storedPositionTokenId) !== BigInt(identity.positionTokenId) ||
+    normalizeHex(storedLaunchHash) !== normalizeHex(identity.launchHash) ||
+    normalizeHex(storedRewardVault) !== normalizeHex(identity.rewardVault) ||
+    BigInt(custody) !== 0n ||
+    normalizeHex(nftOwner) !== normalizeHex(identity.positionRecipient)
+  ) fail("Realized position NFT storage or ownership differs from the launch event");
+  return realized[0];
+}
+
 async function confirmSubmitted(canaryPlan, identity, journal, action, record, urls) {
   const transaction = await loadSubmittedTransaction(
     urls,
@@ -1793,6 +1868,15 @@ async function confirmSubmitted(canaryPlan, identity, journal, action, record, u
       `${action} receipt`,
     ),
   ]);
+  const launchIdentity = action === "launch"
+    ? await realizedLaunchIdentityAtReceipt(
+        canaryPlan,
+        identity,
+        receipts,
+        urls,
+        { tag: blockTag(blockNumber) },
+      )
+    : null;
   if (
     record.prepared.requiredAction === action &&
     ["buyExactInput", "buyExactOutput", "sellExactInput", "sellExactOutput"]
@@ -1826,6 +1910,7 @@ async function confirmSubmitted(canaryPlan, identity, journal, action, record, u
     action,
     blockNumber: Number(blockNumber),
     blockHash: blocks[0].hash,
+    launchIdentity,
   });
 }
 
@@ -1953,6 +2038,20 @@ async function validatePersistedJournalBindings(
       new Date(record.submittedAt).valueOf() >
         Number((receiptBlock.timestamp + MAXIMUM_HEAD_AGE_SECONDS) * 1_000n)
     ) fail(`${record.prepared.action} persisted timestamps differ from Mainnet`);
+    if (record.prepared.action === "launch") {
+      const realized = await realizedLaunchIdentityAtReceipt(
+        canaryPlan,
+        identity,
+        receipts,
+        urls,
+        freshHead,
+      );
+      sameRpcValue(
+        realized,
+        record.launchIdentity,
+        "the persisted realized Classic V4 launch identity",
+      );
+    }
     if (full) {
       const preparationBinding = preparationBindings.get(
         record.prepared.preparedDigest,
@@ -2249,6 +2348,7 @@ function publicState(
     treasury: canaryPlan.treasury,
     token: identity.token,
     rewardVault: identity.rewardVault,
+    positionTokenId: identity.positionTokenId,
     completedActions: completed,
     totalActions: canaryPlan.actions.length,
   };
@@ -2442,16 +2542,23 @@ async function loadContext(options) {
     readJson(options.sourceEvidence, "source evidence"),
     readJson(options.canaryPlan, "canary plan"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
-  validateClassicV4PreparationPlan(plan, artifacts);
-  validateClassicV4DeploymentEvidence(plan, deploymentEvidence);
-  validateClassicV4SourceEvidence(plan, deploymentEvidence, sourceEvidence);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    sourceEvidence,
+  );
   await verifyClassicV4ReleasePrerequisites({
     endpoints: [options.rpcA, options.rpcB],
     plan,
     deploymentEvidence,
     sourceEvidence,
     artifacts,
+    artifactContext,
   });
   const candidate = buildClassicV4LifecycleReleaseCandidate(
     plan,
@@ -2524,7 +2631,7 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   const context = await loadContext(options);
-  const identity = resolveClassicV4LifecycleIdentity(context.canaryPlan);
+  let identity = resolveClassicV4LifecycleIdentity(context.canaryPlan);
   if (!options.write) {
     process.stdout.write(`${JSON.stringify({
       status: "validated-read-only",
@@ -2557,6 +2664,10 @@ export async function main(argv = process.argv.slice(2)) {
       label: "Journal output",
     });
   }
+  identity = resolveClassicV4LifecycleIdentity(
+    context.canaryPlan,
+    journal.requiredTransactions.launch?.launchIdentity ?? null,
+  );
   const urls = [options.rpcA, options.rpcB];
   await validatePersistedJournalBindings(
     context.canaryPlan,
@@ -2574,6 +2685,10 @@ export async function main(argv = process.argv.slice(2)) {
     journalPath,
     transactionsPath,
   ));
+  identity = resolveClassicV4LifecycleIdentity(
+    context.canaryPlan,
+    journal.requiredTransactions.launch?.launchIdentity ?? null,
+  );
   const session = randomBytes(32).toString("base64url");
   const expectedHost = `${HOST}:${options.port}`;
   const serializeRequest = createClassicV4LifecycleRequestMutex();
@@ -2610,6 +2725,10 @@ export async function main(argv = process.argv.slice(2)) {
         journalPath,
         transactionsPath,
       ));
+      identity = resolveClassicV4LifecycleIdentity(
+        context.canaryPlan,
+        journal.requiredTransactions.launch?.launchIdentity ?? null,
+      );
       if (request.method === "GET" && url.pathname === "/state") {
         sendJson(response, 200, publicState(
           context.canaryPlan,

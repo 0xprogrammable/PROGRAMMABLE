@@ -584,7 +584,7 @@ function validClassicV4RouterAuthorization(input: {
     sameAddressValue(result.positionRecipient, lifecycle.positionRecipient) &&
     String(result.poolId).toLowerCase() ===
       String(lifecycle.poolId).toLowerCase() &&
-    result.positionTokenId === decimalBigInt(lifecycle.positionTokenId) &&
+    result.positionTokenId === 0n &&
     launchTimestamp >= BigInt(String(launchAuthorization.validAfter)) &&
     launchTimestamp <= BigInt(String(launchAuthorization.deadline)) &&
     tokenComponent &&

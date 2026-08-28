@@ -16,11 +16,11 @@ import {
   classicV4LaunchStampRouterAbi,
   digestJson,
   normalizeHex,
-  validateClassicV4DeploymentEvidence,
-  validateClassicV4PreparationPlan,
-  validateClassicV4SourceEvidence,
 } from "../../scripts/classic-v4-release-core.mjs";
-import { loadClassicV4SealedBuild } from "./prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "./classic-v4-release-validation.mjs";
 import { verifyClassicV4ReleasePrerequisites } from "./verify-classic-v4-release-prerequisites.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -284,17 +284,24 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(options.sourceEvidence, "source evidence"),
     readJson(deploymentSchemaPath, "deployment evidence schema"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
-  validateClassicV4PreparationPlan(plan, artifacts);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
   assertSchema(deploymentSchema, deploymentEvidence, "Deployment evidence");
-  validateClassicV4DeploymentEvidence(plan, deploymentEvidence);
-  validateClassicV4SourceEvidence(plan, deploymentEvidence, sourceEvidence);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    sourceEvidence,
+  );
   await verifyClassicV4ReleasePrerequisites({
     endpoints: [options.rpcA, options.rpcB],
     plan,
     deploymentEvidence,
     sourceEvidence,
     artifacts,
+    artifactContext,
   });
   const candidate = buildClassicV4LifecycleReleaseCandidate(
     plan,

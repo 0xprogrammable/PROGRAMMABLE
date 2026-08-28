@@ -1,3 +1,5 @@
 # False positives: typed address identifier and immutable dump digest.
 1bcfa9c7396b67651019304ed2693bb8061d9b7e:lib/data-pipeline/optimistic-market-state.server.ts:generic-api-key:404
 476f12e8eb16363d95d9b95952ece2856e7d1a60:scripts/data-pipeline/candidate-restore.mjs:generic-api-key:129
+# False positive: Solidity position-liquidity assignment, not an API credential.
+28fcea6ee143e5a259e50a3d22b50c744c2e9e54:contracts/src/MemeLaunchV4.sol:generic-api-key:316

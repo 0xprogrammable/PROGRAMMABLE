@@ -23,10 +23,11 @@ import {
   digestJson,
   normalizeHex,
   normalizeRuntimeImmutables,
-  validateClassicV4DeploymentEvidence,
-  validateClassicV4PreparationPlan,
 } from "../../scripts/classic-v4-release-core.mjs";
-import { loadClassicV4SealedBuild } from "./prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "./classic-v4-release-validation.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
@@ -76,6 +77,7 @@ const launcherAbi = parseAbi([
   "function INITIAL_TICK() view returns (int24)",
   "function TICK_SPACING() view returns (int24)",
   "function LP_FEE_PIPS() view returns (uint24)",
+  "function ROUTER() view returns (address)",
 ]);
 const ctoAuthorityAbi = parseAbi([
   "function authority() view returns (address)",
@@ -240,11 +242,11 @@ function callCheck(label, target, abi, functionName, expected, args = []) {
   };
 }
 
-function runtimeBindingChecks(plan) {
+function runtimeBindingChecks(plan, releaseKind) {
   const address = plan.predictedAddresses;
   const shared = CLASSIC_V4_SHARED_DEPENDENCIES;
   const official = CLASSIC_V4_OFFICIAL_DEPENDENCIES;
-  return [
+  const checks = [
     callCheck(
       "factory hook mask",
       address.hookFactory,
@@ -534,6 +536,18 @@ function runtimeBindingChecks(plan) {
       uintResult(UINT256_MAX),
     ),
   ];
+  if (releaseKind === "launcher-rollforward") {
+    checks.push(
+      callCheck(
+        "launcher canonical Router",
+        address.launcher,
+        launcherAbi,
+        "ROUTER",
+        addressResult(plan.router.address),
+      ),
+    );
+  }
+  return checks;
 }
 
 function assertTransactionInputFile(value) {
@@ -580,6 +594,79 @@ export function assertClassicV4DeploymentBlockBinding({
   }
 }
 
+export async function verifyClassicV4RollforwardBlockLineageAtEndpoint({
+  endpoint,
+  plan,
+  verificationBlock,
+  verificationHead,
+  rpcClient,
+}) {
+  if (plan.status !== "launcher-rollforward-composite") return [];
+  const parentBundle = plan.parentBundle;
+  const finality = parentBundle.launcherUpgrade.verificationEvidence;
+  if (
+    verificationBlock !== finality.verificationBlock ||
+    normalizeHex(verificationHead.hash) !==
+      normalizeHex(finality.verificationBlockHash)
+  ) {
+    fail(
+      "Composite verification head differs from launcher upgrade finality evidence",
+    );
+  }
+  const bindings = [
+    {
+      label: "base observed block",
+      blockNumber: parentBundle.base.plan.observedAtBlock,
+      blockHash: parentBundle.base.plan.observedAtBlockHash,
+    },
+    {
+      label: "base verification block",
+      blockNumber: parentBundle.base.deploymentEvidence.verificationBlock,
+      blockHash:
+        parentBundle.base.deploymentEvidence.verificationBlockHash,
+    },
+    {
+      label: "launcher upgrade observed block",
+      blockNumber: parentBundle.launcherUpgrade.plan.observedAtBlock,
+      blockHash: parentBundle.launcherUpgrade.plan.observedAtBlockHash,
+    },
+    {
+      label: "launcher upgrade receipt block",
+      blockNumber:
+        parentBundle.launcherUpgrade.receiptEvidence.blockNumber,
+      blockHash:
+        parentBundle.launcherUpgrade.receiptEvidence.blockHash,
+    },
+  ];
+  const latestParentBlock = Math.max(
+    ...bindings.map(({ blockNumber }) => blockNumber),
+  );
+  if (
+    !Number.isSafeInteger(latestParentBlock) ||
+    verificationBlock <
+      latestParentBlock + CLASSIC_V4_FINALITY_CONFIRMATIONS - 1
+  ) {
+    fail("Composite verification head does not finalize every parent block");
+  }
+  return Promise.all(
+    bindings.map(async (binding) => {
+      const block = await rpcClient(endpoint, "eth_getBlockByNumber", [
+        `0x${binding.blockNumber.toString(16)}`,
+        false,
+      ]);
+      if (
+        !block?.number ||
+        !block?.hash ||
+        Number(BigInt(block.number)) !== binding.blockNumber ||
+        normalizeHex(block.hash) !== normalizeHex(binding.blockHash)
+      ) {
+        fail(`${binding.label} differs from its parent evidence`);
+      }
+      return binding;
+    }),
+  );
+}
+
 async function verifyAtEndpoint(
   endpoint,
   plan,
@@ -587,13 +674,19 @@ async function verifyAtEndpoint(
   verificationBlock,
   artifacts,
   rpcClient,
+  releaseValidation,
 ) {
+  const requireObservedBlock = releaseValidation.requireObservedBlock;
   const blockTag = `0x${verificationBlock.toString(16)}`;
-  const observedBlockTag = `0x${plan.observedAtBlock.toString(16)}`;
+  const observedBlockTag = requireObservedBlock
+    ? `0x${plan.observedAtBlock.toString(16)}`
+    : null;
   const [chainId, verificationHead, observedHead] = await Promise.all([
     rpcClient(endpoint, "eth_chainId"),
     rpcClient(endpoint, "eth_getBlockByNumber", [blockTag, false]),
-    rpcClient(endpoint, "eth_getBlockByNumber", [observedBlockTag, false]),
+    requireObservedBlock
+      ? rpcClient(endpoint, "eth_getBlockByNumber", [observedBlockTag, false])
+      : Promise.resolve(null),
   ]);
   if (normalizeHex(chainId) !== "0x1") fail("RPC is not Ethereum Mainnet");
   if (
@@ -605,17 +698,29 @@ async function verifyAtEndpoint(
     fail("Verification block is unavailable");
   }
   if (
-    !observedHead?.hash ||
-    !observedHead?.number ||
-    Number(BigInt(observedHead.number)) !== plan.observedAtBlock ||
-    normalizeHex(observedHead.hash) !== normalizeHex(plan.observedAtBlockHash)
+    requireObservedBlock &&
+    (!observedHead?.hash ||
+      !observedHead?.number ||
+      Number(BigInt(observedHead.number)) !== plan.observedAtBlock ||
+      normalizeHex(observedHead.hash) !== normalizeHex(plan.observedAtBlockHash))
   ) {
     fail("Plan observed block hash differs from the canonical chain");
   }
-  for (const [name, expected] of [
+  await verifyClassicV4RollforwardBlockLineageAtEndpoint({
+    endpoint,
+    plan,
+    verificationBlock,
+    verificationHead,
+    rpcClient,
+  });
+  const runtimeDependencies = [
     ...Object.entries(CLASSIC_V4_OFFICIAL_DEPENDENCIES),
     ...Object.entries(CLASSIC_V4_SHARED_DEPENDENCIES),
-  ]) {
+  ];
+  if (releaseValidation.kind === "launcher-rollforward") {
+    runtimeDependencies.push(["launchStampRouter", plan.router]);
+  }
+  for (const [name, expected] of runtimeDependencies) {
     const code = await rpcClient(endpoint, "eth_getCode", [
       expected.address,
       blockTag,
@@ -720,7 +825,7 @@ async function verifyAtEndpoint(
       runtimeTemplateHash,
     };
   }
-  for (const check of runtimeBindingChecks(plan)) {
+  for (const check of runtimeBindingChecks(plan, releaseValidation.kind)) {
     const actual = await rpcClient(endpoint, "eth_call", [
       { to: check.target, data: check.data },
       blockTag,
@@ -806,13 +911,15 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(options.plan, "preparation plan"),
     readJson(options.transactions, "transaction hashes"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
   const evidence = await verifyClassicV4DeploymentAtFixedBlock({
     endpoints,
     plan,
     txHashes,
     verificationBlock: options.verificationBlock,
     artifacts,
+    artifactContext,
   });
   if (options.write) await writeAcknowledgedEvidence(evidence, plan, options);
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
@@ -824,13 +931,15 @@ export async function verifyClassicV4DeploymentAtFixedBlock({
   txHashes,
   verificationBlock,
   artifacts,
+  artifactContext,
   rpcClient = rpc,
 }) {
   assertEndpoints(endpoints);
   if (!Number.isSafeInteger(verificationBlock) || verificationBlock <= 0) {
     fail("Deployment verification block must be a positive integer");
   }
-  validateClassicV4PreparationPlan(plan, artifacts);
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
   assertTransactionInputFile(txHashes);
   const snapshots = await Promise.all(
     endpoints.map((endpoint) =>
@@ -841,6 +950,7 @@ export async function verifyClassicV4DeploymentAtFixedBlock({
         verificationBlock,
         artifacts,
         rpcClient,
+        releaseValidation,
       ),
     ),
   );
@@ -867,7 +977,7 @@ export async function verifyClassicV4DeploymentAtFixedBlock({
       CLASSIC_V4_DIGEST_DOMAINS.deploymentEvidence,
     ),
   };
-  validateClassicV4DeploymentEvidence(plan, evidence);
+  releaseValidation.validateDeploymentEvidence(plan, evidence);
   return evidence;
 }
 

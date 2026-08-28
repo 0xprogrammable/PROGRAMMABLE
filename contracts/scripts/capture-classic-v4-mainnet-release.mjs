@@ -11,9 +11,11 @@ import {
   createClassicV4ReleaseManifest,
   normalizeHex,
   stableStringify,
-  validateClassicV4PreparationPlan,
 } from "../../scripts/classic-v4-release-core.mjs";
-import { loadClassicV4SealedBuild } from "./prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "./classic-v4-release-validation.mjs";
 import { verifyClassicV4LifecycleCanary } from "./verify-classic-v4-lifecycle-canary.mjs";
 import {
   assertFreshDeploymentEvidence,
@@ -226,8 +228,10 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(deploymentSchemaPath, "deployment evidence schema"),
     readJson(releaseSchemaPath, "release schema"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
-  validateClassicV4PreparationPlan(plan, artifacts);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
   assertSchema(
     compileSchema(deploymentSchema),
     deploymentEvidence,
@@ -239,6 +243,7 @@ export async function main(argv = process.argv.slice(2)) {
     deploymentEvidence,
     sourceEvidence,
     artifacts,
+    artifactContext,
   });
   const freshlyVerifiedLifecycleEvidence =
     await verifyClassicV4LifecycleCanary({
@@ -250,12 +255,13 @@ export async function main(argv = process.argv.slice(2)) {
       suppliedCanary,
       suppliedTransactions,
       artifacts,
+      artifactContext,
     });
   assertFreshLifecycleEvidence(
     lifecycleEvidence,
     freshlyVerifiedLifecycleEvidence,
   );
-  const manifest = createClassicV4ReleaseManifest({
+  const manifestInput = {
     plan,
     deploymentEvidence,
     sourceEvidence,
@@ -265,7 +271,10 @@ export async function main(argv = process.argv.slice(2)) {
       sourceEvidence,
       freshlyVerifiedLifecycleEvidence,
     ),
-  });
+  };
+  const manifest = releaseValidation.createReleaseManifest
+    ? releaseValidation.createReleaseManifest(manifestInput)
+    : createClassicV4ReleaseManifest(manifestInput);
   assertSchema(compileSchema(releaseSchema), manifest, "Release manifest");
   if (options.write) await writeAcknowledgedManifest(manifest, options);
   process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);

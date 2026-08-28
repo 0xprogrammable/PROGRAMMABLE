@@ -29,12 +29,12 @@ import {
   digestJson,
   normalizeHex,
   validateClassicV4LaunchAuthorization,
-  validateClassicV4DeploymentEvidence,
   validateClassicV4LifecycleEvidence,
-  validateClassicV4PreparationPlan,
-  validateClassicV4SourceEvidence,
 } from "../../scripts/classic-v4-release-core.mjs";
-import { loadClassicV4SealedBuild } from "./prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "./classic-v4-release-validation.mjs";
 import { verifyClassicV4ReleasePrerequisites } from "./verify-classic-v4-release-prerequisites.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -50,6 +50,7 @@ const universalRouterAbi = parseAbi([
 ]);
 const launcherReadAbi = parseAbi([
   "function launchHashOf(address token) view returns (bytes32)",
+  "function positionTokenIdOf(address token) view returns (uint256)",
   "function rewardVaultOf(address token) view returns (address)",
   "function initialBuyCustodyOf(address token) view returns (address)",
   "function poolKey(address token) view returns ((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks))",
@@ -184,6 +185,24 @@ function fail(message) {
 
 function assert(condition, message) {
   if (!condition) fail(message);
+}
+
+export function assertClassicV4PositionTokenEvidence({
+  signedPositionTokenId,
+  eventPositionTokenId,
+  storedPositionTokenId,
+}) {
+  assert(
+    signedPositionTokenId === 0n,
+    "Router expected position token ID is not the zero authorization sentinel",
+  );
+  assert(eventPositionTokenId > 0n, "Position token ID is zero");
+  if (storedPositionTokenId !== undefined) {
+    assert(
+      storedPositionTokenId === eventPositionTokenId,
+      "Launcher position token ID mapping differs from the launch event",
+    );
+  }
 }
 
 function parseArguments(argv) {
@@ -724,7 +743,6 @@ function validateLaunch(action, canary, artifacts, plan) {
     launched.args.rewardConfigurationHash,
     "reward configuration hash",
   );
-  assert(launched.args.positionTokenId > 0n, "Position token ID is zero");
   sameAddress(launched.args.feeHook, canary.feeHook, "Launch hook");
   assert(
     Number(launched.args.buySwapFeeBps) === 100 &&
@@ -810,9 +828,12 @@ function validateLaunch(action, canary, artifacts, plan) {
   sameAddress(expectedResult.initialBuyCustody, ZERO_ADDRESS, "Router result custody");
   sameHex(expectedResult.poolId, poolId, "Router result pool");
   sameHex(expectedResult.launchHash, launchHash, "Router result launch hash");
+  assertClassicV4PositionTokenEvidence({
+    signedPositionTokenId: expectedResult.positionTokenId,
+    eventPositionTokenId: launched.args.positionTokenId,
+  });
   assert(
-    expectedResult.positionTokenId === launched.args.positionTokenId &&
-      expectedResult.tokenLiquidityAmount === liquidity.args.tokenLiquidityAmount &&
+    expectedResult.tokenLiquidityAmount === liquidity.args.tokenLiquidityAmount &&
       expectedResult.lockedTokenDust === liquidity.args.lockedTokenDust &&
       expectedResult.initialBuyNativeAmount === initialBuy.args.nativeAmount &&
       expectedResult.initialBuyTokenAmount === initialBuy.args.tokenAmount,
@@ -2026,6 +2047,7 @@ async function verifyFinalState(
   const shared = plan.sharedDependencies;
   const [
     launchHash,
+    storedPositionTokenId,
     rewardVaultOf,
     initialBuyCustody,
     launcherPoolKey,
@@ -2074,6 +2096,14 @@ async function verifyFinalState(
     readContract(endpoint, tag, canary.launcher, launcherReadAbi, "launchHashOf", [
       launch.token,
     ]),
+    readContract(
+      endpoint,
+      tag,
+      canary.launcher,
+      launcherReadAbi,
+      "positionTokenIdOf",
+      [launch.token],
+    ),
     readContract(endpoint, tag, canary.launcher, launcherReadAbi, "rewardVaultOf", [
       launch.token,
     ]),
@@ -2217,6 +2247,11 @@ async function verifyFinalState(
   ]);
 
   sameHex(launchHash, launch.launchHash, "Launcher launch hash mapping");
+  assertClassicV4PositionTokenEvidence({
+    signedPositionTokenId: launch.routerProof.route.expectedResult.positionTokenId,
+    eventPositionTokenId: launch.positionTokenId,
+    storedPositionTokenId,
+  });
   sameAddress(rewardVaultOf, launch.rewardVault, "Launcher reward vault mapping");
   sameAddress(initialBuyCustody, ZERO_ADDRESS, "Launcher initial custody mapping");
   assertPoolKey(launcherPoolKey, launch.poolKey, "Launcher pool key");
@@ -2664,21 +2699,28 @@ export async function verifyClassicV4LifecycleCanary({
   suppliedCanary,
   suppliedTransactions,
   artifacts,
+  artifactContext,
 }) {
   assert(
     Number.isSafeInteger(verificationBlock) && verificationBlock > 0,
     "Verification block must be a positive integer",
   );
   assertEndpoints(endpoints);
-  validateClassicV4PreparationPlan(plan, artifacts);
-  validateClassicV4DeploymentEvidence(plan, deploymentEvidence);
-  validateClassicV4SourceEvidence(plan, deploymentEvidence, sourceEvidence);
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    sourceEvidence,
+  );
   await verifyClassicV4ReleasePrerequisites({
     endpoints,
     plan,
     deploymentEvidence,
     sourceEvidence,
     artifacts,
+    artifactContext,
   });
   const canary = reconstructCanary(
     plan,
@@ -2758,6 +2800,11 @@ export async function verifyClassicV4LifecycleCanary({
     deploymentEvidence,
     sourceEvidence,
     evidence,
+    {
+      validateDeploymentEvidence:
+        releaseValidation.validateDeploymentEvidence,
+      validateSourceEvidence: releaseValidation.validateSourceEvidence,
+    },
   );
   return evidence;
 }
@@ -2783,7 +2830,8 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(options.canaryPlan, "canary plan"),
     readJson(options.transactions, "lifecycle transactions"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
   const evidence = await verifyClassicV4LifecycleCanary({
     endpoints: [options.rpcA, options.rpcB],
     verificationBlock: options.verificationBlock,
@@ -2793,6 +2841,7 @@ export async function main(argv = process.argv.slice(2)) {
     suppliedCanary,
     suppliedTransactions,
     artifacts,
+    artifactContext,
   });
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
   if (options.write) {

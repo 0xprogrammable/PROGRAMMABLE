@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decodeFunctionData, parseAbi } from "viem";
+import {
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeEventTopics,
+  getAddress,
+  parseAbi,
+} from "viem";
 
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
@@ -22,12 +28,14 @@ import {
   classicV4QuoteBound,
   confirmClassicV4JournalTransaction,
   createClassicV4ExecutionJournal,
+  deriveClassicV4RealizedLaunchIdentity,
   discardClassicV4ArmedAction,
   nextClassicV4LifecycleAction,
   recordClassicV4SubmittedTransaction,
   sealClassicV4PreparedAction,
   validateClassicV4PreparedAction,
   validateClassicV4ExecutionJournal,
+  classicV4ExecutionLauncherAbi,
 } from "../../../scripts/classic-v4-lifecycle-console-core.mjs";
 import {
   parseClassicV4LifecycleConsoleArguments,
@@ -45,6 +53,10 @@ const permit2 = address("6");
 const universalRouter = address("7");
 const v4Quoter = address("8");
 const launchRouter = address("9");
+const positionRecipient = getAddress(address("a"));
+const launcher = address("b");
+const poolId = hash("c");
+const launchHash = hash("d");
 const launchCalldata = "0x12345678";
 
 const plan = Object.freeze({
@@ -93,6 +105,16 @@ const plan = Object.freeze({
 });
 
 const identity = Object.freeze({ token, rewardVault });
+const realizedLaunchIdentity = Object.freeze({
+  token,
+  rewardVault,
+  positionRecipient,
+  positionTokenId: "386160",
+  poolId,
+  launchHash,
+  rewardConfigurationHash: hash("1"),
+  eventLogIndex: 17,
+});
 const universalRouterAbi = parseAbi([
   "function execute(bytes commands,bytes[] inputs,uint256 deadline) payable",
 ]);
@@ -173,6 +195,9 @@ function testJournalState(requiredCount = 0) {
       action,
       blockNumber,
       blockHash: hash("a"),
+      ...(action === "launch"
+        ? { launchIdentity: realizedLaunchIdentity }
+        : {}),
     }, now());
     blockNumber += 1;
   }
@@ -213,7 +238,7 @@ function eventDigest(event) {
 
 function genesisDigest(journal) {
   return digestJson({
-    kind: "programmable.classic-v4.lifecycle-execution-journal-genesis.v1",
+    kind: "programmable.classic-v4.lifecycle-execution-journal-genesis.v2",
     schemaVersion: journal.schemaVersion,
     planDigest: journal.planDigest,
     launchAuthorizationDigest: journal.launchAuthorizationDigest,
@@ -297,6 +322,77 @@ test("Classic V4 console creates bounded sell approvals and exact claim calls", 
   assert.equal(creator.request.to, rewardVault);
   assert.equal(launcher.requiredAccount, treasury);
   assert.equal(launcher.request.to, feeHook);
+});
+
+test("Classic V4 console derives a positive realized LP NFT ID only from the launch event", () => {
+  const transactionHash = hash("e");
+  const blockHash = hash("f");
+  const topics = encodeEventTopics({
+    abi: classicV4ExecutionLauncherAbi,
+    eventName: "MemeTokenLaunchedV2",
+    args: { deployer: operator, token, poolId },
+  });
+  const eventData = (positionTokenId) => encodeAbiParameters(
+    [
+      { type: "address" },
+      { type: "address" },
+      { type: "address" },
+      { type: "uint256" },
+      { type: "uint16" },
+      { type: "uint16" },
+      { type: "bytes32" },
+      { type: "bytes32" },
+    ],
+    [
+      feeHook,
+      rewardVault,
+      positionRecipient,
+      positionTokenId,
+      100,
+      200,
+      hash("1"),
+      launchHash,
+    ],
+  );
+  const receipt = {
+    transactionHash,
+    blockHash,
+    blockNumber: "0x64",
+    logs: [{
+      address: launcher,
+      data: eventData(386_160n),
+      topics,
+      transactionHash,
+      blockHash,
+      blockNumber: "0x64",
+      logIndex: "0x11",
+    }],
+  };
+  const context = {
+    launcher,
+    operatorWallet: operator,
+    feeHook,
+    expectedIdentity: {
+      token,
+      rewardVault,
+      positionRecipient,
+      poolId,
+      launchHash,
+    },
+    buySwapFeeBps: 100,
+    sellSwapFeeBps: 200,
+  };
+  assert.deepEqual(
+    deriveClassicV4RealizedLaunchIdentity(receipt, context),
+    realizedLaunchIdentity,
+  );
+  assert.throws(
+    () => deriveClassicV4RealizedLaunchIdentity({
+      ...receipt,
+      logs: [{ ...receipt.logs[0], data: eventData(0n) }],
+    }, context),
+    /position token ID.*zero/iu,
+  );
 });
 
 test("Classic V4 persisted requests rederive exact identity, role and inner calldata", () => {
@@ -411,6 +507,14 @@ test("Classic V4 journal replays an integrity-bound monotonic history", () => {
   assert.throws(
     () => validateClassicV4ExecutionJournal(plan, changedHash),
     /record differs from its history/u,
+  );
+
+  const changedPositionTokenId = clone(journal);
+  changedPositionTokenId.requiredTransactions.launch.launchIdentity.positionTokenId =
+    "386161";
+  assert.throws(
+    () => validateClassicV4ExecutionJournal(plan, changedPositionTokenId),
+    /record differs from its history|history digest differs/u,
   );
 
   const changedTimestamp = clone(journal);
@@ -575,6 +679,9 @@ test("Classic V4 journal is resumable, immutable and emits only seven ordered ha
       action,
       blockNumber: blockNumber++,
       blockHash: hash("a"),
+      ...(action === "launch"
+        ? { launchIdentity: realizedLaunchIdentity }
+        : {}),
     }, now());
   }
 

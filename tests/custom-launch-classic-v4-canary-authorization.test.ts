@@ -167,6 +167,7 @@ type FixtureOptions = Readonly<{
   stampHookRuntimeCodeHash?: Hex;
   componentHookRuntimeCodeHash?: Hex;
   componentHookKind?: number;
+  resultPositionTokenId?: bigint;
   resultInitialBuyNativeAmount?: bigint;
   reportedPermitDigest?: Hex;
   reportedStampHash?: Hex;
@@ -308,7 +309,7 @@ function authorizationFixture(options: FixtureOptions = {}) {
     token: TOKEN,
     rewardVault: REWARD_VAULT,
     positionRecipient: POSITION_RECIPIENT,
-    positionTokenId: 1n,
+    positionTokenId: options.resultPositionTokenId ?? 0n,
     tokenLiquidityAmount: TOKEN_SUPPLY - 123n,
     lockedTokenDust: 123n,
     initialBuyNativeAmount:
@@ -928,6 +929,7 @@ describe("Classic V4 canary authorization lane", () => {
     ["launcher runtime", { routeLauncherRuntimeCodeHash: HASH_H }],
     ["inner launcher calldata", { routeName: "Changed Canary" }],
     ["hook runtime", { stampHookRuntimeCodeHash: HASH_H }],
+    ["prelaunch position sentinel", { resultPositionTokenId: 1n }],
     ["expected result", { resultInitialBuyNativeAmount: 1n }],
     ["component binding", { componentHookKind: 0 }],
     ["predicted result", { predictedToken: OTHER_WALLET }],

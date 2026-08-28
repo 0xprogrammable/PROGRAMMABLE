@@ -865,7 +865,7 @@ function requireClassicV4ExpectedResultBinding(
     isNonzeroAddress(result.token)
       && isNonzeroAddress(result.rewardVault)
       && isNonzeroAddress(result.positionRecipient)
-      && result.positionTokenId > 0n
+      && result.positionTokenId === 0n
       && result.tokenLiquidityAmount > 0n
       && result.tokenLiquidityAmount + result.lockedTokenDust
         === CLASSIC_V4_TOKEN_SUPPLY

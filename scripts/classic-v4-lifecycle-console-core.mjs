@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 import {
+  decodeEventLog,
   decodeFunctionData,
   decodeFunctionResult,
   encodeFunctionData,
@@ -23,7 +24,7 @@ import {
 } from "./classic-v4-release-core.mjs";
 
 export const CLASSIC_V4_EXECUTION_JOURNAL_SCHEMA =
-  "programmable.classic-v4.lifecycle-execution-journal.v1";
+  "programmable.classic-v4.lifecycle-execution-journal.v2";
 export const CLASSIC_V4_PREPARED_ACTION_SCHEMA =
   "programmable.classic-v4.lifecycle-prepared-action.v1";
 export const CLASSIC_V4_TRANSACTION_OUTPUT_SCHEMA =
@@ -36,7 +37,7 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const UINT256_MAX = (1n << 256n) - 1n;
 const MAXIMUM_JOURNAL_CLOCK_LEAD_MS = 15_000;
 const EXECUTION_JOURNAL_GENESIS_KIND =
-  "programmable.classic-v4.lifecycle-execution-journal-genesis.v1";
+  "programmable.classic-v4.lifecycle-execution-journal-genesis.v2";
 const PREPARED_REQUIRED_FIELDS = Object.freeze([
   "schemaVersion",
   "planDigest",
@@ -87,6 +88,16 @@ export const classicV4ExecutionRewardVaultAbi = parseAbi([
 export const classicV4ExecutionHookAbi = parseAbi([
   "function launcherFeesAccrued() view returns (uint256 amount)",
   "function claimLauncherFees() returns (uint256 amount)",
+]);
+export const classicV4ExecutionLauncherAbi = parseAbi([
+  "event MemeTokenLaunchedV2(address indexed deployer,address indexed token,bytes32 indexed poolId,address feeHook,address rewardVault,address positionRecipient,uint256 positionTokenId,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 rewardConfigurationHash,bytes32 launchHash)",
+  "function initialBuyCustodyOf(address token) view returns (address)",
+  "function launchHashOf(address token) view returns (bytes32)",
+  "function positionTokenIdOf(address token) view returns (uint256)",
+  "function rewardVaultOf(address token) view returns (address)",
+]);
+export const classicV4ExecutionPositionManagerAbi = parseAbi([
+  "function ownerOf(uint256 tokenId) view returns (address)",
 ]);
 const classicV4ExecutionUniversalRouterAbi = parseAbi([
   "function execute(bytes commands,bytes[] inputs,uint256 deadline) payable",
@@ -714,6 +725,7 @@ function validateJournalRecord(
     "blockNumber",
     "blockHash",
     "confirmedAt",
+    ...(key === "launch" ? ["launchIdentity"] : []),
   ];
   assert(candidate && typeof candidate === "object" && !Array.isArray(candidate), "Journal transaction is invalid");
   exactRecord(
@@ -756,6 +768,9 @@ function validateJournalRecord(
         confirmedAtMs <= nowMs + MAXIMUM_JOURNAL_CLOCK_LEAD_MS,
       "Journal confirmation time is outside the transaction lifetime",
     );
+    if (key === "launch") {
+      validateClassicV4RealizedLaunchIdentity(candidate.launchIdentity);
+    }
   }
   return Object.freeze({ candidate, submittedAtMs, confirmedAtMs });
 }
@@ -803,6 +818,7 @@ function validateJournalHistory(canaryPlan, journal, context) {
               "transactionHash",
               "blockNumber",
               "blockHash",
+              ...(event.action === "launch" ? ["launchIdentity"] : []),
             ]
           : event.kind === "blocked"
             ? [...common, "reason"]
@@ -920,6 +936,9 @@ function validateJournalHistory(canaryPlan, journal, context) {
       continue;
     }
     const record = records.get(event.action);
+    if (event.action === "launch") {
+      validateClassicV4RealizedLaunchIdentity(event.launchIdentity);
+    }
     assert(
       armed.submittedHash === submittedHash &&
         record?.status === "submitted" &&
@@ -934,6 +953,9 @@ function validateJournalHistory(canaryPlan, journal, context) {
       blockNumber: event.blockNumber,
       blockHash: event.blockHash,
       confirmedAt: event.at,
+      ...(event.action === "launch"
+        ? { launchIdentity: event.launchIdentity }
+        : {}),
     });
     armed = null;
   }
@@ -955,21 +977,172 @@ export function classicV4SwapIdentity(action) {
   return identity;
 }
 
-export function resolveClassicV4LifecycleIdentity(canaryPlan) {
+export function validateClassicV4RealizedLaunchIdentity(value) {
+  const identity = exactRecord(value, [
+    "token",
+    "rewardVault",
+    "positionRecipient",
+    "positionTokenId",
+    "poolId",
+    "launchHash",
+    "rewardConfigurationHash",
+    "eventLogIndex",
+  ], "Realized Classic V4 launch identity");
+  const positionTokenId = decimal(
+    identity.positionTokenId,
+    "Realized position token ID",
+    { positive: true },
+  );
+  assert(positionTokenId <= UINT256_MAX, "Realized position token ID exceeds uint256");
+  assert(
+    Number.isSafeInteger(identity.eventLogIndex) && identity.eventLogIndex >= 0,
+    "Realized launch event log index is invalid",
+  );
+  canonicalAddress(identity.token, "Realized canary token");
+  canonicalAddress(identity.rewardVault, "Realized canary reward vault");
+  canonicalAddress(identity.positionRecipient, "Realized position recipient");
+  hash(identity.poolId, "Realized canary pool id");
+  hash(identity.launchHash, "Realized launch hash");
+  hash(
+    identity.rewardConfigurationHash,
+    "Realized reward configuration hash",
+  );
+  return identity;
+}
+
+export function deriveClassicV4RealizedLaunchIdentity(
+  receipt,
+  {
+    launcher,
+    operatorWallet,
+    feeHook,
+    expectedIdentity,
+    buySwapFeeBps,
+    sellSwapFeeBps,
+  },
+) {
+  assert(receipt && typeof receipt === "object", "Launch receipt is invalid");
+  const receiptTransactionHash = transactionHash(receipt.transactionHash);
+  const receiptBlockHash = hash(receipt.blockHash, "Launch receipt block hash");
+  const receiptBlockNumber = BigInt(receipt.blockNumber);
+  assert(receiptBlockNumber > 0n, "Launch receipt block number is invalid");
+  const canonicalLauncher = canonicalAddress(launcher, "Classic V4 launcher");
+  const matches = [];
+  for (const log of receipt.logs ?? []) {
+    if (
+      !log ||
+      typeof log !== "object" ||
+      !isAddress(log.address) ||
+      getAddress(log.address) !== canonicalLauncher
+    ) continue;
+    let decoded;
+    try {
+      decoded = decodeEventLog({
+        abi: classicV4ExecutionLauncherAbi,
+        eventName: "MemeTokenLaunchedV2",
+        data: log.data,
+        topics: log.topics,
+        strict: true,
+      });
+    } catch {
+      continue;
+    }
+    if (decoded.eventName !== "MemeTokenLaunchedV2") continue;
+    assert(
+      transactionHash(log.transactionHash) === receiptTransactionHash &&
+        hash(log.blockHash, "Launch event block hash") === receiptBlockHash &&
+        BigInt(log.blockNumber) === receiptBlockNumber,
+      "Launch event receipt binding differs",
+    );
+    const logIndex = BigInt(log.logIndex);
+    assert(
+      logIndex >= 0n && logIndex <= BigInt(Number.MAX_SAFE_INTEGER),
+      "Launch event log index is invalid",
+    );
+    matches.push({ args: decoded.args, eventLogIndex: Number(logIndex) });
+  }
+  assert(matches.length === 1, "Expected exactly one MemeTokenLaunchedV2 launch event");
+  const [{ args, eventLogIndex }] = matches;
+  assert(
+    canonicalAddress(args.deployer, "Launch event deployer") ===
+      canonicalAddress(operatorWallet, "Canary operator") &&
+      canonicalAddress(args.feeHook, "Launch event fee hook") ===
+        canonicalAddress(feeHook, "Canary fee hook") &&
+      Number(args.buySwapFeeBps) === Number(buySwapFeeBps) &&
+      Number(args.sellSwapFeeBps) === Number(sellSwapFeeBps),
+    "Launch event operator, hook or fees differ",
+  );
+  const realized = validateClassicV4RealizedLaunchIdentity({
+    token: canonicalAddress(args.token, "Launch event token"),
+    rewardVault: canonicalAddress(args.rewardVault, "Launch event reward vault"),
+    positionRecipient: canonicalAddress(
+      args.positionRecipient,
+      "Launch event position recipient",
+    ),
+    positionTokenId: BigInt(args.positionTokenId).toString(),
+    poolId: hash(args.poolId, "Launch event pool id"),
+    launchHash: hash(args.launchHash, "Launch event launch hash"),
+    rewardConfigurationHash: hash(
+      args.rewardConfigurationHash,
+      "Launch reward configuration hash",
+    ),
+    eventLogIndex,
+  });
+  assert(
+    realized.token === canonicalAddress(expectedIdentity.token, "Expected canary token") &&
+      realized.rewardVault === canonicalAddress(
+        expectedIdentity.rewardVault,
+        "Expected canary reward vault",
+      ) &&
+      realized.positionRecipient === canonicalAddress(
+        expectedIdentity.positionRecipient,
+        "Expected position recipient",
+      ) &&
+      realized.poolId === hash(expectedIdentity.poolId, "Expected canary pool id") &&
+      realized.launchHash === hash(expectedIdentity.launchHash, "Expected launch hash"),
+    "Realized launch identity differs from the Router authorization",
+  );
+  return Object.freeze(realized);
+}
+
+export function resolveClassicV4LifecycleIdentity(canaryPlan, realizedIdentity = null) {
   const proof = validateClassicV4LaunchAuthorization(
     canaryPlan,
     canaryPlan?.launchAuthorization,
   );
   const result = proof.route.expectedResult;
-  return Object.freeze({
+  assert(
+    BigInt(result.positionTokenId) === 0n,
+    "Router expected position token ID must be the zero authorization sentinel",
+  );
+  const expected = {
     token: canonicalAddress(result.token, "Canary token"),
     rewardVault: canonicalAddress(result.rewardVault, "Canary reward vault"),
     positionRecipient: canonicalAddress(
       result.positionRecipient,
       "Canary position recipient",
     ),
-    positionTokenId: result.positionTokenId.toString(),
     poolId: hash(result.poolId, "Canary pool id"),
+    launchHash: hash(result.launchHash, "Canary launch hash"),
+  };
+  const realized = realizedIdentity === null
+    ? null
+    : validateClassicV4RealizedLaunchIdentity(realizedIdentity);
+  if (realized) {
+    assert(
+      realized.token === expected.token &&
+        realized.rewardVault === expected.rewardVault &&
+        realized.positionRecipient === expected.positionRecipient &&
+        realized.poolId === expected.poolId &&
+        realized.launchHash === expected.launchHash,
+      "Persisted realized launch identity differs from the Router authorization",
+    );
+  }
+  return Object.freeze({
+    ...expected,
+    positionTokenIdSentinel: "0",
+    positionTokenId: realized?.positionTokenId ?? null,
+    launchEventLogIndex: realized?.eventLogIndex ?? null,
     launchId: hash(proof.stampRequest.launchId, "Canary launch id"),
     stampHash: hash(
       canaryPlan.launchAuthorization.simulation.stampHash,
@@ -1618,7 +1791,11 @@ export function validateClassicV4ExecutionJournal(
         (record.status !== "confirmed" || (
           historical.blockNumber === record.blockNumber &&
           historical.blockHash === record.blockHash &&
-          historical.confirmedAt === record.confirmedAt
+          historical.confirmedAt === record.confirmedAt &&
+          (action !== "launch" || isDeepStrictEqual(
+            historical.launchIdentity,
+            record.launchIdentity,
+          ))
         )),
       "Execution journal record differs from its history",
     );
@@ -1820,7 +1997,7 @@ export function recordClassicV4SubmittedTransaction(
 export function confirmClassicV4JournalTransaction(
   canaryPlan,
   value,
-  { action, blockNumber, blockHash },
+  { action, blockNumber, blockHash, launchIdentity = null },
   now = new Date(),
 ) {
   const journal = clone(validateClassicV4ExecutionJournal(canaryPlan, value, now));
@@ -1833,6 +2010,13 @@ export function confirmClassicV4JournalTransaction(
     "Transaction block number is invalid",
   );
   const canonicalBlockHash = hash(blockHash, "Transaction block hash");
+  const realizedLaunchIdentity = action === "launch"
+    ? clone(validateClassicV4RealizedLaunchIdentity(launchIdentity))
+    : null;
+  assert(
+    action === "launch" || launchIdentity === null,
+    "Only the launch transaction may bind a realized launch identity",
+  );
   const timestamp = appendJournalHistory(
     journal,
     {
@@ -1845,6 +2029,9 @@ export function confirmClassicV4JournalTransaction(
       transactionHash: record.hash,
       blockNumber: Number(blockNumber),
       blockHash: canonicalBlockHash,
+      ...(realizedLaunchIdentity
+        ? { launchIdentity: clone(realizedLaunchIdentity) }
+        : {}),
     },
     now,
     "Execution journal confirmation time",
@@ -1853,6 +2040,9 @@ export function confirmClassicV4JournalTransaction(
   record.blockNumber = Number(blockNumber);
   record.blockHash = canonicalBlockHash;
   record.confirmedAt = timestamp;
+  if (realizedLaunchIdentity) {
+    record.launchIdentity = clone(realizedLaunchIdentity);
+  }
   if (journal.armed?.action === action) journal.armed = null;
   return validateClassicV4ExecutionJournal(canaryPlan, journal, now);
 }
