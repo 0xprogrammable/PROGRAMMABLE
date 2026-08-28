@@ -1,15 +1,17 @@
-import { keccak256 } from "viem";
+import {
+  encodeAbiParameters,
+  encodeFunctionData,
+  getContractAddress,
+  getCreate2Address,
+  keccak256,
+  parseAbi,
+} from "viem";
 
 import {
   CLASSIC_V4_CHAIN_ID,
   CLASSIC_V4_DIGEST_DOMAINS,
-  CLASSIC_V4_LAUNCHER_FEE_RECIPIENT,
-  CLASSIC_V4_LAUNCH_STAMP_ROUTER,
-  CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
   CLASSIC_V4_NEW_CONTRACTS,
-  CLASSIC_V4_OFFICIAL_DEPENDENCIES,
   CLASSIC_V4_RELEASE,
-  CLASSIC_V4_SHARED_DEPENDENCIES,
   CLASSIC_V4_SOURCE_TARGETS,
   artifactRuntimeDescriptor,
   assertBytes32,
@@ -24,9 +26,12 @@ import {
 import {
   CLASSIC_V4_LAUNCHER_UPGRADE_DEPENDENCIES,
   CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS,
+  CLASSIC_V4_LAUNCHER_UPGRADE_MAX_GAS_LIMIT,
+  CLASSIC_V4_LAUNCHER_UPGRADE_MIN_GAS_LIMIT,
+  CLASSIC_V4_LAUNCHER_UPGRADE_RELEASE,
+  CLASSIC_V4_LAUNCHER_UPGRADE_ROUTER,
   CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET,
   classicV4LauncherUpgradeConstructorArguments,
-  computeClassicV4LauncherUpgradeBuildCommitments,
   validateClassicV4LauncherUpgradePlan,
   validateClassicV4LauncherUpgradeReceiptEvidence,
 } from "./classic-v4-launcher-upgrade-core.mjs";
@@ -36,22 +41,32 @@ const OLD_CONTRACTS = Object.freeze([
   "feeHook",
   "positionPlanner",
 ]);
-const SOURCE_RECORD_KEYS = Object.freeze([
-  "address",
-  "contractName",
-  "fqcn",
-  "encodedConstructorArguments",
-  "deploymentTransaction",
-  "deploymentBlock",
-  "status",
-  "providers",
+const hookFactoryAbi = parseAbi([
+  "function deploy(bytes32 salt,address poolManager,address launcherFeeRecipient,address feeSplitVaultFactory) returns (address hook)",
 ]);
 
+export const CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR = Object.freeze({
+  releaseCommit: "82d711a8343de5aed0ae089759069c81fc6864db",
+  releaseTree: "27f75eeb90ab138e22c8beac12e83e102ca74428",
+  sourceCommitment:
+    "0xa666b8a82291e1d6f791306d7f997c9fb09a3d95b39c610c1a24003b4a05fb61",
+  planDigest:
+    "0xa918b168e4b1dab5988e7d103d4c9457856f3745d1b9849664585672924efa7a",
+  deploymentEvidenceDigest:
+    "0xf289fc3fa2afd441ec6224964cdd8dd1824c8ad4105888b55bf4de242cd2a112",
+  sourceEvidenceDigest:
+    "0x5e476a74127477952ab7345bb5c9e4c7339a08d15c82fc88433fca3b2945020f",
+  deployer: "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+  predictedAddresses: Object.freeze({
+    hookFactory: "0xbE0aa4081Ab586321BC55197E67135C191d532A9",
+    feeHook: "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+    positionPlanner: "0xD8f8f5C5832648d59a5f465f8Dd02d36572D4A6c",
+    launcher: "0x1af508f9aF9f8f5Cf7bf712B7d2974D4eE7A6681",
+  }),
+});
+
 export const CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS = Object.freeze({
-  artifactSourceClosure:
-    "programmable.classic-v4.launcher-rollforward-artifact-source-closure.v1",
-  launcherSourceRecord:
-    "programmable.classic-v4.launcher-rollforward-source-record.v1",
+  parentBundle: "programmable.classic-v4.launcher-rollforward-parent-bundle.v1",
   sourceCommitment:
     "programmable.classic-v4.launcher-rollforward-source-commitment.v1",
   preparationPlan:
@@ -69,15 +84,15 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function exactKeys(value, expected, label) {
+function exactKeys(value, keys, label) {
   const actual = Object.keys(value ?? {}).sort();
-  const wanted = [...expected].sort();
+  const expected = [...keys].sort();
   assert(
     value &&
       typeof value === "object" &&
       !Array.isArray(value) &&
-      actual.length === wanted.length &&
-      actual.every((key, index) => key === wanted[index]),
+      actual.length === expected.length &&
+      actual.every((key, index) => key === expected[index]),
     `${label} keys differ`,
   );
 }
@@ -90,20 +105,16 @@ function sameJson(left, right) {
   return digestJson(left) === digestJson(right);
 }
 
+function without(value, key) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([entry]) => entry !== key),
+  );
+}
+
 function nonzeroHash(value, label) {
   const hash = assertBytes32(value, label);
   assert(BigInt(hash) !== 0n, `Invalid ${label}`);
   return hash;
-}
-
-function commit(value, label) {
-  assert(
-    typeof value === "string" &&
-      /^[0-9a-f]{40}$/i.test(value) &&
-      value !== "0".repeat(40),
-    `Invalid ${label}`,
-  );
-  return value.toLowerCase();
 }
 
 function isoTime(value, label) {
@@ -117,62 +128,36 @@ function isoTime(value, label) {
   return timestamp;
 }
 
-function bytecode(value, label, { empty = true } = {}) {
+function gitObject(value, label) {
   assert(
     typeof value === "string" &&
-      /^0x(?:[0-9a-f]{2})*$/i.test(value) &&
-      (empty || value !== "0x"),
+      /^[0-9a-f]{40}$/i.test(value) &&
+      value !== "0".repeat(40),
     `Invalid ${label}`,
   );
-  return value;
+  return value.toLowerCase();
 }
 
-function unsigned(value, digestKey) {
-  return Object.fromEntries(
-    Object.entries(value).filter(([key]) => key !== digestKey),
+function decimal(value, label, { positive = false } = {}) {
+  assert(
+    typeof value === "string" && /^(?:0|[1-9][0-9]*)$/.test(value),
+    `Invalid ${label}`,
   );
+  const parsed = BigInt(value);
+  assert(!positive || parsed > 0n, `Invalid ${label}`);
+  return parsed;
 }
 
-function artifactSourceClosure(artifact, label) {
-  let metadata;
-  try {
-    metadata =
-      typeof artifact?.metadata === "string"
-        ? JSON.parse(artifact.metadata)
-        : artifact?.metadata;
-  } catch {
-    throw new Error(`${label} artifact metadata is invalid`);
-  }
-  const sources = Object.entries(metadata?.sources ?? {})
-    .map(([sourcePath, source]) => {
-      assert(
-        /^(?:src|lib\/[a-z0-9-]+)\/[A-Za-z0-9_./-]+\.sol$/.test(
-          sourcePath,
-        ) && !sourcePath.split("/").includes(".."),
-        `${label} artifact source path is invalid`,
-      );
-      return {
-        sourcePath,
-        sourceHash: nonzeroHash(source?.keccak256, `${label} source hash`),
-      };
-    })
-    .sort((left, right) => left.sourcePath.localeCompare(right.sourcePath));
-  assert(sources.length > 0, `${label} artifact source closure is empty`);
-  return digestJson(
-    sources,
-    CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.artifactSourceClosure,
-  );
-}
-
-function sourceMaterial(plan) {
+function transactionProjection(transaction, name = transaction.name) {
   return {
-    lineage: plan.lineage,
-    predictedAddresses: plan.predictedAddresses,
-    runtimeTemplates: plan.runtimeTemplates,
-    artifactSourceClosures: plan.artifactSourceClosures,
-    constructorArguments: plan.constructorArguments,
-    launcherDependencies: plan.launcherDependencies,
-    sourceTargets: plan.sourceTargets,
+    name,
+    transactionType: transaction.transactionType,
+    from: transaction.from,
+    to: transaction.to,
+    nonce: transaction.nonce,
+    value: transaction.value,
+    predictedAddress: transaction.predictedAddress,
+    dataHash: transaction.dataHash,
   };
 }
 
@@ -198,6 +183,119 @@ function expectedUpgradeDependencies(basePlan, baseDeployment) {
   };
 }
 
+function validateBaseParent(plan, deployment, source) {
+  assert(
+    plan.releaseCommit ===
+      CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.releaseCommit &&
+      plan.releaseTree ===
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.releaseTree &&
+      sameHex(
+        plan.sourceCommitment,
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.sourceCommitment,
+      ) &&
+      sameHex(
+        plan.planDigest,
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.planDigest,
+      ) &&
+      sameHex(
+        deployment.evidenceDigest,
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.deploymentEvidenceDigest,
+      ) &&
+      sameHex(
+        source.evidenceDigest,
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.sourceEvidenceDigest,
+      ) &&
+      sameHex(
+        plan.deployer,
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.deployer,
+      ) &&
+      sameJson(
+        plan.predictedAddresses,
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_BASE_ANCHOR.predictedAddresses,
+      ) &&
+      sameHex(
+        plan.planDigest,
+        digestJson(
+          without(plan, "planDigest"),
+          CLASSIC_V4_DIGEST_DOMAINS.preparationPlan,
+        ),
+      ),
+    "Embedded base parent differs from the canonical deployed release",
+  );
+  validateClassicV4DeploymentEvidence(plan, deployment);
+  validateClassicV4SourceEvidence(plan, deployment, source);
+
+  const deployer = canonicalNonzeroAddress(plan.deployer, "base deployer");
+  const expectedAddresses = {
+    hookFactory: getContractAddress({
+      from: deployer,
+      nonce: BigInt(plan.startingNonce),
+    }),
+    feeHook: getCreate2Address({
+      from: plan.predictedAddresses.hookFactory,
+      salt: plan.hookSalt,
+      bytecodeHash: plan.hookInitCodeHash,
+    }),
+    positionPlanner: getContractAddress({
+      from: deployer,
+      nonce: BigInt(plan.startingNonce + 2),
+    }),
+    launcher: getContractAddress({
+      from: deployer,
+      nonce: BigInt(plan.startingNonce + 3),
+    }),
+  };
+  assert(
+    sameJson(plan.predictedAddresses, expectedAddresses),
+    "Embedded base CREATE/CREATE2 address ancestry differs",
+  );
+  const feeHookCall = encodeFunctionData({
+    abi: hookFactoryAbi,
+    functionName: "deploy",
+    args: [
+      plan.hookSalt,
+      plan.officialDependencies.poolManager.address,
+      plan.launcherFeeRecipient,
+      plan.sharedDependencies.rewardVaultFactory.address,
+    ],
+  });
+  const hookArguments = encodeAbiParameters(
+    [{ type: "address" }, { type: "address" }, { type: "address" }],
+    [
+      plan.officialDependencies.poolManager.address,
+      plan.launcherFeeRecipient,
+      plan.sharedDependencies.rewardVaultFactory.address,
+    ],
+  );
+  for (const [index, name] of CLASSIC_V4_NEW_CONTRACTS.entries()) {
+    const transaction = plan.transactions[index];
+    assert(
+      transaction.name === name &&
+        transaction.nonce === plan.startingNonce + index &&
+        sameHex(transaction.from, deployer) &&
+        (name === "feeHook"
+          ? sameHex(transaction.to, plan.predictedAddresses.hookFactory)
+          : transaction.to === null) &&
+        sameHex(transaction.predictedAddress, plan.predictedAddresses[name]) &&
+        sameHex(transaction.dataHash, keccak256(transaction.data)),
+      `Embedded base ${name} transaction ancestry differs`,
+    );
+  }
+  assert(
+    sameHex(
+      plan.transactions[0].dataHash,
+      plan.runtimeTemplates.hookFactory.creationCodeHash,
+    ) &&
+      sameHex(plan.transactions[1].dataHash, keccak256(feeHookCall)) &&
+      sameHex(
+        plan.transactions[2].dataHash,
+        plan.runtimeTemplates.positionPlanner.creationCodeHash,
+      ) &&
+      sameHex(plan.constructorArguments.feeHook, hookArguments),
+    "Embedded retained artifacts or factory call differ",
+  );
+}
+
 export function validateClassicV4LauncherUpgradeVerificationEvidence(
   plan,
   receipt,
@@ -207,13 +305,26 @@ export function validateClassicV4LauncherUpgradeVerificationEvidence(
   exactKeys(
     evidence,
     [
-      "schemaVersion", "status", "chainId", "planDigest",
-      "receiptEvidenceDigest", "sourceCommitment", "verificationBlock",
-      "verificationBlockHash", "checkedAt", "independentRpcCount",
-      "confirmations", "transactionHash", "contractAddress",
-      "runtimeCodeHash", "runtimeTemplateHash", "dependencyRuntimeVerified",
-      "dependencyBindingsVerified", "constructorBindingsVerified",
-      "canonicalRouterVerified", "evidenceDigest",
+      "schemaVersion",
+      "status",
+      "chainId",
+      "planDigest",
+      "receiptEvidenceDigest",
+      "sourceCommitment",
+      "verificationBlock",
+      "verificationBlockHash",
+      "checkedAt",
+      "independentRpcCount",
+      "confirmations",
+      "transactionHash",
+      "contractAddress",
+      "runtimeCodeHash",
+      "runtimeTemplateHash",
+      "dependencyRuntimeVerified",
+      "dependencyBindingsVerified",
+      "constructorBindingsVerified",
+      "canonicalRouterVerified",
+      "evidenceDigest",
     ],
     "launcher verification evidence",
   );
@@ -229,31 +340,29 @@ export function validateClassicV4LauncherUpgradeVerificationEvidence(
       sameHex(
         evidence.runtimeTemplateHash,
         plan.runtimeTemplate.runtimeTemplateHash,
-      ),
-    "Launcher verification identity differs",
-  );
-  nonzeroHash(evidence.verificationBlockHash, "verification block hash");
-  nonzeroHash(evidence.transactionHash, "launcher transaction hash");
-  nonzeroHash(evidence.runtimeCodeHash, "launcher runtime code hash");
-  isoTime(evidence.checkedAt, "launcher verification checkedAt");
-  assert(
-    Number.isSafeInteger(evidence.verificationBlock) &&
-      evidence.verificationBlock > 0 &&
-      evidence.independentRpcCount === 2 &&
-      evidence.confirmations === evidence.verificationBlock - receipt.blockNumber + 1 &&
+      ) &&
+      Number.isSafeInteger(evidence.verificationBlock) &&
+      evidence.confirmations ===
+        evidence.verificationBlock - receipt.blockNumber + 1 &&
       evidence.confirmations >= 12 &&
+      evidence.independentRpcCount === 2 &&
       evidence.dependencyRuntimeVerified === true &&
       evidence.dependencyBindingsVerified === true &&
       evidence.constructorBindingsVerified === true &&
       evidence.canonicalRouterVerified === true,
-    "Launcher verification is incomplete",
+    "Launcher verification identity or finality differs",
   );
-  nonzeroHash(evidence.evidenceDigest, "launcher verification digest");
+  nonzeroHash(
+    evidence.verificationBlockHash,
+    "launcher verification block hash",
+  );
+  nonzeroHash(evidence.runtimeCodeHash, "launcher runtime code hash");
+  isoTime(evidence.checkedAt, "launcher verification checkedAt");
   assert(
     sameHex(
       evidence.evidenceDigest,
       digestJson(
-        unsigned(evidence, "evidenceDigest"),
+        without(evidence, "evidenceDigest"),
         CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.verificationEvidence,
       ),
     ),
@@ -262,229 +371,462 @@ export function validateClassicV4LauncherUpgradeVerificationEvidence(
   return evidence;
 }
 
-export function validateClassicV4LauncherRollforwardPlan(plan) {
+function validateUpgradeParent(
+  basePlan,
+  baseDeployment,
+  plan,
+  receipt,
+  verification,
+) {
   exactKeys(
     plan,
     [
-      "schemaVersion", "status", "model", "internalContractRelease",
-      "chainId", "releaseCommit", "releaseTree", "sourceCommitment",
-      "deployer", "predictedAddresses", "launcherFeeRecipient",
-      "officialDependencies", "sharedDependencies", "runtimeTemplates",
-      "artifactSourceClosures", "constructorArguments", "transactions",
-      "router", "launcherDependencies", "sourceTargets", "lineage",
+      "schemaVersion",
+      "status",
+      "model",
+      "internalContractRelease",
+      "chainId",
+      "releaseCommit",
+      "releaseTree",
+      "sourceCommitment",
+      "sourceClosureDigest",
+      "sourcePinsDigest",
+      "deployer",
+      "startingNonce",
+      "observedAtBlock",
+      "observedAtBlockHash",
+      "predictedAddress",
+      "dependencies",
+      "router",
+      "runtimeTemplate",
+      "constructorArguments",
+      "transaction",
+      "preflight",
+      "executionBoundary",
       "planDigest",
     ],
-    "launcher rollforward plan",
+    "launcher upgrade parent plan",
   );
+  exactKeys(
+    plan.transaction,
+    [
+      "transactionType",
+      "from",
+      "to",
+      "nonce",
+      "value",
+      "predictedAddress",
+      "data",
+      "dataHash",
+      "gasLimit",
+    ],
+    "launcher upgrade transaction",
+  );
+  exactKeys(
+    plan.runtimeTemplate,
+    [
+      "bytes",
+      "creationCodeHash",
+      "runtimeTemplateHash",
+      "immutableReferenceCount",
+    ],
+    "launcher upgrade runtime template",
+  );
+  exactKeys(
+    plan.preflight,
+    [
+      "independentRpcCount",
+      "freshDeterministicBuild",
+      "sourcePinsVerified",
+      "dependencyRuntimeVerified",
+      "dependencyBindingsVerified",
+      "canonicalRouterVerified",
+      "constructorSimulationVerified",
+      "predictedAddressVacant",
+      "deployerNonceReconciled",
+      "deployerBalanceVerified",
+      "estimatedGas",
+      "reviewedGasLimit",
+      "gasPriceWei",
+      "deployerBalanceWei",
+      "requiredBalanceWei",
+    ],
+    "launcher upgrade preflight",
+  );
+  exactKeys(
+    plan.executionBoundary,
+    ["signs", "broadcasts", "writes", "ownerApprovalRequiredForDeployment"],
+    "launcher upgrade execution boundary",
+  );
+  const constructorArguments = classicV4LauncherUpgradeConstructorArguments();
+  const constructorSuffix = constructorArguments.slice(2).toLowerCase();
+  const transactionData = plan.transaction.data.toLowerCase();
+  assert(
+    /^0x[0-9a-f]+$/.test(transactionData) &&
+      transactionData.endsWith(constructorSuffix),
+    "Launcher upgrade creation data differs",
+  );
+  const creationCode = transactionData.slice(0, -constructorSuffix.length);
+  const estimatedGas = decimal(
+    plan.preflight.estimatedGas,
+    "launcher estimated gas",
+    { positive: true },
+  );
+  const reviewedGasLimit = decimal(
+    plan.preflight.reviewedGasLimit,
+    "launcher reviewed gas limit",
+    { positive: true },
+  );
+  const gasPriceWei = decimal(
+    plan.preflight.gasPriceWei,
+    "launcher gas price",
+    { positive: true },
+  );
+  const deployerBalanceWei = decimal(
+    plan.preflight.deployerBalanceWei,
+    "launcher deployer balance",
+    { positive: true },
+  );
+  const requiredBalanceWei = decimal(
+    plan.preflight.requiredBalanceWei,
+    "launcher required balance",
+    { positive: true },
+  );
+  const predictedAddress = getContractAddress({
+    from: canonicalNonzeroAddress(plan.deployer, "launcher upgrade deployer"),
+    nonce: BigInt(plan.startingNonce),
+  });
   assert(
     plan.schemaVersion === 1 &&
-      plan.status === "launcher-rollforward-composite" &&
+      plan.status === "simulation-only" &&
       plan.model === "classic" &&
-      plan.internalContractRelease === CLASSIC_V4_RELEASE &&
-      plan.chainId === CLASSIC_V4_CHAIN_ID,
-    "Launcher rollforward identity differs",
-  );
-  commit(plan.releaseCommit, "rollforward release commit");
-  commit(plan.releaseTree, "rollforward release tree");
-  nonzeroHash(plan.sourceCommitment, "rollforward source commitment");
-  nonzeroHash(plan.planDigest, "rollforward plan digest");
-  assert(
-    sameJson(plan.officialDependencies, CLASSIC_V4_OFFICIAL_DEPENDENCIES) &&
-      sameJson(plan.sharedDependencies, CLASSIC_V4_SHARED_DEPENDENCIES) &&
-      sameHex(plan.launcherFeeRecipient, CLASSIC_V4_LAUNCHER_FEE_RECIPIENT) &&
-      sameJson(plan.launcherDependencies, CLASSIC_V4_LAUNCHER_UPGRADE_DEPENDENCIES) &&
-      sameJson(plan.router, {
-        address: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
-        runtimeCodeHash: CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
-      }) &&
-      sameJson(plan.sourceTargets, CLASSIC_V4_LAUNCHER_ROLLFORWARD_SOURCE_TARGETS),
-    "Launcher rollforward dependencies or source targets differ",
-  );
-  assert(
-    sameHex(
-      plan.constructorArguments.launcher,
-      classicV4LauncherUpgradeConstructorArguments(),
-    ),
-    "V4 launcher constructor arguments differ",
-  );
-  for (const key of [
-    "predictedAddresses",
-    "runtimeTemplates",
-    "artifactSourceClosures",
-    "constructorArguments",
-    "sourceTargets",
-  ]) {
-    exactKeys(plan[key], CLASSIC_V4_NEW_CONTRACTS, `rollforward ${key}`);
-  }
-  for (const name of CLASSIC_V4_NEW_CONTRACTS) {
-    canonicalNonzeroAddress(
-      plan.predictedAddresses[name],
-      `${name} predicted address`,
-    );
-    nonzeroHash(
-      plan.runtimeTemplates[name]?.runtimeTemplateHash,
-      `${name} runtime template hash`,
-    );
-    nonzeroHash(
-      plan.artifactSourceClosures[name],
-      `${name} artifact source closure`,
-    );
-    bytecode(plan.constructorArguments[name], `${name} constructor arguments`);
-  }
-  assert(
-    sameHex(
-      plan.predictedAddresses.feeHook,
-      plan.launcherDependencies.feeHook.address,
-    ) &&
-      sameHex(
-        plan.predictedAddresses.positionPlanner,
-        plan.launcherDependencies.positionPlanner.address,
-      ),
-    "Retained launcher dependencies differ from composite addresses",
-  );
-
-  assert(
-    Array.isArray(plan.transactions) && plan.transactions.length === 4,
-    "Launcher rollforward requires four transactions",
-  );
-  const nonces = new Set();
-  for (const [index, name] of CLASSIC_V4_NEW_CONTRACTS.entries()) {
-    const transaction = plan.transactions[index];
-    exactKeys(
-      transaction,
-      [
-        "name", "transactionType", "from", "to", "nonce", "value",
-        "predictedAddress", "data", "dataHash",
-      ],
-      `${name} rollforward transaction`,
-    );
-    assert(
-      transaction.name === name &&
-        transaction.transactionType ===
-          (name === "feeHook" ? "CALL_CREATE2" : "CREATE") &&
-        sameHex(transaction.from, plan.deployer) &&
-        (name === "feeHook"
-          ? sameHex(transaction.to, plan.predictedAddresses.hookFactory)
-          : transaction.to === null) &&
-        Number.isSafeInteger(transaction.nonce) && transaction.nonce >= 0 &&
-        transaction.value === "0" &&
-        sameHex(transaction.predictedAddress, plan.predictedAddresses[name]) &&
-        sameHex(
-          transaction.dataHash,
-          keccak256(bytecode(transaction.data, `${name} transaction data`, { empty: false })),
-        ) &&
-        !nonces.has(transaction.nonce),
-      `${name} rollforward transaction differs`,
-    );
-    nonces.add(transaction.nonce);
-  }
-  assert(
-    plan.transactions[3].nonce >
-      Math.max(...plan.transactions.slice(0, 3).map(({ nonce }) => nonce)),
-    "Launcher rollforward nonce does not follow retained deployments",
-  );
-
-  exactKeys(plan.lineage, ["baseRelease", "launcherUpgrade"], "rollforward lineage");
-  exactKeys(
-    plan.lineage.baseRelease,
-    [
-      "releaseCommit", "releaseTree", "sourceCommitment", "planDigest",
-      "deploymentEvidenceDigest", "sourceEvidenceDigest",
-    ],
-    "base release lineage",
-  );
-  exactKeys(
-    plan.lineage.launcherUpgrade,
-    [
-      "releaseCommit", "releaseTree", "sourceCommitment", "planDigest",
-      "receiptEvidenceDigest", "verificationEvidenceDigest",
-      "launcherSourceRecordDigest", "sourceClosureDigest", "sourcePinsDigest",
-    ],
-    "launcher upgrade lineage",
-  );
-  for (const [label, lineage] of Object.entries(plan.lineage)) {
-    commit(lineage.releaseCommit, `${label} commit`);
-    commit(lineage.releaseTree, `${label} tree`);
-    for (const [key, value] of Object.entries(lineage)) {
-      if (key !== "releaseCommit" && key !== "releaseTree") {
-        nonzeroHash(value, `${label} ${key}`);
-      }
-    }
-  }
-  assert(
-    plan.releaseCommit === plan.lineage.launcherUpgrade.releaseCommit &&
-      plan.releaseTree === plan.lineage.launcherUpgrade.releaseTree &&
+      plan.internalContractRelease === CLASSIC_V4_LAUNCHER_UPGRADE_RELEASE &&
+      plan.chainId === CLASSIC_V4_CHAIN_ID &&
+      gitObject(plan.releaseCommit, "launcher upgrade release commit") ===
+        plan.releaseCommit.toLowerCase() &&
+      gitObject(plan.releaseTree, "launcher upgrade release tree") ===
+        plan.releaseTree.toLowerCase() &&
+      Number.isSafeInteger(plan.observedAtBlock) &&
+      plan.observedAtBlock > baseDeployment.verificationBlock &&
+      nonzeroHash(
+        plan.observedAtBlockHash,
+        "launcher upgrade observed block hash",
+      ) &&
+      nonzeroHash(plan.sourceClosureDigest, "launcher source closure digest") &&
+      nonzeroHash(plan.sourcePinsDigest, "launcher source pins digest") &&
+      sameJson(
+        plan.dependencies,
+        expectedUpgradeDependencies(basePlan, baseDeployment),
+      ) &&
+      sameJson(plan.dependencies, CLASSIC_V4_LAUNCHER_UPGRADE_DEPENDENCIES) &&
+      sameJson(plan.router, CLASSIC_V4_LAUNCHER_UPGRADE_ROUTER) &&
+      sameHex(plan.constructorArguments, constructorArguments) &&
+      sameHex(plan.predictedAddress, predictedAddress) &&
+      plan.transaction.transactionType === "CREATE" &&
+      sameHex(plan.transaction.from, plan.deployer) &&
+      plan.transaction.to === null &&
+      plan.transaction.nonce === plan.startingNonce &&
+      plan.transaction.value === "0" &&
+      sameHex(plan.transaction.predictedAddress, plan.predictedAddress) &&
+      sameHex(plan.transaction.dataHash, keccak256(plan.transaction.data)) &&
+      sameHex(plan.runtimeTemplate.creationCodeHash, keccak256(creationCode)) &&
+      Number.isSafeInteger(plan.runtimeTemplate.bytes) &&
+      plan.runtimeTemplate.bytes > 0 &&
+      plan.runtimeTemplate.bytes <= 24_576 &&
+      Number.isSafeInteger(plan.runtimeTemplate.immutableReferenceCount) &&
+      plan.runtimeTemplate.immutableReferenceCount >= 0 &&
+      nonzeroHash(
+        plan.runtimeTemplate.runtimeTemplateHash,
+        "launcher runtime template hash",
+      ) &&
+      plan.transaction.gasLimit === plan.preflight.reviewedGasLimit &&
+      estimatedGas <= reviewedGasLimit &&
+      reviewedGasLimit >= CLASSIC_V4_LAUNCHER_UPGRADE_MIN_GAS_LIMIT &&
+      reviewedGasLimit <= CLASSIC_V4_LAUNCHER_UPGRADE_MAX_GAS_LIMIT &&
+      gasPriceWei > 0n &&
+      deployerBalanceWei >= requiredBalanceWei &&
       sameHex(
         plan.sourceCommitment,
         digestJson(
-          sourceMaterial(plan),
-          CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.sourceCommitment,
+          {
+            contract: CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET,
+            artifact: plan.runtimeTemplate,
+            sourceClosureDigest: plan.sourceClosureDigest,
+            sourcePinsDigest: plan.sourcePinsDigest,
+            dependencies: plan.dependencies,
+            router: plan.router,
+            constructorArguments: plan.constructorArguments,
+          },
+          CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.sourceCommitment,
         ),
       ) &&
       sameHex(
         plan.planDigest,
         digestJson(
-          unsigned(plan, "planDigest"),
-          CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.preparationPlan,
+          without(plan, "planDigest"),
+          CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.preparationPlan,
         ),
+      ) &&
+      sameHex(plan.deployer, basePlan.deployer) &&
+      plan.preflight.independentRpcCount === 2 &&
+      [
+        "freshDeterministicBuild",
+        "sourcePinsVerified",
+        "dependencyRuntimeVerified",
+        "dependencyBindingsVerified",
+        "canonicalRouterVerified",
+        "constructorSimulationVerified",
+        "predictedAddressVacant",
+        "deployerNonceReconciled",
+        "deployerBalanceVerified",
+      ].every((key) => plan.preflight[key] === true) &&
+      plan.executionBoundary.signs === false &&
+      plan.executionBoundary.broadcasts === false &&
+      plan.executionBoundary.writes === false &&
+      plan.executionBoundary.ownerApprovalRequiredForDeployment === true &&
+      !sameHex(plan.predictedAddress, basePlan.predictedAddresses.launcher) &&
+      plan.startingNonce >
+        Math.max(...basePlan.transactions.map(({ nonce }) => nonce)) &&
+      receipt.blockNumber > plan.observedAtBlock &&
+      receipt.blockNumber >
+        Math.max(
+          ...Object.values(baseDeployment.contracts).map(
+            ({ blockNumber }) => blockNumber,
+          ),
+        ) &&
+      verification.verificationBlock >= baseDeployment.verificationBlock,
+    "Embedded launcher upgrade parent differs from the canonical base",
+  );
+  validateClassicV4LauncherUpgradeReceiptEvidence(plan, receipt);
+  validateClassicV4LauncherUpgradeVerificationEvidence(
+    plan,
+    receipt,
+    verification,
+  );
+}
+
+export function validateClassicV4LauncherRollforwardParentBundle(bundle) {
+  exactKeys(
+    bundle,
+    ["schemaVersion", "base", "launcherUpgrade", "bundleDigest"],
+    "launcher rollforward parent bundle",
+  );
+  exactKeys(
+    bundle.base,
+    ["plan", "deploymentEvidence", "sourceEvidence"],
+    "base parent bundle",
+  );
+  exactKeys(
+    bundle.launcherUpgrade,
+    ["plan", "receiptEvidence", "verificationEvidence"],
+    "launcher upgrade parent bundle",
+  );
+  assert(bundle.schemaVersion === 1, "Parent bundle schema differs");
+  validateBaseParent(
+    bundle.base.plan,
+    bundle.base.deploymentEvidence,
+    bundle.base.sourceEvidence,
+  );
+  validateUpgradeParent(
+    bundle.base.plan,
+    bundle.base.deploymentEvidence,
+    bundle.launcherUpgrade.plan,
+    bundle.launcherUpgrade.receiptEvidence,
+    bundle.launcherUpgrade.verificationEvidence,
+  );
+  assert(
+    sameHex(
+      bundle.bundleDigest,
+      digestJson(
+        without(bundle, "bundleDigest"),
+        CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.parentBundle,
       ),
-    "Launcher rollforward lineage or digest differs",
+    ),
+    "Launcher rollforward parent bundle digest differs",
+  );
+  return bundle;
+}
+
+export function createClassicV4LauncherRollforwardParentBundle({
+  basePlan,
+  baseDeploymentEvidence,
+  baseSourceEvidence,
+  baseArtifacts,
+  upgradePlan,
+  upgradeReceiptEvidence,
+  upgradeVerificationEvidence,
+  launcherArtifact,
+}) {
+  validateClassicV4PreparationPlan(basePlan, baseArtifacts);
+  validateClassicV4LauncherUpgradePlan(upgradePlan, launcherArtifact);
+  const body = {
+    schemaVersion: 1,
+    base: {
+      plan: structuredClone(basePlan),
+      deploymentEvidence: structuredClone(baseDeploymentEvidence),
+      sourceEvidence: structuredClone(baseSourceEvidence),
+    },
+    launcherUpgrade: {
+      plan: structuredClone(upgradePlan),
+      receiptEvidence: structuredClone(upgradeReceiptEvidence),
+      verificationEvidence: structuredClone(upgradeVerificationEvidence),
+    },
+  };
+  const bundle = {
+    ...body,
+    bundleDigest: digestJson(
+      body,
+      CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.parentBundle,
+    ),
+  };
+  return validateClassicV4LauncherRollforwardParentBundle(bundle);
+}
+
+function planBody(parentBundle) {
+  const base = parentBundle.base.plan;
+  const upgrade = parentBundle.launcherUpgrade.plan;
+  const body = {
+    schemaVersion: 1,
+    status: "launcher-rollforward-composite",
+    model: "classic",
+    internalContractRelease: CLASSIC_V4_RELEASE,
+    chainId: CLASSIC_V4_CHAIN_ID,
+    releaseCommit: upgrade.releaseCommit,
+    releaseTree: upgrade.releaseTree,
+    sourceCommitment: null,
+    deployer: upgrade.deployer,
+    predictedAddresses: {
+      ...Object.fromEntries(
+        OLD_CONTRACTS.map((name) => [name, base.predictedAddresses[name]]),
+      ),
+      launcher: upgrade.predictedAddress,
+    },
+    launcherFeeRecipient: base.launcherFeeRecipient,
+    officialDependencies: structuredClone(base.officialDependencies),
+    sharedDependencies: structuredClone(base.sharedDependencies),
+    runtimeTemplates: {
+      ...Object.fromEntries(
+        OLD_CONTRACTS.map((name) => [
+          name,
+          structuredClone(base.runtimeTemplates[name]),
+        ]),
+      ),
+      launcher: structuredClone(upgrade.runtimeTemplate),
+    },
+    constructorArguments: {
+      ...Object.fromEntries(
+        OLD_CONTRACTS.map((name) => [name, base.constructorArguments[name]]),
+      ),
+      launcher: upgrade.constructorArguments,
+    },
+    transactions: [
+      ...base.transactions
+        .slice(0, 3)
+        .map((transaction) => transactionProjection(transaction)),
+      transactionProjection(upgrade.transaction, "launcher"),
+    ],
+    router: structuredClone(upgrade.router),
+    sourceTargets: structuredClone(
+      CLASSIC_V4_LAUNCHER_ROLLFORWARD_SOURCE_TARGETS,
+    ),
+    parentBundle: structuredClone(parentBundle),
+  };
+  body.sourceCommitment = digestJson(
+    {
+      parentBundleDigest: parentBundle.bundleDigest,
+      releaseCommit: body.releaseCommit,
+      releaseTree: body.releaseTree,
+      predictedAddresses: body.predictedAddresses,
+      runtimeTemplates: body.runtimeTemplates,
+      constructorArguments: body.constructorArguments,
+      router: body.router,
+      sourceTargets: body.sourceTargets,
+    },
+    CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.sourceCommitment,
+  );
+  return body;
+}
+
+export function createClassicV4LauncherRollforwardPlan({ parentBundle }) {
+  validateClassicV4LauncherRollforwardParentBundle(parentBundle);
+  const body = planBody(parentBundle);
+  return {
+    ...body,
+    planDigest: digestJson(
+      body,
+      CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.preparationPlan,
+    ),
+  };
+}
+
+export function validateClassicV4LauncherRollforwardPlan(plan) {
+  validateClassicV4LauncherRollforwardParentBundle(plan?.parentBundle);
+  const expected = createClassicV4LauncherRollforwardPlan({
+    parentBundle: plan.parentBundle,
+  });
+  assert(
+    sameJson(plan, expected),
+    "Launcher rollforward plan differs from its parents",
   );
   return plan;
 }
 
-export function validateClassicV4LauncherRollforwardArtifacts(plan, artifacts) {
+export function validateClassicV4LauncherRollforwardArtifacts(
+  plan,
+  artifacts,
+  { baseArtifacts } = {},
+) {
   validateClassicV4LauncherRollforwardPlan(plan);
   exactKeys(artifacts, CLASSIC_V4_NEW_CONTRACTS, "rollforward artifacts");
-  for (const name of CLASSIC_V4_NEW_CONTRACTS) {
-    assert(
-      sameJson(
-        plan.runtimeTemplates[name],
-        artifactRuntimeDescriptor(artifacts[name], name),
-      ) &&
-        sameHex(
-          plan.artifactSourceClosures[name],
-          artifactSourceClosure(artifacts[name], name),
-        ),
-      `${name} artifact differs from the rollforward plan`,
-    );
-  }
-  const launcherBuild = computeClassicV4LauncherUpgradeBuildCommitments(
+  exactKeys(baseArtifacts, CLASSIC_V4_NEW_CONTRACTS, "base artifacts");
+  validateClassicV4PreparationPlan(plan.parentBundle.base.plan, baseArtifacts);
+  validateClassicV4LauncherUpgradePlan(
+    plan.parentBundle.launcherUpgrade.plan,
     artifacts.launcher,
   );
-  const upgradeSourceCommitment = digestJson(
-    {
-      contract: CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET,
-      artifact: launcherBuild.artifact,
-      sourceClosureDigest: launcherBuild.sourceClosureDigest,
-      sourcePinsDigest: plan.lineage.launcherUpgrade.sourcePinsDigest,
-      dependencies: plan.launcherDependencies,
-      router: plan.router,
-      constructorArguments: plan.constructorArguments.launcher,
-    },
-    CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.sourceCommitment,
-  );
-  const creationCode = bytecode(
-    artifacts.launcher?.bytecode?.object,
-    "launcher creation bytecode",
-    { empty: false },
-  );
+  for (const name of OLD_CONTRACTS) {
+    assert(
+      sameJson(artifacts[name], baseArtifacts[name]) &&
+        sameJson(
+          artifactRuntimeDescriptor(artifacts[name], name),
+          plan.parentBundle.base.plan.runtimeTemplates[name],
+        ) &&
+        sameJson(
+          artifactRuntimeDescriptor(baseArtifacts[name], name),
+          plan.runtimeTemplates[name],
+        ),
+      `${name} retained artifact differs from the canonical parent`,
+    );
+  }
   assert(
-    sameHex(
-      launcherBuild.sourceClosureDigest,
-      plan.lineage.launcherUpgrade.sourceClosureDigest,
-    ) &&
-      sameHex(
-        upgradeSourceCommitment,
-        plan.lineage.launcherUpgrade.sourceCommitment,
-      ) &&
-      sameHex(
-        plan.transactions[3].data,
-        creationCode + plan.constructorArguments.launcher.slice(2),
-      ),
-    "V4 launcher artifact, source closure or constructor differs",
+    sameJson(
+      artifactRuntimeDescriptor(artifacts.launcher, "launcher"),
+      plan.runtimeTemplates.launcher,
+    ),
+    "Launcher artifact differs from the upgrade parent",
   );
   return artifacts;
+}
+
+function sameDeploymentAncestry(actual, expected) {
+  const keys = [
+    "transactionHash",
+    "blockNumber",
+    "blockHash",
+    "address",
+    "nonce",
+    "from",
+    "to",
+    "dataHash",
+    "value",
+    "runtimeCodeHash",
+    "runtimeTemplateHash",
+  ];
+  return keys.every((key) =>
+    typeof expected[key] === "string"
+      ? sameHex(actual[key], expected[key])
+      : actual[key] === expected[key],
+  );
 }
 
 export function validateClassicV4LauncherRollforwardDeploymentEvidence(
@@ -493,18 +835,40 @@ export function validateClassicV4LauncherRollforwardDeploymentEvidence(
 ) {
   validateClassicV4LauncherRollforwardPlan(plan);
   const deployment = validateClassicV4DeploymentEvidence(plan, evidence);
+  const parents = plan.parentBundle;
+  const base = parents.base.deploymentEvidence;
+  const upgradeReceipt = parents.launcherUpgrade.receiptEvidence;
+  const upgradeFinal = parents.launcherUpgrade.verificationEvidence;
+  const expectedLauncher = {
+    transactionHash: upgradeReceipt.transactionHash,
+    blockNumber: upgradeReceipt.blockNumber,
+    blockHash: upgradeReceipt.blockHash,
+    address: upgradeReceipt.contractAddress,
+    nonce: upgradeReceipt.nonce,
+    from: upgradeReceipt.from,
+    to: upgradeReceipt.to,
+    dataHash: upgradeReceipt.dataHash,
+    value: upgradeReceipt.value,
+    runtimeCodeHash: upgradeFinal.runtimeCodeHash,
+    runtimeTemplateHash: upgradeFinal.runtimeTemplateHash,
+  };
   assert(
-    evidence.contracts.launcher.blockNumber >
-      Math.max(...OLD_CONTRACTS.map((name) => evidence.contracts[name].blockNumber)) &&
+    evidence.independentRpcCount === 2 &&
+      evidence.verificationBlock >= base.verificationBlock &&
+      evidence.verificationBlock === upgradeFinal.verificationBlock &&
       sameHex(
-        evidence.contracts.feeHook.runtimeCodeHash,
-        plan.launcherDependencies.feeHook.runtimeCodeHash,
+        evidence.verificationBlockHash,
+        upgradeFinal.verificationBlockHash,
       ) &&
-      sameHex(
-        evidence.contracts.positionPlanner.runtimeCodeHash,
-        plan.launcherDependencies.positionPlanner.runtimeCodeHash,
-      ),
-    "Composite deployment does not bind retained launcher dependencies",
+      isoTime(evidence.checkedAt, "common-head deployment checkedAt") ===
+        isoTime(upgradeFinal.checkedAt, "upgrade verification checkedAt") &&
+      isoTime(evidence.checkedAt, "common-head deployment checkedAt") >
+        isoTime(base.checkedAt, "base deployment checkedAt") &&
+      OLD_CONTRACTS.every((name) =>
+        sameDeploymentAncestry(evidence.contracts[name], base.contracts[name]),
+      ) &&
+      sameDeploymentAncestry(evidence.contracts.launcher, expectedLauncher),
+    "Composite deployment is not a fresh common-head replay of both parents",
   );
   return deployment;
 }
@@ -515,291 +879,52 @@ export function validateClassicV4LauncherRollforwardSourceEvidence(
   evidence,
 ) {
   validateClassicV4LauncherRollforwardDeploymentEvidence(plan, deployment);
-  exactKeys(
-    evidence,
-    [
-      "schemaVersion", "chainId", "planDigest", "sourceCommitment",
-      "status", "checkedAt", "contracts", "evidenceDigest",
-    ],
-    "rollforward source evidence",
-  );
+  validateClassicV4SourceEvidence(plan, deployment, evidence, {
+    sourceTargets: CLASSIC_V4_LAUNCHER_ROLLFORWARD_SOURCE_TARGETS,
+  });
+  const parents = plan.parentBundle;
   assert(
-    evidence.schemaVersion === 1 &&
-      evidence.chainId === CLASSIC_V4_CHAIN_ID &&
-      evidence.status === "verified" &&
-      sameHex(evidence.planDigest, plan.planDigest) &&
-      sameHex(evidence.sourceCommitment, plan.sourceCommitment) &&
-      sameHex(
-        evidence.evidenceDigest,
-        digestJson(
-          unsigned(evidence, "evidenceDigest"),
-          CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
+    isoTime(evidence.checkedAt, "common source checkedAt") >
+      Math.max(
+        isoTime(deployment.checkedAt, "common deployment checkedAt"),
+        isoTime(parents.base.sourceEvidence.checkedAt, "base source checkedAt"),
+        isoTime(
+          parents.launcherUpgrade.verificationEvidence.checkedAt,
+          "upgrade verification checkedAt",
         ),
       ),
-    "Rollforward source identity or digest differs",
+    "Composite source evidence is not a fresh all-contract provider capture",
   );
-  isoTime(evidence.checkedAt, "rollforward source checkedAt");
-  assert(
-    isoTime(evidence.checkedAt, "rollforward source checkedAt") >=
-      isoTime(deployment.checkedAt, "rollforward deployment checkedAt"),
-    "Rollforward source evidence predates deployment evidence",
-  );
-  exactKeys(evidence.contracts, CLASSIC_V4_NEW_CONTRACTS, "source contracts");
-  exactKeys(evidence.contracts.launcher, SOURCE_RECORD_KEYS, "launcher source record");
-  assert(
-    evidence.contracts.launcher.contractName ===
-      CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET.contractName &&
-      evidence.contracts.launcher.fqcn ===
-        CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET.fqcn &&
-      sameHex(
-        digestJson(
-          evidence.contracts.launcher,
-          CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.launcherSourceRecord,
-        ),
-        plan.lineage.launcherUpgrade.launcherSourceRecordDigest,
-      ),
-    "V4 launcher source record differs from rollforward lineage",
-  );
-
-  // Reuse the existing provider, URL, constructor and deployment checks after
-  // projecting only the already-validated V4 source name to the legacy name.
-  const projected = structuredClone(evidence);
-  projected.contracts.launcher.contractName = CLASSIC_V4_SOURCE_TARGETS.launcher.contractName;
-  projected.contracts.launcher.fqcn = CLASSIC_V4_SOURCE_TARGETS.launcher.fqcn;
-  projected.evidenceDigest = digestJson(
-    unsigned(projected, "evidenceDigest"),
-    CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
-  );
-  validateClassicV4SourceEvidence(plan, deployment, projected);
   return evidence;
 }
 
+export function createClassicV4LauncherRollforward({
+  parentBundle,
+  commonHeadDeploymentEvidence,
+  commonHeadSourceEvidence,
+}) {
+  const plan = createClassicV4LauncherRollforwardPlan({ parentBundle });
+  validateClassicV4LauncherRollforwardDeploymentEvidence(
+    plan,
+    commonHeadDeploymentEvidence,
+  );
+  validateClassicV4LauncherRollforwardSourceEvidence(
+    plan,
+    commonHeadDeploymentEvidence,
+    commonHeadSourceEvidence,
+  );
+  return {
+    plan,
+    deploymentEvidence: commonHeadDeploymentEvidence,
+    sourceEvidence: commonHeadSourceEvidence,
+  };
+}
+
 export function createClassicV4LauncherRollforwardReleaseManifest(input) {
+  validateClassicV4LauncherRollforwardPlan(input?.plan);
   return createClassicV4ReleaseManifest(input, {
     validateDeploymentEvidence:
       validateClassicV4LauncherRollforwardDeploymentEvidence,
     validateSourceEvidence: validateClassicV4LauncherRollforwardSourceEvidence,
   });
-}
-
-export function createClassicV4LauncherRollforward({
-  basePlan,
-  baseDeploymentEvidence,
-  baseSourceEvidence,
-  baseArtifacts,
-  upgradePlan,
-  upgradeReceiptEvidence,
-  upgradeVerificationEvidence,
-  launcherArtifact,
-  launcherSourceRecord,
-  sourceCheckedAt,
-}) {
-  validateClassicV4PreparationPlan(basePlan, baseArtifacts);
-  validateClassicV4DeploymentEvidence(basePlan, baseDeploymentEvidence);
-  validateClassicV4SourceEvidence(basePlan, baseDeploymentEvidence, baseSourceEvidence);
-  validateClassicV4LauncherUpgradePlan(upgradePlan, launcherArtifact);
-  validateClassicV4LauncherUpgradeReceiptEvidence(upgradePlan, upgradeReceiptEvidence);
-  validateClassicV4LauncherUpgradeVerificationEvidence(
-    upgradePlan,
-    upgradeReceiptEvidence,
-    upgradeVerificationEvidence,
-  );
-  const expectedDependencies = expectedUpgradeDependencies(
-    basePlan,
-    baseDeploymentEvidence,
-  );
-  assert(
-    basePlan.chainId === upgradePlan.chainId &&
-      sameHex(basePlan.deployer, upgradePlan.deployer) &&
-      !sameHex(basePlan.predictedAddresses.launcher, upgradePlan.predictedAddress) &&
-      sameJson(upgradePlan.dependencies, expectedDependencies) &&
-      sameJson(upgradePlan.router, {
-        address: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
-        runtimeCodeHash: CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
-      }) &&
-      upgradePlan.startingNonce >
-        Math.max(...basePlan.transactions.slice(0, 3).map(({ nonce }) => nonce)) &&
-      upgradeReceiptEvidence.blockNumber >
-        Math.max(...OLD_CONTRACTS.map((name) => baseDeploymentEvidence.contracts[name].blockNumber)) &&
-      upgradeVerificationEvidence.verificationBlock >=
-        baseDeploymentEvidence.verificationBlock &&
-      isoTime(sourceCheckedAt, "source checkedAt") >=
-        isoTime(baseSourceEvidence.checkedAt, "base source checkedAt") &&
-      isoTime(sourceCheckedAt, "source checkedAt") >=
-        isoTime(upgradeVerificationEvidence.checkedAt, "upgrade checkedAt"),
-    "Launcher rollforward parents are incompatible",
-  );
-
-  const artifacts = {
-    ...Object.fromEntries(OLD_CONTRACTS.map((name) => [name, baseArtifacts[name]])),
-    launcher: launcherArtifact,
-  };
-  const planBase = {
-    schemaVersion: 1,
-    status: "launcher-rollforward-composite",
-    model: "classic",
-    internalContractRelease: CLASSIC_V4_RELEASE,
-    chainId: CLASSIC_V4_CHAIN_ID,
-    releaseCommit: upgradePlan.releaseCommit,
-    releaseTree: upgradePlan.releaseTree,
-    sourceCommitment: null,
-    deployer: upgradePlan.deployer,
-    predictedAddresses: {
-      ...Object.fromEntries(
-        OLD_CONTRACTS.map((name) => [name, basePlan.predictedAddresses[name]]),
-      ),
-      launcher: upgradePlan.predictedAddress,
-    },
-    launcherFeeRecipient: basePlan.launcherFeeRecipient,
-    officialDependencies: structuredClone(basePlan.officialDependencies),
-    sharedDependencies: structuredClone(basePlan.sharedDependencies),
-    runtimeTemplates: Object.fromEntries(
-      CLASSIC_V4_NEW_CONTRACTS.map((name) => [
-        name,
-        structuredClone(
-          name === "launcher"
-            ? upgradePlan.runtimeTemplate
-            : basePlan.runtimeTemplates[name],
-        ),
-      ]),
-    ),
-    artifactSourceClosures: Object.fromEntries(
-      CLASSIC_V4_NEW_CONTRACTS.map((name) => [
-        name,
-        artifactSourceClosure(artifacts[name], name),
-      ]),
-    ),
-    constructorArguments: {
-      ...Object.fromEntries(
-        OLD_CONTRACTS.map((name) => [name, basePlan.constructorArguments[name]]),
-      ),
-      launcher: upgradePlan.constructorArguments,
-    },
-    transactions: [
-      ...basePlan.transactions.slice(0, 3).map((transaction) =>
-        structuredClone(transaction),
-      ),
-      Object.fromEntries(
-        Object.entries(upgradePlan.transaction).filter(([key]) => key !== "gasLimit"),
-      ),
-    ].map((transaction, index) => ({
-      ...(index === 3 ? { name: "launcher" } : {}),
-      ...transaction,
-    })),
-    router: structuredClone(upgradePlan.router),
-    launcherDependencies: structuredClone(upgradePlan.dependencies),
-    sourceTargets: structuredClone(CLASSIC_V4_LAUNCHER_ROLLFORWARD_SOURCE_TARGETS),
-    lineage: {
-      baseRelease: {
-        releaseCommit: basePlan.releaseCommit,
-        releaseTree: basePlan.releaseTree,
-        sourceCommitment: basePlan.sourceCommitment,
-        planDigest: basePlan.planDigest,
-        deploymentEvidenceDigest: baseDeploymentEvidence.evidenceDigest,
-        sourceEvidenceDigest: baseSourceEvidence.evidenceDigest,
-      },
-      launcherUpgrade: {
-        releaseCommit: upgradePlan.releaseCommit,
-        releaseTree: upgradePlan.releaseTree,
-        sourceCommitment: upgradePlan.sourceCommitment,
-        planDigest: upgradePlan.planDigest,
-        receiptEvidenceDigest: upgradeReceiptEvidence.evidenceDigest,
-        verificationEvidenceDigest: upgradeVerificationEvidence.evidenceDigest,
-        launcherSourceRecordDigest: digestJson(
-          launcherSourceRecord,
-          CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.launcherSourceRecord,
-        ),
-        sourceClosureDigest: upgradePlan.sourceClosureDigest,
-        sourcePinsDigest: upgradePlan.sourcePinsDigest,
-      },
-    },
-  };
-  planBase.sourceCommitment = digestJson(
-    sourceMaterial(planBase),
-    CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.sourceCommitment,
-  );
-  const plan = {
-    ...planBase,
-    planDigest: digestJson(
-      planBase,
-      CLASSIC_V4_LAUNCHER_ROLLFORWARD_DIGEST_DOMAINS.preparationPlan,
-    ),
-  };
-  validateClassicV4LauncherRollforwardArtifacts(plan, artifacts);
-
-  const verificationBlock = upgradeVerificationEvidence.verificationBlock;
-  const contracts = {
-    ...Object.fromEntries(
-      OLD_CONTRACTS.map((name) => {
-        const record = structuredClone(baseDeploymentEvidence.contracts[name]);
-        record.confirmations = verificationBlock - record.blockNumber + 1;
-        return [name, record];
-      }),
-    ),
-    launcher: {
-      transactionHash: upgradeReceiptEvidence.transactionHash,
-      blockNumber: upgradeReceiptEvidence.blockNumber,
-      blockHash: upgradeReceiptEvidence.blockHash,
-      confirmations: verificationBlock - upgradeReceiptEvidence.blockNumber + 1,
-      address: upgradeReceiptEvidence.contractAddress,
-      nonce: upgradeReceiptEvidence.nonce,
-      from: upgradeReceiptEvidence.from,
-      to: upgradeReceiptEvidence.to,
-      dataHash: upgradeReceiptEvidence.dataHash,
-      value: upgradeReceiptEvidence.value,
-      runtimeCodeHash: upgradeVerificationEvidence.runtimeCodeHash,
-      runtimeTemplateHash: upgradeVerificationEvidence.runtimeTemplateHash,
-    },
-  };
-  const deploymentBase = {
-    schemaVersion: 1,
-    chainId: CLASSIC_V4_CHAIN_ID,
-    planDigest: plan.planDigest,
-    sourceCommitment: plan.sourceCommitment,
-    status: "finalized",
-    checkedAt: upgradeVerificationEvidence.checkedAt,
-    verificationBlock,
-    verificationBlockHash: upgradeVerificationEvidence.verificationBlockHash,
-    independentRpcCount: 2,
-    deploymentLive: true,
-    runtimeCodeVerified: true,
-    constructorBindingsVerified: true,
-    contracts,
-  };
-  const deploymentEvidence = {
-    ...deploymentBase,
-    evidenceDigest: digestJson(
-      deploymentBase,
-      CLASSIC_V4_DIGEST_DOMAINS.deploymentEvidence,
-    ),
-  };
-  validateClassicV4LauncherRollforwardDeploymentEvidence(plan, deploymentEvidence);
-
-  const sourceBase = {
-    schemaVersion: 1,
-    chainId: CLASSIC_V4_CHAIN_ID,
-    planDigest: plan.planDigest,
-    sourceCommitment: plan.sourceCommitment,
-    status: "verified",
-    checkedAt: sourceCheckedAt,
-    contracts: {
-      ...Object.fromEntries(
-        OLD_CONTRACTS.map((name) => [
-          name,
-          structuredClone(baseSourceEvidence.contracts[name]),
-        ]),
-      ),
-      launcher: structuredClone(launcherSourceRecord),
-    },
-  };
-  const sourceEvidence = {
-    ...sourceBase,
-    evidenceDigest: digestJson(sourceBase, CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence),
-  };
-  validateClassicV4LauncherRollforwardSourceEvidence(
-    plan,
-    deploymentEvidence,
-    sourceEvidence,
-  );
-  return { plan, deploymentEvidence, sourceEvidence };
 }
