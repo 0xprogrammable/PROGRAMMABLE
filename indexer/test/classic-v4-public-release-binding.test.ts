@@ -24,9 +24,9 @@ const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -41,13 +41,12 @@ describe("Classic V4 browser release activation", () => {
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const bindingBlock = source.slice(start, end);
-    expect(bindingBlock).toContain("| null = null;");
+    expect(bindingBlock).toMatch(/\|\s*null\s*=\s*null;/u);
     expect(bindingBlock).not.toContain("launcher:");
   });
 
   it("refuses activation without an immutable Envio release audit", async () => {
-    await expect(main(["--write"]))
-      .rejects.toThrow("--release-audit");
+    await expect(main(["--write"])).rejects.toThrow("--release-audit");
     await expect(
       main(["--catalog-release-binding", "/tmp/hand-authored-binding.json"]),
     ).rejects.toThrow("Unknown argument");
@@ -69,6 +68,15 @@ describe("Classic V4 browser release activation", () => {
     };
     const launcher = `0x${"44".repeat(20)}`;
     const hook = `0x${"83".repeat(19)}cc`;
+    const launchAnchor = {
+      transactionHash: `0x${"71".repeat(32)}`,
+      blockHash: `0x${"72".repeat(32)}`,
+      blockNumber: 25_700_200,
+      inputHash: `0x${"73".repeat(32)}`,
+      launchId: `0x${"74".repeat(32)}`,
+      stampHash: `0x${"75".repeat(32)}`,
+      permitDigest: `0x${"76".repeat(32)}`,
+    };
     const sources = [
       {
         contractName: "ClassicV4Hook",
@@ -107,10 +115,7 @@ describe("Classic V4 browser release activation", () => {
         eventSetSha256: `0x${"b3".repeat(32)}`,
         eventCount: baseReleaseBinding.envio.eventCount + 9,
       },
-      sources: [
-        ...structuredClone(baseReleaseBinding.sources),
-        ...sources,
-      ],
+      sources: [...structuredClone(baseReleaseBinding.sources), ...sources],
       releases: [
         ...structuredClone(baseReleaseBinding.releases),
         dataPipelineReleaseFragment,
@@ -147,6 +152,9 @@ describe("Classic V4 browser release activation", () => {
         chainId: 1,
         launcher,
         manifestDigest,
+        releaseStatus: "indexer-activated",
+        publicAvailable: false,
+        ...launchAnchor,
       },
       activatedManifest,
       dataPipelineReleaseFragment,
@@ -157,25 +165,45 @@ describe("Classic V4 browser release activation", () => {
       reviewedReleaseBinding,
     );
     const plan = { ...planCore, catalogReleaseArtifact };
-    const rendered = renderClassicV4Activation(plan, {
+    const current = {
       releaseMap:
         "before\n// CLASSIC_V4_ACTIVATION_START\nold\n// CLASSIC_V4_ACTIVATION_END\nafter\n",
       envioConfig:
         "before\n      # CLASSIC_V4_ACTIVATION_START\nold\n      # CLASSIC_V4_ACTIVATION_END\nafter\n",
       publicReleaseBinding:
         "before\n// CLASSIC_V4_PUBLIC_RELEASE_BINDING_START\nold\n// CLASSIC_V4_PUBLIC_RELEASE_BINDING_END\nafter\n",
-      catalogRelease: `${JSON.stringify({
-        schemaVersion: 1,
-        status: "inactive",
-        chainId: 1,
-        manifestDigest: null,
-        launcher: null,
-        releaseBinding: null,
-      }, null, 2)}\n`,
-    });
+      catalogRelease: `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          status: "inactive",
+          chainId: 1,
+          manifestDigest: null,
+          launcher: null,
+          releaseBinding: null,
+        },
+        null,
+        2,
+      )}\n`,
+    };
+    const rendered = renderClassicV4Activation(plan, current);
 
     expect(rendered.publicReleaseBinding).toContain(launcher);
     expect(rendered.publicReleaseBinding).toContain(manifestDigest);
+    expect(rendered.publicReleaseBinding).toContain(
+      'releaseStatus: "indexer-activated"',
+    );
+    expect(rendered.publicReleaseBinding).toContain("publicAvailable: false");
+    for (const value of [
+      launchAnchor.transactionHash,
+      launchAnchor.blockHash,
+      launchAnchor.inputHash,
+      launchAnchor.launchId,
+      launchAnchor.stampHash,
+      launchAnchor.permitDigest,
+    ]) {
+      expect(rendered.publicReleaseBinding).toContain(value);
+    }
+    expect(rendered.publicReleaseBinding).toContain("blockNumber: 25_700_200");
     expect(rendered.publicReleaseBinding).not.toContain(
       baseManifest.manifestDigest,
     );
@@ -189,31 +217,38 @@ describe("Classic V4 browser release activation", () => {
       releaseBinding: reviewedReleaseBinding,
     });
     expect(() =>
-      buildClassicV4CatalogReleaseArtifact(
-        planCore,
-        baseReleaseBinding,
-        {
-          ...reviewedReleaseBinding,
-          envio: {
-            ...reviewedReleaseBinding.envio,
-            eventSetSha256: baseReleaseBinding.envio.eventSetSha256,
-          },
+      buildClassicV4CatalogReleaseArtifact(planCore, baseReleaseBinding, {
+        ...reviewedReleaseBinding,
+        envio: {
+          ...reviewedReleaseBinding.envio,
+          eventSetSha256: baseReleaseBinding.envio.eventSetSha256,
         },
-      ),
+      }),
     ).toThrow("independently promoted");
     expect(() =>
-      buildClassicV4CatalogReleaseArtifact(
-        planCore,
-        baseReleaseBinding,
+      buildClassicV4CatalogReleaseArtifact(planCore, baseReleaseBinding, {
+        ...reviewedReleaseBinding,
+        envio: {
+          ...reviewedReleaseBinding.envio,
+          handlerSha256: `0x${"c4".repeat(32)}`,
+        },
+      }),
+    ).toThrow("binding digest");
+    expect(() =>
+      renderClassicV4Activation(
         {
-          ...reviewedReleaseBinding,
-          envio: {
-            ...reviewedReleaseBinding.envio,
-            handlerSha256: `0x${"c4".repeat(32)}`,
+          ...plan,
+          publicReleaseBinding: {
+            chainId: 1,
+            launcher,
+            manifestDigest,
+            releaseStatus: "indexer-activated",
+            publicAvailable: false,
           },
         },
+        current,
       ),
-    ).toThrow("binding digest");
+    ).toThrow("finalized launch anchor");
   });
 
   it("keeps the manifest as the single final activation commit point", () => {
@@ -227,13 +262,15 @@ describe("Classic V4 browser release activation", () => {
       "browser",
       "manifest",
     ]);
-    expect(() => orderClassicV4ActivationChanges([
-      { filename: "manifest" },
-    ])).toThrow("exactly one manifest commit point");
-    expect(() => orderClassicV4ActivationChanges([
-      { filename: "first", commitPoint: true },
-      { filename: "second", commitPoint: true },
-    ])).toThrow("exactly one manifest commit point");
+    expect(() =>
+      orderClassicV4ActivationChanges([{ filename: "manifest" }]),
+    ).toThrow("exactly one manifest commit point");
+    expect(() =>
+      orderClassicV4ActivationChanges([
+        { filename: "first", commitPoint: true },
+        { filename: "second", commitPoint: true },
+      ]),
+    ).toThrow("exactly one manifest commit point");
   });
 
   it("stages all files before changing any activation target", async () => {
@@ -250,28 +287,34 @@ describe("Classic V4 browser release activation", () => {
     ]);
 
     await expect(
-      writeClassicV4ActivationAtomically([
-        { filename: first, before: "stale", after: "first-after" },
+      writeClassicV4ActivationAtomically(
+        [
+          { filename: first, before: "stale", after: "first-after" },
+          {
+            filename: second,
+            before: "second-before",
+            after: "second-after",
+            commitPoint: true,
+          },
+        ],
+        { lockDirectory },
+      ),
+    ).rejects.toThrow("inputs changed");
+    await expect(readFile(first, "utf8")).resolves.toBe("first-before");
+    await expect(readFile(second, "utf8")).resolves.toBe("second-before");
+
+    await writeClassicV4ActivationAtomically(
+      [
+        { filename: first, before: "first-before", after: "first-after" },
         {
           filename: second,
           before: "second-before",
           after: "second-after",
           commitPoint: true,
         },
-      ], { lockDirectory }),
-    ).rejects.toThrow("inputs changed");
-    await expect(readFile(first, "utf8")).resolves.toBe("first-before");
-    await expect(readFile(second, "utf8")).resolves.toBe("second-before");
-
-    await writeClassicV4ActivationAtomically([
-      { filename: first, before: "first-before", after: "first-after" },
-      {
-        filename: second,
-        before: "second-before",
-        after: "second-after",
-        commitPoint: true,
-      },
-    ], { lockDirectory });
+      ],
+      { lockDirectory },
+    );
     await expect(readFile(first, "utf8")).resolves.toBe("first-after");
     await expect(readFile(second, "utf8")).resolves.toBe("second-after");
   });

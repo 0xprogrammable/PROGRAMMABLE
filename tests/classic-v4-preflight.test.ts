@@ -28,6 +28,7 @@ import {
 } from "../lib/classic-v3-launch-validation";
 import { CLASSIC_V4_PUBLIC_RELEASE_BINDING } from "../lib/classic-v4-public-release";
 import {
+  getConfiguredClassicV4PublicRelease,
   isClassicV4PublicActionRelease,
   parseClassicV4PendingRelease,
   parseClassicV4PublicRelease,
@@ -68,24 +69,36 @@ const routerPermitTypes = {
 const routeParameters = parseAbiParameters(
   "(address launcher,bytes32 launcherRuntimeCodeHash,(string name,string symbol,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 creatorSalt,(string description,string website,string image,bytes extraData) metadata,address[] rewardBeneficiaries,uint16[] rewardSharesBps,(uint8 mode,uint16 durationDays,uint16 cliffDays) initialBuyCustody) parameters,(address token,address rewardVault,address positionRecipient,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount,address initialBuyCustody,bytes32 poolId,bytes32 launchHash) expectedResult) route",
 );
-const resultAddressesTypehash = keccak256(stringToHex(
-  "ProgrammableClassicResultAddressesV1(address token,address rewardVault,address positionRecipient,address initialBuyCustody)",
-));
-const resultAmountsTypehash = keccak256(stringToHex(
-  "ProgrammableClassicResultAmountsV1(uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount)",
-));
-const resultTypehash = keccak256(stringToHex(
-  "ProgrammableClassicLaunchResultV1(bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash)",
-));
-const componentTypehash = keccak256(stringToHex(
-  "ProgrammableLaunchComponentV1(uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope)",
-));
-const poolKeyTypehash = keccak256(stringToHex(
-  "ProgrammablePoolKeyV1(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)",
-));
-const stampRequestTypehash = keccak256(stringToHex(
-  "ProgrammableStampRequestV1(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash)",
-));
+const resultAddressesTypehash = keccak256(
+  stringToHex(
+    "ProgrammableClassicResultAddressesV1(address token,address rewardVault,address positionRecipient,address initialBuyCustody)",
+  ),
+);
+const resultAmountsTypehash = keccak256(
+  stringToHex(
+    "ProgrammableClassicResultAmountsV1(uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount)",
+  ),
+);
+const resultTypehash = keccak256(
+  stringToHex(
+    "ProgrammableClassicLaunchResultV1(bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash)",
+  ),
+);
+const componentTypehash = keccak256(
+  stringToHex(
+    "ProgrammableLaunchComponentV1(uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope)",
+  ),
+);
+const poolKeyTypehash = keccak256(
+  stringToHex(
+    "ProgrammablePoolKeyV1(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)",
+  ),
+);
+const stampRequestTypehash = keccak256(
+  stringToHex(
+    "ProgrammableStampRequestV1(bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash)",
+  ),
+);
 
 function digest(
   value: Record<string, unknown>,
@@ -133,8 +146,7 @@ function activeReleaseManifest() {
   );
   const addresses = {
     deployer: address(20),
-    launcherFeeRecipient:
-      "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    launcherFeeRecipient: "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
     ctoAuthority: address(1),
     rewardVaultFactory: address(2),
     initialBuyVestingWalletFactory: address(3),
@@ -207,8 +219,16 @@ function activeReleaseManifest() {
   const launchTimestamp = 1_788_000_000n;
   const launchValidAfter = launchTimestamp - 30n;
   const launchDeadline = launchTimestamp + 300n;
+  const canaryCreatorSalt = digestJson(
+    {
+      purpose: "programmable-classic-v4-mainnet-lifecycle-canary",
+      releaseBindingDigest,
+      operatorWallet: account,
+    },
+    CLASSIC_V4_DIGEST_DOMAINS.canaryCreatorSalt,
+  );
   const routerLaunch = preparedV4RouterTransaction(
-    v4Draft(),
+    classicV4CanaryDraft(),
     {
       addresses: {
         launcher: addresses.launcher,
@@ -220,6 +240,7 @@ function activeReleaseManifest() {
       },
     },
     { validAfter: launchValidAfter, deadline: launchDeadline },
+    canaryCreatorSalt,
   );
   const actionNames = [
     "launch",
@@ -296,8 +317,7 @@ function activeReleaseManifest() {
   const actions = Object.fromEntries(
     actionNames.map((name, index) => {
       const blockNumber = 25_700_200 + index;
-      const swapIdentity =
-        swapIdentities[name as keyof typeof swapIdentities];
+      const swapIdentity = swapIdentities[name as keyof typeof swapIdentities];
       const values = {
         launch: "600000000000000",
         buyExactInput: "100000000000000",
@@ -329,9 +349,7 @@ function activeReleaseManifest() {
           transactionIndex: index,
           nonce: name === "launcherClaim" ? 77 : 100 + index,
           from:
-            name === "launcherClaim"
-              ? addresses.launcherFeeRecipient
-              : account,
+            name === "launcherClaim" ? addresses.launcherFeeRecipient : account,
           to: target,
           value: values[name],
           confirmations: lifecycleVerificationBlock - blockNumber + 1,
@@ -345,10 +363,7 @@ function activeReleaseManifest() {
         },
       ];
     }),
-  ) as unknown as Record<
-    (typeof actionNames)[number],
-    Record<string, unknown>
-  >;
+  ) as unknown as Record<(typeof actionNames)[number], Record<string, unknown>>;
   const grossSplit = (gross: bigint, bps: number) => {
     const total = (gross * BigInt(bps)) / 10_000n;
     const launcherFee = (gross * 10n) / 10_000n;
@@ -433,7 +448,9 @@ function activeReleaseManifest() {
           appliedTotalSwapFeeBps: row.side === "buy" ? 100 : 200,
           inputBound: row.inputBound,
           outputBound: row.outputBound,
-          routerDeadline: (BigInt(timestamps[name as keyof typeof timestamps]) + 300n).toString(),
+          routerDeadline: (
+            BigInt(timestamps[name as keyof typeof timestamps]) + 300n
+          ).toString(),
           executionPath: "single-hop-all",
           quote: {
             policy: "canonical-v4-quoter-at-parent-block",
@@ -443,9 +460,7 @@ function activeReleaseManifest() {
             blockNumber:
               Number(actions[name as keyof typeof actions].blockNumber) - 1,
             blockHash: hash(`quote-block:${name}`),
-            exactAmount: exactInput
-              ? row.inputBound
-              : row.outputBound,
+            exactAmount: exactInput ? row.inputBound : row.outputBound,
             quotedAmount: row.quotedAmount,
             gasEstimate: "100000",
             slippageBps: 100,
@@ -454,10 +469,7 @@ function activeReleaseManifest() {
         },
       ];
     }),
-  ) as unknown as Record<
-    keyof typeof swapRows,
-    Record<string, unknown>
-  >;
+  ) as unknown as Record<keyof typeof swapRows, Record<string, unknown>>;
   const initialFee = grossSplit(600_000_000_000_000n, 100);
   const creatorTotal =
     initialFee.creator +
@@ -541,11 +553,11 @@ function activeReleaseManifest() {
     operatorWallet: account,
     launcher,
     feeHook: addresses.feeHook,
-    canaryToken: address(30),
-    rewardVault: address(31),
-    poolId: hash("pool"),
-    positionRecipient: address(32),
-    positionTokenId: "42",
+    canaryToken: routerLaunch.expectedResult.token,
+    rewardVault: routerLaunch.expectedResult.rewardVault,
+    poolId: routerLaunch.expectedResult.poolId,
+    positionRecipient: routerLaunch.expectedResult.positionRecipient,
+    positionTokenId: routerLaunch.expectedResult.positionTokenId.toString(),
     actions,
     swaps,
     claims: {
@@ -558,7 +570,7 @@ function activeReleaseManifest() {
     },
     postState: {
       launchMappings: {
-        launchHash: hash("launch-hash"),
+        launchHash: routerLaunch.expectedResult.launchHash,
         rewardVault: address(31),
         initialBuyCustody: zeroAddress,
       },
@@ -580,7 +592,7 @@ function activeReleaseManifest() {
       positionLock: {
         owner: address(32),
         approved: zeroAddress,
-        tokenId: "42",
+        tokenId: routerLaunch.expectedResult.positionTokenId.toString(),
         positionLiquidity: "1000000",
         activePoolLiquidity: "1000000",
         tickLower: 174_800,
@@ -593,14 +605,20 @@ function activeReleaseManifest() {
       },
       tokenCustody: {
         totalSupply: (1_000_000_000n * 10n ** 18n).toString(),
-        lockedTokenDust: "1",
+        lockedTokenDust: routerLaunch.expectedResult.lockedTokenDust.toString(),
         launcherBalance: "0",
         positionManagerBalance: "0",
       },
       derivedCodeHashes: {
-        token: hash("token-code"),
-        rewardVault: hash("vault-code"),
-        positionForwarder: hash("forwarder-code"),
+        token: routerLaunch.stampRequest.components.find(
+          (component) => component.resultIndex === 0,
+        )!.runtimeCodeHash,
+        rewardVault: routerLaunch.stampRequest.components.find(
+          (component) => component.resultIndex === 1,
+        )!.runtimeCodeHash,
+        positionForwarder: routerLaunch.stampRequest.components.find(
+          (component) => component.resultIndex === 2,
+        )!.runtimeCodeHash,
         rewardVaultPredeployed: false,
         positionForwarderPredeployed: false,
       },
@@ -650,9 +668,7 @@ function activeReleaseManifest() {
             blockNumber: Number(actions[name].blockNumber) - 1,
             erc20AllowanceToPermit2: swaps[name].inputBound,
             permit2AllowanceToRouter: swaps[name].inputBound,
-            permit2Expiration: (
-              BigInt(timestamps[name]) + 1_000n
-            ).toString(),
+            permit2Expiration: (BigInt(timestamps[name]) + 1_000n).toString(),
             permit2Nonce: "1",
             requiredAmount: swaps[name].inputBound,
           },
@@ -820,10 +836,36 @@ function v4Draft(): LaunchDraft {
   };
 }
 
+function classicV4CanaryDraft(): LaunchDraft {
+  return {
+    ...createClassicV3Draft(),
+    classicContractRelease: "classic-v4",
+    tokenName: "Programmable Classic V4 Canary",
+    tokenSymbol: "PCV4C",
+    tokenDescription: "Programmable Classic V4 Mainnet lifecycle canary",
+    tokenWebsite: "https://programmable.market",
+    tokenImage: "",
+    buySwapFeePercent: "1",
+    sellSwapFeePercent: "2",
+    initialBuyEth: "0.0006",
+  };
+}
+
 type RouterFixtureRelease = {
   addresses: { launcher: Address; feeHook: Address };
   runtimeCodeHashes: Record<string, Hex>;
 };
+
+type RouterFixtureVariant =
+  | "valid"
+  | "permit-kind"
+  | "expected-result"
+  | "stamp-token"
+  | "component-kind"
+  | "component-runtime"
+  | "signature"
+  | "wrong-canonical-signature"
+  | "noncanonical";
 
 function preparedV4RouterTransaction(
   draft: LaunchDraft,
@@ -832,6 +874,8 @@ function preparedV4RouterTransaction(
     validAfter: 100n,
     deadline: 430n,
   },
+  creatorSalt: Hex = salt,
+  variant: RouterFixtureVariant = "valid",
 ) {
   const initialBuy = 600_000_000_000_000n;
   const token = address(30);
@@ -845,32 +889,38 @@ function preparedV4RouterTransaction(
     tickSpacing: 200,
     hooks: hook,
   } as const;
-  const poolId = keccak256(encodeAbiParameters(
-    parseAbiParameters(
-      "address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks",
+  const poolId = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks",
+      ),
+      [
+        poolKey.currency0,
+        poolKey.currency1,
+        poolKey.fee,
+        poolKey.tickSpacing,
+        poolKey.hooks,
+      ],
     ),
-    [
-      poolKey.currency0,
-      poolKey.currency1,
-      poolKey.fee,
-      poolKey.tickSpacing,
-      poolKey.hooks,
-    ],
-  ));
+  );
   const expectedResult = {
     token,
     rewardVault,
     positionRecipient,
     positionTokenId: 123n,
-    tokenLiquidityAmount: 999_000_000n * 10n ** 18n,
-    lockedTokenDust: 1n,
-    initialBuyNativeAmount: initialBuy,
+    tokenLiquidityAmount: 999_999_999n * 10n ** 18n,
+    lockedTokenDust: 1n * 10n ** 18n,
+    initialBuyNativeAmount:
+      variant === "expected-result" ? initialBuy + 1n : initialBuy,
     initialBuyTokenAmount: 42_000n * 10n ** 18n,
     initialBuyCustody: zeroAddress as Address,
     poolId,
     launchHash: hash("router-launch-result"),
   } as const;
-  const tokenRuntimeCodeHash = hash("router-token-runtime");
+  const tokenRuntimeCodeHash =
+    variant === "component-runtime"
+      ? hash("router-token-runtime-tampered")
+      : hash("router-token-runtime");
   const hookRuntimeCodeHash = manifest.runtimeCodeHashes.feeHook;
   const components = [
     {
@@ -884,7 +934,7 @@ function preparedV4RouterTransaction(
       resultIndex: 0,
       account: token,
       runtimeCodeHash: tokenRuntimeCodeHash,
-      kind: 1,
+      kind: variant === "component-kind" ? 0 : 1,
       scope: 1,
     },
     {
@@ -902,11 +952,11 @@ function preparedV4RouterTransaction(
       scope: 1,
     },
   ].sort((left, right) =>
-    BigInt(left.account) < BigInt(right.account) ? -1 : 1
+    BigInt(left.account) < BigInt(right.account) ? -1 : 1,
   );
   const direct = decodeFunctionData({
     abi: classicV4LaunchAbi,
-    data: encodeClassicV4Launch(draft, salt, account),
+    data: encodeClassicV4Launch(draft, creatorSalt, account),
   });
   if (direct.functionName !== "launchFor") throw new Error("fixture");
   const route = {
@@ -917,101 +967,113 @@ function preparedV4RouterTransaction(
   } as const;
   const routePayload = encodeAbiParameters(routeParameters, [route]);
 
-  const addressesHash = keccak256(encodeAbiParameters(
-    parseAbiParameters(
-      "bytes32 typehash,address token,address rewardVault,address positionRecipient,address initialBuyCustody",
-    ),
-    [
-      resultAddressesTypehash,
-      token,
-      rewardVault,
-      positionRecipient,
-      zeroAddress,
-    ],
-  ));
-  const amountsHash = keccak256(encodeAbiParameters(
-    parseAbiParameters(
-      "bytes32 typehash,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount",
-    ),
-    [
-      resultAmountsTypehash,
-      expectedResult.positionTokenId,
-      expectedResult.tokenLiquidityAmount,
-      expectedResult.lockedTokenDust,
-      expectedResult.initialBuyNativeAmount,
-      expectedResult.initialBuyTokenAmount,
-    ],
-  ));
-  const expectedResultHash = keccak256(encodeAbiParameters(
-    parseAbiParameters(
-      "bytes32 typehash,bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash",
-    ),
-    [
-      resultTypehash,
-      addressesHash,
-      amountsHash,
-      expectedResult.poolId,
-      expectedResult.launchHash,
-    ],
-  ));
-  const componentHashes = components.map((component) =>
-    keccak256(encodeAbiParameters(
+  const addressesHash = keccak256(
+    encodeAbiParameters(
       parseAbiParameters(
-        "bytes32 typehash,uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope",
+        "bytes32 typehash,address token,address rewardVault,address positionRecipient,address initialBuyCustody",
       ),
       [
-        componentTypehash,
-        component.resultIndex,
-        component.account,
-        component.runtimeCodeHash,
-        component.kind,
-        component.scope,
+        resultAddressesTypehash,
+        token,
+        rewardVault,
+        positionRecipient,
+        zeroAddress,
       ],
-    ))
-  );
-  const componentSetHash = keccak256(concat(
-    componentHashes as [Hex, ...Hex[]],
-  ));
-  const poolKeyHash = keccak256(encodeAbiParameters(
-    parseAbiParameters(
-      "bytes32 typehash,address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks",
     ),
-    [
-      poolKeyTypehash,
-      poolKey.currency0,
-      poolKey.currency1,
-      poolKey.fee,
-      poolKey.tickSpacing,
-      poolKey.hooks,
-    ],
-  ));
+  );
+  const amountsHash = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,uint256 positionTokenId,uint256 tokenLiquidityAmount,uint256 lockedTokenDust,uint256 initialBuyNativeAmount,uint256 initialBuyTokenAmount",
+      ),
+      [
+        resultAmountsTypehash,
+        expectedResult.positionTokenId,
+        expectedResult.tokenLiquidityAmount,
+        expectedResult.lockedTokenDust,
+        expectedResult.initialBuyNativeAmount,
+        expectedResult.initialBuyTokenAmount,
+      ],
+    ),
+  );
+  const expectedResultHash = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,bytes32 addressesHash,bytes32 amountsHash,bytes32 poolId,bytes32 launchHash",
+      ),
+      [
+        resultTypehash,
+        addressesHash,
+        amountsHash,
+        expectedResult.poolId,
+        expectedResult.launchHash,
+      ],
+    ),
+  );
+  const componentHashes = components.map((component) =>
+    keccak256(
+      encodeAbiParameters(
+        parseAbiParameters(
+          "bytes32 typehash,uint8 resultIndex,address account,bytes32 runtimeCodeHash,uint8 kind,uint8 scope",
+        ),
+        [
+          componentTypehash,
+          component.resultIndex,
+          component.account,
+          component.runtimeCodeHash,
+          component.kind,
+          component.scope,
+        ],
+      ),
+    ),
+  );
+  const componentSetHash = keccak256(
+    concat(componentHashes as [Hex, ...Hex[]]),
+  );
+  const poolKeyHash = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks",
+      ),
+      [
+        poolKeyTypehash,
+        poolKey.currency0,
+        poolKey.currency1,
+        poolKey.fee,
+        poolKey.tickSpacing,
+        poolKey.hooks,
+      ],
+    ),
+  );
   const stampRequest = {
     launchId: hash("router-launch-id"),
-    token,
+    token: variant === "stamp-token" ? address(99) : token,
     tokenRuntimeCodeHash,
     poolKey,
     hookRuntimeCodeHash,
     components,
   } as const;
-  const stampRequestHash = keccak256(encodeAbiParameters(
-    parseAbiParameters(
-      "bytes32 typehash,bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash",
+  const stampRequestHash = keccak256(
+    encodeAbiParameters(
+      parseAbiParameters(
+        "bytes32 typehash,bytes32 launchId,address token,bytes32 tokenRuntimeCodeHash,bytes32 poolKeyHash,bytes32 hookRuntimeCodeHash,bytes32 componentSetHash",
+      ),
+      [
+        stampRequestTypehash,
+        stampRequest.launchId,
+        stampRequest.token,
+        stampRequest.tokenRuntimeCodeHash,
+        poolKeyHash,
+        stampRequest.hookRuntimeCodeHash,
+        componentSetHash,
+      ],
     ),
-    [
-      stampRequestTypehash,
-      stampRequest.launchId,
-      stampRequest.token,
-      stampRequest.tokenRuntimeCodeHash,
-      poolKeyHash,
-      stampRequest.hookRuntimeCodeHash,
-      componentSetHash,
-    ],
-  ));
+  );
   const permit = {
     chainId: 1n,
     router: CLASSIC_V4_LAUNCH_STAMP_ROUTER,
     launchWallet: account,
-    kind: 2,
+    kind: variant === "permit-kind" ? 1 : 2,
     routePayloadHash: keccak256(routePayload),
     expectedResultHash,
     stampRequestHash,
@@ -1020,16 +1082,19 @@ function preparedV4RouterTransaction(
     deadline: permitWindow.deadline,
     value: initialBuy,
   } as const;
-  const signature = concat([
-    toHex(1n, { size: 32 }),
-    toHex(1n, { size: 32 }),
-    "0x1b",
-  ]);
-  const data = encodeFunctionData({
+  const signature =
+    variant === "signature"
+      ? (`0x${"00".repeat(65)}` as Hex)
+      : variant === "wrong-canonical-signature"
+        ? concat([toHex(2n, { size: 32 }), toHex(1n, { size: 32 }), "0x1b"])
+        : concat([toHex(1n, { size: 32 }), toHex(1n, { size: 32 }), "0x1b"]);
+  const canonicalData = encodeFunctionData({
     abi: routerAbi,
     functionName: "launchAndStampV1",
     args: [permit, stampRequest, routePayload, signature],
   });
+  const data =
+    variant === "noncanonical" ? (`${canonicalData}00` as Hex) : canonicalData;
   const transaction = {
     kind: "launch" as const,
     chainId: 1 as const,
@@ -1052,6 +1117,8 @@ function preparedV4RouterTransaction(
       message: permit,
     }),
     token,
+    expectedResult,
+    stampRequest,
     planHash: buildPlanHash(account, {
       kind: "launch",
       chainId: 1,
@@ -1060,6 +1127,96 @@ function preparedV4RouterTransaction(
       value: transaction.value,
     }),
   };
+}
+
+function redigestRouterRelease(
+  manifest: ReturnType<typeof activeReleaseManifest>,
+) {
+  const authorization = manifest.lifecycleEvidence.launchAuthorization;
+  manifest.lifecycleEvidence.actions.launch.inputHash = keccak256(
+    authorization.transaction.calldata,
+  );
+  manifest.lifecycleEvidence.launchAuthorizationDigest = digest(
+    authorization,
+    undefined,
+    CLASSIC_V4_DIGEST_DOMAINS.lifecycleAuthorization,
+  );
+  manifest.lifecycleEvidence.evidenceDigest = digest(
+    manifest.lifecycleEvidence,
+    "evidenceDigest",
+    CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+  );
+  manifest.manifestDigest = digest(manifest, "manifestDigest");
+  return manifest;
+}
+
+function trustedBindingFor(manifest: ReturnType<typeof activeReleaseManifest>) {
+  const authorization = manifest.lifecycleEvidence.launchAuthorization;
+  const launch = manifest.lifecycleEvidence.actions.launch;
+  const decoded = decodeFunctionData({
+    abi: routerAbi,
+    data: authorization.transaction.calldata,
+  });
+  if (decoded.functionName !== "launchAndStampV1") {
+    throw new Error("Classic V4 Router fixture is invalid");
+  }
+  return {
+    chainId: 1 as const,
+    launcher: manifest.addresses.launcher,
+    manifestDigest: manifest.manifestDigest,
+    releaseStatus:
+      manifest.releaseStatus === "publicly-available"
+        ? ("publicly-available" as const)
+        : ("indexer-activated" as const),
+    publicAvailable: manifest.verification.publicAvailable === true,
+    transactionHash: launch.transactionHash as Hex,
+    blockHash: launch.blockHash as Hex,
+    blockNumber: launch.blockNumber as number,
+    inputHash: launch.inputHash as Hex,
+    launchId: decoded.args[1].launchId,
+    stampHash: authorization.simulation.stampHash as Hex,
+    permitDigest: authorization.permitDigest as Hex,
+  };
+}
+
+function routerTamperedRelease(
+  variant: RouterFixtureVariant,
+  mutateRelease?: (release: RouterFixtureRelease) => void,
+) {
+  const manifest = activeReleaseManifest();
+  const authorization = manifest.lifecycleEvidence.launchAuthorization;
+  const release: RouterFixtureRelease = {
+    addresses: {
+      launcher: manifest.addresses.launcher,
+      feeHook: manifest.addresses.feeHook,
+    },
+    runtimeCodeHashes: {
+      launcher: manifest.runtimeCodeHashes.launcher,
+      feeHook: manifest.runtimeCodeHashes.feeHook,
+    },
+  };
+  mutateRelease?.(release);
+  const creatorSalt = digestJson(
+    {
+      purpose: "programmable-classic-v4-mainnet-lifecycle-canary",
+      releaseBindingDigest: manifest.lifecycleEvidence.releaseBindingDigest,
+      operatorWallet: account,
+    },
+    CLASSIC_V4_DIGEST_DOMAINS.canaryCreatorSalt,
+  );
+  const prepared = preparedV4RouterTransaction(
+    classicV4CanaryDraft(),
+    release,
+    {
+      validAfter: BigInt(authorization.validAfter),
+      deadline: BigInt(authorization.deadline),
+    },
+    creatorSalt,
+    variant,
+  );
+  authorization.permitDigest = prepared.permitDigest;
+  authorization.transaction.calldata = prepared.transaction.data;
+  return redigestRouterRelease(manifest);
 }
 
 describe("Classic V4 release and launch preflight", () => {
@@ -1086,12 +1243,13 @@ describe("Classic V4 release and launch preflight", () => {
 
   it("accepts only a complete indexer-activated release manifest", () => {
     const manifest = activeReleaseManifest();
-    expect(parseClassicV4PublicRelease(manifest)).toMatchObject({
+    const binding = trustedBindingFor(manifest);
+    expect(parseClassicV4PublicRelease(manifest, binding)).toMatchObject({
       releaseStatus: "indexer-activated",
       verification: { indexerActivated: true, publicAvailable: false },
     });
 
-    const parsedIndexerRelease = parseClassicV4PublicRelease(manifest);
+    const parsedIndexerRelease = parseClassicV4PublicRelease(manifest, binding);
     expect(isClassicV4PublicActionRelease(parsedIndexerRelease)).toBe(false);
 
     const directLauncher = structuredClone(manifest);
@@ -1112,14 +1270,19 @@ describe("Classic V4 release and launch preflight", () => {
       "evidenceDigest",
       CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
     );
-    directLauncher.manifestDigest = digest(
-      directLauncher,
-      "manifestDigest",
-    );
-    expect(parseClassicV4PublicRelease(directLauncher)).toBeNull();
+    directLauncher.manifestDigest = digest(directLauncher, "manifestDigest");
+    expect(
+      parseClassicV4PublicRelease(
+        directLauncher,
+        trustedBindingFor(directLauncher),
+      ),
+    ).toBeNull();
 
     const publicManifest = publiclyAvailableReleaseManifest();
-    const parsedPublicRelease = parseClassicV4PublicRelease(publicManifest);
+    const parsedPublicRelease = parseClassicV4PublicRelease(
+      publicManifest,
+      trustedBindingFor(publicManifest),
+    );
     expect(parsedPublicRelease).toMatchObject({
       releaseStatus: "publicly-available",
       verification: { indexerActivated: true, publicAvailable: true },
@@ -1141,42 +1304,147 @@ describe("Classic V4 release and launch preflight", () => {
       verification: { indexerActivated: false, publicAvailable: false },
       indexerHandoff: { indexerBindingDigest: null, activated: false },
     });
-    expect(parseClassicV4PublicRelease(pending)).toBeNull();
+    expect(
+      parseClassicV4PublicRelease(pending, trustedBindingFor(pending)),
+    ).toBeNull();
 
     const forgedLifecycle = structuredClone(manifest);
-    Object.assign(
-      forgedLifecycle.lifecycleEvidence.actions.sellExactOutput,
-      { success: false },
-    );
+    Object.assign(forgedLifecycle.lifecycleEvidence.actions.sellExactOutput, {
+      success: false,
+    });
     forgedLifecycle.lifecycleEvidence.evidenceDigest = digest(
       forgedLifecycle.lifecycleEvidence,
       "evidenceDigest",
       CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
     );
-    forgedLifecycle.manifestDigest = digest(
-      forgedLifecycle,
-      "manifestDigest",
-    );
-    expect(parseClassicV4PublicRelease(forgedLifecycle)).toBeNull();
+    forgedLifecycle.manifestDigest = digest(forgedLifecycle, "manifestDigest");
+    expect(
+      parseClassicV4PublicRelease(
+        forgedLifecycle,
+        trustedBindingFor(forgedLifecycle),
+      ),
+    ).toBeNull();
 
     const forgedFinality = structuredClone(manifest);
     forgedFinality.deploymentVerification.confirmations.launcher += 1;
-    forgedFinality.manifestDigest = digest(
-      forgedFinality,
-      "manifestDigest",
-    );
-    expect(parseClassicV4PublicRelease(forgedFinality)).toBeNull();
+    forgedFinality.manifestDigest = digest(forgedFinality, "manifestDigest");
+    expect(
+      parseClassicV4PublicRelease(
+        forgedFinality,
+        trustedBindingFor(forgedFinality),
+      ),
+    ).toBeNull();
 
     const missingFinality = structuredClone(manifest) as Record<
       string,
       unknown
     >;
     delete missingFinality.deploymentVerification;
-    missingFinality.manifestDigest = digest(
-      missingFinality,
-      "manifestDigest",
+    missingFinality.manifestDigest = digest(missingFinality, "manifestDigest");
+    expect(
+      parseClassicV4PublicRelease(
+        missingFinality,
+        trustedBindingFor(
+          missingFinality as ReturnType<typeof activeReleaseManifest>,
+        ),
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects every tampered signed Router authorization binding", () => {
+    const cases: readonly [
+      string,
+      () => ReturnType<typeof activeReleaseManifest>,
+    ][] = [
+      ["permit kind", () => routerTamperedRelease("permit-kind")],
+      [
+        "route launcher",
+        () =>
+          routerTamperedRelease("valid", (release) => {
+            release.addresses.launcher = address(97);
+          }),
+      ],
+      [
+        "launcher runtime",
+        () =>
+          routerTamperedRelease("valid", (release) => {
+            release.runtimeCodeHashes.launcher = hash(
+              "foreign-launcher-runtime",
+            );
+          }),
+      ],
+      ["expected result", () => routerTamperedRelease("expected-result")],
+      ["stamp request", () => routerTamperedRelease("stamp-token")],
+      ["component semantics", () => routerTamperedRelease("component-kind")],
+      ["component runtime", () => routerTamperedRelease("component-runtime")],
+      ["signature", () => routerTamperedRelease("signature")],
+      ["noncanonical calldata", () => routerTamperedRelease("noncanonical")],
+      [
+        "permit digest",
+        () => {
+          const manifest = activeReleaseManifest();
+          manifest.lifecycleEvidence.launchAuthorization.permitDigest = hash(
+            "tampered-permit-digest",
+          );
+          return redigestRouterRelease(manifest);
+        },
+      ],
+    ];
+
+    for (const [label, candidate] of cases) {
+      const manifest = candidate();
+      expect(
+        parseClassicV4PublicRelease(manifest, trustedBindingFor(manifest)),
+        label,
+      ).toBeNull();
+    }
+  });
+
+  it("requires the code-reviewed finalized launch anchor", () => {
+    const exactManifest = publiclyAvailableReleaseManifest();
+    const exactBinding = trustedBindingFor(exactManifest);
+    expect(parseClassicV4PublicRelease(exactManifest, exactBinding)).toEqual(
+      exactManifest,
     );
-    expect(parseClassicV4PublicRelease(missingFinality)).toBeNull();
+    expect(parseClassicV4PublicRelease(exactManifest, null)).toBeNull();
+    for (const [label, tamper] of [
+      ["transaction hash", { transactionHash: hash("false transaction") }],
+      ["block hash", { blockHash: hash("false block") }],
+      ["block number", { blockNumber: exactBinding.blockNumber + 1 }],
+      ["input hash", { inputHash: hash("false input") }],
+      ["launch id", { launchId: hash("false launch id") }],
+      ["stamp hash", { stampHash: hash("false stamp") }],
+      ["permit digest", { permitDigest: hash("false permit") }],
+    ] as const) {
+      expect(
+        parseClassicV4PublicRelease(exactManifest, {
+          ...exactBinding,
+          ...tamper,
+        }),
+        label,
+      ).toBeNull();
+    }
+
+    const wrongSignature = routerTamperedRelease("wrong-canonical-signature");
+    Object.assign(wrongSignature, { releaseStatus: "publicly-available" });
+    Object.assign(wrongSignature.verification, { publicAvailable: true });
+    wrongSignature.manifestDigest = digest(wrongSignature, "manifestDigest");
+    const selfBinding = trustedBindingFor(wrongSignature);
+
+    expect(parseClassicV4PublicRelease(wrongSignature, null)).toBeNull();
+    expect(
+      parseClassicV4PublicRelease(wrongSignature, {
+        ...selfBinding,
+        inputHash: exactBinding.inputHash,
+      }),
+    ).toBeNull();
+    expect(
+      promoteClassicV4ReleaseToPublicAvailability(
+        activeReleaseManifest(),
+        null,
+      ),
+    ).toBeNull();
+    expect(getConfiguredClassicV4PublicRelease("production")).toBeNull();
   });
 
   it("accepts only the exact signed Router handoff for the public release", () => {
@@ -1206,16 +1474,11 @@ describe("Classic V4 release and launch preflight", () => {
       releaseLauncher: indexerManifest.addresses.launcher,
       releaseManifestDigest: indexerManifest.manifestDigest,
     };
+    const indexerBinding = trustedBindingFor(indexerManifest);
     expect(() =>
       validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
         indexerInput,
-        {
-          chainId: 1,
-          launcher: indexerManifest.addresses.launcher,
-          manifestDigest: indexerManifest.manifestDigest,
-          releaseStatus: "indexer-activated",
-          publicAvailable: false,
-        },
+        indexerBinding,
       ),
     ).toThrow("browser release binding");
 
@@ -1229,13 +1492,7 @@ describe("Classic V4 release and launch preflight", () => {
       releaseManifestDigest: manifest.manifestDigest,
     };
 
-    const browserBinding = {
-      chainId: 1 as const,
-      launcher: manifest.addresses.launcher,
-      manifestDigest: manifest.manifestDigest,
-      releaseStatus: "publicly-available" as const,
-      publicAvailable: true as const,
-    };
+    const browserBinding = trustedBindingFor(manifest);
     expect(() =>
       validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
         input,
@@ -1283,17 +1540,21 @@ describe("Classic V4 release and launch preflight", () => {
       ),
     ).toThrow("browser V4 release binding");
     expect(() =>
-      validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
-        input,
-        { ...browserBinding, manifestDigest: hash("another manifest") },
-      ),
+      validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(input, {
+        ...browserBinding,
+        manifestDigest: hash("another manifest"),
+      }),
     ).toThrow("browser V4 release binding");
   });
 
   it("promotes the exact indexer manifest and derives its browser binding", () => {
     const indexed = activeReleaseManifest();
     const originalDigest = indexed.manifestDigest;
-    const promotion = promoteClassicV4ReleaseToPublicAvailability(indexed);
+    const indexedBinding = trustedBindingFor(indexed);
+    const promotion = promoteClassicV4ReleaseToPublicAvailability(
+      indexed,
+      indexedBinding,
+    );
 
     expect(promotion).not.toBeNull();
     expect(indexed).toMatchObject({
@@ -1315,15 +1576,26 @@ describe("Classic V4 release and launch preflight", () => {
       manifestDigest: promotion?.release.manifestDigest,
       releaseStatus: "publicly-available",
       publicAvailable: true,
+      transactionHash: indexedBinding.transactionHash,
+      blockHash: indexedBinding.blockHash,
+      blockNumber: indexedBinding.blockNumber,
+      inputHash: indexedBinding.inputHash,
+      launchId: indexedBinding.launchId,
+      stampHash: indexedBinding.stampHash,
+      permitDigest: indexedBinding.permitDigest,
     });
-    expect(parseClassicV4PublicRelease(promotion?.release)).toEqual(
-      promotion?.release,
-    );
     expect(
-      isClassicV4PublicActionRelease(promotion?.release),
-    ).toBe(true);
+      parseClassicV4PublicRelease(
+        promotion?.release,
+        promotion?.browserBinding ?? null,
+      ),
+    ).toEqual(promotion?.release);
+    expect(isClassicV4PublicActionRelease(promotion?.release)).toBe(true);
     expect(
-      promoteClassicV4ReleaseToPublicAvailability(promotion?.release),
+      promoteClassicV4ReleaseToPublicAvailability(
+        promotion?.release,
+        promotion?.browserBinding ?? null,
+      ),
     ).toBeNull();
   });
 });

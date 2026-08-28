@@ -17,7 +17,11 @@ import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
 } from "../../scripts/classic-v4-digest.mjs";
-import { parseClassicV4PendingRelease } from "../../lib/classic-v4-release.ts";
+import {
+  deriveClassicV4FinalizedLaunchAnchor,
+  parseClassicV4PendingRelease,
+} from "../../lib/classic-v4-release.ts";
+import { isClassicV4AnchoredPublicReleaseBinding } from "../../lib/classic-v4-public-release.ts";
 import { parseReleaseAuditArtifact } from "./release-candidate.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -196,23 +200,30 @@ function assertSharedFactory(manifest, binding, input) {
   );
   const shared = manifest?.sharedDependencies?.[input.manifestName];
   if (
-    address !== exactAddress(current.address, `${input.contractName} address`) ||
-    runtimeCodeHash !== exactBytes32(
-      current.runtimeCodeHash,
-      `${input.contractName} runtime code hash`,
-    ) ||
-    address !== exactAddress(shared?.address, `${input.manifestName} shared address`) ||
-    runtimeCodeHash !== exactBytes32(
-      shared?.runtimeCodeHash,
-      `${input.manifestName} shared runtime code hash`,
-    )
+    address !==
+      exactAddress(current.address, `${input.contractName} address`) ||
+    runtimeCodeHash !==
+      exactBytes32(
+        current.runtimeCodeHash,
+        `${input.contractName} runtime code hash`,
+      ) ||
+    address !==
+      exactAddress(shared?.address, `${input.manifestName} shared address`) ||
+    runtimeCodeHash !==
+      exactBytes32(
+        shared?.runtimeCodeHash,
+        `${input.manifestName} shared runtime code hash`,
+      )
   ) {
     fail(`${input.manifestName} is not the approved shared factory`);
   }
   return Object.freeze({
     contractName: input.contractName,
     address,
-    startBlock: positiveBlock(current.startBlock, `${input.contractName} start block`),
+    startBlock: positiveBlock(
+      current.startBlock,
+      `${input.contractName} start block`,
+    ),
     runtimeCodeHash,
   });
 }
@@ -283,7 +294,10 @@ export function buildClassicV4ActivationPlan(
     fail("Classic V4 release evidence is incomplete");
   }
 
-  const releaseCommit = exactGitObject(manifest.releaseCommit, "release commit");
+  const releaseCommit = exactGitObject(
+    manifest.releaseCommit,
+    "release commit",
+  );
   const releaseTree = exactGitObject(manifest.releaseTree, "release tree");
   const sourceCommitment = exactBytes32(
     manifest.sourceCommitment,
@@ -305,12 +319,14 @@ export function buildClassicV4ActivationPlan(
   if (
     manifest.sourceVerification?.schemaVersion !== 1 ||
     manifest.sourceVerification?.chainId !== 1 ||
-    String(manifest.sourceVerification?.planDigest).toLowerCase() !== planDigest ||
+    String(manifest.sourceVerification?.planDigest).toLowerCase() !==
+      planDigest ||
     String(manifest.sourceVerification?.sourceCommitment).toLowerCase() !==
       sourceCommitment ||
     manifest.lifecycleEvidence?.schemaVersion !== 1 ||
     manifest.lifecycleEvidence?.chainId !== 1 ||
-    String(manifest.lifecycleEvidence?.planDigest).toLowerCase() !== planDigest ||
+    String(manifest.lifecycleEvidence?.planDigest).toLowerCase() !==
+      planDigest ||
     String(manifest.lifecycleEvidence?.sourceCommitment).toLowerCase() !==
       sourceCommitment ||
     !Number.isSafeInteger(manifest.lifecycleEvidence?.independentRpcCount) ||
@@ -362,9 +378,13 @@ export function buildClassicV4ActivationPlan(
     fail("Classic V4 indexer handoff is not activation eligible");
   }
 
-  const launcher = exactAddress(manifest.addresses?.launcher, "launcher address");
+  const launcher = exactAddress(
+    manifest.addresses?.launcher,
+    "launcher address",
+  );
   const hook = exactAddress(manifest.addresses?.feeHook, "fee hook address");
-  if (launcher === hook) fail("Classic V4 launcher and hook identities collide");
+  if (launcher === hook)
+    fail("Classic V4 launcher and hook identities collide");
   if ((BigInt(hook) & HOOK_ADDRESS_MASK) !== REQUIRED_HOOK_FLAGS) {
     fail("Classic V4 fee hook address has incorrect Uniswap v4 flags");
   }
@@ -382,12 +402,18 @@ export function buildClassicV4ActivationPlan(
   }
 
   if (
-    exactAddress(handoff.sources?.launcher?.address, "handoff launcher") !== launcher ||
-    exactAddress(handoff.sources?.feeHook?.address, "handoff fee hook") !== hook ||
-    positiveBlock(handoff.sources?.launcher?.startBlock, "handoff launcher block") !==
-      launcherBlock ||
-    positiveBlock(handoff.sources?.feeHook?.startBlock, "handoff fee hook block") !==
-      hookBlock ||
+    exactAddress(handoff.sources?.launcher?.address, "handoff launcher") !==
+      launcher ||
+    exactAddress(handoff.sources?.feeHook?.address, "handoff fee hook") !==
+      hook ||
+    positiveBlock(
+      handoff.sources?.launcher?.startBlock,
+      "handoff launcher block",
+    ) !== launcherBlock ||
+    positiveBlock(
+      handoff.sources?.feeHook?.startBlock,
+      "handoff fee hook block",
+    ) !== hookBlock ||
     positiveBlock(handoff.startBlock, "handoff start block") !== startBlock
   ) {
     fail("Classic V4 indexer source handoff drifted from deployment evidence");
@@ -406,7 +432,8 @@ export function buildClassicV4ActivationPlan(
   if (
     exactAddress(manifest.lifecycleEvidence.launcher, "lifecycle launcher") !==
       launcher ||
-    exactAddress(manifest.lifecycleEvidence.feeHook, "lifecycle fee hook") !== hook
+    exactAddress(manifest.lifecycleEvidence.feeHook, "lifecycle fee hook") !==
+      hook
   ) {
     fail("Classic V4 lifecycle evidence has mismatched source provenance");
   }
@@ -418,16 +445,19 @@ export function buildClassicV4ActivationPlan(
     const evidence = manifest.sourceVerification?.contracts?.[name];
     if (
       exactAddress(evidence?.address, `${name} verified source`) !== address ||
-      positiveBlock(evidence?.deploymentBlock, `${name} verified deployment block`) !==
-        block ||
+      positiveBlock(
+        evidence?.deploymentBlock,
+        `${name} verified deployment block`,
+      ) !== block ||
       evidence?.status !== "exact-match" ||
       exactBytes32(
         evidence?.deploymentTransaction,
         `${name} verified deployment transaction`,
-      ) !== exactBytes32(
-        manifest.deploymentTransactions?.[name],
-        `${name} deployment transaction`,
-      )
+      ) !==
+        exactBytes32(
+          manifest.deploymentTransactions?.[name],
+          `${name} deployment transaction`,
+        )
     ) {
       fail(`Classic V4 ${name} source provenance is not an exact match`);
     }
@@ -442,7 +472,8 @@ export function buildClassicV4ActivationPlan(
   const existingLauncher = existingByAddress.get(launcher);
   const existingHook = existingByAddress.get(hook);
   if (
-    (existingLauncher && existingLauncher.contractName !== "ClassicV4Launcher") ||
+    (existingLauncher &&
+      existingLauncher.contractName !== "ClassicV4Launcher") ||
     (existingHook && existingHook.contractName !== "ClassicV4Hook")
   ) {
     fail("Classic V4 source identity collides with an existing indexed source");
@@ -480,16 +511,18 @@ export function buildClassicV4ActivationPlan(
   ]) {
     if (
       existing &&
-      (
-        positiveBlock(existing.startBlock, `${expected.contractName} bound start block`) !==
-          expected.startBlock ||
+      (positiveBlock(
+        existing.startBlock,
+        `${expected.contractName} bound start block`,
+      ) !== expected.startBlock ||
         exactBytes32(
           existing.runtimeCodeHash,
           `${expected.contractName} bound runtime code hash`,
-        ) !== expected.runtimeCodeHash
-      )
+        ) !== expected.runtimeCodeHash)
     ) {
-      fail(`Existing ${expected.contractName} binding does not match the manifest`);
+      fail(
+        `Existing ${expected.contractName} binding does not match the manifest`,
+      );
     }
   }
   const activationBlock = Math.max(hookBlock, launcherBlock);
@@ -505,6 +538,8 @@ export function buildClassicV4ActivationPlan(
     activatedManifest.manifestDigest,
     "activated manifest digest",
   );
+  const finalizedLaunchAnchor =
+    deriveClassicV4FinalizedLaunchAnchor(activatedManifest);
 
   return Object.freeze({
     schemaVersion: 1,
@@ -524,6 +559,9 @@ export function buildClassicV4ActivationPlan(
       chainId: 1,
       launcher,
       manifestDigest: activatedManifestDigest,
+      releaseStatus: "indexer-activated",
+      publicAvailable: false,
+      ...(finalizedLaunchAnchor ?? {}),
     }),
     sources: Object.freeze([hookSource, launcherSource]),
     sharedSources: Object.freeze([rewardVaultFactory, vestingWalletFactory]),
@@ -593,8 +631,10 @@ function assertCatalogEnvioIdentity(candidate, base) {
         base.sourceRegistrySha256,
         "base Envio source registry digest",
       ) ||
-    exactBytes32(candidate.eventSetSha256, "reviewed Envio event-set digest") ===
-      exactBytes32(base.eventSetSha256, "base Envio event-set digest") ||
+    exactBytes32(
+      candidate.eventSetSha256,
+      "reviewed Envio event-set digest",
+    ) === exactBytes32(base.eventSetSha256, "base Envio event-set digest") ||
     !Number.isSafeInteger(candidate.eventCount) ||
     candidate.eventCount <= base.eventCount
   ) {
@@ -634,10 +674,7 @@ export function buildClassicV4CatalogReleaseArtifact(
     reviewedBinding.startBlock !== baseBinding.startBlock ||
     reviewedBinding.confirmations !== 12 ||
     baseBinding.confirmations !== 12 ||
-    !sameJson(
-      reviewedBinding.uniswapV4Subgraph,
-      baseBinding.uniswapV4Subgraph,
-    )
+    !sameJson(reviewedBinding.uniswapV4Subgraph, baseBinding.uniswapV4Subgraph)
   ) {
     fail("Reviewed Envio release binding changed shared pipeline identity");
   }
@@ -646,7 +683,9 @@ export function buildClassicV4CatalogReleaseArtifact(
     digestJson(reviewedBinding, CLASSIC_V4_DIGEST_DOMAINS.releaseBinding) !==
     plan.indexerBindingDigest
   ) {
-    fail("Reviewed Envio release binding digest does not match the activation plan");
+    fail(
+      "Reviewed Envio release binding digest does not match the activation plan",
+    );
   }
 
   if (
@@ -658,7 +697,9 @@ export function buildClassicV4CatalogReleaseArtifact(
   ) {
     fail("Reviewed Envio sources do not preserve the exact base prefix");
   }
-  const addedSources = reviewedBinding.sources.slice(baseBinding.sources.length);
+  const addedSources = reviewedBinding.sources.slice(
+    baseBinding.sources.length,
+  );
   for (let index = 0; index < plan.sources.length; index += 1) {
     const expected = plan.sources[index];
     const source = assertExactKeys(
@@ -668,12 +709,18 @@ export function buildClassicV4CatalogReleaseArtifact(
     );
     if (
       source.contractName !== expected.contractName ||
-      source.address !== exactAddress(expected.address, `${expected.contractName} address`) ||
+      source.address !==
+        exactAddress(expected.address, `${expected.contractName} address`) ||
       source.startBlock !== expected.startBlock ||
       source.runtimeCodeHash !==
-        exactBytes32(expected.runtimeCodeHash, `${expected.contractName} runtime code hash`)
+        exactBytes32(
+          expected.runtimeCodeHash,
+          `${expected.contractName} runtime code hash`,
+        )
     ) {
-      fail(`Reviewed ${expected.contractName} source does not match the manifest`);
+      fail(
+        `Reviewed ${expected.contractName} source does not match the manifest`,
+      );
     }
   }
 
@@ -699,8 +746,10 @@ export function buildClassicV4CatalogReleaseArtifact(
   );
   if (
     release.model !== plan.dataPipelineReleaseFragment.model ||
-    release.releaseVersion !== plan.dataPipelineReleaseFragment.releaseVersion ||
-    release.activationBlock !== plan.dataPipelineReleaseFragment.activationBlock ||
+    release.releaseVersion !==
+      plan.dataPipelineReleaseFragment.releaseVersion ||
+    release.activationBlock !==
+      plan.dataPipelineReleaseFragment.activationBlock ||
     !sameJson(
       release.sourceContracts,
       plan.dataPipelineReleaseFragment.sourceContracts,
@@ -710,7 +759,9 @@ export function buildClassicV4CatalogReleaseArtifact(
       plan.dataPipelineReleaseFragment.dynamicContracts,
     )
   ) {
-    fail("Reviewed Envio Classic V4 release does not match the activation plan");
+    fail(
+      "Reviewed Envio Classic V4 release does not match the activation plan",
+    );
   }
 
   return Object.freeze({
@@ -774,6 +825,9 @@ function renderEnvioConfigBlock(plan) {
 
 function renderPublicReleaseBindingBlock(plan) {
   const binding = plan.publicReleaseBinding;
+  if (!isClassicV4AnchoredPublicReleaseBinding(binding)) {
+    fail("Classic V4 browser binding is missing its finalized launch anchor");
+  }
   return [
     PUBLIC_BINDING_START,
     "export const CLASSIC_V4_PUBLIC_RELEASE_BINDING:",
@@ -782,6 +836,15 @@ function renderPublicReleaseBindingBlock(plan) {
     `  chainId: ${binding.chainId},`,
     `  launcher: "${binding.launcher}",`,
     `  manifestDigest: "${binding.manifestDigest}",`,
+    `  releaseStatus: "${binding.releaseStatus}",`,
+    `  publicAvailable: ${binding.publicAvailable},`,
+    `  transactionHash: "${binding.transactionHash}",`,
+    `  blockHash: "${binding.blockHash}",`,
+    `  blockNumber: ${binding.blockNumber.toLocaleString("en-US").replaceAll(",", "_")},`,
+    `  inputHash: "${binding.inputHash}",`,
+    `  launchId: "${binding.launchId}",`,
+    `  stampHash: "${binding.stampHash}",`,
+    `  permitDigest: "${binding.permitDigest}",`,
     "});",
     PUBLIC_BINDING_END,
   ].join("\n");
@@ -926,7 +989,9 @@ function validateJournal(value, expectedTargets) {
   ) {
     fail("Classic V4 activation journal is invalid");
   }
-  const allowed = new Set(expectedTargets.map((target) => path.resolve(target)));
+  const allowed = new Set(
+    expectedTargets.map((target) => path.resolve(target)),
+  );
   const entries = value.entries.map((entry) => {
     if (
       !isRecord(entry) ||
@@ -1029,7 +1094,11 @@ async function readLockOwner(lockDirectory) {
     const owner = JSON.parse(
       await readFile(path.join(lockDirectory, "owner.json"), "utf8"),
     );
-    if (!isRecord(owner) || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) {
+    if (
+      !isRecord(owner) ||
+      !Number.isSafeInteger(owner.pid) ||
+      owner.pid <= 0
+    ) {
       fail("Classic V4 activation lock owner is invalid");
     }
     return owner;
@@ -1049,7 +1118,9 @@ async function acquireRecoveryClaim(lockDirectory, isProcessAlive) {
       existing.pid > 0 &&
       isProcessAlive(existing.pid)
     ) {
-      fail(`Classic V4 activation recovery is owned by live process ${existing.pid}`);
+      fail(
+        `Classic V4 activation recovery is owned by live process ${existing.pid}`,
+      );
     }
     await removeTemporaryFile(claimPath);
     await syncDirectory(lockDirectory);
@@ -1059,11 +1130,15 @@ async function acquireRecoveryClaim(lockDirectory, isProcessAlive) {
   try {
     await writeDurableFile(
       claimPath,
-      `${JSON.stringify({
-        schemaVersion: 1,
-        pid: process.pid,
-        startedAt: new Date().toISOString(),
-      }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
     );
   } catch (error) {
     if (error?.code === "EEXIST") {
@@ -1123,11 +1198,15 @@ async function acquireActivationLock(lockDirectory, expectedTargets, options) {
   try {
     await writeDurableFile(
       path.join(lockDirectory, "owner.json"),
-      `${JSON.stringify({
-        schemaVersion: 1,
-        pid: options.processId ?? process.pid,
-        startedAt: new Date().toISOString(),
-      }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          pid: options.processId ?? process.pid,
+          startedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
     );
   } catch (error) {
     await rm(lockDirectory, { recursive: true, force: true });
@@ -1136,14 +1215,19 @@ async function acquireActivationLock(lockDirectory, expectedTargets, options) {
   }
 }
 
-export async function writeClassicV4ActivationAtomically(changes, options = {}) {
+export async function writeClassicV4ActivationAtomically(
+  changes,
+  options = {},
+) {
   const pending = changes.filter((change) => change.before !== change.after);
   if (pending.length === 0) return;
   const ordered = orderClassicV4ActivationChanges(pending);
   const lockDirectory = path.resolve(
     options.lockDirectory ?? activationLockDirectory,
   );
-  const expectedTargets = ordered.map((change) => path.resolve(change.filename));
+  const expectedTargets = ordered.map((change) =>
+    path.resolve(change.filename),
+  );
   await acquireActivationLock(lockDirectory, expectedTargets, options);
   const transactionId = `${options.processId ?? process.pid}-${Date.now()}`;
   const staged = ordered.map((change, index) => ({
@@ -1171,7 +1255,10 @@ export async function writeClassicV4ActivationAtomically(changes, options = {}) 
   };
   let journalDurable = false;
   try {
-    await writeDurableFile(journalPath, `${JSON.stringify(journal, null, 2)}\n`);
+    await writeDurableFile(
+      journalPath,
+      `${JSON.stringify(journal, null, 2)}\n`,
+    );
     journalDurable = true;
     for (const change of staged) {
       await writeDurableFile(change.rollback, change.before);
@@ -1283,7 +1370,9 @@ export async function main(argv = process.argv.slice(2)) {
     CLASSIC_V4_DIGEST_DOMAINS.releaseBinding,
   );
   if (indexerBindingDigest !== releaseAudit.releaseBindingDigest) {
-    fail("Envio release audit binding digest does not match its release binding");
+    fail(
+      "Envio release audit binding digest does not match its release binding",
+    );
   }
   const basePlan = buildClassicV4ActivationPlan(
     validatedManifest,
@@ -1316,47 +1405,59 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (options.write) {
     if (options.acknowledgement !== plan.manifestDigest) {
-      fail("--write requires --acknowledge-manifest-digest for this exact manifest");
+      fail(
+        "--write requires --acknowledge-manifest-digest for this exact manifest",
+      );
     }
-    await writeClassicV4ActivationAtomically(orderClassicV4ActivationChanges([
-      {
-        filename: releaseMapPath,
-        before: releaseMap,
-        after: rendered.releaseMap,
-      },
-      {
-        filename: envioConfigPath,
-        before: envioConfig,
-        after: rendered.envioConfig,
-      },
-      {
-        filename: options.manifest,
-        before: manifestSource,
-        after: rendered.manifest,
-        commitPoint: true,
-      },
-      {
-        filename: catalogReleasePath,
-        before: catalogRelease,
-        after: rendered.catalogRelease,
-      },
-      {
-        filename: publicReleaseBindingPath,
-        before: publicReleaseBinding,
-        after: rendered.publicReleaseBinding,
-      },
-    ]));
+    await writeClassicV4ActivationAtomically(
+      orderClassicV4ActivationChanges([
+        {
+          filename: releaseMapPath,
+          before: releaseMap,
+          after: rendered.releaseMap,
+        },
+        {
+          filename: envioConfigPath,
+          before: envioConfig,
+          after: rendered.envioConfig,
+        },
+        {
+          filename: options.manifest,
+          before: manifestSource,
+          after: rendered.manifest,
+          commitPoint: true,
+        },
+        {
+          filename: catalogReleasePath,
+          before: catalogRelease,
+          after: rendered.catalogRelease,
+        },
+        {
+          filename: publicReleaseBindingPath,
+          before: publicReleaseBinding,
+          after: rendered.publicReleaseBinding,
+        },
+      ]),
+    );
   }
-  process.stdout.write(`${JSON.stringify({
-    mode: options.write ? "write" : "check",
-    changed,
-    plan,
-  }, null, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        mode: options.write ? "write" : "check",
+        changed,
+        plan,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
 
 if (process.argv[1] === scriptPath) {
   main().catch((error) => {
-    process.stderr.write(`Classic V4 indexer activation failed: ${error.message}\n`);
+    process.stderr.write(
+      `Classic V4 indexer activation failed: ${error.message}\n`,
+    );
     process.exitCode = 1;
   });
 }

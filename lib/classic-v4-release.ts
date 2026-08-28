@@ -11,15 +11,20 @@ import {
   type Hex,
 } from "viem";
 
-import classicV4ReleaseSchema from "../contracts/deployments/schema/classic-v4-release-v1.schema.json" with {
-  type: "json",
-};
-import type { ClassicV4PublicReleaseBinding } from
-  "./classic-v4-public-release";
+import classicV4ReleaseSchema from "../contracts/deployments/schema/classic-v4-release-v1.schema.json" with { type: "json" };
+import {
+  CLASSIC_V4_PUBLIC_RELEASE_BINDING,
+  isClassicV4AnchoredPublicReleaseBinding,
+  type ClassicV4FinalizedLaunchAnchor,
+  type ClassicV4PublicReleaseBinding,
+} from "./classic-v4-public-release";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
 } from "../scripts/classic-v4-digest.mjs";
+// The release tool is the canonical 51d93b Router authorization verifier.
+// @ts-expect-error The frozen operational .mjs intentionally has no TS declaration surface.
+import { validateClassicV4LaunchAuthorization as validateClassicV4LaunchAuthorizationCore } from "../scripts/classic-v4-release-core.mjs";
 import { CLASSIC_V4_LAUNCH_STAMP_ROUTER } from "./classic-v4";
 
 export const CLASSIC_V4_RELEASE_MANIFEST_PATH =
@@ -171,8 +176,7 @@ const validateClassicV4ReleaseSchema = classicV4ReleaseAjv.compile(
 );
 
 type ContractName =
-  | (typeof NEW_CONTRACTS)[number]
-  | (typeof SHARED_CONTRACTS)[number];
+  (typeof NEW_CONTRACTS)[number] | (typeof SHARED_CONTRACTS)[number];
 type DependencyName = (typeof OFFICIAL_DEPENDENCIES)[number];
 
 type AddressAndRuntime = {
@@ -193,7 +197,10 @@ export type ClassicV4PublicRelease = {
   manifestDigest: Hex;
   capturedAt: string;
   startBlock: number;
-  addresses: Record<ContractName | "deployer" | "launcherFeeRecipient", Address>;
+  addresses: Record<
+    ContractName | "deployer" | "launcherFeeRecipient",
+    Address
+  >;
   deploymentTransactions: Record<(typeof NEW_CONTRACTS)[number], Hex>;
   deploymentBlocks: Record<(typeof NEW_CONTRACTS)[number], number>;
   deploymentVerification: {
@@ -207,7 +214,10 @@ export type ClassicV4PublicRelease = {
   runtimeCodeHashes: Record<ContractName, Hex>;
   runtimeTemplateHashes: Record<(typeof NEW_CONTRACTS)[number], Hex>;
   officialDependencies: Record<DependencyName, AddressAndRuntime>;
-  sharedDependencies: Record<(typeof SHARED_CONTRACTS)[number], AddressAndRuntime>;
+  sharedDependencies: Record<
+    (typeof SHARED_CONTRACTS)[number],
+    AddressAndRuntime
+  >;
   verification: {
     deploymentLive: true;
     deploymentFinalized: true;
@@ -344,15 +354,14 @@ function evidenceDigest(value: Record<string, unknown>, domain: string) {
   return digestJson(unsigned, domain);
 }
 
-function validAddressRuntimeMap(
-  value: unknown,
-  keys: readonly string[],
-) {
+function validAddressRuntimeMap(value: unknown, keys: readonly string[]) {
   const object = exactKeys(value, keys);
   if (!object) return false;
   return keys.every((key) => {
     const entry = exactKeys(object[key], ["address", "runtimeCodeHash"]);
-    return Boolean(entry && address(entry.address) && bytes32(entry.runtimeCodeHash));
+    return Boolean(
+      entry && address(entry.address) && bytes32(entry.runtimeCodeHash),
+    );
   });
 }
 
@@ -386,6 +395,283 @@ function decimalBigInt(
   }
 }
 
+type ClassicV4AuthorizationProof = Readonly<{
+  route: Readonly<{
+    expectedResult: Readonly<{
+      token: Address;
+      rewardVault: Address;
+      positionRecipient: Address;
+      positionTokenId: bigint;
+      lockedTokenDust: bigint;
+      poolId: Hex;
+      launchHash: Hex;
+    }>;
+  }>;
+  stampRequest: Readonly<{
+    launchId: Hex;
+    components: readonly Readonly<{
+      resultIndex: number;
+      runtimeCodeHash: Hex;
+    }>[];
+  }>;
+}>;
+
+const validateClassicV4LaunchAuthorization =
+  validateClassicV4LaunchAuthorizationCore as (
+    canary: Record<string, unknown>,
+    value: unknown,
+  ) => ClassicV4AuthorizationProof;
+
+function validClassicV4RouterAuthorization(input: {
+  lifecycle: Record<string, unknown>;
+  addresses: Record<string, unknown>;
+  runtimeCodeHashes: Record<string, unknown>;
+}): ClassicV4FinalizedLaunchAnchor | null {
+  const { lifecycle, addresses, runtimeCodeHashes } = input;
+  const actions = record(lifecycle.actions);
+  const launchAction = actions && record(actions.launch);
+  const launchAuthorization = exactKeys(lifecycle.launchAuthorization, [
+    "schemaVersion",
+    "chainId",
+    "releaseManifestDigest",
+    "predictedToken",
+    "predictedHook",
+    "permitDigest",
+    "validAfter",
+    "deadline",
+    "simulation",
+    "transaction",
+  ]);
+  const launchSimulation =
+    launchAuthorization &&
+    exactKeys(launchAuthorization.simulation, [
+      "blockNumber",
+      "blockHash",
+      "blockTimestamp",
+      "gasEstimate",
+      "stampHash",
+    ]);
+  const launchTransaction =
+    launchAuthorization &&
+    exactKeys(launchAuthorization.transaction, [
+      "chainId",
+      "from",
+      "to",
+      "valueWei",
+      "calldata",
+      "gasLimit",
+    ]);
+  const launchCalldata = calldata(launchTransaction?.calldata);
+  const transactionHash = bytes32(launchAction?.transactionHash);
+  const blockHash = bytes32(launchAction?.blockHash);
+  const inputHash = bytes32(launchAction?.inputHash);
+  const launchBlockNumber = blockNumber(launchAction?.blockNumber)
+    ? launchAction.blockNumber
+    : null;
+  const permitDigest = bytes32(launchAuthorization?.permitDigest);
+  const stampHash = bytes32(launchSimulation?.stampHash);
+  const launchTimestamp = decimalBigInt(launchAction?.blockTimestamp, {
+    positive: true,
+  });
+  const simulationBlock = decimalBigInt(launchSimulation?.blockNumber, {
+    positive: true,
+  });
+  if (
+    !launchAction ||
+    !launchAuthorization ||
+    !launchSimulation ||
+    !launchTransaction ||
+    !transactionHash ||
+    !blockHash ||
+    !inputHash ||
+    launchBlockNumber === null ||
+    !permitDigest ||
+    !stampHash ||
+    launchAuthorization.schemaVersion !==
+      "programmable.classic-launch-authorization.v1" ||
+    launchAuthorization.chainId !== "1" ||
+    launchTransaction.chainId !== "1" ||
+    !bytes32(lifecycle.launchAuthorizationDigest) ||
+    String(lifecycle.launchAuthorizationDigest).toLowerCase() !==
+      digestJson(
+        launchAuthorization,
+        CLASSIC_V4_DIGEST_DOMAINS.lifecycleAuthorization,
+      ).toLowerCase() ||
+    String(launchAuthorization.releaseManifestDigest).toLowerCase() !==
+      String(lifecycle.releaseBindingDigest).toLowerCase() ||
+    !sameAddressValue(
+      launchAuthorization.predictedToken,
+      lifecycle.canaryToken,
+    ) ||
+    !sameAddressValue(launchAuthorization.predictedHook, lifecycle.feeHook) ||
+    !sameAddressValue(launchTransaction.from, lifecycle.operatorWallet) ||
+    !sameAddressValue(launchTransaction.to, CLASSIC_V4_LAUNCH_STAMP_ROUTER) ||
+    !sameAddressValue(launchAction.to, CLASSIC_V4_LAUNCH_STAMP_ROUTER) ||
+    !sameAddressValue(launchAction.from, lifecycle.operatorWallet) ||
+    decimalBigInt(launchAction.value) !== CLASSIC_V4_CANARY_INITIAL_BUY ||
+    !launchCalldata ||
+    inputHash !== keccak256(launchCalldata).toLowerCase() ||
+    launchTimestamp === null ||
+    simulationBlock === null ||
+    simulationBlock > BigInt(launchBlockNumber)
+  ) {
+    return null;
+  }
+
+  let proof: ClassicV4AuthorizationProof;
+  try {
+    proof = validateClassicV4LaunchAuthorization(
+      {
+        releaseBindingDigest: String(
+          lifecycle.releaseBindingDigest,
+        ).toLowerCase(),
+        operatorWallet: getAddress(String(lifecycle.operatorWallet)),
+        launcher: getAddress(String(addresses.launcher)),
+        feeHook: getAddress(String(lifecycle.feeHook)),
+        runtimeCodeHashes: {
+          launcher: String(runtimeCodeHashes.launcher).toLowerCase(),
+          feeHook: String(runtimeCodeHashes.feeHook).toLowerCase(),
+        },
+        launchFixture: {
+          name: "Programmable Classic V4 Canary",
+          symbol: "PCV4C",
+          creatorSalt: digestJson(
+            {
+              purpose: "programmable-classic-v4-mainnet-lifecycle-canary",
+              releaseBindingDigest: String(
+                lifecycle.releaseBindingDigest,
+              ).toLowerCase(),
+              operatorWallet: getAddress(String(lifecycle.operatorWallet)),
+            },
+            CLASSIC_V4_DIGEST_DOMAINS.canaryCreatorSalt,
+          ),
+          metadata: {
+            description: "Programmable Classic V4 Mainnet lifecycle canary",
+            website: "https://programmable.market",
+            image: "",
+            extraData: "0x",
+          },
+          buySwapFeeBps: 100,
+          sellSwapFeeBps: 200,
+          initialBuyWei: CLASSIC_V4_CANARY_INITIAL_BUY.toString(),
+          beneficiarySharesBps: [10_000],
+        },
+      },
+      launchAuthorization,
+    );
+  } catch {
+    return null;
+  }
+
+  const result = proof.route.expectedResult;
+  const componentByResultIndex = new Map(
+    proof.stampRequest.components.map((component) => [
+      Number(component.resultIndex),
+      component,
+    ]),
+  );
+  const tokenComponent = componentByResultIndex.get(0);
+  const rewardComponent = componentByResultIndex.get(1);
+  const positionComponent = componentByResultIndex.get(2);
+  const hookComponent = componentByResultIndex.get(255);
+  const postState = record(lifecycle.postState);
+  const launchMappings = postState && record(postState.launchMappings);
+  const tokenCustody = postState && record(postState.tokenCustody);
+  const derivedCodeHashes = postState && record(postState.derivedCodeHashes);
+  if (!(
+    sameAddressValue(result.token, lifecycle.canaryToken) &&
+    sameAddressValue(result.rewardVault, lifecycle.rewardVault) &&
+    sameAddressValue(result.positionRecipient, lifecycle.positionRecipient) &&
+    String(result.poolId).toLowerCase() ===
+      String(lifecycle.poolId).toLowerCase() &&
+    result.positionTokenId === decimalBigInt(lifecycle.positionTokenId) &&
+    launchTimestamp >= BigInt(String(launchAuthorization.validAfter)) &&
+    launchTimestamp <= BigInt(String(launchAuthorization.deadline)) &&
+    tokenComponent &&
+    rewardComponent &&
+    positionComponent &&
+    hookComponent &&
+    launchMappings &&
+    String(launchMappings.launchHash).toLowerCase() ===
+      result.launchHash.toLowerCase() &&
+    tokenCustody &&
+    decimalBigInt(tokenCustody.lockedTokenDust) === result.lockedTokenDust &&
+    derivedCodeHashes &&
+    String(derivedCodeHashes.token).toLowerCase() ===
+      tokenComponent.runtimeCodeHash.toLowerCase() &&
+    String(derivedCodeHashes.rewardVault).toLowerCase() ===
+      rewardComponent.runtimeCodeHash.toLowerCase() &&
+    String(derivedCodeHashes.positionForwarder).toLowerCase() ===
+      positionComponent.runtimeCodeHash.toLowerCase() &&
+    String(runtimeCodeHashes.feeHook).toLowerCase() ===
+      hookComponent.runtimeCodeHash.toLowerCase()
+  )) {
+    return null;
+  }
+
+  return Object.freeze({
+    transactionHash,
+    blockHash,
+    blockNumber: launchBlockNumber,
+    inputHash,
+    launchId: proof.stampRequest.launchId.toLowerCase() as Hex,
+    stampHash,
+    permitDigest,
+  });
+}
+
+/**
+ * Extracts the immutable finalized launch anchor from a release that has
+ * already passed the complete pending/public manifest parser.
+ */
+export function deriveClassicV4FinalizedLaunchAnchor(
+  release: ClassicV4PendingRelease | ClassicV4PublicRelease,
+): ClassicV4FinalizedLaunchAnchor | null {
+  const lifecycle = record(release.lifecycleEvidence);
+  const addresses = record(release.addresses);
+  const runtimeCodeHashes = record(release.runtimeCodeHashes);
+  return lifecycle && addresses && runtimeCodeHashes
+    ? validClassicV4RouterAuthorization({
+        lifecycle,
+        addresses,
+        runtimeCodeHashes,
+      })
+    : null;
+}
+
+function sameHexValue(left: unknown, right: unknown) {
+  return (
+    typeof left === "string" &&
+    typeof right === "string" &&
+    left.toLowerCase() === right.toLowerCase()
+  );
+}
+
+function matchesClassicV4PublicReleaseBinding(input: {
+  binding: ClassicV4PublicReleaseBinding | null | undefined;
+  manifest: Record<string, unknown>;
+  addresses: Record<string, unknown>;
+  verification: Record<string, unknown>;
+  launchAnchor: ClassicV4FinalizedLaunchAnchor;
+}) {
+  const { binding, manifest, addresses, verification, launchAnchor } = input;
+  return Boolean(
+    isClassicV4AnchoredPublicReleaseBinding(binding) &&
+    binding.chainId === manifest.chainId &&
+    binding.releaseStatus === manifest.releaseStatus &&
+    binding.publicAvailable === verification.publicAvailable &&
+    sameAddressValue(binding.launcher, addresses.launcher) &&
+    sameHexValue(binding.manifestDigest, manifest.manifestDigest) &&
+    sameHexValue(binding.transactionHash, launchAnchor.transactionHash) &&
+    sameHexValue(binding.blockHash, launchAnchor.blockHash) &&
+    binding.blockNumber === launchAnchor.blockNumber &&
+    sameHexValue(binding.inputHash, launchAnchor.inputHash) &&
+    sameHexValue(binding.launchId, launchAnchor.launchId) &&
+    sameHexValue(binding.stampHash, launchAnchor.stampHash) &&
+    sameHexValue(binding.permitDigest, launchAnchor.permitDigest),
+  );
+}
+
 function nonNegativeSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -407,8 +693,7 @@ function netFeeSplit(net: bigint, feeBps: number) {
 function validEventIndices(value: unknown, expected: readonly string[]) {
   const events = exactKeys(value, expected);
   return Boolean(
-    events &&
-      expected.every((key) => nonNegativeSafeInteger(events[key])),
+    events && expected.every((key) => nonNegativeSafeInteger(events[key])),
   );
 }
 
@@ -416,6 +701,7 @@ function validRichLifecycleEvidence(input: {
   lifecycle: Record<string, unknown>;
   manifest: Record<string, unknown>;
   addresses: Record<string, unknown>;
+  runtimeCodeHashes: Record<string, unknown>;
   official: Record<string, unknown>;
   deploymentBlocks: Record<string, unknown>;
   deploymentVerification: Record<string, unknown>;
@@ -425,6 +711,7 @@ function validRichLifecycleEvidence(input: {
     lifecycle,
     manifest,
     addresses,
+    runtimeCodeHashes,
     official,
     deploymentBlocks,
     deploymentVerification,
@@ -550,107 +837,12 @@ function validRichLifecycleEvidence(input: {
     return false;
   }
 
-  const launchAction = record(actions.launch)!;
-  const launchAuthorization = exactKeys(lifecycle.launchAuthorization, [
-    "schemaVersion",
-    "chainId",
-    "releaseManifestDigest",
-    "predictedToken",
-    "predictedHook",
-    "permitDigest",
-    "validAfter",
-    "deadline",
-    "simulation",
-    "transaction",
-  ]);
-  const launchSimulation =
-    launchAuthorization &&
-    exactKeys(launchAuthorization.simulation, [
-      "blockNumber",
-      "blockHash",
-      "blockTimestamp",
-      "gasEstimate",
-      "stampHash",
-    ]);
-  const launchTransaction =
-    launchAuthorization &&
-    exactKeys(launchAuthorization.transaction, [
-      "chainId",
-      "from",
-      "to",
-      "valueWei",
-      "calldata",
-      "gasLimit",
-    ]);
-  const launchCalldata = calldata(launchTransaction?.calldata);
-  const validAfter = decimalBigInt(launchAuthorization?.validAfter);
-  const deadline = decimalBigInt(launchAuthorization?.deadline, {
-    positive: true,
-  });
-  const simulationBlock = decimalBigInt(launchSimulation?.blockNumber, {
-    positive: true,
-  });
-  const simulationTimestamp = decimalBigInt(
-    launchSimulation?.blockTimestamp,
-    { positive: true },
-  );
-  const gasEstimate = decimalBigInt(launchSimulation?.gasEstimate, {
-    positive: true,
-  });
-  const gasLimit = decimalBigInt(launchTransaction?.gasLimit, {
-    positive: true,
-  });
-  const launchTimestamp = decimalBigInt(launchAction.blockTimestamp, {
-    positive: true,
-  });
   if (
-    !launchAuthorization ||
-    !launchSimulation ||
-    !launchTransaction ||
-    launchAuthorization.schemaVersion !==
-      "programmable.classic-launch-authorization.v1" ||
-    launchAuthorization.chainId !== "1" ||
-    launchTransaction.chainId !== "1" ||
-    !bytes32(launchAuthorization.permitDigest) ||
-    !bytes32(launchSimulation.blockHash) ||
-    !bytes32(launchSimulation.stampHash) ||
-    !bytes32(lifecycle.launchAuthorizationDigest) ||
-    String(lifecycle.launchAuthorizationDigest).toLowerCase() !==
-      digestJson(
-        launchAuthorization,
-        CLASSIC_V4_DIGEST_DOMAINS.lifecycleAuthorization,
-      ).toLowerCase() ||
-    String(launchAuthorization.releaseManifestDigest).toLowerCase() !==
-      String(lifecycle.releaseBindingDigest).toLowerCase() ||
-    !sameAddressValue(launchAuthorization.predictedToken, lifecycle.canaryToken) ||
-    !sameAddressValue(launchAuthorization.predictedHook, lifecycle.feeHook) ||
-    !sameAddressValue(launchTransaction.from, lifecycle.operatorWallet) ||
-    !sameAddressValue(launchTransaction.to, CLASSIC_V4_LAUNCH_STAMP_ROUTER) ||
-    !sameAddressValue(launchAction.to, CLASSIC_V4_LAUNCH_STAMP_ROUTER) ||
-    !sameAddressValue(launchAction.from, lifecycle.operatorWallet) ||
-    decimalBigInt(launchTransaction.valueWei) !==
-      CLASSIC_V4_CANARY_INITIAL_BUY ||
-    decimalBigInt(launchAction.value) !== CLASSIC_V4_CANARY_INITIAL_BUY ||
-    !launchCalldata ||
-    !launchCalldata.startsWith("0xe5f6b8cd") ||
-    String(launchAction.inputHash).toLowerCase() !==
-      keccak256(launchCalldata).toLowerCase() ||
-    validAfter === null ||
-    deadline === null ||
-    simulationBlock === null ||
-    simulationTimestamp === null ||
-    gasEstimate === null ||
-    gasLimit === null ||
-    launchTimestamp === null ||
-    validAfter > simulationTimestamp ||
-    simulationTimestamp > deadline ||
-    validAfter > launchTimestamp ||
-    launchTimestamp > deadline ||
-    deadline - validAfter > 330n ||
-    simulationBlock > BigInt(Number(launchAction.blockNumber)) ||
-    gasLimit < 1_500_000n ||
-    gasLimit > 13_500_000n ||
-    gasEstimate > gasLimit
+    !validClassicV4RouterAuthorization({
+      lifecycle,
+      addresses,
+      runtimeCodeHashes,
+    })
   ) {
     return false;
   }
@@ -659,23 +851,30 @@ function validRichLifecycleEvidence(input: {
   if (!swaps) return false;
   let swapCreatorTotal = 0n;
   let swapLauncherTotal = 0n;
-  for (const [
-    actionName,
-    [side, exactness],
-  ] of Object.entries(SWAP_IDENTITIES)) {
+  for (const [actionName, [side, exactness]] of Object.entries(
+    SWAP_IDENTITIES,
+  )) {
     const swap = record(swaps[actionName]);
     const action = record(actions[actionName])!;
     const quote = swap && record(swap.quote);
     const amount0 = swap && decimalBigInt(swap.poolAmount0, { signed: true });
     const amount1 = swap && decimalBigInt(swap.poolAmount1, { signed: true });
-    const gross = swap && decimalBigInt(swap.grossNativeAmount, { positive: true });
-    const creatorFee = swap && decimalBigInt(swap.creatorFee, { positive: true });
-    const launcherFee = swap && decimalBigInt(swap.launcherFee, { positive: true });
+    const gross =
+      swap && decimalBigInt(swap.grossNativeAmount, { positive: true });
+    const creatorFee =
+      swap && decimalBigInt(swap.creatorFee, { positive: true });
+    const launcherFee =
+      swap && decimalBigInt(swap.launcherFee, { positive: true });
     const totalFee = swap && decimalBigInt(swap.totalFee, { positive: true });
-    const inputBound = swap && decimalBigInt(swap.inputBound, { positive: true });
-    const outputBound = swap && decimalBigInt(swap.outputBound, { positive: true });
-    const deadline = swap && decimalBigInt(swap.routerDeadline, { positive: true });
-    const blockTimestamp = decimalBigInt(action.blockTimestamp, { positive: true });
+    const inputBound =
+      swap && decimalBigInt(swap.inputBound, { positive: true });
+    const outputBound =
+      swap && decimalBigInt(swap.outputBound, { positive: true });
+    const deadline =
+      swap && decimalBigInt(swap.routerDeadline, { positive: true });
+    const blockTimestamp = decimalBigInt(action.blockTimestamp, {
+      positive: true,
+    });
     if (
       !swap ||
       !quote ||
@@ -704,8 +903,14 @@ function validRichLifecycleEvidence(input: {
     }
     const expectedFee =
       exactness === "exact-output"
-        ? netFeeSplit(side === "buy" ? -amount0 : outputBound, side === "buy" ? 100 : 200)
-        : grossFeeSplit(side === "buy" ? inputBound : amount0, side === "buy" ? 100 : 200);
+        ? netFeeSplit(
+            side === "buy" ? -amount0 : outputBound,
+            side === "buy" ? 100 : 200,
+          )
+        : grossFeeSplit(
+            side === "buy" ? inputBound : amount0,
+            side === "buy" ? 100 : 200,
+          );
     if (
       creatorFee !== expectedFee.creator ||
       launcherFee !== expectedFee.launcher ||
@@ -763,7 +968,8 @@ function validRichLifecycleEvidence(input: {
   const claims = record(lifecycle.claims);
   const creatorClaim = claims && record(claims.creator);
   const launcherClaim = claims && record(claims.launcher);
-  const creatorAmount = creatorClaim && decimalBigInt(creatorClaim.amount, { positive: true });
+  const creatorAmount =
+    creatorClaim && decimalBigInt(creatorClaim.amount, { positive: true });
   const creatorCheckpoint =
     creatorClaim &&
     decimalBigInt(creatorClaim.vaultCheckpointAmount, { positive: true });
@@ -820,34 +1026,34 @@ function validRichLifecycleEvidence(input: {
     const total = state.creator + state.launcher;
     return Boolean(
       hook &&
-        sameAddressValue(
-          hook.rewardVault,
-          state.registered ? lifecycle.rewardVault : ZERO_ADDRESS,
-        ) &&
-        sameAddressValue(
-          hook.registrar,
-          state.registered ? lifecycle.launcher : ZERO_ADDRESS,
-        ) &&
-        hook.registered === state.registered &&
-        hook.buySwapFeeBps === (state.registered ? 100 : 0) &&
-        hook.sellSwapFeeBps === (state.registered ? 200 : 0) &&
-        decimalBigInt(hook.creatorFeesAccrued) === state.creator &&
-        decimalBigInt(hook.launcherFeesAccrued) === state.launcher &&
-        decimalBigInt(hook.totalNativeFeesAccrued) === total &&
-        decimalBigInt(hook.poolManagerNativeClaims) === total &&
-        decimalBigInt(hook.poolManagerTokenClaims) === 0n &&
-        decimalBigInt(hook.rawNativeBalance) === 0n,
+      sameAddressValue(
+        hook.rewardVault,
+        state.registered ? lifecycle.rewardVault : ZERO_ADDRESS,
+      ) &&
+      sameAddressValue(
+        hook.registrar,
+        state.registered ? lifecycle.launcher : ZERO_ADDRESS,
+      ) &&
+      hook.registered === state.registered &&
+      hook.buySwapFeeBps === (state.registered ? 100 : 0) &&
+      hook.sellSwapFeeBps === (state.registered ? 200 : 0) &&
+      decimalBigInt(hook.creatorFeesAccrued) === state.creator &&
+      decimalBigInt(hook.launcherFeesAccrued) === state.launcher &&
+      decimalBigInt(hook.totalNativeFeesAccrued) === total &&
+      decimalBigInt(hook.poolManagerNativeClaims) === total &&
+      decimalBigInt(hook.poolManagerTokenClaims) === 0n &&
+      decimalBigInt(hook.rawNativeBalance) === 0n,
     );
   };
   const validVaultState = (value: unknown, expected: bigint) => {
     const vault = record(value);
     return Boolean(
       vault &&
-        decimalBigInt(vault.totalCreatorFeesReceived) === expected &&
-        decimalBigInt(vault.totalCreatorFeesClaimed) === expected &&
-        decimalBigInt(vault.beneficiaryClaimed) === expected &&
-        decimalBigInt(vault.beneficiaryClaimable) === 0n &&
-        decimalBigInt(vault.rawNativeBalance) === 0n,
+      decimalBigInt(vault.totalCreatorFeesReceived) === expected &&
+      decimalBigInt(vault.totalCreatorFeesClaimed) === expected &&
+      decimalBigInt(vault.beneficiaryClaimed) === expected &&
+      decimalBigInt(vault.beneficiaryClaimable) === 0n &&
+      decimalBigInt(vault.rawNativeBalance) === 0n,
     );
   };
   const checkpointStates = {
@@ -874,7 +1080,9 @@ function validRichLifecycleEvidence(input: {
     if (
       !checkpoint ||
       checkpoint.blockNumber !==
-        expectedCheckpointBlocks[name as keyof typeof expectedCheckpointBlocks] ||
+        expectedCheckpointBlocks[
+          name as keyof typeof expectedCheckpointBlocks
+        ] ||
       !validHookState(checkpoint.hook, state)
     ) {
       return false;
@@ -930,8 +1138,10 @@ function validRichLifecycleEvidence(input: {
     !bytes32(positionLock.factoryConfigurationHash) ||
     decimalBigInt(positionLock.tokenId, { positive: true }) !==
       decimalBigInt(lifecycle.positionTokenId, { positive: true }) ||
-    decimalBigInt(positionLock.positionLiquidity, { positive: true }) === null ||
-    decimalBigInt(positionLock.activePoolLiquidity, { positive: true }) === null ||
+    decimalBigInt(positionLock.positionLiquidity, { positive: true }) ===
+      null ||
+    decimalBigInt(positionLock.activePoolLiquidity, { positive: true }) ===
+      null ||
     positionLock.tickLower !== 174_800 ||
     positionLock.tickUpper !== 204_200 ||
     decimalBigInt(positionLock.timelockBlockNumber, { positive: true }) !==
@@ -968,7 +1178,8 @@ function validRichLifecycleEvidence(input: {
     const approval = record(approvals[actionName]);
     const action = record(actions[actionName])!;
     const swap = record(swaps[actionName])!;
-    const required = approval && decimalBigInt(approval.requiredAmount, { positive: true });
+    const required =
+      approval && decimalBigInt(approval.requiredAmount, { positive: true });
     if (
       !approval ||
       required === null ||
@@ -986,8 +1197,7 @@ function validRichLifecycleEvidence(input: {
   }
   const invariants = record(lifecycle.invariants);
   return Boolean(
-    invariants &&
-      LIFECYCLE_INVARIANTS.every((key) => invariants[key] === true),
+    invariants && LIFECYCLE_INVARIANTS.every((key) => invariants[key] === true),
   );
 }
 
@@ -999,6 +1209,7 @@ function validRichLifecycleEvidence(input: {
 function parseClassicV4Release(
   value: unknown,
   mode: "pending" | "public",
+  trustedBinding?: ClassicV4PublicReleaseBinding | null,
 ): ClassicV4PendingRelease | ClassicV4PublicRelease | null {
   if (!validateClassicV4ReleaseSchema(value)) return null;
   const manifest = exactKeys(value, [
@@ -1147,7 +1358,10 @@ function parseClassicV4Release(
     }) ||
     !runtimeTemplateHashes ||
     !NEW_CONTRACTS.every((key) => bytes32(runtimeTemplateHashes[key])) ||
-    !validAddressRuntimeMap(manifest.officialDependencies, OFFICIAL_DEPENDENCIES) ||
+    !validAddressRuntimeMap(
+      manifest.officialDependencies,
+      OFFICIAL_DEPENDENCIES,
+    ) ||
     !validAddressRuntimeMap(manifest.sharedDependencies, SHARED_CONTRACTS)
   ) {
     return null;
@@ -1168,7 +1382,8 @@ function parseClassicV4Release(
     }) ||
     !OFFICIAL_DEPENDENCIES.every((key) => {
       const dependency = record(official[key]);
-      const [expectedAddress, expectedHash] = EXPECTED_OFFICIAL_DEPENDENCIES[key];
+      const [expectedAddress, expectedHash] =
+        EXPECTED_OFFICIAL_DEPENDENCIES[key];
       return (
         dependency &&
         String(dependency.address).toLowerCase() ===
@@ -1233,9 +1448,7 @@ function parseClassicV4Release(
       typeof contract.fqcn !== "string" ||
       contract.fqcn.length === 0 ||
       typeof contract.encodedConstructorArguments !== "string" ||
-      !/^0x(?:[0-9a-fA-F]{2})*$/.test(
-        contract.encodedConstructorArguments,
-      ) ||
+      !/^0x(?:[0-9a-fA-F]{2})*$/.test(contract.encodedConstructorArguments) ||
       contract.status !== "exact-match" ||
       String(contract.address).toLowerCase() !==
         String(addresses[name]).toLowerCase() ||
@@ -1274,6 +1487,7 @@ function parseClassicV4Release(
       lifecycle,
       manifest,
       addresses,
+      runtimeCodeHashes,
       official,
       deploymentBlocks,
       deploymentVerification,
@@ -1298,14 +1512,16 @@ function parseClassicV4Release(
     "indexerBindingDigest",
     "activated",
   ]);
-  const sources = handoff && exactKeys(handoff.sources, ["launcher", "feeHook"]);
+  const sources =
+    handoff && exactKeys(handoff.sources, ["launcher", "feeHook"]);
   const launcherSource =
     sources && exactKeys(sources.launcher, ["address", "startBlock", "events"]);
   const hookSource =
     sources && exactKeys(sources.feeHook, ["address", "startBlock", "events"]);
   const validHandoffActivation = pending
     ? handoff?.indexerBindingDigest === null && handoff.activated === false
-    : Boolean(bytes32(handoff?.indexerBindingDigest)) && handoff?.activated === true;
+    : Boolean(bytes32(handoff?.indexerBindingDigest)) &&
+      handoff?.activated === true;
   if (
     handoff?.schemaVersion !== 1 ||
     handoff.chainId !== 1 ||
@@ -1339,6 +1555,26 @@ function parseClassicV4Release(
     return null;
   }
 
+  if (mode === "public") {
+    const launchAnchor = validClassicV4RouterAuthorization({
+      lifecycle,
+      addresses,
+      runtimeCodeHashes,
+    });
+    if (
+      !launchAnchor ||
+      !matchesClassicV4PublicReleaseBinding({
+        binding: trustedBinding,
+        manifest,
+        addresses,
+        verification,
+        launchAnchor,
+      })
+    ) {
+      return null;
+    }
+  }
+
   return manifest as ClassicV4PendingRelease | ClassicV4PublicRelease;
 }
 
@@ -1349,13 +1585,21 @@ function parseClassicV4Release(
 export function parseClassicV4PendingRelease(
   value: unknown,
 ): ClassicV4PendingRelease | null {
-  return parseClassicV4Release(value, "pending") as ClassicV4PendingRelease | null;
+  return parseClassicV4Release(
+    value,
+    "pending",
+  ) as ClassicV4PendingRelease | null;
 }
 
 export function parseClassicV4PublicRelease(
   value: unknown,
+  trustedBinding: ClassicV4PublicReleaseBinding | null,
 ): ClassicV4PublicRelease | null {
-  return parseClassicV4Release(value, "public") as ClassicV4PublicRelease | null;
+  return parseClassicV4Release(
+    value,
+    "public",
+    trustedBinding,
+  ) as ClassicV4PublicRelease | null;
 }
 
 export type ClassicV4PublicPromotion = Readonly<{
@@ -1363,18 +1607,23 @@ export type ClassicV4PublicPromotion = Readonly<{
   browserBinding: ClassicV4PublicReleaseBinding & {
     releaseStatus: "publicly-available";
     publicAvailable: true;
-  };
+  } & ClassicV4FinalizedLaunchAnchor;
 }>;
 
 /**
  * Pure, fail-closed transition from the catalog-visible indexer state to the
- * public wallet-action state. The browser binding is derived only from the
- * newly digested manifest, so the two outputs cannot commit different releases.
+ * public wallet-action state. The input must match the code-reviewed indexer
+ * binding; the output preserves its finalized launch anchor while binding the
+ * newly digested public manifest.
  */
 export function promoteClassicV4ReleaseToPublicAvailability(
   value: unknown,
+  trustedIndexerBinding: ClassicV4PublicReleaseBinding | null,
 ): ClassicV4PublicPromotion | null {
-  const indexedRelease = parseClassicV4PublicRelease(value);
+  const indexedRelease = parseClassicV4PublicRelease(
+    value,
+    trustedIndexerBinding,
+  );
   if (
     !indexedRelease ||
     indexedRelease.releaseStatus !== "indexer-activated" ||
@@ -1382,6 +1631,8 @@ export function promoteClassicV4ReleaseToPublicAvailability(
   ) {
     return null;
   }
+  const launchAnchor = deriveClassicV4FinalizedLaunchAnchor(indexedRelease);
+  if (!launchAnchor) return null;
 
   const promotedWithoutDigest = {
     ...indexedRelease,
@@ -1397,31 +1648,41 @@ export function promoteClassicV4ReleaseToPublicAvailability(
       promotedWithoutDigest as unknown as Record<string, unknown>,
     ),
   };
-  const release = parseClassicV4PublicRelease(promoted);
+  const browserBinding = Object.freeze({
+    chainId: indexedRelease.chainId,
+    launcher: indexedRelease.addresses.launcher,
+    manifestDigest: promoted.manifestDigest,
+    releaseStatus: "publicly-available" as const,
+    publicAvailable: true as const,
+    ...launchAnchor,
+  });
+  const release = parseClassicV4PublicRelease(promoted, browserBinding);
   if (!isClassicV4PublicActionRelease(release)) return null;
 
   return {
     release,
-    browserBinding: {
-      chainId: release.chainId,
-      launcher: release.addresses.launcher,
-      manifestDigest: release.manifestDigest,
-      releaseStatus: release.releaseStatus,
-      publicAvailable: release.verification.publicAvailable,
-    },
+    browserBinding,
   };
 }
 
 export function getConfiguredClassicV4PublicRelease(
   environment: "production" | "rehearsal",
 ) {
-  if (environment !== "production") return null;
+  if (
+    environment !== "production" ||
+    !isClassicV4AnchoredPublicReleaseBinding(CLASSIC_V4_PUBLIC_RELEASE_BINDING)
+  ) {
+    return null;
+  }
   try {
     const raw = readFileSync(
       path.join(process.cwd(), CLASSIC_V4_RELEASE_MANIFEST_PATH),
       "utf8",
     );
-    return parseClassicV4PublicRelease(JSON.parse(raw));
+    return parseClassicV4PublicRelease(
+      JSON.parse(raw),
+      CLASSIC_V4_PUBLIC_RELEASE_BINDING,
+    );
   } catch {
     return null;
   }
