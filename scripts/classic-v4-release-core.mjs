@@ -2772,9 +2772,9 @@ export function validateClassicV4LifecycleEvidence(
   assert(
     creatorClaim === creatorCheckpoint &&
       creatorClaim === beneficiaryClaim &&
-      creatorClaim === swapCreatorTotal + initialFee.creator &&
-      launcherClaim === swapLauncherTotal + initialFee.launcher,
-    "Lifecycle claims do not equal exact canary accruals",
+      creatorClaim >= swapCreatorTotal + initialFee.creator &&
+      launcherClaim >= swapLauncherTotal + initialFee.launcher,
+    "Lifecycle claims do not cover the required canary accruals",
   );
 
   assertExactKeys(

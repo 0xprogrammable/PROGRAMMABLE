@@ -998,8 +998,8 @@ function validRichLifecycleEvidence(input: {
     beneficiaryAmount !== creatorAmount ||
     launcherAmount === null ||
     launcherAmount === undefined ||
-    creatorAmount !== swapCreatorTotal + initialFee.creator ||
-    launcherAmount !== swapLauncherTotal + initialFee.launcher
+    creatorAmount < swapCreatorTotal + initialFee.creator ||
+    launcherAmount < swapLauncherTotal + initialFee.launcher
   ) {
     return false;
   }

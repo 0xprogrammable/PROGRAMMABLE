@@ -1280,6 +1280,60 @@ describe("Classic V4 release and launch preflight", () => {
     const publicPoolActivity = structuredClone(manifest);
     publicPoolActivity.lifecycleEvidence.observations.exclusiveHookActivity.nativeAccrualEvents =
       334;
+    const publicCreatorTotal =
+      BigInt(publicPoolActivity.lifecycleEvidence.claims.creator.amount) + 123n;
+    const publicLauncherTotal =
+      BigInt(publicPoolActivity.lifecycleEvidence.claims.launcher.amount) + 45n;
+    Object.assign(publicPoolActivity.lifecycleEvidence.claims.creator, {
+      amount: publicCreatorTotal.toString(),
+      vaultCheckpointAmount: publicCreatorTotal.toString(),
+      beneficiaryAmount: publicCreatorTotal.toString(),
+    });
+    publicPoolActivity.lifecycleEvidence.claims.launcher.amount =
+      publicLauncherTotal.toString();
+    Object.assign(publicPoolActivity.lifecycleEvidence.feeConservation, {
+      creatorAccrualTotal: publicCreatorTotal.toString(),
+      launcherAccrualTotal: publicLauncherTotal.toString(),
+      totalAccrual: (publicCreatorTotal + publicLauncherTotal).toString(),
+    });
+    const setPublicHookTotals = (
+      snapshot: {
+        creatorFeesAccrued: string;
+        launcherFeesAccrued: string;
+        totalNativeFeesAccrued: string;
+        poolManagerNativeClaims: string;
+      },
+      creator: bigint,
+      launcher: bigint,
+    ) => {
+      snapshot.creatorFeesAccrued = creator.toString();
+      snapshot.launcherFeesAccrued = launcher.toString();
+      snapshot.totalNativeFeesAccrued = (creator + launcher).toString();
+      snapshot.poolManagerNativeClaims = (creator + launcher).toString();
+    };
+    const publicCheckpoints =
+      publicPoolActivity.lifecycleEvidence.feeConservation.checkpoints;
+    setPublicHookTotals(
+      publicCheckpoints.beforeCreatorClaim.hook,
+      publicCreatorTotal,
+      publicLauncherTotal,
+    );
+    setPublicHookTotals(
+      publicCheckpoints.afterCreatorClaim.hook,
+      0n,
+      publicLauncherTotal,
+    );
+    setPublicHookTotals(
+      publicCheckpoints.beforeLauncherClaim.hook,
+      0n,
+      publicLauncherTotal,
+    );
+    for (const name of ["afterCreatorClaim", "final"] as const) {
+      const vault = publicCheckpoints[name].vault;
+      vault.totalCreatorFeesReceived = publicCreatorTotal.toString();
+      vault.totalCreatorFeesClaimed = publicCreatorTotal.toString();
+      vault.beneficiaryClaimed = publicCreatorTotal.toString();
+    }
     publicPoolActivity.lifecycleEvidence.evidenceDigest = digest(
       publicPoolActivity.lifecycleEvidence,
       "evidenceDigest",
