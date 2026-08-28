@@ -44,7 +44,8 @@ rewards. Custom is the deterministic bundle model for products that need their o
 execution graph. Public V3.3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2
 and V1 history and schemas remain readable, while fresh authenticated POSTs are permanently read-only with
 non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY` responses. Only V3.3 accepts new
-submissions.
+submissions. Profile `3.4.0` and CLI `3.3.8` are preparatory only, not live or installable. Live/default discovery
+remains profile `3.3.0` with CLI `3.3.7` until backend and `.well-known` activation are independently verified.
 Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
 capabilities, contracts and release evidence live in the public
 [`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets) repository.
@@ -143,7 +144,7 @@ provider availability or onchain lifecycle completion.
 | Custom Launch CLI 1.0.1      | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Custom Launch V1 OpenAPI     | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
 | Custom Launch V2 OpenAPI     | [V2 reads, schemas and write fence](https://programmable.market/openapi/custom-launch-v2.json)             |
-| Custom Launch V3 OpenAPI     | [live general-hook creation and lifecycle contract](https://programmable.market/openapi/custom-launch-v3.json) |
+| Custom Launch V3 OpenAPI     | [preparatory profile 3.4 contract; live/default remains discovery-bound profile 3.3](https://programmable.market/openapi/custom-launch-v3.json) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |

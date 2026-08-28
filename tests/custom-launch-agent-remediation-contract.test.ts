@@ -303,7 +303,16 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.3.7");
+    expect(openApi.info.version).toBe("3.3.8-preparatory");
+    expect(openApi["x-programmable-availability"]).toMatchObject({
+      status: "preparatory-not-live",
+      publicAuthorized: false,
+      liveContract: {
+        cliReleaseVersion: "3.3.7",
+        profileVersion: "3.3.0",
+      },
+      pendingProfileVersion: "3.4.0",
+    });
     const v2Patch =
       openApi.components.schemas.FundingAuthorizationPatchDescriptorV2;
     expect(v2Patch.required).toEqual([

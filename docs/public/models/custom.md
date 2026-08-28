@@ -19,6 +19,9 @@ schema](../developers/custom-launch.md). The default `programmable.direct-native
 name, symbol, description, an exact source-bound image and links into the request and graph hashes. Exact `3.2.0`, `3.1.0` and `3.0.0`
 requests remain readable and byte-identical retryable under their original immutable policies, and revision 2 remains
 compatible. Profile `3.2.0` keeps its original nullable-image metadata semantics.
+Profile `3.4.0` and CLI `3.3.8` are preparatory only. They are not live or installable, and their source-tree presence
+does not authorize fresh writes; use profile `3.3.0` and CLI `3.3.7` until live discovery and the backend activate the
+pending profile independently.
 Run `pack`, `validate --remote`, `submit` and `status --watch --until authorized` for the byte-identical current V3.3
 request. The CLI and preflight prepare and classify exact bytes; the API server makes the durable decision and exposes
 a wallet handoff only after objective static hard blocks and exact Router simulation pass. Missing behavior execution

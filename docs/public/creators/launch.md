@@ -10,10 +10,14 @@ Public V3.3 general-hook creation and lifecycle reads are live on Ethereum Mainn
 
 Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.
 
-The 3.3.7 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
+The released 3.3.7 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
 compiles real project-owned token, hook and initializer targets with exact
 `solc 0.8.26+commit.8a97fa7a`, then runs deterministic `pack` and `validate` without submitting, signing, broadcasting
 or creating a Mainnet coin.
+
+CLI `3.3.8` and profile `3.4.0` are preparatory, not live or installable. Do not pack or submit pending profile `3.4.0`
+until the backend and `.well-known` discovery independently activate it; live/default remains CLI `3.3.7` with profile
+`3.3.0`.
 
 The source descriptor, manifest digest, graph bundle and agent evidence must all identify the same exact launch subject. Run the checks that apply to the project and keep their underlying evidence. The API requires check IDs and evidence digests but does not publish a universal check catalog or assess the evidence.
 

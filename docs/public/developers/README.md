@@ -14,8 +14,9 @@ catalog](https://programmable.market/policies/custom-launch-agent-remediation-v1
 guide](custom-launch.md) and [pack-config schema](https://programmable.market/schemas/custom-launch/v3/pack-config.json).
 Install the pinned public `programmable-launch` 3.3.7 CLI to
 pack, validate, submit and track V3 requests, and manage a key at [Custom Launch API
-keys](https://programmable.market/developers/api-keys). The [public V3
-contract](https://programmable.market/openapi/custom-launch-v3.json) is the normative production contract. Its default
+keys](https://programmable.market/developers/api-keys). Live discovery and capabilities are the production activation
+authority. The [source-tree V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json) includes a
+preparatory profile `3.4.0` / CLI `3.3.8` candidate; it is not a release or backend-acceptance claim. The live/default
 direct-native profile is revision 3 with `profileVersion: 3.3.0`; it binds canonical project name, symbol, meaningful
 description, an exact non-empty source-bound image, one website, one X profile and optional additional links into the
 launch hashes. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and

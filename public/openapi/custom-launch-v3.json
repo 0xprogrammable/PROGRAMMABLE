@@ -2034,7 +2034,6 @@
               "notConfiguredDisposition",
               "unavailableDisposition",
               "executedFailureDisposition",
-              "immutableFeePathRequired",
               "feeBehaviorClaim"
             ],
             "properties": {
@@ -2048,14 +2047,13 @@
               "vectorSetVersion": { "const": "1.1.0" },
               "maximumConfiguredRunnerAttempts": { "const": 3 },
               "configurationIsExecutionEvidence": { "const": false },
-              "walletHandoffRequiresVerifiedEvidence": { "const": true },
-              "notConfiguredDisposition": { "const": "blocks_wallet_handoff" },
-              "unavailableDisposition": { "const": "blocks_wallet_handoff" },
+              "walletHandoffRequiresVerifiedEvidence": { "const": false },
+              "notConfiguredDisposition": { "const": "claims_remain_unverified" },
+              "unavailableDisposition": { "const": "claims_remain_unverified" },
               "executedFailureDisposition": { "const": "blocks_wallet_handoff" },
-              "immutableFeePathRequired": { "const": true },
               "feeBehaviorClaim": { "const": false }
             },
-            "description": "Fresh-profile server decision boundary. Runner configuration is not evidence. Missing, not-configured or unavailable execution blocks wallet handoff and remains retryable; an authenticated executed failure blocks wallet handoff terminally. Legacy 3.3.0 and earlier resources retain their stored evidence state and are not retroactively upgraded.",
+            "description": "Live profile 3.3.0 capability boundary. Runner configuration is not evidence. Missing, not-configured or unavailable execution leaves related claims unverified; an authenticated executed failure blocks wallet handoff. Pending profile 3.4.0 is not advertised here before activation.",
             "additionalProperties": false
           },
           "hardSafetyInvariants": {
