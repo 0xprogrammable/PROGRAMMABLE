@@ -204,7 +204,6 @@ function loadWalletProviderRuntime() {
 export function shouldEagerLoadWalletRuntime(pathname: string) {
   return [
     "/launch",
-    "/markets",
     "/profile",
     "/token",
     "/developers/api-keys",
@@ -766,7 +765,7 @@ export function selectAuthenticatedWallet<T extends WalletCandidate>(
   return selectConnectedWallet(wallets, primaryAddress);
 }
 
-export function selectPartnerAdminWallet<T extends WalletCandidate>(
+export function selectLinkedWallet<T extends WalletCandidate>(
   wallets: readonly T[],
   primaryAddress?: string,
 ) {
@@ -781,15 +780,17 @@ export function selectPartnerAdminWallet<T extends WalletCandidate>(
     ?? linkedWallets[0];
 }
 
-export function requiresPartnerAdminLinkedWallet(pathname: string) {
+export function requiresLinkedWallet(pathname: string) {
   return pathname === "/admin/partners"
-    || pathname.startsWith("/admin/partners/");
+    || pathname.startsWith("/admin/partners/")
+    || pathname === "/developers/api-keys"
+    || pathname.startsWith("/developers/api-keys/");
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const eager = shouldEagerLoadWalletRuntime(pathname);
-  const partnerAdminLinkedWalletOnly = requiresPartnerAdminLinkedWallet(pathname);
+  const linkedWalletOnly = requiresLinkedWallet(pathname);
   const [activationRequested, setActivationRequested] = useState(false);
   const [pendingAction, setPendingAction] = useState<"wallet" | "github" | null>(
     null,
@@ -869,8 +870,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     <ConfiguredWalletProvider
       appId={privyAppId}
       autoAction={pendingAction}
+      linkedWalletOnly={linkedWalletOnly}
       onAutoActionConsumed={() => setPendingAction(null)}
-      partnerAdminLinkedWalletOnly={partnerAdminLinkedWalletOnly}
       runtime={runtime}
     >
       {children}
@@ -974,15 +975,15 @@ function ConfiguredWalletProvider({
   appId,
   autoAction,
   children,
+  linkedWalletOnly,
   onAutoActionConsumed,
-  partnerAdminLinkedWalletOnly,
   runtime,
 }: {
   appId: string;
   autoAction: "wallet" | "github" | null;
   children: ReactNode;
+  linkedWalletOnly: boolean;
   onAutoActionConsumed: () => void;
-  partnerAdminLinkedWalletOnly: boolean;
   runtime: WalletProviderRuntime;
 }) {
   const { PrivyProvider } = runtime;
@@ -1010,8 +1011,8 @@ function ConfiguredWalletProvider({
     >
       <PrivyWalletBridge
         autoAction={autoAction}
+        linkedWalletOnly={linkedWalletOnly}
         onAutoActionConsumed={onAutoActionConsumed}
-        partnerAdminLinkedWalletOnly={partnerAdminLinkedWalletOnly}
         runtime={runtime}
       >
         {children}
@@ -1023,14 +1024,14 @@ function ConfiguredWalletProvider({
 function PrivyWalletBridge({
   autoAction,
   children,
+  linkedWalletOnly,
   onAutoActionConsumed,
-  partnerAdminLinkedWalletOnly,
   runtime,
 }: Readonly<{
   autoAction: "wallet" | "github" | null;
   children: ReactNode;
+  linkedWalletOnly: boolean;
   onAutoActionConsumed: () => void;
-  partnerAdminLinkedWalletOnly: boolean;
   runtime: WalletProviderRuntime;
 }>) {
   const {
@@ -1139,10 +1140,10 @@ function PrivyWalletBridge({
       ? undefined
       : wallets.find((candidate) =>
         isEthereumAddress(candidate.address)
-        && (!partnerAdminLinkedWalletOnly || candidate.linked)
+        && (!linkedWalletOnly || candidate.linked)
         && candidate.address.toLowerCase() === selectedWalletAddress.toLowerCase());
-    return selected ?? (partnerAdminLinkedWalletOnly
-      ? selectPartnerAdminWallet(wallets, user?.wallet?.address)
+    return selected ?? (linkedWalletOnly
+      ? selectLinkedWallet(wallets, user?.wallet?.address)
       : selectAuthenticatedWallet(
           activeAuthenticated,
           wallets,
@@ -1150,7 +1151,7 @@ function PrivyWalletBridge({
         ));
   }, [
     activeAuthenticated,
-    partnerAdminLinkedWalletOnly,
+    linkedWalletOnly,
     selectedWalletAddress,
     user?.wallet?.address,
     wallets,
@@ -1160,7 +1161,7 @@ function PrivyWalletBridge({
     return wallets.flatMap((candidate) => {
       if (
         !isEthereumAddress(candidate.address)
-        || (partnerAdminLinkedWalletOnly && !candidate.linked)
+        || (linkedWalletOnly && !candidate.linked)
       ) return [];
       const normalized = candidate.address.toLowerCase();
       if (seen.has(normalized)) return [];
@@ -1170,7 +1171,7 @@ function PrivyWalletBridge({
         chainId: normalizeChainId(candidate.chainId),
       })];
     });
-  }, [partnerAdminLinkedWalletOnly, wallets]);
+  }, [linkedWalletOnly, wallets]);
 
   const connectedWalletAddress = connectedWallet?.address;
   const connectedWalletChainId = connectedWallet?.chainId;

@@ -8,7 +8,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Tokens and launches · Programmable",
   description:
-    "Compare Programmable Classic, Custom, Prediction Markets and Stock-Paired launches by market, fee path and identity.",
+    "Compare Programmable Classic, Custom and Stock-Paired launches by market, fee path and identity.",
   alternates: { canonical: "/docs/tokens" },
 };
 
@@ -35,14 +35,6 @@ const launchTypes = [
     label: "Custom hooks",
     market:
       "Token market with Uniswap v4 hook logic and a configuration defined for that release.",
-  },
-  {
-    feePath:
-      "Current fees, recipients and creator rewards are defined by the active release in the canonical Prediction Markets repository.",
-    href: "/docs/tokens/prediction-markets",
-    label: "Prediction Markets",
-    market:
-      "Onchain outcome markets powered by a separately versioned Uniswap v4 release.",
   },
   {
     feePath:
@@ -131,11 +123,6 @@ export default function TokensDocsPage() {
           <code>CustomGraph</code> is the Router enum name for kind 1. It is not
           a public product label. A verified label describes Router provenance,
           not current safety, liquidity or tradability.
-        </p>
-        <p>
-          Prediction Markets is separately versioned. Use its canonical
-          repository for the current network, market and contract identity rules
-          rather than inferring them from a name or ticker.
         </p>
       </section>
 

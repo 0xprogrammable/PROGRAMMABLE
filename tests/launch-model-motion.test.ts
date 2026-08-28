@@ -48,16 +48,8 @@ describe("launch model artwork", () => {
 
     expect(source).toContain('data-launch-model-option="classic"');
     expect(source).toContain('type="button"');
-    expect(source).toContain('data-launch-model-option="prediction"');
+    expect(source).not.toContain('data-launch-model-option="prediction"');
     expect(source).toContain('data-launch-model-launchable="false"');
-    expect(source).toContain('data-launch-model-preview="true"');
-    expect(source).toContain(
-      'aria-labelledby="launch-model-prediction-title"',
-    );
-    expect(source).toContain(
-      'aria-describedby="launch-model-prediction-description"',
-    );
-    expect(source).toContain('onClick={() => void onChoose("prediction")}');
     expect(source).toContain(
       'aria-labelledby="launch-model-classic-title"',
     );
@@ -90,7 +82,7 @@ describe("launch model artwork", () => {
       ),
     ).toHaveLength(2);
     expect(source.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(source).toContain("launchExperience.predictionRail");
+    expect(source).not.toContain("launchExperience.predictionRail");
   });
 
   it("keeps decorative movement subtle and compositor-safe", () => {

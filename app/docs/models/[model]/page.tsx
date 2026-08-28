@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { DocsAddress } from "@/components/docs-address";
 import { DocsExternalLink } from "@/components/docs-external-link";
 import { DocsShell } from "@/components/docs-shell";
 import styles from "@/components/docs-experience.module.css";
-import { predictionMarketsDocsMetadata } from "@/components/prediction-markets-docs";
-
-type ModelSlug = "classic" | "custom" | "prediction-markets" | "stock-paired";
+type ModelSlug = "classic" | "custom" | "stock-paired";
 
 const classicEvidenceCommit = "1fb9558af4f0248de75d5c7983f80036e32f47cb";
 const stockPairedEvidenceCommit = "db30e8609002cdee16d7cbe5a2c5a0309b63ce9b";
@@ -56,11 +54,6 @@ const modelMetadata: Record<ModelSlug, { description: string; title: string }> =
       description:
         "API preparation requirements and provenance for individual Uniswap v4 hook graphs.",
     },
-    "prediction-markets": {
-      title: "Prediction Markets",
-      description:
-        "The open-source Uniswap v4 launch model for onchain outcome markets.",
-    },
     "stock-paired": {
       title: "Stock-Paired",
       description:
@@ -83,8 +76,6 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { model } = await params;
   if (!isModelSlug(model)) return {};
-  if (model === "prediction-markets") return predictionMarketsDocsMetadata;
-
   const metadata = modelMetadata[model];
   return {
     title: `${metadata.title} · Programmable`,
@@ -762,10 +753,6 @@ export default async function ModelDocsPage({
 }) {
   const { model } = await params;
   if (!isModelSlug(model)) notFound();
-  if (model === "prediction-markets") {
-    redirect("/docs/tokens/prediction-markets");
-  }
-
   if (model === "classic") return <ClassicDocs />;
   if (model === "custom") return <CustomDocs />;
   return <StockPairedDocs />;

@@ -47,7 +47,7 @@ describe("Explore UI contract", () => {
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
     expect(source).toContain('const Heading = embedded ? "h2" : "h1"');
     expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
-    expect(source).toContain('<ExploreModeSwitch active="token" />');
+    expect(source).not.toContain("ExploreModeSwitch");
     expect(source).toContain("const eagerImage = !embedded");
     expect(source).toContain("function ExploreGridSkeleton");
     expect(source).toContain(
@@ -62,111 +62,19 @@ describe("Explore UI contract", () => {
     );
   });
 
-  it("keeps token and prediction discovery inside one Explore destination", () => {
+  it("keeps public Explore limited to token discovery", () => {
     const navigation = readFileSync(
       join(root, "components/site-navigation.tsx"),
       "utf8",
     );
-    const switchSource = readFileSync(
-      join(root, "components/explore-mode-switch.tsx"),
-      "utf8",
-    );
-    const predictionSource = readFileSync(
-      join(root, "components/prediction-market-directory.tsx"),
-      "utf8",
-    );
-    const predictionStyles = readFileSync(
-      join(root, "components/prediction-market-experience.module.css"),
-      "utf8",
-    );
-    const predictionLaunchSource = readFileSync(
-      join(root, "components/prediction-market-launch.tsx"),
-      "utf8",
-    );
-    const predictionLaunchStyles = readFileSync(
-      join(root, "components/prediction-market-launch.module.css"),
-      "utf8",
-    );
-    const exploreStyles = readFileSync(
-      join(root, "components/explore-experience.module.css"),
+    const source = readFileSync(
+      join(root, "components/explore-view.tsx"),
       "utf8",
     );
 
-    expect(navigation).not.toContain('{ href: "/markets", label: "Markets" }');
-    expect(navigation).toContain('pathname.startsWith("/markets/")');
-    expect(switchSource).toContain(
-      '{ id: "token", href: "/explore", label: "Token" }',
-    );
-    expect(switchSource).toContain(
-      '{ id: "prediction", href: "/markets", label: "Prediction" }',
-    );
-    expect(switchSource).toContain('aria-label="Explore categories"');
-    expect(predictionSource).toContain("<h1>Explore</h1>");
-    expect(predictionSource).toContain(
-      '<ExploreModeSwitch active="prediction" />',
-    );
-    expect(predictionSource).toContain("styles.marketGrid");
-    expect(predictionSource).toContain(
-      "Will BTC be at or above ${formatPredictionPriceAtoms(market.thresholdAtoms)}?",
-    );
-    expect(predictionSource).not.toContain(
-      "PREDICTION MARKETS · ROBINHOOD CHAIN",
-    );
-    expect(predictionSource).not.toContain("Market system status");
-    expect(predictionSource).not.toContain("VISIBLE BACKING");
-    expect(predictionSource).not.toContain("LIVE · BLOCK");
-    expect(predictionSource).not.toContain("<i data-open=");
-    expect(predictionSource).not.toContain("aria-label={`${market.title}");
-    expect(predictionSource).toContain(
-      "Closes ${compactUtcDate(market.cutoff)}",
-    );
-    expect(predictionSource).toContain(
-      '<span className={styles.marketCardTime}>{marketStatus}</span>',
-    );
-    expect(predictionStyles).toMatch(
-      /\.marketGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s,
-    );
-    expect(predictionStyles).toMatch(
-      /@media \(max-width: 900px\)[\s\S]*?\.marketGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
-    );
-    expect(predictionStyles).toMatch(
-      /\.directoryToolbar\s*\{[^}]*width:\s*fit-content;/s,
-    );
-    expect(predictionLaunchSource).toContain("Create a prediction");
-    expect(predictionLaunchSource).toContain(
-      "Set the BTC price and result time",
-    );
-    expect(predictionLaunchSource).not.toContain("Technical preview");
-    expect(predictionLaunchSource).not.toContain("Robinhood Chain ·");
-    expect(predictionLaunchSource).not.toContain("1 signature");
-    expect(predictionLaunchSource).not.toContain("1 transaction");
-    expect(predictionLaunchSource).not.toContain(
-      "YES wins at this price or higher.",
-    );
-    expect(predictionLaunchSource).not.toContain("Shown and resolved in UTC.");
-    expect(predictionLaunchSource).not.toContain("How this market resolves");
-    expect(predictionLaunchSource).not.toContain("Trades close 1 min early");
-    expect(predictionLaunchSource).not.toContain("styles.rulesLink");
-    expect(predictionLaunchSource).toContain("styles.fieldFeedback");
-    expect(predictionLaunchSource).toContain(
-      'market ? `Result: ${market.observationLabel}` : "\\u00a0"',
-    );
-    expect(predictionStyles).not.toContain(".marketCardMeta i");
-    expect(predictionStyles).toMatch(
-      /\.marketCardTime\s*\{[^}]*color:\s*var\(--webde-muted\);[^}]*font-family:\s*var\(--font-instrument\), Arial, sans-serif;[^}]*font-size:\s*13\.5px;[^}]*font-variant-numeric:\s*tabular-nums slashed-zero;[^}]*font-weight:\s*600;[^}]*white-space:\s*nowrap;/s,
-    );
-    expect(predictionStyles).toMatch(
-      /@media \(max-width: 700px\)[\s\S]*?\.marketCardTime\s*\{[^}]*font-size:\s*13px;/s,
-    );
-    expect(predictionLaunchStyles).toMatch(
-      /\.header\s*\{[^}]*max-width:\s*1060px;[^}]*width:\s*100%;/s,
-    );
-    expect(predictionLaunchStyles).toMatch(
-      /\.layout\s*\{[^}]*align-items:\s*stretch;/s,
-    );
-    expect(exploreStyles).toMatch(
-      /@media \(min-width: 1101px\)[\s\S]*?\.runnersIntro\s*\{[^}]*pointer-events:\s*none;[^}]*\}[\s\S]*?\.runnersIntro :global\(\.token-section-heading\)\s*\{[^}]*pointer-events:\s*auto;/s,
-    );
+    expect(navigation).not.toContain("/markets");
+    expect(source).not.toContain("ExploreModeSwitch");
+    expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
   });
 
   it("shows quote-derived prediction payouts without allowing stale orders", () => {

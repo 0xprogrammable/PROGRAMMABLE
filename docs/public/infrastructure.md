@@ -4,7 +4,7 @@ description: How Programmable separates launch preparation, execution, finality 
 
 # How Programmable works
 
-Programmable records each part of a launch separately. The product interface prepares the launch, the creator wallet signs its transaction, the required network finalizes it, and the public product adds the resulting token, pool or prediction market to the appropriate discovery surface.
+Programmable records each part of a launch separately. The product interface prepares the launch, the creator wallet signs its transaction, the required network finalizes it, and the public product adds the resulting token and pool to the appropriate discovery surface.
 
 ## Classic execution
 
@@ -14,17 +14,13 @@ Classic uses the current launcher and shared hook on Ethereum. One transaction c
 
 Custom begins with one deterministic source and graph bundle derived by the public `programmable-launch` CLI and submitted through the authenticated V3.3 API. The CLI and preflight prepare and classify exact bytes; the API server makes the durable decision and exposes a wallet handoff only after objective static hard blocks and exact Router simulation pass. Missing behavior execution leaves behavior, fee, liquidity and routability claims unverified; an authenticated executed failure blocks. When exact-source material is present, the prepared artifact also binds the exact Solidity Standard JSON bytes, compiler build, settings, libraries, contract identity and resolved constructor arguments. A `prepared` result contains the exact artifact but no wallet transaction. An `authorized` result contains the permit-attached transaction for separate controller-wallet signing and broadcast. Post-finality source verification is independent from launch finality; Programmable does not reproduce project tests or audit the project.
 
-## Prediction Markets execution
-
-Prediction Markets uses a separately versioned Uniswap v4 protocol release. Its [canonical repository](https://github.com/0xprogrammable/Prediction-Markets) defines the current network, market components, transaction paths, resolution rules and deployment evidence. The public Ethereum developer feed covers Ethereum Router records; use the canonical repository for Prediction Markets integrations.
-
 ## Launch stamps
 
 The Launch Stamp Router provides a canonical provenance record for future Router based Classic and Custom launches. Its Ethereum deployment is live, and the developer manifest publishes the address, code hash, ABI hash, start block and finality rules required for independent verification.
 
 ## Public discovery
 
-The website combines verified launch records with price and liquidity data when those values are available. The read only Ethereum developer service publishes consistent Classic and Custom records for terminals, scanners, explorers and applications. Prediction Markets uses its own versioned release records. Integrators should treat origin, indexing freshness, chart availability and transaction support as separate capabilities.
+The website combines verified launch records with price and liquidity data when those values are available. The read only Ethereum developer service publishes consistent Classic and Custom records for terminals, scanners, explorers and applications. Integrators should treat origin, indexing freshness, chart availability and transaction support as separate capabilities.
 
 {% content-ref url="launch-stamps.md" %}
 [launch-stamps.md](launch-stamps.md)

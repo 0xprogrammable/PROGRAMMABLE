@@ -8,6 +8,38 @@ const MARKDOWN_DESTINATIONS = new Map([
   ["/docs/developers", "/docs/developers.md"],
 ]);
 
+function isRetiredPredictionPage(pathname: string): boolean {
+  return pathname === "/markets" ||
+    pathname.startsWith("/markets/") ||
+    pathname === "/docs/tokens/prediction-markets" ||
+    pathname === "/docs/models/prediction-markets";
+}
+
+function isRetiredPredictionApi(pathname: string): boolean {
+  return pathname === "/api/prediction" ||
+    pathname.startsWith("/api/prediction/");
+}
+
+function retiredPredictionApiResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      schemaVersion: "programmable.api-error.v1",
+      status: "error",
+      error: {
+        code: "api_route_not_found",
+        message: "No public Programmable API route matches this path.",
+      },
+    },
+    {
+      status: 404,
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
+    },
+  );
+}
+
 function withAcceptVariation(response: NextResponse): NextResponse {
   const values = new Set(
     (response.headers.get("Vary") ?? "")
@@ -32,6 +64,16 @@ function homeMarkdownResponse(): NextResponse {
 }
 
 export function proxy(request: NextRequest) {
+  if (isRetiredPredictionApi(request.nextUrl.pathname)) {
+    return retiredPredictionApiResponse();
+  }
+  if (isRetiredPredictionPage(request.nextUrl.pathname)) {
+    const destination = request.nextUrl.pathname.startsWith("/docs/")
+      ? "/docs/tokens"
+      : "/explore";
+    return NextResponse.redirect(new URL(destination, request.url), 307);
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     return withAcceptVariation(NextResponse.next());
   }
@@ -67,5 +109,12 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/docs/developers"],
+  matcher: [
+    "/",
+    "/docs/developers",
+    "/markets/:path*",
+    "/docs/tokens/prediction-markets",
+    "/docs/models/prediction-markets",
+    "/api/prediction/:path*",
+  ],
 };

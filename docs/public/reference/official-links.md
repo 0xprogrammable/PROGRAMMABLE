@@ -9,9 +9,7 @@ description: Official Programmable product, source, community and analytics link
 | Website                 | [programmable.market](https://programmable.market)                                                                 |
 | Create                  | [programmable.market/launch](https://programmable.market/launch)                                                   |
 | Explore                 | [programmable.market/explore](https://programmable.market/explore)                                                 |
-| Prediction Markets      | [programmable.market/markets](https://programmable.market/markets)                                                 |
 | GitHub                  | [github.com/0xprogrammable](https://github.com/0xprogrammable)                                                     |
-| Prediction source       | [Prediction-Markets](https://github.com/0xprogrammable/Prediction-Markets)                                         |
 | Custom Launch API keys  | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)                         |
 | Custom Launch API guide | [programmable.market/developers/custom-launch-api-v1.md](https://programmable.market/developers/custom-launch-api-v1.md) |
 | Custom Launch V1 OpenAPI | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
@@ -35,6 +33,5 @@ and revision 2 remains compatible. CLI `3.3.9` defaults to live profile `3.3.0`;
 preparatory and is rejected by live capabilities until backend activation. V2 and V1 history and schemas remain readable, while fresh creation returns
 non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 accepts new submissions.
 Legacy Registry and GitHub submission intake is closed. Use the read-only
-developer service and current deployment manifest when verifying Ethereum source or deployment data. Use the Prediction
-Markets repository for its current networks, contracts and release evidence. Community posts and analytics are useful
-context but do not replace the contract address, canonical chain record or versioned release evidence.
+developer service and current deployment manifest when verifying Ethereum source or deployment data. Community posts
+and analytics are useful context but do not replace the contract address, canonical chain record or versioned release evidence.

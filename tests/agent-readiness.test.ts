@@ -309,6 +309,42 @@ describe("agent-readable public surface", () => {
     expect(unacceptableResponse.headers.get("vary")).toBe("Accept");
   });
 
+  it("removes the retired prediction product from public pages and APIs", async () => {
+    for (const path of ["/markets", "/markets/example"]) {
+      const response = proxy(new NextRequest(`${ORIGIN}${path}`));
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe(`${ORIGIN}/explore`);
+    }
+
+    for (const path of [
+      "/docs/tokens/prediction-markets",
+      "/docs/models/prediction-markets",
+    ]) {
+      const response = proxy(new NextRequest(`${ORIGIN}${path}`));
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe(`${ORIGIN}/docs/tokens`);
+    }
+
+    for (const method of ["GET", "POST"] as const) {
+      const response = proxy(
+        new NextRequest(`${ORIGIN}/api/prediction/v2/directory`, { method }),
+      );
+      expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("x-robots-tag")).toBe(
+        "noindex, nofollow",
+      );
+      await expect(response.json()).resolves.toMatchObject({
+        schemaVersion: "programmable.api-error.v1",
+        status: "error",
+        error: { code: "api_route_not_found" },
+      });
+    }
+
+    expect(programmableHomeMarkdown).not.toMatch(/prediction markets?/iu);
+    expect(programmableLlmsIndex).not.toMatch(/prediction markets?/iu);
+  });
+
   it("keeps Accept and the Next RSC keys in the public CDN variation", () => {
     const config = JSON.parse(
       readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),

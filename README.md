@@ -46,9 +46,6 @@ and V1 history and schemas remain readable, while fresh authenticated POSTs are 
 non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY` responses. Only V3.3 accepts new
 submissions. CLI `3.3.9` is the current installable release and defaults to live profile `3.3.0`. Explicit profile
 `3.4.0` output remains preparatory and is rejected by live capabilities until the backend activates that profile.
-Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
-capabilities, contracts and release evidence live in the public
-[`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets) repository.
 Each release defines its funding and signing path. User-funded flows keep the connected wallet in control of its own
 transaction.
 
@@ -58,7 +55,6 @@ transaction.
 | ---------------------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
 | **Classic**            | A fixed supply token with configurable buy and sell transaction fees  | Open through [Create](https://programmable.market/launch) |
 | **Custom**             | A token or application with its own deterministic hook graph          | Wallet-bound [Custom Launch API](https://programmable.market/developers/api-keys) |
-| **Prediction Markets** | Onchain outcome markets powered by Uniswap v4                         | Open through [Create](https://programmable.market/launch) |
 
 A hook is a smart contract attached to a Uniswap v4 pool. The pool calls it at defined points in a transaction, which
 lets the product apply behavior at the pool level. A hook can change fees, accounting, access or other pool behavior,
@@ -76,11 +72,11 @@ but the word hook does not establish safety, compatibility or launch approval.
 
 ## How public state is built
 
-1. A launch request is normalized under the active Classic, Custom or Prediction Markets release.
+1. A launch request is normalized under the active Classic or Custom release.
 2. The active release authenticates and submits the required transaction under its published signer and funding
    policy.
 3. The required network confirms the transaction and the launch reaches the required finality.
-4. The product read layer publishes the canonical token, pool or prediction market identity.
+4. The product read layer publishes the canonical token and pool identity.
 5. Optional price, chart and liquidity data are attached only when their providers return current evidence.
 
 Canonical launch identity remains visible when optional market data is unavailable. The application does not invent
@@ -135,7 +131,6 @@ provider availability or onchain lifecycle completion.
 | ---------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Product                      | [programmable.market](https://programmable.market)                                                       |
 | Explore                      | [programmable.market/explore](https://programmable.market/explore)                                       |
-| Prediction Markets           | [programmable.market/markets](https://programmable.market/markets)                                       |
 | Documentation                | [programmable.market/docs](https://programmable.market/docs)                                             |
 | Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
 | Wallet-owned V1 launch reads | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
@@ -150,8 +145,7 @@ provider availability or onchain lifecycle completion.
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
 
 Ethereum contract addresses and integration data should come from the versioned manifest rather than screenshots,
-token names or third-party metadata. For Prediction Markets, use the canonical repository for the current networks,
-supported market types, economics, resolution rules, contract addresses and release evidence.
+token names or third-party metadata.
 
 V2 and V1 list and single-resource reads remain live for existing wallet-owned requests. Fresh POSTs return
 non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 is the current
@@ -168,7 +162,6 @@ intake is closed.
 | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | [`Launch-Policy`](https://github.com/0xprogrammable/Launch-Policy)                         | Versioned Custom launch requirements, policies and schemas                  |
 | [`Developers`](https://github.com/0xprogrammable/Developers)                               | Read-only discovery manifests, API contracts and verification rules         |
-| [`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets)               | Prediction market contracts, release specifications and deployment evidence |
 
 ## Release and security boundaries
 
