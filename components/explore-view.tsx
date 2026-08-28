@@ -268,6 +268,13 @@ export function resolveExploreServerSort(
   return "newest";
 }
 
+export function requiresCompleteExploreDataset(
+  valuationSort: ExploreValuationSort,
+  ageSort: ExploreAgeSort,
+) {
+  return valuationSort !== "none" && ageSort === "oldest";
+}
+
 type ExploreState =
   | { phase: "loading" }
   | {
@@ -2422,8 +2429,10 @@ export function ExploreView({
   } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const sort = resolveExploreServerSort(valuationSort, ageSort);
-  const requiresCompleteDataset =
-    valuationSort !== "none" && ageSort !== "none";
+  const requiresCompleteDataset = requiresCompleteExploreDataset(
+    valuationSort,
+    ageSort,
+  );
   const contentKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
   const requestKey = `${contentKey}\u0000${retryKey}`;
   const modelDatasetKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
