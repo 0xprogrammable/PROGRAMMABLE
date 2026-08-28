@@ -62,9 +62,10 @@ authenticated request still consumes its ordinary route rate budget, including a
    `productTruthAxes`, hard-block, needs-evidence and warning code arrays, the bounded `staticBaseline`, typed
    `remediations`, and the five fixed side-effect fields. Local validation and preflight prepare and classify exact
    bytes; neither is the launch decision. A `not_executed` or `needs_evidence` result is outstanding, not verified, and
-   cannot authorize a wallet handoff. Unknown additive fields may be preserved; they never relax a required false or
-   true invariant. After durable submission, the API server must verify every per-launch behavior, fee and liquidity
-   evidence axis required by the selected lane before exposing a wallet handoff.
+   cannot support a positive behavior, fee, liquidity or routability claim. Unknown additive fields may be preserved;
+   they never relax a required false or true invariant. After durable submission, the API server independently enforces
+   the objective static hard blocks and exact Router simulation before exposing a wallet handoff. An authenticated
+   executed behavior failure blocks the handoff; absent execution leaves the related claims unverified.
 
 For USDC EIP-3009 funding, the CLI is the derivation authority. Project code must accept and forward the exact
 `from`, predicted-initializer `to`, `value`, validity window and nonce. It must not substitute an application-specific
@@ -135,8 +136,8 @@ For EIP-3009 funding, one single-resource flow keeps the two wallet actions sepa
    65-byte lower-case `r || s || v` signature is posted once to the resource-specific wallet-admin URL. The CLI does
    not accept or submit this wallet signature.
 3. The backend verifies and inserts the signature only at the bound zero ABI words, derives the final graph commitment,
-   permit, artifact and Router transaction, and requires the exact simulation postconditions plus the per-launch
-   behavior, fee and liquidity evidence required by the selected lane.
+   permit, artifact and Router transaction, and requires the exact simulation postconditions. Behavior execution is
+   additional server evidence; absence leaves its claims unverified and an authenticated executed failure blocks.
 4. The website revalidates the exact Router transaction and asks for a second explicit wallet send. Nothing
    auto-signs or auto-broadcasts.
 
@@ -170,8 +171,8 @@ PoolManager, and a missing enabled callback implementation. Proxy or delegatecal
 controls, liquidity custody or locking, external dependencies and return-delta custom accounting are evidence duties,
 not categorical deployment blocks. A hard-block match returns `action_required`; other findings populate
 `needsEvidenceFindingCodes` or warnings. There is no manual project allowlist. A final Router simulation is mandatory,
-but the API server also verifies the behavior, fee and liquidity evidence required by the selected lane before wallet
-handoff.
+and the API server independently requires it to pass before wallet handoff. Missing behavior execution leaves its
+positive claims unverified; an authenticated executed failure blocks the handoff.
 
 When no hard-blocking pair matches, the server-authored `platformAdmission` status binds the report SHA-256,
 needs-evidence and warning codes with disposition `no_blocking_static_finding`, while requiring Router simulation and explicitly setting
@@ -190,7 +191,7 @@ The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and h
 
 A Programmable share of `1,000` hundredths of a bip, equal to `0.10% = 10 bps`, is claimed only for a fee-certified profile or adapter and its
 exact stamped PoolKey. That lane binds its accounting, currency, rounding and claim destination and requires
-server-authored per-launch fee-behavior evidence before wallet handoff. Arbitrary custom hooks are not automatically
+server-authored per-launch fee-path evidence before the platform makes that claim. Arbitrary custom hooks are not automatically
 fee-enforced, and the open arbitrary-hook lane carries no Programmable fee claim. Revision-3 local validation, static
 admission and Router simulation do not independently create `feeBehaviorClaim: true`.
 For that certified lane, the bound Programmable recipient is `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`.
@@ -271,15 +272,15 @@ programmable-launch submit ./launch.json \
 programmable-launch status REQUEST_UUID --watch --until authorized
 ```
 
-The agent state machine is `pack -> validate --remote -> submit -> server evidence decision -> status --watch --until
+The agent state machine is `pack -> validate --remote -> submit -> server decision -> status --watch --until
 authorized -> wallet -> status --watch --until finalized`. `wallet` means stop for the connected controller to review and sign; it is not a
 fifth CLI command. Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`; there is no
 origin override. Remote validation and later submission use the same exact request bytes. Preflight has no
 Idempotency-Key because it creates no durable resource; `submit` keeps its existing durable idempotency and retry
 rules.
 
-The API server exposes neither handoff until it has verified every per-launch behavior, fee and liquidity evidence axis
-required by the selected lane. With `--until authorized`, the status command stops at either the EIP-3009 funding handoff or the Router handoff. In
+The API server exposes either handoff only after objective static hard blocks and exact Router simulation pass. Missing
+behavior execution leaves the related claims unverified; an authenticated executed failure blocks. With `--until authorized`, the status command stops at either the EIP-3009 funding handoff or the Router handoff. In
 EIP-3009 mode, first complete the exact funding signature in the website, then run the same status command again. At
 `authorized`, stop again so the connected controller can review and sign the exact Router transaction separately. When
 present, use only the resource's HTTPS `walletHandoffUrl` before its `expiresAt`; refetch the single-resource status after

@@ -147,10 +147,11 @@ export default function CreatorLaunchDocsPage() {
           A <code>prepared</code> result means the exact launch artifact exists.
           Its public signed permit and wallet transaction are still null. It is
           not a wallet authorization, approval, audit or safety claim. The API
-          server exposes no wallet handoff until it verifies every per-launch
-          behavior, fee and liquidity evidence axis required by the selected
-          lane. Client, model and caller-attested output cannot bypass that
-          gate. Read the launch status with the same API key and stop on any
+          server exposes a wallet handoff only after objective static hard blocks
+          and exact Router simulation pass. Missing behavior execution leaves
+          behavior, fee, liquidity and routability claims unverified; an
+          authenticated executed failure blocks the handoff. Client, model and
+          caller-attested output cannot bypass a server gate. Read the launch status with the same API key and stop on any
           failed or mismatched binding.
         </p>
       </section>

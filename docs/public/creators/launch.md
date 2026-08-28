@@ -32,8 +32,9 @@ The key is bound to its controller wallet and API scopes. It is not a wallet key
 ## Submit the V3 request
 
 Run `programmable-launch pack`, `validate --remote`, `submit`, then `status --watch --until authorized`. The CLI and
-preflight prepare and classify the exact request; the API server is the decision authority and exposes no wallet
-handoff until it verifies the per-launch behavior, fee and liquidity evidence required by the selected lane. Stop for the
+preflight prepare and classify the exact request; the API server is the decision authority and exposes a wallet
+handoff only after objective static hard blocks and exact Router simulation pass. Missing behavior execution leaves
+related claims unverified; an authenticated executed failure blocks. Stop for the
 connected controller's wallet review and signature, then resume `status --watch --until finalized`. Submit the bundle
 to `POST https://api.programmable.market/v3/custom-launches` with the CLI. Authenticated CLI traffic is fixed to exact
 origin `https://api.programmable.market`; there is no origin override. Preserve the exact request bytes and idempotency

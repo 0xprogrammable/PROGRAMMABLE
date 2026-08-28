@@ -30,7 +30,7 @@
     "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.7",
     "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz",
     "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
-    "cliTarballSha256": "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b"
+    "cliTarballSha256": "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8"
   },
   "agentContract": {
     "coldStartUrl": "https://programmable.market/.well-known/programmable.json",
@@ -67,13 +67,15 @@
     "walletHandoffEvidenceGate": {
       "enforcedServerSide": true,
       "clientDeclarationAccepted": false,
-      "requiredAxesAreSelectedLaneSpecific": true,
-      "allRequiredBehaviorFeeAndLiquidityEvidenceMustBeVerified": true,
+      "mandatoryServerGates": ["static-hard-block-policy", "exact-router-simulation"],
+      "behaviorEvidenceRequiredForPositiveClaims": true,
       "notExecutedOrNeedsEvidenceIsAuthorization": false,
+      "notConfiguredOrUnavailableDisposition": "claims_remain_unverified",
+      "authenticatedExecutedFailureDisposition": "blocks_wallet_handoff",
       "workerPrivateSignedPermitMayExistWhileSimulating": true,
       "publicOutputIsNullWhileSimulatingOrFailed": true,
       "gateControlsPermitAndWalletTransactionExposureNotInternalPermitSigning": true,
-      "meaning": "The CLI and preflight prepare and classify exact bytes. The API server is the decision authority and exposes no permit, wallet transaction or wallet handoff until every behavior, fee and liquidity evidence axis required by the selected lane is verified. A worker-private signed permit may exist only inside the simulation envelope; it is not public authorization. An axis that is not required by an open lane creates no claim."
+      "meaning": "The CLI and preflight prepare and classify exact bytes. The API server is the decision authority and exposes no permit, wallet transaction or wallet handoff until objective static hard blocks and exact Router simulation pass. Missing or unavailable behavior execution leaves behavior, fee, liquidity and routability claims unverified; an authenticated executed failure blocks the handoff. A worker-private signed permit may exist only inside the simulation envelope; it is not public authorization."
     },
     "instruction": "Fetch discovery, this catalog and the advertised pack-config schema before inspecting or changing the project. Never expect the API key itself to contain instructions. Never place the secret value in source, config, prompts, chat, logs, screenshots or command history. Use only V3.3 for fresh submission; V2 and V1 are historical read/schema compatibility surfaces with non-retryable 409 fresh-write fences."
   },
@@ -119,7 +121,7 @@
     {
       "step": 7,
       "id": "status-before-wallet",
-      "action": "Poll the single resource with status --watch --until authorized. The API server exposes no wallet handoff until every per-launch behavior, fee and liquidity evidence axis required by the selected lane is verified. not_executed, needs_evidence, client output and caller attestation are never authorization. It may then stop earlier at awaiting_funding_authorization. When the resource exposes walletHandoffUrl and expiresAt, stop automation. The connected controller independently reviews and signs the exact funding authorization. Poll the same resource again until authorized, then stop for separate review and broadcast of the exact Router transaction. The API and CLI never sign or broadcast."
+      "action": "Poll the single resource with status --watch --until authorized. The API server exposes a wallet handoff only after objective static hard blocks and exact Router simulation pass. Missing or unavailable behavior execution leaves related claims unverified; an authenticated executed failure blocks. Client output and caller attestation are never authorization. The resource may stop earlier at awaiting_funding_authorization. When it exposes walletHandoffUrl and expiresAt, stop automation. The connected controller independently reviews and signs the exact funding authorization. Poll the same resource again until authorized, then stop for separate review and broadcast of the exact Router transaction. The API and CLI never sign or broadcast."
     },
     {
       "step": 8,
@@ -515,7 +517,7 @@
     "routerSimulationRole": "Final execution-compatibility detector for the exact prepared Router transaction. It is not a safety, fee-behavior, liquidity or economic-solvency claim.",
     "blockingStatus": "action_required",
     "warningDisposition": "continue-to-server-evidence-evaluation",
-    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.3.0 deployment blocks. The API server must verify the evidence required by the selected lane before wallet handoff. No warning is an admission, conformance or safety claim.",
+    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.3.0 deployment blocks. Missing evidence leaves the related product claim unverified; it is not a caller-declared pass. An authenticated executed failure blocks wallet handoff. No warning is an admission, conformance or safety claim.",
     "actionRequiredInstruction": "Read the exact single-resource report, match each hard-blocking finding to its target and role, change the exact source or config, rebuild, repack and validate, then submit a new immutable request. Do not retry unchanged and do not ask for an allowlist bypass.",
     "supportInstruction": "When the resource directs you to support, send only requestId, status, UTC time and the public finding or error code. Never send the API key."
   },

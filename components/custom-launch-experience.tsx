@@ -571,7 +571,7 @@ export function customLaunchFeeReviewV1(
     value: recipient.value,
   })));
   return Object.freeze({
-    summary: "10 bps Programmable, added on top",
+    summary: "Configured market path: 10 bps Programmable, additive",
     identity,
     marketPath: policy.marketPathId,
     recipients,

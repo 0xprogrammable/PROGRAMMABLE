@@ -187,7 +187,7 @@ describe("token detail metrics", () => {
     expect(buildTokenDetailMetrics(confirmed).map((metric) => metric.label))
       .not.toContain("Programmable fee");
     expect(platformFeePolicyDisclosure(confirmed)).toBe(
-      "Platform fee confirmed: 10 bps accrue in an unspecified pool asset and are claimable by the fixed Programmable reward wallet.",
+      "Platform fee policy recorded: 10 bps are configured for this stamped pool. This does not prove current accrual or a claimable balance.",
     );
     expect(platformFeePolicyDisclosure(customGraphToken)).toBeNull();
   });

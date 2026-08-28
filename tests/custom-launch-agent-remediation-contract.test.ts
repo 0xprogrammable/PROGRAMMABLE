@@ -71,18 +71,16 @@ describe("Custom Launch cold-agent remediation contract", () => {
       clientChecks: "preparation-only",
       decisionAuthority: "api-server",
       walletAuthorizationGate: {
-        requiredServerEvidenceAxes: [
-          "behavior",
-          "platform_fee",
-          "liquidity",
+        mandatoryServerGates: [
+          "static-hard-block-policy",
+          "exact-router-simulation",
         ],
         behaviorEvidence: {
           configurationIsExecutionEvidence: false,
-          walletHandoffRequiresVerifiedEvidence: true,
-          minimumWalletHandoffEvidenceStatus: "verified",
-          walletHandoffFailureCode: "BEHAVIOR_EVIDENCE_NOT_VERIFIED",
-          notConfiguredDisposition: "blocks_wallet_handoff",
-          unavailableDisposition: "blocks_wallet_handoff",
+          walletHandoffRequiresVerifiedEvidence: false,
+          notConfiguredDisposition: "claims_remain_unverified",
+          unavailableDisposition: "claims_remain_unverified",
+          executedFailureDisposition: "blocks_wallet_handoff",
         },
         feePolicy: {
           feeBehaviorClaim: false,
@@ -185,7 +183,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         cliChecksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         cliTarballSha256:
-          "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+          "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",

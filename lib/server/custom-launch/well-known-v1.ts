@@ -78,19 +78,16 @@ export function programmableWellKnownDocumentV1(
         clientChecks: "preparation-only" as const,
         decisionAuthority: "api-server" as const,
         walletAuthorizationGate: Object.freeze({
-          requiredServerEvidenceAxes: Object.freeze([
-            "behavior",
-            "platform_fee",
-            "liquidity",
+          mandatoryServerGates: Object.freeze([
+            "static-hard-block-policy",
+            "exact-router-simulation",
           ] as const),
           behaviorEvidence: Object.freeze({
             configurationIsExecutionEvidence: false as const,
-            walletHandoffRequiresVerifiedEvidence: true as const,
-            minimumWalletHandoffEvidenceStatus: "verified" as const,
-            walletHandoffFailureCode:
-              "BEHAVIOR_EVIDENCE_NOT_VERIFIED" as const,
-            notConfiguredDisposition: "blocks_wallet_handoff" as const,
-            unavailableDisposition: "blocks_wallet_handoff" as const,
+            walletHandoffRequiresVerifiedEvidence: false as const,
+            notConfiguredDisposition: "claims_remain_unverified" as const,
+            unavailableDisposition: "claims_remain_unverified" as const,
+            executedFailureDisposition: "blocks_wallet_handoff" as const,
           }),
           feePolicy: Object.freeze({
             feeBehaviorClaim: false as const,
@@ -149,7 +146,7 @@ export function programmableWellKnownDocumentV1(
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         tarballSha256:
-          "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+          "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
       }),
       compatibility: Object.freeze({
         v1: Object.freeze({
@@ -189,7 +186,7 @@ export function programmableWellKnownDocumentV1(
           checksumUrl:
             "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
           tarballSha256:
-            "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+            "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
         }),
       }),
       generalHookProfile: Object.freeze({
@@ -346,7 +343,7 @@ export function programmableWellKnownDocumentV1(
         ] as const),
         platformAdmissionReceiptRequired: true as const,
         routerSimulationRequiredBeforeAuthorization: true as const,
-        serverVerifiedEvidenceRequiredBeforeAuthorization: true as const,
+        serverVerifiedEvidenceRequiredForPositiveClaims: true as const,
         safetyClaim: false as const,
         feeBehaviorClaim: false as const,
         fundingAuthorization: Object.freeze({
@@ -376,7 +373,7 @@ export function programmableWellKnownDocumentV1(
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         tarballSha256:
-          "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+          "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: Object.freeze({

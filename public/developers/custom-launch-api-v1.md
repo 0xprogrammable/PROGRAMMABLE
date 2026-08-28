@@ -41,9 +41,10 @@ ordinary authenticated route rate budget still applies, and partner preflight co
 separate connected-controller action, not a CLI command.
 Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`; there is no origin override.
 Local CLI results and preflight prepare and classify the exact request; neither is the launch decision. After durable
-submission, the API server must verify every per-launch behavior, fee and liquidity evidence axis required by the
-selected lane before it exposes a wallet handoff. A client, model or caller attestation cannot declare that evidence
-verified.
+submission, the API server independently enforces the objective static hard blocks and exact Router simulation before
+it exposes a wallet handoff. Missing or unavailable behavior execution leaves behavior, fee, liquidity and routability
+claims unverified; an authenticated executed failure blocks the handoff. A client, model or caller attestation cannot
+declare evidence verified or bypass a server gate.
 
 For an existing repository, pin the exact public source object, compile every direct graph target with
 `solc 0.8.26+commit.8a97fa7a`, map the distinct token, hook and initializer roles plus all address dependencies, declare
@@ -105,7 +106,7 @@ The general V3 production profile is available on Ethereum Mainnet only (`chainI
 
 A Programmable share of `1,000` hundredths of a bip, equal to `0.10% = 10 bps`, is claimed only for a fee-certified profile or adapter and its
 exact stamped PoolKey. That lane binds the accounting mode, fee currency, rounding and claim destination and requires
-server-authored per-launch fee-behavior evidence before wallet handoff. Arbitrary custom hooks are not automatically
+server-authored per-launch fee-path evidence before the platform makes that claim. Arbitrary custom hooks are not automatically
 fee-enforced, and the open arbitrary-hook lane carries no Programmable fee claim. Revision-3 local validation, static
 admission and Router simulation do not independently create `feeBehaviorClaim: true`.
 For that certified lane, the bound Programmable recipient is `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`.
@@ -142,8 +143,8 @@ or a missing enabled callback implementation. Proxy or delegatecall use, mint/ta
 custody or locking, external dependencies and return-delta custom accounting remain bound evidence duties rather than
 categorical deployment blocks. A hard-block match returns `action_required`; other findings populate
 `needsEvidenceFindingCodes` or warnings. There is no manual project allowlist. A final Router simulation is mandatory,
-but the API server also verifies the per-launch behavior, fee and liquidity evidence required by the selected lane
-before wallet handoff.
+and the API server independently requires it to pass before wallet handoff. Behavior execution is additional evidence:
+absence leaves behavior-derived claims unverified, while an authenticated executed failure blocks the handoff.
 
 When no blocking pair matches, the server-authored `platformAdmission` status binds the report SHA-256 and warning
 codes with disposition `no_blocking_static_finding`, while requiring Router simulation and explicitly setting
@@ -162,8 +163,8 @@ liquidity exists, platform-fee behavior was proven, source verification reached 
 feature placement happened. The response disposition is `supported`, `supported_with_warnings`, `needs_evidence` or
 `unsupported` and includes typed finding-code arrays, `riskClassification`, `behaviorEvidence`, `productTruthAxes`,
 `staticBaseline` and `remediations`. A `not_executed` or `needs_evidence` result remains outstanding; it is neither a
-failure nor a caller-declared pass, and it cannot authorize a wallet handoff. None is an audit, universal compatibility
-statement or safety guarantee.
+failure nor a caller-declared pass and cannot support a positive behavior, fee, liquidity or routability claim. None is
+an audit, universal compatibility statement or safety guarantee.
 
 ## Install the public CLI
 
@@ -273,8 +274,9 @@ never stores it in its journal.
 
 Wallet keys are bound to their controller wallet and API scopes. Partner credentials are bound to their own isolated
 launch principal; they select an exact controller in each request but cannot sign for it. The API and CLI never sign or broadcast. The API server
-exposes no wallet handoff until every per-launch behavior, fee and liquidity evidence axis required by the selected lane
-is verified; client output cannot bypass that gate. At `authorized`, the API returns the exact prepared wallet
+exposes a wallet handoff only after its objective static hard blocks and exact Router simulation pass. Missing behavior
+execution keeps the related claims unverified; an authenticated executed failure blocks the handoff. Client output
+cannot bypass either mandatory server gate. At `authorized`, the API returns the exact prepared wallet
 transaction. Stop the agent flow so the connected controller can independently review the chain, sender, Router,
 value, selector and calldata before signing.
 

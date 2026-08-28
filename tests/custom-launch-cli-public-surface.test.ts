@@ -41,7 +41,7 @@ describe("public Custom Launch CLI surface", () => {
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         tarballSha256:
-          "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+          "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
       },
       compatibility: {
         v1: {
@@ -75,7 +75,7 @@ describe("public Custom Launch CLI surface", () => {
           checksumUrl:
             "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
           tarballSha256:
-            "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+            "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
         },
       },
       generalHookProfile: {
@@ -143,7 +143,7 @@ describe("public Custom Launch CLI surface", () => {
         ],
         platformAdmissionReceiptRequired: true,
         routerSimulationRequiredBeforeAuthorization: true,
-        serverVerifiedEvidenceRequiredBeforeAuthorization: true,
+        serverVerifiedEvidenceRequiredForPositiveClaims: true,
         safetyClaim: false,
         feeBehaviorClaim: false,
         fundingAuthorization: {
@@ -173,7 +173,7 @@ describe("public Custom Launch CLI surface", () => {
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         tarballSha256:
-          "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+          "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -274,7 +274,7 @@ describe("public Custom Launch CLI surface", () => {
         artifactPublished: true,
         releaseVersion: "3.3.7",
         tarballSha256:
-          "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+          "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
       });
       expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
     } finally {
@@ -519,13 +519,12 @@ describe("public Custom Launch CLI surface", () => {
       walletHandoffEvidenceGate: {
         decisionAuthority: "api-server",
         clientChecks: "preparation-only",
-        walletHandoffRequiresVerifiedEvidence: true,
-        minimumWalletHandoffEvidenceStatus: "verified",
-        walletHandoffFailureCode: "BEHAVIOR_EVIDENCE_NOT_VERIFIED",
+        walletHandoffRequiresVerifiedEvidence: false,
         configurationIsExecutionEvidence: false,
-        notConfiguredDisposition: "blocks_wallet_handoff",
-        unavailableDisposition: "blocks_wallet_handoff",
-        requiredServerEvidenceAxes: ["behavior", "platform_fee", "liquidity"],
+        notConfiguredDisposition: "claims_remain_unverified",
+        unavailableDisposition: "claims_remain_unverified",
+        executedFailureDisposition: "blocks_wallet_handoff",
+        mandatoryServerGates: ["static-hard-block-policy", "exact-router-simulation"],
         localOrModelApprovalAccepted: false,
       },
       activationBlockers: [],
@@ -639,21 +638,17 @@ describe("public Custom Launch CLI surface", () => {
         required: expect.arrayContaining([
           "configurationIsExecutionEvidence",
           "walletHandoffRequiresVerifiedEvidence",
-          "minimumWalletHandoffEvidenceStatus",
-          "walletHandoffFailureCode",
           "notConfiguredDisposition",
           "unavailableDisposition",
+          "executedFailureDisposition",
           "feeBehaviorClaim",
         ]),
         properties: {
           configurationIsExecutionEvidence: { const: false },
-          walletHandoffRequiresVerifiedEvidence: { const: true },
-          minimumWalletHandoffEvidenceStatus: { const: "verified" },
-          walletHandoffFailureCode: {
-            const: "BEHAVIOR_EVIDENCE_NOT_VERIFIED",
-          },
-          notConfiguredDisposition: { const: "blocks_wallet_handoff" },
-          unavailableDisposition: { const: "blocks_wallet_handoff" },
+          walletHandoffRequiresVerifiedEvidence: { const: false },
+          notConfiguredDisposition: { const: "claims_remain_unverified" },
+          unavailableDisposition: { const: "claims_remain_unverified" },
+          executedFailureDisposition: { const: "blocks_wallet_handoff" },
           feeBehaviorClaim: { const: false },
         },
       });
@@ -791,8 +786,7 @@ describe("public Custom Launch CLI surface", () => {
       projectOwnedHook: true,
       platformAdmissionReceiptRequired: true,
       routerSimulationRequiredBeforeAuthorization: true,
-      serverVerifiedEvidenceRequiredBeforeAuthorization: true,
-      minimumWalletHandoffEvidenceStatus: "verified",
+      serverVerifiedEvidenceRequiredForPositiveClaims: true,
       safetyClaim: false,
       feeBehaviorClaim: false,
     });
@@ -975,6 +969,23 @@ describe("public Custom Launch CLI surface", () => {
     expect(outputForStage("platform-review-pending")).toBeDefined();
     expect(outputForStage("funding-signature-required")).toBeDefined();
     expect(outputForStage("funding-signature-verified")).toBeDefined();
+    const onchainOutput = outputForStage("onchain-observation");
+    expect(onchainOutput).toBeDefined();
+    expect(onchainOutput.required).toEqual([
+      "schemaVersion",
+      "integrationState",
+      "stage",
+      "actionRequired",
+      "fundingBoundary",
+      "artifact",
+      "observationWindow",
+      "onchain",
+      "simulation",
+      "behaviorEvidence",
+      "behaviorAssurance",
+    ]);
+    expect(onchainOutput.properties).not.toHaveProperty("signedPermit");
+    expect(onchainOutput.properties).not.toHaveProperty("walletTransaction");
 
     expect(outputForStage("simulating")).toBeUndefined();
     const simulatingResourceContract = v3.components.schemas
@@ -1075,6 +1086,7 @@ describe("public Custom Launch CLI surface", () => {
       "blockTimestamp",
       "responseDigest",
       "gasEstimate",
+      "behaviorEvidence",
     ]);
     expect(v3.components.schemas.ExactSimulationEvidenceV3.additionalProperties)
       .toBe(false);

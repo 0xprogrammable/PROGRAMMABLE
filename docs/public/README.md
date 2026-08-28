@@ -40,7 +40,7 @@ To inspect an existing token, begin with [Explore](https://programmable.market/e
 ## How a launch becomes public
 
 1. The creator configures a supported launch or prepares and submits one exact Custom API bundle. CLI and preflight results are preparation, not the server's launch decision.
-2. For Custom, the API server verifies the per-launch behavior, fee and liquidity evidence required by the selected lane before it exposes a wallet handoff. The creator wallet then checks the network, destination, calldata and value and signs the transaction.
+2. For Custom, the API server enforces objective static hard blocks and exact Router simulation before it exposes a wallet handoff. Missing behavior evidence keeps related product claims unverified; an authenticated executed failure blocks. The creator wallet then checks the network, destination, calldata and value and signs the transaction.
 3. The required network confirms the transaction and the launch reaches the required finality.
 4. The appropriate website surface publishes the canonical token, pool or prediction market identity. The developer feeds currently cover the Ethereum launch records. Optional price, chart and liquidity data remain separate.
 

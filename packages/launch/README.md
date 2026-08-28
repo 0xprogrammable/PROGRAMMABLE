@@ -59,9 +59,9 @@ and project values. Static pool fees and the `0x800000` dynamic-fee sentinel are
 
 Funding can be absent, carried as exact native value on the separately reviewed Router transaction, or use an unsigned
 USDC EIP-3009 descriptor with an exact v2 nonce+r+s+v ABI-path patch. The connected wallet separately signs EIP-3009 data when that
-mode is selected. The website presents the Router transaction only after the API server has verified the required
-per-launch behavior, platform-fee, liquidity, and routability evidence for the selected launch lane. Missing,
-unavailable, conditional, or failed required evidence cannot produce a wallet handoff. The CLI never accepts an API
+mode is selected. The website presents the Router transaction only after the API server has enforced objective static
+hard blocks and exact Router simulation. Missing or unavailable behavior execution leaves behavior, platform-fee,
+liquidity and routability claims unverified; an authenticated executed failure blocks the handoff. The CLI never accepts an API
 key argument, decides authorization, signs, requests approval, or broadcasts either wallet action.
 
 Revision 3 preparation binds exact source, compiler output, the complete graph and a role-aware static report. Local
@@ -137,8 +137,8 @@ baseline and typed remediation. The CLI rejects a response unless it explicitly 
 `quotaConsumed: false` means the preflight creates no durable launch and consumes no launch-creation quota; it does not
 mean the authenticated HTTP request is unmetered. Normal route limits still apply, and a partner preflight consumes its
 `prepareRequestsPerHour` budget.
-Neither a favorable preflight disposition nor local checks can approve wallet handoff. The server must later bind and
-verify the launch-specific behavior, fee, liquidity, and routability evidence required by the selected lane.
+Neither a favorable preflight disposition nor local checks can approve wallet handoff. The server later enforces the
+objective static hard blocks and exact Router simulation. Behavior-derived positive claims require separate exact server evidence.
 
 Use `examples/direct-native-v3-no-broadcast/README.md` shipped with the release for a no-broadcast cold-room
 rehearsal. It invokes real solc, uses exact sources and artifacts, and stops after byte-reproducible `pack` and

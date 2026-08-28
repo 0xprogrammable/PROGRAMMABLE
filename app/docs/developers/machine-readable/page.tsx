@@ -332,9 +332,10 @@ export default function MachineReadableDocsPage() {
             require evidence instead of categorical rejection. A hard-block
             code-and-role match returns <code>action_required</code>; other
             findings remain visible. There is no manual project allowlist. A
-            final Router simulation is mandatory. The API server also verifies
-            the per-launch behavior, fee and liquidity evidence required by the
-            selected lane before wallet handoff.
+            final Router simulation is mandatory and must pass before wallet
+            handoff. Missing behavior execution leaves behavior, fee, liquidity
+            and routability claims unverified; an authenticated executed failure
+            blocks the handoff.
           </li>
           <li>
             Public <code>GET /v3/capabilities</code> and authenticated,
@@ -354,10 +355,12 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             <code>prepared</code> contains an artifact but no wallet transaction.
-            <code>authorized</code> is possible only after the server verifies the
-            evidence required by the selected lane and contains the permit-attached
-            transaction for the bound wallet to review, sign and broadcast. The API
-            key is not wallet authority.
+            <code>authorized</code> is possible only after objective static hard
+            blocks and exact Router simulation pass and contains the
+            permit-attached transaction for the bound wallet to review, sign and
+            broadcast. Missing behavior execution leaves related claims
+            unverified; an authenticated executed failure blocks. The API key is
+            not wallet authority.
           </li>
           <li>
             <code>GET /v3/custom-launches</code> returns an exact-launch-principal,

@@ -21,7 +21,8 @@ requests remain readable and byte-identical retryable under their original immut
 compatible. Profile `3.2.0` keeps its original nullable-image metadata semantics.
 Run `pack`, `validate --remote`, `submit` and `status --watch --until authorized` for the byte-identical current V3.3
 request. The CLI and preflight prepare and classify exact bytes; the API server makes the durable decision and exposes
-no wallet handoff until the per-launch behavior, fee and liquidity evidence required by the selected lane is verified.
+a wallet handoff only after objective static hard blocks and exact Router simulation pass. Missing behavior execution
+leaves related claims unverified; an authenticated executed failure blocks.
 Stop for every explicit wallet handoff, then resume `status --watch --until finalized`. The API key and CLI never sign
 or broadcast.
 

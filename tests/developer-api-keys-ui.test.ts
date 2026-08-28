@@ -384,7 +384,7 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "pack -> validate --remote -> submit -> server evidence decision -> status --watch --until authorized -> wallet -> status --watch --until finalized",
+      "pack -> validate --remote -> submit -> server decision -> status --watch --until authorized -> wallet -> status --watch --until finalized",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli).toContain(
       "programmable-launch-v3.3.7",

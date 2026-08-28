@@ -4,7 +4,7 @@ description: Read only contracts and verification rules for detecting Programmab
 
 # Developer reference
 
-Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated public V3.3 general-hook creation and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys. V2 and V1 history and schemas remain readable, while fresh POSTs return non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 accepts new submissions. CLI and preflight checks prepare and classify exact bytes, while the API server makes the durable decision and exposes no wallet handoff until the per-launch behavior, fee and liquidity evidence required by the selected lane is verified.
+Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated public V3.3 general-hook creation and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys. V2 and V1 history and schemas remain readable, while fresh POSTs return non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 accepts new submissions. CLI and preflight checks prepare and classify exact bytes, while the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified; an authenticated executed failure blocks wallet handoff.
 
 ## Package locally and read existing launches
 
@@ -34,8 +34,8 @@ aggregate and no more than 2,048 inline sources. Its role-aware exact-source sta
 request. Exactly seven objective code-and-role rules hard-block profile 3.3.0; proxy/delegatecall, mint/tax/pause,
 liquidity and return-delta surfaces remain evidence duties. A hard-block match returns `action_required`; all other
 findings remain visible needs-evidence or warning conditions. No manual project allowlist exists. The API server must
-verify the per-launch behavior, fee and liquidity evidence required by the selected lane before wallet handoff. Local
-checks, preflight and Router simulation are not the server decision, an audit or a guarantee of safety, honeypot
+enforce objective static hard blocks and exact Router simulation before wallet handoff. Local checks and preflight are
+preparation, not the server decision. The exact Router simulation is not an audit or a guarantee of safety, honeypot
 resistance, liquidity, tradeability or fee behavior. A 10 bps claim exists only for a fee-certified profile or adapter
 and its exact stamped PoolKey; arbitrary custom hooks are not automatically fee-enforced.
 

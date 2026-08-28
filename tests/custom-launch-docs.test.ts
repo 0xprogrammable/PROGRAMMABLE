@@ -60,7 +60,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/authorized[\s\S]{0,240}(?:walletTransaction|wallet transaction)/i);
     }
     expect(createGuide).toContain(
-      "pack -> validate --remote -> submit -> server evidence decision -> status --watch --until authorized -> wallet -> status --watch --until finalized",
+      "pack -> validate --remote -> submit -> server decision -> status --watch --until authorized -> wallet -> status --watch --until finalized",
     );
     expect(createGuide).toContain("/openapi/custom-launch-v3.json");
     expect(createGuide).toContain("awaiting_funding_authorization");

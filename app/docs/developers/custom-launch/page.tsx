@@ -211,7 +211,7 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             Run <code>submit ./launch.json --config programmable-launch.config.json</code>.
-            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; server evidence decision -&gt; status --watch --until authorized -&gt; wallet -&gt; status --watch --until finalized</code>.
+            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; server decision -&gt; status --watch --until authorized -&gt; wallet -&gt; status --watch --until finalized</code>.
             Authenticated CLI traffic is fixed to <code>https://api.programmable.market</code>. Wallet is a separate controller action, not a CLI command. At <code>authorized</code>, stop for exact wallet review and signing,
             then run <code>status REQUEST_UUID --watch --until finalized</code>.
           </li>
@@ -361,9 +361,10 @@ export default function CustomLaunchApiDocsPage() {
              <code>trading</code>, <code>platform_fee_evidence</code>,{" "}
              <code>source_verification</code>, <code>indexing</code> and{" "}
              <code>featured</code>. A not-executed or needs-evidence result remains
-             outstanding; it is not a caller-declared pass and cannot authorize a
-             wallet handoff. The API server must verify every behavior, fee and
-             liquidity evidence axis required by the selected lane.
+             outstanding; it is not a caller-declared pass and cannot support a
+             positive behavior, fee, liquidity or routability claim. The API server
+             independently enforces objective static hard blocks and exact Router
+             simulation before wallet handoff; an authenticated executed failure blocks.
           </li>
           <li>
             In EIP-3009 mode, accept the exact CLI-derived funding descriptor.
@@ -594,7 +595,7 @@ export default function CustomLaunchApiDocsPage() {
           <code>0.10% = 10 bps</code>, is
           claimed only for a fee-certified profile or adapter and its exact
           stamped PoolKey. That lane requires server-authored per-launch
-          fee-behavior evidence before wallet handoff. Arbitrary custom hooks are
+          fee-path evidence before the platform makes that claim. Arbitrary custom hooks are
           not automatically fee-enforced, and the open arbitrary-hook lane carries
           no Programmable fee claim. Revision-3 local validation, static admission
           and Router simulation do not independently create{" "}
@@ -698,9 +699,11 @@ export default function CustomLaunchApiDocsPage() {
             key bound to different bytes is a conflict.
           </li>
           <li>
-            The API server exposes no wallet handoff until the evidence required
-            by the selected lane is verified. Stop at <code>authorized</code>. The
-            API and CLI never sign or broadcast the returned transaction.
+            The API server exposes a wallet handoff only after objective static
+            hard blocks and exact Router simulation pass. Missing behavior
+            execution leaves related claims unverified; an authenticated executed
+            failure blocks. Stop at <code>authorized</code>. The API and CLI never
+            sign or broadcast the returned transaction.
           </li>
           <li>
             Keep deployment, trading, platform-fee evidence, source verification,
