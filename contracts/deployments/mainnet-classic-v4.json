@@ -1,0 +1,771 @@
+{
+  "schemaVersion": 1,
+  "model": "classic",
+  "internalContractRelease": "classic-v4",
+  "releaseStatus": "deployment-source-and-lifecycle-verified",
+  "chainId": 1,
+  "releaseCommit": "707d438576dcf47dc2667125789fd35eb1c3de50",
+  "releaseTree": "789161bc206ea145f12b809f9d1746bd1a83468a",
+  "sourceCommitment": "0x038f0dec0856e2638eac146af373a388bf18fd40c6891fece4c9490b9dac18ca",
+  "planDigest": "0x724eb7b8825882d8aa823c60969843f1b889b3ec3b25d71be643969df44c30e8",
+  "capturedAt": "2026-08-28T17:22:11.000Z",
+  "startBlock": 25851103,
+  "addresses": {
+    "deployer": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "launcherFeeRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "ctoAuthority": "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C",
+    "rewardVaultFactory": "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a",
+    "initialBuyVestingWalletFactory": "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4",
+    "launchPolicy": "0x53a4d1E6ab184389D3581085AB73CD3549B20d1a",
+    "positionForwarderFactory": "0x291a9ff1059d225d02B1659430804486404dB507",
+    "hookFactory": "0xbE0aa4081Ab586321BC55197E67135C191d532A9",
+    "feeHook": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+    "positionPlanner": "0xD8f8f5C5832648d59a5f465f8Dd02d36572D4A6c",
+    "launcher": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699"
+  },
+  "deploymentTransactions": {
+    "hookFactory": "0xb33e0339b822e2733312c353f74f263e66ee5e1d2e371fd7e601f291521445b5",
+    "feeHook": "0x38be0b23481bf13e156dc9e565c5e4d5cf93027203c3e7affeb7a16eb4ddfecf",
+    "positionPlanner": "0xa11a152fa14df5fe11396343a302b856278dc5875ff2e61faa86d079bca6cc25",
+    "launcher": "0x631b07ea7a0c48cc50fa82b83a036aa10bf85150100f0cb527336bd110c7eb42"
+  },
+  "deploymentBlocks": {
+    "hookFactory": 25851103,
+    "feeHook": 25851137,
+    "positionPlanner": 25851147,
+    "launcher": 25853086
+  },
+  "deploymentVerification": {
+    "evidenceDigest": "0xd21105b4d7e1a4104457a96cdea9054d027ec46142cc82da858ffb69730fdc7f",
+    "checkedAt": "2026-08-28T10:19:23.000Z",
+    "verificationBlock": 25853097,
+    "verificationBlockHash": "0xba0c821cfb12a894601c3d46dc55f785aaad83b30ecfba9b394481edd4071adb",
+    "contractBlockHashes": {
+      "hookFactory": "0xe92db8e077ef91158b48ba5ec8cc126ae22beac0e1d1276414081528c6536d91",
+      "feeHook": "0xea619cdee78612070f95f46910b69aafa02127f9277c1d95bfbdab0bc9e55ab2",
+      "positionPlanner": "0x0062829e0fe8ba54bbeb1b35439898ed266072e220c245cfa81fac892aaae2ec",
+      "launcher": "0x97fcfe9d890513cd527ab28d32080eef5c4552dae8c8cb66b727b95a5ed889ca"
+    },
+    "confirmations": {
+      "hookFactory": 1995,
+      "feeHook": 1961,
+      "positionPlanner": 1951,
+      "launcher": 12
+    }
+  },
+  "runtimeCodeHashes": {
+    "ctoAuthority": "0x7beafb575fba4ffce22da7b3f927df8248eebc6c33e77cb43ed967a91a36984c",
+    "rewardVaultFactory": "0x874ec76f396807bfcbbdd88cc2fd534f10201242ad0479a05fe5d2ee937616ee",
+    "initialBuyVestingWalletFactory": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4",
+    "launchPolicy": "0xb6b31b6cf326784774e13f6d60f9b251dde118469a506fa3b1c124c9f11b49be",
+    "positionForwarderFactory": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2",
+    "hookFactory": "0x843d466c391708934be8198cfee4ec9c2a93d25b264ce567b12228298daaaa06",
+    "feeHook": "0xf3a1a628ce898c527f24569b426aa795ec65ff9d97afa2b89e8ea5a2b99ad280",
+    "positionPlanner": "0xf522d2131dcecdea17c4de6d376df4b340d515d1da006b1421e7672f5a32317d",
+    "launcher": "0xc80a1d3b6b3f196a54cea46fc94913d59aec2937e94e70b53fe5c5fd7f5c4b12"
+  },
+  "runtimeTemplateHashes": {
+    "hookFactory": "0x843d466c391708934be8198cfee4ec9c2a93d25b264ce567b12228298daaaa06",
+    "feeHook": "0x8db2ae7a3c029dfb2cbe1cd5c1d0f674f0c8e0045e9622cd663257db9f632a1b",
+    "positionPlanner": "0xf522d2131dcecdea17c4de6d376df4b340d515d1da006b1421e7672f5a32317d",
+    "launcher": "0x759a6cb3cc169ee16489bbc796bbb353994c9db5de112b3beb8e37fab264307a"
+  },
+  "officialDependencies": {
+    "poolManager": {
+      "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "runtimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+    },
+    "positionManager": {
+      "address": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+      "runtimeCodeHash": "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b"
+    },
+    "stateView": {
+      "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+      "runtimeCodeHash": "0xd7947778589cf4aac9a092a4451292a2056380941635ab7006d3c691d8dfd878"
+    },
+    "v4Quoter": {
+      "address": "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+      "runtimeCodeHash": "0x06de58fa119c5deaa7a667fb92d3894e25d9160e62fb82c8d86d43b47eefe441"
+    },
+    "uerc20Factory": {
+      "address": "0x000000e200088D55C39a11F609E5F667729ad49b",
+      "runtimeCodeHash": "0x9f042af1533641f048ced56b55898d9e87b2ccb0ec6854292e2cd8ea733e6aeb"
+    },
+    "permit2": {
+      "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "runtimeCodeHash": "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131"
+    },
+    "universalRouter": {
+      "address": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+      "runtimeCodeHash": "0x41ccd905c8e4de29ce9536ff49233b79e3085a0987d490664e703ee1e7b1dc49"
+    }
+  },
+  "sharedDependencies": {
+    "ctoAuthority": {
+      "address": "0x9746469Cd79fdDc5aA7218e7dd51c829ee518c0C",
+      "runtimeCodeHash": "0x7beafb575fba4ffce22da7b3f927df8248eebc6c33e77cb43ed967a91a36984c"
+    },
+    "rewardVaultFactory": {
+      "address": "0xF28967f9DFaC3Ca21384b59D6D75C8106b3eab2a",
+      "runtimeCodeHash": "0x874ec76f396807bfcbbdd88cc2fd534f10201242ad0479a05fe5d2ee937616ee"
+    },
+    "initialBuyVestingWalletFactory": {
+      "address": "0xDe21b9c0Cc0AfDB9be20e8236113f066BB8C66f4",
+      "runtimeCodeHash": "0x13b7578a8abd0bc0ba724b5815d9bd0aff0d07c2677c00d2577004e8c1f6d5f4"
+    },
+    "launchPolicy": {
+      "address": "0x53a4d1E6ab184389D3581085AB73CD3549B20d1a",
+      "runtimeCodeHash": "0xb6b31b6cf326784774e13f6d60f9b251dde118469a506fa3b1c124c9f11b49be"
+    },
+    "positionForwarderFactory": {
+      "address": "0x291a9ff1059d225d02B1659430804486404dB507",
+      "runtimeCodeHash": "0xcefd10b60f990984bb60c98eb53e66048bfd36da9b48200e8535f5ca39d58fb2"
+    }
+  },
+  "verification": {
+    "deploymentLive": true,
+    "deploymentFinalized": true,
+    "independentRpcCount": 2,
+    "runtimeCodeVerified": true,
+    "constructorBindingsVerified": true,
+    "sourceVerified": true,
+    "lifecycleVerified": true,
+    "indexerActivated": false,
+    "publicAvailable": false
+  },
+  "sourceVerification": {
+    "schemaVersion": 1,
+    "chainId": 1,
+    "planDigest": "0x724eb7b8825882d8aa823c60969843f1b889b3ec3b25d71be643969df44c30e8",
+    "sourceCommitment": "0x038f0dec0856e2638eac146af373a388bf18fd40c6891fece4c9490b9dac18ca",
+    "status": "verified",
+    "checkedAt": "2026-08-28T10:47:33.280Z",
+    "contracts": {
+      "hookFactory": {
+        "address": "0xbE0aa4081Ab586321BC55197E67135C191d532A9",
+        "contractName": "EthCreatorFeeHookFactoryV4",
+        "fqcn": "src/EthCreatorFeeHookFactoryV4.sol:EthCreatorFeeHookFactoryV4",
+        "encodedConstructorArguments": "0x",
+        "deploymentTransaction": "0xb33e0339b822e2733312c353f74f263e66ee5e1d2e371fd7e601f291521445b5",
+        "deploymentBlock": 25851103,
+        "status": "match",
+        "providers": [
+          {
+            "name": "Sourcify",
+            "status": "match",
+            "url": "https://sourcify.dev/server/v2/contract/1/0xbE0aa4081Ab586321BC55197E67135C191d532A9"
+          }
+        ]
+      },
+      "feeHook": {
+        "address": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+        "contractName": "EthCreatorFeeHookV4",
+        "fqcn": "src/EthCreatorFeeHookV4.sol:EthCreatorFeeHookV4",
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a900000000000000000000000004957f49620aff3adbbe8195a4f633e49cc93376c000000000000000000000000f28967f9dfac3ca21384b59d6d75c8106b3eab2a",
+        "deploymentTransaction": "0x38be0b23481bf13e156dc9e565c5e4d5cf93027203c3e7affeb7a16eb4ddfecf",
+        "deploymentBlock": 25851137,
+        "status": "match",
+        "providers": [
+          {
+            "name": "Sourcify",
+            "status": "match",
+            "url": "https://sourcify.dev/server/v2/contract/1/0xADF955a44FD7F009380240d56D71dFAfB46020cc"
+          }
+        ]
+      },
+      "positionPlanner": {
+        "address": "0xD8f8f5C5832648d59a5f465f8Dd02d36572D4A6c",
+        "contractName": "ClassicPositionPlannerV1",
+        "fqcn": "src/ClassicPositionPlannerV1.sol:ClassicPositionPlannerV1",
+        "encodedConstructorArguments": "0x",
+        "deploymentTransaction": "0xa11a152fa14df5fe11396343a302b856278dc5875ff2e61faa86d079bca6cc25",
+        "deploymentBlock": 25851147,
+        "status": "match",
+        "providers": [
+          {
+            "name": "Sourcify",
+            "status": "match",
+            "url": "https://sourcify.dev/server/v2/contract/1/0xD8f8f5C5832648d59a5f465f8Dd02d36572D4A6c"
+          }
+        ]
+      },
+      "launcher": {
+        "address": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+        "contractName": "MemeLaunchV4",
+        "fqcn": "src/MemeLaunchV4.sol:MemeLaunchV4",
+        "encodedConstructorArguments": "0x000000000000000000000000000000000004444c5dc75cb358380d2e3de08a90000000000000000000000000bd216513d74c8cf14cf4747e6aaa6420ff64ee9e000000000000000000000000000000e200088d55c39a11f609e5f667729ad49b000000000000000000000000adf955a44fd7f009380240d56d71dfafb46020cc000000000000000000000000d8f8f5c5832648d59a5f465f8dd02d36572d4a6c000000000000000000000000f28967f9dfac3ca21384b59d6d75c8106b3eab2a000000000000000000000000de21b9c0cc0afdb9be20e8236113f066bb8c66f400000000000000000000000053a4d1e6ab184389d3581085ab73cd3549b20d1a000000000000000000000000291a9ff1059d225d02b1659430804486404db507",
+        "deploymentTransaction": "0x631b07ea7a0c48cc50fa82b83a036aa10bf85150100f0cb527336bd110c7eb42",
+        "deploymentBlock": 25853086,
+        "status": "match",
+        "providers": [
+          {
+            "name": "Sourcify",
+            "status": "match",
+            "url": "https://sourcify.dev/server/v2/contract/1/0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699"
+          }
+        ]
+      }
+    },
+    "evidenceDigest": "0x8b0d405e1a05ca41b1ff7dee774b9795d0ee4465c7ab505cd26e77c7a7b3c005"
+  },
+  "lifecycleEvidence": {
+    "schemaVersion": 1,
+    "chainId": 1,
+    "planDigest": "0x724eb7b8825882d8aa823c60969843f1b889b3ec3b25d71be643969df44c30e8",
+    "sourceCommitment": "0x038f0dec0856e2638eac146af373a388bf18fd40c6891fece4c9490b9dac18ca",
+    "status": "verified-current-release",
+    "checkedAt": "2026-08-28T17:22:11.000Z",
+    "independentRpcCount": 2,
+    "releaseEligible": true,
+    "canaryPlanDigest": "0x3f2937b71958aea4fba5712597bc1606a6dcddbb73d6f5bbc80e4e7f33b619c8",
+    "launchAuthorization": {
+      "schemaVersion": "programmable.classic-launch-authorization.v1",
+      "chainId": "1",
+      "releaseManifestDigest": "0xf4bd9a33728b62deca13a68b3b5ceedab9504930bf4c1676f3abaa4fc4f8cb13",
+      "predictedToken": "0xB382f738a99820276FD66EfB94b75Eca104c2B4D",
+      "predictedHook": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+      "permitDigest": "0xfe2e718590739692dfe500000a18d62c07cb11d44cf5035febb12cac6c4466df",
+      "validAfter": "1787928929",
+      "deadline": "1787929259",
+      "simulation": {
+        "blockNumber": "25854472",
+        "blockHash": "0x725efde4b3fae37d5d0f8cb40d2620d2f8bcec341c97afaf5c6de8a832260a19",
+        "blockTimestamp": "1787928959",
+        "gasEstimate": "5628642",
+        "stampHash": "0xd173468420cfa5159890896d34746c9c2fc9bb5e3960a1062aa82d1c3ffb5941"
+      },
+      "transaction": {
+        "chainId": "1",
+        "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "to": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+        "valueWei": "600000000000000",
+        "calldata": "0xe5f6b8cd00000000000000000000000000000000000000000000000000000000000000010000000000000000000000008622dd5bab44185f2a458ac90384ac99248f8d560000000000000000000000002bb333d48dfaf1596d9036671d2e43168994249e0000000000000000000000000000000000000000000000000000000000000002344818154572f460bc3fa598678f37fc8f4853e9785ca723419511e5179dab4044e56f4408bee94e5179b10ee30574f740b6bf0e3d47b202b1c0a0e0179403ab9d5bf792cfc60654af22aec35a9ca974a290cb43ac7171567cfbacc85fc271ad7ae19a6de396aa769ac713efea2852214fb8f0c4da25365068874932b60fa839000000000000000000000000000000000000000000000000000000006a91a161000000000000000000000000000000000000000000000000000000006a91a2ab000000000000000000000000000000000000000000000000000221b262dd800000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000005a00000000000000000000000000000000000000000000000000000000000000b6075503436c39192ea7f165d1c0140724fed5dbd73c9b4816de713e34fe5a3fc87000000000000000000000000b382f738a99820276fd66efb94b75eca104c2b4d554847de232eb1242cae2befefb8882eb05947e2b103220baaebb3e2ab59b1320000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b382f738a99820276fd66efb94b75eca104c2b4d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c8000000000000000000000000adf955a44fd7f009380240d56d71dfafb46020ccf3a1a628ce898c527f24569b426aa795ec65ff9d97afa2b89e8ea5a2b99ad2800000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000020000000000000000000000000ec0ac6aa9724928aa678c407039d5b2d65cb7edbfcf00b05d7092f0e47d9dc8ed24cdfab992dfe82da0ac1c1ff8e2c3c2dbc7d7000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001000000000000000000000000541034c6613154e81a64f9a9ca1a572819e426e3263080da69f045205235451b41e17da8f03955ece962f4589ee604ccc3c366250000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000ff000000000000000000000000adf955a44fd7f009380240d56d71dfafb46020ccf3a1a628ce898c527f24569b426aa795ec65ff9d97afa2b89e8ea5a2b99ad280000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b382f738a99820276fd66efb94b75eca104c2b4d554847de232eb1242cae2befefb8882eb05947e2b103220baaebb3e2ab59b1320000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000005a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000bbdf30a2fe1394e4aa864ac269c6cf09b518e699c80a1d3b6b3f196a54cea46fc94913d59aec2937e94e70b53fe5c5fd7f5c4b1200000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000b382f738a99820276fd66efb94b75eca104c2b4d000000000000000000000000541034c6613154e81a64f9a9ca1a572819e426e30000000000000000000000000ec0ac6aa9724928aa678c407039d5b2d65cb7ed00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000033b2e3c9fd0803ce7ffd1e10000000000000000000000000000000000000000000000000000000000002e1f000000000000000000000000000000000000000000000000000221b262dd8000000000000000000000000000000000000000000000005cc0e3a025f3e119024e0000000000000000000000000000000000000000000000000000000000000000ef513a3234ab2eb561aa0a7ee55619ace1624a900e5f7b55156ba6d0cc86334a7bfbdb011786613d3d269a05c7b2a3a1743dcb51e407892b3f21299108d6992e000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000001a0000000000000000000000000000000000000000000000000000000000000006400000000000000000000000000000000000000000000000000000000000000c8ae42c092031c837981f2bc0c8d092ae534d805ea90c7d5af13d445d1f4e361c500000000000000000000000000000000000000000000000000000000000001e000000000000000000000000000000000000000000000000000000000000003400000000000000000000000000000000000000000000000000000000000000380000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e50726f6772616d6d61626c6520436c61737369632056342043616e617279000000000000000000000000000000000000000000000000000000000000000000055043563443000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000003050726f6772616d6d61626c6520436c6173736963205634204d61696e6e6574206c6966656379636c652063616e61727900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001b68747470733a2f2f70726f6772616d6d61626c652e6d61726b657400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000002bb333d48dfaf1596d9036671d2e43168994249e0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000000416f3b10ea506d60b8930c33c9b3e509f2f886b9a378a5a74ca677fb7cf98393853c8edebc1d02364d6bf4257de8aa27723eb0e9b331a3735419388d3a7405789a1b00000000000000000000000000000000000000000000000000000000000000",
+        "gasLimit": "6754371"
+      }
+    },
+    "launchAuthorizationDigest": "0x0e9976d2ae5b4d2631d1813fa832cd7de31e732431465786d2e10845384cac25",
+    "releaseBindingDigest": "0xf4bd9a33728b62deca13a68b3b5ceedab9504930bf4c1676f3abaa4fc4f8cb13",
+    "deploymentEvidenceDigest": "0xd21105b4d7e1a4104457a96cdea9054d027ec46142cc82da858ffb69730fdc7f",
+    "sourceEvidenceDigest": "0x8b0d405e1a05ca41b1ff7dee774b9795d0ee4465c7ab505cd26e77c7a7b3c005",
+    "verificationBlock": 25855200,
+    "verificationBlockHash": "0x3de5eeb594e8431be0d090f65fe2ddfc38900f0c4bce9320f4a46bb280b9d905",
+    "latestLifecycleBlock": 25855189,
+    "confirmations": 12,
+    "operatorWallet": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "launcher": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+    "feeHook": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+    "canaryToken": "0xB382f738a99820276FD66EfB94b75Eca104c2B4D",
+    "rewardVault": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+    "poolId": "0xef513a3234ab2eb561aa0a7ee55619ace1624a900e5f7b55156ba6d0cc86334a",
+    "positionRecipient": "0x0EC0ac6aA9724928aA678c407039D5b2d65cB7Ed",
+    "positionTokenId": "386488",
+    "actions": {
+      "launch": {
+        "transactionHash": "0xbb6b4c9fc70600e4d5dd394314a49630bf9f837a82065013c397ebebd978aa7c",
+        "inputHash": "0xeb0f441e72f5c1dbcb99a46bae5fdeeac1de5d8b474aed9002b36b4d9199a3a3",
+        "blockNumber": 25854486,
+        "blockHash": "0x66d7201c8274251f7e94960edad2570e9121f7a0209f4528c09c41c5ea9cdb7c",
+        "blockTimestamp": "1787929127",
+        "transactionIndex": 188,
+        "nonce": 353,
+        "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "to": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+        "value": "600000000000000",
+        "confirmations": 715,
+        "success": true,
+        "events": {
+          "ProgrammableComponentStampedV1.token": 1040,
+          "ProgrammableComponentStampedV1.rewardVault": 1038,
+          "ProgrammableComponentStampedV1.positionRecipient": 1037,
+          "ProgrammableComponentStampedV1.feeHook": 1039,
+          "ProgrammableLaunchRouteStampedV1": 1041,
+          "ProgrammableLaunchStampedV1": 1042,
+          "MemeTokenLaunchedV2": 1033,
+          "MemeLiquidityConfiguredV2": 1034,
+          "MemeCreatorInitialBuyV2": 1035,
+          "MemeCreatorInitialBuyCustodyV2": 1036,
+          "PoolRegistered": 1019,
+          "PoolFeeDisclosure": 1020,
+          "NativeSwapFeesAccrued": 1029,
+          "HookFee": 1027,
+          "HookSwap": 1028,
+          "PoolManagerSwap": 1031
+        }
+      },
+      "buyExactInput": {
+        "transactionHash": "0x7a773f0c6757fafb693fa2cc8463bd7be43639bca1d0893a0cca47d0b839bc87",
+        "inputHash": "0xfed7c9b88a7473705fbd7b2ab32643ec5aa2fbb84832969538c255935ee8e0f6",
+        "blockNumber": 25854582,
+        "blockHash": "0x7bf4d30d9c2904a8e9acd383c240515f1ec0f3d694c043f722453b38eebbb075",
+        "blockTimestamp": "1787930279",
+        "transactionIndex": 351,
+        "nonce": 354,
+        "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "to": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+        "value": "100000000000000",
+        "confirmations": 619,
+        "success": true,
+        "events": {
+          "NativeSwapFeesAccrued": 2091,
+          "HookFee": 2089,
+          "HookSwap": 2090,
+          "PoolManagerSwap": 2093
+        },
+        "side": "buy",
+        "exactness": "exact-input"
+      },
+      "buyExactOutput": {
+        "transactionHash": "0xad8d3c23aec50ecfe44fe20b87a2da1f18bcfc16647334940b5967cb67932b10",
+        "inputHash": "0x95989c477cbaf0f0d0a4056ba1302bacc4385860678099fdce7db5fca74888da",
+        "blockNumber": 25854791,
+        "blockHash": "0x2c8bd5991c6c5eb1d7a9bef9cee8140e0bdf3a48a371974d04aa3365e192e569",
+        "blockTimestamp": "1787932787",
+        "transactionIndex": 292,
+        "nonce": 355,
+        "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "to": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+        "value": "3074370766",
+        "confirmations": 410,
+        "success": true,
+        "events": {
+          "NativeSwapFeesAccrued": 1079,
+          "HookFee": 1077,
+          "HookSwap": 1078,
+          "PoolManagerSwap": 1076
+        },
+        "side": "buy",
+        "exactness": "exact-output"
+      },
+      "sellExactInput": {
+        "transactionHash": "0x3e5266235bb8e8b273209852300eb11bd3a95962c14b8755356c9acc6dfb68b6",
+        "inputHash": "0x642d7ba89b24ff4eec059066d01da641631563f6b0ac52c2cc686d9cd13ada3b",
+        "blockNumber": 25855035,
+        "blockHash": "0x8c5f1ea1ab7a00e4b8ee99b8502573923be9999be0f8cc1126fc93eb4cc04db1",
+        "blockTimestamp": "1787935751",
+        "transactionIndex": 215,
+        "nonce": 358,
+        "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "to": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+        "value": "0",
+        "confirmations": 166,
+        "success": true,
+        "events": {
+          "NativeSwapFeesAccrued": 386,
+          "HookFee": 384,
+          "HookSwap": 385,
+          "PoolManagerSwap": 383
+        },
+        "side": "sell",
+        "exactness": "exact-input"
+      },
+      "sellExactOutput": {
+        "transactionHash": "0xd8c51e9d4a6e7f50b7706b0f602a96355333a48028ca411efb059c6bc68741c9",
+        "inputHash": "0xab633bc85378c596ead569f0d5fc1e3771f0f23fd3a2f5a7276e8a13ba92060c",
+        "blockNumber": 25855051,
+        "blockHash": "0x3dac464a203fba49f52676ea41e7d8d979ff87d3ec1ab1c0a554ba8529c6e3c6",
+        "blockTimestamp": "1787935943",
+        "transactionIndex": 358,
+        "nonce": 360,
+        "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "to": "0xd92A36B0000531EF3063dEd4De20A0783308446C",
+        "value": "0",
+        "confirmations": 150,
+        "success": true,
+        "events": {
+          "NativeSwapFeesAccrued": 796,
+          "HookFee": 794,
+          "HookSwap": 795,
+          "PoolManagerSwap": 798
+        },
+        "side": "sell",
+        "exactness": "exact-output"
+      },
+      "creatorClaim": {
+        "transactionHash": "0xd39b232971d91792149330f21866790a29d318b7683c8dc6841d4675089badd9",
+        "inputHash": "0x28b172f2c38ea80649febf661c33c4409d2f3f4e3d444c1d6158a231f0d285eb",
+        "blockNumber": 25855089,
+        "blockHash": "0x538acb740c761310757dad68e8ace6721be39ecbf0f93d2f9c703c52ef914f1f",
+        "blockTimestamp": "1787936399",
+        "transactionIndex": 255,
+        "nonce": 361,
+        "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "to": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+        "value": "0",
+        "confirmations": 112,
+        "success": true,
+        "events": {
+          "CreatorFeesClaimed": 636,
+          "CreatorFeesCheckpointed": 637,
+          "BeneficiaryFeesClaimed": 638
+        }
+      },
+      "launcherClaim": {
+        "transactionHash": "0xf29dcc032d31ab74237558c48122643797f4c9865a69d1c5e349977736c3bd74",
+        "inputHash": "0xe13809703046e5a550c5690dc93e1168eeab4142c7c94b3d83c3d44e4111d58e",
+        "blockNumber": 25855189,
+        "blockHash": "0x35be8bc436e5e4ba6cd14088aad7a1c00a6514958f9220b331a43a53f9a21a52",
+        "blockTimestamp": "1787937599",
+        "transactionIndex": 384,
+        "nonce": 74,
+        "from": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+        "to": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+        "value": "0",
+        "confirmations": 12,
+        "success": true,
+        "events": {
+          "LauncherFeesClaimed": 1077
+        }
+      }
+    },
+    "swaps": {
+      "buyExactInput": {
+        "side": "buy",
+        "exactness": "exact-input",
+        "poolAmount0": "-99000000000000",
+        "poolAmount1": "36303320327621337350412",
+        "grossNativeAmount": "100000000000000",
+        "creatorFee": "900000000000",
+        "launcherFee": "100000000000",
+        "totalFee": "1000000000000",
+        "appliedTotalSwapFeeBps": 100,
+        "inputBound": "100000000000000",
+        "outputBound": "35940287124345123976907",
+        "routerDeadline": "1787930423",
+        "executionPath": "single-hop-all",
+        "quote": {
+          "policy": "canonical-v4-quoter-at-parent-block",
+          "function": "V4Quoter.quoteExactInputSingle",
+          "blockNumber": 25854581,
+          "blockHash": "0x6a658db06ccd2f862f62b05c5653e6cc89d5a1006ea96929a3c037314f82d838",
+          "exactAmount": "100000000000000",
+          "quotedAmount": "36303320327621337350412",
+          "gasEstimate": "86784",
+          "slippageBps": 100,
+          "bound": "35940287124345123976907"
+        }
+      },
+      "buyExactOutput": {
+        "side": "buy",
+        "exactness": "exact-output",
+        "poolAmount0": "-3013492136",
+        "poolAmount1": "1000000000000000000",
+        "grossNativeAmount": "3043931451",
+        "creatorFee": "27395384",
+        "launcherFee": "3043931",
+        "totalFee": "30439315",
+        "appliedTotalSwapFeeBps": 100,
+        "inputBound": "3074370766",
+        "outputBound": "1000000000000000000",
+        "routerDeadline": "1787933027",
+        "executionPath": "single-hop-all",
+        "quote": {
+          "policy": "canonical-v4-quoter-at-parent-block",
+          "function": "V4Quoter.quoteExactOutputSingle",
+          "blockNumber": 25854790,
+          "blockHash": "0x3650975b143311cc522a7a7b66c45bb122af4adda11fb3a9742b404a14ccef0b",
+          "exactAmount": "1000000000000000000",
+          "quotedAmount": "3043931451",
+          "gasEstimate": "84470",
+          "slippageBps": 100,
+          "bound": "3074370766"
+        }
+      },
+      "sellExactInput": {
+        "side": "sell",
+        "exactness": "exact-input",
+        "poolAmount0": "2977871700",
+        "poolAmount1": "-1000000000000000000",
+        "grossNativeAmount": "2977871700",
+        "creatorFee": "56579563",
+        "launcherFee": "2977871",
+        "totalFee": "59557434",
+        "appliedTotalSwapFeeBps": 200,
+        "inputBound": "1000000000000000000",
+        "outputBound": "2889131123",
+        "routerDeadline": "1787935967",
+        "executionPath": "single-hop-all",
+        "quote": {
+          "policy": "canonical-v4-quoter-at-parent-block",
+          "function": "V4Quoter.quoteExactInputSingle",
+          "blockNumber": 25855034,
+          "blockHash": "0xa549854269db09828515b39ae7acb5bfa82ba70577fe6610d9480a4c4673c458",
+          "exactAmount": "1000000000000000000",
+          "quotedAmount": "2918314266",
+          "gasEstimate": "84231",
+          "slippageBps": 100,
+          "bound": "2889131123"
+        }
+      },
+      "sellExactOutput": {
+        "side": "sell",
+        "exactness": "exact-output",
+        "poolAmount0": "1020408164",
+        "poolAmount1": "-343645748988900290",
+        "grossNativeAmount": "1020408164",
+        "creatorFee": "19387756",
+        "launcherFee": "1020408",
+        "totalFee": "20408164",
+        "appliedTotalSwapFeeBps": 200,
+        "inputBound": "347082206478789293",
+        "outputBound": "1000000000",
+        "routerDeadline": "1787936171",
+        "executionPath": "single-hop-all",
+        "quote": {
+          "policy": "canonical-v4-quoter-at-parent-block",
+          "function": "V4Quoter.quoteExactOutputSingle",
+          "blockNumber": 25855050,
+          "blockHash": "0xca6d3ecbc149219740ac10ae05ef9701cea36d10793d5520f306e859ac3d4b0f",
+          "exactAmount": "1000000000",
+          "quotedAmount": "343645748988900290",
+          "gasEstimate": "86738",
+          "slippageBps": 100,
+          "bound": "347082206478789293"
+        }
+      }
+    },
+    "claims": {
+      "creator": {
+        "amount": "228362679713384389",
+        "vaultCheckpointAmount": "228362679713384389",
+        "beneficiaryAmount": "228362679713384389"
+      },
+      "launcher": {
+        "amount": "16642344161618150"
+      }
+    },
+    "postState": {
+      "launchMappings": {
+        "launchHash": "0x7bfbdb011786613d3d269a05c7b2a3a1743dcb51e407892b3f21299108d6992e",
+        "rewardVault": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+        "initialBuyCustody": "0x0000000000000000000000000000000000000000"
+      },
+      "poolFeeConfig": {
+        "rewardVault": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+        "registrar": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+        "buySwapFeeBps": 100,
+        "sellSwapFeeBps": 200,
+        "registered": true,
+        "creatorFeesAccrued": "0"
+      },
+      "rewardVault": {
+        "configurationHash": "0x913f84679ff755b87e2ba9625779ef31a4d34ae249a141fa2b6e6595b3b93efe",
+        "activeConfigurationHash": "0x5dda896dc7a06cd575654429875613662833c9ddf9bf7399d87794d367d91dec",
+        "configurationEpoch": 1,
+        "beneficiary": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "shareBps": 10000
+      },
+      "positionLock": {
+        "owner": "0x0EC0ac6aA9724928aA678c407039D5b2d65cB7Ed",
+        "approved": "0x0000000000000000000000000000000000000000",
+        "tokenId": "386488",
+        "positionLiquidity": "47813640512503339560210",
+        "activePoolLiquidity": "47813640512503339560210",
+        "tickLower": 174800,
+        "tickUpper": 204200,
+        "manager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+        "operator": "0x0000000000000000000000000000000000000000",
+        "timelockBlockNumber": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "feeRecipient": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+        "factoryConfigurationHash": "0x3959c422272ce6f06d6a28f0fa9c9c501342736ebf7b7109f67e1d0a451146a6"
+      },
+      "tokenCustody": {
+        "totalSupply": "1000000000000000000000000000",
+        "lockedTokenDust": "11807",
+        "launcherBalance": "0",
+        "positionManagerBalance": "0"
+      },
+      "derivedCodeHashes": {
+        "token": "0x554847de232eb1242cae2befefb8882eb05947e2b103220baaebb3e2ab59b132",
+        "rewardVault": "0x263080da69f045205235451b41e17da8f03955ece962f4589ee604ccc3c36625",
+        "positionForwarder": "0xbfcf00b05d7092f0e47d9dc8ed24cdfab992dfe82da0ac1c1ff8e2c3c2dbc7d7",
+        "rewardVaultPredeployed": false,
+        "positionForwarderPredeployed": false
+      }
+    },
+    "feeConservation": {
+      "creatorAccrualTotal": "228362679713384389",
+      "launcherAccrualTotal": "16642344161618150",
+      "totalAccrual": "245005023875002539",
+      "checkpoints": {
+        "preLaunch": {
+          "blockNumber": 25854485,
+          "hook": {
+            "rewardVault": "0x0000000000000000000000000000000000000000",
+            "registrar": "0x0000000000000000000000000000000000000000",
+            "buySwapFeeBps": 0,
+            "sellSwapFeeBps": 0,
+            "registered": false,
+            "creatorFeesAccrued": "0",
+            "launcherFeesAccrued": "0",
+            "totalNativeFeesAccrued": "0",
+            "poolManagerNativeClaims": "0",
+            "poolManagerTokenClaims": "0",
+            "rawNativeBalance": "0"
+          }
+        },
+        "beforeCreatorClaim": {
+          "blockNumber": 25855088,
+          "hook": {
+            "rewardVault": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+            "registrar": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+            "buySwapFeeBps": 100,
+            "sellSwapFeeBps": 200,
+            "registered": true,
+            "creatorFeesAccrued": "228362679713384389",
+            "launcherFeesAccrued": "16642344161618150",
+            "totalNativeFeesAccrued": "245005023875002539",
+            "poolManagerNativeClaims": "245005023875002539",
+            "poolManagerTokenClaims": "0",
+            "rawNativeBalance": "0"
+          },
+          "vault": {
+            "totalCreatorFeesReceived": "0",
+            "totalCreatorFeesClaimed": "0",
+            "beneficiaryClaimed": "0",
+            "beneficiaryClaimable": "0",
+            "rawNativeBalance": "0"
+          }
+        },
+        "afterCreatorClaim": {
+          "blockNumber": 25855089,
+          "hook": {
+            "rewardVault": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+            "registrar": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+            "buySwapFeeBps": 100,
+            "sellSwapFeeBps": 200,
+            "registered": true,
+            "creatorFeesAccrued": "0",
+            "launcherFeesAccrued": "16642344161618150",
+            "totalNativeFeesAccrued": "16642344161618150",
+            "poolManagerNativeClaims": "16642344161618150",
+            "poolManagerTokenClaims": "0",
+            "rawNativeBalance": "0"
+          },
+          "vault": {
+            "totalCreatorFeesReceived": "228362679713384389",
+            "totalCreatorFeesClaimed": "228362679713384389",
+            "beneficiaryClaimed": "228362679713384389",
+            "beneficiaryClaimable": "0",
+            "rawNativeBalance": "0"
+          }
+        },
+        "beforeLauncherClaim": {
+          "blockNumber": 25855188,
+          "hook": {
+            "rewardVault": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+            "registrar": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+            "buySwapFeeBps": 100,
+            "sellSwapFeeBps": 200,
+            "registered": true,
+            "creatorFeesAccrued": "0",
+            "launcherFeesAccrued": "16642344161618150",
+            "totalNativeFeesAccrued": "16642344161618150",
+            "poolManagerNativeClaims": "16642344161618150",
+            "poolManagerTokenClaims": "0",
+            "rawNativeBalance": "0"
+          }
+        },
+        "final": {
+          "blockNumber": 25855200,
+          "hook": {
+            "rewardVault": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+            "registrar": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+            "buySwapFeeBps": 100,
+            "sellSwapFeeBps": 200,
+            "registered": true,
+            "creatorFeesAccrued": "0",
+            "launcherFeesAccrued": "0",
+            "totalNativeFeesAccrued": "0",
+            "poolManagerNativeClaims": "0",
+            "poolManagerTokenClaims": "0",
+            "rawNativeBalance": "0"
+          },
+          "vault": {
+            "totalCreatorFeesReceived": "228362679713384389",
+            "totalCreatorFeesClaimed": "228362679713384389",
+            "beneficiaryClaimed": "228362679713384389",
+            "beneficiaryClaimable": "0",
+            "rawNativeBalance": "0"
+          }
+        }
+      }
+    },
+    "observations": {
+      "exclusiveHookActivity": {
+        "fromBlock": 25854486,
+        "toBlock": 25855200,
+        "nativeAccrualEvents": 334,
+        "creatorClaimEvents": 1,
+        "launcherClaimEvents": 1
+      },
+      "sellApprovals": {
+        "sellExactInput": {
+          "blockNumber": 25855034,
+          "erc20AllowanceToPermit2": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+          "permit2AllowanceToRouter": "10000000000000000000000",
+          "permit2Expiration": "1787942603",
+          "permit2Nonce": "0",
+          "requiredAmount": "1000000000000000000"
+        },
+        "sellExactOutput": {
+          "blockNumber": 25855050,
+          "erc20AllowanceToPermit2": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+          "permit2AllowanceToRouter": "10000000000000000000000",
+          "permit2Expiration": "1787936711",
+          "permit2Nonce": "0",
+          "requiredAmount": "347082206478789293"
+        }
+      }
+    },
+    "invariants": {
+      "launchVerified": true,
+      "positionLockVerified": true,
+      "buyExactInputVerified": true,
+      "buyExactOutputVerified": true,
+      "sellExactInputVerified": true,
+      "sellExactOutputVerified": true,
+      "creatorClaimVerified": true,
+      "launcherClaimVerified": true,
+      "feeConservationVerified": true
+    },
+    "evidenceDigest": "0x8cebe98625569273cb3612deb6ea14621ef124c9197418923e034a39db1c316a"
+  },
+  "indexerHandoff": {
+    "schemaVersion": 1,
+    "chainId": 1,
+    "model": "classic",
+    "releaseVersion": "classic-v4",
+    "releaseCommit": "707d438576dcf47dc2667125789fd35eb1c3de50",
+    "sourceCommitment": "0x038f0dec0856e2638eac146af373a388bf18fd40c6891fece4c9490b9dac18ca",
+    "startBlock": 25851103,
+    "sources": {
+      "launcher": {
+        "address": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+        "startBlock": 25853086,
+        "events": [
+          "MemeTokenLaunchedV2",
+          "MemeLiquidityConfiguredV2",
+          "MemeCreatorInitialBuyV2",
+          "MemeCreatorInitialBuyCustodyV2"
+        ]
+      },
+      "feeHook": {
+        "address": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+        "startBlock": 25851137,
+        "events": [
+          "PoolRegistered",
+          "PoolFeeDisclosure",
+          "NativeSwapFeesAccrued",
+          "CreatorFeesClaimed",
+          "LauncherFeesClaimed"
+        ]
+      }
+    },
+    "sourceVerified": true,
+    "lifecycleVerified": true,
+    "activationEligible": true,
+    "indexerBindingDigest": null,
+    "activated": false
+  },
+  "manifestDigest": "0xc2b601e5983f0251744a980bb060be6f2508d2d65951f290abde5d2f1a86e4a3"
+}
