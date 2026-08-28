@@ -214,7 +214,7 @@ Before constructing a wallet-bound plan, preparation reruns the fixed-block depl
 6. creator reward-vault claim; and
 7. launcher treasury claim.
 
-The plan fixes the canary name, symbol, full deterministic creator salt, metadata, `0.0006 ETH` activation buy, beneficiary and fees. The contract itself fixes the one canonical liquidity range. The plan also caps all four swap amounts before any signature, pins the D92 Mainnet Universal Router to its V2.0 five-field single-hop ABI, fixes 1% slippage and a five-minute deadline policy, and requires the canonical V4Quoter at each transaction's parent block.
+The plan fixes the canary name, symbol, full deterministic creator salt, metadata, `0.0006 ETH` activation buy, beneficiary and fees. The contract itself fixes the one canonical liquidity range. The plan also caps all four swap amounts before any signature, pins the D92 Mainnet Universal Router to its V2.0 five-field single-hop ABI, fixes 1% slippage and a five-minute deadline policy, and requires the canonical V4Quoter at each transaction's parent block. Wallet preparation keeps a 12-confirmation evidence anchor while separately binding nonce, gas, signer, simulation and swap quote to the dual-RPC common fresh block; revalidation checks both bindings again before MetaMask opens.
 
 Save the exact plan outside the repository only through a second acknowledged run:
 

@@ -39,6 +39,7 @@ import {
 } from "../../../scripts/classic-v4-lifecycle-console-core.mjs";
 import {
   classicV4SimulationRequest,
+  classicV4SellApprovalAmount,
   parseClassicV4LifecycleConsoleArguments,
 } from
   "../../../scripts/serve-classic-v4-lifecycle-canary.mjs";
@@ -304,6 +305,45 @@ test("Classic V4 console binds all four dynamic quote quadrants", () => {
   );
 });
 
+test("Classic V4 swap review separates the stable anchor from the fresh quote", () => {
+  const fresh = prepareSwap("buyExactOutput");
+  const prepared = sealClassicV4PreparedAction(
+    plan,
+    fresh,
+    {
+      nonce: 7,
+      gasLimit: 120_000,
+      maxFeePerGas: 20,
+      maxPriorityFeePerGas: 2,
+      preparedAtBlock: 112,
+      preparedAtBlockHash: hash("b"),
+      executionBlockNumber: 123,
+      executionBlockHash: hash("a"),
+    },
+  );
+  assert.equal(
+    validateClassicV4PreparedAction(plan, prepared, identity).preparedDigest,
+    prepared.preparedDigest,
+  );
+  assert.throws(
+    () => sealClassicV4PreparedAction(
+      plan,
+      fresh,
+      {
+        nonce: 7,
+        gasLimit: 120_000,
+        maxFeePerGas: 20,
+        maxPriorityFeePerGas: 2,
+        preparedAtBlock: 113,
+        preparedAtBlockHash: hash("b"),
+        executionBlockNumber: 123,
+        executionBlockHash: hash("a"),
+      },
+    ),
+    /Prepared execution block is invalid/u,
+  );
+});
+
 test("Classic V4 revalidation sanitizes only the eth_call request", () => {
   const exactRequest = Object.freeze({
     from: operator,
@@ -328,6 +368,12 @@ test("Classic V4 revalidation sanitizes only the eth_call request", () => {
 });
 
 test("Classic V4 console creates bounded sell approvals and exact claim calls", () => {
+  assert.equal(classicV4SellApprovalAmount(plan, "sellExactInput"), 3_000n);
+  assert.equal(classicV4SellApprovalAmount(plan, "sellExactOutput"), 100_000n);
+  assert.throws(
+    () => classicV4SellApprovalAmount(plan, "buyExactInput"),
+    /not a sell/u,
+  );
   const tokenApproval = buildClassicV4TokenApprovalPrepared({
     canaryPlan: plan,
     identity,

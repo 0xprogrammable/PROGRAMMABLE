@@ -55,6 +55,7 @@ import {
   classicV4LifecycleActionLabel,
   classicV4PreparedCalldataHash,
   classicV4QuoteBound,
+  classicV4SwapIdentity,
   confirmClassicV4JournalTransaction,
   createClassicV4ExecutionJournal,
   decodeClassicV4Quote,
@@ -1436,7 +1437,13 @@ async function feeEnvelope(urls, block) {
   return { maxPriorityFeePerGas: priority, maxFeePerGas };
 }
 
-async function enrichPrepared(canaryPlan, urls, block, prepared) {
+async function enrichPrepared(
+  canaryPlan,
+  urls,
+  block,
+  prepared,
+  { preparationBlock = block } = {},
+) {
   const [nonce, fees, estimates, balances] = await Promise.all([
     exactNonce(urls, prepared.requiredAccount, block.tag),
     feeEnvelope(urls, block),
@@ -1452,7 +1459,23 @@ async function enrichPrepared(canaryPlan, urls, block, prepared) {
       block,
       "required wallet",
     ),
+    ...(preparationBlock.number === block.number
+      ? []
+      : [assertClassicV4SignerRuntimeAtBlock(
+          urls,
+          prepared.requiredAccount,
+          preparationBlock,
+          "required wallet stable anchor",
+        )]),
   ]);
+  const recheckedBlock = await exactBlockAt(
+    urls,
+    block.number,
+    `${prepared.action} execution block after preparation`,
+  );
+  if (normalizeHex(recheckedBlock.hash) !== normalizeHex(block.hash)) {
+    fail(`${prepared.action} execution block changed during preparation`);
+  }
   const estimateA = BigInt(estimates[0]);
   const estimateB = BigInt(estimates[1]);
   const maximumEstimate = estimateA > estimateB ? estimateA : estimateB;
@@ -1474,8 +1497,14 @@ async function enrichPrepared(canaryPlan, urls, block, prepared) {
     nonce,
     gasLimit,
     ...fees,
-    preparedAtBlock: block.number,
-    preparedAtBlockHash: block.hash,
+    preparedAtBlock: preparationBlock.number,
+    preparedAtBlockHash: preparationBlock.hash,
+    ...(preparationBlock.number === block.number
+      ? {}
+      : {
+          executionBlockNumber: block.number,
+          executionBlockHash: block.hash,
+        }),
   });
   if (BigInt(balances[0]) < BigInt(sealed.maximumGasDebit)) {
     fail("The required wallet balance is below the reviewed maximum debit");
@@ -1645,12 +1674,26 @@ async function assertRouterRuntime(canaryPlan, urls, block) {
   ) fail("Launch Stamp Router runtime differs from the canary plan");
 }
 
+export function classicV4SellApprovalAmount(canaryPlan, action) {
+  const swap = classicV4SwapIdentity(action);
+  if (swap.side !== "sell") fail("Classic V4 approval action is not a sell");
+  const fixture = canaryPlan.swapFixture[action];
+  const amount = BigInt(
+    swap.exactness === "exact-input"
+      ? fixture.amountIn
+      : fixture.hardMaximumAmountIn,
+  );
+  if (amount <= 0n) fail("Classic V4 sell approval amount is invalid");
+  return amount;
+}
+
 async function prepareNextAction(canaryPlan, identity, journal, urls) {
   const next = nextClassicV4LifecycleAction(journal);
   if (next.status !== "ready") fail("No Classic V4 action is ready");
   const { freshHead, preparationBlock: block } =
     await stablePreparationContext(urls);
   let prepared;
+  let executionBlock = block;
   if (next.action === "launch") {
     await assertRouterRuntime(canaryPlan, urls, block);
     const validAfter = BigInt(canaryPlan.launchAuthorization.validAfter);
@@ -1661,19 +1704,30 @@ async function prepareNextAction(canaryPlan, identity, journal, urls) {
     ) fail("The signed Router authorization needs to be acquired again");
     prepared = buildClassicV4LaunchPrepared(canaryPlan);
   } else if (["buyExactInput", "buyExactOutput", "sellExactInput", "sellExactOutput"].includes(next.action)) {
-    const swapPrepared = await quoteSwap(canaryPlan, identity, next.action, urls, block);
+    executionBlock = freshHead;
+    const swapPrepared = await quoteSwap(
+      canaryPlan,
+      identity,
+      next.action,
+      urls,
+      freshHead,
+    );
     if (next.action.startsWith("sell")) {
       const required = BigInt(swapPrepared.swap.inputBound);
-      const allowance = await allowanceState(canaryPlan, identity, urls, block);
-      if (allowance.erc20 < required) {
+      const approvalAmount = classicV4SellApprovalAmount(canaryPlan, next.action);
+      if (required > approvalAmount) {
+        fail(`${next.action} exceeds its plan-bound approval maximum`);
+      }
+      const allowance = await allowanceState(canaryPlan, identity, urls, freshHead);
+      if (allowance.erc20 < approvalAmount) {
         prepared = buildClassicV4TokenApprovalPrepared({
           canaryPlan,
           identity,
           requiredAction: next.action,
-          amount: required,
+          amount: approvalAmount,
         });
       } else if (
-        allowance.permitAmount < required ||
+        allowance.permitAmount < approvalAmount ||
         allowance.permitExpiration <
           BigInt(swapPrepared.swap.routerDeadline) + MINIMUM_SWAP_DEADLINE_BUFFER_SECONDS
       ) {
@@ -1681,8 +1735,8 @@ async function prepareNextAction(canaryPlan, identity, journal, urls) {
           canaryPlan,
           identity,
           requiredAction: next.action,
-          amount: required,
-          blockTimestamp: block.timestamp,
+          amount: approvalAmount,
+          blockTimestamp: executionBlock.timestamp,
         });
       } else {
         prepared = swapPrepared;
@@ -1691,9 +1745,10 @@ async function prepareNextAction(canaryPlan, identity, journal, urls) {
       prepared = swapPrepared;
     }
   } else if (next.action === "creatorClaim") {
+    executionBlock = freshHead;
     const claimable = await readContractBoth(
       urls,
-      block,
+      executionBlock,
       identity.rewardVault,
       classicV4ExecutionRewardVaultAbi,
       "claimable",
@@ -1702,9 +1757,10 @@ async function prepareNextAction(canaryPlan, identity, journal, urls) {
     if (BigInt(claimable) <= 0n) fail("The creator reward is not claimable yet");
     prepared = buildClassicV4CreatorClaimPrepared(canaryPlan, identity);
   } else if (next.action === "launcherClaim") {
+    executionBlock = freshHead;
     const accrued = await readContractBoth(
       urls,
-      block,
+      executionBlock,
       canaryPlan.feeHook,
       classicV4ExecutionHookAbi,
       "launcherFeesAccrued",
@@ -1714,8 +1770,19 @@ async function prepareNextAction(canaryPlan, identity, journal, urls) {
   } else {
     fail("Classic V4 lifecycle action is unknown");
   }
-  await callBoth(urls, prepared.request, block.tag, `${prepared.action} simulation`);
-  return enrichPrepared(canaryPlan, urls, block, prepared);
+  await callBoth(
+    urls,
+    prepared.request,
+    executionBlock.tag,
+    `${prepared.action} simulation`,
+  );
+  return enrichPrepared(
+    canaryPlan,
+    urls,
+    executionBlock,
+    prepared,
+    { preparationBlock: block },
+  );
 }
 
 async function derivePreparedBaseAtBlock(
@@ -1734,14 +1801,10 @@ async function derivePreparedBaseAtBlock(
     prepared.action === `tokenApproval:${prepared.requiredAction}` ||
     prepared.action === `permit2Approval:${prepared.requiredAction}`
   ) {
-    const swap = await quoteSwap(
+    const amount = classicV4SellApprovalAmount(
       canaryPlan,
-      identity,
       prepared.requiredAction,
-      urls,
-      block,
     );
-    const amount = BigInt(swap.swap.inputBound);
     return prepared.action.startsWith("tokenApproval:")
       ? buildClassicV4TokenApprovalPrepared({
           canaryPlan,
@@ -1786,12 +1849,24 @@ async function validatePersistedPreparedBinding(
     prepared.preparedAtBlock + Number(PREPARATION_FINALITY_OFFSET),
     `${prepared.action} preparation finality block`,
   );
+  const executionBlockNumber = prepared.executionBlockNumber ??
+    (prepared.swap ? prepared.quote.blockNumber : prepared.preparedAtBlock);
+  const executionBlockHash = prepared.executionBlockHash ??
+    (prepared.swap ? prepared.quote.blockHash : prepared.preparedAtBlockHash);
+  const executionBlock = await exactBlockAt(
+    urls,
+    executionBlockNumber,
+    `${prepared.action} execution block`,
+  );
+  if (
+    normalizeHex(executionBlock.hash) !== normalizeHex(executionBlockHash)
+  ) fail(`${prepared.action} execution block is no longer canonical`);
   const expected = await derivePreparedBaseAtBlock(
     canaryPlan,
     identity,
     prepared,
     urls,
-    block,
+    executionBlock,
   );
   const actualBase = {
     action: prepared.action,
@@ -1828,16 +1903,24 @@ async function validatePersistedPreparedBinding(
     Promise.all(
       urls.map((endpoint) => rpc(endpoint, "eth_getTransactionCount", [
         prepared.requiredAccount,
-        block.tag,
+        executionBlock.tag,
       ])),
     ),
     Promise.all(
       urls.map((endpoint) => rpc(endpoint, "eth_estimateGas", [
         expected.request,
-        block.tag,
+        executionBlock.tag,
       ])),
     ),
   ]);
+  const executionBlockAfterReads = await exactBlockAt(
+    urls,
+    executionBlock.number,
+    `${prepared.action} persisted execution block after reads`,
+  );
+  if (
+    normalizeHex(executionBlockAfterReads.hash) !== normalizeHex(executionBlock.hash)
+  ) fail(`${prepared.action} execution block changed during persisted validation`);
   sameRpcValue(nonces[0], nonces[1], `${prepared.action} historical nonce`);
   if (BigInt(nonces[0]) !== BigInt(prepared.request.nonce)) {
     fail(`${prepared.action} persisted nonce differs`);
@@ -1860,15 +1943,23 @@ async function validatePersistedPreparedBinding(
     BigInt(prepared.request.gas) !== expectedGas ||
     priority <= 0n ||
     priority > MAX_PRIORITY_FEE_WEI ||
-    maxFee !== block.baseFeePerGas * 2n + priority ||
+    maxFee !== executionBlock.baseFeePerGas * 2n + priority ||
     maxFee > MAX_FEE_WEI
   ) fail(`${prepared.action} persisted gas envelope differs`);
   await assertClassicV4SignerRuntimeAtBlock(
     urls,
     prepared.requiredAccount,
-    block,
+    executionBlock,
     `${prepared.action} preparation`,
   );
+  if (executionBlock.number !== block.number) {
+    await assertClassicV4SignerRuntimeAtBlock(
+      urls,
+      prepared.requiredAccount,
+      block,
+      `${prepared.action} stable preparation anchor`,
+    );
+  }
   return { preparationBlock: block, finalityBlock };
 }
 
@@ -2443,6 +2534,19 @@ async function revalidatePrepared(canaryPlan, identity, journal, urls, digest) {
     currentClassicV4ArmTime(journal, prepared),
     `${prepared.action} revalidation`,
   );
+  const reviewedExecutionBlockNumber = prepared.executionBlockNumber ??
+    (prepared.swap ? prepared.quote.blockNumber : prepared.preparedAtBlock);
+  const reviewedExecutionBlockHash = prepared.executionBlockHash ??
+    (prepared.swap ? prepared.quote.blockHash : prepared.preparedAtBlockHash);
+  const reviewedExecutionBlock = await exactBlockAt(
+    urls,
+    reviewedExecutionBlockNumber,
+    `${prepared.action} reviewed execution block`,
+  );
+  if (
+    normalizeHex(reviewedExecutionBlock.hash) !==
+      normalizeHex(reviewedExecutionBlockHash)
+  ) fail("The reviewed Classic V4 execution block changed; prepare a fresh request");
   await assertClassicV4SignerRuntimeAtBlock(
     urls,
     prepared.requiredAccount,
