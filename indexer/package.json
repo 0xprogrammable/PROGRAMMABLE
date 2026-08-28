@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "classic-v4:activate": "node scripts/activate-classic-v4.mjs",
+    "classic-v4:activate": "tsx scripts/activate-classic-v4.mjs",
+    "classic-v4:public:promote": "tsx scripts/promote-classic-v4-public-availability.mjs",
     "release:identity": "node scripts/release-candidate.mjs identity",
     "release:snapshot": "node scripts/release-candidate.mjs snapshot",
     "release:audit": "node scripts/release-candidate.mjs audit"
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "24.12.2",
+    "tsx": "4.21.0",
     "typescript": "6.0.3",
     "vitest": "4.1.0",
     "yaml": "2.8.3"

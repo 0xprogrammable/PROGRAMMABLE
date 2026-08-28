@@ -17,12 +17,16 @@ import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
 } from "../../scripts/classic-v4-digest.mjs";
-import {
+import * as classicV4ReleaseModule from "../../lib/classic-v4-release.ts";
+import * as classicV4PublicReleaseModule from "../../lib/classic-v4-public-release.ts";
+import { parseReleaseAuditArtifact } from "./release-candidate.mjs";
+
+const {
   deriveClassicV4FinalizedLaunchAnchor,
   parseClassicV4PendingRelease,
-} from "../../lib/classic-v4-release.ts";
-import { isClassicV4AnchoredPublicReleaseBinding } from "../../lib/classic-v4-public-release.ts";
-import { parseReleaseAuditArtifact } from "./release-candidate.mjs";
+} = classicV4ReleaseModule.default ?? classicV4ReleaseModule;
+const { isClassicV4AnchoredPublicReleaseBinding } =
+  classicV4PublicReleaseModule.default ?? classicV4PublicReleaseModule;
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
@@ -58,6 +62,8 @@ const activationTargetPaths = Object.freeze([
   catalogReleasePath,
   canonicalManifestPath,
 ]);
+
+export const CLASSIC_V4_ACTIVATION_TARGET_PATHS = activationTargetPaths;
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
@@ -823,8 +829,7 @@ function renderEnvioConfigBlock(plan) {
   ].join("\n");
 }
 
-function renderPublicReleaseBindingBlock(plan) {
-  const binding = plan.publicReleaseBinding;
+export function renderClassicV4PublicReleaseBindingBlock(binding) {
   if (!isClassicV4AnchoredPublicReleaseBinding(binding)) {
     fail("Classic V4 browser binding is missing its finalized launch anchor");
   }
@@ -850,6 +855,16 @@ function renderPublicReleaseBindingBlock(plan) {
   ].join("\n");
 }
 
+export function renderClassicV4PublicReleaseBindingSource(binding, source) {
+  return replaceActivationBlock(
+    source,
+    PUBLIC_BINDING_START,
+    PUBLIC_BINDING_END,
+    renderClassicV4PublicReleaseBindingBlock(binding),
+    "browser public release binding",
+  );
+}
+
 export function renderClassicV4Activation(plan, current) {
   return Object.freeze({
     releaseMap: replaceActivationBlock(
@@ -866,12 +881,9 @@ export function renderClassicV4Activation(plan, current) {
       renderEnvioConfigBlock(plan),
       "Envio config",
     ),
-    publicReleaseBinding: replaceActivationBlock(
+    publicReleaseBinding: renderClassicV4PublicReleaseBindingSource(
+      plan.publicReleaseBinding,
       current.publicReleaseBinding,
-      PUBLIC_BINDING_START,
-      PUBLIC_BINDING_END,
-      renderPublicReleaseBindingBlock(plan),
-      "browser public release binding",
     ),
     manifest: `${JSON.stringify(plan.activatedManifest, null, 2)}\n`,
     catalogRelease: plan.catalogReleaseArtifact
@@ -903,6 +915,7 @@ function parseArguments(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    if (argument === "--") continue;
     if (argument === "--write") {
       options.write = true;
       continue;

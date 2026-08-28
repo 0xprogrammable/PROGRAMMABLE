@@ -157,6 +157,30 @@ the frozen five-release `config/data-pipeline-release.v1.json`; the reviewed
 expanded Envio deployment must already exist before this command can activate
 the website catalog.
 
+Public wallet actions remain disabled after indexer activation. After the
+indexed canary parity and separate public-availability decision are complete,
+inspect the deterministic source transition:
+
+```bash
+pnpm classic-v4:public:promote
+```
+
+The check accepts only the exact `indexer-activated` manifest, its committed
+browser binding and the matching Envio catalog artifact. It prints the newly
+digested `publicly-available` manifest without writing. Apply that exact result
+only after review:
+
+```bash
+pnpm classic-v4:public:promote -- \
+  --write \
+  --acknowledge-manifest-digest 0x<exact-public-manifest-digest>
+```
+
+The command changes only the canonical manifest, browser binding and catalog
+digest under the same durable activation lock, with the manifest written last
+as the commit point. It does not deploy, promote a Vercel alias, configure the
+backend, request a wallet signature or broadcast a transaction.
+
 ## Production status
 
 Passing local checks or running an Envio development deployment does not make
