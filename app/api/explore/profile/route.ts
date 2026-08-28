@@ -47,6 +47,8 @@ import {
 import {
   resolveRouterCustomCreatorClaimCapabilityV1,
 } from "@/lib/profile/router-custom-creator-claim";
+import { publicExplorePresentationEntryV1 } from
+  "@/lib/public-explore-catalog-v1";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -762,7 +764,7 @@ export async function GET(request: NextRequest) {
       deadlineMs,
     }).then(
       (snapshot) => ({
-        entries: snapshot.entries,
+        entries: snapshot.entries.map(publicExplorePresentationEntryV1),
         snapshot,
         status: snapshot.status,
       }),

@@ -45,6 +45,7 @@ const mocks = vi.hoisted(() => ({
   readAlchemyCreatorProfile: vi.fn(),
   readAlchemyExploreModel: vi.fn(),
   readRouter: vi.fn(),
+  routerAsOfBlock: vi.fn(() => "25740001"),
   safeAlchemyError: vi.fn((error) => error),
 }));
 
@@ -129,7 +130,7 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
       source: "canonical-launch-stamp-router",
       status: "current",
       generatedAt: "2026-08-22T08:00:01.000Z",
-      asOfBlock: "25740001",
+      asOfBlock: mocks.routerAsOfBlock(),
       asOfBlockHash: `0x${"bc".repeat(32)}`,
       finalityConfirmations: 64,
       identityCommitment: `sha256:${"ac".repeat(32)}`,
@@ -211,7 +212,10 @@ vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
 
 import { GET as creatorProfile } from "../app/api/explore/profile/route";
 import { GET as stockLaunchLookup } from "../app/api/explore/launch/stock-paired/route";
+import { SHARD_PUBLIC_PRESENTATION_V1 } from
+  "../lib/custom-launch/router-trade-adapters-v1";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
+import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 
 const ACCOUNT = "0x1111111111111111111111111111111111111111";
 const TRANSACTION = `0x${"22".repeat(32)}`;
@@ -377,6 +381,57 @@ describe("public route coordinator wiring", () => {
       generatedWei: "0",
       claimedWei: "0",
     });
+  });
+
+  it("reuses the exact SHARD presentation without trusting mutable lookalikes", async () => {
+    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue({
+      ...profileCatalog(),
+      asOfBlock: "25845472",
+      asOfBlockHash: `0x${"97".repeat(32)}`,
+      entries: [],
+    });
+    mocks.routerAsOfBlock.mockReturnValue("25845472");
+    mocks.readRouter.mockResolvedValue([shardRouterTradeEntry]);
+
+    const shardResponse = await creatorProfile(new NextRequest(
+      `http://localhost/api/explore/profile?account=${shardRouterTradeEntry.creatorAddress}`,
+    ));
+    const shardBody = await shardResponse.json();
+
+    expect(shardResponse.status).toBe(200);
+    expect(shardBody.tokens).toEqual([
+      expect.objectContaining({
+        tokenAddress: SHARD_PUBLIC_PRESENTATION_V1.tokenAddress,
+        description: SHARD_PUBLIC_PRESENTATION_V1.description,
+        imageUrl: SHARD_PUBLIC_PRESENTATION_V1.imageUrl,
+        links: SHARD_PUBLIC_PRESENTATION_V1.links,
+      }),
+    ]);
+
+    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue({
+      ...profileCatalog(),
+      asOfBlock: "25740001",
+      entries: [],
+    });
+    mocks.routerAsOfBlock.mockReturnValue("25740001");
+    mocks.readRouter.mockResolvedValue([{
+      ...customGraphExploreEntry,
+      name: "Shard",
+      symbol: "SHARD",
+    }]);
+
+    const lookalikeResponse = await creatorProfile(new NextRequest(
+      `http://localhost/api/explore/profile?account=${customGraphExploreEntry.creatorAddress}`,
+    ));
+    const lookalikeBody = await lookalikeResponse.json();
+
+    expect(lookalikeResponse.status).toBe(200);
+    expect(lookalikeBody.tokens).toEqual([
+      expect.objectContaining({ name: "Shard", symbol: "SHARD" }),
+    ]);
+    expect(lookalikeBody.tokens[0]).not.toHaveProperty("description");
+    expect(lookalikeBody.tokens[0]).not.toHaveProperty("imageUrl");
+    expect(lookalikeBody.tokens[0]).not.toHaveProperty("links");
   });
 
   it("keeps the Envio profile visible when Router discovery fails", async () => {
