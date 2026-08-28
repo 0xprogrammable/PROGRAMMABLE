@@ -1,0 +1,591 @@
+#!/usr/bin/env node
+
+import { execFileSync } from "node:child_process";
+import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { keccak256, stringToHex } from "viem";
+
+import {
+  CLASSIC_V4_DIGEST_DOMAINS,
+  CLASSIC_V4_NEW_CONTRACTS,
+  canonicalAddress,
+  digestJson,
+} from "../../scripts/classic-v4-release-core.mjs";
+import { resolvePinnedSolc } from "./custom-registry-v2-source-verification-core.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "./classic-v4-release-validation.mjs";
+
+const scriptPath = fileURLToPath(import.meta.url);
+const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
+const REQUEST_TIMEOUT_MS = 20_000;
+
+function fail(message) {
+  throw new Error(message);
+}
+
+function parseArguments(argv) {
+  const forbidden = argv.find(
+    (argument) =>
+      argument === "--submit" ||
+      argument === "--broadcast" ||
+      argument === "--private-key" ||
+      argument.startsWith("--private-key=") ||
+      argument === "--mnemonic" ||
+      argument.startsWith("--mnemonic="),
+  );
+  if (forbidden) {
+    fail(
+      `${forbidden.split("=", 1)[0]} is forbidden; source verification is read-only`,
+    );
+  }
+  const parsed = {
+    plan: null,
+    deploymentEvidence: null,
+    write: false,
+    output: null,
+    wallet: null,
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--write") {
+      parsed.write = true;
+      continue;
+    }
+    const separator = argument.indexOf("=");
+    const key = separator === -1 ? argument : argument.slice(0, separator);
+    const inlineValue = separator === -1 ? null : argument.slice(separator + 1);
+    const known = ["--plan", "--deployment-evidence", "--output", "--wallet"];
+    if (!known.includes(key)) fail(`Unknown argument: ${key}`);
+    const value = inlineValue ?? argv[++index];
+    if (!value || value.startsWith("--")) fail(`Missing value for ${key}`);
+    if (key === "--plan") parsed.plan = value;
+    if (key === "--deployment-evidence") parsed.deploymentEvidence = value;
+    if (key === "--output") parsed.output = value;
+    if (key === "--wallet") parsed.wallet = value;
+  }
+  for (const key of ["plan", "deploymentEvidence"]) {
+    if (!parsed[key] || !path.isAbsolute(parsed[key])) {
+      fail(`${key} must be an absolute path`);
+    }
+  }
+  return parsed;
+}
+
+async function readJson(file, label) {
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    fail(`Unable to read ${label}: ${error.message}`);
+  }
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!response.ok)
+    fail(`${url.origin}${url.pathname} returned HTTP ${response.status}`);
+  return response.json();
+}
+
+function artifactCompilerSettings(artifact, field) {
+  let metadata;
+  try {
+    metadata =
+      typeof artifact.metadata === "string"
+        ? JSON.parse(artifact.metadata)
+        : artifact.metadata;
+  } catch {
+    fail(`${field} artifact metadata is unavailable`);
+  }
+  return {
+    compilerVersion: `v${metadata.compiler.version}`,
+    optimizationUsed: metadata.settings.optimizer.enabled ? "1" : "0",
+    optimizerRuns: String(metadata.settings.optimizer.runs),
+    evmVersion: metadata.settings.evmVersion,
+    materialSettings: materialCompilerSettings(metadata.settings),
+  };
+}
+
+export function materialCompilerSettings(settings) {
+  return {
+    remappings: settings?.remappings ?? [],
+    optimizer: settings?.optimizer,
+    evmVersion: settings?.evmVersion,
+    viaIR: settings?.viaIR ?? false,
+    metadata: settings?.metadata
+      ? {
+          useLiteralContent: settings.metadata.useLiteralContent ?? false,
+          ...settings.metadata,
+        }
+      : undefined,
+    libraries: settings?.libraries ?? {},
+    debug: settings?.debug ?? {},
+  };
+}
+
+export function standardJsonCompilerInputSettings(settings) {
+  const material = materialCompilerSettings(settings);
+  return {
+    remappings: material.remappings,
+    optimizer: material.optimizer,
+    metadata: material.metadata,
+    outputSelection: {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode.object",
+          "evm.bytecode.sourceMap",
+          "evm.bytecode.linkReferences",
+          "evm.deployedBytecode.object",
+          "evm.deployedBytecode.sourceMap",
+          "evm.deployedBytecode.linkReferences",
+          "evm.deployedBytecode.immutableReferences",
+          "evm.methodIdentifiers",
+          "metadata",
+        ],
+      },
+    },
+    evmVersion: material.evmVersion,
+    viaIR: material.viaIR,
+    libraries: material.libraries,
+    ...(settings?.debug === undefined ? {} : { debug: material.debug }),
+  };
+}
+
+function hasCompleteMaterialCompilerSettings(settings) {
+  return [
+    "remappings",
+    "optimizer",
+    "metadata",
+    "evmVersion",
+    "viaIR",
+    "libraries",
+  ].every((key) => Object.hasOwn(settings ?? {}, key));
+}
+
+const allowedProviderCompilerSettingKeys = new Set([
+  "remappings",
+  "optimizer",
+  "metadata",
+  "evmVersion",
+  "viaIR",
+  "libraries",
+  "debug",
+  "outputSelection",
+  "compilationTarget",
+]);
+
+function compilerProvenMaterialSettings(settings) {
+  const { remappings: _remappings, ...material } =
+    materialCompilerSettings(settings);
+  return material;
+}
+
+function canonicalJson(value) {
+  return JSON.stringify(value, (_, item) => {
+    if (item === null || Array.isArray(item) || typeof item !== "object") {
+      return item;
+    }
+    return Object.fromEntries(
+      Object.entries(item).sort(([left], [right]) => left.localeCompare(right)),
+    );
+  });
+}
+
+function artifactSourceClosure(artifact, label) {
+  let metadata;
+  try {
+    metadata =
+      typeof artifact.metadata === "string"
+        ? JSON.parse(artifact.metadata)
+        : artifact.metadata;
+  } catch {
+    fail(`${label} artifact metadata is unavailable`);
+  }
+  if (!metadata?.sources || typeof metadata.sources !== "object") {
+    fail(`${label} artifact source closure is unavailable`);
+  }
+  return metadata.sources;
+}
+
+function assertExactProviderSourceClosure(remoteSources, artifact, label) {
+  const expectedSources = artifactSourceClosure(artifact, label);
+  const actualPaths = Object.keys(remoteSources ?? {}).sort();
+  const expectedPaths = Object.keys(expectedSources).sort();
+  if (
+    actualPaths.length !== expectedPaths.length ||
+    !actualPaths.every((sourcePath, index) => sourcePath === expectedPaths[index])
+  ) {
+    fail(`${label} source path closure differs`);
+  }
+  for (const sourcePath of expectedPaths) {
+    const content = remoteSources[sourcePath]?.content;
+    if (
+      typeof content !== "string" ||
+      keccak256(stringToHex(content)) !==
+        expectedSources[sourcePath]?.keccak256?.toLowerCase()
+    ) {
+      fail(`${label} source bytes differ at ${sourcePath}`);
+    }
+  }
+}
+
+function etherscanStandardJsonInput(sourceCode, label) {
+  if (typeof sourceCode !== "string" || sourceCode.trim() === "") {
+    fail(`${label} Etherscan source is unavailable`);
+  }
+  let encoded = sourceCode.trim();
+  if (encoded.startsWith("{{") && encoded.endsWith("}}")) {
+    encoded = encoded.slice(1, -1);
+  }
+  let input;
+  try {
+    input = JSON.parse(encoded);
+  } catch {
+    fail(`${label} Etherscan source is not Standard JSON`);
+  }
+  if (
+    input?.language !== "Solidity" ||
+    !input.sources ||
+    typeof input.sources !== "object"
+  ) {
+    fail(`${label} Etherscan Standard JSON is invalid`);
+  }
+  return input;
+}
+
+async function compileProviderStandardJsonInput(input, target) {
+  const [sourcePath] = target.fqcn.split(":", 1);
+  const compiler = await resolvePinnedSolc();
+  const compilationInput = structuredClone(input);
+  compilationInput.settings = {
+    ...compilationInput.settings,
+    outputSelection: {
+      [sourcePath]: {
+        [target.contractName]: [
+          "evm.bytecode.object",
+          "evm.deployedBytecode.object",
+        ],
+      },
+    },
+  };
+  let output;
+  try {
+    output = JSON.parse(
+      execFileSync(compiler.path, ["--standard-json"], {
+        input: Buffer.from(JSON.stringify(compilationInput)),
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024,
+      }),
+    );
+  } finally {
+    if (compiler.cleanupDirectory) {
+      await rm(compiler.cleanupDirectory, { recursive: true, force: true });
+    }
+  }
+  if (output.errors?.some(({ severity }) => severity === "error")) {
+    fail(`${target.contractName} Etherscan Standard JSON does not compile`);
+  }
+  const compiled = output.contracts?.[sourcePath]?.[target.contractName];
+  if (!compiled) {
+    fail(`${target.contractName} Etherscan compiler output is unavailable`);
+  }
+  return compiled;
+}
+
+function normalizedBytecode(value) {
+  const bytecode = value?.startsWith("0x") ? value : `0x${value ?? ""}`;
+  return bytecode.toLowerCase();
+}
+
+function assertExactCompiledBytecode(compiled, artifact, label) {
+  if (
+    normalizedBytecode(compiled?.evm?.bytecode?.object) !==
+      normalizedBytecode(artifact?.bytecode?.object) ||
+    normalizedBytecode(compiled?.evm?.deployedBytecode?.object) !==
+      normalizedBytecode(artifact?.deployedBytecode?.object)
+  ) {
+    fail(`${label} compiled bytecode differs from the sealed artifact`);
+  }
+}
+
+export async function captureSourcify(address, artifact, fetchJsonClient) {
+  const providerUrl = new URL(
+    `https://sourcify.dev/server/v2/contract/1/${address}`,
+  );
+  const lookupUrl = new URL(providerUrl);
+  lookupUrl.searchParams.set("fields", "sources");
+  const payload = await fetchJsonClient(lookupUrl);
+  const status = assertSourcifyMatch(payload, address, artifact);
+  return {
+    name: "Sourcify",
+    status,
+    url: providerUrl.toString(),
+  };
+}
+
+export function assertSourcifyMatch(payload, address, artifact) {
+  let providerAddress;
+  try {
+    providerAddress = canonicalAddress(payload?.address, "Sourcify address");
+  } catch {
+    fail(`${address} Sourcify identity differs`);
+  }
+  if (
+    payload?.chainId !== "1" ||
+    providerAddress.toLowerCase() !==
+      canonicalAddress(address, "requested Sourcify address").toLowerCase()
+  ) {
+    fail(`${address} Sourcify identity differs`);
+  }
+  const matchFields = [
+    payload?.match,
+    payload?.creationMatch,
+    payload?.runtimeMatch,
+  ];
+  if (
+    !matchFields.every(
+      (status) => status === "match" || status === "exact_match",
+    )
+  ) {
+    fail(`${address} is not a complete Sourcify match`);
+  }
+  assertExactProviderSourceClosure(
+    payload.sources,
+    artifact,
+    `${address} Sourcify`,
+  );
+  return matchFields.every((status) => status === "exact_match")
+    ? "exact-match"
+    : "match";
+}
+
+export async function captureEtherscan(
+  address,
+  target,
+  constructorArguments,
+  artifact,
+  fetchJsonClient,
+  etherscanApiKey,
+  compileStandardJsonInput = compileProviderStandardJsonInput,
+) {
+  if (!etherscanApiKey) return null;
+  const settings = artifactCompilerSettings(artifact, target.contractName);
+  const query = new URL("https://api.etherscan.io/v2/api");
+  query.searchParams.set("chainid", "1");
+  query.searchParams.set("module", "contract");
+  query.searchParams.set("action", "getsourcecode");
+  query.searchParams.set("address", address);
+  query.searchParams.set("apikey", etherscanApiKey);
+  const payload = await fetchJsonClient(query);
+  const source = payload?.result?.[0];
+  await assertExactEtherscanMatch(
+    payload,
+    source,
+    target,
+    constructorArguments,
+    settings,
+    artifact,
+    compileStandardJsonInput,
+  );
+  return {
+    name: "Etherscan",
+    status: "exact-match",
+    url: `https://etherscan.io/address/${address}#code`,
+  };
+}
+
+export async function assertExactEtherscanMatch(
+  payload,
+  source,
+  target,
+  constructorArguments,
+  settings,
+  artifact,
+  compileStandardJsonInput = compileProviderStandardJsonInput,
+) {
+  const [contractFileName] = target.fqcn.split(":", 1);
+  const standardJsonInput = etherscanStandardJsonInput(
+    source?.SourceCode,
+    target.contractName,
+  );
+  const metadata =
+    typeof artifact.metadata === "string"
+      ? JSON.parse(artifact.metadata)
+      : artifact.metadata;
+  const expectedMaterialSettings =
+    settings.materialSettings ?? materialCompilerSettings(metadata?.settings);
+  if (
+    payload?.status !== "1" ||
+    source?.ContractName !== target.contractName ||
+    source?.ContractFileName !== contractFileName ||
+    source?.CompilerType !== "solc" ||
+    source?.CompilerVersion !== settings.compilerVersion ||
+    source?.OptimizationUsed !== settings.optimizationUsed ||
+    source?.Runs !== settings.optimizerRuns ||
+    source?.EVMVersion !== settings.evmVersion ||
+    source?.Proxy !== "0" ||
+    source?.Implementation !== "" ||
+    source?.SimilarMatch !== "" ||
+    (source?.ConstructorArguments ?? "").toLowerCase() !==
+      constructorArguments.slice(2).toLowerCase() ||
+    typeof source?.SourceCode !== "string" ||
+    source.SourceCode.length === 0 ||
+    !hasCompleteMaterialCompilerSettings(standardJsonInput.settings) ||
+    Object.keys(standardJsonInput.settings).some(
+      (key) => !allowedProviderCompilerSettingKeys.has(key),
+    ) ||
+    canonicalJson(
+      compilerProvenMaterialSettings(standardJsonInput.settings),
+    ) !== canonicalJson(compilerProvenMaterialSettings(expectedMaterialSettings))
+  ) {
+    fail(`${target.contractName} Etherscan metadata differs`);
+  }
+  assertExactProviderSourceClosure(
+    standardJsonInput.sources,
+    artifact,
+    `${target.contractName} Etherscan`,
+  );
+  const compiled = await compileStandardJsonInput(standardJsonInput, target);
+  assertExactCompiledBytecode(
+    compiled,
+    artifact,
+    `${target.contractName} Etherscan`,
+  );
+}
+
+async function writeEvidence(evidence, plan, options) {
+  if (!options.output || !path.isAbsolute(options.output)) {
+    fail("--write requires an absolute --output path");
+  }
+  if (
+    !options.wallet ||
+    canonicalAddress(options.wallet, "wallet") !==
+      canonicalAddress(plan.deployer)
+  ) {
+    fail("--write requires the explicit human wallet matching the deployer");
+  }
+  const output = path.resolve(options.output);
+  const relative = path.relative(repositoryRoot, output);
+  if (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  ) {
+    fail("Source evidence must be written outside the source repository");
+  }
+  const parent = path.dirname(output);
+  const [realParent, parentStats] = await Promise.all([
+    realpath(parent),
+    stat(parent),
+  ]);
+  if (!parentStats.isDirectory() || realParent !== parent)
+    fail("Invalid output parent");
+  await writeFile(output, `${JSON.stringify(evidence, null, 2)}\n`, {
+    encoding: "utf8",
+    flag: "wx",
+  });
+}
+
+export async function main(argv = process.argv.slice(2)) {
+  const options = parseArguments(argv);
+  const [plan, deploymentEvidence] = await Promise.all([
+    readJson(options.plan, "preparation plan"),
+    readJson(options.deploymentEvidence, "deployment evidence"),
+  ]);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
+  const evidence = await verifyClassicV4SourceProviders({
+    plan,
+    deploymentEvidence,
+    artifacts,
+    artifactContext,
+  });
+  if (options.write) await writeEvidence(evidence, plan, options);
+  process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
+}
+
+export async function verifyClassicV4SourceProviders({
+  plan,
+  deploymentEvidence,
+  artifacts,
+  artifactContext,
+  now = () => new Date(),
+  fetchJsonClient = fetchJson,
+  etherscanApiKey = process.env.ETHERSCAN_API_KEY?.trim() || null,
+  compileEtherscanStandardJsonInput = compileProviderStandardJsonInput,
+}) {
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
+  const contracts = {};
+  for (const name of CLASSIC_V4_NEW_CONTRACTS) {
+    const target = releaseValidation.sourceTargets[name];
+    const deployed = deploymentEvidence.contracts[name];
+    const providers = (
+      await Promise.all([
+        captureSourcify(deployed.address, artifacts[name], fetchJsonClient),
+        captureEtherscan(
+          deployed.address,
+          target,
+          plan.constructorArguments[name],
+          artifacts[name],
+          fetchJsonClient,
+          etherscanApiKey,
+          compileEtherscanStandardJsonInput,
+        ),
+      ])
+    ).filter(Boolean);
+    const status = providers.every(
+      (provider) => provider.status === "exact-match",
+    )
+      ? "exact-match"
+      : "match";
+    contracts[name] = {
+      address: deployed.address,
+      contractName: target.contractName,
+      fqcn: target.fqcn,
+      encodedConstructorArguments: plan.constructorArguments[name],
+      deploymentTransaction: deployed.transactionHash,
+      deploymentBlock: deployed.blockNumber,
+      status,
+      providers,
+    };
+  }
+  const unsignedEvidence = {
+    schemaVersion: 1,
+    chainId: 1,
+    planDigest: plan.planDigest,
+    sourceCommitment: plan.sourceCommitment,
+    status: "verified",
+    checkedAt: now().toISOString(),
+    contracts,
+  };
+  const evidence = {
+    ...unsignedEvidence,
+    evidenceDigest: digestJson(
+      unsignedEvidence,
+      CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
+    ),
+  };
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    evidence,
+  );
+  return evidence;
+}
+
+if (process.argv[1] === scriptPath) {
+  main().catch((error) => {
+    process.stderr.write(
+      `Classic V4 source verification failed: ${error.message}\n`,
+    );
+    process.exitCode = 1;
+  });
+}

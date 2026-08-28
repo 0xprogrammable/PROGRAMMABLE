@@ -1,0 +1,170 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: programmable-realtime-mainnet
+description: Candidate Ethereum Mainnet events for the Programmable verified read model
+handlers: src
+rollback_on_reorg: true
+save_full_history: false
+raw_events: false
+address_format: lowercase
+field_selection:
+  transaction_fields:
+    - hash
+    - transactionIndex
+contracts:
+  - name: ClassicV2Launcher
+    events:
+      - event: "MemeTokenLaunched(address indexed creator, address indexed token, bytes32 indexed poolId, address feeHook, address positionRecipient, uint256 positionTokenId, uint16 totalSwapFeeBps, bytes32 launchHash)"
+      - event: "MemeLiquidityConfigured(address indexed token, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)"
+      - event: "MemeCreatorInitialBuy(address indexed creator, address indexed token, bytes32 indexed poolId, uint256 nativeAmount, uint256 tokenAmount, bytes32 launchHash)"
+  - name: ClassicV2Hook
+    events:
+      - event: "PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed creator, address registrar, uint16 totalSwapFeeBps)"
+      - event: "PoolFeeDisclosure(bytes32 indexed poolId, address indexed token, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, uint16 launcherFeeBps, uint16 transferTaxBps, uint24 lpFeePips)"
+      - event: "NativeSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, uint256 grossNativeAmount, uint256 creatorFee, uint256 launcherFee)"
+      - event: "CreatorFeesClaimed(bytes32 indexed poolId, address indexed creator, address indexed recipient, address caller, uint256 amount)"
+      - event: "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed caller, uint256 amount)"
+  - name: ClassicV3Launcher
+    events:
+      - event: "MemeTokenLaunchedV2(address indexed deployer, address indexed token, bytes32 indexed poolId, address feeHook, address rewardVault, address positionRecipient, uint256 positionTokenId, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash, bytes32 launchHash)"
+      - event: "MemeLiquidityConfiguredV2(address indexed token, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)"
+      - event: "MemeCreatorInitialBuyV2(address indexed deployer, address indexed token, bytes32 indexed poolId, uint256 nativeAmount, uint256 tokenAmount, bytes32 launchHash)"
+      - event: "MemeCreatorInitialBuyCustodyV2(address indexed deployer, address indexed token, address indexed custody, uint8 mode, uint16 durationDays, uint16 cliffDays, bytes32 configurationHash, bytes32 launchHash)"
+  - name: ClassicV3Hook
+    events:
+      - event: "PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed rewardVault, address registrar, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash)"
+      - event: "PoolFeeDisclosure(bytes32 indexed poolId, address indexed token, address indexed rewardVault, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, uint16 buyCreatorFeeBps, uint16 sellCreatorFeeBps, uint16 launcherFeeBps, uint16 transferTaxBps, uint24 lpFeePips)"
+      - event: "NativeSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, bool indexed isBuy, uint16 appliedTotalSwapFeeBps, uint256 grossNativeAmount, uint256 creatorFee, uint256 launcherFee)"
+      - event: "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed caller, uint256 amount)"
+      - event: "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed caller, uint256 amount)"
+  - name: ClassicV3RewardVaultFactory
+    events:
+      - event: "ClassicRewardVaultDeployed(address indexed vault, bytes32 indexed poolId, address indexed feeHook, bytes32 salt, bytes32 configurationHash)"
+  - name: ClassicV3VestingWalletFactory
+    events:
+      - event: "ClassicInitialBuyVestingWalletDeployed(address indexed wallet, address indexed token, address indexed beneficiary, bytes32 salt, bytes32 configurationHash)"
+  - name: ClassicV3RewardVault
+    events:
+      - event: "CreatorFeesCheckpointed(bytes32 indexed poolId, uint64 indexed configurationEpoch, uint256 amount, uint256 totalCreatorFeesReceived)"
+      - event: "BeneficiaryFeesClaimed(address indexed beneficiary, uint256 amount, uint256 beneficiaryTotalClaimed, uint256 vaultTotalReceived)"
+      - event: "PayoutWalletChanged(bytes32 indexed poolId, uint256 indexed allocationIndex, address indexed previousPayoutWallet, address newPayoutWallet, uint16 shareBps, uint64 configurationEpoch, bytes32 activeConfigurationHash, uint256 effectiveTotalCreatorFeesReceived)"
+      - event: "CtoRewardConfigurationActivated(bytes32 indexed poolId, bytes32 indexed approvalReference, uint64 indexed configurationEpoch, bytes32 previousConfigurationHash, bytes32 newConfigurationHash, address[] beneficiaries, uint16[] sharesBps, uint256 effectiveTotalCreatorFeesReceived)"
+  - name: StockV1Launcher
+    events:
+      - event: "StockPairedTokenLaunched(address indexed deployer, address indexed token, address indexed quoteAsset, bytes32 poolId, address rewardVault, address positionRecipient, uint256 positionTokenId, bytes32 launchHash)"
+      - event: "StockPairedLiquidityConfigured(address indexed token, address indexed quoteAsset, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)"
+      - event: "StockPairedCreatorInitialBuy(address indexed deployer, address indexed token, address indexed quoteAsset, bytes32 poolId, uint256 quoteAmount, uint256 tokenAmount, bytes32 launchHash)"
+  - name: StockV1EthCoordinator
+    events:
+      - event: "StockPairedEthTokenLaunched(address indexed creator, address indexed token, address indexed quoteAsset, uint256 initialBuyEthAmount, uint256 initialBuyQuoteAmount, uint256 initialBuyTokenAmount, bytes32 launchHash)"
+  - name: StockV1Hook
+    events:
+      - event: "PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed quoteAsset, address rewardVault, address registrar, bool quoteIsCurrency0, bytes32 rewardConfigurationHash, bytes32 quoteConfigurationHash)"
+      - event: "PoolFeeDisclosure(bytes32 indexed poolId, address indexed token, address indexed quoteAsset, address rewardVault, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, uint16 creatorFeeBps, uint16 launcherFeeBps, uint16 transferTaxBps, uint24 lpFeePips)"
+      - event: "QuoteSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, address indexed quoteAsset, bool isBuy, uint256 grossQuoteAmount, uint256 creatorFee, uint256 launcherFee)"
+      - event: "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed quoteAsset, address caller, uint256 amount)"
+      - event: "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed quoteAsset, address caller, uint256 amount)"
+  - name: StockV1RewardVaultFactory
+    events:
+      - event: "QuoteAssetFeeSplitVaultDeployed(address indexed vault, address indexed feeHook, bytes32 indexed poolId, address quoteAsset)"
+  - name: StockV1RewardVault
+    events:
+      - event: "PayoutAddressUpdated(address indexed beneficiary, address indexed previousPayoutAddress, address indexed newPayoutAddress)"
+      - event: "BeneficiaryFeesClaimed(address indexed beneficiary, address indexed payoutAddress, address indexed quoteAsset, uint256 amount, uint256 beneficiaryTotalClaimed, uint256 vaultTotalReceived)"
+  - name: StockV2Launcher
+    events:
+      - event: "StockPairedTokenLaunched(address indexed deployer, address indexed token, address indexed quoteAsset, bytes32 poolId, address rewardVault, address positionRecipient, uint256 positionTokenId, bytes32 launchHash)"
+      - event: "StockPairedLiquidityConfigured(address indexed token, address indexed quoteAsset, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)"
+      - event: "StockPairedCreatorInitialBuy(address indexed deployer, address indexed token, address indexed quoteAsset, bytes32 poolId, uint256 quoteAmount, uint256 tokenAmount, bytes32 launchHash)"
+  - name: StockV2EthCoordinator
+    events:
+      - event: "StockPairedEthTokenLaunched(address indexed creator, address indexed token, address indexed quoteAsset, uint256 initialBuyEthAmount, uint256 initialBuyQuoteAmount, uint256 initialBuyTokenAmount, bytes32 launchHash)"
+  - name: StockV3Launcher
+    events:
+      - event: "StockPairedTokenLaunched(address indexed deployer, address indexed token, address indexed quoteAsset, bytes32 poolId, address rewardVault, address positionRecipient, uint256 positionTokenId, bytes32 launchHash)"
+      - event: "StockPairedLiquidityConfigured(address indexed token, address indexed quoteAsset, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)"
+      - event: "StockPairedCreatorInitialBuy(address indexed deployer, address indexed token, address indexed quoteAsset, bytes32 poolId, uint256 quoteAmount, uint256 tokenAmount, bytes32 launchHash)"
+  - name: StockV3EthCoordinator
+    events:
+      - event: "StockPairedEthTokenLaunched(address indexed creator, address indexed token, address indexed quoteAsset, uint256 initialBuyEthAmount, uint256 initialBuyQuoteAmount, uint256 initialBuyTokenAmount, bytes32 launchHash)"
+  - name: StockV2V3Hook
+    events:
+      - event: "PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed quoteAsset, address rewardVault, address registrar, bool quoteIsCurrency0, bytes32 rewardConfigurationHash, bytes32 quoteConfigurationHash)"
+      - event: "PoolFeeDisclosure(bytes32 indexed poolId, address indexed token, address indexed quoteAsset, address rewardVault, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, uint16 creatorFeeBps, uint16 launcherFeeBps, uint16 transferTaxBps, uint24 lpFeePips)"
+      - event: "QuoteSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, address indexed quoteAsset, bool isBuy, uint256 grossQuoteAmount, uint256 creatorFee, uint256 launcherFee)"
+      - event: "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed quoteAsset, address caller, uint256 amount)"
+      - event: "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed quoteAsset, address caller, uint256 amount)"
+  - name: StockV2V3RewardVaultFactory
+    events:
+      - event: "QuoteAssetFeeSplitVaultDeployed(address indexed vault, address indexed feeHook, bytes32 indexed poolId, address quoteAsset)"
+  - name: StockV2V3RewardVault
+    events:
+      - event: "PayoutAddressUpdated(address indexed beneficiary, address indexed previousPayoutAddress, address indexed newPayoutAddress)"
+      - event: "BeneficiaryFeesClaimed(address indexed beneficiary, address indexed payoutAddress, address indexed quoteAsset, uint256 amount, uint256 beneficiaryTotalClaimed, uint256 vaultTotalReceived)"
+  - name: CustomRegistryV1
+    events:
+      - event: "CustomLaunchApprovalAuthorizedV1(bytes32 indexed approvalId, bytes32 indexed launchId, bytes32 indexed approvalBindingHash, bytes32 registrationBindingHash, uint64 transitionSequence, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash)"
+      - event: "CustomLaunchRegisteredV1(bytes32 indexed launchId, bytes32 indexed projectId, address indexed primaryContract, uint64 registrationSequence, uint256 chainId, uint64 registryGeneration, bytes32 approvalId, bytes32 deploymentId, address launchWallet, bytes32 identityHash, bytes32 registeredRecordCommitment, uint64 observedAtBlock)"
+      - event: "CustomLaunchProvenanceBoundV1(bytes32 indexed launchId, bytes32 indexed repositoryId, bytes32 indexed commitId, bytes32 sourceCommitment, bytes32 buildCommitment, bytes32 artifactSetHash, bytes32 deploymentConfigurationHash, bytes32 deploymentSetHash, bytes32 runtimeCodeSetHash, bytes32 primaryRuntimeCodeHash)"
+      - event: "CustomLaunchReviewBoundV1(bytes32 indexed launchId, bytes32 indexed approvalBindingHash, bytes32 indexed securityReviewHash, bytes32 reviewPolicyHash, bytes32 reviewResultId, bytes32 reviewDeploymentBindingHash, bytes32 feePolicyHash, bytes32 finalityPolicyHash)"
+      - event: "CustomLaunchAttributionBoundV1(bytes32 indexed launchId, bytes32 indexed modelId, bytes32 indexed templateId, bytes32 modelVersion, bytes32 templateVersion, bytes32 providerId, bytes32 builderAttributionHash, bytes32 originHash, bytes32 assetSetHash, bytes32 marketSetHash, bytes32 marketPathId, bytes32 configurationHash, bytes32 permissionsHash, bytes32 capabilitySetHash)"
+      - event: "CustomLaunchFeePolicyBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed providerId, uint8 kind, uint16 totalFeeBps, uint16 nativeCustomFeeBps, uint16 partnerShareBps, uint16 programmableShareBps, address partnerRecipient, address programmableRecipient)"
+      - event: "CustomLaunchFeeScopeBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed publicPolicyBindingHash, bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, bytes32 marketPathId)"
+      - event: "CustomLaunchFeeEvidenceBoundV1(bytes32 indexed launchId, bytes32 indexed feePolicyHash, bytes32 indexed verificationEvidenceHash, address currency, bytes32 chargeModeId, bytes32 basisId, bytes32 roundingId, bytes32 partnerAccrualId, bytes32 programmableAccrualId, bytes32 claimIsolationEvidenceHash, bytes32 accountingSafetyEvidenceHash)"
+      - event: "CustomLaunchFinalizedV1(bytes32 indexed launchId, bytes32 indexed observedTransactionHash, bytes32 indexed finalityEvidenceHash, uint64 transitionSequence, uint64 observedBlockNumber, bytes32 observedBlockHash, uint32 observedTransactionIndex, uint32 observedLogIndex, uint64 confirmedHeadBlockNumber, bytes32 confirmedHeadBlockHash, bytes32 finalityPolicyHash, uint64 finalizedAtBlock, uint64 finalizedAtTimestamp)"
+      - event: "CustomLaunchRecordCorrectedV1(bytes32 indexed launchId, uint64 indexed revision, bytes32 indexed correctedRecordHash, uint64 transitionSequence, bytes32 previousRecordHash, bytes32 reasonCode, bytes32 evidenceHash)"
+      - event: "CustomLaunchRevokedV1(bytes32 indexed launchId, bytes32 indexed reasonCode, bytes32 indexed evidenceHash, uint64 transitionSequence, uint64 latestRecordRevision, bytes32 latestRecordHash, uint64 revokedAtBlock, uint64 revokedAtTimestamp)"
+  - name: CustomPartnerFactoryRegistryV1
+    events:
+      - event: "CustomPartnerFactoryAuthorizedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 modelId, bytes32 modelVersion, bytes32 templateId, bytes32 templateVersion, uint64 validAfterBlock, uint64 expiresAtBlock, bytes32 evidenceHash)"
+      - event: "CustomPartnerFactorySourceBoundV1(bytes32 indexed configurationHash, bytes32 indexed modelRepositoryId, bytes32 indexed modelSourceCommitId, bytes32 factorySourceRepositoryId, bytes32 factorySourceCommitId, bytes32 factoryRuntimeCodeHash, bytes32 launchRuntimeCodeSetHash, bytes32 permissionsHash, bytes32 feePolicyHash)"
+      - event: "CustomPartnerFactoryRevokedV1(bytes32 indexed configurationHash, bytes32 indexed providerId, address indexed factory, bytes32 reasonCode, bytes32 evidenceHash)"
+  - name: CustomAtomicRegistrarV1
+    events:
+      - event: "AtomicCustomLaunchExecutedV1(bytes32 indexed launchId, address indexed primaryContract, bytes32 indexed salt, bytes32 creationCodeHash, bytes32 initializationResultHash)"
+chains:
+  - id: 1
+    start_block: 25624130
+    max_reorg_depth: 200
+    block_lag: 12
+    contracts:
+      - name: ClassicV2Hook
+        address: "0x025a386eaa79f6067d29848fd05ccc71beab20cc"
+      - name: ClassicV2Launcher
+        address: "0xd240d06f8586eb799f20056054e5b527405e6bad"
+      - name: ClassicV3RewardVaultFactory
+        address: "0xf28967f9dfac3ca21384b59d6d75c8106b3eab2a"
+      - name: ClassicV3VestingWalletFactory
+        address: "0xde21b9c0cc0afdb9be20e8236113f066bb8c66f4"
+      - name: ClassicV3Hook
+        address: "0x35fe236ea82f7cf525c9719d7df8f49f94d720cc"
+      - name: ClassicV3Launcher
+        address: "0xc3bd04aac2fb2ba58efd7eb673e544e0b80de770"
+      - name: ClassicV3RewardVault
+      - name: StockV1Launcher
+        address: "0x195750f33cad5ef2df857a53226b421297a1e79e"
+      - name: StockV1EthCoordinator
+        address: "0xfa5f17389ca28d071781d59750b32c842ab6a54b"
+      - name: StockV1Hook
+        address: "0x7773d183fe7b60d4f1885047fa42b815a62fe0cc"
+      - name: StockV1RewardVaultFactory
+        address: "0xd430d9162c153afdf9e4caca6d2317e72a044441"
+      - name: StockV1RewardVault
+      - name: StockV2Launcher
+        address: "0x5ea6be24838061ba45dbe8d82de1b267dc240daf"
+      - name: StockV2EthCoordinator
+        address: "0xfb9e1034df6161088e8f358502b19e7515c30fd2"
+      - name: StockV2V3Hook
+        address: "0x90c67c1e866f86526f0e338459cd435e1f23a0cc"
+      - name: StockV2V3RewardVaultFactory
+        address: "0x52d70971d6653a754c29385a2a6f241a481952d4"
+      - name: StockV2V3RewardVault
+      - name: StockV3Launcher
+        address: "0x0573879f72d8ee8b0e5a4ec5e8bcdb2fcab9e51c"
+      - name: StockV3EthCoordinator
+        address: "0xddc3abbab0df7f1189310a4f70e7e365796b74e2"
+      - name: CustomRegistryV1
+        address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671"
+      - name: CustomPartnerFactoryRegistryV1
+        address: "0xf8aef69201621ad20fa256da595426b7e6192dba"
+      - name: CustomAtomicRegistrarV1
+        address: "0xcc916e5200d2626edfd918dc219bc4296629e997"

@@ -12,6 +12,8 @@ const openApi = JSON.parse(readFileSync(
 const collection = openApi.paths["/v1/partner/subkeys"];
 const rotation = openApi.paths["/v1/partner/subkeys/{subkeyId}/rotate"].post;
 const revocation = openApi.paths["/v1/partner/subkeys/{subkeyId}"].delete;
+const launchCollection = openApi.paths["/v3/custom-launches"].get;
+const launchStatus = openApi.paths["/v3/custom-launches/{launchId}"].get;
 
 describe("public partner subkey OpenAPI", () => {
   it("publishes only the root-owned public subkey routes", () => {
@@ -35,6 +37,8 @@ describe("public partner subkey OpenAPI", () => {
       expect(operation.security).toEqual([{ PartnerRootApiKey: [] }]);
       expect(operation["x-programmable-required-scope"])
         .toBe("partner-subkeys:manage");
+      expect(operation["x-programmable-budget-class"])
+        .toBe("partner-subkey-admin");
     }
     expect(openApi.components.securitySchemes.PartnerRootApiKey).toMatchObject({
       type: "http",
@@ -47,6 +51,56 @@ describe("public partner subkey OpenAPI", () => {
     ]);
     expect(openApi.components.schemas.PartnerSubkeyScopeV1.enum)
       .not.toContain("partner-subkeys:manage");
+  });
+
+  it("keeps permit recovery wallet-only and publishes partner principal boundaries", () => {
+    const partnerContract = openApi["x-programmable-partner-credentials"];
+    const permit = openApi.paths[
+      "/v3/custom-launches/{launchId}/permit-reissues"
+    ].post;
+
+    expect(permit.security).toEqual([{ WalletCustomLaunchApiKey: [] }]);
+    expect(openApi.components.securitySchemes.WalletCustomLaunchApiKey)
+      .toMatchObject({
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "pm_live_*",
+      });
+    expect(partnerContract.permitReissueDispositionCredentialKind)
+      .toBe("wallet-only");
+    expect(partnerContract.metadataPolicySameAsWalletKeys).toBe(true);
+    expect(partnerContract.controllerWallet).toEqual({
+      walletKey: "must-equal-key-wallet-binding",
+      partnerCredential: "selected-by-exact-request",
+      mustReviewSignAndBroadcast: true,
+    });
+    expect(partnerContract.launchHistoryVisibility).toEqual({
+      root: "all-partner-attributed-root-and-subkey-launches",
+      subkey: "stable-subkey-lineage-only",
+      rootAggregatesSubkeys: true,
+      rotationPreservesLineageHistory: true,
+      newDistinctSubkeyStartsIsolatedLineage: true,
+      revokedCredentialCanAuthenticate: false,
+    });
+    expect(rotation.description).toMatch(/same immutable subkey lineage/i);
+    expect(rotation.description).toMatch(/read that lineage's authenticated launch history/i);
+  });
+
+  it("keeps list and single-resource partner history visibility identical", () => {
+    for (const operation of [launchCollection, launchStatus]) {
+      expect(operation.description).toMatch(
+        /partner root (?:sees|reads) every launch attributed to its partner/i,
+      );
+      expect(operation.description).toMatch(/subkey reads only its stable lineage/i);
+      expect(operation.description).toMatch(/cannot read root or sibling launches/i);
+      expect(operation.description).toMatch(/rotat(?:ion|ed)[\s\S]{0,120}(?:preserv|lineage)/i);
+    }
+    expect(launchStatus.description).toMatch(/revoked predecessor cannot authenticate/i);
+    expect(launchStatus.description).not.toMatch(/root cannot read a child's launch/i);
+    expect(launchStatus.description).not.toMatch(/replacement cannot inherit/i);
+    expect(launchStatus.responses["404"].description).toMatch(
+      /partner root aggregate.*stable subkey lineage/i,
+    );
   });
 
   it("binds POST to an exact idempotency key and closed child limits", () => {

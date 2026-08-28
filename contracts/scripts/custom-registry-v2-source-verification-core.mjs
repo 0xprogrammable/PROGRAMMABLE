@@ -188,13 +188,23 @@ const SOLC_LOCK = {
         "Library/Caches/hardhat-nodejs/compilers-v2/macosx-amd64/solc-macosx-amd64-v0.8.26+commit.8a97fa7a",
       ),
       path.join(os.homedir(), ".svm/0.8.26/solc-0.8.26"),
+      path.join(
+        os.homedir(),
+        ".solc-select/artifacts/solc-0.8.26/solc-0.8.26",
+      ),
     ],
     url: "https://binaries.soliditylang.org/macosx-amd64/solc-macosx-amd64-v0.8.26+commit.8a97fa7a",
   },
   linux: {
     sha256:
       "0xd5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef",
-    candidates: [path.join(os.homedir(), ".svm/0.8.26/solc-0.8.26")],
+    candidates: [
+      path.join(os.homedir(), ".svm/0.8.26/solc-0.8.26"),
+      path.join(
+        os.homedir(),
+        ".solc-select/artifacts/solc-0.8.26/solc-0.8.26",
+      ),
+    ],
     url: "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.26+commit.8a97fa7a",
   },
 };

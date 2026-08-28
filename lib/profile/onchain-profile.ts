@@ -18,6 +18,7 @@ import {
   parseLaunchPartnerAttributionV1,
   type LaunchPartnerAttributionV1,
 } from "../launch-partner-attribution";
+import { safePublicImageUrl } from "../safe-public-image-url";
 import {
   FADE_ROUTER_CUSTOM_CREATOR_CLAIM_ADAPTER_ID,
   resolveRouterCustomCreatorClaimCapabilityV1,
@@ -402,7 +403,7 @@ function containsRecognizableProfileSecret(value: string) {
   return PROFILE_SECRET_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-function safePublicHttpsUrl(value: unknown) {
+function safeProfileUrlValue(value: unknown) {
   const decoded = typeof value === "string"
     ? fullyDecodeProfileText(value)
     : "";
@@ -417,9 +418,15 @@ function safePublicHttpsUrl(value: unknown) {
   ) {
     return undefined;
   }
+  return value;
+}
+
+function safePublicHttpsUrl(value: unknown) {
+  const safeValue = safeProfileUrlValue(value);
+  if (safeValue === undefined) return undefined;
 
   try {
-    const url = new URL(value);
+    const url = new URL(safeValue);
     const hostname = url.hostname.toLowerCase();
     if (
       url.protocol !== "https:" ||
@@ -436,7 +443,7 @@ function safePublicHttpsUrl(value: unknown) {
       /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname) ||
       !/^[a-z0-9.-]+$/u.test(hostname) ||
       url.hash !== "" ||
-      url.href !== value ||
+      url.href !== safeValue ||
       [...url.searchParams].some(([key, queryValue]) =>
         PROFILE_SENSITIVE_QUERY_KEY.test(fullyDecodeProfileText(key)) ||
         containsRecognizableProfileSecret(
@@ -446,19 +453,23 @@ function safePublicHttpsUrl(value: unknown) {
     ) {
       return undefined;
     }
-    return value;
+    return safeValue;
   } catch {
     return undefined;
   }
 }
 
-function readOptionalHttpsUrl(
+function readOptionalImageUrl(
   record: Record<string, unknown>,
   key: string,
 ) {
   const value = record[key];
   if (value === undefined || value === null || value === "") return undefined;
-  return safePublicHttpsUrl(value);
+  const safeValue = safeProfileUrlValue(value);
+  if (safeValue === undefined) return undefined;
+  return safeValue.startsWith("/") && !safeValue.startsWith("//")
+    ? safePublicImageUrl(safeValue)
+    : safePublicHttpsUrl(safeValue);
 }
 
 function readOptionalProjectDescription(record: Record<string, unknown>) {
@@ -863,7 +874,7 @@ function parseToken(
   const poolId = readHex(token, "poolId", "pool id", 32);
   const hookAddress = readAddress(token, "hookAddress", "token hook address");
   const description = readOptionalProjectDescription(token);
-  const imageUrl = readOptionalHttpsUrl(token, "imageUrl");
+  const imageUrl = readOptionalImageUrl(token, "imageUrl");
   const projectMetadataLinks = readOptionalProjectMetadataLinks(token);
   const projectMetadataStatus = readOptionalProjectMetadataStatus(token);
   const partnerAttribution = token.partnerAttribution === undefined

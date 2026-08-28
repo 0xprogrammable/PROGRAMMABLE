@@ -1,10 +1,15 @@
 # Programmable Custom Launch API
 
-V3 is public and live: general custom-hook launch creation, list and single-resource reads are available at
+V3.3 is public and live: general custom-hook launch creation, list and single-resource reads are available at
 `https://api.programmable.market` for wallet keys, partner roots and bounded partner subkeys. V2 and V1 history remain
-available for existing requests, while authenticated
-`POST /v1/custom-launches` remains permanently read only with `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and
-GitHub submission intake is closed.
+available for existing requests, and their schemas remain published. Fresh authenticated `POST /v2/custom-launches`
+and `POST /v1/custom-launches` are permanently read only with non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and
+`409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is
+closed.
+
+V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
+simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
+reconciliation and finalized reads remain available.
 
 Normative public V3 OpenAPI: <https://programmable.market/openapi/custom-launch-v3.json>
 
@@ -15,6 +20,12 @@ V1 compatibility OpenAPI: <https://programmable.market/openapi/custom-launch-v1.
 Human guide: <https://programmable.market/docs/developers/custom-launch>
 
 Readiness: <https://api.programmable.market/readyz>
+
+The live unauthenticated `GET /v3/finalized-custom-launches` response uses top-level `launches` and required top-level
+`quality`. Quality contains `status` (`complete` or `partial`), `sourceRowCount`, `publishedRowCount`,
+`quarantinedRowCount`, and row-indexed `FINALIZED_ROW_QUARANTINED` diagnostics. A partial page is not a complete
+inventory. Each launch item also carries required `launchProfileVersion` (`2.0.0`, `3.0.0`, `3.1.0`, `3.2.0`,
+`3.3.0`, or `3.4.0`) so clients can interpret profile-conditional metadata without inference.
 
 ## Existing-project integration
 
@@ -30,9 +41,16 @@ Fetch public `GET https://api.programmable.market/v3/capabilities`, then use the
 `pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until
 finalized`. `validate --remote` first repeats local byte-identical
 validation and then posts those same bytes to Bearer-authenticated `POST /v3/custom-launches/preflight`. The preflight
-uses scope `custom-launch:create`, consumes no launch quota, allocates no nonce, persists no launch, requires a later
-wallet signature and never broadcasts. `wallet` is a separate connected-controller action, not a CLI command.
+uses scope `custom-launch:create`, consumes no launch-creation quota, allocates no nonce, persists no launch, requires a
+later wallet signature and never broadcasts. `quotaConsumed: false` does not mean the HTTP call is unmetered: its
+ordinary authenticated route rate budget still applies, and partner preflight counts against `prepareRequestsPerHour`. `wallet` is a
+separate connected-controller action, not a CLI command.
 Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`; there is no origin override.
+Local CLI results and preflight prepare and classify the exact request; neither is the launch decision. After durable
+submission, the API server independently enforces the objective static hard blocks and exact Router simulation before
+it exposes a wallet handoff. Missing or unavailable behavior execution leaves behavior, fee, liquidity and routability
+claims unverified; an authenticated executed failure blocks the handoff. A client, model or caller attestation cannot
+declare evidence verified or bypass a server gate.
 
 For an existing repository, pin the exact public source object, compile every direct graph target with
 `solc 0.8.26+commit.8a97fa7a`, map the distinct token, hook and initializer roles plus all address dependencies, declare
@@ -53,8 +71,9 @@ nonce and verified signature.
 Tooling may report `FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED` or
 `FUNDING_NONCE_CONFORMANCE_UNPROVEN` when source, ABI and compiler artifacts cannot prove complete nonce dataflow
 offline. These are nonblocking warnings, not conformance or safety claims. Inspect a real conflict before submitting.
-The mandatory exact Router simulation is the final execution-compatibility detector for the prepared transaction; a
-successful simulation is not a safety, admission, liquidity, fee-behavior or economic-solvency claim.
+The mandatory exact Router simulation is one server-side execution-compatibility check for the prepared transaction; a
+successful simulation is not by itself the server decision or a safety, admission, liquidity, fee-behavior or
+economic-solvency claim.
 
 Pool initialization does not add liquidity, volume cannot create initial liquidity from nothing, and V3 does not
 inject Classic liquidity. Bind the implementation's actual `external-concentrated-liquidity`,
@@ -76,11 +95,23 @@ a project-owned hook, native or ERC-20 quote currency, all fourteen Uniswap v4 p
 permission must resolve to a concrete reachable callback implementation;
 an interface declaration or fallback-only route does not qualify.
 
-Every V3 request must bind and disclose a 1,000-hundredths-of-a-bip Programmable share, declared as an additive
-platform share or included inside the selected total. The request binds the selected buy and sell economics. Revision 3 does not issue a
-fee-conformance certification. It runs role-aware exact-source static admission, binds the resulting report and
-warnings, and requires a final Router simulation before the permit authority can sign. Source, compiler settings,
-constructor arguments, final calldata and simulation are bound per launch.
+CLI `3.3.9` is the current installable release and defaults fresh packs to live profile `3.3.0`. Explicit profile
+`3.4.0` output remains preparatory and is rejected by live capabilities until backend and `.well-known` activation.
+Pending `3.4.0` requires 4-16 targets inclusive of the exact
+`programmable:settlement-fee-vault:v1`; applicants cannot select another platform fee target. Its release binding is
+`sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9`, source SHA-256 is
+`sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b`, and creation/runtime Keccak-256 are
+`0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e` and
+`0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554`. The vault uses solc 0.8.26, EVM Paris,
+optimizer 1000 and no CBOR; its constructor binds the GraphFactory and `bindRoute(address)` locates one distinct route.
+Exactly one constructor or initializer locator on that project-owned route points back to the vault. The route may be
+the hook or a custom AMM, while `settlementFeeVault()` and full fee-path behavior remain server-evidence requirements.
+
+The open arbitrary-custom-hook lane does not carry a Programmable fee claim. A 10 bps share applies only when the
+request selects a fee-certified profile or adapter and the API server verifies its per-launch behavior for the exact
+stamped PoolKey. Revision 3 does not turn a declaration, local check, static report or Router simulation into a fee
+certification. Source, compiler settings, constructor arguments, final calldata and server evidence remain bound per
+launch.
 The pool may use a static fee or the Uniswap v4 dynamic-fee sentinel. Funding may be absent, carried as the exact
 native value of the separately reviewed Router transaction, or use an unsigned USDC EIP-3009 descriptor. Any later
 funding signature and the Router transaction remain separate explicit wallet actions and are never produced or sent
@@ -91,13 +122,17 @@ by the API key.
 The general V3 production profile is available on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-Every V3 request must bind and disclose a Programmable share of 1,000 parts per 1,000,000 of the request-bound declared
-assessment basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is either `additive-platform-share` or
-`inclusive-selected-total`; the server recomputes buy and sell project share, effective total, fee currency and
-rounding. The exact claim binding is controlled by
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. This request-bound policy does not certify or enforce the behavior of
-arbitrary custom code. Revision-3 admission and the required Router simulation carry `feeBehaviorClaim: false`;
-inspect the exact project implementation.
+A Programmable share of `1,000` hundredths of a bip, equal to `0.10% = 10 bps`, is claimed only for a fee-certified profile or adapter and its
+exact stamped PoolKey. That lane binds the accounting mode, fee currency, rounding and claim destination and requires
+server-authored per-launch fee-path evidence before the platform makes that claim. Arbitrary custom hooks are not automatically
+fee-enforced, and the open arbitrary-hook lane carries no Programmable fee claim. Revision-3 local validation, static
+admission and Router simulation do not independently create `feeBehaviorClaim: true`.
+For that certified lane, the bound Programmable recipient is `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`.
+
+Where a selected lane uses applicant buy or sell rates, each rate is capped at `100,000` hundredths of a bip:
+`1,000 bps = 10%`. The API server enforces the cap in both `additive-platform-share` and
+`inclusive-selected-total` modes. The separate platform value is `1,000` hundredths of a bip, equal to `10 bps`; the
+additive and inclusive accounting meanings do not change.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -119,14 +154,15 @@ inventory that can exchange against incoming assets. Buys may then grow assets h
 inventory and the buy, sell, redemption and withdrawal paths still come from the exact project graph. Funding mode
 `none` does not make an empty ordinary pool liquid.
 
-Profiles `3.1.0` and `3.2.0` check exact source/build bindings, hook permissions and address bits, then apply a role-aware static
+Current profile `3.3.0` checks exact source/build bindings, hook permissions and address bits, then applies a role-aware static
 baseline. Exactly seven objective code-and-role rules hard-block deployment: runtime `CALLCODE`, runtime or source
 `SELFDESTRUCT`, a definitively missing or invalid callback authentication guard, a literal noncanonical PoolManager,
 or a missing enabled callback implementation. Proxy or delegatecall use, mint/tax/pause/transfer controls, liquidity
 custody or locking, external dependencies and return-delta custom accounting remain bound evidence duties rather than
 categorical deployment blocks. A hard-block match returns `action_required`; other findings populate
-`needsEvidenceFindingCodes` or warnings. There is no manual project allowlist. A final Router simulation is mandatory
-before authorization.
+`needsEvidenceFindingCodes` or warnings. There is no manual project allowlist. A final Router simulation is mandatory,
+and the API server independently requires it to pass before wallet handoff. Behavior execution is additional evidence:
+absence leaves behavior-derived claims unverified, while an authenticated executed failure blocks the handoff.
 
 When no blocking pair matches, the server-authored `platformAdmission` status binds the report SHA-256 and warning
 codes with disposition `no_blocking_static_finding`, while requiring Router simulation and explicitly setting
@@ -144,8 +180,9 @@ are bounded classifications at the returned `evidenceTier`; they do not prove a 
 liquidity exists, platform-fee behavior was proven, source verification reached `exact_match`, indexing refreshed, or
 feature placement happened. The response disposition is `supported`, `supported_with_warnings`, `needs_evidence` or
 `unsupported` and includes typed finding-code arrays, `riskClassification`, `behaviorEvidence`, `productTruthAxes`,
-`staticBaseline` and `remediations`. A `not_executed` behavior vector remains outstanding; it is neither a failure nor
-a caller-declared pass. None is an audit, universal compatibility statement or safety guarantee.
+`staticBaseline` and `remediations`. A `not_executed` or `needs_evidence` result remains outstanding; it is neither a
+failure nor a caller-declared pass and cannot support a positive behavior, fee, liquidity or routability claim. None is
+an audit, universal compatibility statement or safety guarantee.
 
 ## Install the public CLI
 
@@ -153,17 +190,18 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.9.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.9.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.6`. The package name is
-`@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.9`. The package name is
+`@programmable/launch`; the binary is `programmable-launch`. Omit `profileVersion` for live `3.3.0`; explicit `3.4.0`
+output is rejected until backend activation. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:
 
@@ -183,17 +221,24 @@ Current profile `3.3.0` requires `projectMetadata`: owner-supplied token name an
 description with at least eight Unicode letters or numbers, non-empty local PNG/JPEG/WebP/GIF bytes, exactly one public
 HTTPS website and exactly one canonical `https://x.com/<handle>` profile. Other link kinds remain optional. The CLI
 binds the exact image digest, byte length, media type, dimensions, and source-manifest file; it never invents or uploads
-metadata. Exact `3.2.0` retries preserve their older permissive metadata semantics.
+metadata. Discovery advertises `requiredForProfileVersions = ["3.2.0","3.3.0","3.4.0"]`,
+`strictMetadataProfileVersions = ["3.3.0","3.4.0"]`, and `legacyMetadataProfileVersions = ["3.2.0"]`, so exact
+`3.2.0`, `3.3.0` and pending `3.4.0` all carry metadata while only exact `3.3.0` and pending `3.4.0` use the strict
+current policy and only exact `3.2.0` preserves its older nullable-image semantics.
 
 Use a stable content URI and make HTTPS image bytes browser-readable with CORS. Wallet review fetches the raw bytes
 and checks the bound SHA-256, length, type and dimensions before rendering; IPFS and Arweave use fixed public gateways.
 An unavailable or mismatched remote image remains a digest plus placeholder. The platform does not upload or replace
 the image, mutate the launch, or sign automatically.
 
-Partner root keys and subkeys use the same `PROGRAMMABLE_API_KEY` and canonical V3 flow as wallet keys. The server
+Partner root keys and subkeys use the same `PROGRAMMABLE_API_KEY` and canonical V3 create, preflight, list and status
+flow as wallet keys. The current Router V1 permit-reissue disposition route is wallet-key-only. The server
 derives immutable `partnerAttribution`; callers cannot set it, and it is provenance only, not a safety or verification
-claim. The controller wallet remains the signer and broadcaster. Router V1 permit reissue defines only typed `409`
-responses; recover by repacking a new request with a fresh nonce and Idempotency-Key, with full gates rerun.
+claim. A wallet key requires `launchWallet` to equal its bound wallet. A partner credential instead selects the exact
+controller in the immutable request but never acquires that wallet's authority. The selected controller remains the
+signer and broadcaster, and the same complete name, symbol, description, image, website and X metadata policy applies.
+For an expired partner launch, recover directly by repacking a new request with a fresh nonce and Idempotency-Key, with
+full gates rerun.
 
 ### Public partner subkeys
 
@@ -201,7 +246,14 @@ A partner root with `partner-subkeys:manage` may list, issue, rotate, and revoke
 public `/v1/partner/subkeys` operations in the V3 OpenAPI. The root credential is read only from
 `PROGRAMMABLE_API_KEY`. Children
 may hold `custom-launch:create` and/or `custom-launch:read`, never `partner-subkeys:manage`, and cannot exceed the root's
-budgets or expiry. Private partner and root administration routes are not public.
+budgets or expiry. Every subkey-admin operation, including list, consumes the root's
+`subkeyAdminRequestsPerHour` budget. Private partner and root administration routes are not public.
+
+Launch reads follow immutable partner lineage. A partner root reads every launch attributed to its partner, including
+launches created by current and rotated subkeys. Each subkey sees only its own lineage, including launches for the
+different controller wallets it selected, and cannot read root or sibling launches. Rotation atomically revokes the old
+credential and gives its replacement the same lineage, so its private launch history remains readable. A separately
+issued subkey starts a new isolated lineage. Finalized public metadata remains a separate unauthenticated feed.
 
 ```sh
 curl --fail-with-body \
@@ -221,7 +273,8 @@ The closed `programmable.partner-subkey-request.v1` body contains `displayName`,
 `prepareRequestsPerHour`, `readRequestsPerMinute`, and a millisecond UTC `expiresAt`. The first committed issue or
 rotation returns `201` with `secretState: delivered-once` and the one-time `apiKey`; an exact replay returns `200` with
 `secretState: already-delivered` and `apiKey: null`. Keep the exact body and Idempotency-Key for retry. Rotation is
-`POST /v1/partner/subkeys/{subkeyId}/rotate`; revocation is `DELETE /v1/partner/subkeys/{subkeyId}`. Honor
+`POST /v1/partner/subkeys/{subkeyId}/rotate`; revocation is `DELETE /v1/partner/subkeys/{subkeyId}`. The replacement
+credential retains access to its stable lineage history; export anything needed before permanent revocation. Honor
 `Retry-After` on `429`. Every error includes a correlation `requestId`, and a bounded `500` never includes secrets.
 
 When the selected token ABI and exact constructor or initializer values expose one unambiguous name or symbol string,
@@ -241,9 +294,13 @@ environment variable named `PROGRAMMABLE_API_KEY`, or in the supported operating
 `$PROGRAMMABLE_API_KEY` in chat, prompts and agent setup. The CLI has no API key argument, never prints the key and
 never stores it in its journal.
 
-The API key is bound to its controller wallet and API scopes. The API and CLI never sign or broadcast.
-At `authorized`, the API returns the exact prepared wallet transaction. Stop the agent flow so the connected controller
-can independently review the chain, sender, Router, value, selector and calldata before signing.
+Wallet keys are bound to their controller wallet and API scopes. Partner credentials are bound to their own isolated
+launch principal; they select an exact controller in each request but cannot sign for it. The API and CLI never sign or broadcast. The API server
+exposes a wallet handoff only after its objective static hard blocks and exact Router simulation pass. Missing behavior
+execution keeps the related claims unverified; an authenticated executed failure blocks the handoff. Client output
+cannot bypass either mandatory server gate. At `authorized`, the API returns the exact prepared wallet
+transaction. Stop the agent flow so the connected controller can independently review the chain, sender, Router,
+value, selector and calldata before signing.
 
 ## Public V3 request
 
@@ -286,9 +343,10 @@ status.
 
 ```text
 received -> validating
-validating -> awaiting_funding_authorization -> funding_authorization_verified (EIP-3009 only)
-validating or funding_authorization_verified -> pending_review <-> action_required
-pending_review -> prepared -> simulating -> authorized -> submitted -> finalized
+validating -> pending_review <-> action_required
+pending_review -> server evidence gate
+server evidence gate -> awaiting_funding_authorization -> funding_authorization_verified (EIP-3009 only)
+server evidence gate or funding_authorization_verified -> prepared -> simulating -> authorized -> submitted -> finalized
 ```
 
 `failed` and `cancelled` are terminal alternatives. `pending_review` has no wallet action. `action_required` means a
@@ -296,8 +354,11 @@ current exact hard-blocking finding code matched its target role. Inspect the ex
 with the request ID when directed; it is not a wallet-signing stage. Send only the request ID, status, UTC time and
 public error code. Never send the API key. Nonblocking findings remain bound and visible as warnings. With
 `--until authorized`, the CLI also stops at
-`awaiting_funding_authorization`; complete the exact typed-data signature in the website, then run status again.
-`prepared` has no wallet transaction. `authorized` contains the exact Router transaction for separate controller
+`awaiting_funding_authorization`, but the server exposes that handoff only after the evidence gate required by the
+selected lane has passed. Complete the exact typed-data signature in the website, then run status again.
+`prepared` has no wallet transaction. During `simulating`, a signed permit may exist only inside a worker-private
+simulation envelope; public output remains null in `simulating` and `failed`, so the evidence gate controls permit and
+wallet-transaction exposure rather than internal simulation signing. `authorized` contains the exact Router transaction for separate controller
 wallet review, signing and broadcast. When present, follow only the HTTPS `walletHandoffUrl` before its `expiresAt`;
 refetch status after expiry. The API and CLI never sign or broadcast. After the wallet broadcasts, run:
 

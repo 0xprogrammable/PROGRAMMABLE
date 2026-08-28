@@ -83,6 +83,10 @@ import {
   type BrowserWalletLoginLease,
 } from "../lib/wallet-login-lock";
 import { runWithBrowserWalletRequestLock } from "../lib/wallet-request-lock";
+import {
+  loginConnectedEthereumWalletWithSiwe,
+  selectInjectedEthereumProvider,
+} from "../lib/wallet-siwe-login";
 
 type WalletState = {
   account: `0x${string}`;
@@ -120,6 +124,7 @@ export type WalletApplicantSessionV1 = Readonly<{
 
 type WalletContextValue = {
   wallet: WalletState | null;
+  walletLinked: boolean;
   username: string;
   avatarDataUrl: string;
   authReady: boolean;
@@ -130,6 +135,7 @@ type WalletContextValue = {
   switchingNetwork: boolean;
   preloadWallet: () => void;
   openWallet: () => void;
+  openWalletWithError: (message: string) => void;
   switchNetwork: (expectedChainId?: string) => Promise<boolean>;
   disconnect: (options?: {
     showDialogOnFailure?: boolean;
@@ -198,7 +204,14 @@ function loadWalletProviderRuntime() {
 }
 
 export function shouldEagerLoadWalletRuntime(pathname: string) {
-  return ["/launch", "/markets", "/profile", "/token", "/developers/api-keys"].some(
+  return [
+    "/launch",
+    "/markets",
+    "/profile",
+    "/token",
+    "/developers/api-keys",
+    "/admin/partners",
+  ].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
@@ -755,9 +768,30 @@ export function selectAuthenticatedWallet<T extends WalletCandidate>(
   return selectConnectedWallet(wallets, primaryAddress);
 }
 
+export function selectPartnerAdminWallet<T extends WalletCandidate>(
+  wallets: readonly T[],
+  primaryAddress?: string,
+) {
+  const linkedWallets = [...wallets]
+    .filter((candidate) => candidate.linked && isEthereumAddress(candidate.address))
+    .sort((left, right) => right.connectedAt - left.connectedAt);
+  const normalizedPrimaryAddress = primaryAddress?.toLowerCase();
+
+  return linkedWallets.find((candidate) =>
+    normalizedPrimaryAddress !== undefined
+    && candidate.address.toLowerCase() === normalizedPrimaryAddress)
+    ?? linkedWallets[0];
+}
+
+export function requiresPartnerAdminLinkedWallet(pathname: string) {
+  return pathname === "/admin/partners"
+    || pathname.startsWith("/admin/partners/");
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const eager = shouldEagerLoadWalletRuntime(pathname);
+  const partnerAdminLinkedWalletOnly = requiresPartnerAdminLinkedWallet(pathname);
   const [activationRequested, setActivationRequested] = useState(false);
   const [pendingAction, setPendingAction] = useState<"wallet" | "github" | null>(
     null,
@@ -838,6 +872,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       appId={privyAppId}
       autoAction={pendingAction}
       onAutoActionConsumed={() => setPendingAction(null)}
+      partnerAdminLinkedWalletOnly={partnerAdminLinkedWalletOnly}
       runtime={runtime}
     >
       {children}
@@ -861,6 +896,7 @@ function DeferredWalletProvider({
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet: null,
+      walletLinked: false,
       username: "",
       avatarDataUrl: "",
       authReady: false,
@@ -871,6 +907,7 @@ function DeferredWalletProvider({
       switchingNetwork: false,
       preloadWallet: onPreload,
       openWallet: () => onActivate("wallet"),
+      openWalletWithError: () => onActivate("wallet"),
       switchNetwork: async () => false,
       disconnect: async () => false,
       getAccessToken: async () => null,
@@ -942,12 +979,14 @@ function ConfiguredWalletProvider({
   autoAction,
   children,
   onAutoActionConsumed,
+  partnerAdminLinkedWalletOnly,
   runtime,
 }: {
   appId: string;
   autoAction: "wallet" | "github" | null;
   children: ReactNode;
   onAutoActionConsumed: () => void;
+  partnerAdminLinkedWalletOnly: boolean;
   runtime: WalletProviderRuntime;
 }) {
   const { PrivyProvider } = runtime;
@@ -976,6 +1015,7 @@ function ConfiguredWalletProvider({
       <PrivyWalletBridge
         autoAction={autoAction}
         onAutoActionConsumed={onAutoActionConsumed}
+        partnerAdminLinkedWalletOnly={partnerAdminLinkedWalletOnly}
         runtime={runtime}
       >
         {children}
@@ -988,11 +1028,13 @@ function PrivyWalletBridge({
   autoAction,
   children,
   onAutoActionConsumed,
+  partnerAdminLinkedWalletOnly,
   runtime,
 }: Readonly<{
   autoAction: "wallet" | "github" | null;
   children: ReactNode;
   onAutoActionConsumed: () => void;
+  partnerAdminLinkedWalletOnly: boolean;
   runtime: WalletProviderRuntime;
 }>) {
   const {
@@ -1000,6 +1042,7 @@ function PrivyWalletBridge({
     useIdentityToken,
     useLinkAccount,
     useLogin,
+    useLoginWithSiwe,
     useOAuthTokens,
     usePrivy,
     useSendTransaction: usePrivySendTransaction,
@@ -1073,6 +1116,7 @@ function PrivyWalletBridge({
       setDialogOpen(true);
     },
   });
+  const { generateSiweMessage, loginWithSiwe } = useLoginWithSiwe();
   const { linkGithub, linkWallet } = useLinkAccount({
     onSuccess: () => {
       applicantRefreshUserGate.invalidate();
@@ -1099,17 +1143,29 @@ function PrivyWalletBridge({
       ? undefined
       : wallets.find((candidate) =>
         isEthereumAddress(candidate.address)
+        && (!partnerAdminLinkedWalletOnly || candidate.linked)
         && candidate.address.toLowerCase() === selectedWalletAddress.toLowerCase());
-    return selected ?? selectAuthenticatedWallet(
-      activeAuthenticated,
-      wallets,
-      user?.wallet?.address,
-    );
-  }, [activeAuthenticated, selectedWalletAddress, user?.wallet?.address, wallets]);
+    return selected ?? (partnerAdminLinkedWalletOnly
+      ? selectPartnerAdminWallet(wallets, user?.wallet?.address)
+      : selectAuthenticatedWallet(
+          activeAuthenticated,
+          wallets,
+          user?.wallet?.address,
+        ));
+  }, [
+    activeAuthenticated,
+    partnerAdminLinkedWalletOnly,
+    selectedWalletAddress,
+    user?.wallet?.address,
+    wallets,
+  ]);
   const walletOptions = useMemo(() => {
     const seen = new Set<string>();
     return wallets.flatMap((candidate) => {
-      if (!isEthereumAddress(candidate.address)) return [];
+      if (
+        !isEthereumAddress(candidate.address)
+        || (partnerAdminLinkedWalletOnly && !candidate.linked)
+      ) return [];
       const normalized = candidate.address.toLowerCase();
       if (seen.has(normalized)) return [];
       seen.add(normalized);
@@ -1118,7 +1174,7 @@ function PrivyWalletBridge({
         chainId: normalizeChainId(candidate.chainId),
       })];
     });
-  }, [wallets]);
+  }, [partnerAdminLinkedWalletOnly, wallets]);
 
   const connectedWalletAddress = connectedWallet?.address;
   const connectedWalletChainId = connectedWallet?.chainId;
@@ -1136,6 +1192,7 @@ function PrivyWalletBridge({
       chainId: normalizeChainId(connectedWalletChainId),
     };
   }, [connectedWalletAddress, connectedWalletChainId]);
+  const walletLinked = connectedWallet?.linked === true;
   const walletRequestSessionRef = useRef({
     authenticated: activeAuthenticated,
     privyUserId: user?.id ?? null,
@@ -1329,7 +1386,7 @@ function PrivyWalletBridge({
     }
 
     void acquireBrowserWalletLoginLease()
-      .then((lease) => {
+      .then(async (lease) => {
         if (!walletLoginAttemptGateRef.current.isPending()) {
           lease.release();
           return;
@@ -1337,6 +1394,28 @@ function PrivyWalletBridge({
         walletLoginLeaseRef.current = lease;
 
         try {
+          if (window.location.pathname === "/ops/classic-v4-canary") {
+            const provider = selectInjectedEthereumProvider(
+              (window as typeof window & { ethereum?: unknown }).ethereum,
+            );
+            if (
+              provider
+              && await loginConnectedEthereumWalletWithSiwe({
+                provider,
+                generateSiweMessage,
+                loginWithSiwe,
+              })
+            ) {
+              settleWalletLoginAttempt();
+              applicantRefreshUserGate.invalidate();
+              setSessionSuppressed(false);
+              setError("");
+              setWalletLoginStatus("");
+              setDialogOpen(false);
+              return;
+            }
+          }
+
           login({
             loginMethods: ["wallet", "email"],
             walletChainType: "ethereum-only",
@@ -1359,7 +1438,14 @@ function PrivyWalletBridge({
         }
         setDialogOpen(true);
       });
-  }, [login, ready, settleWalletLoginAttempt]);
+  }, [
+    applicantRefreshUserGate,
+    generateSiweMessage,
+    login,
+    loginWithSiwe,
+    ready,
+    settleWalletLoginAttempt,
+  ]);
 
   useEffect(() => () => {
     walletLoginAttemptGateRef.current.settle();
@@ -1408,6 +1494,11 @@ function PrivyWalletBridge({
 
     startLogin();
   }, [providerTimedOut, sessionAction, startLogin]);
+
+  const openWalletWithError = useCallback((message: string) => {
+    setError(message);
+    setDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     if (autoAction === null || sessionAction === "wait") return;
@@ -2199,6 +2290,7 @@ function PrivyWalletBridge({
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet,
+      walletLinked,
       username,
       avatarDataUrl,
       authReady: ready,
@@ -2210,6 +2302,7 @@ function PrivyWalletBridge({
       switchingNetwork,
       preloadWallet: () => undefined,
       openWallet,
+      openWalletWithError,
       switchNetwork: switchWalletNetwork,
       disconnect,
       getAccessToken,
@@ -2248,6 +2341,7 @@ function PrivyWalletBridge({
       hasSession,
       loginPending,
       openWallet,
+      openWalletWithError,
       providerTimedOut,
       readNativeBalance,
       readTradeBalances,
@@ -2268,6 +2362,7 @@ function PrivyWalletBridge({
       setUsername,
       username,
       wallet,
+      walletLinked,
     ],
   );
 
@@ -2316,6 +2411,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet: null,
+      walletLinked: false,
       username: "",
       avatarDataUrl: "",
       authReady: false,
@@ -2326,6 +2422,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       switchingNetwork: false,
       preloadWallet: () => undefined,
       openWallet: () => setDialogOpen(true),
+      openWalletWithError: () => setDialogOpen(true),
       switchNetwork: async () => false,
       disconnect: async () => false,
       getAccessToken: async () => null,
@@ -2708,6 +2805,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     disconnect,
     openWallet,
     preloadWallet,
+    getAccessToken,
+    getIdentityToken,
   } = useWallet();
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -2715,6 +2814,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCopied, setMenuCopied] = useState(false);
   const [menuError, setMenuError] = useState("");
+  const [partnerAdminAccount, setPartnerAdminAccount] =
+    useState<string | null>(null);
   const hydrationPending = !authReady;
   const openingWallet = connecting && authReady;
 
@@ -2744,6 +2845,46 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    const account = wallet?.account ?? null;
+    if (!menuOpen || !account) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const [accessToken, identityToken] = await Promise.all([
+          getAccessToken(),
+          getIdentityToken().catch(() => null),
+        ]);
+        if (!accessToken || controller.signal.aborted) return;
+        const headers = new Headers({
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        });
+        if (identityToken) {
+          headers.set("X-Privy-Identity-Token", identityToken);
+        }
+        const query = new URLSearchParams({
+          walletAddress: account,
+          page: "1",
+          pageSize: "1",
+        });
+        const response = await fetch(`/api/admin/partners?${query}`, {
+          cache: "no-store",
+          headers,
+          signal: controller.signal,
+        });
+        if (response.ok && !controller.signal.aborted) {
+          setPartnerAdminAccount(account);
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setPartnerAdminAccount(null);
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [getAccessToken, getIdentityToken, menuOpen, wallet?.account]);
 
   const label = disconnecting
     ? "Disconnecting"
@@ -2788,6 +2929,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       onClick={() => {
         if (wallet) {
           setMenuError("");
+          setPartnerAdminAccount(null);
           setMenuOpen((current) => !current);
         } else {
           openWallet();
@@ -2869,6 +3011,17 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         >
           API keys
         </Link>
+        {partnerAdminAccount?.toLowerCase()
+            === wallet.account.toLowerCase() ? (
+          <Link
+            href="/admin/partners"
+            prefetch={false}
+            tabIndex={menuOpen ? undefined : -1}
+            onClick={() => setMenuOpen(false)}
+          >
+            Partner admin
+          </Link>
+        ) : null}
         <button
           type="button"
           tabIndex={menuOpen ? undefined : -1}

@@ -127,6 +127,7 @@ const catalogBoundary = {
   scope: {
     included: [
       "classic-v3",
+      "classic-v4",
       "official-main-token",
       "registry.custom-launched",
     ] as const,
@@ -378,6 +379,48 @@ describe("Explore refresh state", () => {
     });
   });
 
+  it("accepts only the exact bound Classic V4 catalog scope", () => {
+    const input = {
+      contentKey: "classic-v4-content",
+      requestKey: "classic-v4-request",
+      pageSize: EXPLORE_TOKENS_PER_PAGE,
+    };
+
+    expect(createExploreInitialState({ ok: true, body: payload }, input))
+      .toMatchObject({ phase: "ready" });
+
+    for (const included of [
+      [
+        "classic-v3",
+        "official-main-token",
+        "registry.custom-launched",
+      ],
+      [
+        "classic-v3",
+        "classic-v4",
+        "classic-v4",
+        "official-main-token",
+        "registry.custom-launched",
+      ],
+    ]) {
+      const state = createExploreInitialState({
+        ok: true,
+        body: {
+          ...payload,
+          catalog: {
+            ...catalogBoundary,
+            scope: { ...catalogBoundary.scope, included },
+          },
+        },
+      }, input);
+
+      expect(state).toMatchObject({
+        phase: "error",
+        message: "The token registry returned invalid catalog data",
+      });
+    }
+  });
+
   it("hydrates a Router-only fallback when Envio is unavailable", () => {
     const routerFallback = {
       status: "ready" as const,
@@ -439,6 +482,27 @@ describe("Explore refresh state", () => {
         tokens: [{ tokenAddress: customGraphExploreEntry.tokenAddress }],
         catalog: { launchSource: "canonical-launch-stamp-router" },
       },
+    });
+
+    expect(createExploreInitialState({
+      ok: true,
+      body: {
+        ...routerFallback,
+        catalog: {
+          ...routerFallback.catalog,
+          scope: {
+            ...routerFallback.catalog.scope,
+            included: ["classic-v4", "canonical-launch-stamp-router"],
+          },
+        },
+      },
+    }, {
+      contentKey: "router-fallback-invalid-content",
+      requestKey: "router-fallback-invalid-request",
+      pageSize: EXPLORE_TOKENS_PER_PAGE,
+    })).toMatchObject({
+      phase: "error",
+      message: "The token registry returned invalid catalog data",
     });
   });
 

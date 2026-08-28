@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  encodeFunctionData,
-  getAddress,
-  type Address,
-  type Hex,
-} from "viem";
+import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 
 import mainnetDeployments from "../contracts/dependencies/ethereum-mainnet.json";
+import { CLASSIC_V4_PUBLIC_RELEASE_BINDING } from "../lib/classic-v4-public-release";
 import {
   amountOutMinimum,
   buildClassicPermit2ApprovalTransaction,
@@ -35,9 +31,7 @@ const SLIPPAGE_BPS = 100;
 
 const deployment: ClassicTradeDeployment = {
   chainId: 1,
-  poolManager: getAddress(
-    mainnetDeployments.contracts.poolManager.address,
-  ),
+  poolManager: getAddress(mainnetDeployments.contracts.poolManager.address),
   v4Quoter: getAddress(mainnetDeployments.contracts.v4Quoter.address),
   universalRouter: getAddress(
     mainnetDeployments.contracts.universalRouter.address,
@@ -86,10 +80,7 @@ function quote() {
   return {
     amountIn: AMOUNT_IN.toString(),
     amountOut: AMOUNT_OUT.toString(),
-    amountOutMinimum: amountOutMinimum(
-      AMOUNT_OUT,
-      SLIPPAGE_BPS,
-    ).toString(),
+    amountOutMinimum: amountOutMinimum(AMOUNT_OUT, SLIPPAGE_BPS).toString(),
     gasEstimate: "222000",
     slippageBps: SLIPPAGE_BPS,
     deadline: DEADLINE.toString(),
@@ -116,7 +107,7 @@ function swapResponse(
           amountIn: AMOUNT_IN,
           quotedAmountOut: AMOUNT_OUT,
           slippageBps: SLIPPAGE_BPS,
-          now: DEADLINE - 1_200n,
+          now: DEADLINE - 300n,
           deadline: DEADLINE,
         }),
       ),
@@ -140,7 +131,7 @@ function approvalResponse(
           deployment,
           token: TOKEN,
           amountIn: AMOUNT_IN,
-          now: DEADLINE - 1_200n,
+          now: DEADLINE - 300n,
           deadline: DEADLINE,
         });
   return {
@@ -159,14 +150,10 @@ function approvalResponse(
 describe("prepared trade client boundary", () => {
   it("accepts only a coherent canonical swap or exact approval", () => {
     expect(
-      validatePreparedTradeResponse(swapResponse(), context)
-        .transaction.kind,
+      validatePreparedTradeResponse(swapResponse(), context).transaction.kind,
     ).toBe("swap");
 
-    for (const kind of [
-      "token-to-permit2",
-      "permit2-to-router",
-    ] as const) {
+    for (const kind of ["token-to-permit2", "permit2-to-router"] as const) {
       expect(
         validatePreparedTradeResponse(approvalResponse(kind), {
           ...context,
@@ -174,6 +161,44 @@ describe("prepared trade client boundary", () => {
         }).transaction.kind,
       ).toBe(kind);
     }
+  });
+
+  it("uses the active public binding for Classic V4 and fails closed without it", () => {
+    const v4Context = {
+      ...context,
+      launchModelVersion: "classic-v4",
+    };
+    const publicBinding = CLASSIC_V4_PUBLIC_RELEASE_BINDING;
+    expect(publicBinding).toMatchObject({
+      chainId: 1,
+      launcher: "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+      manifestDigest:
+        "0xb08e7032c801ddc3d5ba958eb389d2728bb439e4105aef4e7706969f7426ee00",
+      releaseStatus: "publicly-available",
+      publicAvailable: true,
+    });
+    if (!publicBinding) throw new Error("Classic V4 public binding fixture");
+
+    expect(
+      validatePreparedTradeResponse(swapResponse(), v4Context).transaction
+        .kind,
+    ).toBe("swap");
+    expect(() =>
+      validatePreparedTradeResponse(swapResponse(), v4Context, null),
+    ).toThrow("browser release binding");
+    expect(() =>
+      validatePreparedTradeResponse(swapResponse(), v4Context, {
+        ...publicBinding,
+        releaseStatus: "indexer-activated",
+        publicAvailable: false,
+      }),
+    ).toThrow("browser release binding");
+    expect(() =>
+      validatePreparedTradeResponse(swapResponse(), v4Context, {
+        ...publicBinding,
+        blockNumber: 0,
+      }),
+    ).toThrow("browser release binding");
   });
 
   it("rejects a wrong router, selector or ETH value", () => {
@@ -243,12 +268,7 @@ describe("prepared trade client boundary", () => {
             data: encodeFunctionData({
               abi: classicPermit2Abi,
               functionName: "approve",
-              args: [
-                TOKEN,
-                OTHER,
-                AMOUNT_IN,
-                Number(DEADLINE + 1n),
-              ],
+              args: [TOKEN, OTHER, AMOUNT_IN, Number(DEADLINE + 1n)],
             }),
           },
         },
@@ -270,9 +290,7 @@ describe("prepared trade client boundary", () => {
         poolKey: { ...valid.poolKey, hooks: OTHER },
       },
     ]) {
-      expect(() =>
-        validatePreparedTradeResponse(mutation, context),
-      ).toThrow();
+      expect(() => validatePreparedTradeResponse(mutation, context)).toThrow();
     }
   });
 });

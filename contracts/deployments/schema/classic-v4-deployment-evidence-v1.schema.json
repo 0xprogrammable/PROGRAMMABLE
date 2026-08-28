@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/classic-v4-deployment-evidence-v1.schema.json",
+  "title": "Programmable Classic V4 finalized deployment capture",
+  "$comment": "evidenceDigest uses programmable.classic-v4.deployment-evidence.v1 over the typed canonical payload. Capture must independently replay both RPCs at verificationBlock and compare exact runtime-code hashes and transactions; schema validity alone is insufficient.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "chainId",
+    "planDigest",
+    "sourceCommitment",
+    "status",
+    "checkedAt",
+    "verificationBlock",
+    "verificationBlockHash",
+    "independentRpcCount",
+    "deploymentLive",
+    "runtimeCodeVerified",
+    "constructorBindingsVerified",
+    "contracts",
+    "evidenceDigest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "chainId": { "const": 1 },
+    "planDigest": { "$ref": "#/$defs/bytes32" },
+    "sourceCommitment": { "$ref": "#/$defs/bytes32" },
+    "status": { "const": "finalized" },
+    "checkedAt": { "type": "string", "format": "date-time" },
+    "verificationBlock": { "type": "integer", "minimum": 1 },
+    "verificationBlockHash": { "$ref": "#/$defs/bytes32" },
+    "independentRpcCount": { "type": "integer", "minimum": 2 },
+    "deploymentLive": { "const": true },
+    "runtimeCodeVerified": { "const": true },
+    "constructorBindingsVerified": { "const": true },
+    "evidenceDigest": {
+      "$ref": "#/$defs/bytes32",
+      "description": "Domain-separated digest of the typed canonical unsigned deployment evidence."
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookFactory", "feeHook", "positionPlanner", "launcher"],
+      "properties": {
+        "hookFactory": { "$ref": "#/$defs/contract" },
+        "feeHook": { "$ref": "#/$defs/contract" },
+        "positionPlanner": { "$ref": "#/$defs/contract" },
+        "launcher": { "$ref": "#/$defs/contract" }
+      }
+    }
+  },
+  "$defs": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x(?!0{40}$)[0-9a-fA-F]{40}$"
+    },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-fA-F]{64}$"
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "confirmations",
+        "address",
+        "nonce",
+        "from",
+        "to",
+        "dataHash",
+        "value",
+        "runtimeCodeHash",
+        "runtimeTemplateHash"
+      ],
+      "properties": {
+        "transactionHash": { "$ref": "#/$defs/bytes32" },
+        "blockNumber": { "type": "integer", "minimum": 1 },
+        "blockHash": { "$ref": "#/$defs/bytes32" },
+        "confirmations": { "type": "integer", "minimum": 12 },
+        "address": { "$ref": "#/$defs/address" },
+        "nonce": { "type": "integer", "minimum": 0 },
+        "from": { "$ref": "#/$defs/address" },
+        "to": {
+          "anyOf": [{ "$ref": "#/$defs/address" }, { "type": "null" }]
+        },
+        "dataHash": { "$ref": "#/$defs/bytes32" },
+        "value": { "const": "0" },
+        "runtimeCodeHash": { "$ref": "#/$defs/bytes32" },
+        "runtimeTemplateHash": { "$ref": "#/$defs/bytes32" }
+      }
+    }
+  }
+}

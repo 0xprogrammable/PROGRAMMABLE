@@ -46,6 +46,10 @@ import {
 } from "@/lib/explore-financial-data";
 import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 import {
+  CLASSIC_V4_PUBLIC_RELEASE_BINDING,
+  isClassicV4AnchoredPublicReleaseBinding,
+} from "@/lib/classic-v4-public-release";
+import {
   isTokenMarketDataV1,
   marketDataStatusLabel,
 } from "@/lib/market-data/market-data-v1";
@@ -189,6 +193,7 @@ type ExploreCatalogBoundary = Readonly<{
   scope: Readonly<{
     included: readonly (
       | "classic-v3"
+      | "classic-v4"
       | "official-main-token"
       | "registry.custom-launched"
       | "canonical-launch-stamp-router"
@@ -1146,6 +1151,9 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
     ? value.completeness.routerCustom
     : "unavailable";
   const routerAvailable = routerCustomStatus !== "unavailable";
+  const classicV4IsBound = isClassicV4AnchoredPublicReleaseBinding(
+    CLASSIC_V4_PUBLIC_RELEASE_BINDING,
+  );
   const expectedLaunchSource = [
     ...(envioEvidence ? ["envio-classic-v3"] : []),
     ...(registryCustomStatus === "current"
@@ -1156,6 +1164,7 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
   const expectedIncluded = envioEvidence
     ? [
         "classic-v3",
+        ...(classicV4IsBound ? ["classic-v4"] : []),
         "official-main-token",
         "registry.custom-launched",
         ...(routerAvailable ? ["canonical-launch-stamp-router"] : []),

@@ -4,16 +4,20 @@ description: Package, submit and track one deterministic Custom project
 
 # Launch a project
 
-Public V3 general-hook creation and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable, while authenticated V1 POST remains nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
+Public V3.3 general-hook creation and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.
 
 ## Prepare the source
 
 Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.
 
-The 3.3.6 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
+The released 3.3.9 package includes the executable `examples/direct-native-v3-no-broadcast/README.md` clean-room project. It
 compiles real project-owned token, hook and initializer targets with exact
 `solc 0.8.26+commit.8a97fa7a`, then runs deterministic `pack` and `validate` without submitting, signing, broadcasting
 or creating a Mainnet coin.
+
+CLI `3.3.9` is installable and defaults fresh packs to live profile `3.3.0`. Do not submit explicit profile `3.4.0`
+output until the backend and `.well-known` discovery independently activate it; live capabilities reject that
+preparatory profile.
 
 The source descriptor, manifest digest, graph bundle and agent evidence must all identify the same exact launch subject. Run the checks that apply to the project and keep their underlying evidence. The API requires check IDs and evidence digests but does not publish a universal check catalog or assess the evidence.
 
@@ -31,7 +35,10 @@ The key is bound to its controller wallet and API scopes. It is not a wallet key
 
 ## Submit the V3 request
 
-Run `programmable-launch pack`, `validate --remote`, `submit`, then `status --watch --until authorized`. Stop for the
+Run `programmable-launch pack`, `validate --remote`, `submit`, then `status --watch --until authorized`. The CLI and
+preflight prepare and classify the exact request; the API server is the decision authority and exposes a wallet
+handoff only after objective static hard blocks and exact Router simulation pass. Missing behavior execution leaves
+related claims unverified; an authenticated executed failure blocks. Stop for the
 connected controller's wallet review and signature, then resume `status --watch --until finalized`. Submit the bundle
 to `POST https://api.programmable.market/v3/custom-launches` with the CLI. Authenticated CLI traffic is fixed to exact
 origin `https://api.programmable.market`; there is no origin override. Preserve the exact request bytes and idempotency
@@ -39,8 +46,8 @@ key across timeout, `429` and `503` retries and honor `Retry-After`. Follow the 
 guide](../developers/custom-launch.md) for the exact public contract.
 
 The default direct-native profile uses `programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
-`profileVersion: 3.3.0`. It requires canonical project name, symbol, description, an exact source-bound image and sorted public
-links. The CLI hashes those values and binds the metadata digest into the graph and launch intent; token `name()` and
+`profileVersion: 3.3.0`. It requires canonical project name, symbol, a meaningful description, an exact non-empty
+source-bound image, one website and one X profile; other sorted public links are optional. The CLI hashes those values and binds the metadata digest into the graph and launch intent; token `name()` and
 `symbol()` are read back after deployment. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and byte-identical
 retryable under their original immutable policies; revision 2 also remains compatible. Profile `3.2.0` keeps its original nullable-image metadata semantics. Profile 3.3.0 runs role-aware exact-source static admission with exactly
 seven objective hard-block rules. Proxy/delegatecall, mint/tax/pause controls, liquidity custody and return-delta
@@ -50,8 +57,9 @@ allowlist. A final Router simulation is mandatory before authorization.
 Each enabled v4 permission must have a concrete reachable callback implementation; an interface declaration or
 fallback-only route does not qualify.
 
-These checks do not reproduce project tests and are not an audit or a guarantee of safety, honeypot resistance,
-liquidity, tradeability or fee behavior. Post-finality provider verification is independent from launch finality.
+These client and preflight checks do not reproduce project tests, decide authorization or verify unresolved behavior.
+They are not an audit or a guarantee of safety, honeypot resistance, liquidity, tradeability or fee behavior.
+Post-finality provider verification is independent from launch finality.
 
 ## Launch from the bound wallet
 
@@ -65,7 +73,7 @@ value before signing and broadcasting the Router transaction. Neither the API ke
 A submitted transaction becomes a completed launch only after it succeeds, reaches the required finality and agrees
 with the public Router record.
 
-Every V3 request must bind and disclose a 10 bps Programmable share, additive to the project's selected fee or included in that selected total. The exact declared accounting basis, currency, claim binding and buy/sell economics are request-bound and server-recomputed. Admission carries `feeBehaviorClaim: false`; it does not certify or enforce later swap fee behavior in arbitrary custom code. The Uniswap pool LP fee is separate. Generic fee claiming and buyback management for arbitrary hooks are not live; FADE has a specifically bound adapter only.
+A 10 bps Programmable share applies only to a fee-certified profile or adapter and its exact stamped PoolKey after the server verifies per-launch fee behavior. An arbitrary Custom hook is not automatically fee-enforced and the open arbitrary-hook lane carries no Programmable fee claim. The Uniswap pool LP fee is separate. Generic fee claiming and buyback management for arbitrary hooks are not live; FADE has a specifically bound adapter only.
 
 ## Keep the record useful
 

@@ -35,6 +35,30 @@ function backendError(
 }
 
 describe("preserved Custom Launch backend public errors", () => {
+  it("preserves only the public partner-admin 403 contract", async () => {
+    const error = await readPreservedBackendPublicErrorV1(
+      backendError(403, "PARTNER_ADMIN_FORBIDDEN", {
+        details: {
+          internalRule: "must-not-cross",
+          rootKeySecret: `pm_partner_root_${"A".repeat(22)}_${"B".repeat(43)}`,
+        },
+      }),
+    );
+
+    expect(error).toMatchObject({
+      status: 403,
+      code: "PARTNER_ADMIN_FORBIDDEN",
+      publicMessage: "The request could not be completed.",
+      requestId: REQUEST_ID,
+      retryAfter: null,
+    });
+    expect(JSON.stringify(error)).not.toContain("must-not-cross");
+    expect(JSON.stringify(error)).not.toContain("pm_partner_root_");
+    await expect(readPreservedBackendPublicErrorV1(
+      backendError(403, "INTERNAL_FORBIDDEN"),
+    )).resolves.toBeNull();
+  });
+
   it("preserves only the safe launch-not-found 404 contract", async () => {
     const error = await readPreservedBackendPublicErrorV1(
       backendError(404, "LAUNCH_NOT_FOUND", {
@@ -85,6 +109,7 @@ describe("preserved Custom Launch backend public errors", () => {
     "LAUNCH_UNAVAILABLE",
     "CUSTOM_LAUNCH_V3_UNAVAILABLE",
     "WALLET_ADMIN_UNAVAILABLE",
+    "CLASSIC_LAUNCH_AUTHORIZATION_UNAVAILABLE",
   ])("preserves safe 503 %s responses and retry metadata", async (code) => {
     const error = await readPreservedBackendPublicErrorV1(
       backendError(503, code, { retryAfter: "17" }),
@@ -101,6 +126,7 @@ describe("preserved Custom Launch backend public errors", () => {
 
   it.each([
     [404, "PROFILE_NOT_FOUND"],
+    [403, "INSUFFICIENT_SCOPE"],
     [422, "PROFILE_INVALID"],
     [422, "INTERNAL_SECRET"],
     [503, "INTERNAL_ERROR"],

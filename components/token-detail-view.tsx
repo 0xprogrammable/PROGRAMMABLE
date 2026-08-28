@@ -28,6 +28,8 @@ import {
 } from "@/components/token-price-chart";
 import { TokenDetailShell } from "@/components/token-detail-shell";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
+import { PartnerLaunchAttribution } from
+  "@/components/partner-launch-attribution";
 import { CreatorArticle } from "@/components/creator-article";
 import { CreatorArticleEditAction } from
   "@/components/creator-article-edit-action";
@@ -58,6 +60,7 @@ import {
 } from "@/lib/token-image";
 import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 import { validatePreparedTradeResponse } from "@/lib/trade/client";
+import { TRADE_QUOTE_VALIDITY_SECONDS } from "@/lib/trade/policy";
 import {
   isLaunchStampProvenanceV1,
   isPlatformFeePolicyReadbackV2,
@@ -73,6 +76,13 @@ import {
 import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
   "@/lib/creator-article/programmable-example-v1";
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
+import { parseLaunchPartnerAttributionV1 } from
+  "@/lib/launch-partner-attribution";
+import {
+  parsePlatformFeeCertificationV1,
+  platformFeeCertificationForTokenV1,
+  type PlatformFeeCertificationV1,
+} from "@/lib/platform-fee-certification";
 import styles from "./token-experience.module.css";
 
 type DetailToken = LauncherToken & Readonly<{
@@ -102,6 +112,7 @@ type DetailPayload = {
   token: DetailToken | null;
   customProject: DetailCustomProject | null;
   routerTradeProject: RouterTradeProject | null;
+  platformFeeCertification: PlatformFeeCertificationV1 | null;
   sourceVerification: SourceVerificationDisplay | null;
   creatorArticle: CreatorArticleV1 | null;
   snapshot: { chainId: number } | null;
@@ -116,6 +127,7 @@ export type DetailState =
       phase: "ready";
       token: DetailToken;
       routerTradeProject: RouterTradeProject | null;
+      platformFeeCertification: PlatformFeeCertificationV1 | null;
       sourceVerification: SourceVerificationDisplay | null;
       creatorArticle: CreatorArticleV1 | null;
       chainId: number;
@@ -496,6 +508,12 @@ function parseLauncherToken(value: unknown): DetailToken | null {
         .map(parseTokenLink)
         .filter((link): link is TokenLink => link !== null)
     : [];
+  const partnerAttribution = value.partnerAttribution === undefined
+    ? undefined
+    : parseLaunchPartnerAttributionV1(value.partnerAttribution);
+  if (value.partnerAttribution !== undefined && partnerAttribution === null) {
+    return null;
+  }
   const uniswapV4Pool =
     value.uniswapV4Pool === undefined
       ? undefined
@@ -512,6 +530,7 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     imageUrl: safePublicImageUrl(value.imageUrl),
     uniswapV4Pool: uniswapV4Pool ?? undefined,
     ...(platformFeePolicy ? { platformFeePolicy } : {}),
+    ...(partnerAttribution ? { partnerAttribution } : {}),
   };
   const valuation = value.valuation === undefined
     ? exploreValuation(token)
@@ -802,6 +821,25 @@ function parseRouterTradeProject(
       ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
     });
     if (capability === null) return null;
+    const baseCurrency = capability.poolKey.currency0AssetId
+        === baseAsset.assetId
+      ? capability.poolKey.currency0
+      : capability.poolKey.currency1;
+    const quoteCurrency = capability.poolKey.currency0AssetId
+        === quoteAsset.assetId
+      ? capability.poolKey.currency0
+      : capability.poolKey.currency1;
+    const namespace = `eip155:${token.launchStampProvenance.chainId}`;
+    if (
+      baseAsset.identity.namespace !== namespace
+      || quoteAsset.identity.namespace !== namespace
+      || !isAddress(baseAsset.identity.value)
+      || !isAddress(quoteAsset.identity.value)
+      || baseCurrency.value.toLowerCase()
+        !== baseAsset.identity.value.toLowerCase()
+      || quoteCurrency.value.toLowerCase()
+        !== quoteAsset.identity.value.toLowerCase()
+    ) return null;
     markets.push({
       marketId: candidate.marketId,
       kind: candidate.kind,
@@ -818,9 +856,7 @@ function parseRouterTradeProject(
       market.status === "active" &&
       market.poolId?.toLowerCase() === token.poolId.toLowerCase() &&
       market.baseAsset.identity.value.toLowerCase() ===
-        token.tokenAddress.toLowerCase() &&
-      market.quoteAsset.identity.value.toLowerCase() ===
-        "0x0000000000000000000000000000000000000000",
+        token.tokenAddress.toLowerCase(),
   );
   if (!exactMarket) return null;
 
@@ -867,6 +903,31 @@ export function parseDetailPayload(value: unknown): DetailPayload {
   ) {
     throw new Error("The token registry returned an invalid Router trade route");
   }
+  const platformFeeCertification =
+    value.platformFeeCertification === null ||
+      value.platformFeeCertification === undefined
+      ? null
+      : parsePlatformFeeCertificationV1(value.platformFeeCertification);
+  if (
+    value.platformFeeCertification !== null &&
+    value.platformFeeCertification !== undefined &&
+    platformFeeCertification === null
+  ) {
+    throw new Error("The token registry returned invalid fee certification");
+  }
+  const expectedPlatformFeeCertification = token
+    ? platformFeeCertificationForTokenV1(token)
+    : null;
+  if (
+    platformFeeCertification !== null &&
+    (expectedPlatformFeeCertification === null ||
+      platformFeeCertification.status !==
+        expectedPlatformFeeCertification.status ||
+      platformFeeCertification.programmableFeeBps !==
+        expectedPlatformFeeCertification.programmableFeeBps)
+  ) {
+    throw new Error("The token registry returned conflicting fee certification");
+  }
   const sourceVerification = parseSourceVerificationDisplay(
     value.sourceVerification,
   );
@@ -910,6 +971,7 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     token,
     customProject,
     routerTradeProject,
+    platformFeeCertification,
     sourceVerification,
     creatorArticle,
     snapshot,
@@ -979,6 +1041,7 @@ function detailStateFromResponse(
       phase: "ready",
       token: payload.token!,
       routerTradeProject: payload.routerTradeProject,
+      platformFeeCertification: payload.platformFeeCertification,
       sourceVerification: payload.sourceVerification,
       creatorArticle: payload.creatorArticle,
     chainId: payload.snapshot.chainId,
@@ -1297,10 +1360,13 @@ export function buildTokenDetailMetrics(
   );
 }
 
-export function platformFeePolicyDisclosure(token: LauncherToken) {
-  return token.platformFeePolicy?.status === "onchain-confirmed"
-    ? "Platform fee confirmed: 10 bps accrue in an unspecified pool asset and are claimable by the fixed Programmable reward wallet."
-    : null;
+export function platformFeePolicyDisclosure(
+  token: LauncherToken,
+  certification?: PlatformFeeCertificationV1 | null,
+) {
+  return (
+    certification ?? platformFeeCertificationForTokenV1(token)
+  )?.label ?? null;
 }
 
 export function canUseClassicTokenTrade(token: LauncherToken) {
@@ -1531,6 +1597,7 @@ function TokenDetailContent({
   preview,
   creatorArticle = null,
   routerTradeProject = null,
+  platformFeeCertification = null,
   sourceVerification = null,
 }: {
   token: LauncherToken;
@@ -1538,6 +1605,7 @@ function TokenDetailContent({
   preview: boolean;
   creatorArticle?: CreatorArticleV1 | null;
   routerTradeProject?: RouterTradeProject | null;
+  platformFeeCertification?: PlatformFeeCertificationV1 | null;
   sourceVerification?: SourceVerificationDisplay | null;
 }) {
   const {
@@ -1586,6 +1654,9 @@ function TokenDetailContent({
   const classicSwapFeeBps = typeof defaultSwapFeeBps === "number"
     ? defaultSwapFeeBps
     : null;
+  const classicTradeFeePresentation = token.launchModelVersion === "classic-v4"
+    ? "classic-v4-hook" as const
+    : "legacy-pool" as const;
   const visibleCreatorArticle = publishedCreatorArticle
       && (!creatorArticle || publishedCreatorArticle.revision >= creatorArticle.revision)
     ? publishedCreatorArticle
@@ -1645,7 +1716,10 @@ function TokenDetailContent({
       buildChartVolumeMetric(chartVolume),
     );
   }, [chartVolume, token]);
-  const platformFeeDisclosure = platformFeePolicyDisclosure(token);
+  const platformFeeDisclosure = platformFeePolicyDisclosure(
+    token,
+    platformFeeCertification,
+  );
 
   const explorerBase =
     chainId === 1
@@ -1702,7 +1776,9 @@ function TokenDetailContent({
       side: source.side,
       amountIn: source.quote.amountIn,
       slippageBps: source.quote.slippageBps,
-      deadline: String(Math.floor(Date.now() / 1_000) + 1_200),
+      deadline: String(
+        Math.floor(Date.now() / 1_000) + TRADE_QUOTE_VALIDITY_SECONDS,
+      ),
     };
     const response = await fetch("/api/trade/prepare", {
       method: "POST",
@@ -1720,6 +1796,7 @@ function TokenDetailContent({
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
       launchModel: classicTradeLaunchModel,
+      launchModelVersion: token.launchModelVersion,
       quoteAsset: token.quoteAssetAddress
         ? getAddress(token.quoteAssetAddress)
         : undefined,
@@ -1790,6 +1867,7 @@ function TokenDetailContent({
       hook: getAddress(token.hookAddress),
       poolId: token.poolId,
       launchModel: classicTradeLaunchModel,
+      launchModelVersion: token.launchModelVersion,
       quoteAsset: token.quoteAssetAddress
         ? getAddress(token.quoteAssetAddress)
         : undefined,
@@ -1887,6 +1965,12 @@ function TokenDetailContent({
               >
                 {token.name}
               </h1>
+              {token.partnerAttribution ? (
+                <PartnerLaunchAttribution
+                  attribution={token.partnerAttribution}
+                  compact
+                />
+              ) : null}
               <div className={styles.addressActions}>
                 <button
                   className={styles.address}
@@ -1946,7 +2030,15 @@ function TokenDetailContent({
               ) : null}
 
               {platformFeeDisclosure ? (
-                <p className={styles.sourceVerification}>
+                <p
+                  className={styles.sourceVerification}
+                  data-status={
+                    platformFeeCertification?.status === "certified" ||
+                      token.platformFeePolicy?.status === "onchain-confirmed"
+                      ? "verified"
+                      : undefined
+                  }
+                >
                   {platformFeeDisclosure}
                 </p>
               ) : null}
@@ -1997,8 +2089,8 @@ function TokenDetailContent({
             <div className={styles.routerNotice} role="status">
               <strong>Router launch</strong>
               <p>
-                This page shows launch data only. Trading is not enabled here
-                for this PoolKey.
+                Onsite trading is not enabled for this launch. Launch details
+                remain available.
               </p>
             </div>
           ) : !canUseClassicTrade || classicSwapFeeBps === null ? (
@@ -2023,6 +2115,7 @@ function TokenDetailContent({
               tokenPriceEth={token.tokenPriceEth}
               tokenPriceUsdWad={derivedTokenPriceUsdWad(token)}
               launchModel={classicTradeLaunchModel}
+              launchModelVersion={token.launchModelVersion}
               quoteAsset={
                 token.quoteAssetAddress
                   ? getAddress(token.quoteAssetAddress)
@@ -2032,6 +2125,7 @@ function TokenDetailContent({
               tokenPriceQuote={token.tokenPriceQuote}
               buySwapFeeBps={token.buyHookFeeBps ?? classicSwapFeeBps}
               sellSwapFeeBps={token.sellHookFeeBps ?? classicSwapFeeBps}
+              feePresentation={classicTradeFeePresentation}
               readBalances={readTokenBalances}
               onConnect={openWallet}
               onPrepared={submitPreparedTrade}
@@ -2048,6 +2142,7 @@ function TokenDetailContent({
                   ? (token.buyHookFeeBps ?? classicSwapFeeBps)
                   : (token.sellHookFeeBps ?? classicSwapFeeBps)
               }
+              feePresentation={classicTradeFeePresentation}
               pending={tradeFlow.submitting}
               error={tradeFlow.error}
               onBack={() => setTradeFlow({ phase: "form" })}
@@ -2646,6 +2741,7 @@ export function TokenDetailView({
         chainId={activeState.chainId}
         preview={false}
         routerTradeProject={activeState.routerTradeProject}
+        platformFeeCertification={activeState.platformFeeCertification}
         sourceVerification={activeState.sourceVerification}
         creatorArticle={activeState.creatorArticle}
       />

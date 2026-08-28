@@ -27,7 +27,7 @@ export default function CreatorLaunchDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/creators/launch"
-      description="Package one deterministic bundle locally, submit the exact V3 request and stop for separate wallet review."
+      description="Package one deterministic bundle locally, submit the exact V3.3 request and stop for separate wallet review."
       parentHref="/docs/creators"
       parentLabel="Creators"
       sections={sections}
@@ -36,13 +36,16 @@ export default function CreatorLaunchDocsPage() {
       <section id="access">
         <h2>Start here</h2>
         <p>
-          Public V3 general-hook creation is live on Ethereum Mainnet. Package
+          Public V3.3 general-hook creation is live on Ethereum Mainnet. Package
           and validate locally, then use a scoped API key to submit and track
           the bound wallet&apos;s request.
         </p>
         <p>
-          The retained V1 create endpoint is read-only and returns{" "}
-          <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+          V2 and V1 history and schemas remain readable, but their create
+          endpoints are read-only and return non-retryable{" "}
+          <code>409 CUSTOM_LAUNCH_V2_READ_ONLY</code> or{" "}
+          <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new
+          submissions.
         </p>
         <div className={docsStyles.callout}>
           <strong>The API does not control your wallet.</strong>
@@ -60,7 +63,7 @@ export default function CreatorLaunchDocsPage() {
             <strong>Build a deterministic source bundle.</strong>
             <span>
               Keep contracts, tests, deployment logic and public project data
-              together in the bundle described by the V3 API schema. The CLI
+              together in the bundle described by the V3.3 API schema. The CLI
               release includes the exact V3 no-broadcast example at{" "}
               <code>examples/direct-native-v3-no-broadcast/README.md</code>.
             </span>
@@ -123,9 +126,11 @@ export default function CreatorLaunchDocsPage() {
       <section id="submit">
         <h2>Submit the exact V3 request</h2>
         <p>
-          Run <code>pack</code>, <code>validate</code>, <code>submit</code> and
-          then <code>status</code>. Use <code>POST /v3/custom-launches</code>.
-          Preserve the exact request
+          Run <code>pack</code>, <code>validate --remote</code>,{" "}
+          <code>submit</code> and then <code>status</code>. Use only the current
+          V3.3 profile with <code>POST /v3/custom-launches</code>. The CLI and
+          preflight prepare and classify exact bytes; only the API server
+          decides whether the request may proceed. Preserve the exact request
           bytes and idempotency key across timeout, <code>429</code> and{" "}
           <code>503</code> retries, and honor <code>Retry-After</code>.
         </p>
@@ -140,10 +145,14 @@ export default function CreatorLaunchDocsPage() {
         <h2>Prepared launch</h2>
         <p>
           A <code>prepared</code> result means the exact launch artifact exists.
-          Its signed permit and wallet transaction are still null. It is not a
-          wallet authorization, approval, audit or safety claim. Read the launch
-          status with the same API key and stop on any failed or mismatched
-          binding.
+          Its public signed permit and wallet transaction are still null. It is
+          not a wallet authorization, approval, audit or safety claim. The API
+          server exposes a wallet handoff only after objective static hard blocks
+          and exact Router simulation pass. Missing behavior execution leaves
+          behavior, fee, liquidity and routability claims unverified; an
+          authenticated executed failure blocks the handoff. Client, model and
+          caller-attested output cannot bypass a server gate. Read the launch status with the same API key and stop on any
+          failed or mismatched binding.
         </p>
       </section>
 
@@ -180,7 +189,10 @@ export default function CreatorLaunchDocsPage() {
             new launch subject.
           </li>
           <li>
-            Keep the pool LP fee separate from the 10 bps Programmable share.
+            Keep the pool LP fee separate from any Programmable share. A 10 bps
+            claim applies only to a fee-certified profile or adapter and its
+            exact stamped PoolKey after launch-specific fee behavior is
+            verified. Arbitrary hooks are not automatically fee-enforced.
             Generic fee claiming and buyback management are not live for
             arbitrary hooks; FADE uses a specifically bound adapter only.
           </li>

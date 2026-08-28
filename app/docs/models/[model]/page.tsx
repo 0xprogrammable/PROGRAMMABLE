@@ -377,7 +377,7 @@ function CustomDocs() {
       currentPath="/docs/models/custom"
       kicker="Launch model · Ethereum"
       title="Custom hooks"
-      description="Custom launches use deterministic Uniswap v4 hook graphs prepared through the wallet-bound API."
+      description="Custom launches use deterministic Uniswap v4 hook graphs prepared through the credential-principal API."
       sections={customSections}
     >
       <section id="overview">

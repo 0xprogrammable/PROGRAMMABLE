@@ -482,7 +482,7 @@ export function buildClassicV3LaunchDisclosure(
       (beneficiary, index) => ({
         beneficiary,
         share: formatClassicV3Percent(
-          configuration.rewards.sharesBps[index],
+          configuration.rewards.sharesBps[index]!,
         ),
       }),
     ),

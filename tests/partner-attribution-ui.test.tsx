@@ -13,6 +13,7 @@ import {
   PARTNER_ADMIN_SCHEMA_V1,
   PARTNER_BUDGET_LIMITS_V1,
   parsePartnerListV1,
+  parsePartnerListPageV1,
   parsePartnerRootKeyMutationV1,
 } from "../lib/partner-admin-contract";
 
@@ -140,6 +141,41 @@ describe("partner attribution UI", () => {
     })).toBeNull();
   });
 
+  it("binds bounded partner pagination and accepts the backend root-key ceiling", () => {
+    const roots = Array.from({ length: 500 }, () => ROOT_KEY);
+    const page = parsePartnerListPageV1({
+      schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+      partners: [{ ...PARTNER, rootKeys: roots }],
+      pagination: {
+        page: 2,
+        pageSize: 12,
+        totalPartners: 13,
+        totalPages: 2,
+      },
+    });
+    expect(page?.partners[0]?.rootKeys).toHaveLength(500);
+    expect(parsePartnerListPageV1({
+      schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+      partners: [{ ...PARTNER, rootKeys: [...roots, ROOT_KEY] }],
+      pagination: {
+        page: 2,
+        pageSize: 12,
+        totalPartners: 13,
+        totalPages: 2,
+      },
+    })).toBeNull();
+    expect(parsePartnerListPageV1({
+      schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+      partners: [PARTNER],
+      pagination: {
+        page: 2,
+        pageSize: 12,
+        totalPartners: 25,
+        totalPages: 2,
+      },
+    })).toBeNull();
+  });
+
   it("enforces the backend budget ceilings in browser-facing metadata", () => {
     const maximumBudgets = PARTNER_BUDGET_LIMITS_V1;
     expect(parsePartnerListV1({
@@ -164,7 +200,7 @@ describe("partner attribution UI", () => {
     }
   });
 
-  it("keeps attribution in public Explore and Profile render paths", () => {
+  it("keeps attribution in public Explore, Profile and direct token paths", () => {
     const explore = readFileSync(
       new URL("../components/explore-view.tsx", import.meta.url),
       "utf8",
@@ -173,7 +209,57 @@ describe("partner attribution UI", () => {
       new URL("../components/profile-view.tsx", import.meta.url),
       "utf8",
     );
+    const tokenDetail = readFileSync(
+      new URL("../components/token-detail-view.tsx", import.meta.url),
+      "utf8",
+    );
     expect(explore).toContain("<PartnerLaunchAttribution");
     expect(profile).toContain("<PartnerLaunchAttribution");
+    expect(tokenDetail).toContain("<PartnerLaunchAttribution");
+    expect(tokenDetail).toContain(
+      "parseLaunchPartnerAttributionV1(value.partnerAttribution)",
+    );
+  });
+
+  it("discovers partner administration only after the server allows the wallet", () => {
+    const wallet = readFileSync(
+      new URL("../components/wallet-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(wallet).toContain(
+      "const response = await fetch(`/api/admin/partners?${query}`",
+    );
+    expect(wallet).toContain("if (response.ok && !controller.signal.aborted)");
+    expect(wallet).toContain("=== wallet.account.toLowerCase() ? (");
+    expect(wallet).toContain('href="/admin/partners"');
+  });
+
+  it("keeps permanent partner revocation and bounded pages explicit", () => {
+    const source = readFileSync(
+      new URL("../components/partner-admin-console.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("Revoke permanently");
+    expect(source).toContain("This cannot be undone");
+    expect(source).toContain('aria-label="Partner pages"');
+    expect(source).toContain("ROOT_KEYS_PER_PAGE");
+  });
+
+  it("recovers an unlinked partner-admin wallet without retrying the request", () => {
+    const source = readFileSync(
+      new URL("../components/partner-admin-console.tsx", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf('data-state="wallet-not-linked"');
+    const end = source.indexOf(") : accessDenied ? (", start);
+    const walletRecoveryState = source.slice(start, end);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(walletRecoveryState).toContain("Link this wallet to continue");
+    expect(walletRecoveryState).toContain("select another linked wallet");
+    expect(walletRecoveryState).toContain("onClick={openWallet}");
+    expect(walletRecoveryState).toContain("Manage wallets");
+    expect(walletRecoveryState).not.toContain("Try again");
   });
 });

@@ -246,6 +246,8 @@ describe("Docs information architecture", () => {
     expect(creatorLaunchPage).toContain("The API does not control your wallet");
     expect(creatorLaunchPage).toContain("Manage Custom launch API keys");
     expect(creatorLaunchPage).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
+    expect(creatorLaunchPage).toContain("CUSTOM_LAUNCH_V2_READ_ONLY");
+    expect(creatorLaunchPage).toContain("only the API server");
     expect(creatorLaunchPage).toContain(
       "does not reproduce project-specific tests",
     );

@@ -3,7 +3,10 @@ import "server-only";
 import { parseStrictJson } from "../projection-target/canonical-json";
 
 const MAXIMUM_ERROR_BODY_BYTES = 16_384;
-const PRESERVED_STATUSES = new Set([400, 404, 409, 422, 429, 503]);
+const PRESERVED_STATUSES = new Set([400, 403, 404, 409, 422, 429, 503]);
+const PRESERVED_FORBIDDEN_CODES = new Set([
+  "PARTNER_ADMIN_FORBIDDEN",
+]);
 const PRESERVED_NOT_FOUND_CODES = new Set([
   "LAUNCH_NOT_FOUND",
 ]);
@@ -15,6 +18,7 @@ const PRESERVED_UNAVAILABLE_CODES = new Set([
   "CUSTOM_LAUNCH_V2_UNAVAILABLE",
   "CUSTOM_LAUNCH_V3_INTEGRATION_PENDING",
   "CUSTOM_LAUNCH_V3_UNAVAILABLE",
+  "CLASSIC_LAUNCH_AUTHORIZATION_UNAVAILABLE",
   "LAUNCH_UNAVAILABLE",
   "SIMULATION_UNAVAILABLE",
   "WALLET_ADMIN_UNAVAILABLE",
@@ -71,6 +75,10 @@ export async function readPreservedBackendPublicErrorV1(
       || error.message.length < 1
       || error.message.length > 512
       || /[\u0000-\u001f\u007f]/u.test(error.message)
+    ) return null;
+    if (
+      response.status === 403
+      && !PRESERVED_FORBIDDEN_CODES.has(error.code)
     ) return null;
     if (
       response.status === 404

@@ -7,6 +7,8 @@ vi.mock("server-only", () => ({}));
 
 import { PARTNER_CREDENTIALS_PUBLIC_CONTRACT_V1 } from
   "../lib/custom-launch/partner-credentials-v1";
+import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
+  "../lib/custom-launch/agent-setup-v1";
 import { PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1 } from
   "../lib/custom-launch/registry-public-manifest-v1";
 import {
@@ -35,6 +37,21 @@ const BACKEND_PARTNER_CREDENTIALS_V1 = Object.freeze({
   maximumSubkeyDepth: 1,
   subkeyScopesAndBudgetsCannotExceedRoot: true,
   subkeyExpiryCannotExceedRoot: true,
+  permitReissueDispositionCredentialKind: "wallet-only",
+  metadataPolicySameAsWalletKeys: true,
+  controllerWallet: {
+    walletKey: "must-equal-key-wallet-binding",
+    partnerCredential: "selected-by-exact-request",
+    mustReviewSignAndBroadcast: true,
+  },
+  launchHistoryVisibility: {
+    root: "all-partner-attributed-root-and-subkey-launches",
+    subkey: "stable-subkey-lineage-only",
+    rootAggregatesSubkeys: true,
+    rotationPreservesLineageHistory: true,
+    newDistinctSubkeyStartsIsolatedLineage: true,
+    revokedCredentialCanAuthenticate: false,
+  },
   secretDelivery: "issue-and-rotation-response-only",
   callerSuppliedAttributionAccepted: false,
   attributionSource: "authenticated-partner-api-key",
@@ -42,6 +59,11 @@ const BACKEND_PARTNER_CREDENTIALS_V1 = Object.freeze({
   walletSigningAuthority: false,
   walletBroadcastAuthority: false,
   gateBypassAuthority: false,
+  adminProvisioning: {
+    authentication: "website-bff-assertion-v2",
+    authorization: "server-configured-privy-user-wallet-pair-allowlist",
+    clientMaySelfAuthorize: false,
+  },
 });
 
 describe("partner credential discovery", () => {
@@ -91,6 +113,10 @@ describe("partner credential discovery", () => {
       .toContain("pm_partner_root_");
     expect(openApi.components.securitySchemes.CustomLaunchApiKey.bearerFormat)
       .toContain("pm_partner_");
+    expect(openApi.components.securitySchemes.WalletCustomLaunchApiKey)
+      .toMatchObject({ bearerFormat: "pm_live_*" });
+    expect(openApi.paths["/v3/custom-launches/{launchId}/permit-reissues"]
+      .post.security).toEqual([{ WalletCustomLaunchApiKey: [] }]);
   });
 
   it("keeps the dynamic contract free of OpenAPI-only route aliases", () => {
@@ -106,11 +132,31 @@ describe("partner credential discovery", () => {
     expect(partnerCredentials.rootSubkeyRoutes).toBeUndefined();
     expect(partnerCredentials.attributionResponseField).toBeUndefined();
     expect(partnerCredentials.attributionSchemaVersion).toBeUndefined();
+    expect(partnerCredentials.launchHistoryVisibility).toEqual({
+      root: "all-partner-attributed-root-and-subkey-launches",
+      subkey: "stable-subkey-lineage-only",
+      rootAggregatesSubkeys: true,
+      rotationPreservesLineageHistory: true,
+      newDistinctSubkeyStartsIsolatedLineage: true,
+      revokedCredentialCanAuthenticate: false,
+    });
     expect(openApi["x-programmable-partner-credentials"].rootSubkeyRoutes)
       .toEqual(BACKEND_PARTNER_CREDENTIALS_V1.subkeyAdminRoutes);
     expect(openApi.paths["/v1/partner/subkeys"]).toBeDefined();
     expect(openApi.paths["/v1/partner/subkeys/{subkeyId}"]).toBeDefined();
     expect(openApi.components.schemas.LaunchPartnerAttributionV1).toBeDefined();
+    expect(openApi["x-programmable-partner-credentials"])
+      .toMatchObject({
+        permitReissueDispositionCredentialKind: "wallet-only",
+        metadataPolicySameAsWalletKeys: true,
+        adminProvisioning: BACKEND_PARTNER_CREDENTIALS_V1.adminProvisioning,
+        launchHistoryVisibility: {
+          rootAggregatesSubkeys: true,
+          rotationPreservesLineageHistory: true,
+          newDistinctSubkeyStartsIsolatedLineage: true,
+          revokedCredentialCanAuthenticate: false,
+        },
+      });
   });
 
   it("documents roots and subkeys without wallet-authority claims", () => {
@@ -132,5 +178,24 @@ describe("partner credential discovery", () => {
     );
     expect(sources.join("\n")).toMatch(/(?:cannot|no credential can).*broadcast/iu);
     expect(sources.join("\n")).toMatch(/(?:cannot|no credential can).*bypass/iu);
+  });
+
+  it("keeps agent setup and guides on the same immutable lineage contract", () => {
+    const sources = [
+      PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
+      read("docs/public/developers/custom-launch.md"),
+      read("public/developers/custom-launch-api-v1.md"),
+      read("packages/launch/README.md"),
+    ];
+
+    for (const source of sources) {
+      expect(source).toMatch(/partner root (?:reads|sees|can (?:list and )?read) every launch/iu);
+      expect(source).toMatch(/subkey|child/iu);
+      expect(source).toMatch(/stable lineage|same lineage/iu);
+      expect(source).toMatch(/rotation|rotating/iu);
+    }
+    expect(sources.join("\n")).not.toMatch(
+      /rotation does not transfer the old subkey's private launch history/iu,
+    );
   });
 });

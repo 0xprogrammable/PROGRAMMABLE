@@ -129,6 +129,7 @@ function projectMetadata(
 type LaunchFixtureOptions = Readonly<{
   resourceId?: string;
   routerLaunchId?: `0x${string}`;
+  launchProfileVersion?: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0" | "3.3.0" | "3.4.0";
   tokenAddress?: `0x${string}`;
   createdAt?: string;
   finalizedAt?: string;
@@ -179,6 +180,7 @@ function launchFixture(input: LaunchFixtureOptions = {}) {
     resourceId: input.resourceId ?? "123e4567-e89b-42d3-a456-426614174000",
     routerLaunchId: input.routerLaunchId
       ?? customGraphExploreEntry.launchStampProvenance.launchId,
+    launchProfileVersion: input.launchProfileVersion ?? "3.3.0",
     chainId: "1",
     router: customGraphExploreEntry.launchStampProvenance.routerAddress,
     token: input.tokenAddress ?? customGraphExploreEntry.tokenAddress,
@@ -257,14 +259,39 @@ function launchFixture(input: LaunchFixtureOptions = {}) {
 }
 
 function feedPage(
-  launches: readonly ReturnType<typeof launchFixture>[],
+  launches: readonly Readonly<Record<string, unknown>>[],
   nextCursor: string | null = null,
+  quality?: Readonly<Record<string, unknown>>,
 ) {
   return {
     schemaVersion: "programmable.finalized-custom-launch-metadata-list.v1",
     generatedAt: GENERATED_AT,
     launches,
     nextCursor,
+    ...(quality ? { quality } : {}),
+  } as const;
+}
+
+function completeFeedQuality(publishedRowCount: number) {
+  return {
+    status: "complete",
+    sourceRowCount: publishedRowCount,
+    publishedRowCount,
+    quarantinedRowCount: 0,
+    diagnostics: [],
+  } as const;
+}
+
+function partialFeedQuality(publishedRowCount: number) {
+  return {
+    status: "partial",
+    sourceRowCount: publishedRowCount + 1,
+    publishedRowCount,
+    quarantinedRowCount: 1,
+    diagnostics: [{
+      rowIndex: publishedRowCount,
+      code: "FINALIZED_ROW_QUARANTINED",
+    }],
   } as const;
 }
 
@@ -279,7 +306,7 @@ function jsonResponse(value: unknown) {
 }
 
 async function parsedFeed(
-  launch = launchFixture(),
+  launch: Readonly<Record<string, unknown>> = launchFixture(),
 ) {
   return await readFinalizedCustomLaunchMetadataPagesV1({
     fetchFeed: (async () => jsonResponse(feedPage([launch]))) as typeof fetch,
@@ -314,6 +341,115 @@ afterEach(() => {
 });
 
 describe("finalized Custom launch metadata feed v1", () => {
+  it.each([
+    ["complete", completeFeedQuality(1)],
+    ["partial", partialFeedQuality(1)],
+  ])("accepts and validates the documented %s page-quality envelope", async (
+    _status,
+    quality,
+  ) => {
+    const launch = launchFixture();
+    const feed = await readFinalizedCustomLaunchMetadataPagesV1({
+      fetchFeed: (async () => jsonResponse(feedPage(
+        [launch],
+        null,
+        quality,
+      ))) as typeof fetch,
+      now: () => NOW,
+      timeoutMs: 50,
+    });
+
+    expect(feed.launches).toHaveLength(1);
+    expect(feed.launches[0]?.routerLaunchId).toBe(launch.routerLaunchId);
+  });
+
+  it("keeps the legacy list page without quality compatible", async () => {
+    const launch = launchFixture();
+    const feed = await readFinalizedCustomLaunchMetadataPagesV1({
+      fetchFeed: (async () => jsonResponse(feedPage([launch]))) as typeof fetch,
+      now: () => NOW,
+      timeoutMs: 50,
+    });
+
+    expect(feed.launches[0]?.routerLaunchId).toBe(launch.routerLaunchId);
+  });
+
+  it("accepts legacy finalized entries with explicit null metadata keyed by launchProfileVersion", async () => {
+    const current = launchFixture({ launchProfileVersion: "3.1.0" });
+    const legacy = {
+      ...current,
+      projectMetadata: null,
+      projectMetadataHash: null,
+      bindings: {
+        ...current.bindings,
+        graphBundleHash: current.bindings.unboundGraphBundleHash,
+      },
+    } as const;
+    const feed = await parsedFeed(legacy);
+
+    expect(feed.launches[0]).toMatchObject({
+      launchProfileVersion: "3.1.0",
+      projectMetadata: null,
+      projectMetadataHash: null,
+    });
+  });
+
+  it.each([
+    {
+      name: "unknown quality key",
+      quality: { ...completeFeedQuality(1), extra: true },
+    },
+    {
+      name: "unsupported status",
+      quality: { ...completeFeedQuality(1), status: "unknown" },
+    },
+    {
+      name: "published count mismatch",
+      quality: { ...completeFeedQuality(1), publishedRowCount: 0 },
+    },
+    {
+      name: "broken source accounting",
+      quality: { ...completeFeedQuality(1), sourceRowCount: 2 },
+    },
+    {
+      name: "partial status without quarantine",
+      quality: { ...completeFeedQuality(1), status: "partial" },
+    },
+    {
+      name: "wrong diagnostic code",
+      quality: {
+        status: "partial",
+        sourceRowCount: 2,
+        publishedRowCount: 1,
+        quarantinedRowCount: 1,
+        diagnostics: [{ rowIndex: 1, code: "UNKNOWN" }],
+      },
+    },
+    {
+      name: "duplicate diagnostic row",
+      quality: {
+        status: "partial",
+        sourceRowCount: 3,
+        publishedRowCount: 1,
+        quarantinedRowCount: 2,
+        diagnostics: [
+          { rowIndex: 1, code: "FINALIZED_ROW_QUARANTINED" },
+          { rowIndex: 1, code: "FINALIZED_ROW_QUARANTINED" },
+        ],
+      },
+    },
+  ])("rejects malformed page quality: $name", async ({ quality }) => {
+    await expect(readFinalizedCustomLaunchMetadataPagesV1({
+      fetchFeed: (async () => jsonResponse(feedPage(
+        [launchFixture()],
+        null,
+        quality,
+      ))) as typeof fetch,
+      now: () => NOW,
+      timeoutMs: 50,
+    })).rejects.toThrow(/metadata quality/u);
+  });
+
   it("binds immutable partner attribution into the public Router overlay", async () => {
     const feed = await parsedFeed(launchFixture({
       partnerAttribution: PARTNER_ATTRIBUTION,
@@ -357,6 +493,29 @@ describe("finalized Custom launch metadata feed v1", () => {
     );
   });
 
+  it("quarantines an invalid trade descriptor without hiding launch metadata", async () => {
+    const feed = await parsedFeed({
+      ...launchFixture(),
+      tradeAdapterDescriptor: {
+        schemaVersion: "caller-authored",
+      },
+    } as unknown as ReturnType<typeof launchFixture>);
+    expect(feed.launches[0]?.tradeAdapterDescriptor).toBeUndefined();
+
+    const result = await enrichRouterCustomSnapshotWithFinalizedMetadataV1(
+      routerSnapshot(),
+      { readFeed: async () => feed },
+    );
+    expect(result.entries[0]?.description).toBe(
+      "A finalized Custom Graph project.",
+    );
+    if ("metadataOverlay" in result) {
+      expect(
+        result.metadataOverlay.appliedBindings[0]?.tradeAdapterDescriptor,
+      ).toBeUndefined();
+    }
+  });
+
   it("strictly parses and hash-binds every page of the finalized inventory", async () => {
     const first = launchFixture();
     const second = launchFixture({
@@ -386,8 +545,16 @@ describe("finalized Custom launch metadata feed v1", () => {
       schemaVersion: "programmable.finalized-custom-launch-metadata-list.v1",
       generatedAt: GENERATED_AT,
       launches: [
-        { resourceId: first.resourceId, routerLaunchId: first.routerLaunchId },
-        { resourceId: second.resourceId, routerLaunchId: second.routerLaunchId },
+        {
+          resourceId: first.resourceId,
+          routerLaunchId: first.routerLaunchId,
+          launchProfileVersion: first.launchProfileVersion,
+        },
+        {
+          resourceId: second.resourceId,
+          routerLaunchId: second.routerLaunchId,
+          launchProfileVersion: second.launchProfileVersion,
+        },
       ],
     });
     expect(feed.launches[0]?.projectMetadataHash).toBe(canonicalSha256(

@@ -26,11 +26,11 @@
     "capabilitiesUrl": "https://api.programmable.market/v3/capabilities",
     "finalizedMetadataUrl": "https://api.programmable.market/v3/finalized-custom-launches",
     "preflightUrl": "https://api.programmable.market/v3/custom-launches/preflight",
-    "cliReleaseVersion": "3.3.6",
-    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.6",
-    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz",
-    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
-    "cliTarballSha256": "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25"
+    "cliReleaseVersion": "3.3.9",
+    "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
+    "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
+    "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
+    "cliTarballSha256": "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01"
   },
   "agentContract": {
     "coldStartUrl": "https://programmable.market/.well-known/programmable.json",
@@ -40,6 +40,8 @@
     "authenticatedApiOrigin": "https://api.programmable.market",
     "apiOriginOverride": false,
     "preflightAndSubmitCapabilitiesFailClosedBeforeApiKey": true,
+    "localOrClientChecksAreDecision": false,
+    "serverDecisionRequired": true,
     "manualProjectAllowlist": false,
     "projectSpecificApprovalPath": false,
     "automaticAdmission": true,
@@ -48,12 +50,34 @@
     "automaticBroadcast": false,
     "remotePreflight": {
       "quotaConsumed": false,
+      "quotaConsumedMeaning": "no-launch-creation-quota-or-durable-reservation",
+      "authenticatedRequestRateBudgetConsumed": true,
       "nonceAllocated": false,
       "persisted": false,
       "walletSignatureRequiredLater": true,
       "walletBroadcastByService": false
     },
-    "instruction": "Fetch discovery, this catalog and the advertised pack-config schema before inspecting or changing the project. Never expect the API key itself to contain instructions. Never place the secret value in source, config, prompts, chat, logs, screenshots or command history."
+    "freshSubmissionContract": {
+      "profileVersion": "3.3.0",
+      "route": "POST /v3/custom-launches",
+      "legacyV2Post": "409 CUSTOM_LAUNCH_V2_READ_ONLY",
+      "legacyV1Post": "409 CUSTOM_LAUNCH_V1_READ_ONLY",
+      "legacyReadsAndSchemasPreserved": true
+    },
+    "walletHandoffEvidenceGate": {
+      "enforcedServerSide": true,
+      "clientDeclarationAccepted": false,
+      "mandatoryServerGates": ["static-hard-block-policy", "exact-router-simulation"],
+      "behaviorEvidenceRequiredForPositiveClaims": true,
+      "notExecutedOrNeedsEvidenceIsAuthorization": false,
+      "notConfiguredOrUnavailableDisposition": "claims_remain_unverified",
+      "authenticatedExecutedFailureDisposition": "blocks_wallet_handoff",
+      "workerPrivateSignedPermitMayExistWhileSimulating": true,
+      "publicOutputIsNullWhileSimulatingOrFailed": true,
+      "gateControlsPermitAndWalletTransactionExposureNotInternalPermitSigning": true,
+      "meaning": "The CLI and preflight prepare and classify exact bytes. The API server is the decision authority and exposes no permit, wallet transaction or wallet handoff until objective static hard blocks and exact Router simulation pass. Missing or unavailable behavior execution leaves behavior, fee, liquidity and routability claims unverified; an authenticated executed failure blocks the handoff. A worker-private signed permit may exist only inside the simulation envelope; it is not public authorization."
+    },
+    "instruction": "Fetch discovery, this catalog and the advertised pack-config schema before inspecting or changing the project. Never expect the API key itself to contain instructions. Never place the secret value in source, config, prompts, chat, logs, screenshots or command history. Use only V3.3 for fresh submission; V2 and V1 are historical read/schema compatibility surfaces with non-retryable 409 fresh-write fences."
   },
   "quickstart": [
     "pack",
@@ -87,17 +111,17 @@
     {
       "step": 5,
       "id": "validate",
-      "action": "Run validate with --remote and the same config. It first requires byte-identical local reproduction, then fetches public capabilities and posts those same bytes to authenticated preflight. Require quotaConsumed=false, nonceAllocated=false and persisted=false. Read riskClassification, behaviorEvidence and all six productTruthAxes independently before continuing."
+      "action": "Run validate with --remote and the same config. It first requires byte-identical local reproduction, then fetches public capabilities and posts those same bytes to authenticated preflight. Require quotaConsumed=false, nonceAllocated=false and persisted=false. quotaConsumed=false means no launch-creation quota or durable reservation; the authenticated call still consumes its ordinary route rate budget, including partner prepareRequestsPerHour. Read riskClassification, behaviorEvidence and all six productTruthAxes independently. Treat local validation and preflight only as preparation and classification; neither is the server's durable launch decision."
     },
     {
       "step": 6,
       "id": "submit",
-      "action": "Read PROGRAMMABLE_API_KEY only from the environment or supported secret store, then submit the byte-identical request. Preserve the journal, request bytes and Idempotency-Key for retries."
+      "action": "Read PROGRAMMABLE_API_KEY only from the environment or supported secret store, then submit only the byte-identical current V3.3 request. Preserve the journal, request bytes and Idempotency-Key for retries. A successful submit creates or replays a durable resource; it does not authorize a wallet action."
     },
     {
       "step": 7,
       "id": "status-before-wallet",
-      "action": "Poll the single resource with status --watch --until authorized. It may stop earlier at awaiting_funding_authorization. When the resource exposes walletHandoffUrl and expiresAt, stop automation. The connected controller independently reviews and signs the exact funding authorization. Poll the same resource again until authorized, then stop for separate review and broadcast of the exact Router transaction. The API and CLI never sign or broadcast."
+      "action": "Poll the single resource with status --watch --until authorized. The API server exposes a wallet handoff only after objective static hard blocks and exact Router simulation pass. Missing or unavailable behavior execution leaves related claims unverified; an authenticated executed failure blocks. Client output and caller attestation are never authorization. The resource may stop earlier at awaiting_funding_authorization. When it exposes walletHandoffUrl and expiresAt, stop automation. The connected controller independently reviews and signs the exact funding authorization. Poll the same resource again until authorized, then stop for separate review and broadcast of the exact Router transaction. The API and CLI never sign or broadcast."
     },
     {
       "step": 8,
@@ -183,7 +207,12 @@
     "requiredForProfileVersion": "3.3.0",
     "requiredForProfileVersions": [
       "3.2.0",
-      "3.3.0"
+      "3.3.0",
+      "3.4.0"
+    ],
+    "strictMetadataProfileVersions": [
+      "3.3.0",
+      "3.4.0"
     ],
     "strictNewPackPolicyProfileVersion": "3.3.0",
     "enforcement": {
@@ -376,6 +405,32 @@
       }
     }
   },
+  "feeBoundary": {
+    "universalProgrammableFeeClaim": false,
+    "arbitraryCustomHookAutomaticallyFeeEnforced": false,
+    "applicantSelectedBuyRateMaximumHundredthsOfBip": 100000,
+    "applicantSelectedSellRateMaximumHundredthsOfBip": 100000,
+    "applicantSelectedRateMaximumBps": 1000,
+    "applicantSelectedRateMaximumPercent": 10,
+    "serverEnforcesSelectedRateCaps": true,
+    "rateCapAccountingModes": [
+      "additive-platform-share",
+      "inclusive-selected-total"
+    ],
+    "feeCertifiedLane": {
+      "programmableShareHundredthsOfBip": 1000,
+      "programmableShareBps": 10,
+      "requiresExactFeeCertifiedProfileOrAdapter": true,
+      "requiresExactStampedPoolKey": true,
+      "requiresServerVerifiedPerLaunchFeeBehaviorEvidence": true
+    },
+    "openArbitraryCustomHookLane": {
+      "programmableFeeClaim": false,
+      "meaning": "Broad structural launch eligibility does not imply that arbitrary custom code charges or routes a Programmable fee."
+    },
+    "poolLpFeeIsSeparate": true,
+    "meaning": "Applicant-selected buy and sell rates are each capped and server-enforced at 100,000 hundredths of a bip, equal to 1,000 bps or 10%, in both accounting modes. The separate 1,000-hundredths Programmable share equals 10 bps and is claimed only for a fee-certified profile or adapter and its exact stamped PoolKey after server-authored per-launch evidence verifies the behavior."
+  },
   "liquidity": {
     "poolInitializationAddsLiquidity": false,
     "tradingVolumeCreatesInitialLiquidity": false,
@@ -466,8 +521,8 @@
     "routerSimulationBeforeAuthorization": true,
     "routerSimulationRole": "Final execution-compatibility detector for the exact prepared Router transaction. It is not a safety, fee-behavior, liquidity or economic-solvency claim.",
     "blockingStatus": "action_required",
-    "warningDisposition": "continue-to-router-simulation",
-    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.3.0 deployment blocks. No warning is an admission, conformance or safety claim.",
+    "warningDisposition": "continue-to-server-evidence-evaluation",
+    "warningMeaning": "A needs-evidence or nonblocking warning records a condition that static source, ABI or artifact evidence could not prove. Proxy, delegatecall, mint, tax, pause, liquidity and return-delta surfaces are evidence duties, not categorical profile-3.3.0 deployment blocks. Missing evidence leaves the related product claim unverified; it is not a caller-declared pass. An authenticated executed failure blocks wallet handoff. No warning is an admission, conformance or safety claim.",
     "actionRequiredInstruction": "Read the exact single-resource report, match each hard-blocking finding to its target and role, change the exact source or config, rebuild, repack and validate, then submit a new immutable request. Do not retry unchanged and do not ask for an allowlist bypass.",
     "supportInstruction": "When the resource directs you to support, send only requestId, status, UTC time and the public finding or error code. Never send the API key."
   },
@@ -599,6 +654,7 @@
     "routerSimulationIsAudit": false,
     "safetyClaim": false,
     "feeBehaviorClaim": false,
+    "universalTenBpsClaim": false,
     "guaranteesNotMade": [
       "honeypot resistance",
       "economic solvency",

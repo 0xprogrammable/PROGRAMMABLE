@@ -22,6 +22,13 @@ export const PARTNER_BUDGET_LIMITS_V1 = Object.freeze({
   subkeyAdminRequestsPerHour: 1_000,
 } as const);
 
+export const PARTNER_ADMIN_LIST_LIMITS_V1 = Object.freeze({
+  maximumPartners: 500,
+  maximumRootKeysPerPartner: 500,
+  defaultPageSize: 12,
+  maximumPageSize: 24,
+} as const);
+
 export type PartnerRootKeySummaryV1 = Readonly<{
   id: string;
   partnerId: string;
@@ -56,6 +63,18 @@ export type PartnerRootKeyMutationV1 = Readonly<{
   secretState: "delivered-once" | "already-delivered";
   rootKeySecret?: string;
   rotatedRootKeyId?: string;
+}>;
+
+export type PartnerListPaginationV1 = Readonly<{
+  page: number;
+  pageSize: number;
+  totalPartners: number;
+  totalPages: number;
+}>;
+
+export type PartnerListPageV1 = Readonly<{
+  partners: readonly PartnerSummaryV1[];
+  pagination: PartnerListPaginationV1;
 }>;
 
 const uuidPattern =
@@ -228,7 +247,8 @@ export function parsePartnerSummaryV1(value: unknown): PartnerSummaryV1 | null {
     || (value.status === "suspended" && (suspendedAt === null || revokedAt !== null))
     || (value.status === "revoked" && revokedAt === null)
     || !Array.isArray(value.rootKeys)
-    || value.rootKeys.length > 100
+    || value.rootKeys.length
+      > PARTNER_ADMIN_LIST_LIMITS_V1.maximumRootKeysPerPartner
   ) return null;
   const partnerId = value.id.toLowerCase();
   const rootKeys = value.rootKeys.map(parsePartnerRootKeySummaryV1);
@@ -255,12 +275,54 @@ export function parsePartnerListV1(value: unknown): PartnerSummaryV1[] | null {
     !isRecord(value)
     || value.schemaVersion !== PARTNER_ADMIN_SCHEMA_V1
     || !Array.isArray(value.partners)
-    || value.partners.length > 500
+    || value.partners.length > PARTNER_ADMIN_LIST_LIMITS_V1.maximumPartners
   ) return null;
   const partners = value.partners.map(parsePartnerSummaryV1);
   return partners.some((partner) => partner === null)
     ? null
     : partners as PartnerSummaryV1[];
+}
+
+export function parsePartnerListPageV1(
+  value: unknown,
+): PartnerListPageV1 | null {
+  if (!isRecord(value) || !isRecord(value.pagination)) return null;
+  const partners = parsePartnerListV1(value);
+  if (!partners) return null;
+  const { page, pageSize, totalPartners, totalPages } = value.pagination;
+  if (
+    !Number.isSafeInteger(page)
+    || Number(page) < 1
+    || !Number.isSafeInteger(pageSize)
+    || Number(pageSize) < 1
+    || Number(pageSize) > PARTNER_ADMIN_LIST_LIMITS_V1.maximumPageSize
+    || !Number.isSafeInteger(totalPartners)
+    || Number(totalPartners) < 0
+    || Number(totalPartners) > PARTNER_ADMIN_LIST_LIMITS_V1.maximumPartners
+    || !Number.isSafeInteger(totalPages)
+    || Number(totalPages) < 0
+    || Number(totalPages) !== Math.ceil(Number(totalPartners) / Number(pageSize))
+    || (Number(totalPages) === 0
+      ? Number(page) !== 1
+      : Number(page) > Number(totalPages))
+    || partners.length > Number(pageSize)
+  ) return null;
+  const expectedLength = Number(totalPartners) === 0
+    ? 0
+    : Math.min(
+        Number(pageSize),
+        Number(totalPartners) - ((Number(page) - 1) * Number(pageSize)),
+      );
+  if (partners.length !== expectedLength) return null;
+  return Object.freeze({
+    partners: Object.freeze(partners),
+    pagination: Object.freeze({
+      page: Number(page),
+      pageSize: Number(pageSize),
+      totalPartners: Number(totalPartners),
+      totalPages: Number(totalPages),
+    }),
+  });
 }
 
 export function parsePartnerMutationV1(

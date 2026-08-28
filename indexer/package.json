@@ -14,16 +14,22 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "classic-v4:activate": "tsx scripts/activate-classic-v4.mjs",
+    "classic-v4:public:promote": "tsx scripts/promote-classic-v4-public-availability.mjs",
+    "release:classic-v4-binding": "tsx scripts/generate-classic-v4-release-binding.mjs",
     "release:identity": "node scripts/release-candidate.mjs identity",
     "release:snapshot": "node scripts/release-candidate.mjs snapshot",
     "release:audit": "node scripts/release-candidate.mjs audit"
   },
   "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "envio": "3.2.1",
     "viem": "2.55.10"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
+    "tsx": "4.21.0",
     "typescript": "6.0.3",
     "vitest": "4.1.0",
     "yaml": "2.8.3"

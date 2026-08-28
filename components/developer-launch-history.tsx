@@ -148,6 +148,7 @@ export type LaunchResource = Readonly<{
     | "3.1.0"
     | "3.2.0"
     | "3.3.0"
+    | "3.4.0"
     | null;
   launchProfileHash: `sha256:${string}` | null;
   launchIntentHash: `sha256:${string}` | null;
@@ -660,7 +661,8 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
       || value.launchProfileVersion === "3.0.0"
       || value.launchProfileVersion === "3.1.0"
       || value.launchProfileVersion === "3.2.0"
-      || value.launchProfileVersion === "3.3.0")
+      || value.launchProfileVersion === "3.3.0"
+      || value.launchProfileVersion === "3.4.0")
     ? value.launchProfileVersion
     : null;
   if (v3 && launchProfileVersion === null) return null;
@@ -686,14 +688,16 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
         projectMetadata !== null || projectMetadataHash !== null
       ))
       || ((launchProfileVersion === "3.2.0"
-        || launchProfileVersion === "3.3.0") && (
+        || launchProfileVersion === "3.3.0"
+        || launchProfileVersion === "3.4.0") && (
         projectMetadata === null || projectMetadataHash === null
       ))
     )
   ) return null;
   if (
     (launchProfileVersion === "3.2.0"
-      || launchProfileVersion === "3.3.0")
+      || launchProfileVersion === "3.3.0"
+      || launchProfileVersion === "3.4.0")
     && projectMetadata
     && projectMetadataHash
     && browserProjectMetadataHashV1(projectMetadata) !== projectMetadataHash
@@ -946,6 +950,18 @@ function routerTransactionReview(launch: LaunchResource) {
   }
 }
 
+export function walletPlatformFeeDisclosureV3(
+  launchProfileVersion: LaunchResource["launchProfileVersion"],
+) {
+  if (launchProfileVersion === "3.3.0") {
+    return "No automatic Programmable fee claim";
+  }
+  if (launchProfileVersion === "3.4.0") {
+    return "10 bps · exact fee-path verification required";
+  }
+  return "Defined by the bound launch profile";
+}
+
 function sameFundingAuthorization(
   left: CustomLaunchFundingAuthorizationV3,
   right: CustomLaunchFundingAuthorizationV3,
@@ -1082,7 +1098,8 @@ export function walletProjectMetadataSummaryV1(
   if (
     launch.routeId !== "custom-launch:create:v3"
     || (launch.launchProfileVersion !== "3.2.0"
-      && launch.launchProfileVersion !== "3.3.0")
+      && launch.launchProfileVersion !== "3.3.0"
+      && launch.launchProfileVersion !== "3.4.0")
     || !launch.launchIntentHash
     || !launch.projectMetadata
     || !launch.projectMetadataHash
@@ -1104,7 +1121,8 @@ export function walletProjectMetadataBindingV1(
   const summary = walletProjectMetadataSummaryV1(launch);
   if (
     !summary
-    || (launch.launchProfileVersion === "3.3.0"
+    || ((launch.launchProfileVersion === "3.3.0"
+      || launch.launchProfileVersion === "3.4.0")
       && !walletProjectMetadataRequirementsV1(summary.projectMetadata).complete)
   ) return null;
   const artifact = launch.output?.artifact;
@@ -1596,7 +1614,9 @@ function ProjectMetadataReview({
   const imagePreview = useVerifiedProjectImageV1(presentation.image);
   const linkLabels = projectMetadataLinkDisplayLabels(presentation.links);
   const requirements = walletProjectMetadataRequirementsV1(projectMetadata);
-  const completeForProfile = launch.launchProfileVersion !== "3.3.0"
+  const completeForProfile = !["3.3.0", "3.4.0"].includes(
+    launch.launchProfileVersion ?? "",
+  )
     || requirements.complete;
   const website = presentation.links.find((link) => link.kind === "website");
   const xLink = presentation.links.find((link) => link.kind === "x");
@@ -1629,6 +1649,7 @@ function ProjectMetadataReview({
       <div className={styles.projectRequirementHeading}>
         <h5>
           {launch.launchProfileVersion === "3.3.0"
+            || launch.launchProfileVersion === "3.4.0"
             ? "Required launch details"
             : "Bound legacy launch details"}
         </h5>
@@ -1681,7 +1702,8 @@ function ProjectMetadataReview({
           <strong>Coin description</strong>
           <p>{presentation.description}</p>
         </div>
-      ) : launch.launchProfileVersion === "3.3.0" ? (
+      ) : launch.launchProfileVersion === "3.3.0"
+        || launch.launchProfileVersion === "3.4.0" ? (
         <p className={styles.projectMissing} role="alert">
           Add a coin description and repack this request before signing.
         </p>
@@ -2958,7 +2980,9 @@ export function DeveloperLaunchHistory({
               reviewLaunch,
             );
             const projectMetadataReadyForProfile = projectMetadataSummary !== null
-              && (reviewLaunch.launchProfileVersion !== "3.3.0"
+              && (!["3.3.0", "3.4.0"].includes(
+                reviewLaunch.launchProfileVersion ?? "",
+              )
                 || projectMetadataRequirements?.complete === true);
             const projectRequestBinding = walletProjectRequestBindingV1(
               reviewLaunch,
@@ -3066,7 +3090,8 @@ export function DeveloperLaunchHistory({
                 ) : null}
                 {projectMetadataSummary
                   && projectMetadataRequirements
-                  && reviewLaunch.launchProfileVersion === "3.3.0"
+                  && (reviewLaunch.launchProfileVersion === "3.3.0"
+                    || reviewLaunch.launchProfileVersion === "3.4.0")
                   && !projectMetadataRequirements.complete ? (
                     <div className={styles.metadataUnavailable} role="alert">
                       <strong>Required launch details are missing</strong>
@@ -3248,6 +3273,14 @@ export function DeveloperLaunchHistory({
                       <div>
                         <dt>Native value</dt>
                         <dd>{routerReview.walletAction.valueWei} wei</dd>
+                      </div>
+                      <div>
+                        <dt>Programmable fee</dt>
+                        <dd>
+                          {walletPlatformFeeDisclosureV3(
+                            reviewLaunch.launchProfileVersion,
+                          )}
+                        </dd>
                       </div>
                       <div>
                         <dt>Router</dt>

@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { getDataPipelineReleaseBinding } from
+import type { EnvioClassicCatalogBinding } from
+  "../lib/data-pipeline/envio-classic-v4-catalog-binding.server";
+import {
+  getDataPipelineReleaseBinding,
+  parseDataPipelineReleaseBinding,
+  type DataPipelineReleaseBinding,
+} from
   "../lib/data-pipeline/release-binding.server";
 import {
   createEnvioClassicV3CatalogReaderV1,
@@ -22,6 +28,72 @@ const OFFICIAL_LAUNCH_HASH =
   "0xf62bfccb2c0e3832607d8e6c48c00b0411d1d9bf12337fd039c4821d25e8cd20" as const;
 const OFFICIAL_OCCURRENCE =
   "1:0x17e7e16d94fdf07c3d06586080c68264a39756b326ecf9d55d5170542d8b733d:0x47668b99d392ba82fc82d2a38413bd679e6ec8a04e5cf9535bff2c558259732a:976" as const;
+const V4_HOOK = "0x00000000000000000000000000000000000000a1" as const;
+const V4_LAUNCHER =
+  "0x00000000000000000000000000000000000000a2" as const;
+const V4_MANIFEST_DIGEST = `0x${"91".repeat(32)}` as const;
+
+function expandedReleaseBinding() {
+  return parseDataPipelineReleaseBinding({
+    ...structuredClone(release),
+    envio: {
+      ...structuredClone(release.envio),
+      deploymentLabel: "production-classic-v4-a1b2c3d",
+      graphqlEndpoint: release.envio.graphqlEndpoint,
+      sourceCommit: "b".repeat(40),
+      configSha256: `0x${"b1".repeat(32)}`,
+      sourceRegistrySha256: `0x${"b2".repeat(32)}`,
+      eventSetSha256: `0x${"b3".repeat(32)}`,
+      eventCount: release.envio.eventCount + 9,
+    },
+    sources: [
+      ...structuredClone(release.sources),
+      {
+        contractName: "ClassicV4Hook",
+        address: V4_HOOK,
+        startBlock: 25_639_650,
+        runtimeCodeHash: `0x${"a1".repeat(32)}`,
+      },
+      {
+        contractName: "ClassicV4Launcher",
+        address: V4_LAUNCHER,
+        startBlock: 25_639_651,
+        runtimeCodeHash: `0x${"a2".repeat(32)}`,
+      },
+    ],
+    releases: [
+      ...structuredClone(release.releases),
+      {
+        model: "classic",
+        releaseVersion: "classic-v4",
+        activationBlock: 25_639_651,
+        sourceContracts: [
+          "ClassicV3RewardVaultFactory",
+          "ClassicV3VestingWalletFactory",
+          "ClassicV4Hook",
+          "ClassicV4Launcher",
+        ],
+        dynamicContracts: ["ClassicV3RewardVault"],
+      },
+    ],
+  });
+}
+
+const expandedRelease = expandedReleaseBinding();
+const inactiveCatalogBinding: EnvioClassicCatalogBinding = Object.freeze({
+  releaseBinding: release,
+  classicV4: null,
+});
+const activeCatalogBinding: EnvioClassicCatalogBinding = Object.freeze({
+  releaseBinding: expandedRelease,
+  classicV4: Object.freeze({
+    status: "indexer-activated" as const,
+    chainId: 1 as const,
+    manifestDigest: V4_MANIFEST_DIGEST,
+    launcher: V4_LAUNCHER,
+    releaseBinding: expandedRelease,
+  }),
+});
 
 function hex32(value: number) {
   return `0x${value.toString(16).padStart(64, "0")}` as const;
@@ -31,14 +103,17 @@ function address(value: number) {
   return `0x${value.toString(16).padStart(40, "0")}` as const;
 }
 
-function progressPayload(overrides: Record<string, unknown> = {}) {
+function progressPayload(
+  binding: DataPipelineReleaseBinding = release,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     data: {
       _meta: [{
         chainId: 1,
         progressBlock: ANCHOR_BLOCK,
         bufferBlock: ANCHOR_BLOCK,
-        sourceBlock: ANCHOR_BLOCK + release.confirmations,
+        sourceBlock: ANCHOR_BLOCK + binding.confirmations,
         isReady: true,
         eventsProcessed: 82_840,
         ...overrides,
@@ -46,14 +121,14 @@ function progressPayload(overrides: Record<string, unknown> = {}) {
       IndexerState_by_pk: {
         id: "ethereum-mainnet",
         schemaVersion: "1",
-        deployment: release.envio.deploymentLabel,
-        sourceCommit: release.envio.sourceCommit,
-        configSha256: release.envio.configSha256,
-        schemaSha256: release.envio.schemaSha256,
-        handlerSha256: release.envio.handlerSha256,
-        sourceRegistrySha256: release.envio.sourceRegistrySha256,
-        eventSetSha256: release.envio.eventSetSha256,
-        eventCount: release.envio.eventCount,
+        deployment: binding.envio.deploymentLabel,
+        sourceCommit: binding.envio.sourceCommit,
+        configSha256: binding.envio.configSha256,
+        schemaSha256: binding.envio.schemaSha256,
+        handlerSha256: binding.envio.handlerSha256,
+        sourceRegistrySha256: binding.envio.sourceRegistrySha256,
+        eventSetSha256: binding.envio.eventSetSha256,
+        eventCount: binding.envio.eventCount,
         chainId: 1,
         progressBlock: String(ANCHOR_BLOCK - 5),
         progressBlockHash: STATE_BLOCK_HASH,
@@ -125,10 +200,35 @@ function launchFixture(index: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function custodyEventFixture(launch: ReturnType<typeof launchFixture>) {
-  const classicV3Launcher = release.sources.find(
-    (source) => source.contractName === "ClassicV3Launcher",
-  )!.address;
+function classicV4LaunchFixture(index: number) {
+  const launch = launchFixture(index);
+  return {
+    ...launch,
+    id: `1:classic-v4:${launch.launchHash}`,
+    releaseVersion: "classic-v4",
+    hook: V4_HOOK,
+  };
+}
+
+function launcherSource(
+  launch: ReturnType<typeof launchFixture>,
+  binding: DataPipelineReleaseBinding,
+) {
+  const contractName = launch.releaseVersion === "classic-v4"
+    ? "ClassicV4Launcher"
+    : "ClassicV3Launcher";
+  const source = binding.sources.find(
+    (candidate) => candidate.contractName === contractName,
+  );
+  if (!source) throw new Error(`Missing test source ${contractName}`);
+  return { contractName, address: source.address };
+}
+
+function custodyEventFixture(
+  launch: ReturnType<typeof launchFixture>,
+  binding: DataPipelineReleaseBinding = release,
+) {
+  const launcher = launcherSource(launch, binding);
   const [, blockHash, transactionHash, logIndex] = String(
     launch.custodyOccurrenceId,
   ).split(":");
@@ -143,11 +243,11 @@ function custodyEventFixture(launch: ReturnType<typeof launchFixture>) {
     transactionHash,
     transactionIndex: "1",
     blockGlobalLogIndex: logIndex,
-    sourceAddress: classicV3Launcher,
-    contractName: "ClassicV3Launcher",
+    sourceAddress: launcher.address,
+    contractName: launcher.contractName,
     eventName: "MemeCreatorInitialBuyCustodyV2",
     model: "classic",
-    releaseVersion: "classic-v3",
+    releaseVersion: launch.releaseVersion,
     decodedPayload: JSON.stringify({
       cliffDays: "0",
       configurationHash: hex32(80_000 + Number(logIndex)),
@@ -162,10 +262,11 @@ function custodyEventFixture(launch: ReturnType<typeof launchFixture>) {
   };
 }
 
-function eventFixture(launch: ReturnType<typeof launchFixture>) {
-  const classicV3Launcher = release.sources.find(
-    (source) => source.contractName === "ClassicV3Launcher",
-  )!.address;
+function eventFixture(
+  launch: ReturnType<typeof launchFixture>,
+  binding: DataPipelineReleaseBinding = release,
+) {
+  const launcher = launcherSource(launch, binding);
   const [, blockHash, transactionHash, logIndex] = String(
     launch.launchOccurrenceId,
   ).split(":");
@@ -180,11 +281,11 @@ function eventFixture(launch: ReturnType<typeof launchFixture>) {
     transactionHash,
     transactionIndex: "1",
     blockGlobalLogIndex: logIndex,
-    sourceAddress: classicV3Launcher,
-    contractName: "ClassicV3Launcher",
+    sourceAddress: launcher.address,
+    contractName: launcher.contractName,
     eventName: "MemeTokenLaunchedV2",
     model: "classic",
-    releaseVersion: "classic-v3",
+    releaseVersion: launch.releaseVersion,
     decodedPayload: JSON.stringify({
       buySwapFeeBps: String(launch.buySwapFeeBps),
       deployer: launch.creator,
@@ -299,10 +400,13 @@ function json(value: unknown, status = 200) {
 
 function harness(input: {
   launches?: ReturnType<typeof launchFixture>[];
+  catalogBinding?: EnvioClassicCatalogBinding;
   mutateEvents?: (
     events: Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>,
   ) => Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>;
 } = {}) {
+  const catalogBinding = input.catalogBinding ?? inactiveCatalogBinding;
+  const selectedRelease = catalogBinding.releaseBinding;
   const launches = [...(input.launches ?? [launchFixture(1)])]
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
   const requests: Array<{ query: string; variables: Record<string, unknown> }> = [];
@@ -313,7 +417,7 @@ function harness(input: {
     };
     requests.push(request);
     if (request.query.includes("ProgrammableIndexerProgress")) {
-      return json(progressPayload());
+      return json(progressPayload(selectedRelease));
     }
     if (request.query.includes("ProgrammableClassicV3Catalog")) {
       const afterId = String(request.variables.afterId);
@@ -326,10 +430,10 @@ function harness(input: {
       const ids = request.variables.ids as string[];
       let events = launches.flatMap((row) => [
         ...(ids.includes(String(row.launchOccurrenceId))
-          ? [eventFixture(row)]
+          ? [eventFixture(row, selectedRelease)]
           : []),
         ...(ids.includes(String(row.custodyOccurrenceId))
-          ? [custodyEventFixture(row)]
+          ? [custodyEventFixture(row, selectedRelease)]
           : []),
       ]);
       events = input.mutateEvents?.(events) ?? events;
@@ -352,7 +456,7 @@ function harness(input: {
     anchorBlock: string;
     tokens: readonly `0x${string}`[];
   }) => ({
-    headBlock: String(ANCHOR_BLOCK + release.confirmations),
+    headBlock: String(ANCHOR_BLOCK + selectedRelease.confirmations),
     anchorBlockHash: hex32(60_000),
     anchorBlockTimestamp: "1785480010",
     metadata: new Map(tokens.map((token, index) => [token.toLowerCase(), {
@@ -373,7 +477,13 @@ function harness(input: {
     }])),
     observedAnchorBlock: anchorBlock,
   }));
-  return { fetcher, launches, readRpcSnapshot, requests };
+  return {
+    fetcher,
+    launches,
+    readRpcSnapshot,
+    requests,
+    catalogBinding,
+  };
 }
 
 describe("Envio Classic V3 public catalog", () => {
@@ -486,6 +596,41 @@ describe("Envio Classic V3 public catalog", () => {
     )).not.toBe(identityCommitment);
   });
 
+  it("includes exact Classic V4 launches only through the separate active catalog binding", async () => {
+    const test = harness({
+      catalogBinding: activeCatalogBinding,
+      launches: [launchFixture(1), classicV4LaunchFixture(2)],
+    });
+    const catalog = await createEnvioClassicV3CatalogReaderV1(test)({
+      deadlineMs: Date.now() + 5_000,
+    });
+
+    expect(catalog.scope.included).toEqual([
+      "classic-v3",
+      "classic-v4",
+      "official-main-token",
+      "registry.custom-launched",
+    ]);
+    expect(catalog.evidence).toMatchObject({
+      deployment: expandedRelease.envio.deploymentLabel,
+      sourceCommit: expandedRelease.envio.sourceCommit,
+    });
+    expect(catalog.entries.filter((entry) =>
+      entry.exploreKind === "token" &&
+      entry.launchModelVersion === "classic-v4"
+    )).toHaveLength(1);
+    const classicV4 = catalog.entries.find((entry) =>
+      entry.exploreKind === "token" &&
+      entry.launchModelVersion === "classic-v4"
+    );
+    expect(classicV4).toMatchObject({
+      launchModel: "classic",
+      launchModelVersion: "classic-v4",
+    });
+    expect(classicV4?.exploreKind === "token" &&
+      classicV4.hookAddress.toLowerCase()).toBe(V4_HOOK);
+  });
+
   it("fails closed for an empty catalog, family drift, and payload mismatch", async () => {
     const empty = harness({ launches: [] });
     await expect(createEnvioClassicV3CatalogReaderV1(empty)({
@@ -498,6 +643,13 @@ describe("Envio Classic V3 public catalog", () => {
     await expect(createEnvioClassicV3CatalogReaderV1(legacy)({
       deadlineMs: Date.now() + 5_000,
     })).rejects.toThrow(/failed release validation/u);
+
+    const unboundV4 = harness({
+      launches: [launchFixture(1, { releaseVersion: "classic-v4" })],
+    });
+    await expect(createEnvioClassicV3CatalogReaderV1(unboundV4)({
+      deadlineMs: Date.now() + 5_000,
+    })).rejects.toThrow(/classic-v4 Envio release is not bound/u);
 
     const mismatched = harness({
       mutateEvents: (events) => events.map((event) => ({
@@ -541,6 +693,7 @@ describe("Envio Classic V3 public catalog", () => {
     const read = createEnvioClassicV3CatalogReaderV1({
       fetcher,
       readRpcSnapshot: test.readRpcSnapshot,
+      catalogBinding: test.catalogBinding,
       now: () => now,
     });
 

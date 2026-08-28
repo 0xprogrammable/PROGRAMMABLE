@@ -33,8 +33,9 @@ const LAUNCH_PACKAGE_MANIFEST_PATH = "packages/launch/package.json";
 const PUBLIC_PROFILE_SCHEMA_VERSION =
   "programmable.direct-native-hook-graph-admission-profile.v3";
 const PUBLIC_PROFILE_ID = "programmable.direct-native-hook-graph.v1";
-const PUBLIC_PROFILE_VERSION = "3.3.0";
-const LAUNCH_PACKAGE_VERSION = "3.3.6";
+const BACKEND_PROFILE_VERSION = "3.4.0";
+const CURRENT_WRITE_PROFILE_VERSION = "3.3.0";
+const LAUNCH_PACKAGE_VERSION = "3.3.9";
 const PLATFORM_ADMISSION_POLICY = Object.freeze({
   schemaVersion: "programmable.direct-native-platform-admission-policy.v1",
   mode: "deterministic-exact-source-graph-static-baseline-v1",
@@ -82,6 +83,41 @@ const PLATFORM_ADMISSION_POLICY = Object.freeze({
   safetyClaim: false,
   feeBehaviorClaim: false,
 });
+const PROFILE_ACTIVATION_POLICY = Object.freeze({
+  status: "runner-settlement-and-deployment-readback-gated",
+  currentWriteProfileUntilActivation: CURRENT_WRITE_PROFILE_VERSION,
+  requiresConfiguredSignedRunner: true,
+  requiresFrozenFeeObservationAbi: true,
+  requiresCustomApiSettlementDataflowClosureReceiptV2: true,
+  requiresProductionRuntimeDeploymentReadbackMatch: true,
+  configurationIsExecutionEvidence: false,
+});
+const BEHAVIOR_EVIDENCE_READINESS = Object.freeze({
+  runnerConfigured: false,
+  executionMode: "not_configured",
+  configurationIsExecutionEvidence: false,
+  requiredForProfileVersion: BACKEND_PROFILE_VERSION,
+  requiredPlatformFeeConformanceStatus: "verified",
+  nonFeeVectorsMayRemainUnverified: true,
+  walletHandoffRequiresVerifiedEvidence: false,
+  notConfiguredDisposition: "claims_remain_unverified",
+  unavailableDisposition: "claims_remain_unverified",
+  executedFeeFailureDisposition: "blocks_wallet_handoff",
+  executedHardInvariantFailureDisposition: "blocks_wallet_handoff",
+  feeBehaviorClaim: false,
+});
+const SETTLEMENT_DATAFLOW_CLOSURE_READINESS = Object.freeze({
+  configured: false,
+  evidenceAuthority: "programmable-custom-launch-api-settlement-authority",
+  receiptSchemaVersion: "programmable.custom-api-settlement-dataflow-receipt.v2",
+  exactLaunchGraphAndRouteBindingRequired: true,
+  completeValueFlowInventoryRequired: true,
+  applicationOrGithubIntakeRequired: false,
+  independentReplayRequired: true,
+  runnerNoBypassScope: "canonical-vault-entrypoints-only",
+  candidateRouteCoverageComesFromRunner: false,
+  walletHandoffRequiresClosure: false,
+});
 const EXPECTED_MIGRATIONS = Object.freeze([
   "0001_custom_launch_api_private_schema_v1.sql",
   "0002_reserve_custom_launch_permit_nonce.sql",
@@ -95,6 +131,10 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   "0010_durable_launch_lifecycle_queue_v3.sql",
   "0011_custom_launch_project_metadata_v3.sql",
   "0012_custom_launch_api_reliability_v1.sql",
+  "0013_partner_launch_api_v1.sql",
+  "0014_behavior_fee_evidence_jobs_v3.sql",
+  "0015_partner_credential_lifecycle_hardening_v1.sql",
+  "0016_post_finality_trade_adapter_v1.sql",
 ]);
 const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -109,20 +149,43 @@ const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260826135927_durable_launch_lifecycle_queue_v3.sql",
   "20260826175335_custom_launch_project_metadata_v3.sql",
   "20260827074734_custom_launch_api_reliability_v1.sql",
+  "20260827202458_partner_launch_api_v1.sql",
+  "20260827213000_behavior_fee_evidence_jobs_v3.sql",
+  "20260828075854_partner_credential_lifecycle_hardening_v1.sql",
+  "20260828164455_post_finality_trade_adapter_v1.sql",
 ]);
 const EXPECTED_API_ROUTES = Object.freeze([
+  Object.freeze({ method: "GET", path: "/v1/admin/partners" }),
+  Object.freeze({ method: "GET", path: "/v1/admin/partners/{partnerId}/root-keys" }),
+  Object.freeze({ method: "GET", path: "/v1/partner/subkeys" }),
   Object.freeze({ method: "GET", path: "/v3/capabilities" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches/{id}" }),
   Object.freeze({ method: "GET", path: "/v3/finalized-custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches/{id}" }),
+  Object.freeze({ method: "POST", path: "/v1/admin/partners" }),
+  Object.freeze({ method: "POST", path: "/v1/admin/partners/{partnerId}/root-keys" }),
+  Object.freeze({
+    method: "POST",
+    path: "/v1/admin/partners/{partnerId}/root-keys/{rootKeyId}/rotate",
+  }),
+  Object.freeze({ method: "POST", path: "/v1/admin/partners/{partnerId}/status" }),
+  Object.freeze({ method: "POST", path: "/v1/partner/subkeys" }),
+  Object.freeze({ method: "POST", path: "/v1/partner/subkeys/{subkeyId}/rotate" }),
   Object.freeze({ method: "POST", path: "/v3/custom-launches" }),
   Object.freeze({ method: "POST", path: "/v3/custom-launches/preflight" }),
+  Object.freeze({ method: "POST", path: "/v3/custom-launches/{id}/permit-reissues" }),
   Object.freeze({
     method: "POST",
     path: "/v3/wallet-admin/custom-launches/{id}/funding-authorization",
   }),
+  Object.freeze({ method: "DELETE", path: "/v1/admin/partners/{partnerId}" }),
+  Object.freeze({
+    method: "DELETE",
+    path: "/v1/admin/partners/{partnerId}/root-keys/{rootKeyId}",
+  }),
+  Object.freeze({ method: "DELETE", path: "/v1/partner/subkeys/{subkeyId}" }),
 ]);
 const READINESS_KEYS = Object.freeze([
   "schemaVersion",
@@ -133,6 +196,8 @@ const READINESS_KEYS = Object.freeze([
   "migrationInventorySha256",
   "apiContractSha256",
   "walletAdminSecurity",
+  "behaviorEvidence",
+  "settlementDataflowClosure",
   "publicProfile",
   "chain",
 ]);
@@ -146,6 +211,7 @@ const PUBLIC_PROFILE_KEYS = Object.freeze([
   "profileVersion",
   "profileSha256",
   "productionLaunchAuthorized",
+  "currentWriteProfileVersion",
 ]);
 const CHAIN_KEYS = Object.freeze([
   "chainId",
@@ -384,7 +450,7 @@ function validateApiContract(contract) {
     || contract.schemaVersion !== "programmable.custom-launch-api-contract.v3"
     || contract.requestSchemaVersion !== "programmable.custom-launch-create-request.v3"
     || contract.profileId !== PUBLIC_PROFILE_ID
-    || contract.profileVersion !== PUBLIC_PROFILE_VERSION
+    || contract.profileVersion !== BACKEND_PROFILE_VERSION
     || !Array.isArray(contract.routes)
     || contract.routes.length !== EXPECTED_API_ROUTES.length) {
     throw new Error("backend API contract is invalid");
@@ -402,11 +468,13 @@ function validateProfile(profile) {
   if (!isObject(profile)
     || profile.schemaVersion !== PUBLIC_PROFILE_SCHEMA_VERSION
     || profile.profileId !== PUBLIC_PROFILE_ID
-    || profile.profileVersion !== PUBLIC_PROFILE_VERSION
+    || profile.profileVersion !== BACKEND_PROFILE_VERSION
     || profile.profileRevision !== 3
     || profile.productionLaunchAuthorized !== true
     || !isObject(profile.chain)
     || !isObject(profile.platformAdmissionPolicy)
+    || canonicalize(profile.activationPolicy)
+      !== canonicalize(PROFILE_ACTIVATION_POLICY)
     || Object.hasOwn(profile, "platformFeeProofPolicy")
     || canonicalize(profile.platformAdmissionPolicy)
       !== canonicalize(PLATFORM_ADMISSION_POLICY)) {
@@ -430,11 +498,12 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
   );
   if (openApi?.info?.version !== LAUNCH_PACKAGE_VERSION
     || openApi?.["x-programmable-profile"]?.profileId !== PUBLIC_PROFILE_ID
-    || openApi?.["x-programmable-profile"]?.profileVersion !== PUBLIC_PROFILE_VERSION
+    || openApi?.["x-programmable-profile"]?.profileVersion
+      !== CURRENT_WRITE_PROFILE_VERSION
     || openApi?.["x-programmable-profile"]?.profileRevision !== 3
     || openApi?.["x-programmable-profile"]?.productionLaunchAuthorized !== true
     || openApi?.["x-programmable-admission-policy"]?.currentProfileVersion
-      !== PUBLIC_PROFILE_VERSION
+      !== CURRENT_WRITE_PROFILE_VERSION
     || canonicalize(openApi?.["x-programmable-admission-policy"]
       ?.legacyExactProfileVersions) !== canonicalize([
       "3.2.0",
@@ -451,7 +520,7 @@ function validateWebsiteArtifacts(publicOpenApiBytes, launchPackageManifestBytes
   }
   if (launchPackage?.name !== "@programmable/launch"
     || launchPackage?.version !== LAUNCH_PACKAGE_VERSION) {
-    throw new Error("launch package manifest is not the 3.3.6 public CLI contract");
+    throw new Error("launch package manifest is not the 3.3.9 public CLI contract");
   }
 }
 
@@ -481,11 +550,17 @@ function validateReadiness(
       !== walletAdminSecurity.assertionMode
     || readiness.walletAdminSecurity.legacyBearerRequestsAccepted
       !== walletAdminSecurity.legacyBearerRequestsAccepted
+    || canonicalize(readiness.behaviorEvidence)
+      !== canonicalize(BEHAVIOR_EVIDENCE_READINESS)
+    || canonicalize(readiness.settlementDataflowClosure)
+      !== canonicalize(SETTLEMENT_DATAFLOW_CLOSURE_READINESS)
     || !exactKeys(readiness.publicProfile, PUBLIC_PROFILE_KEYS)
     || readiness.publicProfile.profileId !== profile.profileId
     || readiness.publicProfile.profileVersion !== profile.profileVersion
     || readiness.publicProfile.profileSha256 !== profileSha256
-    || readiness.publicProfile.productionLaunchAuthorized !== true) {
+    || readiness.publicProfile.productionLaunchAuthorized !== false
+    || readiness.publicProfile.currentWriteProfileVersion
+      !== CURRENT_WRITE_PROFILE_VERSION) {
     throw new Error("API readiness differs from the exact backend artifacts");
   }
   validateChain(readiness.chain, profile.chain);
@@ -686,7 +761,11 @@ export async function materializeCustomLaunchApiReleaseBindingV1(input) {
       readinessIdentitySha256: identities.readinessIdentitySha256,
       apiContractSha256: identities.apiContractSha256,
       profileId: PUBLIC_PROFILE_ID,
-      profileVersion: PUBLIC_PROFILE_VERSION,
+      profileVersion: BACKEND_PROFILE_VERSION,
+      currentWriteProfileVersion:
+        readinessDocument.value.publicProfile.currentWriteProfileVersion,
+      runtimeProductionLaunchAuthorized:
+        readinessDocument.value.publicProfile.productionLaunchAuthorized,
       publicProfilePath: PROFILE_PATH,
       publicProfileSha256: identities.profileSha256,
     },

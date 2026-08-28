@@ -93,6 +93,10 @@ const AUTHORIZED_OUTPUT_KEYS = Object.freeze([
   "walletTransaction",
   "simulation",
 ]);
+const BEHAVIOR_OUTPUT_KEYS = Object.freeze([
+  "behaviorEvidence",
+  "behaviorAssurance",
+]);
 const PLATFORM_ADMISSION_KEYS = Object.freeze([
   "schemaVersion",
   "disposition",
@@ -102,24 +106,14 @@ const PLATFORM_ADMISSION_KEYS = Object.freeze([
   "safetyClaim",
   "feeBehaviorClaim",
 ]);
-const PLATFORM_ADMISSION_WARNING_CODES = new Set([
-  "RUNTIME_CALLCODE",
-  "RUNTIME_CREATE",
-  "RUNTIME_CREATE2",
-  "RUNTIME_DELEGATECALL",
-  "RUNTIME_SELFDESTRUCT",
-  "SOURCE_PROXY_OR_UPGRADE_SURFACE",
-  "SOURCE_SELFDESTRUCT_SURFACE",
-  "SOURCE_MUTABLE_PAUSE_SURFACE",
-  "SOURCE_MUTABLE_BLOCKLIST_SURFACE",
-  "SOURCE_MUTABLE_TAX_OR_FEE_SURFACE",
-  "SOURCE_MUTABLE_TRANSFER_RESTRICTION",
-  "SOURCE_MUTABLE_ADMIN_SURFACE",
-  "SOURCE_PUBLIC_MINT_SURFACE",
-  "V4_CALLBACK_AUTHENTICATION_REVIEW_REQUIRED",
-  "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING",
-  "SOURCE_TARGET_ANALYSIS_INCOMPLETE",
+const PLATFORM_ADMISSION_V3_KEYS = Object.freeze([
+  ...PLATFORM_ADMISSION_KEYS,
+  "needsEvidenceFindingCodes",
+  "riskClassification",
+  "behaviorEvidence",
+  "productTruthAxes",
 ]);
+const PLATFORM_FINDING_CODE = /^[A-Z][A-Z0-9_]{2,127}$/u;
 const FUNDING_BOUNDARY_KEYS = Object.freeze([
   "approvalTransactionRequired",
   "permit2Used",
@@ -180,6 +174,11 @@ const ROUTER_ACTION_KEYS = Object.freeze([
   "transactionPreimageHash",
   "permitDigest",
   "initializerCalldataHash",
+]);
+const CURRENT_ROUTER_ACTION_KEYS = Object.freeze([
+  ...ROUTER_ACTION_KEYS,
+  "walletHandoffUrl",
+  "expiresAt",
 ]);
 const EXACT_TRANSACTION_KEYS = Object.freeze([
   "schemaVersion",
@@ -250,6 +249,27 @@ const SIMULATION_KEYS = Object.freeze([
   "blockTimestamp",
   "responseDigest",
   "gasEstimate",
+]);
+const BEHAVIOR_EVIDENCE_KEYS = Object.freeze([
+  "schemaVersion",
+  "subjectSha256",
+  "requirements",
+  "status",
+  "execution",
+  "vectors",
+  "outstandingVectorIds",
+  "claimAxes",
+]);
+const BEHAVIOR_ASSURANCE_KEYS = Object.freeze([
+  "schemaVersion",
+  "authorizationScope",
+  "evidenceAuthority",
+  "behaviorExecution",
+  "mutableAuthorityConditional",
+  "routability",
+  "platformFeeConformance",
+  "liquidityConformance",
+  "safety",
 ]);
 const PERMIT_WINDOW_KEYS = Object.freeze([
   "validAfter",
@@ -628,7 +648,13 @@ export function prepareCustomLaunchRouterReviewV3(
     || outputRecord.integrationState !== "ready"
     || outputRecord.stage !== "router-transaction-required"
   ) return invalid();
-  const required = exactRecord(outputRecord.actionRequired, ROUTER_ACTION_KEYS);
+  const actionCandidate = record(outputRecord.actionRequired);
+  const hasCurrentHandoff = Object.hasOwn(actionCandidate, "walletHandoffUrl")
+    || Object.hasOwn(actionCandidate, "expiresAt");
+  const required = exactRecord(
+    actionCandidate,
+    hasCurrentHandoff ? CURRENT_ROUTER_ACTION_KEYS : ROUTER_ACTION_KEYS,
+  );
   const transaction = exactRecord(
     required.transaction,
     EXACT_TRANSACTION_KEYS,
@@ -644,6 +670,7 @@ export function prepareCustomLaunchRouterReviewV3(
   );
   const valueWei = canonicalUint256(transaction.valueWei);
   const data = exactLowerHexData(transaction.calldata);
+  if (hasCurrentHandoff) assertCurrentRouterHandoffV3(required);
   if (
     required.kind !== "send-router-transaction"
     || transaction.schemaVersion !== CUSTOM_LAUNCH_EXACT_WALLET_TRANSACTION_SCHEMA_V3
@@ -1118,12 +1145,23 @@ function authorizationOutputRecord(value: unknown) {
     : candidate.stage === "router-transaction-required"
       ? AUTHORIZED_OUTPUT_KEYS
       : OUTPUT_KEYS;
-  const expectedKeys = Object.hasOwn(candidate, "platformAdmission")
-    ? [...stageKeys, "platformAdmission"]
-    : stageKeys;
+  const hasBehaviorEvidence = Object.hasOwn(candidate, "behaviorEvidence");
+  const hasBehaviorAssurance = Object.hasOwn(candidate, "behaviorAssurance");
+  if (hasBehaviorEvidence !== hasBehaviorAssurance) return invalid();
+  const expectedKeys = [
+    ...stageKeys,
+    ...(hasBehaviorEvidence ? BEHAVIOR_OUTPUT_KEYS : []),
+    ...(Object.hasOwn(candidate, "platformAdmission")
+      ? ["platformAdmission"]
+      : []),
+  ];
   const output = exactRecord(candidate, expectedKeys);
   if (Object.hasOwn(output, "platformAdmission")) {
     assertPlatformAdmissionStatusV1(output.platformAdmission);
+  }
+  if (hasBehaviorEvidence) {
+    const evidence = assertBehaviorEvidenceSummaryV3(output.behaviorEvidence);
+    assertBehaviorAssuranceV3(output.behaviorAssurance, evidence);
   }
   if (output.stage === "simulating") assertSimulatingOutputV3(output);
   return output;
@@ -1206,10 +1244,40 @@ function assertAuthorizedEvidenceV3(
   if (output.onchain !== null) {
     assertOnchainEvidenceV3(output.onchain, transaction.to);
   }
-  assertSimulationEvidenceV3(
+  const simulation = assertSimulationEvidenceV3(
     output.simulation,
     customLaunchWalletTransactionPreimageHashV2(action),
   );
+  const hasTopLevelBehavior = Object.hasOwn(output, "behaviorEvidence");
+  const hasSimulationBehavior = Object.hasOwn(simulation, "behaviorEvidence");
+  if (hasTopLevelBehavior !== hasSimulationBehavior) return invalid();
+  if (hasTopLevelBehavior
+    && JSON.stringify(output.behaviorEvidence)
+      !== JSON.stringify(simulation.behaviorEvidence)) return invalid();
+}
+
+function assertCurrentRouterHandoffV3(
+  action: Readonly<Record<string, unknown>>,
+) {
+  if (typeof action.walletHandoffUrl !== "string"
+    || typeof action.expiresAt !== "string") return invalid();
+  let url: URL;
+  try {
+    url = new URL(action.walletHandoffUrl);
+  } catch {
+    return invalid();
+  }
+  const launchIds = url.searchParams.getAll("launchId");
+  if (url.origin !== "https://programmable.market"
+    || url.pathname !== "/developers/api-keys"
+    || url.hash !== ""
+    || launchIds.length !== 1
+    || !UUID.test(launchIds[0] ?? "")
+    || [...url.searchParams.keys()].some((key) => key !== "launchId")
+    || url.toString() !== action.walletHandoffUrl) return invalid();
+  const expiresAtMs = Date.parse(action.expiresAt);
+  if (!Number.isFinite(expiresAtMs)
+    || new Date(expiresAtMs).toISOString() !== action.expiresAt) return invalid();
 }
 
 function assertExactWalletTransactionV3(
@@ -1414,7 +1482,12 @@ function assertSimulationEvidenceV3(
   value: unknown,
   expectedTransactionPreimageHash: `sha256:${string}`,
 ) {
-  const simulation = exactRecord(value, SIMULATION_KEYS);
+  const candidate = record(value);
+  const hasBehaviorEvidence = Object.hasOwn(candidate, "behaviorEvidence");
+  const simulation = exactRecord(
+    candidate,
+    hasBehaviorEvidence ? [...SIMULATION_KEYS, "behaviorEvidence"] : SIMULATION_KEYS,
+  );
   if (simulation.outcome !== "passed"
     || exactSha256(simulation.transactionPreimageHash)
       !== expectedTransactionPreimageHash
@@ -1424,13 +1497,25 @@ function assertSimulationEvidenceV3(
     || canonicalUint256(simulation.blockTimestamp).parsed === 0n
     || exactSha256(simulation.responseDigest) !== simulation.responseDigest
     || canonicalUint256(simulation.gasEstimate).parsed === 0n) return invalid();
+  if (hasBehaviorEvidence) {
+    assertBehaviorEvidenceSummaryV3(simulation.behaviorEvidence);
+  }
+  return simulation;
 }
 
 function assertPlatformAdmissionStatusV1(value: unknown) {
-  const status = exactRecord(value, PLATFORM_ADMISSION_KEYS);
+  const candidate = record(value);
+  const isCurrent = Object.hasOwn(candidate, "riskClassification")
+    || Object.hasOwn(candidate, "behaviorEvidence")
+    || Object.hasOwn(candidate, "productTruthAxes")
+    || Object.hasOwn(candidate, "needsEvidenceFindingCodes");
+  const status = exactRecord(
+    candidate,
+    isCurrent ? PLATFORM_ADMISSION_V3_KEYS : PLATFORM_ADMISSION_KEYS,
+  );
   if (!Array.isArray(status.warningFindingCodes)
     || status.warningFindingCodes.some((code) =>
-      typeof code !== "string" || !PLATFORM_ADMISSION_WARNING_CODES.has(code))
+      typeof code !== "string" || !PLATFORM_FINDING_CODE.test(code))
     || new Set(status.warningFindingCodes).size !== status.warningFindingCodes.length
     || status.schemaVersion !== "programmable.platform-admission-status.v1"
     || status.disposition !== "no_blocking_static_finding"
@@ -1440,6 +1525,108 @@ function assertPlatformAdmissionStatusV1(value: unknown) {
     || status.feeBehaviorClaim !== false) {
     return invalid();
   }
+  if (isCurrent) assertCurrentPlatformAdmissionV3(status);
+}
+
+function assertCurrentPlatformAdmissionV3(
+  status: Readonly<Record<string, unknown>>,
+) {
+  if (!Array.isArray(status.needsEvidenceFindingCodes)
+    || status.needsEvidenceFindingCodes.some((code) =>
+      typeof code !== "string" || !PLATFORM_FINDING_CODE.test(code))
+    || new Set(status.needsEvidenceFindingCodes).size
+      !== status.needsEvidenceFindingCodes.length
+    || JSON.stringify(status.warningFindingCodes)
+      !== JSON.stringify(status.needsEvidenceFindingCodes)) return invalid();
+  const risk = record(status.riskClassification);
+  const eligibility = record(risk.launchEligibility);
+  if (risk.schemaVersion !== "programmable.platform-admission-risk-classification.v3"
+    || risk.classifierVersion !== "1.1.0"
+    || risk.evidenceAuthority !== "deterministic-static-classification"
+    || risk.disposition !== "needs_evidence"
+    || risk.evidenceTierStatus !== "required"
+    || risk.approvalAuthority !== false
+    || risk.safetyClaim !== false
+    || risk.feeBehaviorClaim !== false
+    || eligibility.deployable !== true
+    || eligibility.routable !== false
+    || eligibility.featured !== false
+    || eligibility.basis !== "static-admission-only") return invalid();
+  const behavior = assertBehaviorEvidenceSummaryV3(status.behaviorEvidence);
+  if (behavior.status !== "not_executed") return invalid();
+  const truth = record(status.productTruthAxes);
+  if (record(truth.deployment).status !== "eligible"
+    || record(truth.trading).status !== "not_verified"
+    || record(truth.platform_fee_evidence).status !== "not_verified") {
+    return invalid();
+  }
+}
+
+function assertBehaviorEvidenceSummaryV3(value: unknown) {
+  const summary = exactRecord(value, BEHAVIOR_EVIDENCE_KEYS);
+  const requirements = record(summary.requirements);
+  if (summary.schemaVersion !== "programmable.custom-launch-behavior-summary.v1"
+    || exactSha256(summary.subjectSha256) !== summary.subjectSha256
+    || requirements.schemaVersion
+      !== "programmable.custom-launch-behavior-requirements.v1"
+    || requirements.vectorSetVersion !== "1.1.0"
+    || !Number.isInteger(requirements.hookPermissionMask)
+    || Number(requirements.hookPermissionMask) < 0
+    || Number(requirements.hookPermissionMask) > 16_383
+    || exactSha256(requirements.requirementsSha256)
+      !== requirements.requirementsSha256
+    || !["required", "not_executed", "verified", "failed"]
+      .includes(String(summary.status))
+    || !Array.isArray(summary.vectors)
+    || summary.vectors.length < 16
+    || summary.vectors.length > 20
+    || !Array.isArray(summary.outstandingVectorIds)
+    || new Set(summary.outstandingVectorIds).size
+      !== summary.outstandingVectorIds.length
+    || summary.outstandingVectorIds.some((id) =>
+      typeof id !== "string" || !CANONICAL_IDENTIFIER.test(id))
+    || summary.status === "failed") return invalid();
+  if (summary.execution !== null) {
+    const execution = record(summary.execution);
+    if (execution.schemaVersion
+        !== "programmable.custom-launch-behavior-execution.v1"
+      || execution.evidenceAuthority !== "platform-runtime-executor"
+      || exactSha256(execution.subjectSha256) !== summary.subjectSha256
+      || exactSha256(execution.requirementsSha256)
+        !== requirements.requirementsSha256) return invalid();
+  }
+  return summary;
+}
+
+function assertBehaviorAssuranceV3(
+  value: unknown,
+  evidence: Readonly<Record<string, unknown>>,
+) {
+  const assurance = exactRecord(value, BEHAVIOR_ASSURANCE_KEYS);
+  if (assurance.schemaVersion
+      !== "programmable.custom-launch-behavior-assurance.v1"
+    || assurance.authorizationScope !== "exact-launch-provenance-only"
+    || typeof assurance.mutableAuthorityConditional !== "boolean"
+    || !["platform-runtime-executor", "none"]
+      .includes(String(assurance.evidenceAuthority))
+    || !["executed", "not_executed"]
+      .includes(String(assurance.behaviorExecution))) return invalid();
+  const executed = evidence.execution !== null;
+  if (assurance.behaviorExecution !== (executed ? "executed" : "not_executed")
+    || assurance.evidenceAuthority
+      !== (executed ? "platform-runtime-executor" : "none")) return invalid();
+  for (const key of [
+    "routability",
+    "platformFeeConformance",
+    "liquidityConformance",
+  ] as const) {
+    const axis = exactRecord(assurance[key], ["status", "basis"]);
+    if (!["not_verified", "verified", "conditional"]
+      .includes(String(axis.status))) return invalid();
+  }
+  const safety = exactRecord(assurance.safety, ["status", "basis"]);
+  if (safety.status !== "not_verified"
+    || safety.basis !== "no-universal-safety-claim") return invalid();
 }
 
 function exactRecord(

@@ -11,6 +11,8 @@ import {
   readCreatorClaimIdentityFromRpc,
   readTradeActionModelFromRpc,
 } from "../lib/server/action-rpc-identity.server";
+import { getConfiguredClassicV4PublicRelease } from
+  "../lib/classic-v4-release";
 import { getConfiguredStockPairedReleases } from
   "../lib/stock-paired-release";
 import { computeOfficialV4PoolId } from
@@ -61,6 +63,12 @@ describe("single-RPC action identity", () => {
   it("fails closed after current launcher-state reads when a trade token is unknown", async () => {
     const readContract = vi.fn().mockResolvedValue(`0x${"00".repeat(32)}`);
     const client = { readContract } as unknown as PublicClient;
+    const classicV4Release =
+      getConfiguredClassicV4PublicRelease("production");
+
+    if (!classicV4Release) {
+      throw new Error("The public Classic V4 release is not configured");
+    }
 
     await expect(
       readTradeActionModelFromRpc({
@@ -75,7 +83,15 @@ describe("single-RPC action identity", () => {
     });
 
     expect(readContract).toHaveBeenCalledTimes(
-      2 + getConfiguredStockPairedReleases().length,
+      3 + getConfiguredStockPairedReleases().length,
+    );
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: classicV4Release.addresses.launcher,
+        functionName: "launchHashOf",
+        args: [token],
+        blockNumber: 100n,
+      }),
     );
     expect(
       readContract.mock.calls.every(

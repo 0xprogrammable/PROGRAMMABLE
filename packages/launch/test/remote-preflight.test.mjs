@@ -35,7 +35,7 @@ const CANONICAL_REQUEST_VECTOR_BYTES = Buffer.from(
 const CANONICAL_REQUEST_VECTOR_HASH =
   "sha256:7c0a12cdec841fa5c256d0f9887382166b6dcfef6002ccee955120f5f16690d8";
 
-test("remote validate discovers public capabilities then runs authenticated side-effect-free preflight", async () => {
+test("remote validate accepts the live 3.3 capability contract then runs side-effect-free preflight", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "programmable-remote-preflight-"));
   try {
     const launchPath = path.join(root, "launch.json");
@@ -48,6 +48,7 @@ test("remote validate discovers public capabilities then runs authenticated side
       ...validCapabilities(),
       futureAdditiveCapability: { preserved: true },
     };
+    assert.equal(capabilities.profile.profileVersion, "3.3.0");
     const preflight = validPreflight(CANONICAL_REQUEST_VECTOR_HASH, {
       disposition: "needs_evidence",
       needsEvidenceFindingCodes: ["CUSTOM_EVIDENCE_UNPROVEN"],
@@ -321,6 +322,15 @@ test("remote validation fails closed on profile, route, and auth capability drif
         (field) => field !== "presentation.links",
       );
     }],
+    ["projectMetadata.requiredForProfileVersions", (value) => {
+      value.projectMetadata.requiredForProfileVersions = ["3.2.0", "3.4.0"];
+    }],
+    ["projectMetadata.strictMetadataProfileVersions", (value) => {
+      value.projectMetadata.strictMetadataProfileVersions = ["3.4.0"];
+    }],
+    ["projectMetadata.legacyMetadataProfileVersions", (value) => {
+      value.projectMetadata.legacyMetadataProfileVersions = ["3.3.0"];
+    }],
     ["projectMetadata.profilePolicy", (value) => {
       value.projectMetadata.profilePolicy.xUriPattern = "^https://twitter.com/";
     }],
@@ -362,6 +372,36 @@ test("remote validation fails closed on profile, route, and auth capability drif
     assert.equal(calls, 1, expectedField);
     assert.equal(keyLoads, 0, expectedField);
   }
+});
+
+test("remote validation accepts additive future metadata profile versions", async () => {
+  const capabilities = validCapabilities();
+  capabilities.projectMetadata.requiredForProfileVersions = ["3.2.0", "3.3.0", "3.4.0", "3.5.0"];
+  capabilities.projectMetadata.strictMetadataProfileVersions = ["3.3.0", "3.4.0", "3.5.0"];
+
+  const result = await validateLaunchRemote({
+    launchPath: "/does/not/need/to/exist.json",
+    configPath: "/does/not/need/to/exist.config.json",
+    maxAttempts: 1,
+    readLaunchBytesImpl: async () => CANONICAL_REQUEST_VECTOR_BYTES,
+    validateLaunchFileImpl: async () => ({
+      schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+      requestSha256: sha256Digest(CANONICAL_REQUEST_VECTOR_BYTES),
+    }),
+    fetchImpl: async (url, options = {}) => {
+      if (String(url).endsWith("/v3/capabilities")) return jsonResponse(capabilities);
+      if (String(url).endsWith("/v3/custom-launches/preflight")) {
+        assert.equal(options.headers.authorization, `Bearer ${API_KEY}`);
+        return jsonResponse(validPreflight(CANONICAL_REQUEST_VECTOR_HASH));
+      }
+      throw new Error(`unexpected request ${url}`);
+    },
+    loadApiKeyImpl: async () => API_KEY,
+  });
+
+  assert.equal(result.remoteValidation, true);
+  assert.equal(result.capabilities.projectMetadata.requiredForProfileVersions.at(-1), "3.5.0");
+  assert.equal(result.capabilities.projectMetadata.strictMetadataProfileVersions.at(-1), "3.5.0");
 });
 
 test("V3 submit rechecks capabilities before loading a key", async () => {

@@ -53,7 +53,7 @@ const lifecycle = [
   ["validating", "Request and graph validation are running."],
   [
     "pending_review",
-    "Exact-source admission or Router preparation is still running. No wallet transaction exists.",
+    "Server-side admission and the selected lane's per-launch evidence decision are still running. No wallet transaction exists.",
   ],
   [
     "action_required",
@@ -61,7 +61,7 @@ const lifecycle = [
   ],
   [
     "awaiting_funding_authorization",
-    "EIP-3009 mode only: review and sign the exact typed data in the connected controller wallet.",
+    "EIP-3009 mode only, after the server evidence gate: review and sign the exact typed data in the connected controller wallet.",
   ],
   [
     "funding_authorization_verified",
@@ -74,7 +74,7 @@ const lifecycle = [
   ],
   [
     "authorized",
-    "The platform permit and exact output.walletTransaction exist. The controller wallet has not signed or broadcast it.",
+    "The server verified the evidence required by the selected lane, and the platform permit and exact output.walletTransaction exist. The controller wallet has not signed or broadcast it.",
   ],
   [
     "submitted",
@@ -96,19 +96,19 @@ const cliInstallCommands = [
     "Create an isolated download directory.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz',
     "Download the pinned release asset.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256',
     "Download its checksum sidecar.",
   ],
   [
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)',
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.9.tgz.sha256)',
     "Continue only after this reports OK.",
   ],
   [
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.9.tgz"',
     "Install the verified local bytes.",
   ],
 ] as const;
@@ -163,23 +163,26 @@ export default function CustomLaunchApiDocsPage() {
       title="Custom Launch API"
     >
       <p className={styles.bodyCopy}>
-        Public V3 is the general custom-hook creation contract. V2 and V1
-        history remain readable, while
-        V1 creation is permanently write fenced with the nonretryable error{" "}
-        <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+        Public V3.3 is the current custom-hook creation contract. V2 and V1
+        history and schemas remain readable, while fresh creation is permanently
+        write fenced with nonretryable{" "}
+        <code>CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
+        <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new submissions.
       </p>
 
       <section id="quickstart">
         <div className={styles.sectionIntro}>
           <h2>Quickstart</h2>
           <p>
-            Public V3 launch creation is live on Ethereum Mainnet. V1 history
-            reads remain available, while V1 creation stays read-only. Legacy
-            Registry and GitHub submission intake is closed. Use the{" "}
+            Public V3.3 launch creation is live on Ethereum Mainnet. V2 and V1
+            history and schemas remain available, while their fresh POSTs stay read-only. Legacy
+            Registry and GitHub submission intake is closed. The source-tree{" "}
             <a href="/openapi/custom-launch-v3.json">
-              public V3 machine contract
+              profile 3.4 machine contract
             </a>{" "}
-            for the exact request, response and retry contract.
+            is preparatory and does not activate a backend profile. CLI 3.3.9
+            is the current installable release and defaults to live profile
+            3.3.0; live capabilities reject explicit profile 3.4.0 output.
           </p>
         </div>
 
@@ -189,8 +192,8 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> 3.3.6 from the{" "}
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz">
+            Install <code>@programmable/launch</code> 3.3.9 from the{" "}
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz">
               immutable GitHub Release asset
             </a>
             . The binary is{" "}
@@ -199,7 +202,8 @@ export default function CustomLaunchApiDocsPage() {
           <li>
             Run <code>pack</code> and <code>validate --remote</code> against exact
             Standard JSON, compiler artifacts and evidence files. Never enter
-            derived hashes by hand.
+            derived hashes by hand. These checks prepare and classify the request;
+            they are not the server&apos;s launch decision.
           </li>
           <li>
             For a wallet key, use <Link href="/developers/api-keys">API keys</Link>.
@@ -209,7 +213,7 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             Run <code>submit ./launch.json --config programmable-launch.config.json</code>.
-            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; status --watch --until authorized -&gt; wallet -&gt; status --watch --until finalized</code>.
+            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; server decision -&gt; status --watch --until authorized -&gt; wallet -&gt; status --watch --until finalized</code>.
             Authenticated CLI traffic is fixed to <code>https://api.programmable.market</code>. Wallet is a separate controller action, not a CLI command. At <code>authorized</code>, stop for exact wallet review and signing,
             then run <code>status REQUEST_UUID --watch --until finalized</code>.
           </li>
@@ -256,10 +260,17 @@ export default function CustomLaunchApiDocsPage() {
             <code>customLaunchApi.partnerCredentials</code> in discovery.
           </li>
           <li>
+            A wallet key uses its bound wallet as <code>launchWallet</code>. A
+            partner credential selects the exact controller in the request but
+            cannot sign for it. The same current-profile metadata requirements
+            apply to both credential kinds.
+          </li>
+          <li>
             Send <code>Authorization: Bearer $PROGRAMMABLE_API_KEY</code> only
             to <code>https://api.programmable.market</code>. Wallet keys,
             partner roots and bounded partner subkeys use the same canonical V3
-            launch routes.
+            create, preflight, list and status routes within their scopes. The
+            Router V1 permit-reissue disposition route is wallet-key-only.
           </li>
           <li>
             Do not send the website wallet session token to the Custom Launch
@@ -269,6 +280,11 @@ export default function CustomLaunchApiDocsPage() {
             A partner root may manage one level of subkeys. A child&apos;s scopes,
             budgets and expiry cannot exceed its root, and a child cannot manage
             credentials.
+          </li>
+          <li>
+            A partner root reads every launch attributed to its partner. A subkey
+            reads only its stable lineage, rotation preserves that lineage history,
+            and a separately issued subkey cannot read root or sibling launches.
           </li>
           <li>
             API scopes grant API operations only. No wallet key, partner root or
@@ -318,7 +334,9 @@ export default function CustomLaunchApiDocsPage() {
             <code>solc 0.8.26+commit.8a97fa7a</code>, identify the distinct
             token, hook and initializer roles, map address dependencies, and
             declare the real hook permissions, pool, funding, liquidity, fee,
-            custody and withdrawal behavior.
+            custody and withdrawal behavior. Collect the required token name,
+            symbol, meaningful description, non-empty local image, website and X
+            profile; other public links are optional.
           </li>
           <li>
             Create a <code>programmable.launch-pack-config.v3</code> input from
@@ -334,15 +352,21 @@ export default function CustomLaunchApiDocsPage() {
             Fetch public <code>GET /v3/capabilities</code>, then run the exact
             request through <code>validate --remote</code>. The authenticated
             <code> POST /v3/custom-launches/preflight</code> uses those same bytes,
-            consumes no launch quota, allocates no nonce, persists no launch and
-            never signs or broadcasts. It returns additive
+            consumes no launch-creation quota or durable launch reservation,
+            allocates no nonce, persists no launch and never signs or broadcasts.
+            The authenticated request still consumes its ordinary route rate budget,
+            including a partner credential&apos;s <code>prepareRequestsPerHour</code>
+            budget. It returns additive
              <code> riskClassification</code>, platform-owned
              <code> behaviorEvidence</code> and all six
              <code> productTruthAxes</code>: <code>deployment</code>,{" "}
              <code>trading</code>, <code>platform_fee_evidence</code>,{" "}
              <code>source_verification</code>, <code>indexing</code> and{" "}
-             <code>featured</code>. A not-executed behavior vector remains
-             outstanding; it is not a caller-declared pass.
+             <code>featured</code>. A not-executed or needs-evidence result remains
+             outstanding; it is not a caller-declared pass and cannot support a
+             positive behavior, fee, liquidity or routability claim. The API server
+             independently enforces objective static hard blocks and exact Router
+             simulation before wallet handoff; an authenticated executed failure blocks.
           </li>
           <li>
             In EIP-3009 mode, accept the exact CLI-derived funding descriptor.
@@ -379,11 +403,12 @@ export default function CustomLaunchApiDocsPage() {
         </ul>
 
         <aside className={styles.callout}>
-          <strong>One public contract for every project</strong>
+          <strong>Follow the live discovery contract</strong>
           <p>
-            Discovery, the remediation catalog, this guide, OpenAPI and the
-            pinned CLI release provide the complete public handoff. Only the
-            two controller-wallet signatures remain outside the agent flow.
+            Discovery, capabilities, the remediation catalog, this guide and
+            the pinned CLI release provide the current public handoff. A
+            preparatory OpenAPI addition does not activate a profile. The two
+            controller-wallet signatures remain outside the agent flow.
           </p>
         </aside>
       </section>
@@ -396,12 +421,16 @@ export default function CustomLaunchApiDocsPage() {
             <a href="/openapi/custom-launch-v3.json">
               direct-native V3 OpenAPI document
             </a>{" "}
-            is the production contract for project-owned tokens, hooks and
-            multi-contract launch graphs. The default profile uses{" "}
+            includes a preparatory profile 3.4 candidate; it is not evidence of
+            backend activation or a CLI release. The live/default production
+            profile for project-owned tokens, hooks and multi-contract launch
+            graphs uses{" "}
             <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
             <code>profileRevision: 3</code> and{" "}
-            <code>profileVersion: 3.3.0</code>. It binds canonical project name,
-            symbol, presentation and image bytes into the launch identity. Its selection uses{" "}
+            <code>profileVersion: 3.3.0</code>. It requires and binds canonical
+            project name, symbol, meaningful description, non-empty local image,
+            one website and one X profile into the launch identity. Other public
+            links are optional. Its selection uses{" "}
             <code>
               programmable.direct-native-hook-graph-profile-selection-binding.v3
             </code>
@@ -421,11 +450,11 @@ export default function CustomLaunchApiDocsPage() {
             low address bits match exactly.
           </li>
           <li>
-            The 10 bps Programmable share may be additive or included in the
-            selected total. The declared economics are bound to the launch
-            intent. Revision 3 does not issue a fee-conformance certification;
-            it requires role-aware static admission and final Router simulation
-            before its permit signer is called. Static fees and the{" "}
+            A 10 bps Programmable share applies only to a fee-certified profile
+            or adapter and its exact stamped PoolKey after server-authored
+            per-launch fee evidence is verified. Arbitrary custom hooks are not
+            automatically fee-enforced, and the open arbitrary-hook lane carries
+            no Programmable fee claim. Static fees and the{" "}
             <code>0x800000</code> dynamic-fee sentinel are supported.
           </li>
           <li>
@@ -433,7 +462,7 @@ export default function CustomLaunchApiDocsPage() {
             Funding can be absent, carried as the exact native value of the
             separately reviewed Router transaction, or use an unsigned USDC
             EIP-3009 descriptor. Only the EIP-3009 mode contains a funding
-            challenge and authorization patch. CLI 3.3.6 uses{" "}
+            challenge and authorization patch. CLI 3.3.9 uses{" "}
             <code>programmable.eip3009-authorization-patch.v2</code> to bind
             the zero nonce, r, s and v ABI leaves before any wallet signature.
           </li>
@@ -519,7 +548,8 @@ export default function CustomLaunchApiDocsPage() {
           <p>
             <code>POST /v3/custom-launches</code> accepts only the exact,
             byte-bound general-profile request. Earlier versions remain
-            available for existing history; V1 POST stays read-only.
+            available for existing history and schemas; fresh V2 and V1 POSTs
+            return their nonretryable read-only 409 errors.
           </p>
         </div>
 
@@ -542,7 +572,9 @@ export default function CustomLaunchApiDocsPage() {
           per-target init code is limited to 49,152 bytes and initializer
           calldata to 131,072 bytes. Use the{" "}
           <a href="/openapi/custom-launch-v3.json">V3 OpenAPI contract</a> for every
-          nested field, enum and bound. The retained{" "}
+          nested field, enum and bound in the preparatory profile 3.4 candidate.
+          Do not submit those pending fields unless live discovery and
+          capabilities advertise profile 3.4.0. The retained{" "}
           <a href="/openapi/custom-launch-v1.json">V1 contract</a> documents
           compatibility reads and its read-only creation route.
         </p>
@@ -566,16 +598,27 @@ export default function CustomLaunchApiDocsPage() {
         </div>
 
         <p className={styles.bodyCopy}>
-          Every V3 request must bind and disclose a Programmable share of{" "}
-          <code>1,000 ppm = 0.10% = 10 bps</code> of its declared assessment
-          basis. It may be additive to the selected fee or included in that
-          selected total. The server recomputes the declared buy and sell
-          project share, effective total, fee currency and rounding. The request-bound
-          claim destination is controlled by{" "}
+          A Programmable share of <code>1,000</code> hundredths of a bip, equal to{" "}
+          <code>0.10% = 10 bps</code>, is
+          claimed only for a fee-certified profile or adapter and its exact
+          stamped PoolKey. That lane requires server-authored per-launch
+          fee-path evidence before the platform makes that claim. Arbitrary custom hooks are
+          not automatically fee-enforced, and the open arbitrary-hook lane carries
+          no Programmable fee claim. Revision-3 local validation, static admission
+          and Router simulation do not independently create{" "}
+          <code>feeBehaviorClaim: true</code>. For that certified lane, the bound
+          Programmable recipient is{" "}
           <code>0x4957f49620AFf3Adbbe8195a4f633E49cc93376c</code>.
-          Revision-3 static admission carries <code>feeBehaviorClaim: false</code>.
-          It does not certify or enforce how arbitrary custom code charges or
-          routes fees on later swaps; inspect the exact implementation.
+        </p>
+
+        <p className={styles.bodyCopy}>
+          Where a selected lane uses applicant buy or sell rates, each rate is
+          capped at <code>100,000</code> hundredths of a bip, equal to{" "}
+          <code>1,000 bps = 10%</code>. The API server enforces the cap in both{" "}
+          <code>additive-platform-share</code> and{" "}
+          <code>inclusive-selected-total</code> modes. The separate platform value
+          remains <code>1,000</code> hundredths of a bip, equal to{" "}
+          <code>10 bps</code>.
         </p>
 
         <aside className={styles.callout}>
@@ -663,8 +706,11 @@ export default function CustomLaunchApiDocsPage() {
             key bound to different bytes is a conflict.
           </li>
           <li>
-            Stop at <code>authorized</code>. The API and CLI never sign or
-            broadcast the returned transaction.
+            The API server exposes a wallet handoff only after objective static
+            hard blocks and exact Router simulation pass. Missing behavior
+            execution leaves related claims unverified; an authenticated executed
+            failure blocks. Stop at <code>authorized</code>. The API and CLI never
+            sign or broadcast the returned transaction.
           </li>
           <li>
             Keep deployment, trading, platform-fee evidence, source verification,
@@ -677,6 +723,14 @@ export default function CustomLaunchApiDocsPage() {
           Service readiness and API authorization do not replace controller
           approval. The connected wallet must review the exact chain, sender,
           Router, value and calldata before a separate signature.
+        </p>
+
+        <p className={styles.bodyCopy}>
+          During <code>simulating</code>, a signed permit may exist only inside a
+          worker-private simulation envelope. Public output remains null in{" "}
+          <code>simulating</code> and <code>failed</code>; the evidence gate controls
+          permit and wallet-transaction exposure, not internal permit signing
+          required for simulation.
         </p>
 
         <p className={styles.bodyCopy}>
@@ -711,7 +765,7 @@ export default function CustomLaunchApiDocsPage() {
         <p className={styles.bodyCopy}>
           After wallet broadcast, poll the single-resource route to drive exact
           reconciliation. <code>GET /v3/custom-launches</code> is a newest-first
-          wallet-owned history view with bounded summaries; its{" "}
+          exact-credential-principal history view with bounded summaries; its{" "}
           <code>output</code> is always <code>null</code>. Use the single-resource
           route for the artifact, wallet transaction and durable failure. Its
           additive <code>lifecycleQueue</code> reports bounded worker scheduling
@@ -798,9 +852,10 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Treat future capabilities as separate contracts</h2>
           <p>
-            Only operations and scopes in the current OpenAPI contract are
-            active. New scopes or endpoints require an explicit contract update,
-            and existing keys do not gain a newly enabled scope automatically.
+            Only operations, scopes and profile versions advertised by live
+            discovery and capabilities are active. A preparatory OpenAPI update
+            is not activation, and existing keys do not gain a newly enabled
+            scope automatically.
           </p>
         </div>
 
@@ -830,7 +885,7 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             <a href="/openapi/custom-launch-v3.json">
-              Open the live V3 contract
+              Review the preparatory profile 3.4 contract
             </a>
           </li>
           <li>

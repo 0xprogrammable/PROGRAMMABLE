@@ -4,6 +4,7 @@ export {
   useIdentityToken,
   useLinkAccount,
   useLogin,
+  useLoginWithSiwe,
   useOAuthTokens,
   usePrivy,
   useSendTransaction,

@@ -17,9 +17,14 @@ import {
   isClassicV3ReleaseVerified,
 } from "../classic-v3-release";
 import {
+  getConfiguredClassicV4PublicRelease,
+  isClassicV4PublicActionRelease,
+} from "../classic-v4-release";
+import {
   NATIVE_ETH,
   amountOutMinimum,
   assertClassicDeadline,
+  assertClassicV4Deadline,
   assertClassicTradeDeployment,
   buildClassicPermit2ApprovalTransaction,
   buildClassicSwapTransaction,
@@ -37,6 +42,7 @@ import {
   type ClassicTradeDeployment,
   type ClassicTradeSide,
 } from "./classic";
+import { MAX_TRADE_SLIPPAGE_BPS } from "./policy";
 import {
   getVerifiedDeepRelease,
   getVerifiedDeepV2Release,
@@ -187,7 +193,7 @@ export function parseClassicTradeRequest(
   if (
     !Number.isInteger(raw.slippageBps) ||
     Number(raw.slippageBps) < 1 ||
-    Number(raw.slippageBps) > 1_000
+    Number(raw.slippageBps) > MAX_TRADE_SLIPPAGE_BPS
   ) {
     throw new ClassicTradeInputError(
       "Slippage must be an integer from 1 to 1000 basis points",
@@ -335,6 +341,55 @@ export function resolveClassicV3TradeDeployment(
   return deployment;
 }
 
+export function resolveClassicV4TradeDeployment(
+  chainId: number,
+): ClassicTradeRelease {
+  if (chainId !== 1) {
+    throw new ClassicTradeUnavailableError(
+      `Classic V4 trading is not supported on chain ${chainId}`,
+    );
+  }
+  const release = getConfiguredClassicV4PublicRelease("production");
+  if (
+    !isClassicV4PublicActionRelease(release) ||
+    release.chainId !== chainId ||
+    release.model !== "classic" ||
+    release.internalContractRelease !== "classic-v4" ||
+    release.verification.deploymentLive !== true ||
+    release.verification.deploymentFinalized !== true ||
+    release.verification.runtimeCodeVerified !== true ||
+    release.verification.constructorBindingsVerified !== true ||
+    release.verification.sourceVerified !== true ||
+    release.verification.lifecycleVerified !== true ||
+    release.verification.indexerActivated !== true
+  ) {
+    throw new ClassicTradeUnavailableError(
+      `Classic V4 trading has no verified public release on chain ${chainId}`,
+    );
+  }
+
+  const dependencies = release.officialDependencies;
+  const deployment: ClassicTradeRelease = {
+    chainId: release.chainId,
+    launchModel: "classic",
+    poolManager: dependencies.poolManager.address,
+    v4Quoter: dependencies.v4Quoter.address,
+    universalRouter: dependencies.universalRouter.address,
+    universalRouterVersion: "2.0",
+    permit2: dependencies.permit2.address,
+    hook: release.addresses.feeHook,
+    poolManagerRuntimeCodeHash:
+      dependencies.poolManager.runtimeCodeHash,
+    v4QuoterRuntimeCodeHash: dependencies.v4Quoter.runtimeCodeHash,
+    universalRouterRuntimeCodeHash:
+      dependencies.universalRouter.runtimeCodeHash,
+    permit2RuntimeCodeHash: dependencies.permit2.runtimeCodeHash,
+    hookRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+  };
+  assertClassicTradeDeployment(deployment);
+  return deployment;
+}
+
 function verifiedIndexedToken(
   model: ExploreReadModel,
   chainId: number,
@@ -391,9 +446,11 @@ export function resolveTradeDeployment(
   }
   if (launchModel === "classic") {
     const deployment =
-      verified.launchModelVersion === "classic-v3"
-        ? resolveClassicV3TradeDeployment(chainId)
-        : resolveClassicTradeDeployment(chainId);
+      verified.launchModelVersion === "classic-v4"
+        ? resolveClassicV4TradeDeployment(chainId)
+        : verified.launchModelVersion === "classic-v3"
+          ? resolveClassicV3TradeDeployment(chainId)
+          : resolveClassicTradeDeployment(chainId);
     assertVerifiedTradeToken(model, deployment, token);
     return deployment;
   }
@@ -1053,7 +1110,11 @@ export async function prepareClassicTrade(
     }
   }
   const block = await client.getBlock();
-  assertClassicDeadline(block.timestamp, request.deadline);
+  if (verifiedToken.launchModelVersion === "classic-v4") {
+    assertClassicV4Deadline(block.timestamp, request.deadline);
+  } else {
+    assertClassicDeadline(block.timestamp, request.deadline);
+  }
 
   const quoted = await quoteClassicExactInput(client, {
     deployment,

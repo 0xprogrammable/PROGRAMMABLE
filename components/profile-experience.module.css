@@ -82,6 +82,10 @@
   gap: 10px;
 }
 
+.publicProfileNameRow {
+  flex-wrap: wrap;
+}
+
 .nameRow h1 {
   font-size: clamp(28px, 3.2vw, 40px);
   font-weight: 585;
@@ -102,6 +106,15 @@
   font-variant-numeric: tabular-nums;
   margin-block-start: 7px;
   overflow-wrap: anywhere;
+}
+
+.publicProfileNote {
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-block-start: 8px;
+  max-width: 560px;
+  text-wrap: pretty;
 }
 
 .editButton,
@@ -457,6 +470,32 @@
   box-shadow: var(--liquid-glass-shadow);
   margin-block-end: 10px;
   padding: 15px 16px 16px;
+}
+
+.publicProfileState {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-block-start: 18px;
+  min-height: 180px;
+  text-align: center;
+}
+
+.publicProfileState h2 {
+  font-size: 20px;
+  font-weight: 640;
+  letter-spacing: -0.026em;
+  line-height: 1.1;
+}
+
+.publicProfileState p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-block-start: 7px;
+  max-width: 420px;
+  text-wrap: pretty;
 }
 
 .launchesHeader {

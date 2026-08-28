@@ -10,7 +10,10 @@ import {
   canonicalPayloadJson,
   encodeEventPayload,
 } from "../src/lib/payload-hash.js";
-import { SOURCE_REGISTRY } from "../src/lib/release-map.js";
+import {
+  SOURCE_REGISTRY,
+  staticReleaseForContract,
+} from "../src/lib/release-map.js";
 
 const POOL_ID =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -431,6 +434,11 @@ describe("checked-in manifest fixtures", () => {
       ["StockV2V3RewardVaultFactory", stockV2.addresses.feeSplitVaultFactory, stockV2.startBlock],
       ["StockV3Launcher", stockV3.addresses.launcher, stockV3.startBlock],
       ["StockV3EthCoordinator", stockV3.addresses.ethLaunchCoordinator, stockV3.startBlock],
+      ["CustomRegistryV1", "0x17e18c88bda9bfb73924cdc989c07b0707e72671", 25_701_139],
+      ["CustomPartnerFactoryRegistryV1", "0xf8aef69201621ad20fa256da595426b7e6192dba", 25_701_136],
+      ["CustomAtomicRegistrarV1", "0xcc916e5200d2626edfd918dc219bc4296629e997", 25_701_142],
+      ["ClassicV4Hook", "0xadf955a44fd7f009380240d56d71dfafb46020cc", 25_851_137],
+      ["ClassicV4Launcher", "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699", 25_853_086],
     ].map(([contractName, address, startBlock]) => ({
       contractName: String(contractName),
       address: String(address).toLowerCase(),
@@ -438,6 +446,16 @@ describe("checked-in manifest fixtures", () => {
     }));
 
     expect([...SOURCE_REGISTRY]).toEqual(expected);
+    for (const contractName of [
+      "CustomRegistryV1",
+      "CustomPartnerFactoryRegistryV1",
+      "CustomAtomicRegistrarV1",
+    ]) {
+      expect(staticReleaseForContract(contractName)).toEqual({
+        model: "custom",
+        releaseVersion: "custom-registry-v1",
+      });
+    }
 
     const config = parse(
       readFileSync(path.join(process.cwd(), "config.yaml"), "utf8"),
@@ -465,7 +483,10 @@ describe("checked-in manifest fixtures", () => {
             })),
       );
     expect(configuredAddresses).toEqual(
-      expected.map(({ contractName, address }) => ({ contractName, address })),
+      expected.map(({ contractName, address }) => ({
+        contractName,
+        address,
+      })),
     );
     expect(config).toMatchObject({
       address_format: "lowercase",

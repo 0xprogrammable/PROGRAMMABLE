@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, RefreshCw, X } from "lucide-react";
 import { formatUnits, type Hex } from "viem";
 import {
@@ -893,6 +894,18 @@ function normalizeEthereumAddress(value: string) {
   return ethereumAddressPattern.test(normalized) ? normalized : null;
 }
 
+export function publicProfileAccountFromQuery(
+  queryAccounts: readonly string[],
+  connectedAccount?: string,
+) {
+  if (queryAccounts.length !== 1) return null;
+  const requestedAccount = normalizeEthereumAddress(queryAccounts[0] ?? "");
+  if (!requestedAccount) return null;
+  return requestedAccount === connectedAccount?.toLowerCase()
+    ? null
+    : requestedAccount;
+}
+
 function isPendingProfileTransactionRecord(
   value: unknown,
   expectedAccount: string,
@@ -1369,6 +1382,7 @@ export function formatBannerPositionStatus(position: {
 
 export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const { wallet, openWallet, sendTransaction, connecting } = useWallet();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const bannerDragRef = useRef<{
@@ -2643,6 +2657,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           action,
           account: actionAccount,
           vaultAddress: reward.vaultAddress,
+          releaseVersion: reward.releaseVersion ?? "classic-v3",
           newPayoutAddress,
           allocationIndex,
           chainId: scopedClassicV3Rewards.chainId,
@@ -3363,9 +3378,22 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   }
 
   const sessionView = getProfileSessionView(connecting, account);
+  const publicProfileAccount = publicProfileAccountFromQuery(
+    searchParams.getAll("account"),
+    account,
+  );
 
   if (!clientHydrated || sessionView === "loading") {
     return <ProfileSessionLoadingState />;
+  }
+
+  if (publicProfileAccount) {
+    return (
+      <PublicCreatorProfile
+        account={publicProfileAccount}
+        onConnect={openWallet}
+      />
+    );
   }
 
   if (sessionView === "connect" || !account) {
@@ -4455,7 +4483,7 @@ export function profileRewardsForAccount<
   );
 }
 
-function ProfileSessionLoadingState() {
+export function ProfileSessionLoadingState() {
   return (
     <div className={`${styles.page} page-width`}>
       <ProfileLoadingSkeleton label="Restoring wallet profile" showHero />
@@ -4619,6 +4647,113 @@ export function ProfileRouterLaunches({
         })}
       </div>
     </section>
+  );
+}
+
+function PublicCreatorProfile({
+  account,
+  onConnect,
+}: {
+  account: string;
+  onConnect: () => void;
+}) {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [data, setData] = useState<ProfileOnchainData>(() =>
+    loadingProfileData(account)
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) setData(loadingProfileData(account));
+    });
+    void fetchCreatorProfile(account, controller.signal).then(
+      (profile) => {
+        if (!controller.signal.aborted) setData(profile);
+      },
+      (caught) => {
+        if (controller.signal.aborted) return;
+        const errorKind = caught instanceof ProfileResponseError
+          ? caught.kind
+          : "temporary";
+        setData(errorProfileData(
+          account,
+          caught instanceof Error
+            ? caught.message
+            : "Public profile data is temporarily unavailable",
+          errorKind,
+        ));
+      },
+    );
+    return () => controller.abort();
+  }, [account, refreshKey]);
+
+  const entries = data.status === "ready"
+    ? profileRouterLaunchEntries(
+        buildProfilePortfolio(data.tokens, [], []),
+      )
+    : [];
+
+  return (
+    <div className={`${styles.page} page-width`}>
+      <section className={styles.hero} aria-labelledby="public-profile-title">
+        <div className={styles.avatar} aria-hidden="true">
+          <span>{account.slice(2, 4).toUpperCase()}</span>
+        </div>
+        <div className={styles.heroCopy}>
+          <div className={`${styles.nameRow} ${styles.publicProfileNameRow}`}>
+            <h1 id="public-profile-title">Creator profile</h1>
+            <button
+              className={styles.editButton}
+              type="button"
+              onClick={onConnect}
+            >
+              Connect wallet
+            </button>
+          </div>
+          <p className={styles.address}>{account}</p>
+          <p className={styles.publicProfileNote}>
+            Finalized launches are public. Connect this wallet to manage the
+            profile and rewards.
+          </p>
+        </div>
+      </section>
+
+      {data.status === "loading" ? (
+        <section
+          className={`${styles.launchesPanel} ${styles.publicProfileState}`}
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <h2>Loading launches</h2>
+          <p>Reading finalized Router launches.</p>
+        </section>
+      ) : data.status === "error" ? (
+        <section
+          className={`${styles.launchesPanel} ${styles.publicProfileState}`}
+          aria-live="polite"
+        >
+          <h2>Launches unavailable</h2>
+          <p>Unable to load this public profile. Check again.</p>
+          <button
+            className={styles.retryButton}
+            type="button"
+            onClick={() => setRefreshKey((current) => current + 1)}
+          >
+            Check again
+          </button>
+        </section>
+      ) : entries.length ? (
+        <ProfileRouterLaunches entries={entries} />
+      ) : (
+        <section
+          className={`${styles.launchesPanel} ${styles.publicProfileState}`}
+        >
+          <h2>No finalized launches yet</h2>
+          <p>Finalized Router launches will appear here.</p>
+        </section>
+      )}
+    </div>
   );
 }
 

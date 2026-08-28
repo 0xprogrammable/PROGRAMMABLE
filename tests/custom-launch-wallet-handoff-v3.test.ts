@@ -712,7 +712,7 @@ describe("custom launch V3 wallet handoff", () => {
     }, account.address).graphCommitment).toBe(fixture.graphCommitment);
 
     for (const platformAdmission of [
-      { ...PLATFORM_ADMISSION, warningFindingCodes: ["UNKNOWN_FINDING"] },
+      { ...PLATFORM_ADMISSION, warningFindingCodes: ["unknown-finding"] },
       {
         ...PLATFORM_ADMISSION,
         warningFindingCodes: ["RUNTIME_CREATE2", "RUNTIME_CREATE2"],
@@ -727,6 +727,95 @@ describe("custom launch V3 wallet handoff", () => {
         platformAdmission,
       }, account.address)).toThrow();
     }
+  });
+
+  it("accepts the current server evidence envelope without weakening Router bindings", () => {
+    const fixture = routerFixture({ quote: ZERO_ADDRESS });
+    const vectorIds = Array.from({ length: 16 }, (_, index) => `swap.vector-${index}`);
+    const behaviorEvidence = Object.freeze({
+      schemaVersion: "programmable.custom-launch-behavior-summary.v1",
+      subjectSha256: `sha256:${"12".repeat(32)}`,
+      requirements: Object.freeze({
+        schemaVersion: "programmable.custom-launch-behavior-requirements.v1",
+        vectorSetVersion: "1.1.0",
+        riskClass: "standard-swaps",
+        hookPermissionMask: 0,
+        liquidityModel: "external-concentrated-liquidity",
+        vectors: vectorIds.map((vectorId) => ({ vectorId })),
+        requirementsSha256: `sha256:${"13".repeat(32)}`,
+      }),
+      status: "not_executed",
+      execution: null,
+      vectors: vectorIds.map((vectorId) => ({ vectorId })),
+      outstandingVectorIds: vectorIds,
+      claimAxes: Object.freeze({}),
+    });
+    const behaviorAssurance = Object.freeze({
+      schemaVersion: "programmable.custom-launch-behavior-assurance.v1",
+      authorizationScope: "exact-launch-provenance-only",
+      evidenceAuthority: "none",
+      behaviorExecution: "not_executed",
+      mutableAuthorityConditional: false,
+      routability: Object.freeze({
+        status: "not_verified",
+        basis: "behavior-evidence-required",
+      }),
+      platformFeeConformance: Object.freeze({
+        status: "not_verified",
+        basis: "exact-ten-bps-evidence-required",
+      }),
+      liquidityConformance: Object.freeze({
+        status: "not_verified",
+        basis: "liquidity-lifecycle-evidence-required",
+      }),
+      safety: Object.freeze({
+        status: "not_verified",
+        basis: "no-universal-safety-claim",
+      }),
+    });
+    const currentAdmission = Object.freeze({
+      ...PLATFORM_ADMISSION,
+      needsEvidenceFindingCodes: PLATFORM_ADMISSION.warningFindingCodes,
+      riskClassification: Object.freeze({
+        schemaVersion: "programmable.platform-admission-risk-classification.v3",
+        classifierVersion: "1.1.0",
+        evidenceAuthority: "deterministic-static-classification",
+        disposition: "needs_evidence",
+        evidenceTierStatus: "required",
+        approvalAuthority: false,
+        safetyClaim: false,
+        feeBehaviorClaim: false,
+        launchEligibility: Object.freeze({
+          deployable: true,
+          routable: false,
+          featured: false,
+          basis: "static-admission-only",
+        }),
+      }),
+      behaviorEvidence,
+      productTruthAxes: Object.freeze({
+        deployment: Object.freeze({ status: "eligible" }),
+        trading: Object.freeze({ status: "not_verified" }),
+        platform_fee_evidence: Object.freeze({ status: "not_verified" }),
+      }),
+    });
+    const output = {
+      ...fixture.output,
+      actionRequired: {
+        ...fixture.output.actionRequired,
+        walletHandoffUrl:
+          `https://programmable.market/developers/api-keys?launchId=${LAUNCH_ID}`,
+        expiresAt: "2033-05-18T03:33:21.000Z",
+      },
+      simulation: { ...fixture.output.simulation, behaviorEvidence },
+      behaviorEvidence,
+      behaviorAssurance,
+      platformAdmission: currentAdmission,
+    };
+    expect(prepareCustomLaunchRouterReviewV3(
+      output,
+      account.address,
+    ).graphCommitment).toBe(fixture.graphCommitment);
   });
 
   it("accepts only canonical submitted and finalized onchain evidence", () => {

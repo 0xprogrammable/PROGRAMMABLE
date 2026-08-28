@@ -213,6 +213,7 @@ describe("canonical Router stamp surfaces", () => {
           scope: {
             included: [
               "classic-v3",
+              "classic-v4",
               "official-main-token",
               "registry.custom-launched",
               "canonical-launch-stamp-router",

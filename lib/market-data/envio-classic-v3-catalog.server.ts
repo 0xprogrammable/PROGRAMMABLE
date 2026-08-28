@@ -14,9 +14,12 @@ import { mainnet } from "viem/chains";
 
 import { createEnvioClient } from "../data-pipeline/envio";
 import {
-  getDataPipelineReleaseBinding,
   type DataPipelineReleaseBinding,
 } from "../data-pipeline/release-binding.server";
+import {
+  getEnvioClassicCatalogBinding,
+  type EnvioClassicCatalogBinding,
+} from "../data-pipeline/envio-classic-v4-catalog-binding.server";
 import {
   boundedJsonRequest,
   type DataPipelineFetcher,
@@ -71,7 +74,7 @@ const CLASSIC_V3_LAUNCH_QUERY = `
           { id: { _gt: $afterId } }
           { updatedBlock: { _lte: $anchorBlock } }
           { model: { _eq: "classic" } }
-          { releaseVersion: { _eq: "classic-v3" } }
+          { releaseVersion: { _in: ["classic-v3", "classic-v4"] } }
           { isComplete: { _eq: true } }
           { provenanceValid: { _eq: true } }
         ]
@@ -252,8 +255,11 @@ type CatalogReadOptions = Readonly<{
   deadlineMs?: number;
 }>;
 
+type IndexedClassicReleaseVersion = "classic-v3" | "classic-v4";
+
 type EnvioClassicV3LaunchRow = Readonly<{
   id: string;
+  releaseVersion: IndexedClassicReleaseVersion;
   launchHash: Hex;
   token: Address;
   creator: Address;
@@ -372,11 +378,11 @@ export type EnvioClassicV3CatalogV1 = Readonly<{
     custom: "unavailable";
   }>;
   scope: Readonly<{
-    included: readonly [
-      "classic-v3",
-      "official-main-token",
-      "registry.custom-launched",
-    ];
+    included: readonly (
+      | IndexedClassicReleaseVersion
+      | "official-main-token"
+      | "registry.custom-launched"
+    )[];
     excluded: readonly [
       "classic-v1",
       "classic-v2",
@@ -398,6 +404,7 @@ export type EnvioClassicV3CatalogV1 = Readonly<{
 
 export type EnvioClassicV3CatalogDependenciesV1 = Readonly<{
   fetcher?: DataPipelineFetcher;
+  catalogBinding?: EnvioClassicCatalogBinding;
   readRpcSnapshot?: (input: Readonly<{
     anchorBlock: string;
     tokens: readonly Address[];
@@ -482,27 +489,63 @@ function exactString(value: unknown, pattern: RegExp, label: string) {
   return value;
 }
 
-function launchSourceBindings(release: DataPipelineReleaseBinding) {
-  const classicV3 = release.releases.find((candidate) =>
+function indexedClassicReleaseVersion(
+  value: unknown,
+  label: string,
+): IndexedClassicReleaseVersion {
+  if (value !== "classic-v3" && value !== "classic-v4") {
+    throw new Error(`Envio ${label} failed release validation`);
+  }
+  return value;
+}
+
+function launchSourceNames(releaseVersion: IndexedClassicReleaseVersion) {
+  return releaseVersion === "classic-v3"
+    ? Object.freeze({
+      launcher: "ClassicV3Launcher",
+      hook: "ClassicV3Hook",
+    })
+    : Object.freeze({
+      launcher: "ClassicV4Launcher",
+      hook: "ClassicV4Hook",
+    });
+}
+
+function launchSourceBindings(
+  release: DataPipelineReleaseBinding,
+  releaseVersion: IndexedClassicReleaseVersion,
+) {
+  const boundRelease = release.releases.find((candidate) =>
     candidate.model === "classic" &&
-    candidate.releaseVersion === "classic-v3"
+    candidate.releaseVersion === releaseVersion
   );
-  if (!classicV3) throw new Error("Classic V3 Envio release is not bound");
+  if (!boundRelease) {
+    throw new Error(`${releaseVersion} Envio release is not bound`);
+  }
+  const sourceNames = launchSourceNames(releaseVersion);
   const launcher = release.sources.find(
-    (candidate) => candidate.contractName === "ClassicV3Launcher",
+    (candidate) => candidate.contractName === sourceNames.launcher,
   );
   const hook = release.sources.find(
-    (candidate) => candidate.contractName === "ClassicV3Hook",
+    (candidate) => candidate.contractName === sourceNames.hook,
   );
   if (
     !launcher ||
     !hook ||
-    !classicV3.sourceContracts.includes(launcher.contractName) ||
-    !classicV3.sourceContracts.includes(hook.contractName)
+    !boundRelease.sourceContracts.includes(launcher.contractName) ||
+    !boundRelease.sourceContracts.includes(hook.contractName)
   ) {
-    throw new Error("Classic V3 Envio source bindings are incomplete");
+    throw new Error(`${releaseVersion} Envio source bindings are incomplete`);
   }
-  return Object.freeze({ launcher, hook });
+  return Object.freeze({ boundRelease, launcher, hook });
+}
+
+function hasClassicV4ReleaseBinding(release: DataPipelineReleaseBinding) {
+  const hasRelease = release.releases.some((candidate) =>
+    candidate.releaseVersion === "classic-v4"
+  );
+  if (hasRelease) launchSourceBindings(release, "classic-v4");
+  return hasRelease;
 }
 
 function officialMainTokenSourceBindings(release: DataPipelineReleaseBinding) {
@@ -533,9 +576,13 @@ function parseLaunchRow(
   release: DataPipelineReleaseBinding,
 ): EnvioClassicV3LaunchRow {
   if (!isRecord(value) || !hasOnlyKeys(value, LAUNCH_KEYS)) {
-    throw new Error("Envio Classic V3 launch row shape drifted");
+    throw new Error("Envio Classic launch row shape drifted");
   }
-  const sources = launchSourceBindings(release);
+  const releaseVersion = indexedClassicReleaseVersion(
+    value.releaseVersion,
+    "classic release version",
+  );
+  const sources = launchSourceBindings(release, releaseVersion);
   const launchHash = bytes32(value.launchHash, "launch hash");
   const token = address(value.token, "token");
   const creator = address(value.creator, "creator");
@@ -549,7 +596,7 @@ function parseLaunchRow(
   );
   const id = exactString(
     value.id,
-    /^1:classic-v3:0x[0-9a-f]{64}$/u,
+    /^1:classic-v(?:3|4):0x[0-9a-f]{64}$/u,
     "launch id",
   );
   const launchOccurrenceId = exactString(
@@ -576,21 +623,21 @@ function parseLaunchRow(
   if (
     value.chainId !== 1 ||
     value.model !== "classic" ||
-    value.releaseVersion !== "classic-v3" ||
+    value.releaseVersion !== releaseVersion ||
     value.quoteAsset !== null ||
     value.initialBuyEthAmount !== null ||
     value.totalSwapFeeBps !== null ||
     value.quoteConfigurationHash !== null ||
     value.coordinatorOccurrenceId !== null ||
     value.hasCoordinatorEvent !== false ||
-    id !== `1:classic-v3:${launchHash}` ||
+    id !== `1:${releaseVersion}:${launchHash}` ||
     hook.toLowerCase() !== sources.hook.address.toLowerCase() ||
     requiredFlags.some((flag) => flag !== true) ||
     typeof value.liquidityOccurrenceId !== "string" ||
     typeof value.initialBuyOccurrenceId !== "string" ||
     custodyOccurrenceId === launchOccurrenceId
   ) {
-    throw new Error(`Envio Classic V3 launch ${id} failed release validation`);
+    throw new Error(`Envio ${releaseVersion} launch ${id} failed release validation`);
   }
   const buySwapFeeBps = boundedInteger(
     value.buySwapFeeBps,
@@ -616,10 +663,11 @@ function parseLaunchRow(
     BigInt(initialBuyQuoteAmount) === 0n ||
     BigInt(initialBuyTokenAmount) === 0n
   ) {
-    throw new Error(`Envio Classic V3 launch ${id} has an empty initial buy`);
+    throw new Error(`Envio ${releaseVersion} launch ${id} has an empty initial buy`);
   }
   return Object.freeze({
     id,
+    releaseVersion,
     launchHash,
     token,
     creator,
@@ -657,12 +705,14 @@ function parseLaunchRow(
 function parseLaunchEvent(
   value: unknown,
   expectedOccurrenceId: string,
+  expectedReleaseVersion: IndexedClassicReleaseVersion,
   release: DataPipelineReleaseBinding,
 ): EnvioClassicV3LaunchEvent {
   if (!isRecord(value) || !hasOnlyKeys(value, EVENT_KEYS)) {
-    throw new Error("Envio Classic V3 launch event shape drifted");
+    throw new Error("Envio Classic launch event shape drifted");
   }
-  const sources = launchSourceBindings(release);
+  const sources = launchSourceBindings(release, expectedReleaseVersion);
+  const sourceNames = launchSourceNames(expectedReleaseVersion);
   const id = exactString(
     value.id,
     /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9][0-9]*)$/u,
@@ -679,14 +729,14 @@ function parseLaunchEvent(
     value.receiptLogOrdinal !== null ||
     typeof value.decodedPayload !== "string"
   ) {
-    throw new Error(`Envio Classic V3 event ${id} has invalid source semantics`);
+    throw new Error(`Envio ${expectedReleaseVersion} event ${id} has invalid source semantics`);
   }
   bytes32(value.payloadHash, "event payload hash");
   let decodedPayload: unknown;
   try {
     decodedPayload = JSON.parse(value.decodedPayload);
   } catch {
-    throw new Error(`Envio Classic V3 event ${id} payload is invalid`);
+    throw new Error(`Envio ${expectedReleaseVersion} event ${id} payload is invalid`);
   }
   const payloadKeys = [
     "buySwapFeeBps",
@@ -706,20 +756,20 @@ function parseLaunchEvent(
     !hasOnlyKeys(decodedPayload, payloadKeys) ||
     Object.values(decodedPayload).some((item) => typeof item !== "string")
   ) {
-    throw new Error(`Envio Classic V3 event ${id} payload shape drifted`);
+    throw new Error(`Envio ${expectedReleaseVersion} event ${id} payload shape drifted`);
   }
   if (
     id !== expectedOccurrenceId ||
     value.chainId !== 1 ||
     value.model !== "classic" ||
-    value.releaseVersion !== "classic-v3" ||
-    value.contractName !== "ClassicV3Launcher" ||
+    value.releaseVersion !== expectedReleaseVersion ||
+    value.contractName !== sourceNames.launcher ||
     value.eventName !== "MemeTokenLaunchedV2" ||
     address(value.sourceAddress, "event source").toLowerCase() !==
       sources.launcher.address.toLowerCase() ||
     id !== `1:${blockHash}:${transactionHash}:${blockGlobalLogIndex}`
   ) {
-    throw new Error(`Envio Classic V3 event ${id} failed occurrence validation`);
+    throw new Error(`Envio ${expectedReleaseVersion} event ${id} failed occurrence validation`);
   }
   return Object.freeze({
     id,
@@ -741,15 +791,15 @@ function assertLaunchEventBinding(
   event: EnvioClassicV3LaunchEvent,
   release: DataPipelineReleaseBinding,
 ) {
-  const classicV3 = release.releases.find((candidate) =>
-    candidate.releaseVersion === "classic-v3"
-  );
-  if (!classicV3) throw new Error("Classic V3 Envio release is unavailable");
+  const boundRelease = launchSourceBindings(
+    release,
+    launch.releaseVersion,
+  ).boundRelease;
   const payload = event.decodedPayload;
   const sameHex = (left: string, right: string) =>
     left.toLowerCase() === right.toLowerCase();
   if (
-    BigInt(event.blockNumber) < BigInt(classicV3.activationBlock) ||
+    BigInt(event.blockNumber) < BigInt(boundRelease.activationBlock) ||
     BigInt(launch.updatedBlock) < BigInt(event.blockNumber) ||
     !sameHex(payload.launchHash!, launch.launchHash) ||
     !sameHex(payload.token!, launch.token) ||
@@ -766,19 +816,21 @@ function assertLaunchEventBinding(
       launch.rewardConfigurationHash,
     )
   ) {
-    throw new Error(`Envio Classic V3 launch ${launch.id} payload binding failed`);
+    throw new Error(`Envio ${launch.releaseVersion} launch ${launch.id} payload binding failed`);
   }
 }
 
 function parseCustodyEvent(
   value: unknown,
   expectedOccurrenceId: string,
+  expectedReleaseVersion: IndexedClassicReleaseVersion,
   release: DataPipelineReleaseBinding,
 ): EnvioClassicV3CustodyEvent {
   if (!isRecord(value) || !hasOnlyKeys(value, EVENT_KEYS)) {
-    throw new Error("Envio Classic V3 custody event shape drifted");
+    throw new Error("Envio Classic custody event shape drifted");
   }
-  const sources = launchSourceBindings(release);
+  const sources = launchSourceBindings(release, expectedReleaseVersion);
+  const sourceNames = launchSourceNames(expectedReleaseVersion);
   const id = exactString(
     value.id,
     /^1:0x[0-9a-f]{64}:0x[0-9a-f]{64}:(?:0|[1-9][0-9]*)$/u,
@@ -798,14 +850,14 @@ function parseCustodyEvent(
     value.receiptLogOrdinal !== null ||
     typeof value.decodedPayload !== "string"
   ) {
-    throw new Error(`Envio Classic V3 custody event ${id} has invalid source semantics`);
+    throw new Error(`Envio ${expectedReleaseVersion} custody event ${id} has invalid source semantics`);
   }
   bytes32(value.payloadHash, "custody event payload hash");
   let decodedPayload: unknown;
   try {
     decodedPayload = JSON.parse(value.decodedPayload);
   } catch {
-    throw new Error(`Envio Classic V3 custody event ${id} payload is invalid`);
+    throw new Error(`Envio ${expectedReleaseVersion} custody event ${id} payload is invalid`);
   }
   const payloadKeys = [
     "cliffDays",
@@ -822,20 +874,20 @@ function parseCustodyEvent(
     !hasOnlyKeys(decodedPayload, payloadKeys) ||
     Object.values(decodedPayload).some((item) => typeof item !== "string")
   ) {
-    throw new Error(`Envio Classic V3 custody event ${id} payload shape drifted`);
+    throw new Error(`Envio ${expectedReleaseVersion} custody event ${id} payload shape drifted`);
   }
   if (
     id !== expectedOccurrenceId ||
     value.chainId !== 1 ||
     value.model !== "classic" ||
-    value.releaseVersion !== "classic-v3" ||
-    value.contractName !== "ClassicV3Launcher" ||
+    value.releaseVersion !== expectedReleaseVersion ||
+    value.contractName !== sourceNames.launcher ||
     value.eventName !== "MemeCreatorInitialBuyCustodyV2" ||
     address(value.sourceAddress, "custody event source").toLowerCase() !==
       sources.launcher.address.toLowerCase() ||
     id !== `1:${blockHash}:${transactionHash}:${blockGlobalLogIndex}`
   ) {
-    throw new Error(`Envio Classic V3 custody event ${id} failed occurrence validation`);
+    throw new Error(`Envio ${expectedReleaseVersion} custody event ${id} failed occurrence validation`);
   }
   return Object.freeze({
     id,
@@ -1190,6 +1242,12 @@ async function readClassicV3Rows(
       const launchIds = page.map((launch) => launch.launchOccurrenceId);
       const custodyIds = page.map((launch) => launch.custodyOccurrenceId);
       const ids = [...launchIds, ...custodyIds];
+      const releaseByOccurrence = new Map(
+        page.flatMap((launch) => [
+          [launch.launchOccurrenceId, launch.releaseVersion] as const,
+          [launch.custodyOccurrenceId, launch.releaseVersion] as const,
+        ]),
+      );
       const eventResponse = await graphqlRequest(release, {
         query: CLASSIC_V3_LAUNCH_EVENTS_QUERY,
         variables: { ids },
@@ -1204,9 +1262,13 @@ async function readClassicV3Rows(
         if (typeof rawId !== "string" || !expected.delete(rawId)) {
           throw new Error("Envio Classic V3 occurrence set drifted");
         }
+        const releaseVersion = releaseByOccurrence.get(rawId);
+        if (!releaseVersion) {
+          throw new Error("Envio Classic V3 occurrence release drifted");
+        }
         const event = launchIds.includes(rawId)
-          ? parseLaunchEvent(rawEvent, rawId, release)
-          : parseCustodyEvent(rawEvent, rawId, release);
+          ? parseLaunchEvent(rawEvent, rawId, releaseVersion, release)
+          : parseCustodyEvent(rawEvent, rawId, releaseVersion, release);
         if (BigInt(event.blockNumber) > BigInt(anchorBlock)) {
           throw new Error("Envio Classic V3 occurrence exceeds progress");
         }
@@ -1248,7 +1310,9 @@ async function readClassicV3Rows(
       launchIds.has(launch.id) ||
       tokens.has(token) ||
       pools.has(pool) ||
-      occurrences.has(launch.launchOccurrenceId)
+      occurrences.has(launch.launchOccurrenceId) ||
+      occurrences.has(launch.custodyOccurrenceId) ||
+      launch.launchOccurrenceId === launch.custodyOccurrenceId
     ) {
       throw new Error("Envio Classic V3 catalog contains duplicate identities");
     }
@@ -1256,6 +1320,7 @@ async function readClassicV3Rows(
     tokens.add(token);
     pools.add(pool);
     occurrences.add(launch.launchOccurrenceId);
+    occurrences.add(launch.custodyOccurrenceId);
   }
   return Object.freeze({
     launches: Object.freeze(launches),
@@ -1528,7 +1593,7 @@ function buildEntries(
     const custodyEvent = custodyEvents.get(launch.custodyOccurrenceId);
     const tokenMetadata = metadata.get(launch.token.toLowerCase());
     if (!event || !custodyEvent || !tokenMetadata) {
-      throw new Error(`Envio Classic V3 launch ${launch.id} is not hydrated`);
+      throw new Error(`Envio ${launch.releaseVersion} launch ${launch.id} is not hydrated`);
     }
     const totalSwapFeeBps = Math.max(
       launch.buySwapFeeBps,
@@ -1578,7 +1643,7 @@ function buildEntries(
       tickUpper: launch.tickUpper,
       lpFeePips: launch.lpFeePips,
       launchModel: "classic",
-      launchModelVersion: "classic-v3",
+      launchModelVersion: launch.releaseVersion,
       liquidityPath: "meme",
     };
     return canonicalTokenExploreEntryV1(token);
@@ -1640,7 +1705,14 @@ async function readUncached(
   options: Required<Pick<CatalogReadOptions, "signal" | "deadlineMs">>,
   dependencies: EnvioClassicV3CatalogDependenciesV1,
 ): Promise<EnvioClassicV3CatalogV1> {
-  const release = getDataPipelineReleaseBinding();
+  const catalogBinding =
+    dependencies.catalogBinding ?? getEnvioClassicCatalogBinding();
+  const release = catalogBinding.releaseBinding;
+  const classicV4IsBound = catalogBinding.classicV4 !== null;
+  if (classicV4IsBound !== hasClassicV4ReleaseBinding(release)) {
+    throw new Error("Classic V4 Envio catalog activation is inconsistent");
+  }
+  launchSourceBindings(release, "classic-v3");
   const fetcher = boundFetcher(
     dependencies.fetcher,
     options.signal,
@@ -1736,6 +1808,7 @@ async function readUncached(
     scope: Object.freeze({
       included: Object.freeze([
         "classic-v3",
+        ...(classicV4IsBound ? ["classic-v4" as const] : []),
         "official-main-token",
         "registry.custom-launched",
       ] as const),

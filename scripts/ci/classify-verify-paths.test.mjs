@@ -187,10 +187,11 @@ test("partitions every artifact-dependent suite without multi-filter side effect
   const interfaceCommand = packageJson.scripts["test:interface:ci"];
   const contractCommand = packageJson.scripts["test:contract-release:ci"];
 
-  assert.equal(
-    contractCommand.split(" && ").length,
-    CONTRACT_RELEASE_TEST_PATHS.length,
-  );
+  assert.deepEqual(contractCommand.split(" && "), [
+    ...CONTRACT_RELEASE_TEST_PATHS.map((path) => `vitest run ${path}`),
+    "npm run contracts:classic-v4:release:test",
+    "npm run contracts:classic-v4:launcher-upgrade:test",
+  ]);
   for (const path of CONTRACT_RELEASE_TEST_PATHS) {
     assert.match(
       interfaceCommand,

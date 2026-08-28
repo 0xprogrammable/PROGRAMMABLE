@@ -265,7 +265,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Custom Launch API",
     description:
-      "Read existing V1 history and the explicit public write-fence contract.",
+      "Submit current V3.3 requests or read V2 and V1 compatibility history and write fences.",
     href: "/docs/developers/custom-launch",
     keywords: [
       "custom API",

@@ -313,7 +313,16 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.match(probe, /VERCEL_AUTOMATION_BYPASS_SECRET:/u);
   assert.match(probe, /\/api\/explore\?limit=1&page=1&sort=newest/u);
   assert.match(probe, /catalog\?\.source === "envio-classic-v3"/u);
+  assert.match(probe, /const classicCurrent =/u);
   assert.match(probe, /completeness\?\.classic === "current"/u);
+  assert.match(probe, /const routerOnlyFallback =/u);
+  assert.match(probe, /launchSource === "canonical-launch-stamp-router"/u);
+  assert.match(probe, /completeness\?\.classic === "unavailable"/u);
+  assert.match(
+    probe,
+    /routerStamp\.projectedIdentityCount === body\.catalog\.identityCount/u,
+  );
+  assert.match(probe, /classicCurrent \|\| routerOnlyFallback/u);
   assert.match(probe, /completeness\?\.stock === "excluded"/u);
   assert.match(
     probe,
@@ -336,7 +345,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.match(probe, /response = undefined/u);
   assert.match(probe, /if \(attempt === 4\) throw error/u);
   assert.match(probe, /continue/u);
-  assert.match(probe, /if \(exactCatalog\) break/u);
+  assert.match(probe, /if \(exactCatalog\) \{/u);
   assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);
   assert.doesNotMatch(probe, /\n        if:/u);
 
@@ -361,9 +370,13 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   );
 
   const handoff = stepBlock(deploy, "Record staged candidate handoff");
-  assert.match(handoff, /Launch identities: validated Envio Classic V3 catalog/u);
-  assert.match(handoff, /Envio catalog progress block:/u);
-  assert.match(handoff, /Envio catalog identity count:/u);
+  assert.match(
+    handoff,
+    /Launch identities: validated current Classic or bounded Router fallback/u,
+  );
+  assert.match(handoff, /Catalog mode:/u);
+  assert.match(handoff, /Catalog progress block:/u);
+  assert.match(handoff, /Catalog identity count:/u);
   assert.match(
     handoff,
     /Market data provider: Dexscreener \(optional enrichment\)/u,

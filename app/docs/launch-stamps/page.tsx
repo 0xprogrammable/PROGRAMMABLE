@@ -721,7 +721,8 @@ export default function LaunchStampDocsPage() {
             <dt>Not launch authorization</dt>
             <dd>
               A Router reference does not grant launch access. Custom launch
-              preparation uses a wallet-bound key and the authenticated API.
+              preparation uses a scoped wallet, partner-root or partner-subkey
+              credential and the authenticated API.
               Read the <Link href="/docs/trust">trust boundaries</Link> and{" "}
               <Link href="/docs/creators/launch">creator launch guide</Link> for
               the separate access and wallet rules.

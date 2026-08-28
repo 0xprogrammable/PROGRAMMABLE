@@ -27,20 +27,29 @@ const MAX_SNAPSHOT_AGE_MS = 10 * 60 * 1_000;
 const MAX_CLOCK_SKEW_MS = 30 * 1_000;
 const MAX_PROJECTION_LAG_BLOCKS = 12n;
 
-const RELEASE_SCOPES = Object.freeze([
+const BASE_RELEASE_SCOPES = Object.freeze([
   Object.freeze({ release: "classic-v2", model: "classic" }),
   Object.freeze({ release: "classic-v3", model: "classic" }),
   Object.freeze({ release: "stock-paired-v1", model: "stock-paired" }),
   Object.freeze({ release: "stock-paired-v2", model: "stock-paired" }),
   Object.freeze({ release: "stock-paired-v3", model: "stock-paired" }),
 ] as const);
+const CLASSIC_V4_RELEASE_SCOPE = Object.freeze({
+  release: "classic-v4" as const,
+  model: "classic" as const,
+});
+const ALL_RELEASE_SCOPES = Object.freeze([
+  ...BASE_RELEASE_SCOPES,
+  CLASSIC_V4_RELEASE_SCOPE,
+] as const);
 
-type ReleaseVersion = (typeof RELEASE_SCOPES)[number]["release"];
-type ModelVersion = (typeof RELEASE_SCOPES)[number]["model"];
+type ReleaseVersion = (typeof ALL_RELEASE_SCOPES)[number]["release"];
+type ModelVersion = (typeof ALL_RELEASE_SCOPES)[number]["model"];
 type JsonRecord = Record<string, unknown>;
 
-const RELEASES = RELEASE_SCOPES.map((scope) => scope.release);
-const RELEASE_SET = new Set<string>(RELEASES);
+const RELEASE_SET = new Set<string>(
+  ALL_RELEASE_SCOPES.map((scope) => scope.release),
+);
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RAW_HEX = /^0x(?:[0-9a-f]{2})*$/;
@@ -241,7 +250,7 @@ function release(value: unknown): ReleaseVersion {
 }
 
 function expectedModel(releaseVersion: ReleaseVersion): ModelVersion {
-  const scope = RELEASE_SCOPES.find(
+  const scope = ALL_RELEASE_SCOPES.find(
     (candidate) => candidate.release === releaseVersion,
   );
   if (!scope) return fail();
@@ -332,6 +341,7 @@ function parseParityEvidence(value: unknown): ParityEvidence {
 function parseSnapshot(
   value: unknown,
   nowMs: number,
+  requiredReleases: readonly ReleaseVersion[],
 ): {
   publicSnapshot: ExploreSnapshot;
   capturedAt: string;
@@ -354,11 +364,11 @@ function parseSnapshot(
   const lag = BigInt(safeBlockNumber) - BigInt(blockNumber);
   if (lag < 0n || lag > MAX_PROJECTION_LAG_BLOCKS) return fail();
 
-  const pointers = array(input.releasePointers, RELEASES.length).map(
+  const pointers = array(input.releasePointers, requiredReleases.length).map(
     parseReleasePointer,
   );
-  const pointerMap = uniqueReleaseMap(pointers);
-  for (const releaseVersion of RELEASES) {
+  const pointerMap = uniqueReleaseMap(pointers, requiredReleases);
+  for (const releaseVersion of requiredReleases) {
     const pointer = pointerMap.get(releaseVersion)!;
     if (
       pointer.checkpointBlockNumber !== blockNumber ||
@@ -409,6 +419,7 @@ function parseSnapshot(
 
 function uniqueReleaseMap<T extends { releaseVersion: ReleaseVersion }>(
   values: readonly T[],
+  requiredReleases: readonly ReleaseVersion[],
 ): ReadonlyMap<ReleaseVersion, T> {
   const result = new Map<ReleaseVersion, T>();
   for (const value of values) {
@@ -416,8 +427,8 @@ function uniqueReleaseMap<T extends { releaseVersion: ReleaseVersion }>(
     result.set(value.releaseVersion, value);
   }
   if (
-    result.size !== RELEASES.length ||
-    RELEASES.some((releaseVersion) => !result.has(releaseVersion))
+    result.size !== requiredReleases.length ||
+    requiredReleases.some((releaseVersion) => !result.has(releaseVersion))
   ) {
     return fail();
   }
@@ -519,8 +530,11 @@ function parseRawToken(value: unknown): ParsedToken {
   );
   token.launchLogIndex = safeInteger(input.launchLogIndex, 0xffff_ffff);
 
-  if (source.releaseVersion === "classic-v3") {
-    token.launchModelVersion = "classic-v3";
+  if (
+    source.releaseVersion === "classic-v3" ||
+    source.releaseVersion === "classic-v4"
+  ) {
+    token.launchModelVersion = source.releaseVersion;
   } else if (source.modelVersion === "stock-paired") {
     token.launchModelVersion = source.releaseVersion as
       | "stock-paired-v1"
@@ -707,7 +721,12 @@ function sourceCommitment(value: unknown): `0x${string}` {
 async function querySnapshot(
   transaction: PostgresTransaction,
   nowMs: number,
+  includeClassicV4: boolean,
 ): Promise<IndexedFeedSnapshot> {
+  const requiredScopes = includeClassicV4
+    ? ALL_RELEASE_SCOPES
+    : BASE_RELEASE_SCOPES;
+  const requiredReleases = requiredScopes.map((scope) => scope.release);
   const rows = await transaction.query<JsonRecord>(
     `select
        http_status,
@@ -734,7 +753,11 @@ async function querySnapshot(
     return fail();
   }
 
-  const parsedSnapshot = parseSnapshot(row.snapshot, nowMs);
+  const parsedSnapshot = parseSnapshot(
+    row.snapshot,
+    nowMs,
+    requiredReleases,
+  );
   const capturedAt = freshTimestamp(row.captured_at, nowMs);
   const reconciledAt = freshTimestamp(row.reconciled_at, nowMs);
   if (
@@ -750,11 +773,17 @@ async function querySnapshot(
     return fail();
   }
 
-  const pointerMap = uniqueReleaseMap(parsedSnapshot.pointers);
-  const routeEvidence = array(row.route_evidence, RELEASES.length).map(
+  const pointerMap = uniqueReleaseMap(
+    parsedSnapshot.pointers,
+    requiredReleases,
+  );
+  const routeEvidence = array(
+    row.route_evidence,
+    requiredReleases.length,
+  ).map(
     parseParityEvidence,
   );
-  const evidenceMap = uniqueReleaseMap(routeEvidence);
+  const evidenceMap = uniqueReleaseMap(routeEvidence, requiredReleases);
   const oldestParityBoundAt = routeEvidence
     .map((evidence) => evidence.parityBoundAt)
     .sort()[0]!;
@@ -772,8 +801,9 @@ async function querySnapshot(
   const tokenAddresses = new Set<string>();
   for (let index = 0; index < parsedTokens.length; index += 1) {
     const parsed = parsedTokens[index]!;
-    const pointer = pointerMap.get(parsed.source.releaseVersion)!;
+    const pointer = pointerMap.get(parsed.source.releaseVersion);
     if (
+      !pointer ||
       !samePointer(parsed.source, pointer) ||
       parsed.source.snapshotCommitment !==
         parsedSnapshot.snapshotCommitment ||
@@ -803,7 +833,10 @@ async function querySnapshot(
     const key = `${token.source.modelVersion}:${token.source.releaseVersion}`;
     actualScopes.set(key, (actualScopes.get(key) ?? 0) + 1);
   }
-  const declaredScopes = array(row.record_scopes, RELEASES.length).map(
+  const declaredScopes = array(
+    row.record_scopes,
+    requiredReleases.length,
+  ).map(
     parseRecordScope,
   );
   const declaredKeys = new Set(
@@ -851,25 +884,35 @@ async function querySnapshot(
         BigInt(parsedSnapshot.publicSnapshot.blockNumber),
     ),
     reconciledAt,
-    releaseVersions: Object.freeze([...RELEASES]),
+    releaseVersions: Object.freeze([...requiredReleases]),
   });
 }
 
 export async function readIndexedFeedSnapshotWithModel(
   readModel: IndexedReadModel,
   nowMs = Date.now(),
+  options: Readonly<{ includeClassicV4?: boolean }> = {},
 ): Promise<IndexedFeedSnapshot> {
-  if (!Number.isSafeInteger(nowMs) || nowMs < 0) return fail();
+  if (
+    !Number.isSafeInteger(nowMs) ||
+    nowMs < 0 ||
+    (options.includeClassicV4 !== undefined &&
+      typeof options.includeClassicV4 !== "boolean")
+  ) {
+    return fail();
+  }
+  const includeClassicV4 = options.includeClassicV4 === true;
   return readModel.repeatableReadSnapshot((transaction) =>
-    querySnapshot(transaction, nowMs),
+    querySnapshot(transaction, nowMs, includeClassicV4),
   );
 }
 
 /**
  * Reads the complete GMGN/indexer feed through the API-reader-only aggregate
- * function. The database returns no row unless all five supported releases
- * share one current checkpoint and every launch has complete source, parity
- * and publication evidence; the adapter independently validates that envelope.
+ * function. The production database remains on its frozen five-release scope.
+ * Classic V4 support above is intentionally available only to a future,
+ * separate PG promotion; activating the Envio website catalog must not change
+ * this reader's readiness contract.
  */
 export async function readIndexedFeedSnapshot(): Promise<IndexedFeedSnapshot> {
   const readModel = await getServerReadModel();

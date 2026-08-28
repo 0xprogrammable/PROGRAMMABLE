@@ -1938,6 +1938,8 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/alchemy/router-custom-public.server.ts") ?? "";
   const envioClassicV3Catalog =
     source("lib/market-data/envio-classic-v3-catalog.server.ts") ?? "";
+  const envioClassicV4CatalogBinding =
+    source("lib/data-pipeline/envio-classic-v4-catalog-binding.server.ts") ?? "";
   const dexscreenerExplore =
     source("lib/market-data/dexscreener-explore.server.ts") ?? "";
   const dexscreenerShadow =
@@ -2144,10 +2146,13 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   const fastLanePublicProviderContract =
     includesEverySourceFragment(envioClassicV3Catalog, [
-      "getDataPipelineReleaseBinding()",
+      "getEnvioClassicCatalogBinding()",
+      "catalogBinding.releaseBinding",
+      "catalogBinding.classicV4 !== null",
+      "classicV4IsBound !== hasClassicV4ReleaseBinding(release)",
       "createEnvioClient({",
       '{ model: { _eq: "classic" } }',
-      '{ releaseVersion: { _eq: "classic-v3" } }',
+      '{ releaseVersion: { _in: ["classic-v3", "classic-v4"] } }',
       '{ isComplete: { _eq: true } }',
       '{ provenanceValid: { _eq: true } }',
       "assertLaunchEventBinding(launch, event, release)",
@@ -2159,6 +2164,18 @@ export function evaluateReadModelOperationsSourceContracts(
       "entry.tokenAddress !== undefined || entry.markets.length > 0",
       "envioClassicV3IdentityCommitmentV1",
       'canonicalSha256("programmable.envio-classic-v3-identity.v1"',
+    ]) &&
+    includesEverySourceFragment(envioClassicV4CatalogBinding, [
+      "parseEnvioClassicV4CatalogBinding",
+      'input.status !== "inactive"',
+      "if (options.publicReleaseBinding || options.publicRelease) return fail();",
+      'value.status !== "indexer-activated"',
+      "exactSharedBase(releaseBinding, options.baseBinding)",
+      "exactV4Sources(releaseBinding, options.baseBinding, options.publicRelease)",
+      "exactV4Release(releaseBinding, options.baseBinding)",
+      "classicV4IndexerBindingDigest(releaseBinding)",
+      "options.publicRelease.indexerHandoff.indexerBindingDigest",
+      "getDataPipelineReleaseBinding()",
     ]) &&
     !/readDurableExploreModel|productionMainnetRpcPrimary|readPrimaryRpcExploreEntriesV1|readBitquery/iu.test(
       envioClassicV3Catalog,
@@ -2384,7 +2401,13 @@ export function evaluateReadModelOperationsSourceContracts(
         '"/api/explore?limit=1&page=1&sort=newest"',
         "response.status === 200",
         'body?.catalog?.source === "envio-classic-v3"',
-        'body.catalog.completeness?.classic === "current"',
+        "const classicCurrent =",
+        'body?.catalog?.completeness?.classic === "current"',
+        "const routerOnlyFallback =",
+        'body?.catalog?.launchSource === "canonical-launch-stamp-router"',
+        'body.catalog.completeness?.classic === "unavailable"',
+        "routerStamp.projectedIdentityCount === body.catalog.identityCount",
+        "classicCurrent || routerOnlyFallback",
         'body.catalog.completeness?.stock === "excluded"',
         'body.catalog.evidence?.kind === "envio-indexer-state"',
         "body.total >= 1",
@@ -2394,13 +2417,13 @@ export function evaluateReadModelOperationsSourceContracts(
         "response = undefined",
         "if (attempt === 4) throw error",
         "continue;",
-        "if (exactCatalog) break",
+        "if (exactCatalog) {",
       ]) &&
       !stagedCatalogProbeBlock.includes("body.tokens[0]?.launchModel") &&
       !stagedCatalogProbeBlock.includes("CRON_SECRET") &&
       !stagedCatalogProbeBlock.includes("/api/ops/index-v2") &&
       !stagedCatalogProbeBlock.includes("        if:"),
-    "every exact staged candidate proves a non-empty verified Envio Classic V3 catalog before public Fast-Lane smoke",
+    "every exact staged candidate proves either a non-empty current Envio Classic V3 catalog or an exact bounded Router-only fallback before public Fast-Lane smoke",
   );
   check(
     "ops-protected-public-provider-stage-smoke",

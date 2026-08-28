@@ -26,6 +26,7 @@ import {
   profileEntryHasClaimableReward,
   profileHasRewardSurface,
   profileNativeClaimMeetsVisibilityThreshold,
+  publicProfileAccountFromQuery,
   prioritizedProfileActionState,
   profileRouterLaunchEntries,
   profileRewardsForAccount,
@@ -249,6 +250,7 @@ const classicAllocation = {
 };
 
 const classicReward = {
+  releaseVersion: "classic-v3",
   tokenAddress: secondAddress,
   tokenName: "Second",
   tokenSymbol: "SECOND",
@@ -319,6 +321,32 @@ describe("profile workspace loading state", () => {
     expect(getProfileSessionView(true, firstAddress)).toBe("loading");
     expect(getProfileSessionView(false)).toBe("connect");
     expect(getProfileSessionView(false, firstAddress)).toBe("profile");
+  });
+
+  it("opens a query-address profile as public unless it is the connected wallet", () => {
+    expect(publicProfileAccountFromQuery([firstAddress])).toBe(
+      firstAddress.toLowerCase(),
+    );
+    expect(publicProfileAccountFromQuery([firstAddress], firstAddress)).toBeNull();
+    expect(publicProfileAccountFromQuery([firstAddress], secondAddress)).toBe(
+      firstAddress.toLowerCase(),
+    );
+    expect(publicProfileAccountFromQuery([])).toBeNull();
+    expect(publicProfileAccountFromQuery([firstAddress, secondAddress])).toBeNull();
+    expect(publicProfileAccountFromQuery(["not-an-address"])).toBeNull();
+  });
+
+  it("keeps the public profile surface read-only", () => {
+    expect(profileViewSource).toContain("<PublicCreatorProfile");
+    expect(profileViewSource).toContain(
+      "Finalized launches are public. Connect this wallet to manage the",
+    );
+    expect(profileViewSource).toContain(
+      "<ProfileRouterLaunches entries={entries}",
+    );
+    expect(profileViewSource).not.toContain(
+      "<PublicCreatorProfile account={account}",
+    );
   });
 
   it("keeps a stable loading state until every pending source settles", () => {

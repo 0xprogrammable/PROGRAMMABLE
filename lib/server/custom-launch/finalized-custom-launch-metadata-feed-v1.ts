@@ -19,6 +19,10 @@ import {
   parseLaunchPartnerAttributionV1,
   type LaunchPartnerAttributionV1,
 } from "../../launch-partner-attribution";
+import {
+  parseFinalizedTradeAdapterDescriptorV1,
+  type FinalizedTradeAdapterDescriptorV1,
+} from "./finalized-trade-adapter-descriptor-v1";
 
 export const FINALIZED_CUSTOM_LAUNCH_METADATA_FEED_URL =
   "https://api.programmable.market/v3/finalized-custom-launches" as const;
@@ -88,6 +92,13 @@ const SECRET_PATTERNS = Object.freeze([
 type Sha256Digest = `sha256:${string}`;
 type Hex32 = `0x${string}`;
 type Address = `0x${string}`;
+type LaunchProfileVersionV1 =
+  | "2.0.0"
+  | "3.0.0"
+  | "3.1.0"
+  | "3.2.0"
+  | "3.3.0"
+  | "3.4.0";
 
 type LaunchPresentationLinkKindV1 =
   | "website"
@@ -161,15 +172,17 @@ export type FinalizedCustomLaunchMetadataV1 = Readonly<{
   schemaVersion: typeof FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1;
   resourceId: string;
   routerLaunchId: Hex32;
+  launchProfileVersion: LaunchProfileVersionV1;
   chainId: "1";
   router: Address;
   token: Address;
   hook: Address;
   poolManager: Address;
   poolId: Hex32;
-  projectMetadata: ProjectMetadataV1;
-  projectMetadataHash: Sha256Digest;
+  projectMetadata: ProjectMetadataV1 | null;
+  projectMetadataHash: Sha256Digest | null;
   partnerAttribution?: LaunchPartnerAttributionV1;
+  tradeAdapterDescriptor?: FinalizedTradeAdapterDescriptorV1;
   bindings: Readonly<{
     requestHash: Sha256Digest;
     launchIntentHash: Sha256Digest;
@@ -229,6 +242,7 @@ export type RouterCustomMetadataOverlayBindingV1 = Readonly<{
   unboundGraphBundleHash: Sha256Digest;
   artifactHash: Sha256Digest;
   partnerAttribution?: LaunchPartnerAttributionV1;
+  tradeAdapterDescriptor?: FinalizedTradeAdapterDescriptorV1;
   tokenMetadataReadback: Readonly<{
     status: "matching" | "unavailable";
     observedAtBlockNumber: string | null;
@@ -460,6 +474,9 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
       });
       return entry;
     }
+    if (metadata.projectMetadata === null || metadata.projectMetadataHash === null) {
+      return entry;
+    }
     let presentation: ProjectedLaunchPresentationV1;
     try {
       presentation = projectLaunchPresentationV1(
@@ -496,6 +513,9 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
       artifactHash: metadata.bindings.artifactHash,
       ...(metadata.partnerAttribution
         ? { partnerAttribution: metadata.partnerAttribution }
+        : {}),
+      ...(metadata.tradeAdapterDescriptor
+        ? { tradeAdapterDescriptor: metadata.tradeAdapterDescriptor }
         : {}),
       tokenMetadataReadback: Object.freeze({
         status: metadata.tokenMetadataReadback.status,
@@ -639,8 +659,13 @@ function metadataMatchesRouterEntryV1(
 }
 
 function parseFeedPageV1(value: JsonValue, now: number): FeedPageV1 {
+  const hasQuality = value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.hasOwn(value, "quality");
   const record = exactRecord(value, [
     "schemaVersion", "generatedAt", "launches", "nextCursor",
+    ...(hasQuality ? ["quality"] : []),
   ], "Finalized Custom metadata list");
   if (
     record.schemaVersion !== FINALIZED_CUSTOM_LAUNCH_METADATA_LIST_SCHEMA_V1
@@ -656,6 +681,7 @@ function parseFeedPageV1(value: JsonValue, now: number): FeedPageV1 {
     generatedAtMs > now + MAXIMUM_FUTURE_SKEW_MS
     || now - generatedAtMs > MAXIMUM_GENERATED_AGE_MS
   ) throw new Error("Finalized Custom metadata list is stale");
+  if (hasQuality) parseFeedQualityV1(record.quality, record.launches.length);
   return deepFreeze({
     schemaVersion: FINALIZED_CUSTOM_LAUNCH_METADATA_LIST_SCHEMA_V1,
     generatedAt,
@@ -664,17 +690,77 @@ function parseFeedPageV1(value: JsonValue, now: number): FeedPageV1 {
   });
 }
 
+function parseFeedQualityV1(
+  value: JsonValue | undefined,
+  publishedLaunchCount: number,
+) {
+  const record = exactRecord(value, [
+    "status", "sourceRowCount", "publishedRowCount",
+    "quarantinedRowCount", "diagnostics",
+  ], "Finalized Custom metadata quality");
+  if (
+    (record.status !== "complete" && record.status !== "partial")
+    || !boundedInteger(
+      record.sourceRowCount,
+      0,
+      FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT,
+    )
+    || !boundedInteger(
+      record.publishedRowCount,
+      0,
+      FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT,
+    )
+    || !boundedInteger(
+      record.quarantinedRowCount,
+      0,
+      FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT,
+    )
+    || !Array.isArray(record.diagnostics)
+    || record.diagnostics.length > FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT
+    || record.publishedRowCount !== publishedLaunchCount
+    || record.publishedRowCount + record.quarantinedRowCount
+      !== record.sourceRowCount
+    || record.diagnostics.length !== record.quarantinedRowCount
+    || (record.status === "complete" && record.quarantinedRowCount !== 0)
+    || (record.status === "partial" && record.quarantinedRowCount === 0)
+  ) throw new Error("Finalized Custom metadata quality is invalid");
+
+  const rowIndexes = new Set<number>();
+  for (const value of record.diagnostics) {
+    const diagnostic = exactRecord(value, [
+      "rowIndex", "code",
+    ], "Finalized Custom metadata quality diagnostic");
+    if (
+      !boundedInteger(
+        diagnostic.rowIndex,
+        0,
+        FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT - 1,
+      )
+      || diagnostic.rowIndex >= record.sourceRowCount
+      || diagnostic.code !== "FINALIZED_ROW_QUARANTINED"
+      || rowIndexes.has(diagnostic.rowIndex)
+    ) throw new Error("Finalized Custom metadata quality diagnostic is invalid");
+    rowIndexes.add(diagnostic.rowIndex);
+  }
+}
+
 function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
   const hasPartnerAttribution = value !== null
     && typeof value === "object"
     && !Array.isArray(value)
     && Object.hasOwn(value, "partnerAttribution");
+  const hasTradeAdapterDescriptor = value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.hasOwn(value, "tradeAdapterDescriptor");
   const record = exactRecord(value, [
     "schemaVersion", "resourceId", "routerLaunchId", "chainId", "router",
-    "token", "hook", "poolManager", "poolId", "projectMetadata",
+    "token", "hook", "poolManager", "poolId", "launchProfileVersion",
+    "projectMetadata",
     "projectMetadataHash", "bindings", "tokenMetadataReadback", "finality",
     "createdAt", "finalizedAt",
     ...(hasPartnerAttribution ? ["partnerAttribution"] : []),
+    ...(hasTradeAdapterDescriptor ? ["tradeAdapterDescriptor"] : []),
   ], "Finalized Custom metadata item");
   if (
     record.schemaVersion !== FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1
@@ -682,16 +768,32 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     || !UUID.test(record.resourceId)
     || record.chainId !== "1"
   ) throw new Error("Finalized Custom metadata item is invalid");
-
-  const projectMetadata = parseProjectMetadataV1(record.projectMetadata);
-  const projectMetadataHash = digest(
-    record.projectMetadataHash,
-    "project metadata hash",
-  );
   if (
-    canonicalSha256(PROJECT_METADATA_SCHEMA_V1, projectMetadata)
-      !== projectMetadataHash
-  ) throw new Error("Finalized Custom project metadata hash is invalid");
+    record.launchProfileVersion !== "2.0.0"
+    && record.launchProfileVersion !== "3.0.0"
+    && record.launchProfileVersion !== "3.1.0"
+    && record.launchProfileVersion !== "3.2.0"
+    && record.launchProfileVersion !== "3.3.0"
+    && record.launchProfileVersion !== "3.4.0"
+  ) throw new Error("Finalized Custom metadata launch profile version is invalid");
+  const metadataRequired = launchProfileUsesProjectMetadataV1(
+    record.launchProfileVersion,
+  );
+  let projectMetadata: ProjectMetadataV1 | null = null;
+  let projectMetadataHash: Sha256Digest | null = null;
+  if (metadataRequired) {
+    projectMetadata = parseProjectMetadataV1(record.projectMetadata);
+    projectMetadataHash = digest(
+      record.projectMetadataHash,
+      "project metadata hash",
+    );
+    if (
+      canonicalSha256(PROJECT_METADATA_SCHEMA_V1, projectMetadata)
+        !== projectMetadataHash
+    ) throw new Error("Finalized Custom project metadata hash is invalid");
+  } else if (record.projectMetadata !== null || record.projectMetadataHash !== null) {
+    throw new Error("Finalized Custom legacy launch metadata fields must be null");
+  }
   const partnerAttribution = hasPartnerAttribution
     ? parseLaunchPartnerAttributionV1(record.partnerAttribution)
     : null;
@@ -721,7 +823,8 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     artifactHash: digest(bindingsRecord.artifactHash, "artifact hash"),
   });
   if (
-    canonicalSha256(PROJECT_METADATA_GRAPH_BINDING_DOMAIN_V1, {
+    metadataRequired
+    && canonicalSha256(PROJECT_METADATA_GRAPH_BINDING_DOMAIN_V1, {
       graphBundleHash: bindings.unboundGraphBundleHash,
       projectMetadataHash,
     }) !== bindings.graphBundleHash
@@ -733,6 +836,39 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     throw new Error("Finalized Custom metadata timestamps are invalid");
   }
   const finality = parseFinalityV1(record.finality);
+  const routerLaunchId = lowerBytes32(
+    record.routerLaunchId,
+    "Router launch id",
+  );
+  const router = canonicalAddress(record.router, "Router address");
+  const token = canonicalAddress(record.token, "token address");
+  const hook = canonicalAddress(record.hook, "hook address");
+  const poolManager = canonicalAddress(
+    record.poolManager,
+    "PoolManager address",
+  );
+  const poolId = lowerBytes32(record.poolId, "pool id");
+  const tradeAdapterDescriptor = hasTradeAdapterDescriptor
+    ? parseFinalizedTradeAdapterDescriptorV1(
+        record.tradeAdapterDescriptor,
+        {
+          routerLaunchId,
+          router,
+          token,
+          hook,
+          poolManager,
+          poolId,
+          artifactHash: bindings.artifactHash,
+          graphBundleHash: bindings.graphBundleHash,
+          finality: {
+            transactionHash: finality.transactionHash,
+            blockNumber: finality.blockNumber,
+            blockHash: finality.blockHash,
+            logIndex: finality.logIndex,
+          },
+        },
+      )
+    : null;
   const readback = parseTokenMetadataReadbackV1(
     record.tokenMetadataReadback,
     projectMetadata,
@@ -745,16 +881,18 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
   return deepFreeze({
     schemaVersion: FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1,
     resourceId: record.resourceId,
-    routerLaunchId: lowerBytes32(record.routerLaunchId, "Router launch id"),
+    routerLaunchId,
+    launchProfileVersion: record.launchProfileVersion,
     chainId: "1",
-    router: canonicalAddress(record.router, "Router address"),
-    token: canonicalAddress(record.token, "token address"),
-    hook: canonicalAddress(record.hook, "hook address"),
-    poolManager: canonicalAddress(record.poolManager, "PoolManager address"),
-    poolId: lowerBytes32(record.poolId, "pool id"),
+    router,
+    token,
+    hook,
+    poolManager,
+    poolId,
     projectMetadata,
     projectMetadataHash,
     ...(partnerAttribution ? { partnerAttribution } : {}),
+    ...(tradeAdapterDescriptor ? { tradeAdapterDescriptor } : {}),
     bindings,
     tokenMetadataReadback: readback,
     finality,
@@ -763,9 +901,17 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
   });
 }
 
+function launchProfileUsesProjectMetadataV1(
+  launchProfileVersion: LaunchProfileVersionV1,
+) {
+  return launchProfileVersion === "3.2.0"
+    || launchProfileVersion === "3.3.0"
+    || launchProfileVersion === "3.4.0";
+}
+
 function parseTokenMetadataReadbackV1(
   value: JsonValue | undefined,
-  metadata: ProjectMetadataV1,
+  metadata: ProjectMetadataV1 | null,
 ): FinalizedCustomLaunchMetadataV1["tokenMetadataReadback"] {
   const record = exactRecord(value, [
     "status", "declared", "observed", "observedAtBlockNumber", "observedAt",
@@ -785,8 +931,10 @@ function parseTokenMetadataReadbackV1(
     symbol: humanText(declaredRecord.symbol, 1, 16, "declared token symbol"),
   });
   if (
-    declared.name !== metadata.token.name
-    || declared.symbol !== metadata.token.symbol
+    (metadata !== null && (
+      declared.name !== metadata.token.name
+      || declared.symbol !== metadata.token.symbol
+    ))
     || (record.status !== "matching"
       && record.status !== "mismatch"
       && record.status !== "unavailable")

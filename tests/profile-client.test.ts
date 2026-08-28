@@ -377,6 +377,29 @@ describe("profile API client", () => {
     },
   );
 
+  it("preserves the canonical rooted SHARD artwork path", () => {
+    const response = profileResponse();
+    response.tokens[0]!.imageUrl = "/brand/projects/shard-token-v1.png";
+
+    const profile = mapCreatorProfileResponse(response, account);
+
+    expect(profile.tokens[0]?.imageUrl).toBe(
+      "/brand/projects/shard-token-v1.png",
+    );
+  });
+
+  it.each([
+    "//images.example/project.png",
+    "/\\images.example/project.png",
+  ])("drops unsafe relative artwork %s", (imageUrl) => {
+    const response = profileResponse();
+    response.tokens[0]!.imageUrl = imageUrl;
+
+    const profile = mapCreatorProfileResponse(response, account);
+
+    expect(profile.tokens[0]?.imageUrl).toBeUndefined();
+  });
+
   it("keeps canonical identity while dropping untrusted presentation URLs", () => {
     const response = profileResponse();
     Object.assign(response.tokens[0], {

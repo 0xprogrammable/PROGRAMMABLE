@@ -9,7 +9,7 @@ export type SourceRegistryEntry = {
   startBlock: number;
 };
 
-export const SOURCE_REGISTRY = [
+const BASE_SOURCE_REGISTRY = [
   {
     contractName: "ClassicV2Hook",
     address: "0x025a386eaa79f6067d29848fd05ccc71beab20cc",
@@ -90,7 +90,56 @@ export const SOURCE_REGISTRY = [
     address: "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
     startBlock: 25_642_745,
   },
+  {
+    contractName: "CustomRegistryV1",
+    address: "0x17e18c88bda9bfb73924cdc989c07b0707e72671",
+    startBlock: 25_701_139,
+  },
+  {
+    contractName: "CustomPartnerFactoryRegistryV1",
+    address: "0xf8aef69201621ad20fa256da595426b7e6192dba",
+    startBlock: 25_701_136,
+  },
+  {
+    contractName: "CustomAtomicRegistrarV1",
+    address: "0xcc916e5200d2626edfd918dc219bc4296629e997",
+    startBlock: 25_701_142,
+  },
 ] as const satisfies readonly SourceRegistryEntry[];
+
+// CLASSIC_V4_ACTIVATION_START
+const ACTIVATED_CLASSIC_V4_SOURCES = [
+  {
+    contractName: "ClassicV4Hook",
+    address: "0xadf955a44fd7f009380240d56d71dfafb46020cc",
+    startBlock: 25_851_137,
+  },
+  {
+    contractName: "ClassicV4Launcher",
+    address: "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699",
+    startBlock: 25_853_086,
+  },
+] as const satisfies readonly SourceRegistryEntry[];
+// CLASSIC_V4_ACTIVATION_END
+
+export const SOURCE_REGISTRY = [
+  ...BASE_SOURCE_REGISTRY,
+  ...ACTIVATED_CLASSIC_V4_SOURCES,
+] as const satisfies readonly SourceRegistryEntry[];
+
+if (
+  new Set(SOURCE_REGISTRY.map(({ contractName }) => contractName)).size !==
+    SOURCE_REGISTRY.length ||
+  new Set(SOURCE_REGISTRY.map(({ address }) => address.toLowerCase())).size !==
+    SOURCE_REGISTRY.length ||
+  SOURCE_REGISTRY.some(({ address, startBlock }) =>
+    !/^0x(?!0{40}$)[0-9a-f]{40}$/u.test(address) ||
+    !Number.isSafeInteger(startBlock) ||
+    startBlock <= 0
+  )
+) {
+  throw new Error("Invalid or duplicate indexed source registry identity");
+}
 
 export function staticReleaseForContract(
   contractName: string,
@@ -101,6 +150,12 @@ export function staticReleaseForContract(
   if (CLASSIC_V3_CONTRACTS.has(contractName)) {
     return { model: "classic", releaseVersion: "classic-v3" };
   }
+  if (
+    CLASSIC_V4_CONTRACTS.has(contractName) &&
+    sourceStartBlock(contractName) !== undefined
+  ) {
+    return { model: "classic", releaseVersion: "classic-v4" };
+  }
   if (STOCK_V1_CONTRACTS.has(contractName)) {
     return { model: "stock-paired", releaseVersion: "stock-paired-v1" };
   }
@@ -109,6 +164,9 @@ export function staticReleaseForContract(
   }
   if (STOCK_V3_CONTRACTS.has(contractName)) {
     return { model: "stock-paired", releaseVersion: "stock-paired-v3" };
+  }
+  if (CUSTOM_REGISTRY_V1_CONTRACTS.has(contractName)) {
+    return { model: "custom", releaseVersion: "custom-registry-v1" };
   }
   return undefined;
 }
@@ -146,6 +204,10 @@ const CLASSIC_V3_CONTRACTS = new Set([
   "ClassicV3RewardVaultFactory",
   "ClassicV3VestingWalletFactory",
 ]);
+const CLASSIC_V4_CONTRACTS = new Set([
+  "ClassicV4Hook",
+  "ClassicV4Launcher",
+]);
 const STOCK_V1_CONTRACTS = new Set([
   "StockV1Hook",
   "StockV1Launcher",
@@ -159,4 +221,9 @@ const STOCK_V2_CONTRACTS = new Set([
 const STOCK_V3_CONTRACTS = new Set([
   "StockV3Launcher",
   "StockV3EthCoordinator",
+]);
+const CUSTOM_REGISTRY_V1_CONTRACTS = new Set([
+  "CustomRegistryV1",
+  "CustomPartnerFactoryRegistryV1",
+  "CustomAtomicRegistrarV1",
 ]);

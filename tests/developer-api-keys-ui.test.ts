@@ -384,16 +384,16 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized",
+      "pack -> validate --remote -> submit -> server decision -> status --watch --until authorized -> wallet -> status --watch --until finalized",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli).toContain(
-      "programmable-launch-v3.3.6",
+      "programmable-launch-v3.3.9",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "Before pack, collect the project name and symbol",
+      "Before pack, collect the required project name and symbol",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "local source file and its canonical public HTTPS, IPFS or Arweave URI",
+      "non-empty local PNG, JPEG, WebP or GIF plus its canonical public HTTPS, IPFS or Arweave URI",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "website shows the same metadata read-only",
@@ -549,6 +549,13 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('aria-live="polite"');
     expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
+    expect(historySource).toContain("Programmable fee");
+    expect(historySource).toContain(
+      "No automatic Programmable fee claim",
+    );
+    expect(historySource).toContain(
+      "10 bps · exact fee-path verification required",
+    );
     expect(historySource).toContain("Admission checks running");
     expect(historySource).toContain("Changes required");
     expect(historySource).toContain("Fix source or configuration");

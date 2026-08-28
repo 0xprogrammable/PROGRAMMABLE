@@ -23,8 +23,8 @@ import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
 import { readProductionSourceVerificationDisplayV1 } from
   "../../../../lib/server/custom-launch/source-verification-display-v1";
-import { routerTradeProjectForEntryV1 } from
-  "../../../../lib/custom-launch/router-trade-adapters-v1";
+import { routerTradeProjectForServerBoundEntryV1 } from
+  "../../../../lib/server/custom-launch/router-trade-descriptor-v1";
 import {
   publicExploreCatalogEntriesV1,
   publicExplorePresentationEntryV1,
@@ -36,6 +36,8 @@ import { readPublicCreatorArticleV1 } from
   "../../../../lib/server/creator-article/public-read.server";
 import { canonicalSha256 } from
   "../../../../lib/server/projection-target/hashing";
+import { platformFeeCertificationForTokenV1 } from
+  "../../../../lib/platform-fee-certification";
 import type {
   CanonicalTokenExploreEntry,
   ExploreEntry,
@@ -382,6 +384,7 @@ export async function GET(request: NextRequest) {
         token: null,
         customProject: null,
         routerTradeProject: null,
+        platformFeeCertification: null,
         sourceVerification: null,
         creatorArticle: null,
         snapshot: null,
@@ -402,7 +405,10 @@ export async function GET(request: NextRequest) {
   }
 
   const routerTradeProject = entry.exploreKind === "token"
-    ? routerTradeProjectForEntryV1(entry)
+    ? routerTradeProjectForServerBoundEntryV1(
+        entry,
+        acceptedRouterSnapshot,
+      )
     : null;
   const sourceVerificationPromise = entry.exploreKind === "token"
       && entry.launchCategoryProvenance.category === "custom"
@@ -430,14 +436,20 @@ export async function GET(request: NextRequest) {
     const publicEntry = publicExploreEntryV1(
       publicExplorePresentationEntryV1(valuedEntry),
     );
+    const publicToken = publicEntry.exploreKind === "token"
+      ? publicEntry
+      : null;
 
     return NextResponse.json(
       {
         status: "ready",
-        token: publicEntry.exploreKind === "token" ? publicEntry : null,
+        token: publicToken,
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         routerTradeProject,
+        platformFeeCertification: publicToken
+          ? platformFeeCertificationForTokenV1(publicToken)
+          : null,
         sourceVerification: await sourceVerificationPromise,
         creatorArticle: await creatorArticlePromise,
         snapshot:
@@ -468,14 +480,20 @@ export async function GET(request: NextRequest) {
         valuation: { status: "unavailable", reason: "source-unavailable" },
       }),
     );
+    const publicToken = publicEntry.exploreKind === "token"
+      ? publicEntry
+      : null;
     const creatorArticle = await readPublicCreatorArticleV1(entry.tokenAddress!);
     return NextResponse.json(
       {
         status: "ready",
-        token: publicEntry.exploreKind === "token" ? publicEntry : null,
+        token: publicToken,
         customProject:
           publicEntry.exploreKind === "custom-project" ? publicEntry : null,
         routerTradeProject,
+        platformFeeCertification: publicToken
+          ? platformFeeCertificationForTokenV1(publicToken)
+          : null,
         sourceVerification: await sourceVerificationPromise,
         creatorArticle,
         snapshot: publicEntry.exploreKind === "token" ? { chainId: 1 } : null,

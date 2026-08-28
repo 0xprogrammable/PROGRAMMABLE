@@ -15,6 +15,11 @@ import {
   parsePreparedTransaction,
   type PreparedTransaction,
 } from "../prepared-transaction";
+import {
+  CLASSIC_V4_PUBLIC_RELEASE_BINDING,
+  isClassicV4PublicActionBinding,
+  type ClassicV4PublicReleaseBinding,
+} from "../classic-v4-public-release";
 
 export type ClassicV3Beneficiary = {
   allocationIndex: number;
@@ -24,6 +29,8 @@ export type ClassicV3Beneficiary = {
 };
 
 export type ClassicV3Reward = {
+  /** Legacy V3-only projections omit this; canonical API parsing always sets it. */
+  releaseVersion?: "classic-v3" | "classic-v4";
   tokenAddress: Address;
   tokenName: string;
   tokenSymbol: string;
@@ -427,6 +434,13 @@ export function parseClassicV3ProfileRewards(
       throw new Error("Classic reward ETH values do not match");
     }
     return {
+      releaseVersion:
+        reward.releaseVersion === "classic-v3" ||
+        reward.releaseVersion === "classic-v4"
+          ? reward.releaseVersion
+          : (() => {
+              throw new Error("Invalid Classic reward release");
+            })(),
       tokenAddress: address(reward.tokenAddress, "reward token"),
       tokenName:
         typeof reward.tokenName === "string" && reward.tokenName.trim()
@@ -534,11 +548,26 @@ export function validatePreparedClassicV3RewardAction(
     newPayoutAddress?: string;
     allocationIndex?: number;
     chainId: number;
+    releaseVersion: "classic-v3" | "classic-v4";
   },
+  classicV4PublicRelease: ClassicV4PublicReleaseBinding | null =
+    CLASSIC_V4_PUBLIC_RELEASE_BINDING,
 ): PreparedClassicV3RewardAction {
   const response = asRecord(value, "Classic reward action");
-  if (response.status !== "ready" || response.action !== expected.action) {
+  if (
+    response.status !== "ready" ||
+    response.action !== expected.action ||
+    response.releaseVersion !== expected.releaseVersion
+  ) {
     throw new Error("Classic reward action is not ready");
+  }
+  if (
+    expected.releaseVersion === "classic-v4" &&
+    !isClassicV4PublicActionBinding(classicV4PublicRelease)
+  ) {
+    throw new Error(
+      "Classic V4 rewards are not enabled by the browser release binding",
+    );
   }
   const account = address(response.account, "reward action account");
   const vaultAddress = address(response.vaultAddress, "reward action vault");
@@ -600,6 +629,7 @@ export async function prepareClassicV3RewardAction(
     newPayoutAddress?: string;
     allocationIndex?: number;
     chainId: number;
+    releaseVersion: "classic-v3" | "classic-v4";
   },
   signal?: AbortSignal,
   fetcher: FetchLike = fetch,
@@ -623,6 +653,7 @@ export async function prepareClassicV3RewardAction(
         action: input.action,
         account: input.account,
         vaultAddress: input.vaultAddress,
+        releaseVersion: input.releaseVersion,
         ...(input.action === "update-payout"
           ? {
               allocationIndex: input.allocationIndex,
