@@ -24,6 +24,7 @@ import {
   assertClassicV4SignerRuntimeAtBlock,
   assertClassicV4PreparedArmTime,
   assertClassicV4FreshRpcHead,
+  assertClassicV4SwapParentBinding,
   acquireClassicV4ExecutionLock,
   assertClassicV4ExecutionOutputPair,
   assertClassicV4ExternalExecutionPath,
@@ -49,6 +50,112 @@ import {
 const operator = "0x1111111111111111111111111111111111111111";
 const target = "0x2222222222222222222222222222222222222222";
 const digest = `0x${"11".repeat(32)}`;
+
+test("Classic V4 receipt evidence accepts an equal or stricter parent quote bound", () => {
+  const parentBlock = {
+    number: 123,
+    hash: `0x${"aa".repeat(32)}`,
+    timestamp: 1_000n,
+  };
+  const exactInputParent = {
+    action: "buyExactInput",
+    requiredAction: "buyExactInput",
+    request: { from: operator, to: target, value: "0x64" },
+    quote: {
+      policy: "canonical-v4-quoter-at-parent-block",
+      blockNumber: parentBlock.number,
+      blockHash: parentBlock.hash,
+      exactAmount: "100",
+    },
+    swap: {
+      side: "buy",
+      exactness: "exact-input",
+      inputBound: "100",
+      outputBound: "980",
+      routerDeadline: "1300",
+    },
+  };
+  const exactInputPrepared = structuredClone(exactInputParent);
+  exactInputPrepared.quote.blockNumber = 111;
+  exactInputPrepared.quote.blockHash = `0x${"bb".repeat(32)}`;
+  exactInputPrepared.swap.outputBound = "990";
+  exactInputPrepared.swap.routerDeadline = "1400";
+  assert.equal(
+    assertClassicV4SwapParentBinding(
+      exactInputPrepared,
+      exactInputParent,
+      parentBlock,
+    ),
+    true,
+  );
+  assert.throws(
+    () => assertClassicV4SwapParentBinding(
+      {
+        ...exactInputPrepared,
+        swap: { ...exactInputPrepared.swap, outputBound: "979" },
+      },
+      exactInputParent,
+      parentBlock,
+    ),
+    /weaker than its parent-block quote bound/u,
+  );
+  assert.throws(
+    () => assertClassicV4SwapParentBinding(
+      {
+        ...exactInputPrepared,
+        swap: { ...exactInputPrepared.swap, routerDeadline: "1044" },
+      },
+      exactInputParent,
+      parentBlock,
+    ),
+    /deadline was stale/u,
+  );
+
+  const exactOutputParent = {
+    action: "buyExactOutput",
+    requiredAction: "buyExactOutput",
+    request: { from: operator, to: target, value: "0x3fc" },
+    quote: {
+      policy: "canonical-v4-quoter-at-parent-block",
+      blockNumber: parentBlock.number,
+      blockHash: parentBlock.hash,
+      exactAmount: "100",
+    },
+    swap: {
+      side: "buy",
+      exactness: "exact-output",
+      inputBound: "1020",
+      outputBound: "100",
+      routerDeadline: "1300",
+    },
+  };
+  const exactOutputPrepared = structuredClone(exactOutputParent);
+  exactOutputPrepared.quote.blockNumber = 111;
+  exactOutputPrepared.quote.blockHash = `0x${"bb".repeat(32)}`;
+  exactOutputPrepared.request.value = "0x3f2";
+  exactOutputPrepared.swap.inputBound = "1010";
+  exactOutputPrepared.swap.routerDeadline = "1400";
+  assert.equal(
+    assertClassicV4SwapParentBinding(
+      exactOutputPrepared,
+      exactOutputParent,
+      parentBlock,
+    ),
+    true,
+  );
+  assert.throws(
+    () => assertClassicV4SwapParentBinding(
+      {
+        ...exactOutputPrepared,
+        request: { ...exactOutputPrepared.request, value: "0x3fd" },
+        swap: { ...exactOutputPrepared.swap, inputBound: "1021" },
+      },
+      exactOutputParent,
+      parentBlock,
+    ),
+    /weaker than its parent-block quote bound/u,
+  );
+});
 
 test("Classic V4 lifecycle UI check needs no evidence, RPC or wallet", async () => {
   const port = 44_000 + (process.pid % 1_000);
