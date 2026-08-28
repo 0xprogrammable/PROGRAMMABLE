@@ -20,7 +20,7 @@ import {
 const CANDIDATE_ENDPOINT =
   "https://indexer.hyperindex.xyz/cand001/v1/graphql";
 const HOOK = "0xadf955a44fd7f009380240d56d71dfafb46020cc";
-const LAUNCHER = "0x1af508f9af9f8f5cf7bf712b7d2974d4ee7a6681";
+const LAUNCHER = "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699";
 
 function identity() {
   return {
@@ -47,12 +47,12 @@ function plan() {
     {
       contractName: "ClassicV4Launcher",
       address: LAUNCHER,
-      startBlock: 25_851_150,
+      startBlock: 25_853_086,
       runtimeCodeHash:
         "0xafd7bdd723da2f8ab076cd067dd7c8486a89a0dc348fc3a8cbca677f7999798c",
     },
   ];
-  const activationBlock = 25_851_150;
+  const activationBlock = 25_853_086;
   return {
     schemaVersion: 1,
     chainId: 1,

@@ -438,7 +438,7 @@ describe("checked-in manifest fixtures", () => {
       ["CustomPartnerFactoryRegistryV1", "0xf8aef69201621ad20fa256da595426b7e6192dba", 25_701_136],
       ["CustomAtomicRegistrarV1", "0xcc916e5200d2626edfd918dc219bc4296629e997", 25_701_142],
       ["ClassicV4Hook", "0xadf955a44fd7f009380240d56d71dfafb46020cc", 25_851_137],
-      ["ClassicV4Launcher", "0x1af508f9af9f8f5cf7bf712b7d2974d4ee7a6681", 25_851_150],
+      ["ClassicV4Launcher", "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699", 25_853_086],
     ].map(([contractName, address, startBlock]) => ({
       contractName: String(contractName),
       address: String(address).toLowerCase(),

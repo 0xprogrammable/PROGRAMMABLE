@@ -185,5 +185,5 @@ chains:
       - name: ClassicV4Hook
         address: "0xadf955a44fd7f009380240d56d71dfafb46020cc"
       - name: ClassicV4Launcher
-        address: "0x1af508f9af9f8f5cf7bf712b7d2974d4ee7a6681"
+        address: "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699"
       # CLASSIC_V4_ACTIVATION_END
