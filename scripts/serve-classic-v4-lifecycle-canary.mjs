@@ -32,9 +32,6 @@ import {
   buildClassicV4LifecycleReleaseCandidate,
   digestJson,
   normalizeHex,
-  validateClassicV4DeploymentEvidence,
-  validateClassicV4PreparationPlan,
-  validateClassicV4SourceEvidence,
 } from "./classic-v4-release-core.mjs";
 import {
   CLASSIC_V4_AUTHORIZATION_SAFETY_SECONDS,
@@ -69,8 +66,10 @@ import {
   validateClassicV4PreparedAction,
   validateClassicV4ExecutionJournal,
 } from "./classic-v4-lifecycle-console-core.mjs";
-import { loadClassicV4SealedBuild } from
-  "../contracts/scripts/prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "../contracts/scripts/classic-v4-release-validation.mjs";
 import { verifyClassicV4ReleasePrerequisites } from
   "../contracts/scripts/verify-classic-v4-release-prerequisites.mjs";
 
@@ -2543,16 +2542,23 @@ async function loadContext(options) {
     readJson(options.sourceEvidence, "source evidence"),
     readJson(options.canaryPlan, "canary plan"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
-  validateClassicV4PreparationPlan(plan, artifacts);
-  validateClassicV4DeploymentEvidence(plan, deploymentEvidence);
-  validateClassicV4SourceEvidence(plan, deploymentEvidence, sourceEvidence);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    sourceEvidence,
+  );
   await verifyClassicV4ReleasePrerequisites({
     endpoints: [options.rpcA, options.rpcB],
     plan,
     deploymentEvidence,
     sourceEvidence,
     artifacts,
+    artifactContext,
   });
   const candidate = buildClassicV4LifecycleReleaseCandidate(
     plan,

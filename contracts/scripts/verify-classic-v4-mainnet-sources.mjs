@@ -10,15 +10,14 @@ import { keccak256, stringToHex } from "viem";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   CLASSIC_V4_NEW_CONTRACTS,
-  CLASSIC_V4_SOURCE_TARGETS,
   canonicalAddress,
   digestJson,
-  validateClassicV4DeploymentEvidence,
-  validateClassicV4PreparationPlan,
-  validateClassicV4SourceEvidence,
 } from "../../scripts/classic-v4-release-core.mjs";
 import { resolvePinnedSolc } from "./custom-registry-v2-source-verification-core.mjs";
-import { loadClassicV4SealedBuild } from "./prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "./classic-v4-release-validation.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
@@ -499,11 +498,13 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(options.plan, "preparation plan"),
     readJson(options.deploymentEvidence, "deployment evidence"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
   const evidence = await verifyClassicV4SourceProviders({
     plan,
     deploymentEvidence,
     artifacts,
+    artifactContext,
   });
   if (options.write) await writeEvidence(evidence, plan, options);
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
@@ -513,16 +514,18 @@ export async function verifyClassicV4SourceProviders({
   plan,
   deploymentEvidence,
   artifacts,
-  checkedAt = new Date().toISOString(),
+  artifactContext,
+  now = () => new Date(),
   fetchJsonClient = fetchJson,
   etherscanApiKey = process.env.ETHERSCAN_API_KEY?.trim() || null,
   compileEtherscanStandardJsonInput = compileProviderStandardJsonInput,
 }) {
-  validateClassicV4PreparationPlan(plan, artifacts);
-  validateClassicV4DeploymentEvidence(plan, deploymentEvidence);
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
   const contracts = {};
   for (const name of CLASSIC_V4_NEW_CONTRACTS) {
-    const target = CLASSIC_V4_SOURCE_TARGETS[name];
+    const target = releaseValidation.sourceTargets[name];
     const deployed = deploymentEvidence.contracts[name];
     const providers = (
       await Promise.all([
@@ -560,7 +563,7 @@ export async function verifyClassicV4SourceProviders({
     planDigest: plan.planDigest,
     sourceCommitment: plan.sourceCommitment,
     status: "verified",
-    checkedAt,
+    checkedAt: now().toISOString(),
     contracts,
   };
   const evidence = {
@@ -570,7 +573,11 @@ export async function verifyClassicV4SourceProviders({
       CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
     ),
   };
-  validateClassicV4SourceEvidence(plan, deploymentEvidence, evidence);
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    evidence,
+  );
   return evidence;
 }
 

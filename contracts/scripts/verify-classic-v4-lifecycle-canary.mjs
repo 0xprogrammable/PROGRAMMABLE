@@ -29,12 +29,12 @@ import {
   digestJson,
   normalizeHex,
   validateClassicV4LaunchAuthorization,
-  validateClassicV4DeploymentEvidence,
   validateClassicV4LifecycleEvidence,
-  validateClassicV4PreparationPlan,
-  validateClassicV4SourceEvidence,
 } from "../../scripts/classic-v4-release-core.mjs";
-import { loadClassicV4SealedBuild } from "./prepare-classic-v4-mainnet-release.mjs";
+import {
+  loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReleaseValidation,
+} from "./classic-v4-release-validation.mjs";
 import { verifyClassicV4ReleasePrerequisites } from "./verify-classic-v4-release-prerequisites.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -2699,21 +2699,28 @@ export async function verifyClassicV4LifecycleCanary({
   suppliedCanary,
   suppliedTransactions,
   artifacts,
+  artifactContext,
 }) {
   assert(
     Number.isSafeInteger(verificationBlock) && verificationBlock > 0,
     "Verification block must be a positive integer",
   );
   assertEndpoints(endpoints);
-  validateClassicV4PreparationPlan(plan, artifacts);
-  validateClassicV4DeploymentEvidence(plan, deploymentEvidence);
-  validateClassicV4SourceEvidence(plan, deploymentEvidence, sourceEvidence);
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    sourceEvidence,
+  );
   await verifyClassicV4ReleasePrerequisites({
     endpoints,
     plan,
     deploymentEvidence,
     sourceEvidence,
     artifacts,
+    artifactContext,
   });
   const canary = reconstructCanary(
     plan,
@@ -2793,6 +2800,11 @@ export async function verifyClassicV4LifecycleCanary({
     deploymentEvidence,
     sourceEvidence,
     evidence,
+    {
+      validateDeploymentEvidence:
+        releaseValidation.validateDeploymentEvidence,
+      validateSourceEvidence: releaseValidation.validateSourceEvidence,
+    },
   );
   return evidence;
 }
@@ -2818,7 +2830,8 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(options.canaryPlan, "canary plan"),
     readJson(options.transactions, "lifecycle transactions"),
   ]);
-  const artifacts = await loadClassicV4SealedBuild(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const { artifacts } = artifactContext;
   const evidence = await verifyClassicV4LifecycleCanary({
     endpoints: [options.rpcA, options.rpcB],
     verificationBlock: options.verificationBlock,
@@ -2828,6 +2841,7 @@ export async function main(argv = process.argv.slice(2)) {
     suppliedCanary,
     suppliedTransactions,
     artifacts,
+    artifactContext,
   });
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
   if (options.write) {

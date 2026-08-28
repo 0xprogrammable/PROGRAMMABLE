@@ -1324,7 +1324,31 @@ export function validateClassicV4DeploymentEvidence(plan, evidence) {
   return { startBlock: Math.min(...blocks), deploymentBlocks: blocks };
 }
 
-export function validateClassicV4SourceEvidence(plan, deployment, evidence) {
+export function validateClassicV4SourceEvidence(
+  plan,
+  deployment,
+  evidence,
+  { sourceTargets = CLASSIC_V4_SOURCE_TARGETS } = {},
+) {
+  assertExactKeys(
+    sourceTargets,
+    CLASSIC_V4_NEW_CONTRACTS,
+    "Source evidence targets",
+  );
+  for (const name of CLASSIC_V4_NEW_CONTRACTS) {
+    assertExactKeys(
+      sourceTargets[name],
+      ["contractName", "fqcn"],
+      `${name} source target`,
+    );
+    assert(
+      typeof sourceTargets[name].contractName === "string" &&
+        sourceTargets[name].contractName.length > 0 &&
+        typeof sourceTargets[name].fqcn === "string" &&
+        sourceTargets[name].fqcn.length > 0,
+      `${name} source target is invalid`,
+    );
+  }
   assertExactKeys(
     evidence,
     [
@@ -1362,7 +1386,7 @@ export function validateClassicV4SourceEvidence(plan, deployment, evidence) {
   for (const name of CLASSIC_V4_NEW_CONTRACTS) {
     const source = evidence.contracts[name];
     const deployed = deployment.contracts[name];
-    const target = CLASSIC_V4_SOURCE_TARGETS[name];
+    const target = sourceTargets[name];
     assertExactKeys(
       source,
       [
@@ -2184,7 +2208,16 @@ export function validateClassicV4LifecycleEvidence(
   deployment,
   source,
   evidence,
+  {
+    validateDeploymentEvidence = validateClassicV4DeploymentEvidence,
+    validateSourceEvidence = validateClassicV4SourceEvidence,
+  } = {},
 ) {
+  assert(
+    typeof validateDeploymentEvidence === "function" &&
+      typeof validateSourceEvidence === "function",
+    "Classic V4 lifecycle evidence validators are invalid",
+  );
   assertEvidenceIdentity(evidence, plan, "Lifecycle evidence");
   assertExactKeys(
     evidence,
@@ -2226,8 +2259,8 @@ export function validateClassicV4LifecycleEvidence(
     ],
     "Lifecycle evidence",
   );
-  validateClassicV4DeploymentEvidence(plan, deployment);
-  validateClassicV4SourceEvidence(plan, deployment, source);
+  validateDeploymentEvidence(plan, deployment);
+  validateSourceEvidence(plan, deployment, source);
   assertIsoTimestamp(evidence.checkedAt, "lifecycle checkedAt");
   assertNonzeroBytes32(evidence.evidenceDigest, "lifecycle evidence digest");
   assert(
@@ -3149,17 +3182,26 @@ export function createClassicV4ReleaseManifest({
   sourceEvidence,
   lifecycleEvidence,
   capturedAt,
-}) {
-  const deployment = validateClassicV4DeploymentEvidence(
+}, {
+  validateDeploymentEvidence = validateClassicV4DeploymentEvidence,
+  validateSourceEvidence = validateClassicV4SourceEvidence,
+} = {}) {
+  assert(
+    typeof validateDeploymentEvidence === "function" &&
+      typeof validateSourceEvidence === "function",
+    "Classic V4 release manifest validators are invalid",
+  );
+  const deployment = validateDeploymentEvidence(
     plan,
     deploymentEvidence,
   );
-  validateClassicV4SourceEvidence(plan, deploymentEvidence, sourceEvidence);
+  validateSourceEvidence(plan, deploymentEvidence, sourceEvidence);
   validateClassicV4LifecycleEvidence(
     plan,
     deploymentEvidence,
     sourceEvidence,
     lifecycleEvidence,
+    { validateDeploymentEvidence, validateSourceEvidence },
   );
   assertIsoTimestamp(capturedAt, "capture timestamp");
   const addresses = {

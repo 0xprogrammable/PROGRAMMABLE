@@ -4,6 +4,7 @@ import {
 } from "../../scripts/classic-v4-release-core.mjs";
 import { verifyClassicV4DeploymentAtFixedBlock } from "./verify-classic-v4-mainnet-deployment.mjs";
 import { verifyClassicV4SourceProviders } from "./verify-classic-v4-mainnet-sources.mjs";
+import { resolveClassicV4ReleaseValidation } from "./classic-v4-release-validation.mjs";
 
 function fail(message) {
   throw new Error(message);
@@ -49,9 +50,18 @@ export async function verifyClassicV4ReleasePrerequisites({
   deploymentEvidence,
   sourceEvidence,
   artifacts,
+  artifactContext,
   deploymentVerifier = verifyClassicV4DeploymentAtFixedBlock,
   sourceVerifier = verifyClassicV4SourceProviders,
 }) {
+  const releaseValidation = resolveClassicV4ReleaseValidation(plan);
+  releaseValidation.validateArtifacts(plan, artifacts, artifactContext);
+  releaseValidation.validateDeploymentEvidence(plan, deploymentEvidence);
+  releaseValidation.validateSourceEvidence(
+    plan,
+    deploymentEvidence,
+    sourceEvidence,
+  );
   const transactionHashes = Object.fromEntries(
     CLASSIC_V4_NEW_CONTRACTS.map((name) => [
       name,
@@ -64,6 +74,7 @@ export async function verifyClassicV4ReleasePrerequisites({
     plan,
     txHashes: transactionHashes,
     artifacts,
+    artifactContext,
   });
   assertFreshDeploymentEvidence(
     deploymentEvidence,
@@ -78,6 +89,7 @@ export async function verifyClassicV4ReleasePrerequisites({
     plan,
     deploymentEvidence: freshlyVerifiedDeploymentEvidence,
     artifacts,
+    artifactContext,
     etherscanApiKey: sourceUsesEtherscan
       ? process.env.ETHERSCAN_API_KEY?.trim() || null
       : null,

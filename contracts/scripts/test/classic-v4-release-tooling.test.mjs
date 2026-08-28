@@ -1279,12 +1279,12 @@ test("every downstream release entry point consumes a sealed tracked-source buil
     );
     assert.match(
       source,
-      /import \{ loadClassicV4SealedBuild \} from "\.\/prepare-classic-v4-mainnet-release\.mjs";/,
-      `${operator} must import the tracked-source build seal`,
+      /loadClassicV4ReleaseArtifactContext/,
+      `${operator} must import the release-kind tracked-source build seal`,
     );
     assert.match(
       source,
-      /const artifacts = await loadClassicV4SealedBuild\(plan\);/,
+      /const artifactContext = await loadClassicV4ReleaseArtifactContext\(plan\);/,
       `${operator} must rebuild and verify the reviewed plan before use`,
     );
     assert.doesNotMatch(
@@ -1293,6 +1293,20 @@ test("every downstream release entry point consumes a sealed tracked-source buil
       `${operator} must not trust a repository artifact directory`,
     );
   }
+  const sharedSeal = await readFile(
+    path.join(
+      repositoryRoot,
+      "contracts/scripts/classic-v4-release-validation.mjs",
+    ),
+    "utf8",
+  );
+  assert.match(sharedSeal, /loadClassicV4SealedBuild/);
+  assert.match(sharedSeal, /validateClassicV4LauncherRollforwardArtifacts/);
+  assert.match(sharedSeal, /identity\.commit !== plan\.releaseCommit/);
+  assert.match(
+    sharedSeal,
+    /plan\.parentBundle\.launcherUpgrade\.plan\.sourcePinsDigest/,
+  );
 });
 
 test("deployment replay rejects a plan observed block hash that is not canonical", async () => {
@@ -1924,6 +1938,158 @@ test("final manifest is schema-valid and exposes exact indexer handoff", () => {
   }
 });
 
+test("release validator injection preserves legacy output and fails closed", () => {
+  const plan = preparationPlan();
+  const deployment = deploymentEvidence(plan);
+  const source = sourceEvidence(plan, deployment);
+  const lifecycle = lifecycleEvidence(plan, deployment, source);
+  const input = {
+    plan,
+    deploymentEvidence: deployment,
+    sourceEvidence: source,
+    lifecycleEvidence: lifecycle,
+    capturedAt: lifecycle.checkedAt,
+  };
+  const legacyManifest = createClassicV4ReleaseManifest(input);
+  const calls = [];
+  const validators = {
+    validateDeploymentEvidence(candidatePlan, candidateDeployment) {
+      calls.push("deployment");
+      return validateClassicV4DeploymentEvidence(
+        candidatePlan,
+        candidateDeployment,
+      );
+    },
+    validateSourceEvidence(candidatePlan, candidateDeployment, candidateSource) {
+      calls.push("source");
+      return validateClassicV4SourceEvidence(
+        candidatePlan,
+        candidateDeployment,
+        candidateSource,
+      );
+    },
+  };
+
+  assert.equal(
+    validateClassicV4LifecycleEvidence(
+      plan,
+      deployment,
+      source,
+      lifecycle,
+      validators,
+    ),
+    lifecycle,
+  );
+  assert.deepEqual(
+    createClassicV4ReleaseManifest(input, validators),
+    legacyManifest,
+  );
+  assert.deepEqual(calls, [
+    "deployment",
+    "source",
+    "deployment",
+    "source",
+    "deployment",
+    "source",
+  ]);
+
+  const blockedValidators = {
+    validateDeploymentEvidence() {
+      throw new Error("composite deployment rejected");
+    },
+    validateSourceEvidence() {
+      throw new Error("composite source must not run");
+    },
+  };
+  assert.throws(
+    () =>
+      validateClassicV4LifecycleEvidence(
+        plan,
+        deployment,
+        source,
+        lifecycle,
+        blockedValidators,
+      ),
+    /composite deployment rejected/,
+  );
+  assert.throws(
+    () => createClassicV4ReleaseManifest(input, blockedValidators),
+    /composite deployment rejected/,
+  );
+  assert.throws(
+    () =>
+      validateClassicV4LifecycleEvidence(
+        plan,
+        deployment,
+        source,
+        lifecycle,
+        { validateDeploymentEvidence: null },
+      ),
+    /lifecycle evidence validators are invalid/,
+  );
+});
+
+test("source target injection preserves legacy defaults and accepts only an exact target set", () => {
+  const plan = preparationPlan();
+  const deployment = deploymentEvidence(plan);
+  const legacySource = sourceEvidence(plan, deployment);
+  assert.equal(
+    validateClassicV4SourceEvidence(plan, deployment, legacySource),
+    legacySource,
+  );
+
+  const sourceTargets = Object.fromEntries(
+    CLASSIC_V4_NEW_CONTRACTS.map((name) => [
+      name,
+      {
+        contractName: legacySource.contracts[name].contractName,
+        fqcn: legacySource.contracts[name].fqcn,
+      },
+    ]),
+  );
+  sourceTargets.launcher = {
+    contractName: "MemeLaunchV4",
+    fqcn: "src/MemeLaunchV4.sol:MemeLaunchV4",
+  };
+  const injectedSource = structuredClone(legacySource);
+  injectedSource.contracts.launcher.contractName =
+    sourceTargets.launcher.contractName;
+  injectedSource.contracts.launcher.fqcn = sourceTargets.launcher.fqcn;
+  injectedSource.evidenceDigest = digestJson(
+    Object.fromEntries(
+      Object.entries(injectedSource).filter(
+        ([key]) => key !== "evidenceDigest",
+      ),
+    ),
+    CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
+  );
+
+  assert.throws(
+    () => validateClassicV4SourceEvidence(plan, deployment, injectedSource),
+    /launcher source identity differs/,
+  );
+  assert.equal(
+    validateClassicV4SourceEvidence(plan, deployment, injectedSource, {
+      sourceTargets,
+    }),
+    injectedSource,
+  );
+  assert.throws(
+    () =>
+      validateClassicV4SourceEvidence(plan, deployment, injectedSource, {
+        sourceTargets: { ...sourceTargets, extra: sourceTargets.launcher },
+      }),
+    /Source evidence targets keys differ/,
+  );
+  assert.throws(
+    () =>
+      validateClassicV4SourceEvidence(plan, deployment, injectedSource, {
+        sourceTargets: { ...sourceTargets, launcher: null },
+      }),
+    /launcher source target is missing/,
+  );
+});
+
 test("capture requires a fresh two-RPC lifecycle result", () => {
   const plan = preparationPlan();
   const deployment = deploymentEvidence(plan);
@@ -2376,11 +2542,18 @@ test("Sourcify v2 lookup accepts truthful match fields and preserves canonical e
     ]),
   );
   const requestedUrls = [];
+  let completedProviderRequests = 0;
   const evidence = await verifyClassicV4SourceProviders({
     plan,
     deploymentEvidence: deployment,
     artifacts,
-    checkedAt: "2026-08-27T10:05:00.000Z",
+    now: () => {
+      assert.equal(
+        completedProviderRequests,
+        CLASSIC_V4_NEW_CONTRACTS.length,
+      );
+      return new Date("2026-08-27T10:05:00.000Z");
+    },
     etherscanApiKey: null,
     fetchJsonClient: async (url) => {
       requestedUrls.push(url.toString());
@@ -2388,7 +2561,7 @@ test("Sourcify v2 lookup accepts truthful match fields and preserves canonical e
       const address = url.pathname.split("/").at(-1).toLowerCase();
       const name = nameByAddress[address];
       assert.ok(name, `Unexpected Sourcify address ${address}`);
-      return {
+      const response = {
         chainId: "1",
         address,
         match: "match",
@@ -2405,6 +2578,8 @@ test("Sourcify v2 lookup accepts truthful match fields and preserves canonical e
           ]),
         ),
       };
+      completedProviderRequests += 1;
+      return response;
     },
   });
   assert.equal(requestedUrls.length, CLASSIC_V4_NEW_CONTRACTS.length);
