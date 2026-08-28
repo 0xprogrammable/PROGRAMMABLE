@@ -49,6 +49,7 @@ const RPC_RATE_LIMIT_RETRY_DELAYS_MS = Object.freeze([
   9_000,
   18_000,
 ]);
+const RPC_RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429, 502, 503, 504]);
 const rpcEndpointQueues = new Map();
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_HASH = `0x${"00".repeat(32)}`;
@@ -340,10 +341,11 @@ async function rpc(endpoint, method, params = []) {
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
       } catch {
+        if (attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length) continue;
         fail(`RPC ${method} request failed`);
       }
       if (
-        response.status === 429 &&
+        RPC_RETRYABLE_HTTP_STATUSES.has(response.status) &&
         attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length
       ) {
         await response.body?.cancel();
