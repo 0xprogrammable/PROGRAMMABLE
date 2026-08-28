@@ -33,6 +33,7 @@ import { loadClassicV4LauncherUpgradeSealedBuild } from "./prepare-classic-v4-la
 import {
   captureEtherscan,
   captureSourcify,
+  standardJsonCompilerInputSettings,
 } from "./verify-classic-v4-mainnet-sources.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -203,29 +204,8 @@ export async function buildClassicV4LauncherPublicationBundle({
     receiptEvidence,
     finalityEvidence,
   });
-  const metadata = artifactMetadata(artifact);
-  const build = computeClassicV4LauncherUpgradeBuildCommitments(artifact);
-  const sourceClosure = await Promise.all(
-    Object.entries(metadata.sources).map(async ([sourcePath, descriptor]) => {
-      const content = await sourceReader(sourcePath);
-      const sourceHash = keccak256(stringToHex(content));
-      assert(
-        sourceHash === String(descriptor?.keccak256).toLowerCase(),
-        `Publication source differs from the sealed artifact at ${sourcePath}`,
-      );
-      return { sourcePath, sourceHash, content };
-    }),
-  );
-  sourceClosure.sort((left, right) =>
-    left.sourcePath.localeCompare(right.sourcePath),
-  );
-  const standardJsonInput = {
-    language: metadata.language,
-    sources: Object.fromEntries(
-      sourceClosure.map(({ sourcePath, content }) => [sourcePath, { content }]),
-    ),
-    settings: metadata.settings,
-  };
+  const { metadata, build, sourceClosure, standardJsonInput } =
+    await buildClassicV4LauncherStandardJsonInput({ artifact, sourceReader });
   const unsignedBundle = {
     schemaVersion: 1,
     chainId: 1,
@@ -252,6 +232,36 @@ export async function buildClassicV4LauncherPublicationBundle({
     ...unsignedBundle,
     bundleDigest: digestJson(unsignedBundle, PUBLICATION_BUNDLE_DOMAIN),
   };
+}
+
+export async function buildClassicV4LauncherStandardJsonInput({
+  artifact,
+  sourceReader = readLocalSource,
+}) {
+  const metadata = artifactMetadata(artifact);
+  const build = computeClassicV4LauncherUpgradeBuildCommitments(artifact);
+  const sourceClosure = await Promise.all(
+    Object.entries(metadata.sources).map(async ([sourcePath, descriptor]) => {
+      const content = await sourceReader(sourcePath);
+      const sourceHash = keccak256(stringToHex(content));
+      assert(
+        sourceHash === String(descriptor?.keccak256).toLowerCase(),
+        `Publication source differs from the sealed artifact at ${sourcePath}`,
+      );
+      return { sourcePath, sourceHash, content };
+    }),
+  );
+  sourceClosure.sort((left, right) =>
+    left.sourcePath.localeCompare(right.sourcePath),
+  );
+  const standardJsonInput = {
+    language: metadata.language,
+    sources: Object.fromEntries(
+      sourceClosure.map(({ sourcePath, content }) => [sourcePath, { content }]),
+    ),
+    settings: standardJsonCompilerInputSettings(metadata.settings),
+  };
+  return { metadata, build, sourceClosure, standardJsonInput };
 }
 
 export function validateClassicV4LauncherPublicationBundle(bundle) {

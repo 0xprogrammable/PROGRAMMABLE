@@ -48,6 +48,7 @@ import {
 import {
   assertExactEtherscanMatch,
   assertSourcifyMatch,
+  standardJsonCompilerInputSettings,
   verifyClassicV4SourceProviders,
 } from "../verify-classic-v4-mainnet-sources.mjs";
 import {
@@ -2533,7 +2534,9 @@ test("source providers require accepted matches, exact source closure and no Eth
     SourceCode: JSON.stringify({
       language: "Solidity",
       sources: providerSources,
-      settings: providerArtifact.metadata.settings,
+      settings: standardJsonCompilerInputSettings(
+        providerArtifact.metadata.settings,
+      ),
     }),
   };
   assert.doesNotThrow(() =>
@@ -2573,7 +2576,9 @@ test("source providers require accepted matches, exact source closure and no Eth
               ...providerSources,
               "src/launcher.sol": { content: "forged source bytes" },
             },
-            settings: providerArtifact.metadata.settings,
+            settings: standardJsonCompilerInputSettings(
+              providerArtifact.metadata.settings,
+            ),
           }),
         },
         target,

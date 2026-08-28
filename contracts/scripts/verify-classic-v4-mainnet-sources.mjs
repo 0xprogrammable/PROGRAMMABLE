@@ -117,11 +117,55 @@ export function materialCompilerSettings(settings) {
     optimizer: settings?.optimizer,
     evmVersion: settings?.evmVersion,
     viaIR: settings?.viaIR ?? false,
-    metadata: settings?.metadata,
+    metadata: settings?.metadata
+      ? {
+          useLiteralContent: settings.metadata.useLiteralContent ?? false,
+          ...settings.metadata,
+        }
+      : undefined,
     libraries: settings?.libraries ?? {},
     debug: settings?.debug ?? {},
-    compilationTarget: settings?.compilationTarget ?? {},
   };
+}
+
+export function standardJsonCompilerInputSettings(settings) {
+  const material = materialCompilerSettings(settings);
+  return {
+    remappings: material.remappings,
+    optimizer: material.optimizer,
+    metadata: material.metadata,
+    outputSelection: {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode.object",
+          "evm.bytecode.sourceMap",
+          "evm.bytecode.linkReferences",
+          "evm.deployedBytecode.object",
+          "evm.deployedBytecode.sourceMap",
+          "evm.deployedBytecode.linkReferences",
+          "evm.deployedBytecode.immutableReferences",
+          "evm.methodIdentifiers",
+          "metadata",
+        ],
+      },
+    },
+    evmVersion: material.evmVersion,
+    viaIR: material.viaIR,
+    libraries: material.libraries,
+    ...(settings?.debug === undefined ? {} : { debug: material.debug }),
+  };
+}
+
+function hasCompleteMaterialCompilerSettings(settings) {
+  return [
+    "remappings",
+    "optimizer",
+    "metadata",
+    "evmVersion",
+    "viaIR",
+    "libraries",
+  ].every((key) => Object.hasOwn(settings ?? {}, key));
 }
 
 function canonicalJson(value) {
@@ -316,6 +360,7 @@ export function assertExactEtherscanMatch(
       constructorArguments.slice(2).toLowerCase() ||
     typeof source?.SourceCode !== "string" ||
     source.SourceCode.length === 0 ||
+    !hasCompleteMaterialCompilerSettings(standardJsonInput.settings) ||
     canonicalJson(materialCompilerSettings(standardJsonInput.settings)) !==
       canonicalJson(expectedMaterialSettings)
   ) {

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { keccak256, stringToHex } from "viem";
@@ -11,10 +14,21 @@ import {
 } from "../../../scripts/classic-v4-launcher-upgrade-core.mjs";
 import {
   buildClassicV4LauncherPublicationBundle,
+  buildClassicV4LauncherStandardJsonInput,
   submitSources,
   validateClassicV4LauncherFinalityEvidence,
   verifyClassicV4LauncherSourceProviders,
 } from "../verify-classic-v4-launcher-upgrade-sources.mjs";
+import {
+  compileClassicV4LauncherUpgradeFreshArtifact,
+} from "../prepare-classic-v4-launcher-upgrade.mjs";
+import {
+  assertExactEtherscanMatch,
+  standardJsonCompilerInputSettings,
+} from "../verify-classic-v4-mainnet-sources.mjs";
+
+const testPath = fileURLToPath(import.meta.url);
+const contractsRoot = path.resolve(path.dirname(testPath), "..", "..");
 
 const launcherPath = "src/MemeLaunchV4.sol";
 const launcherSource =
@@ -162,7 +176,9 @@ function fixture() {
           SourceCode: JSON.stringify({
             language: "Solidity",
             sources,
-            settings: artifact.metadata.settings,
+            settings: standardJsonCompilerInputSettings(
+              artifact.metadata.settings,
+            ),
           }),
         },
       ],
@@ -272,11 +288,24 @@ test("rejects missing or contradictory Etherscan Standard JSON settings", async 
     (input) => {
       delete input.settings;
     },
+    ...[
+      "remappings",
+      "optimizer",
+      "metadata",
+      "evmVersion",
+      "viaIR",
+      "libraries",
+    ].map(
+      (setting) => (input) => {
+        delete input.settings[setting];
+      },
+    ),
     (input) => {
       input.settings = {
         ...input.settings,
         viaIR: true,
         remappings: ["forged/=lib/forged/"],
+        debug: { revertStrings: "strip" },
       };
     },
   ]) {
@@ -294,6 +323,98 @@ test("rejects missing or contradictory Etherscan Standard JSON settings", async 
       /Etherscan metadata differs/,
     );
   }
+});
+
+test("accepts Forge standard JSON without output-only compilationTarget", () => {
+  const result = spawnSync(
+    "forge",
+    [
+      "verify-contract",
+      "--show-standard-json-input",
+      "0x0000000000000000000000000000000000000001",
+      "src/MemeLaunchV4.sol:MemeLaunchV4",
+    ],
+    {
+      cwd: contractsRoot,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const standardJsonInput = JSON.parse(result.stdout);
+  assert(!Object.hasOwn(standardJsonInput.settings, "compilationTarget"));
+  assert(Object.hasOwn(standardJsonInput.settings, "outputSelection"));
+  const artifactSettings = { ...standardJsonInput.settings };
+  delete artifactSettings.outputSelection;
+  artifactSettings.compilationTarget = {
+    [launcherPath]: "MemeLaunchV4",
+  };
+  const artifact = {
+    metadata: {
+      compiler: { version: "0.8.26+commit.8a97fa7a" },
+      settings: artifactSettings,
+      sources: Object.fromEntries(
+        Object.entries(standardJsonInput.sources).map(
+          ([sourcePath, { content }]) => [
+            sourcePath,
+            { keccak256: keccak256(stringToHex(content)) },
+          ],
+        ),
+      ),
+    },
+  };
+  assert.doesNotThrow(() =>
+    assertExactEtherscanMatch(
+      { status: "1" },
+      {
+        ContractName: "MemeLaunchV4",
+        ContractFileName: launcherPath,
+        CompilerType: "solc",
+        CompilerVersion: "v0.8.26+commit.8a97fa7a",
+        OptimizationUsed: "1",
+        Runs: "1000",
+        EVMVersion: "cancun",
+        Proxy: "0",
+        Implementation: "",
+        SimilarMatch: "",
+        ConstructorArguments: "1234",
+        SourceCode: JSON.stringify(standardJsonInput),
+      },
+      { contractName: "MemeLaunchV4", fqcn: `${launcherPath}:MemeLaunchV4` },
+      "0x1234",
+      {
+        compilerVersion: "v0.8.26+commit.8a97fa7a",
+        optimizationUsed: "1",
+        optimizerRuns: "1000",
+        evmVersion: "cancun",
+      },
+      artifact,
+    ),
+  );
+});
+
+test("frozen publication input compiles with pinned solc 0.8.26", async () => {
+  const artifact = await compileClassicV4LauncherUpgradeFreshArtifact();
+  const { standardJsonInput } =
+    await buildClassicV4LauncherStandardJsonInput({ artifact });
+  assert(!Object.hasOwn(standardJsonInput.settings, "compilationTarget"));
+  assert(Object.hasOwn(standardJsonInput.settings, "outputSelection"));
+  const version = spawnSync("solc", ["--version"], { encoding: "utf8" });
+  assert.equal(version.status, 0, version.stderr);
+  assert.match(version.stdout, /0\.8\.26\+commit\.8a97fa7a/);
+  const compilation = spawnSync("solc", ["--standard-json"], {
+    encoding: "utf8",
+    input: JSON.stringify(standardJsonInput),
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  assert.equal(compilation.status, 0, compilation.stderr);
+  const output = JSON.parse(compilation.stdout);
+  assert.equal(
+    output.errors?.filter(({ severity }) => severity === "error").length ?? 0,
+    0,
+    JSON.stringify(output.errors),
+  );
+  assert(output.contracts?.[launcherPath]?.MemeLaunchV4);
 });
 
 test("publication child receives frozen source bytes and the key only in env", async () => {
