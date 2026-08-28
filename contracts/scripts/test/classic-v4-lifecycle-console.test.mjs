@@ -38,6 +38,7 @@ import {
   classicV4ExecutionLauncherAbi,
 } from "../../../scripts/classic-v4-lifecycle-console-core.mjs";
 import {
+  classicV4SimulationRequest,
   parseClassicV4LifecycleConsoleArguments,
 } from
   "../../../scripts/serve-classic-v4-lifecycle-canary.mjs";
@@ -279,6 +280,29 @@ test("Classic V4 console binds all four dynamic quote quadrants", () => {
     assert.equal(decoded.args[0], commands);
     assert.equal(decoded.args[2], 2_000_000_300n);
   }
+});
+
+test("Classic V4 revalidation sanitizes only the eth_call request", () => {
+  const exactRequest = Object.freeze({
+    from: operator,
+    to: launchRouter,
+    value: "0x1",
+    data: launchCalldata,
+    nonce: "0x7",
+    gas: "0x186a0",
+    maxFeePerGas: "0x14",
+    maxPriorityFeePerGas: "0x2",
+  });
+  const unchangedExactRequest = structuredClone(exactRequest);
+
+  assert.deepEqual(classicV4SimulationRequest(exactRequest), {
+    from: operator,
+    to: launchRouter,
+    value: "0x1",
+    data: launchCalldata,
+    gas: "0x186a0",
+  });
+  assert.deepEqual(exactRequest, unchangedExactRequest);
 });
 
 test("Classic V4 console creates bounded sell approvals and exact claim calls", () => {

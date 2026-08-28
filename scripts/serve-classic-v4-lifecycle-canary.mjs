@@ -125,6 +125,11 @@ function sameRpcValue(left, right, label) {
   ) fail(`Independent RPCs disagree on ${label}`);
 }
 
+export function classicV4SimulationRequest(request) {
+  const { from, to, value, data, gas } = request;
+  return Object.freeze({ from, to, value, data, gas });
+}
+
 function parsePort(value) {
   const port = Number(value ?? DEFAULT_PORT);
   if (!Number.isSafeInteger(port) || port < 1024 || port > 65_535) {
@@ -2389,7 +2394,12 @@ async function revalidatePrepared(canaryPlan, identity, journal, urls, digest) {
     );
     if (BigInt(accrued) <= 0n) fail("The launcher reward is no longer claimable");
   }
-  await callBoth(urls, prepared.request, block.tag, `${prepared.action} revalidation`);
+  await callBoth(
+    urls,
+    classicV4SimulationRequest(prepared.request),
+    block.tag,
+    `${prepared.action} revalidation`,
+  );
   const estimates = await Promise.all(
     urls.map((endpoint) => rpc(endpoint, "eth_estimateGas", [prepared.request, block.tag])),
   );
