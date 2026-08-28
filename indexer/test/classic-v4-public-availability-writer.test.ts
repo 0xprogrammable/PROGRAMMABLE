@@ -5,11 +5,11 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import baseReleaseBinding from "../../config/data-pipeline-release.v1.json";
-import { classicV4IndexerBindingDigest } from "../../lib/classic-v4-release";
 // @ts-expect-error The frozen operational .mjs intentionally has no TS declaration surface.
 import * as publicAvailabilityWriter from "../scripts/promote-classic-v4-public-availability.mjs";
 
 const {
+  classicV4IndexerBindingDigestForPublicAvailability,
   promoteClassicV4CatalogReleaseArtifact,
   renderClassicV4PublicAvailability,
   writeClassicV4PublicAvailabilityAtomically,
@@ -19,9 +19,8 @@ const temporaryDirectories: string[] = [];
 const SOURCE_MANIFEST_DIGEST = `0x${"11".repeat(32)}`;
 const PUBLIC_MANIFEST_DIGEST = `0x${"22".repeat(32)}`;
 const LAUNCHER = `0x${"33".repeat(20)}`;
-const INDEXER_BINDING_DIGEST = classicV4IndexerBindingDigest(
-  baseReleaseBinding,
-);
+const INDEXER_BINDING_DIGEST =
+  classicV4IndexerBindingDigestForPublicAvailability(baseReleaseBinding);
 
 afterEach(async () => {
   await Promise.all(

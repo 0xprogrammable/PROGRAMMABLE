@@ -21,6 +21,9 @@ const {
 const { CLASSIC_V4_PUBLIC_RELEASE_BINDING } =
   classicV4PublicReleaseModule.default ?? classicV4PublicReleaseModule;
 
+export const classicV4IndexerBindingDigestForPublicAvailability =
+  classicV4IndexerBindingDigest;
+
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
 const canonicalManifestPath = path.join(
