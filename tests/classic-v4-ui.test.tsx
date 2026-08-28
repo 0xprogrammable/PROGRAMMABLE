@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE,
+  blockUnlinkedClassicV4Launch,
   classicMaximumCheckDraft,
   classicV4TransactionBlockReason,
   createClassicLaunchPreflightHeaders,
@@ -25,6 +27,64 @@ function renderFeeStep(draft: LaunchDraft, enableV4 = true) {
 }
 
 describe("Classic V4 launch controls", () => {
+  it("blocks only the selected unlinked Classic V4 wallet before preflight", () => {
+    const openWalletWithError = vi.fn();
+    const preflight = vi.fn();
+    if (!blockUnlinkedClassicV4Launch({
+      hasWallet: true,
+      launchModel: "classic-v3",
+      onBlocked: openWalletWithError,
+      releaseEnabled: true,
+      walletLinked: false,
+    })) preflight();
+
+    expect(preflight).not.toHaveBeenCalled();
+    expect(openWalletWithError).toHaveBeenCalledOnce();
+    expect(openWalletWithError).toHaveBeenCalledWith(
+      CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE,
+    );
+
+    for (const allowed of [
+      {
+        hasWallet: false,
+        launchModel: "classic-v3" as const,
+        releaseEnabled: true,
+        walletLinked: false,
+      },
+      {
+        hasWallet: true,
+        launchModel: "classic-v3" as const,
+        releaseEnabled: true,
+        walletLinked: true,
+      },
+      {
+        hasWallet: true,
+        launchModel: "classic-v3" as const,
+        releaseEnabled: false,
+        walletLinked: false,
+      },
+      {
+        hasWallet: true,
+        launchModel: "stock-paired" as const,
+        releaseEnabled: true,
+        walletLinked: false,
+      },
+    ]) {
+      const onBlocked = vi.fn();
+      expect(blockUnlinkedClassicV4Launch({
+        ...allowed,
+        onBlocked,
+      })).toBe(false);
+      expect(onBlocked).not.toHaveBeenCalled();
+    }
+  });
+
+  it("points an unlinked Classic wallet to the existing Add wallet action", () => {
+    expect(CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE).toBe(
+      "This address is not linked to your Programmable wallet session. Select Add wallet to link it before creating a Classic token.",
+    );
+  });
+
   it("gets identity before access so Privy cannot return two racing session revisions", async () => {
     const events: string[] = [];
     const getIdentityToken = vi.fn(async () => {

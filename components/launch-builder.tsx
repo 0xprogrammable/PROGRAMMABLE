@@ -269,6 +269,26 @@ export async function createClassicLaunchPreflightHeaders(
   });
 }
 
+export const CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE =
+  "This address is not linked to your Programmable wallet session. Select Add wallet to link it before creating a Classic token.";
+
+export function blockUnlinkedClassicV4Launch(input: Readonly<{
+  hasWallet: boolean;
+  launchModel: LaunchModel;
+  onBlocked: (message: string) => void;
+  releaseEnabled: boolean;
+  walletLinked: boolean;
+}>) {
+  const blocked = input.launchModel === "classic-v3"
+    && input.releaseEnabled
+    && input.hasWallet
+    && !input.walletLinked;
+  if (!blocked) return false;
+
+  input.onBlocked(CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE);
+  return true;
+}
+
 export function launchDraftForSuccessDisplay(
   draft: LaunchDraft,
   submittedFromCurrentDraft: boolean,
@@ -1302,7 +1322,9 @@ function LaunchBuilderFormView({
 }) {
   const {
     wallet,
+    walletLinked,
     openWallet,
+    openWalletWithError,
     readNativeBalance,
     sendTransaction,
     getAccessToken,
@@ -1935,6 +1957,19 @@ function LaunchBuilderFormView({
 
     if (!wallet) {
       openWallet();
+      return;
+    }
+
+    if (blockUnlinkedClassicV4Launch({
+      hasWallet: true,
+      launchModel: model,
+      onBlocked: (message) => {
+        setFormError(message);
+        openWalletWithError(message);
+      },
+      releaseEnabled: classicV4UiReleaseEnabled,
+      walletLinked,
+    })) {
       return;
     }
 
