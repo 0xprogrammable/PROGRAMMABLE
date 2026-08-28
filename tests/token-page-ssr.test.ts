@@ -30,6 +30,9 @@ describe("token detail initial server read", () => {
     );
     expect(source).toContain("<Suspense fallback={<TokenDetailShell />}> ".trim());
     expect(source).toContain("<InitialTokenDetail address={address} />");
+    expect(source).toContain("const readInitialTokenDetail = cache");
+    expect(source).toContain("export async function generateMetadata");
+    expect(source.match(/readTokenDetailResponse\(/gu)).toHaveLength(1);
   });
 
   it("keeps the token layout stable while the initial detail read is pending", () => {
