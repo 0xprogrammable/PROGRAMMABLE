@@ -23,6 +23,7 @@ import {
   CLASSIC_V4_REVIEWED_EIP_7702_SIGNER_BINDING,
   assertClassicV4SignerRuntimeAtBlock,
   assertClassicV4PreparedArmTime,
+  assertClassicV4PersistedReceiptTime,
   assertClassicV4FreshRpcHead,
   assertClassicV4ReceiptParentBinding,
   assertClassicV4SwapParentBinding,
@@ -51,6 +52,39 @@ import {
 const operator = "0x1111111111111111111111111111111111111111";
 const target = "0x2222222222222222222222222222222222222222";
 const digest = `0x${"11".repeat(32)}`;
+
+test("Classic V4 accepts an exact mined transaction recorded during later hash recovery", () => {
+  const receiptBlock = { timestamp: 1_000n };
+  const recovered = {
+    prepared: { action: "creatorClaim" },
+    submittedAt: "1970-01-01T00:18:20.000Z",
+    confirmedAt: "1970-01-01T00:18:21.000Z",
+  };
+  assert.equal(
+    assertClassicV4PersistedReceiptTime(
+      recovered,
+      receiptBlock,
+      new Date("1970-01-01T00:16:39.000Z"),
+    ),
+    true,
+  );
+
+  assert.throws(
+    () => assertClassicV4PersistedReceiptTime({
+      ...recovered,
+      confirmedAt: "1970-01-01T00:16:24.000Z",
+    }, receiptBlock, new Date("1970-01-01T00:16:39.000Z")),
+    /persisted timestamps differ from Mainnet/u,
+  );
+  assert.throws(
+    () => assertClassicV4PersistedReceiptTime(
+      recovered,
+      receiptBlock,
+      new Date("1970-01-01T00:16:56.000Z"),
+    ),
+    /persisted timestamps differ from Mainnet/u,
+  );
+});
 
 test("Classic V4 receipt blocks are explicitly linked to their fetched parent", () => {
   const parent = {
