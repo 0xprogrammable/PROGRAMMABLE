@@ -124,6 +124,7 @@ export type WalletApplicantSessionV1 = Readonly<{
 
 type WalletContextValue = {
   wallet: WalletState | null;
+  walletLinked: boolean;
   username: string;
   avatarDataUrl: string;
   authReady: boolean;
@@ -134,6 +135,7 @@ type WalletContextValue = {
   switchingNetwork: boolean;
   preloadWallet: () => void;
   openWallet: () => void;
+  openWalletWithError: (message: string) => void;
   switchNetwork: (expectedChainId?: string) => Promise<boolean>;
   disconnect: (options?: {
     showDialogOnFailure?: boolean;
@@ -895,6 +897,7 @@ function DeferredWalletProvider({
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet: null,
+      walletLinked: false,
       username: "",
       avatarDataUrl: "",
       authReady: false,
@@ -905,6 +908,7 @@ function DeferredWalletProvider({
       switchingNetwork: false,
       preloadWallet: onPreload,
       openWallet: () => onActivate("wallet"),
+      openWalletWithError: () => onActivate("wallet"),
       switchNetwork: async () => false,
       disconnect: async () => false,
       getAccessToken: async () => null,
@@ -1189,6 +1193,7 @@ function PrivyWalletBridge({
       chainId: normalizeChainId(connectedWalletChainId),
     };
   }, [connectedWalletAddress, connectedWalletChainId]);
+  const walletLinked = connectedWallet?.linked === true;
   const walletRequestSessionRef = useRef({
     authenticated: activeAuthenticated,
     privyUserId: user?.id ?? null,
@@ -1490,6 +1495,11 @@ function PrivyWalletBridge({
 
     startLogin();
   }, [providerTimedOut, sessionAction, startLogin]);
+
+  const openWalletWithError = useCallback((message: string) => {
+    setError(message);
+    setDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     if (autoAction === null || sessionAction === "wait") return;
@@ -2281,6 +2291,7 @@ function PrivyWalletBridge({
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet,
+      walletLinked,
       username,
       avatarDataUrl,
       authReady: ready,
@@ -2292,6 +2303,7 @@ function PrivyWalletBridge({
       switchingNetwork,
       preloadWallet: () => undefined,
       openWallet,
+      openWalletWithError,
       switchNetwork: switchWalletNetwork,
       disconnect,
       getAccessToken,
@@ -2330,6 +2342,7 @@ function PrivyWalletBridge({
       hasSession,
       loginPending,
       openWallet,
+      openWalletWithError,
       providerTimedOut,
       readNativeBalance,
       readTradeBalances,
@@ -2350,6 +2363,7 @@ function PrivyWalletBridge({
       setUsername,
       username,
       wallet,
+      walletLinked,
     ],
   );
 
@@ -2398,6 +2412,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet: null,
+      walletLinked: false,
       username: "",
       avatarDataUrl: "",
       authReady: false,
@@ -2408,6 +2423,7 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       switchingNetwork: false,
       preloadWallet: () => undefined,
       openWallet: () => setDialogOpen(true),
+      openWalletWithError: () => setDialogOpen(true),
       switchNetwork: async () => false,
       disconnect: async () => false,
       getAccessToken: async () => null,

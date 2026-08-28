@@ -1,10 +1,13 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE,
+  blockUnlinkedClassicV4Launch,
   classicMaximumCheckDraft,
   classicV4TransactionBlockReason,
+  createClassicLaunchPreflightHeaders,
   EnhancedClassicFeeStep,
   normalizeClassicV3Draft,
 } from "../components/launch-builder";
@@ -24,6 +27,109 @@ function renderFeeStep(draft: LaunchDraft, enableV4 = true) {
 }
 
 describe("Classic V4 launch controls", () => {
+  it("blocks only the selected unlinked Classic V4 wallet before preflight", () => {
+    const openWalletWithError = vi.fn();
+    const preflight = vi.fn();
+    if (!blockUnlinkedClassicV4Launch({
+      hasWallet: true,
+      launchModel: "classic-v3",
+      onBlocked: openWalletWithError,
+      releaseEnabled: true,
+      walletLinked: false,
+    })) preflight();
+
+    expect(preflight).not.toHaveBeenCalled();
+    expect(openWalletWithError).toHaveBeenCalledOnce();
+    expect(openWalletWithError).toHaveBeenCalledWith(
+      CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE,
+    );
+
+    for (const allowed of [
+      {
+        hasWallet: false,
+        launchModel: "classic-v3" as const,
+        releaseEnabled: true,
+        walletLinked: false,
+      },
+      {
+        hasWallet: true,
+        launchModel: "classic-v3" as const,
+        releaseEnabled: true,
+        walletLinked: true,
+      },
+      {
+        hasWallet: true,
+        launchModel: "classic-v3" as const,
+        releaseEnabled: false,
+        walletLinked: false,
+      },
+      {
+        hasWallet: true,
+        launchModel: "stock-paired" as const,
+        releaseEnabled: true,
+        walletLinked: false,
+      },
+    ]) {
+      const onBlocked = vi.fn();
+      expect(blockUnlinkedClassicV4Launch({
+        ...allowed,
+        onBlocked,
+      })).toBe(false);
+      expect(onBlocked).not.toHaveBeenCalled();
+    }
+  });
+
+  it("points an unlinked Classic wallet to the existing Add wallet action", () => {
+    expect(CLASSIC_V4_LINKED_WALLET_REQUIRED_MESSAGE).toBe(
+      "This address is not linked to your Programmable wallet session. Select Add wallet to link it before creating a Classic token.",
+    );
+  });
+
+  it("gets identity before access so Privy cannot return two racing session revisions", async () => {
+    const events: string[] = [];
+    const getIdentityToken = vi.fn(async () => {
+      events.push("identity-start");
+      await Promise.resolve();
+      events.push("identity-settled");
+      return "fresh-identity-token";
+    });
+    const getAccessToken = vi.fn(async () => {
+      events.push("access");
+      return "fresh-access-token";
+    });
+
+    const headers = await createClassicLaunchPreflightHeaders({
+      getAccessToken,
+      getIdentityToken,
+    });
+
+    expect(events).toEqual(["identity-start", "identity-settled", "access"]);
+    expect(getAccessToken).toHaveBeenCalledTimes(1);
+    expect(getIdentityToken).toHaveBeenCalledTimes(1);
+    expect(headers.get("authorization")).toBe("Bearer fresh-access-token");
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.get("x-privy-identity-token")).toBe(
+      "fresh-identity-token",
+    );
+  });
+
+  it("keeps the verified access session usable when Privy omits its optional identity token", async () => {
+    const headers = await createClassicLaunchPreflightHeaders({
+      getIdentityToken: async () => null,
+      getAccessToken: async () => "fresh-access-token",
+    });
+
+    expect(headers.get("authorization")).toBe("Bearer fresh-access-token");
+    expect(headers.has("x-privy-identity-token")).toBe(false);
+  });
+
+  it("fails closed before preflight when no verified access session is available", async () => {
+    await expect(createClassicLaunchPreflightHeaders({
+      getIdentityToken: async () => "identity-token",
+      getAccessToken: async () => null,
+    })).rejects.toThrow("Reconnect the launch wallet and try again");
+  });
+
   it("lets Max repair an invalid or over-capacity Activation Buy", () => {
     const overCapacity = {
       ...createClassicV3Draft(),
