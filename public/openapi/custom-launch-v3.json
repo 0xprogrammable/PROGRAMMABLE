@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.3.7",
+    "version": "3.3.8-preparatory",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Complete-metadata profile 3.3.0 is the only fresh-write profile; exact earlier versions remain readable and preserve immutable compatibility semantics. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. CLI, client and model checks prepare and bind a request but never authorize it. The API server independently enforces objective static hard blocks and exact Router simulation. Missing or unavailable behavior execution leaves routability, liquidity and fee claims unverified; an authenticated executed failure blocks wallet handoff. These checks are not an audit, honeypot guarantee, universal safety guarantee, universal compatibility claim or universal 10 bps claim. Any 10 bps claim is limited to the exact launch and stamped PoolKey with verified fee-path evidence. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. Wallet and partner API keys use the same V3 endpoints, but no API key can sign or broadcast a wallet transaction. Partner attribution is server-owned provenance, not project verification or a safety claim. Revision 2 requests also remain readable with their original exact bytes.",
+    "description": "Preparatory, not-live contract for pending profile 3.4.0. It is not evidence that CLI 3.3.8 is released or that the backend accepts 3.4.0. Live/default discovery remains CLI 3.3.7 with profile 3.3.0 until an independently verified backend activation. Pending 3.4.0 preserves arbitrary project-owned token, hook and multi-contract targets while requiring four to sixteen targets inclusive of the frozen programmable:settlement-fee-vault:v1 module and its reciprocal route binding. Exact 3.3.0 and earlier resources retain their immutable compatibility semantics. CLI, client and model checks only prepare and bind a request; the server remains the behavior, fee-path and authorization authority. No result is an audit, honeypot guarantee, universal safety guarantee, liquidity claim or universal compatibility claim.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -14,7 +14,7 @@
   "servers": [
     {
       "url": "https://api.programmable.market",
-      "description": "Programmable Custom Launch API production V3 general hook profile."
+      "description": "Production API origin. Pending profile 3.4.0 is not enabled by this preparatory document."
     }
   ],
   "externalDocs": {
@@ -27,8 +27,13 @@
     }
   ],
   "x-programmable-availability": {
-    "status": "live",
-    "publicAuthorized": true,
+    "status": "preparatory-not-live",
+    "publicAuthorized": false,
+    "liveContract": {
+      "cliReleaseVersion": "3.3.7",
+      "profileVersion": "3.3.0",
+      "discoveryAuthority": "https://programmable.market/.well-known/programmable.json"
+    },
     "publicCreate": {
       "status": "live",
       "path": "/v3/custom-launches",
@@ -62,18 +67,26 @@
     "stableProductionVersion": "3",
     "stableOpenApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
     "freshWritesOnlyProfileVersion": "3.3.0",
+    "pendingProfileVersion": "3.4.0",
+    "pendingCliReleaseVersion": "3.3.8",
     "walletHandoffEvidenceGate": {
       "decisionAuthority": "api-server",
       "clientChecks": "preparation-only",
-      "walletHandoffRequiresVerifiedEvidence": false,
+      "walletHandoffRequiresVerifiedEvidence": true,
       "configurationIsExecutionEvidence": false,
-      "notConfiguredDisposition": "claims_remain_unverified",
-      "unavailableDisposition": "claims_remain_unverified",
+      "notConfiguredDisposition": "blocks_wallet_handoff",
+      "unavailableDisposition": "blocks_wallet_handoff",
       "executedFailureDisposition": "blocks_wallet_handoff",
-      "mandatoryServerGates": ["static-hard-block-policy", "exact-router-simulation"],
+      "immutableFeePathRequired": true,
+      "mandatoryServerGates": ["exact-source-compiler-graph-binding", "static-hard-block-policy", "platform-admission-receipt", "exact-router-simulation", "verified-behavior-evidence", "verified-exact-ten-bps-fee-path"],
       "localOrModelApprovalAccepted": false
     },
-    "activationBlockers": []
+    "activationBlockers": [
+      "backend-profile-3.4-activation",
+      "cli-3.3.8-release",
+      "well-known-default-flip",
+      "independent-live-capability-and-route-probes"
+    ]
   },
   "x-programmable-agent-integration": {
     "schemaVersion": "programmable.custom-launch-agent-remediation-catalog.v1",
@@ -111,12 +124,13 @@
     "clientChecks": "preparation-only",
     "decisionAuthority": "api-server",
     "walletAuthorizationGate": {
-      "walletHandoffRequiresVerifiedEvidence": false,
+      "walletHandoffRequiresVerifiedEvidence": true,
       "configurationIsExecutionEvidence": false,
-      "notConfiguredDisposition": "claims_remain_unverified",
-      "unavailableDisposition": "claims_remain_unverified",
+      "notConfiguredDisposition": "blocks_wallet_handoff",
+      "unavailableDisposition": "blocks_wallet_handoff",
       "executedFailureDisposition": "blocks_wallet_handoff",
-      "mandatoryServerGates": ["static-hard-block-policy", "exact-router-simulation"],
+      "immutableFeePathRequired": true,
+      "mandatoryServerGates": ["exact-source-compiler-graph-binding", "static-hard-block-policy", "platform-admission-receipt", "exact-router-simulation", "verified-behavior-evidence", "verified-exact-ten-bps-fee-path"],
       "tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence": true,
       "feeBehaviorClaim": false,
       "localOrModelApprovalAccepted": false
@@ -130,15 +144,19 @@
       "walletSignatureRequiredLater": true,
       "walletBroadcastByService": false
     },
-    "walletSigning": "separate-controller-action"
+    "walletSigning": "separate-controller-action",
+    "pendingProfile3_4SubmissionEnabled": false
   },
   "x-programmable-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
-    "profileVersion": "3.3.0",
-    "compatibleProfileVersions": ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
-    "productionLaunchAuthorized": true,
-    "minimumTargets": 3,
+    "profileVersion": "3.4.0",
+    "compatibleProfileVersions": ["3.3.0", "3.2.0", "3.1.0", "3.0.0", "2.0.0"],
+    "activationStatus": "preparatory-not-live",
+    "liveProfileVersion": "3.3.0",
+    "availableForFreshWrites": false,
+    "productionLaunchAuthorized": false,
+    "minimumTargets": 4,
     "maximumTargets": 16,
     "minimumHookPermissionMask": 0,
     "maximumHookPermissionMask": 16383,
@@ -148,7 +166,26 @@
     "routerSimulationRequiredBeforeAuthorization": true,
     "serverVerifiedEvidenceRequiredForPositiveClaims": true,
     "safetyClaim": false,
-    "feeBehaviorClaim": false
+    "feeBehaviorClaim": false,
+    "canonicalSettlementFeeModule": {
+      "moduleId": "programmable:settlement-fee-vault:v1",
+      "releaseBindingSha256": "sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9",
+      "sourceSha256": "sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b",
+      "creationBytecodeSha256": "sha256:7b0d51612be90023839f36cf28ae56963d8146d28ff441dd2a20195d56238b81",
+      "creationBytecodeKeccak256": "0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e",
+      "runtimeBytecodeSha256": "sha256:980c0eec1017a7dbbd9010935107440125070a0b1fa4688bca92754e2bf1e649",
+      "runtimeBytecodeKeccak256": "0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554",
+      "compiler": {
+        "version": "0.8.26+commit.8a97fa7a",
+        "evmVersion": "paris",
+        "optimizer": { "enabled": true, "runs": 1000 },
+        "viaIR": false,
+        "metadata": { "bytecodeHash": "none", "appendCBOR": false }
+      },
+      "constructor": "graphFactory",
+      "initializer": "bindRoute(address) with exact route-target locator",
+      "reciprocalRoute": "exactly one route constructor or initializer locator back to the vault; settlementFeeVault() behavior is verified server-side"
+    }
   },
   "x-programmable-partner-credentials": {
     "schemaVersion": "programmable.partner-public-contract.v1",
@@ -204,6 +241,7 @@
   },
   "x-programmable-admission-policy": {
     "currentProfileVersion": "3.3.0",
+    "pendingProfileVersion": "3.4.0",
     "legacyExactProfileVersions": ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
     "legacySemantics": "readable-and-byte-identical-retryable-only",
     "manualProjectAllowlist": false,
@@ -657,7 +695,7 @@
       "get": {
         "operationId": "getDirectNativeCustomLaunchV3",
         "summary": "Read one V3 resource visible to the authenticated credential",
-        "description": "The single-resource contract is the precise polling source for conformance state, any exact funding challenge and, after validation and simulation, the exact Router transaction. Partner roots and subkeys are isolated by their own launch principal; a root cannot read a child's launch and a rotated replacement cannot inherit the revoked key's history. The API never signs or broadcasts either wallet action.",
+        "description": "The single-resource contract is the precise polling source for conformance state, any exact funding challenge and, after validation and simulation, the exact Router transaction. A wallet key reads its wallet principal. A partner root reads every launch attributed to its partner, including launches created by current or rotated subkeys. A subkey reads only its stable lineage and cannot read root or sibling launches. Rotation revokes the predecessor credential, preserves that lineage for the replacement and never restores authentication to the revoked credential. The API never signs or broadcasts either wallet action.",
         "tags": [
           "V3 general hooks"
         ],
@@ -685,7 +723,7 @@
             }
           },
           "404": {
-            "description": "Launch not found for this wallet or exact partner-credential principal.",
+            "description": "Launch not found for this wallet principal, partner root aggregate or permitted stable subkey lineage.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1884,7 +1922,7 @@
                 "const": false
               }
             },
-            "description": "The project owns its primary token and primary hook. Three through sixteen exact direct targets are structurally supported.",
+            "description": "Live profile 3.3.0 requires three through sixteen exact direct targets. Pending profile 3.4.0 raises the fresh-graph minimum to four inclusive of the canonical settlement-fee vault, but is not advertised by this live capabilities response before activation.",
             "additionalProperties": false
           },
           "compiler": {
@@ -1996,6 +2034,7 @@
               "notConfiguredDisposition",
               "unavailableDisposition",
               "executedFailureDisposition",
+              "immutableFeePathRequired",
               "feeBehaviorClaim"
             ],
             "properties": {
@@ -2009,13 +2048,14 @@
               "vectorSetVersion": { "const": "1.1.0" },
               "maximumConfiguredRunnerAttempts": { "const": 3 },
               "configurationIsExecutionEvidence": { "const": false },
-              "walletHandoffRequiresVerifiedEvidence": { "const": false },
-              "notConfiguredDisposition": { "const": "claims_remain_unverified" },
-              "unavailableDisposition": { "const": "claims_remain_unverified" },
+              "walletHandoffRequiresVerifiedEvidence": { "const": true },
+              "notConfiguredDisposition": { "const": "blocks_wallet_handoff" },
+              "unavailableDisposition": { "const": "blocks_wallet_handoff" },
               "executedFailureDisposition": { "const": "blocks_wallet_handoff" },
+              "immutableFeePathRequired": { "const": true },
               "feeBehaviorClaim": { "const": false }
             },
-            "description": "Server decision boundary. Runner configuration is not evidence; missing or unavailable execution leaves behavior-derived claims unverified, while an authenticated executed failure blocks wallet handoff.",
+            "description": "Fresh-profile server decision boundary. Runner configuration is not evidence. Missing, not-configured or unavailable execution blocks wallet handoff and remains retryable; an authenticated executed failure blocks wallet handoff terminally. Legacy 3.3.0 and earlier resources retain their stored evidence state and are not retroactively upgraded.",
             "additionalProperties": false
           },
           "hardSafetyInvariants": {
@@ -2098,7 +2138,7 @@
             "const": false
           }
         },
-        "description": "Public additive discovery for the current V3 structural and operational boundary. It grants no authorization and makes no universal, audit, safety or fee-behavior claim. The server requires objective static hard blocks and exact Router simulation before wallet handoff; missing behavior execution leaves related claims unverified and an authenticated executed failure blocks.",
+        "description": "Public additive discovery for the live profile 3.3.0 structural and operational boundary. It grants no authorization and makes no universal, audit, safety or fee-behavior claim. Pending profile 3.4.0 is preparatory and must not appear as the current capabilities profile until backend activation. Legacy resources preserve their stored evidence semantics.",
         "additionalProperties": true
       },
       "ProjectMetadataCapabilitiesV1": {
@@ -2910,8 +2950,54 @@
             "additionalProperties": false
           }
         },
-        "description": "Server-authored projection of what the exact per-launch runtime evidence can support. Missing execution leaves behavior, platform-fee, liquidity and routability axes unverified without blocking the permissionless deployment lane. An authenticated executed failure blocks wallet handoff. No safety claim is produced.",
+        "description": "Server-authored projection of what the exact per-launch runtime evidence can support. Fresh profile 3.4.0 cannot authorize unless behavior execution and exact launch-bound platform-fee conformance are verified. Missing, not-configured or unavailable execution remains retryable and blocks wallet handoff; an authenticated executed failure blocks terminally. Legacy resources preserve their stored evidence semantics. No universal safety claim is produced.",
         "additionalProperties": false
+      },
+      "FreshWalletHandoffBehaviorEvidenceV3_4": {
+        "allOf": [
+          { "$ref": "#/components/schemas/CustomLaunchBehaviorEvidenceSummaryV3" },
+          {
+            "type": "object",
+            "required": ["status", "claimAxes"],
+            "properties": {
+              "status": { "const": "verified" },
+              "claimAxes": {
+                "type": "object",
+                "required": ["platformFeeConformance"],
+                "properties": {
+                  "platformFeeConformance": {
+                    "type": "object",
+                    "required": ["status", "outstandingVectorIds"],
+                    "properties": {
+                      "status": { "const": "verified" },
+                      "outstandingVectorIds": { "maxItems": 0 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "Fresh profile 3.4.0 wallet-handoff evidence. The server owns execution and verdicts; exact platform-fee conformance must be verified, not conditional or caller-declared."
+      },
+      "FreshWalletHandoffBehaviorAssuranceV3_4": {
+        "allOf": [
+          { "$ref": "#/components/schemas/CustomLaunchBehaviorAssuranceV3" },
+          {
+            "type": "object",
+            "required": ["evidenceAuthority", "behaviorExecution", "platformFeeConformance"],
+            "properties": {
+              "evidenceAuthority": { "const": "platform-runtime-executor" },
+              "behaviorExecution": { "const": "executed" },
+              "platformFeeConformance": {
+                "type": "object",
+                "required": ["status"],
+                "properties": { "status": { "const": "verified" } }
+              }
+            }
+          }
+        ],
+        "description": "Fresh profile 3.4.0 wallet-handoff assurance. Conditional platform-fee status is insufficient; mutable fee-path authority fails before handoff with PLATFORM_FEE_PATH_NOT_IMMUTABLE."
       },
       "CustomLaunchProductTruthAxesV3": {
         "type": "object",
@@ -3120,10 +3206,10 @@
           },
           "platformFeeBindingTargetId": {
             "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier",
-            "description": "May reference the hook or another exact direct graph target that implements the declared platform fee binding."
+            "description": "For pending profile 3.4.0, this must reference the exact programmable:settlement-fee-vault:v1 target. The applicant cannot select another platform fee target. Exact legacy profiles retain their immutable target-role semantics."
           }
         },
-        "description": "The token, hook and initializer IDs are distinct. The platform fee binding target may be a separate project-owned component.",
+        "description": "The token, hook and initializer IDs are distinct. Pending profile 3.4.0 additionally requires a distinct canonical settlement-fee-vault target, while the reciprocal non-vault route may be the hook or another project-owned graph target.",
         "additionalProperties": false
       },
       "PlatformFeePolicyV1": {
@@ -3356,7 +3442,8 @@
         ],
         "properties": {
           "minimumTargets": {
-            "const": 3
+            "enum": [3, 4],
+            "description": "Exactly 4 for pending profile 3.4.0; exactly 3 for legacy profile versions. The profile schema binds the version-specific value."
           },
           "maximumTargets": {
             "const": 16
@@ -3483,7 +3570,7 @@
           "websiteUriPolicy": { "const": "canonical-public-credential-free-https" },
           "xUriPattern": { "const": "^https://x\\.com/[A-Za-z0-9_]{1,64}$" }
         },
-        "description": "Hash-bound profile 3.3.0 policy. The server enforces it during preflight and create; it does not apply retroactively to exact 3.2.0 or older requests.",
+        "description": "Hash-bound complete-metadata policy for profiles 3.4.0 and 3.3.0. The server enforces it during preflight and create; it does not apply retroactively to exact 3.2.0 or older requests.",
         "additionalProperties": false
       },
       "DirectNativeHookGraphProfileV1": {
@@ -3525,7 +3612,7 @@
             "enum": [2, 3]
           },
           "profileVersion": {
-            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0"]
+            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0", "3.4.0"]
           },
           "productionLaunchAuthorized": {
             "const": true,
@@ -3592,6 +3679,18 @@
           }
         },
         "oneOf": [
+          {
+            "required": ["platformAdmissionPolicy", "projectMetadataPolicy"],
+            "properties": {
+              "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+              "profileRevision": { "const": 3 },
+              "profileVersion": { "const": "3.4.0" },
+              "platformAdmissionPolicy": {
+                "$ref": "#/components/schemas/PlatformAdmissionPolicyV3_1_0"
+              }
+            },
+            "not": { "required": ["platformFeeProofPolicy"] }
+          },
           {
             "required": ["platformAdmissionPolicy", "projectMetadataPolicy"],
             "properties": {
@@ -3670,7 +3769,29 @@
             }
           }
         ],
-        "description": "Production-authorized revision 3 direct-graph profile. Complete-metadata profile 3.3.0 is current and binds projectMetadataPolicy. Exact 3.2.0 requests retain their original metadata policy; exact 3.1.0 and 3.0.0 requests remain metadata-absent. All legacy profiles remain readable and byte-identical retryable. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. Neither result is an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "allOf": [
+          {
+            "if": {
+              "properties": { "profileVersion": { "const": "3.4.0" } },
+              "required": ["profileVersion"]
+            },
+            "then": {
+              "properties": {
+                "graphPolicy": {
+                  "properties": { "minimumTargets": { "const": 4 } }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "graphPolicy": {
+                  "properties": { "minimumTargets": { "const": 3 } }
+                }
+              }
+            }
+          }
+        ],
+        "description": "Revision 3 direct-graph contract. Profile 3.4.0 is a pending, preparatory candidate and is not live or production-authorized by this document; live/default discovery remains exact profile 3.3.0 until backend activation is independently verified. Pending 3.4.0 requires four through sixteen targets inclusive of the frozen settlement-fee vault plus verified reciprocal route behavior. Exact 3.3.0 and older requests retain their original minimum of three targets and immutable compatibility policy. Exact source and compiler reconstruction, role-aware static admission and Router simulation remain mandatory. No result is an audit or a universal safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "DirectNativePoolKeyV1": {
@@ -4045,7 +4166,7 @@
           },
           "liquidityModel": {
             "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
-            "description": "Current CLI 3.3.7 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
+            "description": "The unreleased preparatory CLI 3.3.8 candidate includes this exact hash-bound intent. Live/default CLI 3.3.7 compatibility is unchanged; omission is accepted only where the live contract already permits byte-compatible earlier V3 requests."
           }
         },
         "allOf": [
@@ -4199,7 +4320,7 @@
             "$ref": "#/components/schemas/FundingSignaturePatchDescriptorV1"
           }
         ],
-        "description": "CLI 3.3.7 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
+        "description": "The unreleased preparatory CLI 3.3.8 candidate uses authorization patch V2. Live/default CLI 3.3.7 and V1 compatibility remain governed by the currently discovered 3.3 contract until activation."
       },
       "Eip3009FundingAuthorizationDescriptorV1": {
         "type": "object",
@@ -4264,7 +4385,23 @@
             }
           }
         ],
-        "description": "The Router primitive supports 2 through 16 targets, while this V3 profile requires 3 through 16 because the project-owned token, project-owned hook and initializer roles are distinct. The hook may use any valid Uniswap v4 permission mask; return-delta permissions require their corresponding action permission."
+        "description": "Legacy exact profiles require 3 through 16 targets because the project-owned token, project-owned hook and initializer roles are distinct. The hook may use any valid Uniswap v4 permission mask; return-delta permissions require their corresponding action permission."
+      },
+      "CustomGraphBundleV3_4": {
+        "allOf": [
+          { "$ref": "#/components/schemas/CustomGraphBundleV3" },
+          {
+            "type": "object",
+            "properties": {
+              "targets": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 16
+              }
+            }
+          }
+        ],
+        "description": "Pending profile 3.4.0 graph: 4 through 16 direct targets inclusive of the exact programmable:settlement-fee-vault:v1 module. Project-owned token, hook, route and additional contracts remain applicant-defined."
       },
       "DirectNativePermitWindowV1": {
         "type": "object",
@@ -4412,7 +4549,7 @@
           "description": {
             "type": "string",
             "maxLength": 4096,
-            "description": "Legacy profile 3.2.0 canonical NFC public text, which may be empty. New profile 3.3.0 uses CompleteLaunchPresentationDraftV1."
+            "description": "Legacy profile 3.2.0 canonical NFC public text, which may be empty. Profiles 3.4.0 and 3.3.0 use CompleteLaunchPresentationDraftV1."
           },
           "image": {
             "oneOf": [
@@ -4465,7 +4602,7 @@
             "maxLength": 4096,
             "x-programmable-minUtf8Bytes": 20,
             "x-programmable-minUnicodeLettersOrNumbers": 8,
-            "description": "Profile 3.3.0 canonical NFC public text with at least 20 UTF-8 bytes and 8 Unicode letters or numbers, already trimmed, at most 4,096 UTF-8 bytes."
+            "description": "Profiles 3.4.0 and 3.3.0 canonical NFC public text with at least 20 UTF-8 bytes and 8 Unicode letters or numbers, already trimmed, at most 4,096 UTF-8 bytes."
           },
           "image": {
             "type": "object",
@@ -4590,7 +4727,93 @@
             "required": ["presentation"]
           }
         ],
-        "description": "Profile 3.3.0 metadata that satisfies the hash-bound projectMetadataPolicy."
+        "description": "Profile 3.4.0 and exact legacy 3.3.0 metadata that satisfies the hash-bound projectMetadataPolicy."
+      },
+      "BehaviorScenarioTargetV1": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "targetId"],
+            "properties": {
+              "kind": { "const": "prepared-target" },
+              "targetId": {
+                "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalIdentifier"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "binding"],
+            "properties": {
+              "kind": { "const": "chain-binding" },
+              "binding": { "const": "poolManager" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "harness"],
+            "properties": {
+              "kind": { "const": "runner-harness" },
+              "harness": { "const": "v4-actions-v1" }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "BehaviorScenarioStepV1": {
+        "type": "object",
+        "required": ["stepId", "phase", "actor", "target", "valueWei", "calldata", "hookData"],
+        "properties": {
+          "stepId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "phase": {
+            "enum": ["seed", "swap", "liquidity", "claim", "custom-accounting"]
+          },
+          "actor": {
+            "enum": ["launch-wallet", "secondary-user", "unauthorized-claimer"]
+          },
+          "target": { "$ref": "#/components/schemas/BehaviorScenarioTargetV1" },
+          "valueWei": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256"
+          },
+          "calldata": {
+            "type": "string",
+            "pattern": "^0x(?:[0-9a-f]{2})*$",
+            "maxLength": 131074,
+            "x-programmable-maximumBytes": 65536
+          },
+          "hookData": {
+            "type": "string",
+            "pattern": "^0x(?:[0-9a-f]{2})*$",
+            "maxLength": 32770,
+            "x-programmable-maximumBytes": 16384
+          }
+        },
+        "additionalProperties": false
+      },
+      "BehaviorScenarioInputsV1": {
+        "type": "object",
+        "required": ["schemaVersion", "steps"],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-behavior-scenario-inputs.v1"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": { "$ref": "#/components/schemas/BehaviorScenarioStepV1" },
+            "x-programmable-order": "caller-declared-and-hash-bound",
+            "x-programmable-uniqueStepIds": true,
+            "x-programmable-aggregateCalldataAndHookDataMaximumBytes": 1048576
+          }
+        },
+        "description": "Hash-bound declarative inputs for the server-owned network-disabled fork runner. prepared-target IDs must resolve against the exact prepared graph. The caller cannot supply scripts, URLs, assertions, expected results, statuses, runner parameters or vector verdicts.",
+        "additionalProperties": false
       },
       "FinalizedCustomLaunchTokenMetadataReadbackV1": {
         "type": "object",
@@ -4696,6 +4919,268 @@
         "description": "Immutable server-owned partner provenance. The create body cannot set or override it. A display label such as Launched via {name} is attribution only, never project verification, safety status, endorsement, or an economic launch category.",
         "additionalProperties": false
       },
+      "FinalizedTradeAssetIdentityV1": {
+        "type": "object",
+        "required": ["namespace", "value"],
+        "properties": {
+          "namespace": { "const": "eip155:1" },
+          "value": { "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress" }
+        },
+        "additionalProperties": false
+      },
+      "FinalizedTradeAssetV1": {
+        "type": "object",
+        "required": ["assetId", "identity", "name", "symbol", "decimals"],
+        "properties": {
+          "assetId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "identity": { "$ref": "#/components/schemas/FinalizedTradeAssetIdentityV1" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "symbol": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "decimals": { "type": "integer", "minimum": 0, "maximum": 255 }
+        },
+        "additionalProperties": false
+      },
+      "FinalizedTradeRuntimeTargetV1": {
+        "type": "object",
+        "required": ["targetId", "kind", "identity", "runtimeCodeKeccak256", "runtimeCodeSha256"],
+        "properties": {
+          "targetId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "kind": { "enum": ["token", "hook", "other"] },
+          "identity": { "$ref": "#/components/schemas/FinalizedTradeAssetIdentityV1" },
+          "runtimeCodeKeccak256": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+          "runtimeCodeSha256": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+        },
+        "additionalProperties": false
+      },
+      "DiscoverableUniswapV4PoolV2": {
+        "type": "object",
+        "required": ["poolId", "poolManager", "poolManagerReviewEvidenceBindingHash", "poolManagerInterfaceEvidenceBindingHash", "poolManagerRuntimeCodeKeccak256", "poolManagerRuntimeCodeSha256", "currency0AssetId", "currency1AssetId", "feeRaw", "dynamicFee", "tickSpacing", "hooksAssetId", "poolKeyEvidenceHash"],
+        "properties": {
+          "poolId": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+          "poolManager": { "$ref": "#/components/schemas/FinalizedTradeAssetIdentityV1" },
+          "poolManagerReviewEvidenceBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "poolManagerInterfaceEvidenceBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "poolManagerRuntimeCodeKeccak256": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+          "poolManagerRuntimeCodeSha256": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "currency0AssetId": { "type": "string", "minLength": 1 },
+          "currency1AssetId": { "type": "string", "minLength": 1 },
+          "feeRaw": { "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256" },
+          "dynamicFee": { "type": "boolean" },
+          "tickSpacing": { "type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)$" },
+          "hooksAssetId": {
+            "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+          },
+          "poolKeyEvidenceHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+        },
+        "additionalProperties": false
+      },
+      "DiscoverableMarketTradeDependencyV1": {
+        "type": "object",
+        "required": ["role", "dependencyId", "capabilityId", "chainProfileId", "identity", "runtimeCodeKeccak256", "runtimeCodeSha256", "reviewEvidenceBindingHash", "interfaceEvidenceBindingHash"],
+        "properties": {
+          "role": { "enum": ["uniswap-v4-universal-router", "uniswap-v4-quoter", "uniswap-v4-state-view", "uniswap-permit2"] },
+          "dependencyId": { "type": "string", "minLength": 1 },
+          "capabilityId": { "type": "string", "minLength": 1 },
+          "chainProfileId": { "type": "string", "minLength": 1 },
+          "identity": { "$ref": "#/components/schemas/FinalizedTradeAssetIdentityV1" },
+          "runtimeCodeKeccak256": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+          "runtimeCodeSha256": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "reviewEvidenceBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "interfaceEvidenceBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+        },
+        "additionalProperties": false
+      },
+      "DiscoverableMarketTradePoolKeyV1": {
+        "type": "object",
+        "required": ["poolId", "currency0AssetId", "currency0", "currency1AssetId", "currency1", "feeRaw", "tickSpacing", "hooksAssetId", "hooks"],
+        "properties": {
+          "poolId": { "$ref": "./custom-launch-v2.json#/components/schemas/LowerHex32" },
+          "currency0AssetId": { "type": "string", "minLength": 1 },
+          "currency0": { "$ref": "#/components/schemas/FinalizedTradeAssetIdentityV1" },
+          "currency1AssetId": { "type": "string", "minLength": 1 },
+          "currency1": { "$ref": "#/components/schemas/FinalizedTradeAssetIdentityV1" },
+          "feeRaw": { "$ref": "./custom-launch-v2.json#/components/schemas/CanonicalUint256" },
+          "tickSpacing": { "type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)$" },
+          "hooksAssetId": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+          "hooks": { "$ref": "#/components/schemas/FinalizedTradeAssetIdentityV1" }
+        },
+        "additionalProperties": false
+      },
+      "DiscoverableMarketTradeCapabilityV1": {
+        "type": "object",
+        "required": ["schemaVersion", "capabilityId", "adapterId", "chainId", "chainProfileId", "chainProfileHash", "marketId", "baseAssetId", "quoteAssetId", "poolKey", "routerGeneration", "dependencies", "supportedSides", "sideBindings", "exactness", "hookDataPolicy", "actionPolicy", "quotePolicy", "slippagePolicy", "deadlinePolicy", "approvalPolicy", "recipientPolicy", "planBindingHash", "status", "poolKeyEvidenceHash", "marketVerificationBindingHash", "hookAssetIdentityEvidenceHash", "tradeCapabilityBindingHash"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.discoverable-market-trade-capability.v1" },
+          "capabilityId": { "type": "string", "minLength": 1 },
+          "adapterId": { "const": "uniswap-v4-universal-router-exact-input:v1" },
+          "chainId": { "const": "1" },
+          "chainProfileId": { "type": "string", "minLength": 1 },
+          "chainProfileHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "marketId": { "type": "string", "minLength": 1 },
+          "baseAssetId": { "type": "string", "minLength": 1 },
+          "quoteAssetId": { "type": "string", "minLength": 1 },
+          "poolKey": { "$ref": "#/components/schemas/DiscoverableMarketTradePoolKeyV1" },
+          "routerGeneration": { "type": "string", "minLength": 1 },
+          "dependencies": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/components/schemas/DiscoverableMarketTradeDependencyV1" } },
+          "supportedSides": { "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": { "enum": ["base-to-quote", "quote-to-base"] } },
+          "sideBindings": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["side", "inputAssetId", "outputAssetId", "zeroForOne", "inputCurrencyKind", "settlementAction", "takeAction"],
+              "properties": {
+                "side": { "enum": ["base-to-quote", "quote-to-base"] },
+                "inputAssetId": { "type": "string", "minLength": 1 },
+                "outputAssetId": { "type": "string", "minLength": 1 },
+                "zeroForOne": { "type": "boolean" },
+                "inputCurrencyKind": { "enum": ["native", "erc20"] },
+                "settlementAction": { "const": "SETTLE_ALL" },
+                "takeAction": { "const": "TAKE_ALL" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "exactness": { "const": "exact-input" },
+          "hookDataPolicy": {
+            "type": "object",
+            "required": ["kind", "data", "hookDataHash"],
+            "properties": {
+              "kind": { "enum": ["empty", "fixed"] },
+              "data": { "type": "string", "pattern": "^0x(?:[0-9a-f]{2})*$" },
+              "hookDataHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+            },
+            "additionalProperties": false
+          },
+          "actionPolicy": {
+            "type": "object",
+            "required": ["swapAction", "settleAction", "takeAction", "multiHop", "exactOutput"],
+            "properties": {
+              "swapAction": { "const": "SWAP_EXACT_IN_SINGLE" },
+              "settleAction": { "const": "SETTLE_ALL" },
+              "takeAction": { "const": "TAKE_ALL" },
+              "multiHop": { "const": false },
+              "exactOutput": { "const": false }
+            },
+            "additionalProperties": false
+          },
+          "quotePolicy": {
+            "type": "object",
+            "required": ["adapterId", "executionMode", "currentStateRequired", "maximumQuoteAgeSeconds"],
+            "properties": {
+              "adapterId": { "const": "uniswap-v4-quoter-exact-input:v1" },
+              "executionMode": { "const": "offchain-static-call-only" },
+              "currentStateRequired": { "const": true },
+              "maximumQuoteAgeSeconds": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          },
+          "slippagePolicy": {
+            "type": "object",
+            "required": ["kind", "amountOutMinimumRequired", "maximumSlippageBps"],
+            "properties": {
+              "kind": { "const": "user-bounded-minimum-output" },
+              "amountOutMinimumRequired": { "const": true },
+              "maximumSlippageBps": { "type": "integer", "minimum": 0, "maximum": 10000 }
+            },
+            "additionalProperties": false
+          },
+          "deadlinePolicy": {
+            "type": "object",
+            "required": ["kind", "deadlineRequired", "maximumHorizonSeconds"],
+            "properties": {
+              "kind": { "const": "bounded-user-deadline" },
+              "deadlineRequired": { "const": true },
+              "maximumHorizonSeconds": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          },
+          "approvalPolicy": {
+            "type": "object",
+            "required": ["erc20Input", "nativeInput"],
+            "properties": {
+              "erc20Input": { "const": "erc20-approve-permit2-then-permit2-approve-router" },
+              "nativeInput": { "const": "transaction-value" }
+            },
+            "additionalProperties": false
+          },
+          "recipientPolicy": { "const": "connected-wallet-only" },
+          "planBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "status": { "const": "verified" },
+          "poolKeyEvidenceHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "marketVerificationBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "hookAssetIdentityEvidenceHash": { "oneOf": [{ "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }, { "type": "null" }] },
+          "tradeCapabilityBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+        },
+        "additionalProperties": false
+      },
+      "VerifiedDiscoverableLaunchMarketV2": {
+        "type": "object",
+        "required": ["marketId", "kind", "status", "marketAssetId", "baseAssetId", "quoteAssetId", "marketEvidenceHash", "verification", "uniswapV4", "tradeCapability"],
+        "properties": {
+          "marketId": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "minLength": 1 },
+          "status": { "const": "active" },
+          "marketAssetId": { "type": "string", "minLength": 1 },
+          "baseAssetId": { "type": "string", "minLength": 1 },
+          "quoteAssetId": { "type": "string", "minLength": 1 },
+          "marketEvidenceHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "verification": {
+            "type": "object",
+            "required": ["status", "verifierAdapterId", "verifierBindingHash"],
+            "properties": {
+              "status": { "const": "verified" },
+              "verifierAdapterId": { "type": "string", "minLength": 1 },
+              "verifierBindingHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+            },
+            "additionalProperties": false
+          },
+          "uniswapV4": { "$ref": "#/components/schemas/DiscoverableUniswapV4PoolV2" },
+          "tradeCapability": { "$ref": "#/components/schemas/DiscoverableMarketTradeCapabilityV1" }
+        },
+        "additionalProperties": false
+      },
+      "FinalizedTradeAdapterDescriptorV1": {
+        "type": "object",
+        "required": ["schemaVersion", "status", "adapterId", "projectId", "chainProfileId", "chainProfileHash", "market", "baseAsset", "quoteAsset", "runtimeTargets", "serverVerification", "descriptorDigest"],
+        "properties": {
+          "schemaVersion": { "const": "programmable.finalized-trade-adapter-descriptor.v1" },
+          "status": { "const": "verified" },
+          "adapterId": { "const": "uniswap-v4-universal-router-exact-input:v1" },
+          "projectId": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "chainProfileId": { "type": "string", "minLength": 1 },
+          "chainProfileHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" },
+          "market": { "$ref": "#/components/schemas/VerifiedDiscoverableLaunchMarketV2" },
+          "baseAsset": { "$ref": "#/components/schemas/FinalizedTradeAssetV1" },
+          "quoteAsset": { "$ref": "#/components/schemas/FinalizedTradeAssetV1" },
+          "runtimeTargets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": { "$ref": "#/components/schemas/FinalizedTradeRuntimeTargetV1" },
+            "x-programmable-order": "strict-utf8-targetId",
+            "x-programmable-uniqueTargetIds": true,
+            "description": "Sorted unique exact coverage of the launch stamp's exclusive components."
+          },
+          "serverVerification": {
+            "type": "object",
+            "required": ["verifierAdapterId", "verifiedAt", "evidenceHash"],
+            "properties": {
+              "verifierAdapterId": { "const": "programmable-server-trade-route-review:v1" },
+              "verifiedAt": { "type": "string", "format": "date-time" },
+              "evidenceHash": { "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest" }
+            },
+            "additionalProperties": false
+          },
+          "descriptorDigest": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+            "description": "canonicalSha256 domain programmable.finalized-trade-adapter-descriptor.v1 over outerBinding {routerLaunchId,router,token,hook,poolManager,poolId,artifactHash,graphBundleHash,finality:{tx,block,hash,logIndex}} and this descriptor without descriptorDigest."
+          }
+        },
+        "description": "Optional server-authored finalized-only onsite trading contract. Base asset must be the launched token; market, PoolKey, capability and identities must cross-match. The request and CLI schemas never accept this field. Absence or invalidation keeps the launch indexed but does not enable onsite trading.",
+        "additionalProperties": false
+      },
       "FinalizedCustomLaunchMetadataV1": {
         "type": "object",
         "required": [
@@ -4738,6 +5223,10 @@
           },
           "partnerAttribution": {
             "$ref": "#/components/schemas/LaunchPartnerAttributionV1"
+          },
+          "tradeAdapterDescriptor": {
+            "$ref": "#/components/schemas/FinalizedTradeAdapterDescriptorV1",
+            "description": "Optional server-authored finalized projection. Omitted for legacy, unavailable, disabled or non-tradeable routes; consumers must not infer trading from submitted metadata."
           },
           "bindings": {
             "type": "object",
@@ -4794,9 +5283,40 @@
         },
         "additionalProperties": false
       },
+      "FinalizedCustomLaunchMetadataQualityV1": {
+        "type": "object",
+        "required": [
+          "status",
+          "sourceRowCount",
+          "publishedRowCount",
+          "quarantinedRowCount",
+          "diagnostics"
+        ],
+        "properties": {
+          "status": { "enum": ["complete", "partial"] },
+          "sourceRowCount": { "type": "integer", "minimum": 0, "maximum": 25 },
+          "publishedRowCount": { "type": "integer", "minimum": 0, "maximum": 25 },
+          "quarantinedRowCount": { "type": "integer", "minimum": 0, "maximum": 25 },
+          "diagnostics": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "required": ["rowIndex", "code"],
+              "properties": {
+                "rowIndex": { "type": "integer", "minimum": 0, "maximum": 24 },
+                "code": { "const": "FINALIZED_ROW_QUARANTINED" }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "description": "Live page-quality envelope. complete means every source row was published; partial means one or more invalid finalized rows were quarantined. publishedRowCount plus quarantinedRowCount equals sourceRowCount, and diagnostics has one row-indexed entry per quarantined row.",
+        "additionalProperties": false
+      },
       "FinalizedCustomLaunchMetadataListV1": {
         "type": "object",
-        "required": ["schemaVersion", "generatedAt", "launches", "nextCursor"],
+        "required": ["schemaVersion", "generatedAt", "launches", "nextCursor", "quality"],
         "properties": {
           "schemaVersion": { "const": "programmable.finalized-custom-launch-metadata-list.v1" },
           "generatedAt": { "type": "string", "format": "date-time" },
@@ -4810,6 +5330,9 @@
               { "type": "string", "minLength": 1, "maxLength": 512 },
               { "type": "null" }
             ]
+          },
+          "quality": {
+            "$ref": "#/components/schemas/FinalizedCustomLaunchMetadataQualityV1"
           }
         },
         "description": "Finalized-only public backend page. It has no embedded LKG fallback; downstream services must label their own bounded fallback freshness.",
@@ -4861,11 +5384,19 @@
           },
           "projectMetadata": {
             "$ref": "#/components/schemas/ProjectMetadataV1",
-            "description": "Required complete metadata for every fresh profile 3.3.0 request, including partner-created requests. It is optional only under the exact legacy profile branches defined below."
+            "description": "Required complete metadata for every fresh profile 3.4.0 request and exact 3.3.0 retry, including partner-created requests. It is optional only under the older exact legacy profile branches defined below."
           },
           "projectMetadataHash": {
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest",
             "description": "sha256 of the UTF-8 domain programmable.project-metadata.v1, one NUL byte, and canonical projectMetadata JSON."
+          },
+          "behaviorScenarioInputs": {
+            "$ref": "#/components/schemas/BehaviorScenarioInputsV1",
+            "description": "Required only for fresh profile 3.4.0. The server rehashes these declarative inputs, resolves exact targets against the prepared artifact and remains the sole assertion and verdict authority."
+          },
+          "behaviorScenarioInputsHash": {
+            "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest",
+            "description": "sha256 of the UTF-8 domain programmable.custom-launch-behavior-scenario-inputs.v1, one NUL byte, and canonical behaviorScenarioInputs JSON. It is included in launchIntentHash."
           },
           "launchProfile": {
             "$ref": "#/components/schemas/DirectNativeHookGraphProfileV1"
@@ -4896,6 +5427,43 @@
         "allOf": [
           {
             "oneOf": [
+              {
+                "properties": {
+                  "launchProfile": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile.v3" },
+                      "profileRevision": { "const": 3 },
+                      "profileVersion": { "const": "3.4.0" }
+                    }
+                  },
+                  "projectMetadata": {
+                    "$ref": "#/components/schemas/CompleteProjectMetadataV1"
+                  },
+                  "graphBundle": {
+                    "$ref": "#/components/schemas/CustomGraphBundleV3_4"
+                  },
+                  "launchProfileSelection": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": { "const": "programmable.direct-native-hook-graph-profile-selection-binding.v3" },
+                      "profileRevision": { "const": 3 }
+                    }
+                  },
+                  "verificationBundle": {
+                    "$ref": "#/components/schemas/DirectNativeExactSourceVerificationBundleV3"
+                  }
+                },
+                "required": [
+                  "launchProfile",
+                  "launchProfileSelection",
+                  "verificationBundle",
+                  "projectMetadata",
+                  "projectMetadataHash",
+                  "behaviorScenarioInputs",
+                  "behaviorScenarioInputsHash"
+                ]
+              },
               {
                 "properties": {
                   "launchProfile": {
@@ -5045,6 +5613,29 @@
                 }
               }
             ]
+          },
+          {
+            "if": {
+              "properties": {
+                "launchProfile": {
+                  "type": "object",
+                  "properties": { "profileVersion": { "const": "3.4.0" } },
+                  "required": ["profileVersion"]
+                }
+              },
+              "required": ["launchProfile"]
+            },
+            "then": {
+              "required": ["behaviorScenarioInputs", "behaviorScenarioInputsHash"]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  { "required": ["behaviorScenarioInputs"] },
+                  { "required": ["behaviorScenarioInputsHash"] }
+                ]
+              }
+            }
           },
           {
             "if": {
@@ -5743,7 +6334,7 @@
             "const": false
           }
         },
-        "description": "Revision 3 admission classification after the exact-source static baseline found no hard-blocking code and target-role pair. Evidence duties remain bound and visible without becoming routing, fee, source, indexing or feature claims. Exact Router simulation must still pass before wallet handoff. Missing behavior execution leaves behavior-derived claims unverified; an authenticated executed failure blocks. This is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Revision 3 admission classification after the exact-source static baseline found no hard-blocking code and target-role pair. Evidence duties remain bound and visible without becoming routing, fee, source, indexing or feature claims. For fresh profile 3.4.0, exact Router simulation, verified behavior evidence and exact launch-bound 10 bps fee-path verification must all pass before wallet handoff. Missing, not-configured or unavailable execution remains retryable and cannot authorize; an authenticated executed failure blocks terminally. This is not an audit or a safety, honeypot, liquidity, tradeability, or universal fee-behavior guarantee.",
         "additionalProperties": false
       },
       "StaticBaselineSourceLocationV1": {
@@ -6521,7 +7112,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Durable lifecycle state. action_required carries a deterministic static-baseline report or an authenticated executed behavior failure and bound remediation; it is not a wallet action or a request for manual approval. awaiting_funding_authorization can request a separate funding signature. authorized exposes the Router wallet transaction only after objective static server gates and exact Router simulation pass. Missing behavior execution leaves its positive claims unverified.",
+            "description": "Durable lifecycle state. action_required carries a deterministic static-baseline report and bound remediation; it is not a wallet action or a request for manual approval. awaiting_funding_authorization can request a separate funding signature. For fresh profile 3.4.0, missing, not-configured or unavailable behavior execution stays simulating and returns retryable 503/CUSTOM_LAUNCH_V3_UNAVAILABLE; an authenticated executed failure is terminal failed with BEHAVIOR_EVIDENCE_NOT_VERIFIED. authorized exposes the Router wallet transaction only after every mandatory server gate, including verified behavior evidence and exact launch-bound 10 bps fee-path verification, passes. Legacy resources preserve their stored evidence state.",
             "enum": [
               "received",
               "validating",
@@ -6542,8 +7133,8 @@
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
           },
           "launchProfileVersion": {
-            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0"],
-            "description": "Immutable persisted launchProfile.profileVersion. Complete metadata is required for 3.3.0; 3.2.0 retains its original permissive metadata semantics; exact 2.0.0, 3.0.0 and 3.1.0 resources retain null metadata semantics."
+            "enum": ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0", "3.4.0"],
+            "description": "Immutable persisted launchProfile.profileVersion. Complete metadata is required for 3.4.0 and 3.3.0; 3.2.0 retains its original permissive metadata semantics; exact 2.0.0, 3.0.0 and 3.1.0 resources retain null metadata semantics. Only 3.4.0 carries the fresh verified behavior and exact fee-path wallet-handoff gate."
           },
           "projectMetadata": {
             "oneOf": [
@@ -6656,7 +7247,7 @@
             "oneOf": [
               {
                 "properties": {
-                  "launchProfileVersion": { "const": "3.3.0" },
+                  "launchProfileVersion": { "enum": ["3.3.0", "3.4.0"] },
                   "projectMetadata": { "$ref": "#/components/schemas/CompleteProjectMetadataV1" },
                   "projectMetadataHash": {
                     "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest"
@@ -6683,6 +7274,31 @@
                 "required": ["launchProfileVersion", "projectMetadata", "projectMetadataHash"]
               }
             ]
+          },
+          {
+            "if": {
+              "properties": {
+                "launchProfileVersion": { "const": "3.4.0" },
+                "status": { "enum": ["authorized", "submitted", "finalized"] }
+              },
+              "required": ["launchProfileVersion", "status"]
+            },
+            "then": {
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "required": ["behaviorEvidence", "behaviorAssurance"],
+                  "properties": {
+                    "behaviorEvidence": {
+                      "$ref": "#/components/schemas/FreshWalletHandoffBehaviorEvidenceV3_4"
+                    },
+                    "behaviorAssurance": {
+                      "$ref": "#/components/schemas/FreshWalletHandoffBehaviorAssuranceV3_4"
+                    }
+                  }
+                }
+              }
+            }
           },
           {
             "if": {

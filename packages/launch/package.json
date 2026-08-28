@@ -16,6 +16,8 @@
     "src",
     "schemas",
     "examples",
+    "test/fixtures/programmable-settlement-fee-vault-v1.json",
+    "test/fixtures/programmable-settlement-fee-vault-v1.standard-json.json",
     "npm-shrinkwrap.json",
     "README.md"
   ],

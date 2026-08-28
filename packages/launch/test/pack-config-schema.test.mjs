@@ -14,6 +14,16 @@ const ajv = new Ajv2020({
   strictRequired: false,
   validateFormats: false,
 });
+for (const keyword of [
+  "x-programmable-status",
+  "x-programmable-live-contract",
+  "x-programmable-profile-3-4-contract",
+  "x-programmable-order",
+  "x-programmable-aggregateCalldataAndHookDataMaximumBytes",
+  "x-programmable-maximumBytes",
+]) {
+  ajv.addKeyword(keyword);
+}
 ajv.addKeyword({
   keyword: "x-programmable-minUtf8Bytes",
   type: "string",
@@ -31,6 +41,44 @@ const validate = ajv.compile(schema);
 test("published V3 pack-config schema accepts v2 nested authorization paths", () => {
   const config = baseConfig();
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
+});
+
+test("preparatory profile 3.4 schema requires four targets and pins the fee module", () => {
+  assert.equal(schema["x-programmable-status"], "preparatory-not-live");
+  assert.deepEqual(schema["x-programmable-live-contract"], {
+    cliReleaseVersion: "3.3.7",
+    profileVersion: "3.3.0",
+  });
+  assert.equal(schema.properties.targets.minItems, 4);
+  assert.equal(schema.properties.targets.maxItems, 16);
+  assert.deepEqual(
+    schema["x-programmable-profile-3-4-contract"].canonicalSettlementFeeModule,
+    {
+      moduleId: "programmable:settlement-fee-vault:v1",
+      releaseBindingSha256:
+        "sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9",
+      sourceSha256:
+        "sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b",
+      creationBytecodeSha256:
+        "sha256:7b0d51612be90023839f36cf28ae56963d8146d28ff441dd2a20195d56238b81",
+      creationBytecodeKeccak256:
+        "0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e",
+      runtimeBytecodeSha256:
+        "sha256:980c0eec1017a7dbbd9010935107440125070a0b1fa4688bca92754e2bf1e649",
+      runtimeBytecodeKeccak256:
+        "0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554",
+      compiler:
+        "solc 0.8.26, EVM paris, optimizer 1000, viaIR false, metadata bytecodeHash none, appendCBOR false",
+      constructor: "graphFactory",
+      initializer: "bindRoute(address) with one exact route-target locator",
+      reciprocalRoute:
+        "exactly one constructor or initializer locator from that route target back to the vault; settlementFeeVault() behavior remains server-evidence authority",
+    },
+  );
+  const config = baseConfig();
+  assert.equal(validate(config), true, JSON.stringify(validate.errors));
+  config.targets.pop();
+  assert.equal(validate(config), false);
 });
 
 test("published V3 pack-config schema accepts no-funding native and wallet-value modes", () => {
@@ -226,6 +274,14 @@ function baseConfig() {
         targetId: "initializer",
         initializer: { function: "initialize", arguments: [] },
       },
+      {
+        ...target,
+        targetId: "settlement-fee-vault",
+        initializer: {
+          function: "bindRoute",
+          arguments: [{ target: "hook" }],
+        },
+      },
     ],
     pool: {
       tokenTargetId: "token",
@@ -249,6 +305,18 @@ function baseConfig() {
         ],
       },
     },
+    behaviorScenarioInputs: {
+      schemaVersion: "programmable.custom-launch-behavior-scenario-inputs.v1",
+      steps: [{
+        stepId: "reference-swap",
+        phase: "swap",
+        actor: "secondary-user",
+        target: { kind: "runner-harness", harness: "v4-actions-v1" },
+        valueWei: "0",
+        calldata: "0x",
+        hookData: "0x",
+      }],
+    },
     launchProfile: {
       schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",
       profileId: "programmable.direct-native-hook-graph.v1",
@@ -257,7 +325,7 @@ function baseConfig() {
         tokenTargetId: "token",
         hookTargetId: "hook",
         initializerTargetId: "initializer",
-        platformFeeBindingTargetId: "hook",
+        platformFeeBindingTargetId: "settlement-fee-vault",
       },
       liquidityModel: {
         schemaVersion: "programmable.direct-native-liquidity-model-intent.v1",

@@ -21,6 +21,11 @@ Human guide: <https://programmable.market/docs/developers/custom-launch>
 
 Readiness: <https://api.programmable.market/readyz>
 
+The live unauthenticated `GET /v3/finalized-custom-launches` response uses top-level `launches` and required top-level
+`quality`. Quality contains `status` (`complete` or `partial`), `sourceRowCount`, `publishedRowCount`,
+`quarantinedRowCount`, and row-indexed `FINALIZED_ROW_QUARANTINED` diagnostics. A partial page is not a complete
+inventory.
+
 ## Existing-project integration
 
 The API key is scoped API authorization, not an instruction bundle or wallet authority. Start every cold-agent run at
@@ -88,6 +93,17 @@ a project-owned hook, native or ERC-20 quote currency, all fourteen Uniswap v4 p
 `16383`, and an exact multi-contract graph. It does not substitute a Programmable-owned hook. Every enabled v4
 permission must resolve to a concrete reachable callback implementation;
 an interface declaration or fallback-only route does not qualify.
+
+Profile `3.4.0` and CLI `3.3.8` are preparatory, not live. Live/default discovery remains profile `3.3.0` and CLI
+`3.3.7` until backend and `.well-known` activation. Pending `3.4.0` requires 4-16 targets inclusive of the exact
+`programmable:settlement-fee-vault:v1`; applicants cannot select another platform fee target. Its release binding is
+`sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9`, source SHA-256 is
+`sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b`, and creation/runtime Keccak-256 are
+`0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e` and
+`0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554`. The vault uses solc 0.8.26, EVM Paris,
+optimizer 1000 and no CBOR; its constructor binds the GraphFactory and `bindRoute(address)` locates one distinct route.
+Exactly one constructor or initializer locator on that project-owned route points back to the vault. The route may be
+the hook or a custom AMM, while `settlementFeeVault()` and full fee-path behavior remain server-evidence requirements.
 
 The open arbitrary-custom-hook lane does not carry a Programmable fee claim. A 10 bps share applies only when the
 request selects a fee-certified profile or adapter and the API server verifies its per-launch behavior for the exact

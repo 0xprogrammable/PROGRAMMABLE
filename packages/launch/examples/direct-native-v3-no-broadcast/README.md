@@ -1,25 +1,34 @@
 # Direct-native V3 no-broadcast clean room
 
 This packaged fixture compiles real Solidity with exact `solc` 0.8.26, emits the Standard JSON input and selected
-compiler artifacts, then prepares and validates a three-target
-`programmable.direct-native-hook-graph.v1` revision 3 request. The hook target is the exact
+compiler artifacts, then prepares and validates a four-target pending profile `3.4.0`
+`programmable.direct-native-hook-graph.v1` request. The hook target is the exact
 `ProgrammableVolumeFeeHookV2` reference source/build at permission mask `0x20cc`. The initializer uses a static nested
 tuple and the real `receiveWithAuthorization` call shape. The CLI derives and proves v2 ABI paths for the API-derived
-nonce plus `r`/`s`/`v`; the initializer then deliberately reverts so this offline fixture cannot retain or move funds.
+nonce plus `r`/`s`/`v`; the initializer also exposes the reciprocal `settlementFeeVault()` binding. The fourth target
+is the frozen `programmable:settlement-fee-vault:v1` release module, constructed with the GraphFactory and initialized
+with `bindRoute(initializer)`. The initializer then deliberately reverts so this offline fixture cannot retain or move funds.
 
 Passing this fixture proves only local source/build reproduction plus deterministic pack and validation for the exact
-inputs. The embedded profile is the live revision 3 profile with `productionLaunchAuthorized: true`; that flag does
-not turn this deliberately reverting rehearsal initializer into an approved or submitted launch. This fixture is not
+inputs. Profile `3.4.0` and CLI `3.3.8` are preparatory and not live; live/default discovery remains CLI `3.3.7` with
+profile `3.3.0` until backend activation. A serialized `productionLaunchAuthorized: true` profile field does not prove
+that activation and does not turn this deliberately reverting rehearsal initializer or its declarative sample runner
+step into verified behavior, an approved request or a submitted launch. This fixture is not
 admission, deployment, a usable liquidity initializer, a wallet transaction, or a launched coin.
 
 ## Install, build, pack, validate
 
 Use Node.js 24.14 or newer. From a neutral temporary directory, locate a locally installed copy of
-`@programmable/launch`, then copy only this example:
+`@programmable/launch`, then copy the example plus its two frozen release-module inputs:
 
 ```sh
 PACKAGE_ROOT="$(npm root --global)/@programmable/launch"
 cp -R "$PACKAGE_ROOT/examples/direct-native-v3-no-broadcast/project" ./direct-native-v3-clean-room
+mkdir -p ./direct-native-v3-clean-room/release-modules
+cp "$PACKAGE_ROOT/test/fixtures/programmable-settlement-fee-vault-v1.json" \
+  ./direct-native-v3-clean-room/release-modules/
+cp "$PACKAGE_ROOT/test/fixtures/programmable-settlement-fee-vault-v1.standard-json.json" \
+  ./direct-native-v3-clean-room/release-modules/
 cd ./direct-native-v3-clean-room
 npm ci --ignore-scripts --no-audit --no-fund
 ```
@@ -47,9 +56,10 @@ programmable-launch validate launch.json \
   --config programmable-launch.config.json
 ```
 
-`build-and-configure.mjs` fails closed unless the canonical hook, factory, dependency lock, compiler version, and
-compiler settings match the frozen profile. It recursively embeds every imported dependency source into one exact
-Standard JSON compilation unit. The build invokes only `project/node_modules/.bin/solcjs`, installed at exact version
+`build-and-configure.mjs` fails closed unless the canonical hook, factory, settlement-fee-vault descriptor, exact vault
+Standard JSON, dependency lock, compiler version, and compiler settings match the frozen inputs. It recursively embeds
+the project dependencies and compiles the vault's separate frozen Paris/optimizer-1000/no-CBOR unit. The build invokes
+only `project/node_modules/.bin/solcjs`, installed at exact version
 0.8.26 by the frozen project lock; it does not resolve a parent-worktree compiler or a global `solc`. It never accepts
 or writes a derived hash supplied by the operator.
 
@@ -62,7 +72,7 @@ Discord and Telegram remain optional. `npm run build -- --help` lists every boun
 The default market is native ETH against the minted fixture token (`quoteCurrency` is the v4 native zero address),
 with LP fee `3000` and tick spacing `60`. Mainnet USDC is independently fixed as the funding token. Optional public
 environment overrides are documented by `npm run build -- --help`; selected buy/sell totals remain within
-`0..999999`. The live revision 3 profile supports the v4 dynamic-fee sentinel, but this fixed-fee reference fixture
+`0..999999`. The live revision 3.3 profile supports the v4 dynamic-fee sentinel, but this fixed-fee reference fixture
 intentionally does not select it.
 
 Run `pack` promptly after `build`: the generated unsigned funding descriptor uses a fresh, at-most-one-hour validity
@@ -92,7 +102,7 @@ broadcast path in this project.
 
 ## Generated files and boundary
 
-`npm run build` generates `standard-json/direct-native-v3.json`, three compiler artifacts,
+`npm run build` generates two Standard JSON inputs, four compiler artifacts,
 `evidence/rehearsal.json`, and `programmable-launch.config.json`. `pack` adds `launch.json` and its receipt. Generated
 files, local API journal state, and `node_modules` are ignored by Git.
 
