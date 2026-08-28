@@ -1267,6 +1267,13 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
 }
 
 function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
+  const routerStampBoundary = value.routerStamp === undefined
+    ? null
+    : {
+        source: value.routerStamp.source,
+        status: value.routerStamp.status,
+        finalityConfirmations: value.routerStamp.finalityConfirmations,
+      };
   return JSON.stringify({
     source: value.source,
     launchSource: value.launchSource,
@@ -1275,7 +1282,7 @@ function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
     identityCommitment: value.identityCommitment,
     completeness: value.completeness,
     scope: value.scope,
-    routerStamp: value.routerStamp,
+    routerStamp: routerStampBoundary,
     deployment: value.evidence?.deployment ?? null,
     sourceCommit: value.evidence?.sourceCommit ?? null,
   });
