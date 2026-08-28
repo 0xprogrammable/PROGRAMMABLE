@@ -281,6 +281,21 @@ contract MemeLaunchV4Test is Deployers {
         );
     }
 
+    function test_postMintProofRejectsMissingNextTokenIdAdvanceAtomically() public {
+        MemeLaunchV4.LaunchParameters memory parameters = _v4Parameters(bytes32("missing-id-advance"));
+        uint256 fixedNextTokenId = positionManager.nextTokenId();
+        vm.mockCall(
+            address(positionManager),
+            abi.encodeWithSelector(bytes4(keccak256("nextTokenId()"))),
+            abi.encode(fixedNextTokenId)
+        );
+
+        _assertPostMintProofRejects(
+            parameters,
+            abi.encodeWithSelector(MemeLaunchV4.InvalidPositionTokenId.selector, fixedNextTokenId, fixedNextTokenId + 1)
+        );
+    }
+
     function test_postMintProofRejectsWrongPositionPoolAtomically() public {
         MemeLaunchV4.LaunchParameters memory parameters = _v4Parameters(bytes32("wrong-pool"));
         (address predictedToken,) =
