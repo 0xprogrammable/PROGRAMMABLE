@@ -83,6 +83,10 @@ import {
   type BrowserWalletLoginLease,
 } from "../lib/wallet-login-lock";
 import { runWithBrowserWalletRequestLock } from "../lib/wallet-request-lock";
+import {
+  loginConnectedEthereumWalletWithSiwe,
+  selectInjectedEthereumProvider,
+} from "../lib/wallet-siwe-login";
 
 type WalletState = {
   account: `0x${string}`;
@@ -1000,6 +1004,7 @@ function PrivyWalletBridge({
     useIdentityToken,
     useLinkAccount,
     useLogin,
+    useLoginWithSiwe,
     useOAuthTokens,
     usePrivy,
     useSendTransaction: usePrivySendTransaction,
@@ -1073,6 +1078,7 @@ function PrivyWalletBridge({
       setDialogOpen(true);
     },
   });
+  const { generateSiweMessage, loginWithSiwe } = useLoginWithSiwe();
   const { linkGithub, linkWallet } = useLinkAccount({
     onSuccess: () => {
       applicantRefreshUserGate.invalidate();
@@ -1329,7 +1335,7 @@ function PrivyWalletBridge({
     }
 
     void acquireBrowserWalletLoginLease()
-      .then((lease) => {
+      .then(async (lease) => {
         if (!walletLoginAttemptGateRef.current.isPending()) {
           lease.release();
           return;
@@ -1337,6 +1343,28 @@ function PrivyWalletBridge({
         walletLoginLeaseRef.current = lease;
 
         try {
+          if (window.location.pathname === "/ops/classic-v4-canary") {
+            const provider = selectInjectedEthereumProvider(
+              (window as typeof window & { ethereum?: unknown }).ethereum,
+            );
+            if (
+              provider
+              && await loginConnectedEthereumWalletWithSiwe({
+                provider,
+                generateSiweMessage,
+                loginWithSiwe,
+              })
+            ) {
+              settleWalletLoginAttempt();
+              applicantRefreshUserGate.invalidate();
+              setSessionSuppressed(false);
+              setError("");
+              setWalletLoginStatus("");
+              setDialogOpen(false);
+              return;
+            }
+          }
+
           login({
             loginMethods: ["wallet", "email"],
             walletChainType: "ethereum-only",
@@ -1359,7 +1387,14 @@ function PrivyWalletBridge({
         }
         setDialogOpen(true);
       });
-  }, [login, ready, settleWalletLoginAttempt]);
+  }, [
+    applicantRefreshUserGate,
+    generateSiweMessage,
+    login,
+    loginWithSiwe,
+    ready,
+    settleWalletLoginAttempt,
+  ]);
 
   useEffect(() => () => {
     walletLoginAttemptGateRef.current.settle();
