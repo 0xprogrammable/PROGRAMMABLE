@@ -1150,6 +1150,7 @@ function upgradeFixture() {
     to: null,
     nonce: "0x15f",
     value: "0x0",
+    gas: `0x${BigInt(plan.transaction.gasLimit).toString(16)}`,
     input: plan.transaction.data,
     blockNumber: "0x" + blockNumber.toString(16),
     blockHash,

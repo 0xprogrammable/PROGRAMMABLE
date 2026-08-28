@@ -389,6 +389,7 @@ function validateUpgradeParent(
       "releaseCommit",
       "releaseTree",
       "sourceCommitment",
+      "releaseSourceDigest",
       "sourceClosureDigest",
       "sourcePinsDigest",
       "deployer",
@@ -506,6 +507,17 @@ function validateUpgradeParent(
         plan.releaseCommit.toLowerCase() &&
       gitObject(plan.releaseTree, "launcher upgrade release tree") ===
         plan.releaseTree.toLowerCase() &&
+      sameHex(
+        plan.releaseSourceDigest,
+        digestJson(
+          {
+            releaseCommit: plan.releaseCommit,
+            releaseTree: plan.releaseTree,
+            sourceCommitment: plan.sourceCommitment,
+          },
+          CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.releaseSource,
+        ),
+      ) &&
       Number.isSafeInteger(plan.observedAtBlock) &&
       plan.observedAtBlock > baseDeployment.verificationBlock &&
       nonzeroHash(
