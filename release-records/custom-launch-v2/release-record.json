@@ -1,6 +1,6 @@
 {
   "schemaVersion": "programmable.custom-launch-release-record.v2",
-  "recordStatus": "candidate_verified",
+  "recordStatus": "promotion_approved",
   "createdAt": "2026-08-28T19:44:52Z",
   "releaseIntent": {
     "releaseId": "custom-launch-api-v3-20260828-001",
@@ -150,13 +150,13 @@
   },
   "promotionApproval": {
     "authority": "release_owner",
-    "status": "pending",
-    "decisionId": null,
-    "immutableReference": null,
-    "decidedAt": null,
-    "statementSha256": null,
-    "releaseSubjectSha256": null,
-    "candidateEvidenceSha256": null
+    "status": "approved",
+    "decisionId": "custom-launch-v3-promotion-approval-20260828t203303z",
+    "immutableReference": "codex-task://01a049b7-27ea-7540-af46-e3c2f61abb6e",
+    "decidedAt": "2026-08-28T20:33:03Z",
+    "statementSha256": "sha256:6f4212d1f05aa3e95749e3c4842f57ea5c202d9c23befaa4274e2258fd554199",
+    "releaseSubjectSha256": "sha256:1a8dc18d09eb29bf0d2563d79a0aef0717532048b72263f10bc11613b2853fe0",
+    "candidateEvidenceSha256": "sha256:8044ff4fb4294852cb13077665c5923116fdf8d6cfd583320fd6db0c6784616c"
   },
   "promoted": {
     "websiteDeploymentId": null,
