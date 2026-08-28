@@ -15,6 +15,7 @@ import {
 
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
+  CLASSIC_V4_FINALITY_CONFIRMATIONS,
   CLASSIC_V4_LIFECYCLE_ACTIONS,
   digestJson,
   expectedLifecycleLaunchCalldata,
@@ -57,6 +58,10 @@ const PREPARED_OPTIONAL_FIELDS = Object.freeze([
   "swap",
   "allowance",
   "authorization",
+]);
+const PREPARED_OPTIONAL_SCALAR_FIELDS = Object.freeze([
+  "executionBlockNumber",
+  "executionBlockHash",
 ]);
 const AUXILIARY_ACTIONS = Object.freeze([
   "tokenApproval:sellExactInput",
@@ -259,7 +264,8 @@ function validatePreparedAction(canaryPlan, candidate) {
     PREPARED_REQUIRED_FIELDS.every((key) => actualKeys.includes(key)) &&
       actualKeys.every((key) =>
         PREPARED_REQUIRED_FIELDS.includes(key) ||
-        PREPARED_OPTIONAL_FIELDS.includes(key)
+        PREPARED_OPTIONAL_FIELDS.includes(key) ||
+        PREPARED_OPTIONAL_SCALAR_FIELDS.includes(key)
       ),
     "Prepared action fields differ",
   );
@@ -337,6 +343,30 @@ function validatePreparedAction(canaryPlan, candidate) {
     ),
     "Prepared block hash is not canonical",
   );
+  const hasExecutionBlockNumber = Object.hasOwn(
+    candidate,
+    "executionBlockNumber",
+  );
+  const hasExecutionBlockHash = Object.hasOwn(candidate, "executionBlockHash");
+  assert(
+    hasExecutionBlockNumber === hasExecutionBlockHash,
+    "Prepared execution block fields differ",
+  );
+  if (hasExecutionBlockNumber) {
+    assert(
+      Number.isSafeInteger(candidate.executionBlockNumber) &&
+        candidate.executionBlockNumber === candidate.preparedAtBlock +
+          CLASSIC_V4_FINALITY_CONFIRMATIONS - 1,
+      "Prepared execution block is invalid",
+    );
+    assert(
+      candidate.executionBlockHash === hash(
+        candidate.executionBlockHash,
+        "Prepared execution block hash",
+      ),
+      "Prepared execution block hash is not canonical",
+    );
+  }
   assert(
     candidate.preparedDigest === hash(candidate.preparedDigest, "Prepared digest"),
     "Prepared digest is not canonical",
@@ -527,9 +557,13 @@ function validatePreparedSwapBinding(canaryPlan, candidate, request, value) {
       }` &&
       Number.isSafeInteger(quote.blockNumber) &&
       quote.blockNumber > 0 &&
-      quote.blockNumber === candidate.preparedAtBlock &&
+      quote.blockNumber === (
+        candidate.executionBlockNumber ?? candidate.preparedAtBlock
+      ) &&
       quote.blockHash === hash(quote.blockHash, "Prepared quote block hash") &&
-      quote.blockHash === candidate.preparedAtBlockHash &&
+      quote.blockHash === (
+        candidate.executionBlockHash ?? candidate.preparedAtBlockHash
+      ) &&
       Number.isSafeInteger(quote.slippageBps) &&
       quote.slippageBps === canaryPlan.swapFixture.slippageBps &&
       exactAmount === expectedExactAmount &&
@@ -1228,6 +1262,7 @@ export function buildClassicV4SwapPrepared({
   quoteBlockNumber,
   quoteBlockHash,
   quoteBlockTimestamp,
+  enforceHardMaximum = true,
 }) {
   const swap = classicV4SwapIdentity(action);
   const fixture = canaryPlan.swapFixture[action];
@@ -1238,7 +1273,7 @@ export function buildClassicV4SwapPrepared({
     { positive: true },
   );
   const bound = classicV4QuoteBound(swap.exactness, quotedAmount);
-  if (!exactInput) {
+  if (!exactInput && enforceHardMaximum) {
     assert(
       bound <= decimal(fixture.hardMaximumAmountIn, `${action} hard maximum`, {
         positive: true,
@@ -1866,6 +1901,15 @@ export function sealClassicV4PreparedAction(canaryPlan, prepared, envelope) {
     ).toString(),
     preparedAtBlock: Number(envelope.preparedAtBlock),
     preparedAtBlockHash: hash(envelope.preparedAtBlockHash, "Preparation block hash"),
+    ...(envelope.executionBlockNumber == null
+      ? {}
+      : {
+          executionBlockNumber: Number(envelope.executionBlockNumber),
+          executionBlockHash: hash(
+            envelope.executionBlockHash,
+            "Execution block hash",
+          ),
+        }),
     ...(prepared.quote ? { quote: prepared.quote } : {}),
     ...(prepared.swap ? { swap: prepared.swap } : {}),
     ...(prepared.allowance ? { allowance: prepared.allowance } : {}),

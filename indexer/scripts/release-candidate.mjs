@@ -11,7 +11,7 @@ import { parse } from "yaml";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
-} from "../../scripts/classic-v4-digest.mjs";
+} from "./classic-v4-digest.mjs";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const INDEXER_ROOT = path.resolve(path.dirname(SCRIPT_PATH), "..");
@@ -43,6 +43,16 @@ const STOCK_COORDINATOR_SOURCES = Object.freeze({
   "stock-paired-v2": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
   "stock-paired-v3": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
 });
+const LIVE_ENVIO_SURFACE_REFERENCE = Object.freeze({
+  relativePath: "live-production-92f6373.config.yaml",
+  deployment: "production-92f6373",
+  sourceCommit: "92f63731ff0a61601a649cf40ceba3e492f63c62",
+  configSha256:
+    "0x133099a107e8d9c91aea1f0e811dbcc179fae8cf35919e612df7139deab3ee6a",
+  eventSetSha256:
+    "0xe5a88608068d4c84582cc63de55cbf386fa7f36b201722a39164eb4af61de95f",
+  eventCount: 66,
+});
 const BASE_CHAIN_CONTRACTS = Object.freeze([
   "ClassicV2Hook",
   "ClassicV2Launcher",
@@ -51,6 +61,9 @@ const BASE_CHAIN_CONTRACTS = Object.freeze([
   "ClassicV3RewardVault",
   "ClassicV3RewardVaultFactory",
   "ClassicV3VestingWalletFactory",
+  "CustomAtomicRegistrarV1",
+  "CustomPartnerFactoryRegistryV1",
+  "CustomRegistryV1",
   "StockV1EthCoordinator",
   "StockV1Hook",
   "StockV1Launcher",
@@ -323,6 +336,98 @@ function exactNames(label, names, expectedNames) {
   }
 }
 
+function configEventSurface(config, label) {
+  if (!Array.isArray(config?.contracts)) {
+    throw new Error(`${label} has no contract event surface`);
+  }
+  const events = [];
+  const contractEvents = [];
+  for (const contract of config.contracts) {
+    if (
+      typeof contract?.name !== "string" ||
+      !Array.isArray(contract.events) ||
+      contract.events.length === 0
+    ) {
+      throw new Error(`${label} has an invalid contract event surface`);
+    }
+    const local = new Set();
+    for (const declaration of contract.events) {
+      const event = declaration?.event;
+      if (typeof event !== "string" || event.length === 0 || event.trim() !== event) {
+        throw new Error(`${label} has an invalid event signature`);
+      }
+      if (local.has(event)) {
+        throw new Error(`${label} repeats an event signature for ${contract.name}`);
+      }
+      local.add(event);
+      events.push(event);
+      contractEvents.push(`${contract.name}\u0000${event}`);
+    }
+  }
+  return Object.freeze({ events, contractEvents });
+}
+
+function parseLiveEnvioSurfaceReference(referenceBytes) {
+  if (sha256(referenceBytes) !== LIVE_ENVIO_SURFACE_REFERENCE.configSha256) {
+    throw new Error("live Envio surface reference digest is invalid");
+  }
+  const reference = parse(referenceBytes.toString("utf8"));
+  if (
+    !Array.isArray(reference?.chains) ||
+    reference.chains.length !== 1 ||
+    reference.chains[0]?.id !== 1 ||
+    !Array.isArray(reference.chains[0]?.contracts)
+  ) {
+    throw new Error("live Envio surface reference is invalid");
+  }
+  const surface = configEventSurface(reference, "live Envio surface reference");
+  const eventSet = Buffer.from(
+    `${[...surface.events].sort(compareUtf8).join("\n")}\n`,
+    "utf8",
+  );
+  if (
+    surface.events.length !== LIVE_ENVIO_SURFACE_REFERENCE.eventCount ||
+    sha256(eventSet) !== LIVE_ENVIO_SURFACE_REFERENCE.eventSetSha256
+  ) {
+    throw new Error("live Envio event-set reference is invalid");
+  }
+  return Object.freeze({ config: reference, surface });
+}
+
+function assertLiveEnvioSurfaceSuperset(candidate, referenceInput) {
+  const reference = referenceInput.config ?? referenceInput;
+  const referenceSurface = referenceInput.surface ??
+    configEventSurface(reference, "live Envio surface reference");
+  const candidateSurface = configEventSurface(candidate, "candidate Envio config");
+  const candidateContractEvents = new Set(candidateSurface.contractEvents);
+  for (const required of referenceSurface.contractEvents) {
+    if (!candidateContractEvents.has(required)) {
+      const separator = required.indexOf("\u0000");
+      throw new Error(
+        `candidate must preserve live ${required.slice(0, separator)} event ${required.slice(separator + 1)}`,
+      );
+    }
+  }
+
+  const candidateSources = candidate.chains?.[0]?.contracts;
+  if (!Array.isArray(candidateSources)) {
+    throw new Error("candidate must preserve the live Envio source surface");
+  }
+  for (const required of reference.chains[0].contracts) {
+    const matches = candidateSources.filter(({ name }) => name === required.name);
+    if (
+      matches.length !== 1 ||
+      (required.address !== undefined && matches[0]?.address !== required.address)
+    ) {
+      throw new Error(`candidate must preserve live ${required.name} source`);
+    }
+  }
+  return Object.freeze({
+    requiredEventCount: referenceSurface.events.length,
+    candidateEventCount: candidateSurface.events.length,
+  });
+}
+
 function exactChainContractScope(contracts) {
   if (!Array.isArray(contracts)) {
     throw new Error("chain registry must be the exact reviewed contract scope");
@@ -335,10 +440,12 @@ function exactChainContractScope(contracts) {
     sorted.length === expected.length &&
     new Set(sorted).size === sorted.length &&
     sorted.every((name, index) => name === expected[index]);
-  if (matches(baseline)) return false;
-  if (!matches(activated)) {
+  const isBaseline = matches(baseline);
+  const isActivated = matches(activated);
+  if (!isBaseline && !isActivated) {
     throw new Error("chain registry must be the exact reviewed contract scope");
   }
+  if (isBaseline) return false;
   for (const contractName of ["ClassicV4Hook", "ClassicV4Launcher"]) {
     const source = contracts.find((entry) => entry?.name === contractName);
     exactAddress(source?.address, `${contractName} chain address`);
@@ -346,7 +453,7 @@ function exactChainContractScope(contracts) {
   return true;
 }
 
-function validatedConfig(configBytes) {
+function validatedConfig(configBytes, liveSurfaceReferenceBytes) {
   const config = parse(configBytes.toString("utf8"));
   if (!Array.isArray(config?.contracts) || !Array.isArray(config?.chains)) {
     throw new Error("config.yaml is missing the reviewed contract registry");
@@ -364,6 +471,10 @@ function validatedConfig(configBytes) {
     config.contracts.map((entry) => entry?.name),
     EXPECTED_ABI_CONTRACTS,
   );
+  assertLiveEnvioSurfaceSuperset(
+    config,
+    parseLiveEnvioSurfaceReference(liveSurfaceReferenceBytes),
+  );
   const classicV4Activated = exactChainContractScope(
     config.chains[0].contracts,
   );
@@ -373,6 +484,7 @@ function validatedConfig(configBytes) {
 function validatedLocalConfig(sourceCommit) {
   return validatedConfig(
     localArtifactBytes(sourceCommit, ARTIFACTS.configSha256),
+    localArtifactBytes(sourceCommit, LIVE_ENVIO_SURFACE_REFERENCE.relativePath),
   );
 }
 
@@ -383,6 +495,7 @@ function workingTreeArtifactBytes(relativePath) {
 function workingTreeClassicV4Activated() {
   return validatedConfig(
     workingTreeArtifactBytes(ARTIFACTS.configSha256),
+    workingTreeArtifactBytes(LIVE_ENVIO_SURFACE_REFERENCE.relativePath),
   ).classicV4Activated;
 }
 
@@ -410,7 +523,10 @@ function localArtifactBytes(sourceCommit, relativePath) {
 function identityFromArtifactReader(sourceCommitInput, readArtifact) {
   const sourceCommit = exactCommit(sourceCommitInput);
   const configBytes = readArtifact(ARTIFACTS.configSha256);
-  const { config } = validatedConfig(configBytes);
+  const { config } = validatedConfig(
+    configBytes,
+    readArtifact(LIVE_ENVIO_SURFACE_REFERENCE.relativePath),
+  );
 
   const events = [];
   for (const contract of config.contracts) {
@@ -560,7 +676,8 @@ function parseAuditReleaseBinding(value, endpoint, expectedIdentity) {
 }
 
 function parseArgs(argv) {
-  const [command, ...rest] = argv;
+  const [command, ...rawRest] = argv;
+  const rest = rawRest[0] === "--" ? rawRest.slice(1) : rawRest;
   if (rest.length % 2 !== 0) throw new Error("every option requires one value");
   const values = {};
   for (let index = 0; index < rest.length; index += 2) {
@@ -1600,14 +1717,17 @@ export {
   IDENTITY_KEYS,
   INVENTORY_QUERY,
   LAUNCH_FIELDS,
+  LIVE_ENVIO_SURFACE_REFERENCE,
   STABLE_LAUNCH_FIELDS,
   assertFrozenBaseline,
+  assertLiveEnvioSurfaceSuperset,
   auditCandidate,
   auditWorkingTreeCandidate,
   endpointIdFromUrl,
   localIdentity,
   parseBaseline,
   parseCandidateIdentity,
+  parseLiveEnvioSurfaceReference,
   parseReleaseAuditArtifact,
   releaseBindingDigest,
   snapshotBaseline,

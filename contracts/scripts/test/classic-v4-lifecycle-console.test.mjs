@@ -38,6 +38,8 @@ import {
   classicV4ExecutionLauncherAbi,
 } from "../../../scripts/classic-v4-lifecycle-console-core.mjs";
 import {
+  classicV4SimulationRequest,
+  classicV4SellApprovalAmount,
   parseClassicV4LifecycleConsoleArguments,
 } from
   "../../../scripts/serve-classic-v4-lifecycle-canary.mjs";
@@ -279,9 +281,99 @@ test("Classic V4 console binds all four dynamic quote quadrants", () => {
     assert.equal(decoded.args[0], commands);
     assert.equal(decoded.args[2], 2_000_000_300n);
   }
+
+  const oversizedExactOutput = {
+    canaryPlan: plan,
+    identity,
+    action: "buyExactOutput",
+    quotedAmount: 100_000n,
+    quoteGasEstimate: 123_456n,
+    quoteBlockNumber: 123,
+    quoteBlockHash: hash("a"),
+    quoteBlockTimestamp: 2_000_000_000n,
+  };
+  assert.throws(
+    () => buildClassicV4SwapPrepared(oversizedExactOutput),
+    /exceeds its hard maximum input/u,
+  );
+  assert.equal(
+    buildClassicV4SwapPrepared({
+      ...oversizedExactOutput,
+      enforceHardMaximum: false,
+    }).swap.inputBound,
+    "101000",
+  );
+});
+
+test("Classic V4 swap review separates the stable anchor from the fresh quote", () => {
+  const fresh = prepareSwap("buyExactOutput");
+  const prepared = sealClassicV4PreparedAction(
+    plan,
+    fresh,
+    {
+      nonce: 7,
+      gasLimit: 120_000,
+      maxFeePerGas: 20,
+      maxPriorityFeePerGas: 2,
+      preparedAtBlock: 112,
+      preparedAtBlockHash: hash("b"),
+      executionBlockNumber: 123,
+      executionBlockHash: hash("a"),
+    },
+  );
+  assert.equal(
+    validateClassicV4PreparedAction(plan, prepared, identity).preparedDigest,
+    prepared.preparedDigest,
+  );
+  assert.throws(
+    () => sealClassicV4PreparedAction(
+      plan,
+      fresh,
+      {
+        nonce: 7,
+        gasLimit: 120_000,
+        maxFeePerGas: 20,
+        maxPriorityFeePerGas: 2,
+        preparedAtBlock: 113,
+        preparedAtBlockHash: hash("b"),
+        executionBlockNumber: 123,
+        executionBlockHash: hash("a"),
+      },
+    ),
+    /Prepared execution block is invalid/u,
+  );
+});
+
+test("Classic V4 revalidation sanitizes only the eth_call request", () => {
+  const exactRequest = Object.freeze({
+    from: operator,
+    to: launchRouter,
+    value: "0x1",
+    data: launchCalldata,
+    nonce: "0x7",
+    gas: "0x186a0",
+    maxFeePerGas: "0x14",
+    maxPriorityFeePerGas: "0x2",
+  });
+  const unchangedExactRequest = structuredClone(exactRequest);
+
+  assert.deepEqual(classicV4SimulationRequest(exactRequest), {
+    from: operator,
+    to: launchRouter,
+    value: "0x1",
+    data: launchCalldata,
+    gas: "0x186a0",
+  });
+  assert.deepEqual(exactRequest, unchangedExactRequest);
 });
 
 test("Classic V4 console creates bounded sell approvals and exact claim calls", () => {
+  assert.equal(classicV4SellApprovalAmount(plan, "sellExactInput"), 3_000n);
+  assert.equal(classicV4SellApprovalAmount(plan, "sellExactOutput"), 100_000n);
+  assert.throws(
+    () => classicV4SellApprovalAmount(plan, "buyExactInput"),
+    /not a sell/u,
+  );
   const tokenApproval = buildClassicV4TokenApprovalPrepared({
     canaryPlan: plan,
     identity,
@@ -737,6 +829,21 @@ test("Classic V4 console CLI is dry by default and rejects signing material", ()
   ]);
   assert.equal(parsed.write, false);
   assert.equal(parsed.journalOutput, null);
+  assert.equal(parsed.reviewedReleaseWorktree, null);
+  const reviewed = parseClassicV4LifecycleConsoleArguments([
+    "--plan", "/tmp/plan.json",
+    "--deployment-evidence", "/tmp/deployment.json",
+    "--source-evidence", "/tmp/source.json",
+    "--canary-plan", "/tmp/canary.json",
+    "--reviewed-release-worktree", "/tmp/reviewed-release",
+    "--rpc-a", "https://rpc-a.example",
+    "--rpc-b", "https://rpc-b.example",
+    "--wallet", operator,
+  ]);
+  assert.equal(
+    reviewed.reviewedReleaseWorktree,
+    "/tmp/reviewed-release",
+  );
   assert.throws(
     () => parseClassicV4LifecycleConsoleArguments(["--private-key", hash("1")]),
     /forbidden/u,
@@ -746,5 +853,18 @@ test("Classic V4 console CLI is dry by default and rejects signing material", ()
       "--plan", "relative.json",
     ]),
     /absolute/u,
+  );
+  assert.throws(
+    () => parseClassicV4LifecycleConsoleArguments([
+      "--plan", "/tmp/plan.json",
+      "--deployment-evidence", "/tmp/deployment.json",
+      "--source-evidence", "/tmp/source.json",
+      "--canary-plan", "/tmp/canary.json",
+      "--reviewed-release-worktree", "relative/release",
+      "--rpc-a", "https://rpc-a.example",
+      "--rpc-b", "https://rpc-b.example",
+      "--wallet", operator,
+    ]),
+    /reviewed release worktree path must be absolute/u,
   );
 });

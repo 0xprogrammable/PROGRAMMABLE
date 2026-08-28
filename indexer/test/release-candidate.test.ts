@@ -1,13 +1,15 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 import baseReleaseBinding from "../../config/data-pipeline-release.v1.json";
 
 // The release gate is deliberately a standalone Node script rather than indexer runtime code.
 // @ts-expect-error The checked-in mjs script has no declaration file by design.
-import { IDENTITY_KEYS, INVENTORY_QUERY, LAUNCH_FIELDS, STABLE_LAUNCH_FIELDS, assertFrozenBaseline, auditWorkingTreeCandidate, endpointIdFromUrl, parseBaseline, parseCandidateIdentity, parseReleaseAuditArtifact, releaseBindingDigest, snapshotBaseline, workingTreeIdentity } from "../scripts/release-candidate.mjs";
+import { IDENTITY_KEYS, INVENTORY_QUERY, LAUNCH_FIELDS, LIVE_ENVIO_SURFACE_REFERENCE, STABLE_LAUNCH_FIELDS, assertFrozenBaseline, assertLiveEnvioSurfaceSuperset, auditWorkingTreeCandidate, endpointIdFromUrl, parseBaseline, parseCandidateIdentity, parseLiveEnvioSurfaceReference, parseReleaseAuditArtifact, releaseBindingDigest, snapshotBaseline, workingTreeIdentity } from "../scripts/release-candidate.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const REPOSITORY_ROOT = path.resolve(ROOT, "..");
@@ -169,6 +171,18 @@ function fixtureFetcher(options: FixtureOptions = {}) {
   return { fetcher, anchors, inventoryReads: () => inventoryReads };
 }
 
+function candidateFixture(options: FixtureOptions = {}) {
+  const sourceRows = options.rows ?? rows();
+  const candidateRows = sourceRows.some(
+    ({ releaseVersion }) => releaseVersion === "classic-v4",
+  )
+    ? sourceRows
+    : [...sourceRows, launchRow("classic-v4", 9)].sort((left, right) =>
+        String(left.id).localeCompare(String(right.id)),
+      );
+  return fixtureFetcher({ ...options, rows: candidateRows });
+}
+
 async function baseline(fixtureRows = rows()) {
   const fixture = fixtureFetcher({ rows: fixtureRows });
   return snapshotBaseline(BASELINE_ENDPOINT, fixture.fetcher, () => new Date(CAPTURED_AT));
@@ -229,7 +243,7 @@ function releaseBinding(identity: JsonRecord, includeClassicV4 = false): JsonRec
 
 async function auditCandidate(input: Record<string, unknown>) {
   return auditWorkingTreeCandidate({
-    releaseBinding: releaseBinding(input.expectedIdentity as JsonRecord),
+    releaseBinding: releaseBinding(input.expectedIdentity as JsonRecord, true),
     ...input,
   });
 }
@@ -263,16 +277,16 @@ describe("Envio release candidate identity", () => {
       deployment: `production-${SOURCE_COMMIT.slice(0, 7)}`,
       sourceCommit: SOURCE_COMMIT,
       configSha256:
-        "0x0286e176b7e8f9baf49a6751390abb6ca97c246e717d00fda34dbe023830d2a6",
+        "0xb2d34d55b7d733452b011c5030ad773e9cafd0fd3d18364f2de5699e02fd7a43",
       schemaSha256:
         "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
       handlerSha256:
-        "0x3249c4d6e733e271ce1cd9a9407a1e3881fa79491500143b08e77c1d7e5e1fdf",
+        "0x4b6299cddeffaa900bcd7da8428bb715b65c6289d662e908c20f27ef483329fc",
       sourceRegistrySha256:
-        "0x98d6a49f606f198340f1938127744ee5d12b786e0d1b7cd1e31a1b1b4a713ef0",
+        "0xfcb55c4aab63ae77d483b59f068f4ef152aa479bf5e8a9f1ec630b8392c28bd9",
       eventSetSha256:
-        "0x79bd6a7e9c4e4c76141ff72dd1a295b32c8115d85cd6826c7c9a403a4ed3c63f",
-      eventCount: 60,
+        "0x932d5f9f56fd1baaa9d78188dc071f8937c653785a673f2019c11c3bc8a5b7c7",
+      eventCount: 75,
     });
   });
 
@@ -300,6 +314,35 @@ describe("Envio release candidate identity", () => {
     expect(() =>
       parseCandidateIdentity({ ...identity, handlerSha256: String(identity.handlerSha256).toUpperCase() }),
     ).toThrow(/invalid/u);
+  });
+
+  it("requires a semantic superset of the frozen live Envio surface", () => {
+    const reference = parseLiveEnvioSurfaceReference(
+      readFileSync(path.join(ROOT, LIVE_ENVIO_SURFACE_REFERENCE.relativePath)),
+    );
+    const candidate = parse(readFileSync(path.join(ROOT, "config.yaml"), "utf8"));
+    expect(assertLiveEnvioSurfaceSuperset(candidate, reference)).toEqual({
+      requiredEventCount: 66,
+      candidateEventCount: 75,
+    });
+
+    const missingEvent = structuredClone(candidate);
+    const customRegistry = missingEvent.contracts.find(
+      ({ name }: JsonRecord) => name === "CustomRegistryV1",
+    );
+    customRegistry.events.pop();
+    expect(() => assertLiveEnvioSurfaceSuperset(missingEvent, reference)).toThrow(
+      /must preserve live CustomRegistryV1 event/u,
+    );
+
+    const driftedSource = structuredClone(candidate);
+    const partnerFactory = driftedSource.chains[0].contracts.find(
+      ({ name }: JsonRecord) => name === "CustomPartnerFactoryRegistryV1",
+    );
+    partnerFactory.address = hex(20, 9_999);
+    expect(() => assertLiveEnvioSurfaceSuperset(driftedSource, reference)).toThrow(
+      /must preserve live CustomPartnerFactoryRegistryV1 source/u,
+    );
   });
 });
 
@@ -451,7 +494,7 @@ describe("Envio candidate audit", () => {
   it("corroborates control-plane, endpoint, reviewed runtime and baseline evidence", async () => {
     const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     const frozenBaseline = await baseline();
-    const firstFixture = fixtureFetcher({ identity, progressBlock: 1_100 });
+    const firstFixture = candidateFixture({ identity, progressBlock: 1_100 });
     const first = await auditCandidate({
       endpoint: CANDIDATE_ENDPOINT,
       expectedIdentity: identity,
@@ -461,7 +504,7 @@ describe("Envio candidate audit", () => {
       fetcher: firstFixture.fetcher,
       now: () => new Date(CAPTURED_AT),
     });
-    const secondFixture = fixtureFetcher({ identity, progressBlock: 1_100 });
+    const secondFixture = candidateFixture({ identity, progressBlock: 1_100 });
     const second = await auditCandidate({
       endpoint: CANDIDATE_ENDPOINT,
       expectedIdentity: identity,
@@ -482,11 +525,11 @@ describe("Envio candidate audit", () => {
       endpointId: "cand001",
     });
     expect(first.identity).toEqual(identity);
-    expect(first.releaseBinding).toEqual(releaseBinding(identity));
+    expect(first.releaseBinding).toEqual(releaseBinding(identity, true));
     expect(first.releaseBindingDigest).toBe(
-      releaseBindingDigest(releaseBinding(identity)),
+      releaseBindingDigest(releaseBinding(identity, true)),
     );
-    expect(first.classicV4Activated).toBe(false);
+    expect(first.classicV4Activated).toBe(true);
     expect(first.baseline.digest).toBe(frozenBaseline.digest);
     expect(first.anchor.progressBlock).toBe("1100");
     expect(first.inventory.sha256).toMatch(/^0x[0-9a-f]{64}$/u);
@@ -570,7 +613,7 @@ describe("Envio candidate audit", () => {
       baseline: await baseline(frozenRows),
       sourceCommit: SOURCE_COMMIT,
       deployment: deployment(identity),
-      fetcher: fixtureFetcher({
+      fetcher: candidateFixture({
         identity,
         rows: candidateRows,
         progressBlock: 1_100,
@@ -596,7 +639,7 @@ describe("Envio candidate audit", () => {
         baseline: await baseline(),
         sourceCommit: SOURCE_COMMIT,
         deployment: deployment(identity),
-        fetcher: fixtureFetcher({ identity, progressBlock: 1_100 }).fetcher,
+        fetcher: candidateFixture({ identity, progressBlock: 1_100 }).fetcher,
       }),
     ).rejects.toThrow(/reviewed checkout identity mismatch/u);
   });
@@ -614,7 +657,7 @@ describe("Envio candidate audit", () => {
         ...common,
         endpoint: CANDIDATE_ENDPOINT,
         deployment: { ...deployment(identity), "deployment-endpoint-id": "other01" },
-        fetcher: fixtureFetcher({ identity, progressBlock: 1_100 }).fetcher,
+        fetcher: candidateFixture({ identity, progressBlock: 1_100 }).fetcher,
       }),
     ).rejects.toThrow(/reviewed Envio/u);
     await expect(
@@ -622,7 +665,7 @@ describe("Envio candidate audit", () => {
         ...common,
         endpoint: CANDIDATE_ENDPOINT,
         deployment: { ...deployment(identity), "deployment-label": "production-substitute" },
-        fetcher: fixtureFetcher({ identity, progressBlock: 1_100 }).fetcher,
+        fetcher: candidateFixture({ identity, progressBlock: 1_100 }).fetcher,
       }),
     ).rejects.toThrow(/does not match candidate identity/u);
     await expect(
@@ -630,7 +673,7 @@ describe("Envio candidate audit", () => {
         ...common,
         endpoint: CANDIDATE_ENDPOINT,
         deployment: { ...deployment(identity), "mirror-commit": "HEAD" },
-        fetcher: fixtureFetcher({ identity, progressBlock: 1_100 }).fetcher,
+        fetcher: candidateFixture({ identity, progressBlock: 1_100 }).fetcher,
       }),
     ).rejects.toThrow(/mirror commit is invalid/u);
     await expect(
@@ -638,7 +681,7 @@ describe("Envio candidate audit", () => {
         ...common,
         endpoint: CANDIDATE_ENDPOINT,
         deployment: deployment(identity),
-        fetcher: fixtureFetcher({
+        fetcher: candidateFixture({
           identity: { ...identity, eventSetSha256: hex(32, 123) },
           progressBlock: 1_100,
         }).fetcher,
@@ -655,7 +698,7 @@ describe("Envio candidate audit", () => {
         baseline: await baseline(),
         sourceCommit: SOURCE_COMMIT,
         deployment: deployment(identity),
-        fetcher: fixtureFetcher({ identity, progressBlock: 999 }).fetcher,
+        fetcher: candidateFixture({ identity, progressBlock: 999 }).fetcher,
       }),
     ).rejects.toThrow(/has not reached/u);
   });
@@ -672,7 +715,7 @@ describe("Envio candidate audit", () => {
         baseline: frozenBaseline,
         sourceCommit: SOURCE_COMMIT,
         deployment: deployment(identity),
-        fetcher: fixtureFetcher({ identity, rows: changed, progressBlock: 1_100 }).fetcher,
+        fetcher: candidateFixture({ identity, rows: changed, progressBlock: 1_100 }).fetcher,
       }),
     ).rejects.toThrow(/changed frozen launch .* at totalSupply/u);
   });

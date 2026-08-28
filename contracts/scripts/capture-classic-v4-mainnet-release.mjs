@@ -44,7 +44,7 @@ function fail(message) {
   throw new Error(message);
 }
 
-function parseArguments(argv) {
+export function parseClassicV4CaptureArguments(argv) {
   const forbidden = argv.find(
     (argument) =>
       argument === "--broadcast" ||
@@ -65,6 +65,7 @@ function parseArguments(argv) {
     canaryPlan: null,
     transactions: null,
     lifecycleEvidence: null,
+    reviewedReleaseWorktree: null,
     verificationBlock: null,
     rpcA: null,
     rpcB: null,
@@ -89,6 +90,7 @@ function parseArguments(argv) {
       "--canary-plan",
       "--transactions",
       "--lifecycle-evidence",
+      "--reviewed-release-worktree",
       "--verification-block",
       "--rpc-a",
       "--rpc-b",
@@ -105,6 +107,9 @@ function parseArguments(argv) {
     if (key === "--canary-plan") parsed.canaryPlan = value;
     if (key === "--transactions") parsed.transactions = value;
     if (key === "--lifecycle-evidence") parsed.lifecycleEvidence = value;
+    if (key === "--reviewed-release-worktree") {
+      parsed.reviewedReleaseWorktree = value;
+    }
     if (key === "--verification-block") parsed.verificationBlock = Number(value);
     if (key === "--rpc-a") parsed.rpcA = value;
     if (key === "--rpc-b") parsed.rpcB = value;
@@ -127,6 +132,12 @@ function parseArguments(argv) {
         `--${key.replace(/[A-Z]/g, (x) => `-${x.toLowerCase()}`)} is required`,
       );
     if (!path.isAbsolute(parsed[key])) fail(`${key} path must be absolute`);
+  }
+  if (
+    parsed.reviewedReleaseWorktree !== null &&
+    !path.isAbsolute(parsed.reviewedReleaseWorktree)
+  ) {
+    fail("reviewed release worktree path must be absolute");
   }
   if (
     !Number.isSafeInteger(parsed.verificationBlock) ||
@@ -208,7 +219,7 @@ async function writeAcknowledgedManifest(manifest, options) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const options = parseArguments(argv);
+  const options = parseClassicV4CaptureArguments(argv);
   const [
     plan,
     deploymentEvidence,
@@ -228,7 +239,9 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(deploymentSchemaPath, "deployment evidence schema"),
     readJson(releaseSchemaPath, "release schema"),
   ]);
-  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan, {
+    reviewedReleaseWorktree: options.reviewedReleaseWorktree,
+  });
   const { artifacts } = artifactContext;
   const releaseValidation = resolveClassicV4ReleaseValidation(plan);
   releaseValidation.validateArtifacts(plan, artifacts, artifactContext);

@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
-} from "../../scripts/classic-v4-digest.mjs";
+} from "./classic-v4-digest.mjs";
 import * as classicV4ReleaseModule from "../../lib/classic-v4-release.ts";
 import * as classicV4PublicReleaseModule from "../../lib/classic-v4-public-release.ts";
 import { parseReleaseAuditArtifact } from "./release-candidate.mjs";
@@ -642,7 +642,10 @@ function assertCatalogEnvioIdentity(candidate, base) {
       "reviewed Envio event-set digest",
     ) === exactBytes32(base.eventSetSha256, "base Envio event-set digest") ||
     !Number.isSafeInteger(candidate.eventCount) ||
-    candidate.eventCount <= base.eventCount
+    candidate.eventCount <
+      base.eventCount +
+        REQUIRED_LAUNCHER_EVENTS.length +
+        REQUIRED_HOOK_EVENTS.length
   ) {
     fail("Reviewed Envio release identity was not independently promoted");
   }
@@ -865,7 +868,7 @@ export function renderClassicV4PublicReleaseBindingSource(binding, source) {
   );
 }
 
-export function renderClassicV4Activation(plan, current) {
+export function renderClassicV4IndexerSources(plan, current) {
   return Object.freeze({
     releaseMap: replaceActivationBlock(
       current.releaseMap,
@@ -881,6 +884,13 @@ export function renderClassicV4Activation(plan, current) {
       renderEnvioConfigBlock(plan),
       "Envio config",
     ),
+  });
+}
+
+export function renderClassicV4Activation(plan, current) {
+  const indexerSources = renderClassicV4IndexerSources(plan, current);
+  return Object.freeze({
+    ...indexerSources,
     publicReleaseBinding: renderClassicV4PublicReleaseBindingSource(
       plan.publicReleaseBinding,
       current.publicReleaseBinding,

@@ -45,6 +45,19 @@ export const CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH =
   "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546";
 export const CLASSIC_V4_LAUNCH_STAMP_KIND = 2;
 
+export function classicV4SwapBoundIsEqualOrStricter(
+  exactness,
+  transactionBound,
+  quoteBound,
+) {
+  const transaction = BigInt(transactionBound);
+  const quote = BigInt(quoteBound);
+  assert(transaction > 0n && quote > 0n, "Classic V4 swap bound is zero");
+  if (exactness === "exact-input") return transaction >= quote;
+  if (exactness === "exact-output") return transaction <= quote;
+  throw new Error("Classic V4 swap exactness is invalid");
+}
+
 export const CLASSIC_V4_OFFICIAL_DEPENDENCIES = Object.freeze({
   poolManager: Object.freeze({
     address: "0x000000000004444c5dc75cB358380D2e3dE08A90",
@@ -2693,7 +2706,11 @@ export function validateClassicV4LifecycleEvidence(
         quote.slippageBps === canary.swapFixture.slippageBps &&
         exactAmount === expectedExactAmount &&
         quoteBound === expectedQuoteBound &&
-        quoteBound === (exactInput ? outputBound : inputBound),
+        classicV4SwapBoundIsEqualOrStricter(
+          exactness,
+          exactInput ? outputBound : inputBound,
+          quoteBound,
+        ),
       `${action} canonical quote binding differs`,
     );
     if (!exactInput) {
@@ -2755,9 +2772,9 @@ export function validateClassicV4LifecycleEvidence(
   assert(
     creatorClaim === creatorCheckpoint &&
       creatorClaim === beneficiaryClaim &&
-      creatorClaim === swapCreatorTotal + initialFee.creator &&
-      launcherClaim === swapLauncherTotal + initialFee.launcher,
-    "Lifecycle claims do not equal exact canary accruals",
+      creatorClaim >= swapCreatorTotal + initialFee.creator &&
+      launcherClaim >= swapLauncherTotal + initialFee.launcher,
+    "Lifecycle claims do not cover the required canary accruals",
   );
 
   assertExactKeys(
@@ -3115,7 +3132,8 @@ export function validateClassicV4LifecycleEvidence(
   assert(
     exclusive.fromBlock === evidence.actions.launch.blockNumber &&
       exclusive.toBlock === evidence.verificationBlock &&
-      exclusive.nativeAccrualEvents === 5 &&
+      Number.isSafeInteger(exclusive.nativeAccrualEvents) &&
+      exclusive.nativeAccrualEvents >= 5 &&
       exclusive.creatorClaimEvents === 1 &&
       exclusive.launcherClaimEvents === 1,
     "Exclusive hook activity differs",

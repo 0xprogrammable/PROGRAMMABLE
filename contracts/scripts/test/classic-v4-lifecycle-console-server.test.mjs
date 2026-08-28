@@ -17,10 +17,16 @@ import os from "node:os";
 import path from "node:path";
 import { createServer } from "node:http";
 import test from "node:test";
+import { keccak256 } from "viem";
 
 import {
+  CLASSIC_V4_REVIEWED_EIP_7702_SIGNER_BINDING,
+  assertClassicV4SignerRuntimeAtBlock,
   assertClassicV4PreparedArmTime,
+  assertClassicV4PersistedReceiptTime,
   assertClassicV4FreshRpcHead,
+  assertClassicV4ReceiptParentBinding,
+  assertClassicV4SwapParentBinding,
   acquireClassicV4ExecutionLock,
   assertClassicV4ExecutionOutputPair,
   assertClassicV4ExternalExecutionPath,
@@ -30,6 +36,7 @@ import {
   classicV4LifecycleUiCheckHtml,
   classicV4MinedTransactionMatchesRequest,
   classicV4StablePreparationBlockNumber,
+  classifyClassicV4SignerRuntime,
   commonBlock,
   createClassicV4LifecycleRequestMutex,
   parseClassicV4LifecycleConsoleArguments,
@@ -45,6 +52,173 @@ import {
 const operator = "0x1111111111111111111111111111111111111111";
 const target = "0x2222222222222222222222222222222222222222";
 const digest = `0x${"11".repeat(32)}`;
+
+test("Classic V4 accepts an exact mined transaction recorded during later hash recovery", () => {
+  const receiptBlock = { timestamp: 1_000n };
+  const recovered = {
+    prepared: { action: "creatorClaim" },
+    submittedAt: "1970-01-01T00:18:20.000Z",
+    confirmedAt: "1970-01-01T00:18:21.000Z",
+  };
+  assert.equal(
+    assertClassicV4PersistedReceiptTime(
+      recovered,
+      receiptBlock,
+      new Date("1970-01-01T00:16:39.000Z"),
+    ),
+    true,
+  );
+
+  assert.throws(
+    () => assertClassicV4PersistedReceiptTime({
+      ...recovered,
+      confirmedAt: "1970-01-01T00:16:24.000Z",
+    }, receiptBlock, new Date("1970-01-01T00:16:39.000Z")),
+    /persisted timestamps differ from Mainnet/u,
+  );
+  assert.throws(
+    () => assertClassicV4PersistedReceiptTime(
+      recovered,
+      receiptBlock,
+      new Date("1970-01-01T00:16:56.000Z"),
+    ),
+    /persisted timestamps differ from Mainnet/u,
+  );
+});
+
+test("Classic V4 receipt blocks are explicitly linked to their fetched parent", () => {
+  const parent = {
+    number: 122,
+    hash: `0x${"aa".repeat(32)}`,
+  };
+  assert.equal(
+    assertClassicV4ReceiptParentBinding(
+      { number: 123, parentHash: parent.hash },
+      parent,
+    ),
+    true,
+  );
+  assert.throws(
+    () => assertClassicV4ReceiptParentBinding(
+      { number: 123, parentHash: `0x${"bb".repeat(32)}` },
+      parent,
+    ),
+    /not linked to its fetched parent block/u,
+  );
+  assert.throws(
+    () => assertClassicV4ReceiptParentBinding(
+      { number: 124, parentHash: parent.hash },
+      parent,
+    ),
+    /not linked to its fetched parent block/u,
+  );
+});
+
+test("Classic V4 receipt evidence accepts an equal or stricter parent quote bound", () => {
+  const parentBlock = {
+    number: 123,
+    hash: `0x${"aa".repeat(32)}`,
+    timestamp: 1_000n,
+  };
+  const exactInputParent = {
+    action: "buyExactInput",
+    requiredAction: "buyExactInput",
+    request: { from: operator, to: target, value: "0x64" },
+    quote: {
+      policy: "canonical-v4-quoter-at-parent-block",
+      blockNumber: parentBlock.number,
+      blockHash: parentBlock.hash,
+      exactAmount: "100",
+    },
+    swap: {
+      side: "buy",
+      exactness: "exact-input",
+      inputBound: "100",
+      outputBound: "980",
+      routerDeadline: "1300",
+    },
+  };
+  const exactInputPrepared = structuredClone(exactInputParent);
+  exactInputPrepared.quote.blockNumber = 111;
+  exactInputPrepared.quote.blockHash = `0x${"bb".repeat(32)}`;
+  exactInputPrepared.swap.outputBound = "990";
+  exactInputPrepared.swap.routerDeadline = "1400";
+  assert.equal(
+    assertClassicV4SwapParentBinding(
+      exactInputPrepared,
+      exactInputParent,
+      parentBlock,
+    ),
+    true,
+  );
+  assert.throws(
+    () => assertClassicV4SwapParentBinding(
+      {
+        ...exactInputPrepared,
+        swap: { ...exactInputPrepared.swap, outputBound: "979" },
+      },
+      exactInputParent,
+      parentBlock,
+    ),
+    /weaker than its parent-block quote bound/u,
+  );
+  assert.throws(
+    () => assertClassicV4SwapParentBinding(
+      {
+        ...exactInputPrepared,
+        swap: { ...exactInputPrepared.swap, routerDeadline: "1044" },
+      },
+      exactInputParent,
+      parentBlock,
+    ),
+    /deadline was stale/u,
+  );
+
+  const exactOutputParent = {
+    action: "buyExactOutput",
+    requiredAction: "buyExactOutput",
+    request: { from: operator, to: target, value: "0x3fc" },
+    quote: {
+      policy: "canonical-v4-quoter-at-parent-block",
+      blockNumber: parentBlock.number,
+      blockHash: parentBlock.hash,
+      exactAmount: "100",
+    },
+    swap: {
+      side: "buy",
+      exactness: "exact-output",
+      inputBound: "1020",
+      outputBound: "100",
+      routerDeadline: "1300",
+    },
+  };
+  const exactOutputPrepared = structuredClone(exactOutputParent);
+  exactOutputPrepared.quote.blockNumber = 111;
+  exactOutputPrepared.quote.blockHash = `0x${"bb".repeat(32)}`;
+  exactOutputPrepared.request.value = "0x3f2";
+  exactOutputPrepared.swap.inputBound = "1010";
+  exactOutputPrepared.swap.routerDeadline = "1400";
+  assert.equal(
+    assertClassicV4SwapParentBinding(
+      exactOutputPrepared,
+      exactOutputParent,
+      parentBlock,
+    ),
+    true,
+  );
+  assert.throws(
+    () => assertClassicV4SwapParentBinding(
+      {
+        ...exactOutputPrepared,
+        request: { ...exactOutputPrepared.request, value: "0x3fd" },
+        swap: { ...exactOutputPrepared.swap, inputBound: "1021" },
+      },
+      exactOutputParent,
+      parentBlock,
+    ),
+    /weaker than its parent-block quote bound/u,
+  );
+});
 
 test("Classic V4 lifecycle UI check needs no evidence, RPC or wallet", async () => {
   const port = 44_000 + (process.pid % 1_000);
@@ -257,6 +431,208 @@ test("Classic V4 console fetches both providers' fresh independent heads", async
       method === "eth_getBlockByNumber" &&
       params[0] === "0x66"
     ));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Classic V4 signer runtime accepts only an EOA or canonical EIP-7702 designator", () => {
+  const designator = `0xef0100${target.slice(2)}`;
+  assert.deepEqual(classifyClassicV4SignerRuntime("0x"), {
+    kind: "eoa",
+    code: "0x",
+  });
+  assert.deepEqual(classifyClassicV4SignerRuntime(designator.toUpperCase()), {
+    kind: "eip7702",
+    code: designator,
+    delegate: target,
+  });
+  for (const runtime of [
+    "0x6000",
+    `0xef0100${target.slice(2, -2)}`,
+    `${designator}00`,
+    "0xef0100zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+  ]) {
+    assert.throws(
+      () => classifyClassicV4SignerRuntime(runtime),
+      /canonical EIP-7702 delegation designator/u,
+    );
+  }
+  assert.throws(
+    () => classifyClassicV4SignerRuntime(`0xef0100${"00".repeat(20)}`),
+    /delegate is zero/u,
+  );
+  assert.deepEqual(CLASSIC_V4_REVIEWED_EIP_7702_SIGNER_BINDING, {
+    delegate: "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b",
+    delegateRuntimeHash:
+      "0x0b77e469f5603ed1e9ff0e7ee56238b61a8cf7cb3185b33e53e2eeaad50109ab",
+  });
+});
+
+test("Classic V4 independently verifies the EIP-7702 delegate runtime at the exact block", async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = ["https://rpc-a.example/", "https://rpc-b.example/"];
+  const designator = `0xef0100${target.slice(2)}`;
+  const delegateRuntime = "0x6001600055";
+  const calls = [];
+  globalThis.fetch = async (endpoint, options) => {
+    const request = JSON.parse(options.body);
+    calls.push({ endpoint, method: request.method, params: request.params });
+    assert.equal(request.method, "eth_getCode");
+    const result = request.params[0] === operator
+      ? designator
+      : delegateRuntime;
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    });
+  };
+  try {
+    assert.deepEqual(
+      await assertClassicV4SignerRuntimeAtBlock(
+        urls,
+        operator,
+        { tag: "0x64" },
+        "launch",
+        {
+          delegate: target,
+          delegateRuntimeHash: keccak256(delegateRuntime),
+        },
+      ),
+      {
+        kind: "eip7702",
+        code: designator,
+        delegate: target,
+        delegateRuntimeHash: keccak256(delegateRuntime),
+      },
+    );
+    assert.deepEqual(
+      calls.map(({ endpoint, params }) => [endpoint, params]),
+      [
+        [urls[0], [operator, "0x64"]],
+        [urls[1], [operator, "0x64"]],
+        [urls[0], [target, "0x64"]],
+        [urls[1], [target, "0x64"]],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Classic V4 keeps the empty-code EOA path without delegate RPCs", async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = ["https://rpc-a.example/", "https://rpc-b.example/"];
+  const calls = [];
+  globalThis.fetch = async (endpoint, options) => {
+    const request = JSON.parse(options.body);
+    calls.push({ endpoint, method: request.method, params: request.params });
+    return new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: "0x",
+    }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    });
+  };
+  try {
+    assert.deepEqual(
+      await assertClassicV4SignerRuntimeAtBlock(
+        urls,
+        operator,
+        { tag: "0x64" },
+        "launch",
+      ),
+      { kind: "eoa", code: "0x" },
+    );
+    assert.deepEqual(
+      calls.map(({ endpoint, method, params }) => [endpoint, method, params]),
+      [
+        [urls[0], "eth_getCode", [operator, "0x64"]],
+        [urls[1], "eth_getCode", [operator, "0x64"]],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Classic V4 pins EIP-7702 to the independently reviewed delegate", async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = ["https://rpc-a.example/", "https://rpc-b.example/"];
+  const designator = `0xef0100${target.slice(2)}`;
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    return new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: designator,
+    }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    });
+  };
+  try {
+    await assert.rejects(
+      assertClassicV4SignerRuntimeAtBlock(
+        urls,
+        operator,
+        { tag: "0x64" },
+        "launch",
+      ),
+      /delegate is not the reviewed Classic V4 signer delegate/u,
+    );
+    assert.equal(requests, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Classic V4 fails closed on an unverified or chained EIP-7702 delegate", async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = ["https://rpc-a.example/", "https://rpc-b.example/"];
+  const designator = `0xef0100${target.slice(2)}`;
+  const verify = (delegateCodes) => {
+    globalThis.fetch = async (endpoint, options) => {
+      const request = JSON.parse(options.body);
+      const result = request.params[0] === operator
+        ? designator
+        : delegateCodes[endpoint === urls[0] ? 0 : 1];
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    };
+    return assertClassicV4SignerRuntimeAtBlock(
+      urls,
+      operator,
+      { tag: "0x64" },
+      "launch",
+      {
+        delegate: target,
+        delegateRuntimeHash: keccak256("0x6000"),
+      },
+    );
+  };
+  try {
+    await assert.rejects(
+      verify(["0x6000", "0x6001"]),
+      /Independent RPCs disagree on launch EIP-7702 delegate runtime/u,
+    );
+    await assert.rejects(
+      verify(["0x", "0x"]),
+      /delegate has no valid runtime code/u,
+    );
+    await assert.rejects(
+      verify([designator, designator]),
+      /delegate cannot itself be delegated/u,
+    );
+    await assert.rejects(
+      verify(["0x6001", "0x6001"]),
+      /delegate runtime differs from the reviewed hash/u,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

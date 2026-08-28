@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -30,8 +30,6 @@ import { compileClassicV4LauncherUpgradeFreshArtifact } from
 const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
-const contractsRoot = path.join(repositoryRoot, "contracts");
-const sourcePinsPath = path.join(contractsRoot, "dependencies/source-pins.json");
 
 function fail(message) {
   throw new Error(message);
@@ -40,36 +38,47 @@ function fail(message) {
 function sameIdentity(left, right) {
   return left.topLevel === right.topLevel &&
     left.clean === right.clean &&
+    left.detached === right.detached &&
     left.commit === right.commit &&
     left.tree === right.tree;
 }
 
-async function readRepositoryIdentity() {
-  const [{ stdout: topLevel }, { stdout: commit }, { stdout: tree }, { stdout: status }] =
+async function readRepositoryIdentity(root = repositoryRoot) {
+  const [
+    { stdout: topLevel },
+    { stdout: commit },
+    { stdout: tree },
+    { stdout: status },
+    { stdout: branch },
+  ] =
     await Promise.all([
       execFileAsync("git", ["rev-parse", "--show-toplevel"], {
-        cwd: repositoryRoot,
+        cwd: root,
       }),
-      execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot }),
+      execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root }),
       execFileAsync("git", ["rev-parse", "HEAD^{tree}"], {
-        cwd: repositoryRoot,
+        cwd: root,
       }),
       execFileAsync(
         "git",
         ["status", "--porcelain", "--untracked-files=all"],
-        { cwd: repositoryRoot },
+        { cwd: root },
       ),
+      execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+        cwd: root,
+      }),
     ]);
   return {
     topLevel: topLevel.trim(),
     clean: status.trim() === "",
+    detached: branch.trim() === "HEAD",
     commit: commit.trim().toLowerCase(),
     tree: tree.trim().toLowerCase(),
   };
 }
 
-async function readDependencyGitState(root) {
-  const directory = path.join(contractsRoot, "lib", root);
+async function readDependencyGitState(releaseRoot, dependencyRoot) {
+  const directory = path.join(releaseRoot, "contracts", "lib", dependencyRoot);
   try {
     const [{ stdout: topLevel }, { stdout: head }, { stdout: status }, { stdout: remoteUrl }] =
       await Promise.all([
@@ -93,11 +102,16 @@ async function readDependencyGitState(root) {
       remoteUrl: remoteUrl.trim(),
     };
   } catch {
-    fail(`Pinned dependency ${root} is not a readable Git checkout`);
+    fail(`Pinned dependency ${dependencyRoot} is not a readable Git checkout`);
   }
 }
 
-async function readSourcePinState() {
+async function readSourcePinState(releaseRoot = repositoryRoot) {
+  const contractsRoot = path.join(releaseRoot, "contracts");
+  const sourcePinsPath = path.join(
+    contractsRoot,
+    "dependencies/source-pins.json",
+  );
   const [sourcePins, localDirectories] = await Promise.all([
     readFile(sourcePinsPath, "utf8").then((source) => JSON.parse(source)),
     readdir(path.join(contractsRoot, "lib"), { withFileTypes: true }).then(
@@ -112,7 +126,7 @@ async function readSourcePinState() {
     await Promise.all(
       localDirectories.map(async (root) => [
         root,
-        await readDependencyGitState(root),
+        await readDependencyGitState(releaseRoot, root),
       ]),
     ),
   );
@@ -122,14 +136,22 @@ async function readSourcePinState() {
       localDirectories,
       dependencyRoots: localDirectories,
       dependencyGitStates,
+      contractsDirectory: contractsRoot,
     }),
   };
 }
 
-function assertRollforwardSeal(plan, identity, pins) {
+function assertRollforwardSeal(
+  plan,
+  identity,
+  pins,
+  expectedRoot = repositoryRoot,
+  { requireDetached = false } = {},
+) {
   if (
-    identity.topLevel !== repositoryRoot ||
+    identity.topLevel !== expectedRoot ||
     identity.clean !== true ||
+    (requireDetached && identity.detached !== true) ||
     identity.commit !== plan.releaseCommit ||
     identity.tree !== plan.releaseTree
   ) {
@@ -143,6 +165,52 @@ function assertRollforwardSeal(plan, identity, pins) {
   ) {
     fail("Current source pins differ from the launcher rollforward plan");
   }
+}
+
+function assertCleanToolIdentity(identity) {
+  if (
+    identity.topLevel !== repositoryRoot ||
+    identity.clean !== true
+  ) fail("Current lifecycle tool Git identity must be clean");
+}
+
+export async function resolveClassicV4ReviewedReleaseWorktree(
+  value,
+  {
+    identityReader = readRepositoryIdentity,
+    lstatPath = lstat,
+    realpathPath = realpath,
+  } = {},
+) {
+  if (typeof value !== "string" || !path.isAbsolute(value)) {
+    fail("Reviewed release worktree path must be absolute");
+  }
+  let stats;
+  let resolved;
+  try {
+    [stats, resolved] = await Promise.all([
+      lstatPath(value),
+      realpathPath(value),
+    ]);
+  } catch (error) {
+    fail(`Reviewed release worktree is unavailable: ${error.message}`);
+  }
+  if (
+    !stats.isDirectory() ||
+    stats.isSymbolicLink() ||
+    resolved !== value
+  ) {
+    fail("Reviewed release worktree must be a real canonical directory");
+  }
+  const identity = await identityReader(value);
+  if (
+    identity.topLevel !== value ||
+    identity.clean !== true ||
+    identity.detached !== true
+  ) {
+    fail("Reviewed release worktree must be its clean detached Git top level");
+  }
+  return Object.freeze({ root: value, identity });
 }
 
 export function resolveClassicV4ReleaseValidation(plan) {
@@ -191,8 +259,10 @@ export function resolveClassicV4ReleaseValidation(plan) {
 export async function loadClassicV4ReleaseArtifactContext(
   plan,
   {
+    reviewedReleaseWorktree = null,
     legacyLoader = loadClassicV4SealedBuild,
     identityReader = readRepositoryIdentity,
+    toolIdentityReader = readRepositoryIdentity,
     sourcePinReader = readSourcePinState,
     retainedArtifactBuilder = compileClassicV4FreshArtifacts,
     launcherArtifactBuilder = compileClassicV4LauncherUpgradeFreshArtifact,
@@ -201,6 +271,9 @@ export async function loadClassicV4ReleaseArtifactContext(
 ) {
   const validation = resolveClassicV4ReleaseValidation(plan);
   if (validation.kind === "legacy") {
+    if (reviewedReleaseWorktree !== null) {
+      fail("A reviewed release worktree is supported only for a launcher rollforward plan");
+    }
     return Object.freeze({
       plan,
       artifacts: await legacyLoader(plan),
@@ -209,25 +282,49 @@ export async function loadClassicV4ReleaseArtifactContext(
   }
   rollforwardPlanValidator(plan);
 
-  const [beforeIdentity, beforePins] = await Promise.all([
-    identityReader(),
-    sourcePinReader(),
+  const reviewed = reviewedReleaseWorktree === null
+    ? null
+    : await resolveClassicV4ReviewedReleaseWorktree(
+        reviewedReleaseWorktree,
+        { identityReader },
+      );
+  const releaseRoot = reviewed?.root ?? repositoryRoot;
+  const contractsDirectory = path.join(releaseRoot, "contracts");
+  const readIdentity = () => identityReader(releaseRoot);
+  const readPins = () => sourcePinReader(releaseRoot);
+  const readToolIdentity = () => toolIdentityReader(repositoryRoot);
+
+  const [beforeIdentity, beforePins, beforeToolIdentity] = await Promise.all([
+    reviewed ? Promise.resolve(reviewed.identity) : readIdentity(),
+    readPins(),
+    reviewed ? readToolIdentity() : Promise.resolve(null),
   ]);
-  assertRollforwardSeal(plan, beforeIdentity, beforePins);
+  if (beforeToolIdentity) assertCleanToolIdentity(beforeToolIdentity);
+  assertRollforwardSeal(plan, beforeIdentity, beforePins, releaseRoot, {
+    requireDetached: reviewed !== null,
+  });
   const [retainedArtifacts, launcherArtifact] = await Promise.all([
-    retainedArtifactBuilder(),
-    launcherArtifactBuilder(),
+    retainedArtifactBuilder({ contractsDirectory }),
+    launcherArtifactBuilder({ contractsDirectory }),
   ]);
-  const [afterIdentity, afterPins] = await Promise.all([
-    identityReader(),
-    sourcePinReader(),
+  const [afterIdentity, afterPins, afterToolIdentity] = await Promise.all([
+    readIdentity(),
+    readPins(),
+    reviewed ? readToolIdentity() : Promise.resolve(null),
   ]);
-  assertRollforwardSeal(plan, afterIdentity, afterPins);
+  if (afterToolIdentity) assertCleanToolIdentity(afterToolIdentity);
+  assertRollforwardSeal(plan, afterIdentity, afterPins, releaseRoot, {
+    requireDetached: reviewed !== null,
+  });
   if (
     !sameIdentity(beforeIdentity, afterIdentity) ||
+    (beforeToolIdentity &&
+      !sameIdentity(beforeToolIdentity, afterToolIdentity)) ||
     normalizeHex(beforePins.digest) !== normalizeHex(afterPins.digest)
   ) {
-    fail("Launcher rollforward source or pins changed during the sealed build");
+    fail(
+      "Launcher rollforward source, pins or lifecycle tool changed during the sealed build",
+    );
   }
   const artifacts = {
     hookFactory: retainedArtifacts.hookFactory,

@@ -35,6 +35,32 @@ const hashes = Object.freeze({
   nine: `sha256:${"9".repeat(64)}`,
 });
 const at = "2026-08-26T12:00:00Z";
+const behaviorEvidenceReadiness = Object.freeze({
+  runnerConfigured: false,
+  executionMode: "not_configured",
+  configurationIsExecutionEvidence: false,
+  requiredForProfileVersion: "3.4.0",
+  requiredPlatformFeeConformanceStatus: "verified",
+  nonFeeVectorsMayRemainUnverified: true,
+  walletHandoffRequiresVerifiedEvidence: false,
+  notConfiguredDisposition: "claims_remain_unverified",
+  unavailableDisposition: "claims_remain_unverified",
+  executedFeeFailureDisposition: "blocks_wallet_handoff",
+  executedHardInvariantFailureDisposition: "blocks_wallet_handoff",
+  feeBehaviorClaim: false,
+});
+const settlementDataflowClosureReadiness = Object.freeze({
+  configured: false,
+  evidenceAuthority: "programmable-custom-launch-api-settlement-authority",
+  receiptSchemaVersion: "programmable.custom-api-settlement-dataflow-receipt.v2",
+  exactLaunchGraphAndRouteBindingRequired: true,
+  completeValueFlowInventoryRequired: true,
+  applicationOrGithubIntakeRequired: false,
+  independentReplayRequired: true,
+  runnerNoBypassScope: "canonical-vault-entrypoints-only",
+  candidateRouteCoverageComesFromRunner: false,
+  walletHandoffRequiresClosure: false,
+});
 
 function digest(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -133,7 +159,7 @@ async function stagingFixture() {
     },
     database: {
       migrationInventorySha256: record.subject.apiService.migrationInventorySha256,
-      lastMigration: "migrations/0011_custom_launch_project_metadata_v3.sql",
+      lastMigration: "migrations/0016_post_finality_trade_adapter_v1.sql",
       schemaEvidenceSha256: hashes.nine,
     },
     api: {
@@ -141,7 +167,9 @@ async function stagingFixture() {
       readinessIdentitySha256: record.subject.apiService.readinessIdentitySha256,
       apiContractSha256: record.subject.apiService.apiContractSha256,
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.3.0",
+      profileVersion: "3.4.0",
+      currentWriteProfileVersion: "3.3.0",
+      runtimeProductionLaunchAuthorized: false,
       publicProfilePath:
         "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json",
       publicProfileSha256: hashes.nine,
@@ -175,7 +203,7 @@ test("V2 template validates without granting staging authority", async () => {
   assert.equal(record.recordStatus, "draft");
 });
 
-test("backend binding schema pairs current 3.3 and compatible 3.2/3.1/3.0/2.0 evidence", async () => {
+test("backend binding schema pairs preparatory 3.4 and historical 3.3/3.1/3.0/2.0 evidence", async () => {
   const currentBytes = await readFile(new URL(
     "../../docs/operations/releases/custom-launch-v2/backend-release-binding.template.json",
     import.meta.url,
@@ -193,6 +221,19 @@ test("backend binding schema pairs current 3.3 and compatible 3.2/3.1/3.0/2.0 ev
     parseDeterministicCustomLaunchApiReleaseBindingV1(reliabilityBytes)
       .database.lastMigration,
     "migrations/0012_custom_launch_api_reliability_v1.sql",
+  );
+
+  const preparatory = clone(current);
+  preparatory.api.profileVersion = "3.4.0";
+  preparatory.api.currentWriteProfileVersion = "3.3.0";
+  preparatory.api.runtimeProductionLaunchAuthorized = false;
+  preparatory.database.lastMigration =
+    "migrations/0016_post_finality_trade_adapter_v1.sql";
+  const preparatoryBytes = Buffer.from(`${JSON.stringify(preparatory, null, 2)}\n`);
+  assert.equal(
+    parseDeterministicCustomLaunchApiReleaseBindingV1(preparatoryBytes)
+      .api.profileVersion,
+    "3.4.0",
   );
 
   const unknownMigration = clone(current);
@@ -541,11 +582,19 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     sourceTree: observation.backendCandidateTreeSha,
     migrationInventorySha256: observation.database.migrationInventorySha256,
     apiContractSha256: observation.api.apiContractSha256,
+    walletAdminSecurity: {
+      assertionVersion: "2",
+      assertionMode: "enforced",
+      legacyBearerRequestsAccepted: false,
+    },
+    behaviorEvidence: behaviorEvidenceReadiness,
+    settlementDataflowClosure: settlementDataflowClosureReadiness,
     publicProfile: {
       profileId: observation.api.profileId,
       profileVersion: observation.api.profileVersion,
       profileSha256: observation.api.publicProfileSha256,
-      productionLaunchAuthorized: true,
+      productionLaunchAuthorized: false,
+      currentWriteProfileVersion: "3.3.0",
     },
     chain: observation.chain,
   };
@@ -616,10 +665,38 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
         profileVersion: "3.3.0",
         productionLaunchAuthorized: true,
       },
+      profile34Activation: {
+        profileVersion: "3.4.0",
+        active: false,
+        productionLaunchAuthorized: false,
+        requiredRunnerReadback:
+          "configured-signed-runner-and-frozen-fee-observation-abi",
+        requiredSettlementDataflowReadback:
+          "configured-custom-api-authority-v2-exact-route-closure-receipt",
+        mandatoryServerGates: [
+          "exact-source-compiler-graph-binding",
+          "static-hard-block-policy",
+          "platform-admission-receipt",
+          "exact-settlement-dataflow-closure",
+          "exact-router-simulation",
+          "verified-behavior-evidence",
+          "verified-exact-ten-bps-fee-path",
+        ],
+      },
+      requestProfiles: {
+        current: "3.3.0",
+        parseableExactVersions: ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0", "3.4.0"],
+        freshSubmissionExactVersions: ["3.3.0"],
+        legacyReadableAndExactRetryableVersions:
+          ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0"],
+        newProfileVersionsAreImplicitlyAccepted: false,
+        unsupportedVersionReasonCode: "PROFILE_VERSION_NOT_ADMITTED",
+      },
       routes: {
         create: "/v3/custom-launches",
         preflight: "/v3/custom-launches/preflight",
         status: "/v3/custom-launches/{launchId}",
+        permitReissue: "/v3/custom-launches/{launchId}/permit-reissues",
         list: "/v3/custom-launches",
         capabilities: "/v3/capabilities",
         finalizedMetadata: "/v3/finalized-custom-launches",

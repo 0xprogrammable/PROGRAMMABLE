@@ -26,6 +26,7 @@ import {
   buildClassicV4LifecycleReleaseCandidate,
   canonicalAddress,
   canonicalNonzeroAddress,
+  classicV4SwapBoundIsEqualOrStricter,
   digestJson,
   normalizeHex,
   validateClassicV4LaunchAuthorization,
@@ -40,6 +41,16 @@ import { verifyClassicV4ReleasePrerequisites } from "./verify-classic-v4-release
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
 const REQUEST_TIMEOUT_MS = 15_000;
+const RPC_MIN_INTERVAL_MS = 125;
+const RPC_RATE_LIMIT_RETRY_DELAYS_MS = Object.freeze([
+  0,
+  1_500,
+  4_000,
+  9_000,
+  18_000,
+]);
+const RPC_RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429, 502, 503, 504]);
+const rpcEndpointQueues = new Map();
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_HASH = `0x${"00".repeat(32)}`;
 const UINT256_MAX = (1n << 256n) - 1n;
@@ -205,7 +216,7 @@ export function assertClassicV4PositionTokenEvidence({
   }
 }
 
-function parseArguments(argv) {
+export function parseClassicV4LifecycleVerifierArguments(argv) {
   const forbidden = argv.find((argument) => {
     const value = argument.toLowerCase();
     return ["--broadcast", "--send", "--sign", "--private-key", "--mnemonic"].some(
@@ -223,6 +234,7 @@ function parseArguments(argv) {
     sourceEvidence: null,
     canaryPlan: null,
     transactions: null,
+    reviewedReleaseWorktree: null,
     verificationBlock: null,
     rpcA: null,
     rpcB: null,
@@ -237,6 +249,7 @@ function parseArguments(argv) {
     "--source-evidence": "sourceEvidence",
     "--canary-plan": "canaryPlan",
     "--transactions": "transactions",
+    "--reviewed-release-worktree": "reviewedReleaseWorktree",
     "--rpc-a": "rpcA",
     "--rpc-b": "rpcB",
     "--output": "output",
@@ -274,6 +287,12 @@ function parseArguments(argv) {
     }
   }
   if (
+    result.reviewedReleaseWorktree !== null &&
+    !path.isAbsolute(result.reviewedReleaseWorktree)
+  ) {
+    fail("--reviewed-release-worktree must be an absolute path");
+  }
+  if (
     !Number.isSafeInteger(result.verificationBlock) ||
     result.verificationBlock <= 0
   ) {
@@ -301,21 +320,56 @@ function assertEndpoints(endpoints) {
 }
 
 async function rpc(endpoint, method, params = []) {
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch {
-    fail(`RPC ${method} request failed`);
-  }
-  if (!response.ok) fail(`RPC ${method} returned HTTP ${response.status}`);
-  const payload = await response.json();
-  if (payload?.error || payload?.result === undefined) fail(`RPC ${method} failed`);
-  return payload.result;
+  const previous = rpcEndpointQueues.get(endpoint) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(async () => {
+    await new Promise((resolve) => setTimeout(resolve, RPC_MIN_INTERVAL_MS));
+    for (
+      let attempt = 0;
+      attempt < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length;
+      attempt += 1
+    ) {
+      const delay = RPC_RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+      } catch {
+        if (attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length) continue;
+        fail(`RPC ${method} request failed`);
+      }
+      if (
+        RPC_RETRYABLE_HTTP_STATUSES.has(response.status) &&
+        attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length
+      ) {
+        await response.body?.cancel();
+        continue;
+      }
+      if (!response.ok) fail(`RPC ${method} returned HTTP ${response.status}`);
+      const payload = await response.json();
+      const rateLimited = payload?.error && (
+        Number(payload.error.code) === 15 ||
+        Number(payload.error.code) === -32_005 ||
+        /rate limit|too many requests/iu.test(payload.error.message || "")
+      );
+      if (
+        rateLimited &&
+        attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length
+      ) continue;
+      if (payload?.error) fail(`RPC ${method} failed: ${payload.error.message}`);
+      if (payload?.result === undefined) fail(`RPC ${method} returned no result`);
+      return payload.result;
+    }
+    fail(`RPC ${method} remained rate limited`);
+  });
+  rpcEndpointQueues.set(endpoint, current);
+  return current;
 }
 
 async function readJson(file, label) {
@@ -447,6 +501,15 @@ function isBefore(left, right) {
     left.blockNumber < right.blockNumber ||
     (left.blockNumber === right.blockNumber &&
       left.transactionIndex < right.transactionIndex)
+  );
+}
+
+function isEventBefore(left, right) {
+  return (
+    isBefore(left, right) ||
+    (left.blockNumber === right.blockNumber &&
+      left.transactionIndex === right.transactionIndex &&
+      left.logIndex < right.logIndex)
   );
 }
 
@@ -1582,18 +1645,32 @@ async function verifySwapQuote(endpoint, action, expected, swap, launch, canary)
       },
     ],
   );
+  const quoteBlockAfterRead = await loadClassicV4BlockAtExactNumber(
+    endpoint,
+    quoteBlockNumber,
+    `${expected.key} quote post-read`,
+  );
+  sameHex(
+    quoteBlockAfterRead.hash,
+    quoteBlock.hash,
+    `${expected.key} quote block changed during the read`,
+  );
   assert(quotedAmount > 0n && gasEstimate > 0n, `${expected.key} quote is zero`);
   const bound = exactInput
     ? (quotedAmount * 9_900n) / 10_000n
     : (quotedAmount * 10_100n + 9_999n) / 10_000n;
   assert(bound > 0n, `${expected.key} slippage bound is zero`);
   assert(
-    BigInt(exactInput ? swap.outputBound : swap.inputBound) === bound,
-    `${expected.key} calldata bound differs from its parent-block quote`,
+    classicV4SwapBoundIsEqualOrStricter(
+      expected.exactness,
+      BigInt(exactInput ? swap.outputBound : swap.inputBound),
+      bound,
+    ),
+    `${expected.key} calldata bound is weaker than its parent-block quote`,
   );
   if (!exactInput) {
     assert(
-      bound <= BigInt(fixture.hardMaximumAmountIn),
+      BigInt(swap.inputBound) <= BigInt(fixture.hardMaximumAmountIn),
       `${expected.key} exceeds its hard maximum input`,
     );
   }
@@ -1713,6 +1790,9 @@ async function verifyExclusiveHookActivity(
     },
   ]);
   const events = decodeEvents({ logs }, artifacts.feeHook.abi, canary.feeHook);
+  const registrations = events.filter(
+    (event) => event.eventName === "PoolRegistered",
+  );
   const accruals = events.filter(
     (event) => event.eventName === "NativeSwapFeesAccrued",
   );
@@ -1730,30 +1810,68 @@ async function verifyExclusiveHookActivity(
     "sellExactOutput",
   ].map((key) => actions[key].anchor.transactionHash);
   assert(
-    accruals.length === 5 &&
+    registrations.length === 1 &&
+      accruals.length >= expectedAccrualHashes.length &&
       creatorClaims.length === 1 &&
       launcherClaims.length === 1 &&
-      new Set(accruals.map((event) => event.transactionHash)).size === 5 &&
       expectedAccrualHashes.every((hash) =>
-        accruals.some(
+        accruals.filter(
           (event) => normalizeHex(event.transactionHash) === normalizeHex(hash),
-        ),
+        ).length === 1,
       ) &&
+      normalizeHex(registrations[0].transactionHash) ===
+        normalizeHex(actions.launch.anchor.transactionHash) &&
       normalizeHex(creatorClaims[0].transactionHash) ===
         normalizeHex(actions.creatorClaim.anchor.transactionHash) &&
       normalizeHex(launcherClaims[0].transactionHash) ===
         normalizeHex(actions.launcherClaim.anchor.transactionHash),
-    "Foreign fee activity exists in the canary verification window",
+    "Required canary hook activity is incomplete or ambiguous",
   );
-  for (const event of [...accruals, ...creatorClaims]) {
-    sameHex(event.args.poolId, launch.poolId, "Exclusive hook activity pool");
+  for (const event of [...registrations, ...accruals, ...creatorClaims]) {
+    sameHex(event.args.poolId, launch.poolId, "Canary hook activity pool");
+  }
+  assert(
+    accruals.every(
+      (event) =>
+        isEventBefore(registrations[0], event) &&
+        isEventBefore(event, creatorClaims[0]),
+    ) && isEventBefore(creatorClaims[0], launcherClaims[0]),
+    "Canary hook activity is outside the claim accounting window",
+  );
+
+  let creatorAccrualTotal = 0n;
+  let launcherAccrualTotal = 0n;
+  for (const event of accruals) {
+    const expectedFeeBps = event.args.isBuy ? 100 : 200;
+    const grossNativeAmount = event.args.grossNativeAmount;
+    const creatorFee = event.args.creatorFee;
+    const launcherFee = event.args.launcherFee;
+    const totalFee = creatorFee + launcherFee;
+    const feeFloor =
+      (grossNativeAmount * BigInt(expectedFeeBps)) / 10_000n;
+    const feeCeiling =
+      (grossNativeAmount * BigInt(expectedFeeBps) + 9_999n) / 10_000n;
+    assert(
+      Number(event.args.appliedTotalSwapFeeBps) === expectedFeeBps &&
+        grossNativeAmount > 0n &&
+        totalFee > 0n &&
+        (totalFee === feeFloor || totalFee === feeCeiling) &&
+        launcherFee === (grossNativeAmount * 10n) / 10_000n,
+      "Canary hook fee event does not match the registered fee policy",
+    );
+    creatorAccrualTotal += creatorFee;
+    launcherAccrualTotal += launcherFee;
   }
   return {
-    fromBlock,
-    toBlock: verificationBlock,
-    nativeAccrualEvents: accruals.length,
-    creatorClaimEvents: creatorClaims.length,
-    launcherClaimEvents: launcherClaims.length,
+    observation: {
+      fromBlock,
+      toBlock: verificationBlock,
+      nativeAccrualEvents: accruals.length,
+      creatorClaimEvents: creatorClaims.length,
+      launcherClaimEvents: launcherClaims.length,
+    },
+    creatorAccrualTotal,
+    launcherAccrualTotal,
   };
 }
 
@@ -1893,17 +2011,22 @@ async function verifyAccountingTimeline(
   swaps,
   claims,
   canary,
+  hookActivity,
 ) {
-  const creatorSum =
+  const requiredCreatorSum =
     launch.initialFee.creatorFee +
     Object.values(swaps).reduce((sum, swap) => sum + BigInt(swap.creatorFee), 0n);
-  const launcherSum =
+  const requiredLauncherSum =
     launch.initialFee.launcherFee +
     Object.values(swaps).reduce((sum, swap) => sum + BigInt(swap.launcherFee), 0n);
+  const creatorSum = hookActivity.creatorAccrualTotal;
+  const launcherSum = hookActivity.launcherAccrualTotal;
   assert(
-    claims.creator.hookAmount === creatorSum &&
+    creatorSum >= requiredCreatorSum &&
+      launcherSum >= requiredLauncherSum &&
+      claims.creator.hookAmount === creatorSum &&
       claims.launcher.amount === launcherSum,
-    "Claim amounts differ from the five canary accrual events",
+    "Claim amounts differ from the complete canary-pool accrual history",
   );
 
   const baselineBlock = actions.launch.anchor.blockNumber - 1;
@@ -2562,16 +2685,16 @@ async function verifyAtEndpoint(
   );
   for (const [key, quote] of quoteEntries) swaps[key].quote = quote;
   const claims = validateClaims(actions, launch, canary, artifacts);
-  const [exclusiveHookActivity, feeConservation, sellExactInputApproval, sellExactOutputApproval, postState] =
+  const hookActivity = await verifyExclusiveHookActivity(
+    endpoint,
+    verificationBlock,
+    actions,
+    launch,
+    canary,
+    artifacts,
+  );
+  const [feeConservation, sellExactInputApproval, sellExactOutputApproval, postState] =
     await Promise.all([
-      verifyExclusiveHookActivity(
-        endpoint,
-        verificationBlock,
-        actions,
-        launch,
-        canary,
-        artifacts,
-      ),
       verifyAccountingTimeline(
         endpoint,
         verificationBlock,
@@ -2580,6 +2703,7 @@ async function verifyAtEndpoint(
         swaps,
         claims,
         canary,
+        hookActivity,
       ),
       verifySellApproval(
         endpoint,
@@ -2634,7 +2758,7 @@ async function verifyAtEndpoint(
     postState,
     feeConservation,
     observations: {
-      exclusiveHookActivity,
+      exclusiveHookActivity: hookActivity.observation,
       sellApprovals: {
         sellExactInput: sellExactInputApproval,
         sellExactOutput: sellExactOutputApproval,
@@ -2810,7 +2934,7 @@ export async function verifyClassicV4LifecycleCanary({
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const options = parseArguments(argv);
+  const options = parseClassicV4LifecycleVerifierArguments(argv);
   if (
     !options.write &&
     (options.output || options.wallet || options.acknowledgement)
@@ -2830,7 +2954,9 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(options.canaryPlan, "canary plan"),
     readJson(options.transactions, "lifecycle transactions"),
   ]);
-  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan, {
+    reviewedReleaseWorktree: options.reviewedReleaseWorktree,
+  });
   const { artifacts } = artifactContext;
   const evidence = await verifyClassicV4LifecycleCanary({
     endpoints: [options.rpcA, options.rpcB],

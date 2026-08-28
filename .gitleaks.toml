@@ -239,3 +239,13 @@ regexes = [
   '''(?i)0xface73b63787960282f2d4682d3752beb25271ad''',
   '''(?i)0xd0f3e1e5c985d2b37a66cf07fecb0d8191c0445f''',
 ]
+
+[[allowlists]]
+description = "Classic V4 finalized release pins the public canary token address and runtime code hash"
+condition = "AND"
+regexTarget = "match"
+paths = ['''contracts/deployments/mainnet-classic-v4\.json''']
+regexes = [
+  '''(?i)0xb382f738a99820276fd66efb94b75eca104c2b4d''',
+  '''(?i)0x554847de232eb1242cae2befefb8882eb05947e2b103220baaebb3e2ab59b132''',
+]
