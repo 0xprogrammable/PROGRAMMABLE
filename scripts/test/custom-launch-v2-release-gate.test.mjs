@@ -141,7 +141,7 @@ async function stagingFixture() {
       readinessIdentitySha256: record.subject.apiService.readinessIdentitySha256,
       apiContractSha256: record.subject.apiService.apiContractSha256,
       profileId: "programmable.direct-native-hook-graph.v1",
-      profileVersion: "3.3.0",
+      profileVersion: "3.4.0",
       publicProfilePath:
         "services/custom-launch-api-v1/release/direct-native-hook-graph-admission-profile.v3.json",
       publicProfileSha256: hashes.nine,
@@ -175,7 +175,7 @@ test("V2 template validates without granting staging authority", async () => {
   assert.equal(record.recordStatus, "draft");
 });
 
-test("backend binding schema pairs current 3.3 and compatible 3.2/3.1/3.0/2.0 evidence", async () => {
+test("backend binding schema pairs preparatory 3.4 and historical 3.3/3.1/3.0/2.0 evidence", async () => {
   const currentBytes = await readFile(new URL(
     "../../docs/operations/releases/custom-launch-v2/backend-release-binding.template.json",
     import.meta.url,
@@ -193,6 +193,17 @@ test("backend binding schema pairs current 3.3 and compatible 3.2/3.1/3.0/2.0 ev
     parseDeterministicCustomLaunchApiReleaseBindingV1(reliabilityBytes)
       .database.lastMigration,
     "migrations/0012_custom_launch_api_reliability_v1.sql",
+  );
+
+  const preparatory = clone(current);
+  preparatory.api.profileVersion = "3.4.0";
+  preparatory.database.lastMigration =
+    "migrations/0015_partner_credential_lifecycle_hardening_v1.sql";
+  const preparatoryBytes = Buffer.from(`${JSON.stringify(preparatory, null, 2)}\n`);
+  assert.equal(
+    parseDeterministicCustomLaunchApiReleaseBindingV1(preparatoryBytes)
+      .api.profileVersion,
+    "3.4.0",
   );
 
   const unknownMigration = clone(current);
@@ -541,11 +552,17 @@ test("stage probe is GET-only and returns redacted no-broadcast evidence", async
     sourceTree: observation.backendCandidateTreeSha,
     migrationInventorySha256: observation.database.migrationInventorySha256,
     apiContractSha256: observation.api.apiContractSha256,
+    walletAdminSecurity: {
+      assertionVersion: "2",
+      assertionMode: "enforced",
+      legacyBearerRequestsAccepted: false,
+    },
     publicProfile: {
       profileId: observation.api.profileId,
       profileVersion: observation.api.profileVersion,
       profileSha256: observation.api.publicProfileSha256,
-      productionLaunchAuthorized: true,
+      productionLaunchAuthorized: false,
+      currentWriteProfileVersion: "3.3.0",
     },
     chain: observation.chain,
   };

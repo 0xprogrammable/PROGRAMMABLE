@@ -38,6 +38,9 @@ const runtimeMigrations = Object.freeze([
   "0010_durable_launch_lifecycle_queue_v3.sql",
   "0011_custom_launch_project_metadata_v3.sql",
   "0012_custom_launch_api_reliability_v1.sql",
+  "0013_partner_launch_api_v1.sql",
+  "0014_behavior_fee_evidence_jobs_v3.sql",
+  "0015_partner_credential_lifecycle_hardening_v1.sql",
 ]);
 const supabaseMigrations = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -52,20 +55,42 @@ const supabaseMigrations = Object.freeze([
   "20260826135927_durable_launch_lifecycle_queue_v3.sql",
   "20260826175335_custom_launch_project_metadata_v3.sql",
   "20260827074734_custom_launch_api_reliability_v1.sql",
+  "20260827202458_partner_launch_api_v1.sql",
+  "20260827213000_behavior_fee_evidence_jobs_v3.sql",
+  "20260828075854_partner_credential_lifecycle_hardening_v1.sql",
 ]);
 const apiRoutes = Object.freeze([
+  Object.freeze({ method: "GET", path: "/v1/admin/partners" }),
+  Object.freeze({ method: "GET", path: "/v1/admin/partners/{partnerId}/root-keys" }),
+  Object.freeze({ method: "GET", path: "/v1/partner/subkeys" }),
   Object.freeze({ method: "GET", path: "/v3/capabilities" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/custom-launches/{id}" }),
   Object.freeze({ method: "GET", path: "/v3/finalized-custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches" }),
   Object.freeze({ method: "GET", path: "/v3/wallet-admin/custom-launches/{id}" }),
+  Object.freeze({ method: "POST", path: "/v1/admin/partners" }),
+  Object.freeze({ method: "POST", path: "/v1/admin/partners/{partnerId}/root-keys" }),
+  Object.freeze({
+    method: "POST",
+    path: "/v1/admin/partners/{partnerId}/root-keys/{rootKeyId}/rotate",
+  }),
+  Object.freeze({ method: "POST", path: "/v1/admin/partners/{partnerId}/status" }),
+  Object.freeze({ method: "POST", path: "/v1/partner/subkeys" }),
+  Object.freeze({ method: "POST", path: "/v1/partner/subkeys/{subkeyId}/rotate" }),
   Object.freeze({ method: "POST", path: "/v3/custom-launches" }),
   Object.freeze({ method: "POST", path: "/v3/custom-launches/preflight" }),
+  Object.freeze({ method: "POST", path: "/v3/custom-launches/{id}/permit-reissues" }),
   Object.freeze({
     method: "POST",
     path: "/v3/wallet-admin/custom-launches/{id}/funding-authorization",
   }),
+  Object.freeze({ method: "DELETE", path: "/v1/admin/partners/{partnerId}" }),
+  Object.freeze({
+    method: "DELETE",
+    path: "/v1/admin/partners/{partnerId}/root-keys/{rootKeyId}",
+  }),
+  Object.freeze({ method: "DELETE", path: "/v1/partner/subkeys/{subkeyId}" }),
 ]);
 const chain = Object.freeze({
   chainId: "1",
@@ -160,7 +185,7 @@ async function releaseFixture(t) {
   const profile = {
     schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.3.0",
+    profileVersion: "3.4.0",
     profileRevision: 3,
     productionLaunchAuthorized: true,
     platformAdmissionPolicy,
@@ -170,7 +195,7 @@ async function releaseFixture(t) {
     schemaVersion: "programmable.custom-launch-api-contract.v3",
     requestSchemaVersion: "programmable.custom-launch-create-request.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.3.0",
+    profileVersion: "3.4.0",
     routes: apiRoutes,
   };
   await json(join(
@@ -234,7 +259,8 @@ async function releaseFixture(t) {
       profileId: profile.profileId,
       profileVersion: profile.profileVersion,
       profileSha256: sha256(Buffer.from(canonicalize(profile), "utf8")),
-      productionLaunchAuthorized: true,
+      productionLaunchAuthorized: false,
+      currentWriteProfileVersion: "3.3.0",
     },
     chain,
   };
@@ -356,7 +382,7 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.equal(binding.backend.candidateTreeSha, fixture.backend.tree);
   assert.equal(binding.website.candidateCommitSha, fixture.website.commit);
   assert.equal(binding.website.candidateTreeSha, fixture.website.tree);
-  assert.equal(binding.api.profileVersion, "3.3.0");
+  assert.equal(binding.api.profileVersion, "3.4.0");
   assert.equal(
     binding.api.readinessIdentitySha256,
     sha256(Buffer.from(canonicalize(fixture.readiness), "utf8")),
@@ -369,9 +395,9 @@ test("binding generator derives exact revision 3 artifacts and retained database
   assert.equal(binding.database.schemaEvidenceSha256, sha256(databaseEvidenceBytes));
   assert.equal(databaseEvidence.status, "passed");
   assert.equal(binding.database.lastMigration,
-    "migrations/0012_custom_launch_api_reliability_v1.sql");
-  assert.equal(databaseEvidence.supabaseMigrationList.migrations.length, 12);
-  assert.equal(databaseEvidence.mirrorByteChecks.length, 12);
+    "migrations/0015_partner_credential_lifecycle_hardening_v1.sql");
+  assert.equal(databaseEvidence.supabaseMigrationList.migrations.length, 15);
+  assert.equal(databaseEvidence.mirrorByteChecks.length, 15);
   assert.ok(databaseEvidence.mirrorByteChecks.every((check) => check.byteEqual));
   assert.equal((await stat(result.outputPath)).mode & 0o777, 0o600);
   const beforeRetry = Buffer.from(bindingBytes);
@@ -380,6 +406,36 @@ test("binding generator derives exact revision 3 artifacts and retained database
     /repository is not clean|output already exists/u,
   );
   assert.deepEqual(await readFile(result.outputPath), beforeRetry);
+});
+
+test("binding generator accepts only the exact preparatory 3.4 readiness profile", async (t) => {
+  const mutations = Object.freeze([
+    (readiness) => { delete readiness.publicProfile.currentWriteProfileVersion; },
+    (readiness) => { readiness.publicProfile.profileVersion = "3.3.0"; },
+    (readiness) => { readiness.publicProfile.productionLaunchAuthorized = true; },
+    (readiness) => { readiness.publicProfile.currentWriteProfileVersion = "3.4.0"; },
+    (readiness) => { readiness.publicProfile.unexpected = true; },
+  ]);
+
+  for (const mutate of mutations) {
+    const fixture = await releaseFixture(t);
+    const mutatedReadiness = structuredClone(fixture.readiness);
+    mutate(mutatedReadiness);
+    await json(fixture.paths.readiness, mutatedReadiness);
+    await assert.rejects(
+      materializeCustomLaunchApiReleaseBindingV1({
+        websiteRoot: fixture.websiteRoot,
+        backendRoot: fixture.backendRoot,
+        flyReleases: fixture.paths.releases,
+        flyMachines: fixture.paths.machines,
+        flyImages: fixture.paths.images,
+        apiReadiness: fixture.paths.readiness,
+        supabaseMigrationList: fixture.paths.migrationList,
+        databaseSchemaEvidenceOutput: fixture.paths.databaseEvidence,
+      }),
+      /readiness differs from the exact backend artifacts/u,
+    );
+  }
 });
 
 test("binding generator defaults to the exact compatibility wallet-admin security identity", async (t) => {

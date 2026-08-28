@@ -428,10 +428,15 @@ export async function probeCustomLaunchV3Release(input) {
   const readiness = parseJson(readinessResult.bytes, "Custom Launch API readiness");
   exactKeys(readiness, [
     "schemaVersion", "status", "service", "sourceCommit", "sourceTree",
-    "migrationInventorySha256", "apiContractSha256", "publicProfile", "chain",
+    "migrationInventorySha256", "apiContractSha256", "walletAdminSecurity",
+    "publicProfile", "chain",
   ], "Custom Launch API readiness");
+  exactKeys(readiness.walletAdminSecurity, [
+    "assertionVersion", "assertionMode", "legacyBearerRequestsAccepted",
+  ], "Custom Launch API wallet-admin security readiness");
   exactKeys(readiness.publicProfile, [
     "profileId", "profileVersion", "profileSha256", "productionLaunchAuthorized",
+    "currentWriteProfileVersion",
   ], "Custom Launch API public profile readiness");
   exactKeys(readiness.chain, [
     "chainId", "router", "routerRuntimeCodeHash", "graphFactory",
@@ -448,10 +453,14 @@ export async function probeCustomLaunchV3Release(input) {
     || readiness.migrationInventorySha256
       !== observation.database.migrationInventorySha256
     || readiness.apiContractSha256 !== observation.api.apiContractSha256
+    || readiness.walletAdminSecurity.assertionVersion !== "2"
+    || readiness.walletAdminSecurity.assertionMode !== "enforced"
+    || readiness.walletAdminSecurity.legacyBearerRequestsAccepted !== false
     || readiness.publicProfile.profileId !== observation.api.profileId
     || readiness.publicProfile.profileVersion !== observation.api.profileVersion
     || readiness.publicProfile.profileSha256 !== observation.api.publicProfileSha256
-    || readiness.publicProfile.productionLaunchAuthorized !== true
+    || readiness.publicProfile.productionLaunchAuthorized !== false
+    || readiness.publicProfile.currentWriteProfileVersion !== "3.3.0"
     || canonicalize(readiness.chain) !== canonicalize(observation.chain)
     || readinessIdentitySha256 !== observation.api.readinessIdentitySha256
   ) throw new Error("Custom Launch API readiness differs from the exact release binding");
