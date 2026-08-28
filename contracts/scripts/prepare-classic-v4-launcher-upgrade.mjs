@@ -600,7 +600,7 @@ function parseArguments(argv) {
         "--rpc-b",
         "--output",
         "--wallet",
-        "--acknowledge-plan-digest",
+        "--acknowledge-release-source-digest",
       ].includes(key)
     ) {
       fail(`Unknown argument: ${key}`);
@@ -611,25 +611,38 @@ function parseArguments(argv) {
     if (key === "--rpc-b") options.rpcB = value;
     if (key === "--output") options.output = value;
     if (key === "--wallet") options.wallet = value;
-    if (key === "--acknowledge-plan-digest") options.acknowledgement = value;
+    if (key === "--acknowledge-release-source-digest") {
+      options.acknowledgement = value;
+    }
   }
   return options;
+}
+
+export function assertClassicV4LauncherUpgradePlanWriteAcknowledgement(
+  plan,
+  { wallet, acknowledgement },
+) {
+  if (
+    !wallet ||
+    canonicalAddress(wallet, "wallet") !==
+      canonicalAddress(CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER)
+  ) {
+    fail("--write requires the explicit dev wallet");
+  }
+  if (
+    normalizeHex(acknowledgement) !== normalizeHex(plan.releaseSourceDigest)
+  ) {
+    fail(
+      "--write requires --acknowledge-release-source-digest from a reviewed check run",
+    );
+  }
 }
 
 async function writeAcknowledgedPlan(plan, options) {
   if (!options.output || !path.isAbsolute(options.output)) {
     fail("--write requires an absolute --output path");
   }
-  if (
-    !options.wallet ||
-    canonicalAddress(options.wallet, "wallet") !==
-      canonicalAddress(CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER)
-  ) {
-    fail("--write requires the explicit dev wallet");
-  }
-  if (normalizeHex(options.acknowledgement) !== normalizeHex(plan.planDigest)) {
-    fail("--write requires --acknowledge-plan-digest from a fresh check run");
-  }
+  assertClassicV4LauncherUpgradePlanWriteAcknowledgement(plan, options);
   const output = path.resolve(options.output);
   const relative = path.relative(repositoryRoot, output);
   if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {

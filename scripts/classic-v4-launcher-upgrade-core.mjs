@@ -76,6 +76,8 @@ export const CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS = Object.freeze({
     "programmable.classic-v4-launcher-upgrade.source-commitment.v1",
   preparationPlan:
     "programmable.classic-v4-launcher-upgrade.preparation-plan.v1",
+  releaseSource:
+    "programmable.classic-v4-launcher-upgrade.release-source.v1",
   receiptEvidence:
     "programmable.classic-v4-launcher-upgrade.receipt-evidence.v1",
   verificationEvidence:
@@ -526,6 +528,14 @@ export function buildClassicV4LauncherUpgradePlan({
     },
     CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.sourceCommitment,
   );
+  const releaseSourceDigest = digestJson(
+    {
+      releaseCommit: commit,
+      releaseTree: tree,
+      sourceCommitment,
+    },
+    CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.releaseSource,
+  );
   const reviewedGasLimit = assertDecimal(
     snapshot?.reviewedGasLimit,
     "reviewed gas limit",
@@ -586,6 +596,7 @@ export function buildClassicV4LauncherUpgradePlan({
     releaseCommit: commit,
     releaseTree: tree,
     sourceCommitment,
+    releaseSourceDigest,
     sourceClosureDigest: build.sourceClosureDigest,
     sourcePinsDigest: sourcePinsDigest.toLowerCase(),
     deployer,
@@ -637,6 +648,7 @@ export function validateClassicV4LauncherUpgradePlan(plan, artifact) {
       "releaseCommit",
       "releaseTree",
       "sourceCommitment",
+      "releaseSourceDigest",
       "sourceClosureDigest",
       "sourcePinsDigest",
       "deployer",
@@ -699,6 +711,7 @@ export function buildClassicV4LauncherUpgradeReceiptEvidence({
       transactionTo === null &&
       Number(BigInt(transaction?.nonce ?? -1)) === expected.nonce &&
       BigInt(transaction?.value ?? -1) === 0n &&
+      BigInt(transaction?.gas ?? -1) === BigInt(expected.gasLimit) &&
       normalizeHex(keccak256(transaction?.input ?? "0x")) ===
         normalizeHex(expected.dataHash),
     "Submitted transaction differs from the reviewed launcher deployment",
@@ -731,6 +744,7 @@ export function buildClassicV4LauncherUpgradeReceiptEvidence({
     nonce: Number(BigInt(transaction.nonce)),
     value: "0",
     dataHash: keccak256(transaction.input),
+    gasLimit: BigInt(transaction.gas).toString(),
     gasUsed: BigInt(receipt.gasUsed).toString(),
     effectiveGasPrice: BigInt(receipt.effectiveGasPrice ?? 0).toString(),
   };
@@ -761,6 +775,7 @@ export function validateClassicV4LauncherUpgradeReceiptEvidence(plan, evidence) 
       "nonce",
       "value",
       "dataHash",
+      "gasLimit",
       "gasUsed",
       "effectiveGasPrice",
       "evidenceDigest",
@@ -778,14 +793,20 @@ export function validateClassicV4LauncherUpgradeReceiptEvidence(plan, evidence) 
       evidence.to === null &&
       evidence.nonce === plan.startingNonce &&
       evidence.value === "0" &&
-      normalizeHex(evidence.dataHash) === normalizeHex(plan.transaction.dataHash),
+      normalizeHex(evidence.dataHash) === normalizeHex(plan.transaction.dataHash) &&
+      evidence.gasLimit === plan.transaction.gasLimit,
     "Classic V4 launcher receipt evidence identity differs",
   );
   assertTransactionHash(evidence.transactionHash);
   assertPositiveInteger(evidence.blockNumber, "receipt block");
   assertBytes32(evidence.blockHash, "receipt block hash");
+  assertDecimal(evidence.gasLimit, "receipt gas limit", { positive: true });
   assertDecimal(evidence.gasUsed, "receipt gas used", { positive: true });
   assertDecimal(evidence.effectiveGasPrice, "receipt effective gas price");
+  assert(
+    BigInt(evidence.gasUsed) <= BigInt(evidence.gasLimit),
+    "Receipt gas used exceeds the reviewed launcher gas limit",
+  );
   const { evidenceDigest, ...unsignedEvidence } = evidence;
   assert(
     normalizeHex(evidenceDigest) ===

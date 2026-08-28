@@ -18,6 +18,7 @@ import {
 } from "../../../scripts/classic-v4-launcher-upgrade-core.mjs";
 import { renderClassicV4LauncherUpgradeHtml } from "../../../scripts/serve-classic-v4-launcher-upgrade.mjs";
 import {
+  assertClassicV4LauncherUpgradePlanWriteAcknowledgement,
   assertClassicV4LauncherUpgradeRpcEndpoints,
   compileClassicV4LauncherUpgradeFreshArtifact,
 } from "../prepare-classic-v4-launcher-upgrade.mjs";
@@ -95,6 +96,7 @@ function receiptFixture(plan) {
     to: null,
     nonce: "0x15e",
     value: "0x0",
+    gas: `0x${BigInt(plan.transaction.gasLimit).toString(16)}`,
     input: plan.transaction.data,
     blockNumber: "0x18b8201",
     blockHash: RECEIPT_BLOCK_HASH,
@@ -169,6 +171,43 @@ test("plan validation fails closed on Router, dependency, calldata, gas or diges
   }
 });
 
+test("plan-file acknowledgement stays stable across volatile Mainnet snapshots", () => {
+  const first = planFixture();
+  const nextSnapshot = {
+    ...snapshotFixture(),
+    gasPriceWei: "21000000000",
+    requiredBalanceWei: "31500000000000000",
+  };
+  const second = buildClassicV4LauncherUpgradePlan({
+    artifact: artifactFixture(),
+    releaseCommit: COMMIT,
+    releaseTree: TREE,
+    repositoryClean: true,
+    startingNonce: 350,
+    observedAtBlock: 25_900_001,
+    observedAtBlockHash: HASH("a"),
+    sourcePinsDigest: SOURCE_PINS_DIGEST,
+    snapshot: nextSnapshot,
+  });
+
+  assert.notEqual(first.planDigest, second.planDigest);
+  assert.equal(first.releaseSourceDigest, second.releaseSourceDigest);
+  assert.doesNotThrow(() =>
+    assertClassicV4LauncherUpgradePlanWriteAcknowledgement(second, {
+      wallet: CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER,
+      acknowledgement: first.releaseSourceDigest,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertClassicV4LauncherUpgradePlanWriteAcknowledgement(second, {
+        wallet: CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER,
+        acknowledgement: first.planDigest,
+      }),
+    /acknowledge-release-source-digest/,
+  );
+});
+
 test("fresh builder compiles only MemeLaunchV4 into disposable controlled output", async () => {
   const artifact = artifactFixture();
   const calls = [];
@@ -233,6 +272,7 @@ test("receipt capture binds the exact transaction, CREATE address and block", ()
   assert.equal(evidence.contractAddress, plan.predictedAddress);
   assert.equal(evidence.nonce, 350);
   assert.equal(evidence.dataHash, plan.transaction.dataHash);
+  assert.equal(evidence.gasLimit, plan.transaction.gasLimit);
   assert.equal(
     validateClassicV4LauncherUpgradeReceiptEvidence(plan, evidence),
     evidence,
@@ -249,6 +289,23 @@ test("receipt capture binds the exact transaction, CREATE address and block", ()
         receipt,
       }),
     /differs/,
+  );
+});
+
+test("receipt capture rejects a wallet-mutated gas limit", () => {
+  const plan = planFixture();
+  const { transaction, receipt } = receiptFixture(plan);
+  transaction.gas = `0x${(BigInt(plan.transaction.gasLimit) + 1n).toString(16)}`;
+
+  assert.throws(
+    () =>
+      buildClassicV4LauncherUpgradeReceiptEvidence({
+        plan,
+        transactionHash: TRANSACTION_HASH,
+        transaction,
+        receipt,
+      }),
+    /differs from the reviewed launcher deployment/,
   );
 });
 
