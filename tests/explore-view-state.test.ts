@@ -26,6 +26,7 @@ import {
   paginateTokensByExploreSelections,
   paginateTokensBySocialPresence,
   preserveExplorePayloadOnRefreshFailure,
+  requiresCompleteExploreDataset,
   resolveExploreServerSort,
   sortExploreEntriesBySelections,
   tokenHasSocialLinks,
@@ -840,6 +841,10 @@ describe("Explore refresh state", () => {
 
     expect(resolveExploreServerSort("highest", "newest")).toBe("market-cap");
     expect(resolveExploreServerSort("none", "oldest")).toBe("oldest");
+    expect(requiresCompleteExploreDataset("highest", "newest")).toBe(false);
+    expect(requiresCompleteExploreDataset("lowest", "newest")).toBe(false);
+    expect(requiresCompleteExploreDataset("highest", "oldest")).toBe(true);
+    expect(requiresCompleteExploreDataset("none", "oldest")).toBe(false);
     expect(
       sortExploreEntriesBySelections(
         [lowNewest, highOld, unavailable, highNew],
