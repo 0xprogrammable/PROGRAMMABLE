@@ -42,6 +42,17 @@ export function buildClassicV4CatalogReleaseArtifact(
   reviewedBinding: unknown,
 ): Record<string, unknown>;
 
+export function renderClassicV4IndexerSources(
+  plan: unknown,
+  current: Readonly<{
+    releaseMap: string;
+    envioConfig: string;
+  }>,
+): Readonly<{
+  releaseMap: string;
+  envioConfig: string;
+}>;
+
 export function renderClassicV4Activation(
   plan: unknown,
   current: Readonly<{

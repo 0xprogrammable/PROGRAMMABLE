@@ -4,14 +4,25 @@ This isolated Envio HyperIndex project builds a reorg-aware read model for the
 active Programmable releases on Ethereum Mainnet:
 
 - Classic V2 and Classic V3
+- Classic V4 source candidate
 - Stock-Paired V1, V2 and V3
 
-Classic V4 ABI and handlers are source-ready but deliberately have no chain
-binding before the provider-backed, sealed-source Mainnet release manifest
-exists. All other releases are intentionally out of scope. Source addresses and
-inclusive start blocks are pinned to the checked-in deployment manifests.
+Classic V4 ABI, handlers, and finalized Mainnet source addresses are present in
+the source-only candidate. They do not activate the product release binding or
+public website before the provider-backed Envio deployment, backfill, parity
+audit, and manifest gates pass. All other releases are intentionally out of
+scope. Source addresses and inclusive start blocks are pinned to finalized
+deployment evidence.
 Shared Stock V2/V3 hook and vault-factory events are attributed only after an
 indexed `poolId` relation identifies the release.
+
+The live Custom Registry V1 event sources remain as a compatibility-only
+read-model prefix so an Envio replacement cannot silently lose the provider's
+current event history. This does not restore V1 as launch, discovery, claim, or
+website authority. Custom Registry V2 remains a separate inactive prelaunch
+source until its own deployment and release gates pass. The immutable
+`live-production-92f6373.config.yaml` snapshot makes every replacement prove a
+semantic source-and-event superset of the currently deployed Envio surface.
 
 ## Safety boundary
 
@@ -120,11 +131,26 @@ local test must not update that binding.
 
 ## Classic V4 source activation
 
-The pre-deploy `chains[].contracts` list contains no Classic V4 entry. After
-`contracts/deployments/mainnet-classic-v4.json` has been generated from
-finalized deployment, provider-backed source matching with exact sealed source
-closure, and lifecycle evidence, first
-inspect the deterministic activation plan:
+The source-only candidate binds the finalized V4 hook and launcher in
+`chains[].contracts`; this alone does not change the canonical product release
+binding. Once the complete `contracts/deployments/mainnet-classic-v4.json` and
+an independently promoted Envio candidate identity exist, generate the exact
+append-only release binding without mutating the frozen base binding:
+
+```bash
+pnpm release:classic-v4-binding -- \
+  --manifest </absolute/mainnet-classic-v4.json> \
+  --identity </absolute/envio-candidate-identity.json> \
+  --endpoint https://indexer.hyperindex.xyz/<endpoint-id>/v1/graphql \
+  --output </absolute/classic-v4-release-binding.json>
+```
+
+The generator requires the complete finalized source and lifecycle manifest,
+verifies that the checked-out V4 source markers match it exactly, preserves the
+entire existing source and release prefixes, and appends only the V4 hook,
+launcher, and `classic-v4` release fragment. The output is then an input to the
+immutable Envio candidate audit. After that audit exists, inspect the
+deterministic activation plan:
 
 ```bash
 pnpm classic-v4:activate -- \
