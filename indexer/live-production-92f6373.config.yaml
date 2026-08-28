@@ -36,19 +36,6 @@ contracts:
       - event: "NativeSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, bool indexed isBuy, uint16 appliedTotalSwapFeeBps, uint256 grossNativeAmount, uint256 creatorFee, uint256 launcherFee)"
       - event: "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed caller, uint256 amount)"
       - event: "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed caller, uint256 amount)"
-  - name: ClassicV4Launcher
-    events:
-      - event: "MemeTokenLaunchedV2(address indexed deployer, address indexed token, bytes32 indexed poolId, address feeHook, address rewardVault, address positionRecipient, uint256 positionTokenId, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash, bytes32 launchHash)"
-      - event: "MemeLiquidityConfiguredV2(address indexed token, uint256 totalSupply, uint256 tokenLiquidityAmount, uint256 lockedTokenDust, int24 initialTick, int24 tickLower, int24 tickUpper, uint24 lpFeePips, bytes32 launchHash)"
-      - event: "MemeCreatorInitialBuyV2(address indexed deployer, address indexed token, bytes32 indexed poolId, uint256 nativeAmount, uint256 tokenAmount, bytes32 launchHash)"
-      - event: "MemeCreatorInitialBuyCustodyV2(address indexed deployer, address indexed token, address indexed custody, uint8 mode, uint16 durationDays, uint16 cliffDays, bytes32 configurationHash, bytes32 launchHash)"
-  - name: ClassicV4Hook
-    events:
-      - event: "PoolRegistered(bytes32 indexed poolId, address indexed token, address indexed rewardVault, address registrar, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, bytes32 rewardConfigurationHash)"
-      - event: "PoolFeeDisclosure(bytes32 indexed poolId, address indexed token, address indexed rewardVault, uint16 buySwapFeeBps, uint16 sellSwapFeeBps, uint16 buyCreatorFeeBps, uint16 sellCreatorFeeBps, uint16 launcherFeeBps, uint16 transferTaxBps, uint24 lpFeePips)"
-      - event: "NativeSwapFeesAccrued(bytes32 indexed poolId, address indexed swapSender, bool indexed isBuy, uint16 appliedTotalSwapFeeBps, uint256 grossNativeAmount, uint256 creatorFee, uint256 launcherFee)"
-      - event: "CreatorFeesClaimed(bytes32 indexed poolId, address indexed rewardVault, address indexed caller, uint256 amount)"
-      - event: "LauncherFeesClaimed(address indexed treasury, address indexed recipient, address indexed caller, uint256 amount)"
   - name: ClassicV3RewardVaultFactory
     events:
       - event: "ClassicRewardVaultDeployed(address indexed vault, bytes32 indexed poolId, address indexed feeHook, bytes32 salt, bytes32 configurationHash)"
@@ -181,9 +168,3 @@ chains:
         address: "0xf8aef69201621ad20fa256da595426b7e6192dba"
       - name: CustomAtomicRegistrarV1
         address: "0xcc916e5200d2626edfd918dc219bc4296629e997"
-      # CLASSIC_V4_ACTIVATION_START
-      - name: ClassicV4Hook
-        address: "0xadf955a44fd7f009380240d56d71dfafb46020cc"
-      - name: ClassicV4Launcher
-        address: "0x1af508f9af9f8f5cf7bf712b7d2974d4ee7a6681"
-      # CLASSIC_V4_ACTIVATION_END

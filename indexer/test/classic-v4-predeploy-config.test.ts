@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -18,9 +18,6 @@ const currentBindingPath = fileURLToPath(
 );
 const classicV3ManifestPath = fileURLToPath(
   new URL("../../contracts/deployments/mainnet-classic-v3.json", import.meta.url),
-);
-const classicV4ManifestPath = fileURLToPath(
-  new URL("../../contracts/deployments/mainnet-classic-v4.json", import.meta.url),
 );
 const INDEXER_BINDING_DIGEST = `0x${"ab".repeat(32)}`;
 
@@ -204,8 +201,8 @@ function validActivationFixture(binding: { sources: FixtureBindingSource[] }) {
   return { ...manifest, manifestDigest: digest(manifest) };
 }
 
-describe("Classic V4 pre-deploy Envio configuration", () => {
-  it("keeps ABI definitions available without binding a wildcard chain source", () => {
+describe("Classic V4 source-only Envio configuration", () => {
+  it("binds only the exact finalized hook and launcher sources", () => {
     const config = readFileSync(configPath, "utf8");
     const [definitions, chainBindings] = config.split(/^chains:\s*$/mu);
 
@@ -214,31 +211,35 @@ describe("Classic V4 pre-deploy Envio configuration", () => {
     expect(chainBindings).toBeDefined();
     if (chainBindings === undefined) throw new Error("Envio chain bindings are missing");
     const releaseMap = readFileSync(releaseMapPath, "utf8");
-    const inactive = releaseMap.includes(
+    expect(releaseMap).not.toContain(
       "const ACTIVATED_CLASSIC_V4_SOURCES = [] as const",
     );
-    if (!existsSync(classicV4ManifestPath)) expect(inactive).toBe(true);
-
-    if (inactive) {
-      expect(chainBindings).not.toContain("name: ClassicV4Hook");
-      expect(chainBindings).not.toContain("name: ClassicV4Launcher");
-      expect(releaseMap).not.toMatch(
-        /contractName: "ClassicV4(?:Hook|Launcher)",\s+address:/u,
-      );
-      return;
-    }
-
-    for (const contractName of ["ClassicV4Hook", "ClassicV4Launcher"]) {
+    const expected = {
+      ClassicV4Hook: {
+        address: "0xadf955a44fd7f009380240d56d71dfafb46020cc",
+        startBlock: "25_851_137",
+      },
+      ClassicV4Launcher: {
+        address: "0x1af508f9af9f8f5cf7bf712b7d2974d4ee7a6681",
+        startBlock: "25_851_150",
+      },
+    } as const;
+    for (const contractName of ["ClassicV4Hook", "ClassicV4Launcher"] as const) {
       const releaseAddress = new RegExp(
         `contractName: "${contractName}",[\\s\\S]*?address: "(0x[0-9a-f]{40})"`,
+        "u",
+      ).exec(releaseMap)?.[1];
+      const releaseStartBlock = new RegExp(
+        `contractName: "${contractName}",[\\s\\S]*?startBlock: ([0-9_]+)`,
         "u",
       ).exec(releaseMap)?.[1];
       const chainAddress = new RegExp(
         `name: ${contractName}\\s+address: "(0x[0-9a-f]{40})"`,
         "u",
       ).exec(chainBindings)?.[1];
-      expect(releaseAddress).toMatch(/^0x(?!0{40}$)[0-9a-f]{40}$/u);
-      expect(chainAddress).toBe(releaseAddress);
+      expect(releaseAddress).toBe(expected[contractName].address);
+      expect(releaseStartBlock).toBe(expected[contractName].startBlock);
+      expect(chainAddress).toBe(expected[contractName].address);
     }
   });
 

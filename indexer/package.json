@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "classic-v4:activate": "tsx scripts/activate-classic-v4.mjs",
     "classic-v4:public:promote": "tsx scripts/promote-classic-v4-public-availability.mjs",
+    "release:classic-v4-binding": "tsx scripts/generate-classic-v4-release-binding.mjs",
     "release:identity": "node scripts/release-candidate.mjs identity",
     "release:snapshot": "node scripts/release-candidate.mjs snapshot",
     "release:audit": "node scripts/release-candidate.mjs audit"

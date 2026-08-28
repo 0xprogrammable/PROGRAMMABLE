@@ -642,7 +642,10 @@ function assertCatalogEnvioIdentity(candidate, base) {
       "reviewed Envio event-set digest",
     ) === exactBytes32(base.eventSetSha256, "base Envio event-set digest") ||
     !Number.isSafeInteger(candidate.eventCount) ||
-    candidate.eventCount <= base.eventCount
+    candidate.eventCount <
+      base.eventCount +
+        REQUIRED_LAUNCHER_EVENTS.length +
+        REQUIRED_HOOK_EVENTS.length
   ) {
     fail("Reviewed Envio release identity was not independently promoted");
   }
@@ -865,7 +868,7 @@ export function renderClassicV4PublicReleaseBindingSource(binding, source) {
   );
 }
 
-export function renderClassicV4Activation(plan, current) {
+export function renderClassicV4IndexerSources(plan, current) {
   return Object.freeze({
     releaseMap: replaceActivationBlock(
       current.releaseMap,
@@ -881,6 +884,13 @@ export function renderClassicV4Activation(plan, current) {
       renderEnvioConfigBlock(plan),
       "Envio config",
     ),
+  });
+}
+
+export function renderClassicV4Activation(plan, current) {
+  const indexerSources = renderClassicV4IndexerSources(plan, current);
+  return Object.freeze({
+    ...indexerSources,
     publicReleaseBinding: renderClassicV4PublicReleaseBindingSource(
       plan.publicReleaseBinding,
       current.publicReleaseBinding,
