@@ -11,6 +11,7 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  DIRECT_NATIVE_PROFILE_VERSION,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
@@ -81,6 +82,16 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const absoluteConfig = path.resolve(configPath);
   const { config, apiVersion } = await readPackConfig(absoluteConfig);
+  const configuredDirectNativeProfileVersion = apiVersion === "v3"
+    ? config.profileVersion ?? DIRECT_NATIVE_PROFILE_VERSION
+    : undefined;
+  if (directNativeProfileVersion !== undefined
+    && config.profileVersion !== undefined
+    && directNativeProfileVersion !== config.profileVersion) {
+    throw new TypeError(
+      "pack config profileVersion does not match the exact request profile version",
+    );
+  }
   const launchProfileSelection = apiVersion === "v2"
     ? validateLaunchProfileSelection(config.launchProfile)
     : apiVersion === "v3"
@@ -91,7 +102,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     : null;
   const directNativeProfile = apiVersion === "v3"
     ? resolveDirectNativeProfile(launchProfileSelection, {
-        profileVersion: directNativeProfileVersion,
+        profileVersion: directNativeProfileVersion ?? configuredDirectNativeProfileVersion,
       })
     : null;
   if (directNativeProfileVersion !== undefined && apiVersion !== "v3") {
@@ -580,11 +591,21 @@ function assertPackConfig(config) {
   } else if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V3) {
     apiVersion = "v3";
     const launchProfile = validateDirectNativeProfileSelection(config.launchProfile);
+    const profileVersion = config.profileVersion ?? DIRECT_NATIVE_PROFILE_VERSION;
+    if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION
+      && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3) {
+      throw new TypeError(
+        `pack config profileVersion must be ${DIRECT_NATIVE_PROFILE_VERSION} or ${DIRECT_NATIVE_PROFILE_VERSION_V3}`,
+      );
+    }
     assertExactKeys(config, [
       ...commonKeys,
+      ...(Object.hasOwn(config, "profileVersion") ? ["profileVersion"] : []),
       "launchProfile",
       "permitWindow",
-      "behaviorScenarioInputs",
+      ...(profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3
+        ? ["behaviorScenarioInputs"]
+        : []),
       ...(Object.hasOwn(config, "projectMetadata") ? ["projectMetadata"] : []),
       ...(launchProfile.fundingMode === "eip-3009-receive-with-authorization"
         ? ["fundingAuthorization", "fundingSignaturePatch"]
@@ -601,6 +622,11 @@ function assertPackConfig(config) {
   }
   if (apiVersion === "v3" && config.targets.length < 3) {
     throw new TypeError("direct-native V3 pack config targets must contain between 3 and 16 entries");
+  }
+  if (apiVersion === "v3"
+    && config.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3
+    && config.targets.length < 4) {
+    throw new TypeError("preparatory profile 3.4 pack config requires between 4 and 16 entries");
   }
   if (apiVersion === "v3") {
     assertExactKeys(config.pool, [

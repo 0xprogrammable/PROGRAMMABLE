@@ -186,7 +186,7 @@ test("profile 3.4 rejects an arbitrary platform fee target and requires four dis
   const binding = bindingFor(arbitrarySelection, graph);
   assert.throws(
     () => validateDirectNativeProfileGraph(
-      resolveDirectNativeProfile(arbitrarySelection),
+      resolveDirectNativeProfile(arbitrarySelection, { profileVersion: "3.4.0" }),
       binding,
       graph,
     ),
@@ -202,7 +202,7 @@ test("profile 3.4 requires one exact reciprocal route locator in each direction"
     .constructorAddressLocators = [];
   assert.throws(
     () => validateDirectNativeProfileGraph(
-      resolveDirectNativeProfile(CURRENT_SELECTION),
+      resolveDirectNativeProfile(CURRENT_SELECTION, { profileVersion: "3.4.0" }),
       binding,
       noBacklink,
     ),
@@ -210,7 +210,7 @@ test("profile 3.4 requires one exact reciprocal route locator in each direction"
   );
   assert.throws(
     () => validateDirectNativeProfileGraph(
-      resolveDirectNativeProfile(CURRENT_SELECTION),
+      resolveDirectNativeProfile(CURRENT_SELECTION, { profileVersion: "3.4.0" }),
       binding,
       graph,
     ),
@@ -236,7 +236,12 @@ test("profile 3.3 exact retries retain the three-target arbitrary binding semant
   const binding = bindingFor(legacySelection, graph);
   assert.equal(profile.graphPolicy.minimumTargets, 3);
   assert.doesNotThrow(() => validateDirectNativeProfileGraph(profile, binding, graph));
-  assert.equal(resolveDirectNativeProfile(CURRENT_SELECTION).graphPolicy.minimumTargets, 4);
+  assert.equal(resolveDirectNativeProfile(CURRENT_SELECTION).graphPolicy.minimumTargets, 3);
+  assert.equal(
+    resolveDirectNativeProfile(CURRENT_SELECTION, { profileVersion: "3.4.0" })
+      .graphPolicy.minimumTargets,
+    4,
+  );
 });
 
 function bindingFor(selection, graphBundle) {

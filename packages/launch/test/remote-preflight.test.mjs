@@ -35,7 +35,7 @@ const CANONICAL_REQUEST_VECTOR_BYTES = Buffer.from(
 const CANONICAL_REQUEST_VECTOR_HASH =
   "sha256:7c0a12cdec841fa5c256d0f9887382166b6dcfef6002ccee955120f5f16690d8";
 
-test("remote validate discovers public capabilities then runs authenticated side-effect-free preflight", async () => {
+test("remote validate accepts the live 3.3 capability contract then runs side-effect-free preflight", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "programmable-remote-preflight-"));
   try {
     const launchPath = path.join(root, "launch.json");
@@ -48,6 +48,7 @@ test("remote validate discovers public capabilities then runs authenticated side
       ...validCapabilities(),
       futureAdditiveCapability: { preserved: true },
     };
+    assert.equal(capabilities.profile.profileVersion, "3.3.0");
     const preflight = validPreflight(CANONICAL_REQUEST_VECTOR_HASH, {
       disposition: "needs_evidence",
       needsEvidenceFindingCodes: ["CUSTOM_EVIDENCE_UNPROVEN"],
@@ -301,7 +302,7 @@ test("remote validation fails closed on profile, route, and auth capability drif
   const cases = [
     ["profile.profileId", (value) => { value.profile.profileId = "other.profile"; }],
     ["profile.profileRevision", (value) => { value.profile.profileRevision = 4; }],
-    ["profile.profileVersion", (value) => { value.profile.profileVersion = "3.3.0"; }],
+    ["profile.profileVersion", (value) => { value.profile.profileVersion = "3.4.0"; }],
     ["profile.productionLaunchAuthorized", (value) => {
       value.profile.productionLaunchAuthorized = false;
     }],
@@ -410,7 +411,7 @@ function validCapabilities() {
     profile: {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 3,
-      profileVersion: "3.4.0",
+      profileVersion: "3.3.0",
       productionLaunchAuthorized: true,
     },
     routes: {

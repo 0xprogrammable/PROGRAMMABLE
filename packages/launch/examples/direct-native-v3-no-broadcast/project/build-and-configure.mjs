@@ -317,7 +317,7 @@ const evidence = {
   schemaVersion: "programmable.direct-native-v3-no-broadcast-evidence.v3",
   profile: {
     profileId: "programmable.direct-native-hook-graph.v1",
-    profileVersion: "3.4.0",
+    profileVersion: "3.3.0",
     profileRevision: 3,
     productionLaunchAuthorized: true,
   },
@@ -372,6 +372,10 @@ const evidence = {
 const evidenceBytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`, "utf8");
 await writeFile(path.join(root, "evidence/rehearsal.json"), evidenceBytes, { mode: 0o600 });
 
+const initializerRuntimeImmutables = runtimeImmutablesForInitializer(
+  output,
+  selectedArtifacts[1].compiled,
+);
 const hookRuntimeImmutables = runtimeImmutablesForHook(output, selectedArtifacts[2].compiled, quoteCurrency);
 const config = {
   schemaVersion: "programmable.launch-pack-config.v3",
@@ -413,7 +417,7 @@ const config = {
       initializerValueWei: "0",
       componentKind: "other",
       declaredHookPermissions: null,
-      runtimeImmutables: [],
+      runtimeImmutables: initializerRuntimeImmutables,
     },
     {
       targetId: "token",
@@ -484,20 +488,6 @@ const config = {
       links: projectLinks,
     },
   },
-  behaviorScenarioInputs: {
-    schemaVersion: "programmable.custom-launch-behavior-scenario-inputs.v1",
-    steps: [
-      {
-        stepId: "reference-swap-input",
-        phase: "swap",
-        actor: "secondary-user",
-        target: { kind: "runner-harness", harness: "v4-actions-v1" },
-        valueWei: "0",
-        calldata: "0x",
-        hookData: "0x",
-      },
-    ],
-  },
   launchProfile: {
     schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3",
     profileId: "programmable.direct-native-hook-graph.v1",
@@ -556,7 +546,7 @@ await writeFile(
 process.stdout.write(`${JSON.stringify({
   schemaVersion: "programmable.direct-native-v3-config-result.v3",
   profileId: config.launchProfile.profileId,
-  profileVersion: "3.4.0",
+  profileVersion: "3.3.0",
   profileRevision: config.launchProfile.profileRevision,
   productionLaunchAuthorized: true,
   configPath: path.join(root, "programmable-launch.config.json"),
@@ -660,6 +650,23 @@ function runtimeImmutablesForHook(compilerOutput, compiledHook, quoteCurrencyAdd
       }
       throw new TypeError(
         `unmapped hook immutable ${immutableId} (${declaration.name}); do not guess runtime materialization`,
+      );
+    });
+}
+
+function runtimeImmutablesForInitializer(compilerOutput, compiledInitializer) {
+  const declarations = new Map();
+  for (const source of Object.values(compilerOutput.sources ?? {})) walkAst(source.ast, declarations);
+  const references = compiledInitializer.evm.deployedBytecode.immutableReferences ?? {};
+  return Object.keys(references).sort((left, right) => BigInt(left) < BigInt(right) ? -1 : 1)
+    .map((immutableId) => {
+      const declaration = declarations.get(immutableId);
+      if (!declaration) throw new TypeError(`compiler immutable ${immutableId} has no AST declaration`);
+      if (declaration.name === "settlementFeeVault") {
+        return { immutableId, abiType: "address", target: "settlement-fee-vault" };
+      }
+      throw new TypeError(
+        `unmapped initializer immutable ${immutableId} (${declaration.name}); do not guess runtime materialization`,
       );
     });
 }

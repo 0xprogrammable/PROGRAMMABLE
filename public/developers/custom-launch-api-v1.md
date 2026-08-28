@@ -94,8 +94,9 @@ a project-owned hook, native or ERC-20 quote currency, all fourteen Uniswap v4 p
 permission must resolve to a concrete reachable callback implementation;
 an interface declaration or fallback-only route does not qualify.
 
-Profile `3.4.0` and CLI `3.3.8` are preparatory, not live. Live/default discovery remains profile `3.3.0` and CLI
-`3.3.7` until backend and `.well-known` activation. Pending `3.4.0` requires 4-16 targets inclusive of the exact
+CLI `3.3.8` is the current installable release and defaults fresh packs to live profile `3.3.0`. Explicit profile
+`3.4.0` output remains preparatory and is rejected by live capabilities until backend and `.well-known` activation.
+Pending `3.4.0` requires 4-16 targets inclusive of the exact
 `programmable:settlement-fee-vault:v1`; applicants cannot select another platform fee target. Its release binding is
 `sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9`, source SHA-256 is
 `sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b`, and creation/runtime Keccak-256 are
@@ -188,17 +189,18 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.7`. The package name is
-`@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.8`. The package name is
+`@programmable/launch`; the binary is `programmable-launch`. Omit `profileVersion` for live `3.3.0`; explicit `3.4.0`
+output is rejected until backend activation. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:
 
@@ -243,7 +245,7 @@ may hold `custom-launch:create` and/or `custom-launch:read`, never `partner-subk
 budgets or expiry. Every subkey-admin operation, including list, consumes the root's
 `subkeyAdminRequestsPerHour` budget. Private partner and root administration routes are not public.
 
-Launch reads follow immutable partner lineage. A root lists and reads every launch attributed to its partner, including
+Launch reads follow immutable partner lineage. A partner root reads every launch attributed to its partner, including
 launches created by current and rotated subkeys. Each subkey sees only its own lineage, including launches for the
 different controller wallets it selected, and cannot read root or sibling launches. Rotation atomically revokes the old
 credential and gives its replacement the same lineage, so its private launch history remains readable. A separately

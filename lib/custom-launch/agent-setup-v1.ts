@@ -6,7 +6,7 @@ export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
     "https://programmable.market/policies/custom-launch-agent-remediation-v1.json",
   packConfigSchema:
     "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
-  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz",
+  cli: "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz",
   guide:
     "https://programmable.market/docs/developers/custom-launch#existing-project-integration",
   openApi: "https://programmable.market/openapi/custom-launch-v3.json",
@@ -36,7 +36,7 @@ export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   `V2 read compatibility and fresh-write fence: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV2Compatibility}`,
   `V1 read compatibility and fresh-write fence: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility}`,
   "Use only the current V3.3 profile for a new submission. Fresh V2 and V1 POSTs are permanently read-only and return non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY or 409 CUSTOM_LAUNCH_V1_READ_ONLY; their schemas and reads remain available for historical resources.",
-  "Profile 3.4.0 and CLI 3.3.8 are preparatory, not live, released, installable or accepted for fresh writes. Live/default discovery remains profile 3.3.0 and the pinned CLI 3.3.7 asset until the backend and .well-known document independently activate the pending profile. Do not install or submit the source-tree candidate.",
+  "CLI 3.3.8 is the current installable release and defaults fresh packs to live profile 3.3.0. Explicit profile 3.4.0 output remains preparatory and is rejected by live capabilities until the backend and .well-known document independently activate that pending profile. Do not submit explicit profile 3.4.0 bytes before activation.",
   "V2 detail reads are observation-only for prepared or simulating resources. GET cannot advance simulation or authorization or expose a new walletTransaction; existing authorized and submitted reconciliation and finalized reads remain available.",
   "Before pack, collect the required project name and symbol, a meaningful description, one canonical website, one canonical X profile, and a non-empty local PNG, JPEG, WebP or GIF plus its canonical public HTTPS, IPFS or Arweave URI. Documentation, Telegram, Discord, GitHub and other links remain optional. Never invent metadata or a public image URI.",
   "The CLI derives the image content digest, media type, byte length and dimensions from the local bytes and binds the complete canonical project metadata into the request and launch identity. Never handwrite these derived fields. The website shows the same metadata read-only before either wallet step; changing it requires a newly packed request.",

@@ -12,16 +12,15 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## Local packaging and API availability
 
-Build and test the exact project. The public `programmable-launch` 3.3.7 CLI derives the deterministic source manifest,
+Build and test the exact project. The public `programmable-launch` 3.3.8 CLI derives the deterministic source manifest,
 graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API
 schema](../developers/custom-launch.md). The default `programmable.direct-native-hook-graph-profile.v3` profile uses
 `profileRevision: 3`, `profileVersion: 3.3.0` and exact `solc 0.8.26+commit.8a97fa7a`. It also binds canonical project
 name, symbol, description, an exact source-bound image and links into the request and graph hashes. Exact `3.2.0`, `3.1.0` and `3.0.0`
 requests remain readable and byte-identical retryable under their original immutable policies, and revision 2 remains
 compatible. Profile `3.2.0` keeps its original nullable-image metadata semantics.
-Profile `3.4.0` and CLI `3.3.8` are preparatory only. They are not live or installable, and their source-tree presence
-does not authorize fresh writes; use profile `3.3.0` and CLI `3.3.7` until live discovery and the backend activate the
-pending profile independently.
+CLI `3.3.8` defaults to live profile `3.3.0`. Explicit profile `3.4.0` output is preparatory, is rejected by live
+capabilities and does not authorize fresh writes until discovery and the backend activate that profile independently.
 Run `pack`, `validate --remote`, `submit` and `status --watch --until authorized` for the byte-identical current V3.3
 request. The CLI and preflight prepare and classify exact bytes; the API server makes the durable decision and exposes
 a wallet handoff only after objective static hard blocks and exact Router simulation pass. Missing behavior execution

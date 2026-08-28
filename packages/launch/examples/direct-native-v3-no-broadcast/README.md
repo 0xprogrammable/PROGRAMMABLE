@@ -1,7 +1,7 @@
 # Direct-native V3 no-broadcast clean room
 
 This packaged fixture compiles real Solidity with exact `solc` 0.8.26, emits the Standard JSON input and selected
-compiler artifacts, then prepares and validates a four-target pending profile `3.4.0`
+compiler artifacts, then prepares and validates a four-target live/default profile `3.3.0`
 `programmable.direct-native-hook-graph.v1` request. The hook target is the exact
 `ProgrammableVolumeFeeHookV2` reference source/build at permission mask `0x20cc`. The initializer uses a static nested
 tuple and the real `receiveWithAuthorization` call shape. The CLI derives and proves v2 ABI paths for the API-derived
@@ -10,8 +10,8 @@ is the frozen `programmable:settlement-fee-vault:v1` release module, constructed
 with `bindRoute(initializer)`. The initializer then deliberately reverts so this offline fixture cannot retain or move funds.
 
 Passing this fixture proves only local source/build reproduction plus deterministic pack and validation for the exact
-inputs. Profile `3.4.0` and CLI `3.3.8` are preparatory and not live; live/default discovery remains CLI `3.3.7` with
-profile `3.3.0` until backend activation. A serialized `productionLaunchAuthorized: true` profile field does not prove
+inputs. CLI `3.3.8` defaults this cold pack to live profile `3.3.0`; explicit profile `3.4.0` remains preparatory until
+backend capability activation. A serialized `productionLaunchAuthorized: true` profile field does not prove
 that activation and does not turn this deliberately reverting rehearsal initializer or its declarative sample runner
 step into verified behavior, an approved request or a submitted launch. This fixture is not
 admission, deployment, a usable liquidity initializer, a wallet transaction, or a launched coin.

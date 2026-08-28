@@ -4,7 +4,7 @@
     "title": "Programmable Custom Launch API V3 general hook profile",
     "version": "3.3.8",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "Preparatory, not-live contract for pending profile 3.4.0. It is not evidence that CLI 3.3.8 is released or that the backend accepts 3.4.0. Live/default discovery remains CLI 3.3.7 with profile 3.3.0 until an independently verified backend activation. Pending 3.4.0 preserves arbitrary project-owned token, hook and multi-contract targets while requiring four to sixteen targets inclusive of the frozen programmable:settlement-fee-vault:v1 module and its reciprocal route binding. Exact 3.3.0 and earlier resources retain their immutable compatibility semantics. CLI, client and model checks only prepare and bind a request; the server remains the behavior, fee-path and authorization authority. No result is an audit, honeypot guarantee, universal safety guarantee, liquidity claim or universal compatibility claim.",
+    "description": "Public CLI 3.3.8 and API contract for live/default profile 3.3.0. Explicit profile 3.4.0 material remains preparatory and the live backend rejects it until independent activation. Pending 3.4.0 preserves arbitrary project-owned token, hook and multi-contract targets while requiring four to sixteen targets inclusive of the frozen programmable:settlement-fee-vault:v1 module and its reciprocal route binding. Exact 3.3.0 and earlier resources retain their immutable compatibility semantics. CLI, client and model checks only prepare and bind a request; the server remains the behavior, fee-path and authorization authority. No result is an audit, honeypot guarantee, universal safety guarantee, liquidity claim or universal compatibility claim.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -14,7 +14,7 @@
   "servers": [
     {
       "url": "https://api.programmable.market",
-      "description": "Production API origin. Pending profile 3.4.0 is not enabled by this preparatory document."
+      "description": "Production API origin for live profile 3.3.0. Pending profile 3.4.0 remains disabled."
     }
   ],
   "externalDocs": {
@@ -27,10 +27,10 @@
     }
   ],
   "x-programmable-availability": {
-    "status": "preparatory-not-live",
-    "publicAuthorized": false,
+    "status": "live",
+    "publicAuthorized": true,
     "liveContract": {
-      "cliReleaseVersion": "3.3.7",
+      "cliReleaseVersion": "3.3.8",
       "profileVersion": "3.3.0",
       "discoveryAuthority": "https://programmable.market/.well-known/programmable.json"
     },
@@ -68,7 +68,7 @@
     "stableOpenApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
     "freshWritesOnlyProfileVersion": "3.3.0",
     "pendingProfileVersion": "3.4.0",
-    "pendingCliReleaseVersion": "3.3.8",
+    "preparatoryProfileCliReleaseVersion": "3.3.8",
     "walletHandoffEvidenceGate": {
       "decisionAuthority": "api-server",
       "clientChecks": "preparation-only",
@@ -83,9 +83,8 @@
     },
     "activationBlockers": [
       "backend-profile-3.4-activation",
-      "cli-3.3.8-release",
-      "well-known-default-flip",
-      "independent-live-capability-and-route-probes"
+      "well-known-profile-default-flip",
+      "independent-profile-3.4-capability-and-route-probes"
     ]
   },
   "x-programmable-agent-integration": {
@@ -148,6 +147,24 @@
     "pendingProfile3_4SubmissionEnabled": false
   },
   "x-programmable-profile": {
+    "profileId": "programmable.direct-native-hook-graph.v1",
+    "profileRevision": 3,
+    "profileVersion": "3.3.0",
+    "compatibleProfileVersions": ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
+    "productionLaunchAuthorized": true,
+    "minimumTargets": 3,
+    "maximumTargets": 16,
+    "minimumHookPermissionMask": 0,
+    "maximumHookPermissionMask": 16383,
+    "projectOwnedToken": true,
+    "projectOwnedHook": true,
+    "platformAdmissionReceiptRequired": true,
+    "routerSimulationRequiredBeforeAuthorization": true,
+    "serverVerifiedEvidenceRequiredForPositiveClaims": true,
+    "safetyClaim": false,
+    "feeBehaviorClaim": false
+  },
+  "x-programmable-pending-profile": {
     "profileId": "programmable.direct-native-hook-graph.v1",
     "profileRevision": 3,
     "profileVersion": "3.4.0",
@@ -633,7 +650,7 @@
       "get": {
         "operationId": "listDirectNativeCustomLaunchesV3",
         "summary": "List V3 resources visible to the authenticated credential",
-        "description": "Version-matched newest-first list for the authenticated lineage. A wallet key sees its wallet principal. A partner root sees every launch attributed to its partner, including current and rotated child launches. A subkey sees only its stable lineage and cannot read root or sibling launches. Rotation preserves that lineage history; a separately issued subkey starts an isolated lineage. Pending rows may receive bounded best-effort reconciliation; use single-resource GET for precise polling.",
+        "description": "Version-matched newest-first list for the authenticated lineage. A wallet key sees its wallet principal. A partner root sees every launch attributed to its partner, including current and rotated child launches. A subkey reads only its stable lineage and cannot read root or sibling launches. Rotation preserves that lineage history; a separately issued subkey starts an isolated lineage. Pending rows may receive bounded best-effort reconciliation; use single-resource GET for precise polling.",
         "tags": [
           "V3 general hooks"
         ],
@@ -695,7 +712,7 @@
       "get": {
         "operationId": "getDirectNativeCustomLaunchV3",
         "summary": "Read one V3 resource visible to the authenticated credential",
-        "description": "The single-resource contract is the precise polling source for conformance state, any exact funding challenge and, after validation and simulation, the exact Router transaction. A wallet key reads its wallet principal. A partner root reads every launch attributed to its partner, including launches created by current or rotated subkeys. A subkey reads only its stable lineage and cannot read root or sibling launches. Rotation revokes the predecessor credential, preserves that lineage for the replacement and never restores authentication to the revoked credential. The API never signs or broadcasts either wallet action.",
+        "description": "The single-resource contract is the precise polling source for conformance state, any exact funding challenge and, after validation and simulation, the exact Router transaction. A wallet key reads its wallet principal. A partner root reads every launch attributed to its partner, including launches created by current or rotated subkeys. A subkey reads only its stable lineage and cannot read root or sibling launches. Rotation preserves that lineage for the replacement. The revoked predecessor cannot authenticate. The API never signs or broadcasts either wallet action.",
         "tags": [
           "V3 general hooks"
         ],
@@ -4164,7 +4181,7 @@
           },
           "liquidityModel": {
             "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
-            "description": "The unreleased preparatory CLI 3.3.8 candidate includes this exact hash-bound intent. Live/default CLI 3.3.7 compatibility is unchanged; omission is accepted only where the live contract already permits byte-compatible earlier V3 requests."
+            "description": "The released CLI 3.3.8 includes this exact hash-bound intent in live/default profile 3.3.0 requests. Omission is accepted only where the live contract already permits byte-compatible earlier V3 requests."
           }
         },
         "allOf": [
@@ -4318,7 +4335,7 @@
             "$ref": "#/components/schemas/FundingSignaturePatchDescriptorV1"
           }
         ],
-        "description": "The unreleased preparatory CLI 3.3.8 candidate uses authorization patch V2. Live/default CLI 3.3.7 and V1 compatibility remain governed by the currently discovered 3.3 contract until activation."
+        "description": "The released CLI 3.3.8 uses authorization patch V2 for live/default profile 3.3.0 requests. V1 compatibility remains governed by the currently discovered 3.3 contract."
       },
       "Eip3009FundingAuthorizationDescriptorV1": {
         "type": "object",

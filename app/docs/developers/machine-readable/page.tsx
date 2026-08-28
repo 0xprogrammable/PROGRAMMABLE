@@ -121,8 +121,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz">
-              <code>@programmable/launch 3.3.7</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz">
+              <code>@programmable/launch 3.3.8</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and
@@ -304,10 +304,10 @@ export default function MachineReadableDocsPage() {
             submissions.
           </li>
           <li>
-            Profile <code>3.4.0</code> and CLI <code>3.3.8</code> are
-            preparatory, not live or installable. Live/default discovery remains
-            profile <code>3.3.0</code> and CLI <code>3.3.7</code> until backend
-            and <code>.well-known</code> activation are independently verified.
+            CLI <code>3.3.8</code> is the current installable release and
+            defaults to live profile <code>3.3.0</code>. Explicit profile{" "}
+            <code>3.4.0</code> output remains preparatory and is rejected by live
+            capabilities until backend and <code>.well-known</code> activation.
           </li>
           <li>
             The default V3 profile uses{" "}

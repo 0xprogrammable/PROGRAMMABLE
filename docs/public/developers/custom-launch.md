@@ -96,8 +96,9 @@ The versioned [`programmable.direct-native-hook-graph.v1` OpenAPI](https://progr
 defines the live create, list and single-resource shapes. The default profile uses
 `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
 `profileVersion: 3.3.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. Profile `3.4.0` is an unreleased preparatory
-candidate and must not be treated as live until backend and `.well-known` activation are independently verified.
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. CLI `3.3.8` defaults to this live `3.3.0`
+profile. Explicit profile `3.4.0` output is preparatory and is rejected by live capabilities until backend and
+`.well-known` activation are independently verified.
 Exact `3.2.0` requests retain their original nullable-image rules, and metadata-absent `3.1.0` and `3.0.0` requests remain readable and
 byte-identical retryable under their original immutable policy; revision 2 also remains a compatible profile contract
 for existing clients and resources. Discovery reports `productionLaunchAuthorized: true`. Do not fall back
@@ -246,17 +247,17 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.7`. CLI `3.3.8` remains
-an unreleased preparatory candidate.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.8`. Omit `profileVersion`
+for the live `3.3.0` default. Explicit `3.4.0` output remains preparatory and is rejected until backend activation.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
 matching solc artifacts. Its generated evidence is limited to `pre-submit`. The deterministic permission salt grind

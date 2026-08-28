@@ -8,20 +8,20 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.3.7`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.3.8`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
-The source tree also contains an unreleased CLI `3.3.8` / profile `3.4.0` candidate. It is preparatory only. Do not
-install, submit, or describe it as live until `.well-known` discovery and the backend independently advertise it.
+CLI `3.3.8` defaults fresh packs to the live profile `3.3.0`. It can materialize profile `3.4.0` only when that version
+is selected explicitly; live remote validation rejects the preparatory profile until capabilities activate it.
 
 The release includes `npm-shrinkwrap.json` so the runtime dependency closure is integrity-pinned. Release operators
 generate the CycloneDX inventory with `npm run sbom`; that inventory and the tarball checksum are evidence for exact
@@ -45,9 +45,9 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-The released package `3.3.7` uses live/default general profile
-`programmable.direct-native-hook-graph.v1` version `3.3.0`. The unreleased package `3.3.8` candidate prepares pending
-profile `3.4.0`; it is not accepted or authorized merely because this source exists. Exact nullable-image `3.2.0`
+The released package `3.3.8` uses live/default general profile
+`programmable.direct-native-hook-graph.v1` version `3.3.0`. The same package contains explicit preparatory support for
+profile `3.4.0`; it is not accepted or authorized merely because those materials exist. Exact nullable-image `3.2.0`
 requests retain their original immutable semantics, while metadata-absent `3.1.0`, `3.0.0`, and `2.0.0`
 requests remain reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable, but their create
@@ -95,7 +95,7 @@ target. That route may be the hook or a custom AMM, but it must contain the sing
 locator back to the vault and expose matching `settlementFeeVault()` behavior. Locators establish graph identity, not
 fee-path execution: server static and runtime evidence remains authoritative. Project token, hook and every unrelated
 multi-contract target remain applicant-owned and arbitrary within the general admission contract. The exact claim
-recipient remains `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` and the share remains 10 bps, subject to per-launch server evidence.
+recipient remains `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` and the share remains 0.10% (10 bps), subject to per-launch server evidence.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -314,7 +314,7 @@ For new requests the patch input contains exactly `targetId`, `nonceArgumentPath
 and `vArgumentPath`. Each path is a non-empty array of zero-based ABI indices: its first index selects a top-level
 initializer input and later indices descend only static tuples or fixed-size static arrays. The four distinct zero
 leaves must resolve to `bytes32`, `bytes32`, `bytes32`, and `uint8`. The CLI derives and proves them from the compiled
-ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the unreleased preparatory 3.3.8
+ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the profile 3.4
 schema. Legacy r/s/v-only v1 descriptors remain readable for exact retries and emit
 `FUNDING_SIGNATURE_PATCH_V1_LEGACY`, but new integrations must use v2.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
@@ -395,7 +395,7 @@ permit-reissue disposition endpoint is the wallet-key-only exception.
 When a partner credential is used, the server may return immutable `partnerAttribution`; callers cannot supply or
 override it. “Launched via” is provenance only, never verification, a safety mark, endorsement, or an economic category.
 
-Partner history follows immutable lineage. On both list and single-resource status reads, a root can read every launch
+Partner history follows immutable lineage. On both list and single-resource status reads, a partner root reads every launch
 attributed to its partner, including current and rotated child launches. A child can read only its own lineage, never
 root or sibling launches. Rotating a subkey revokes the old credential and gives the replacement the same lineage,
 preserving that lineage's private launch history while the revoked predecessor can no longer authenticate; a separately

@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
   "title": "Programmable Custom Launch V3 pack config",
-  "description": "Preparatory, not-live input contract for unreleased @programmable/launch 3.3.8 and profile 3.4.0. Live/default discovery remains @programmable/launch 3.3.7 with profile 3.3.0 until an independently verified backend activation. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
-  "x-programmable-status": "preparatory-not-live",
+  "description": "Public @programmable/launch 3.3.8 input contract. Omitted profileVersion defaults to live profile 3.3.0. Explicit profile 3.4.0 remains preparatory and is rejected by live capability validation until independently activated. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
+  "x-programmable-status": "live-with-preparatory-profile",
   "x-programmable-live-contract": {
-    "cliReleaseVersion": "3.3.7",
+    "cliReleaseVersion": "3.3.8",
     "profileVersion": "3.3.0"
   },
   "x-programmable-profile-3-4-contract": {
@@ -38,13 +38,17 @@
     "targets",
     "pool",
     "projectMetadata",
-    "behaviorScenarioInputs",
     "launchProfile",
     "permitWindow",
     "agentAttestation"
   ],
   "properties": {
     "schemaVersion": { "const": "programmable.launch-pack-config.v3" },
+    "profileVersion": {
+      "enum": ["3.3.0", "3.4.0"],
+      "default": "3.3.0",
+      "description": "Omit or select 3.3.0 for the live fresh-write profile. Profile 3.4.0 is explicit preparatory material and fails closed against live 3.3 capabilities."
+    },
     "launchWallet": { "$ref": "#/$defs/address" },
     "chainId": { "const": "1" },
     "nonce": { "$ref": "#/$defs/nonzeroBytes32" },
@@ -57,9 +61,9 @@
     },
     "targets": {
       "type": "array",
-      "minItems": 4,
+      "minItems": 3,
       "maxItems": 16,
-      "description": "Fresh profile 3.4.0 graphs contain four through sixteen direct targets, inclusive of the canonical settlement fee vault. Exact legacy profile 3.3.0 retries retain their historical three-target minimum outside this fresh-pack schema.",
+      "description": "Live profile 3.3.0 accepts three through sixteen direct targets. Explicit preparatory profile 3.4.0 requires four through sixteen targets inclusive of the canonical settlement fee vault.",
       "items": { "$ref": "#/$defs/target" }
     },
     "pool": { "$ref": "#/$defs/pool" },
@@ -72,6 +76,22 @@
     "agentAttestation": { "$ref": "#/$defs/agentAttestation" }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": { "profileVersion": { "const": "3.4.0" } },
+        "required": ["profileVersion"]
+      },
+      "then": {
+        "properties": { "targets": { "type": "array", "minItems": 4 } },
+        "required": ["behaviorScenarioInputs"]
+      },
+      "else": {
+        "not": {
+          "properties": { "behaviorScenarioInputs": {} },
+          "required": ["behaviorScenarioInputs"]
+        }
+      }
+    },
     {
       "if": {
         "properties": {

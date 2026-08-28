@@ -114,16 +114,16 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("PROGRAMMABLE_API_KEY");
       expect(source).toMatch(/(?:without (?:signing|a wallet signature).{0,40}(?:or|and) broadcast(?:ing)?|never[^\n]{0,80}sign[^\n]{0,40}broadcast)/i);
     }
-    expect(gitBookGuide).toContain("programmable-launch-3.3.7.tgz");
-    expect(rawGuide).toContain("programmable-launch-3.3.7.tgz");
-    expect(developerDocsMarkdown).toContain("programmable-launch-3.3.7.tgz");
+    expect(gitBookGuide).toContain("programmable-launch-3.3.8.tgz");
+    expect(rawGuide).toContain("programmable-launch-3.3.8.tgz");
+    expect(developerDocsMarkdown).toContain("programmable-launch-3.3.8.tgz");
     expect(gitBookGuide).toContain("examples/direct-native-v3-no-broadcast/README.md");
     expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
     expect(gitBookGuide).toContain("programmable-launch submit ./launch.json");
   });
 
   it("keeps the website agent prompt on the current public CLI release", () => {
-    expect(createGuide).toContain("public CLI 3.3.7 state machine");
+    expect(createGuide).toContain("public CLI 3.3.8 state machine");
     expect(createGuide).not.toContain("public CLI 3.1.0 flow");
   });
 
@@ -230,9 +230,9 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/V3/i);
     }
     for (const source of [gitBookGuide, rawGuide, cliGuide]) {
-      expect(source).toContain("programmable-launch-3.3.7.tgz.sha256");
+      expect(source).toContain("programmable-launch-3.3.8.tgz.sha256");
     }
-    expect(websiteGuide).toContain("programmable-launch-3.3.7.tgz.sha256");
+    expect(websiteGuide).toContain("programmable-launch-3.3.8.tgz.sha256");
 
     expect(v3OpenApi["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",

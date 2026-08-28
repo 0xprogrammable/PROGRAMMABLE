@@ -65,7 +65,8 @@ export const DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA = "3.1.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY = "3.2.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY = "3.3.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.4.0";
-export const DIRECT_NATIVE_PROFILE_VERSION = DIRECT_NATIVE_PROFILE_VERSION_V3;
+export const DIRECT_NATIVE_PROFILE_VERSION =
+  DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY;
 export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2 =
   "programmable.direct-native-hook-graph-profile.v2";
 export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V3 =
@@ -151,8 +152,8 @@ export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.3.7";
-export const RELEASE_TARBALL = "programmable-launch-3.3.7.tgz";
+export const RELEASE_TAG = "programmable-launch-v3.3.8";
+export const RELEASE_TARBALL = "programmable-launch-3.3.8.tgz";
 export const RELEASE_URL =
   `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =

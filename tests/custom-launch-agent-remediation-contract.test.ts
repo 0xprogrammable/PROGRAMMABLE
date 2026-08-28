@@ -179,11 +179,11 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.3.7",
+        cliReleaseVersion: "3.3.8",
         cliChecksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256",
         cliTarballSha256:
-          "sha256:905fff9464586cd1bf1873a0b8edb292603ffc4e07a4f7eef6e0fa2b6cb32fe8",
+          "sha256:13b7a73ab87fa2acca8d3be672e32b89c2d895fe7a715c09f3b3617379f77a30",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
@@ -305,10 +305,10 @@ describe("Custom Launch cold-agent remediation contract", () => {
     });
     expect(openApi.info.version).toBe("3.3.8");
     expect(openApi["x-programmable-availability"]).toMatchObject({
-      status: "preparatory-not-live",
-      publicAuthorized: false,
+      status: "live",
+      publicAuthorized: true,
       liveContract: {
-        cliReleaseVersion: "3.3.7",
+        cliReleaseVersion: "3.3.8",
         profileVersion: "3.3.0",
       },
       pendingProfileVersion: "3.4.0",

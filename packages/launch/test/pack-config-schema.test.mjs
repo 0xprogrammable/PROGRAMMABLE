@@ -44,12 +44,12 @@ test("published V3 pack-config schema accepts v2 nested authorization paths", ()
 });
 
 test("preparatory profile 3.4 schema requires four targets and pins the fee module", () => {
-  assert.equal(schema["x-programmable-status"], "preparatory-not-live");
+  assert.equal(schema["x-programmable-status"], "live-with-preparatory-profile");
   assert.deepEqual(schema["x-programmable-live-contract"], {
-    cliReleaseVersion: "3.3.7",
+    cliReleaseVersion: "3.3.8",
     profileVersion: "3.3.0",
   });
-  assert.equal(schema.properties.targets.minItems, 4);
+  assert.equal(schema.properties.targets.minItems, 3);
   assert.equal(schema.properties.targets.maxItems, 16);
   assert.deepEqual(
     schema["x-programmable-profile-3-4-contract"].canonicalSettlementFeeModule,
@@ -78,6 +78,18 @@ test("preparatory profile 3.4 schema requires four targets and pins the fee modu
   const config = baseConfig();
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
   config.targets.pop();
+  assert.equal(validate(config), false);
+});
+
+test("published V3 pack-config schema defaults cold packs to live profile 3.3", () => {
+  const config = baseConfig();
+  delete config.profileVersion;
+  delete config.behaviorScenarioInputs;
+  config.targets.pop();
+  assert.equal(config.targets.length, 3);
+  assert.equal(validate(config), true, JSON.stringify(validate.errors));
+
+  config.behaviorScenarioInputs = baseConfig().behaviorScenarioInputs;
   assert.equal(validate(config), false);
 });
 
@@ -248,6 +260,7 @@ function baseConfig() {
   };
   return {
     schemaVersion: "programmable.launch-pack-config.v3",
+    profileVersion: "3.4.0",
     launchWallet: "0x1111111111111111111111111111111111111111",
     chainId: "1",
     nonce: `0x${"22".repeat(32)}`,

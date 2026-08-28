@@ -127,6 +127,8 @@ test("V3 pack and validate preserve a nine-target project graph plus the canonic
     assert.equal(Object.hasOwn(fixedRequest, "signature"), false);
 
     const legacyMetadataConfig = structuredClone(fixture.config);
+    delete legacyMetadataConfig.profileVersion;
+    delete legacyMetadataConfig.behaviorScenarioInputs;
     legacyMetadataConfig.projectMetadata.presentation.description = "";
     legacyMetadataConfig.projectMetadata.presentation.image = null;
     legacyMetadataConfig.projectMetadata.presentation.links = [];
@@ -147,6 +149,8 @@ test("V3 pack and validate preserve a nine-target project graph plus the canonic
     assert.equal(legacyMetadataBuilt.request.projectMetadata.presentation.image, null);
 
     const legacyConfig = structuredClone(fixture.config);
+    delete legacyConfig.profileVersion;
+    delete legacyConfig.behaviorScenarioInputs;
     delete legacyConfig.projectMetadata;
     await writeFile(
       fixture.configPath,
@@ -575,6 +579,7 @@ contract AuxiliaryComponent {
   };
   const config = {
     schemaVersion: "programmable.launch-pack-config.v3",
+    profileVersion: "3.4.0",
     launchWallet,
     chainId: "1",
     nonce: `0x${"22".repeat(32)}`,
