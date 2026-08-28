@@ -36,6 +36,13 @@ const DEFAULT_RPC_ENDPOINTS = [
   "https://eth.drpc.org",
 ];
 const REQUEST_TIMEOUT_MS = 15_000;
+const RPC_RATE_LIMIT_RETRY_DELAYS_MS = Object.freeze([
+  0,
+  1_500,
+  4_000,
+  9_000,
+  18_000,
+]);
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const UINT256_MAX = (1n << 256n) - 1n;
 
@@ -196,17 +203,44 @@ function assertEndpoints(endpoints) {
 }
 
 async function rpc(endpoint, method, params = []) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!response.ok) fail(`RPC ${method} returned HTTP ${response.status}`);
-  const payload = await response.json();
-  if (payload?.error) fail(`RPC ${method} failed: ${payload.error.message}`);
-  if (payload?.result === undefined) fail(`RPC ${method} returned no result`);
-  return payload.result;
+  for (
+    let attempt = 0;
+    attempt < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length;
+    attempt += 1
+  ) {
+    const delay = RPC_RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (
+      response.status === 429 &&
+      attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length
+    ) {
+      await response.body?.cancel();
+      continue;
+    }
+    if (!response.ok) fail(`RPC ${method} returned HTTP ${response.status}`);
+    const payload = await response.json();
+    const rateLimited = payload?.error && (
+      Number(payload.error.code) === 15 ||
+      Number(payload.error.code) === -32_005 ||
+      /rate limit|too many requests/iu.test(payload.error.message || "")
+    );
+    if (
+      rateLimited &&
+      attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length
+    ) continue;
+    if (payload?.error) fail(`RPC ${method} failed: ${payload.error.message}`);
+    if (payload?.result === undefined) fail(`RPC ${method} returned no result`);
+    return payload.result;
+  }
+  fail(`RPC ${method} remained rate limited`);
 }
 
 async function readJson(file, label) {
