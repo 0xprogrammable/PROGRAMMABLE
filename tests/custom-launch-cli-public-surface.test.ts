@@ -486,7 +486,7 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v3.openapi).toBe("3.1.0");
-    expect(v3.info.version).toBe("3.3.8-preparatory");
+    expect(v3.info.version).toBe("3.3.8");
     expect(v3["x-programmable-availability"]).toMatchObject({
       status: "preparatory-not-live",
       publicAuthorized: false,

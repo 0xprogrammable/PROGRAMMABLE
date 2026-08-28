@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.3.8-preparatory",
+    "version": "3.3.8",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
     "description": "Preparatory, not-live contract for pending profile 3.4.0. It is not evidence that CLI 3.3.8 is released or that the backend accepts 3.4.0. Live/default discovery remains CLI 3.3.7 with profile 3.3.0 until an independently verified backend activation. Pending 3.4.0 preserves arbitrary project-owned token, hook and multi-contract targets while requiring four to sixteen targets inclusive of the frozen programmable:settlement-fee-vault:v1 module and its reciprocal route binding. Exact 3.3.0 and earlier resources retain their immutable compatibility semantics. CLI, client and model checks only prepare and bind a request; the server remains the behavior, fee-path and authorization authority. No result is an audit, honeypot guarantee, universal safety guarantee, liquidity claim or universal compatibility claim.",
     "license": {
