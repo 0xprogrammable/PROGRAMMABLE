@@ -906,7 +906,7 @@
           "properties": {
             "fromBlock": { "$ref": "#/$defs/blockNumber" },
             "toBlock": { "$ref": "#/$defs/blockNumber" },
-            "nativeAccrualEvents": { "const": 5 },
+            "nativeAccrualEvents": { "type": "integer", "minimum": 5 },
             "creatorClaimEvents": { "const": 1 },
             "launcherClaimEvents": { "const": 1 }
           }
