@@ -41,6 +41,7 @@ const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
+const PROFILE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const PARTNER_API_KEY =
   /^pm_partner_(?:root_)?[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
 const MAX_SUBMISSION_JOURNAL_BYTES = 12_582_912;
@@ -689,14 +690,44 @@ function assertCapabilitiesResponse(value) {
     ]),
     "projectMetadata.requiredFields",
   );
+  const requiredForProfileVersions = capabilitiesProfileVersions(
+    value.projectMetadata?.requiredForProfileVersions,
+    "projectMetadata.requiredForProfileVersions",
+  );
+  const strictMetadataProfileVersions = capabilitiesProfileVersions(
+    value.projectMetadata?.strictMetadataProfileVersions,
+    "projectMetadata.strictMetadataProfileVersions",
+  );
+  const legacyMetadataProfileVersions = capabilitiesProfileVersions(
+    value.projectMetadata?.legacyMetadataProfileVersions,
+    "projectMetadata.legacyMetadataProfileVersions",
+  );
   assertCapabilitiesField(
-    canonicalizeJson(value.projectMetadata?.requiredForProfileVersions)
-      === canonicalizeJson(["3.2.0", "3.3.0"]),
+    requiredForProfileVersions.includes("3.2.0")
+      && requiredForProfileVersions.includes("3.3.0")
+      && requiredForProfileVersions.every(
+        (profileVersion) => compareProfileVersions(profileVersion, "3.2.0") >= 0,
+      ),
     "projectMetadata.requiredForProfileVersions",
   );
   assertCapabilitiesField(
-    canonicalizeJson(value.projectMetadata?.legacyMetadataProfileVersions)
-      === canonicalizeJson(["3.2.0"]),
+    strictMetadataProfileVersions.includes("3.3.0")
+      && strictMetadataProfileVersions.every((profileVersion) =>
+        requiredForProfileVersions.includes(profileVersion))
+      && strictMetadataProfileVersions.every(
+        (profileVersion) => compareProfileVersions(profileVersion, "3.3.0") >= 0,
+      ),
+    "projectMetadata.strictMetadataProfileVersions",
+  );
+  assertCapabilitiesField(
+    legacyMetadataProfileVersions.includes("3.2.0")
+      && legacyMetadataProfileVersions.every((profileVersion) =>
+        requiredForProfileVersions.includes(profileVersion))
+      && legacyMetadataProfileVersions.every(
+        (profileVersion) => compareProfileVersions(profileVersion, "3.3.0") < 0,
+      )
+      && legacyMetadataProfileVersions.every((profileVersion) =>
+        !strictMetadataProfileVersions.includes(profileVersion)),
     "projectMetadata.legacyMetadataProfileVersions",
   );
   assertCapabilitiesField(
@@ -780,6 +811,33 @@ function assertCapabilitiesResponse(value) {
     safeWalletHandoffBase(value.walletHandoffBaseUrl) !== null,
     "walletHandoffBaseUrl",
   );
+}
+
+function capabilitiesProfileVersions(value, field) {
+  assertCapabilitiesField(Array.isArray(value) && value.length > 0, field, value);
+  const versions = [];
+  for (const entry of value) {
+    assertCapabilitiesField(typeof entry === "string" && PROFILE_VERSION.test(entry), field, value);
+    versions.push(entry);
+  }
+  assertCapabilitiesField(new Set(versions).size === versions.length, field, value);
+  assertCapabilitiesField(
+    versions.every((entry, index) =>
+      index === 0 || compareProfileVersions(versions[index - 1], entry) < 0),
+    field,
+    value,
+  );
+  return versions;
+}
+
+function compareProfileVersions(left, right) {
+  const leftParts = left.split(".").map((part) => Number.parseInt(part, 10));
+  const rightParts = right.split(".").map((part) => Number.parseInt(part, 10));
+  for (let index = 0; index < leftParts.length; index += 1) {
+    const delta = leftParts[index] - rightParts[index];
+    if (delta !== 0) return delta;
+  }
+  return 0;
 }
 
 function assertCapabilitiesField(condition, field, value) {

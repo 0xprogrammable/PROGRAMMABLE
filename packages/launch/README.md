@@ -8,19 +8,19 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.9.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.9.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.3.8`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.3.9`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
-CLI `3.3.8` defaults fresh packs to the live profile `3.3.0`. It can materialize profile `3.4.0` only when that version
+CLI `3.3.9` defaults fresh packs to the live profile `3.3.0`. It can materialize profile `3.4.0` only when that version
 is selected explicitly; live remote validation rejects the preparatory profile until capabilities activate it.
 
 The release includes `npm-shrinkwrap.json` so the runtime dependency closure is integrity-pinned. Release operators
@@ -45,7 +45,7 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-The released package `3.3.8` uses live/default general profile
+The released package `3.3.9` uses live/default general profile
 `programmable.direct-native-hook-graph.v1` version `3.3.0`. The same package contains explicit preparatory support for
 profile `3.4.0`; it is not accepted or authorized merely because those materials exist. Exact nullable-image `3.2.0`
 requests retain their original immutable semantics, while metadata-absent `3.1.0`, `3.0.0`, and `2.0.0`
@@ -275,14 +275,20 @@ constructor or initializer string argument clearly represents `name` or `symbol`
 Constant, inherited, proxy, initializer-based and other arbitrary token designs are not rejected when a value cannot
 be extracted deterministically: the declaration is still bound to the request and onchain launch ID, and the API
 requires post-deployment `name()` / `symbol()` readback where supported. A mismatch or unavailable readback is public
-truth; it never silently rewrites the owner's declaration.
+truth; it never silently rewrites the owner's declaration. Discovery advertises
+`requiredForProfileVersions = ["3.2.0","3.3.0","3.4.0"]`, `strictMetadataProfileVersions = ["3.3.0","3.4.0"]`, and
+`legacyMetadataProfileVersions = ["3.2.0"]`, so exact `3.2.0`, `3.3.0` and pending `3.4.0` all carry metadata while
+only exact `3.3.0` and pending `3.4.0` use the strict current policy and only exact `3.2.0` preserves its older
+nullable-image semantics.
 
 `projectMetadataHash` is SHA-256 of UTF-8 `programmable.project-metadata.v1`, one NUL byte, and JCS metadata bytes.
 The launch identity uses a metadata-bound `graphBundleHash`: SHA-256 of UTF-8
 `programmable.custom-graph-project-metadata.v1`, one NUL byte, and JCS
 `{graphBundleHash:<unbound graph SHA-256>,projectMetadataHash}`. The receipt exposes both hashes so the website wallet
-review and finalized public read model can verify the same identity. Exact legacy `3.2.0` retries preserve their original
-metadata rules. Exact `3.1.0`, `3.0.0`, and `2.0.0` retries omit metadata rather than inventing it.
+review and finalized public read model can verify the same identity. Finalized feed items also carry
+`launchProfileVersion` (`2.0.0` through `3.4.0`) so a client can interpret profile-conditional metadata without
+guessing. Exact legacy `3.2.0` retries preserve their original metadata rules. Exact `3.1.0`, `3.0.0`, and `2.0.0`
+retries omit metadata rather than inventing it.
 
 Each target has exactly `targetId`, `compilationUnitId`, `artifact`, `applicantSalt`, `constructorArguments`,
 `initializer`, `deploymentValueWei`, `initializerValueWei`, `componentKind`, `declaredHookPermissions`, and

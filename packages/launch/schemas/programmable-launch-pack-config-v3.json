@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
   "title": "Programmable Custom Launch V3 pack config",
-  "description": "Public @programmable/launch 3.3.8 input contract. Omitted profileVersion defaults to live profile 3.3.0. Explicit profile 3.4.0 remains preparatory and is rejected by live capability validation until independently activated. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
+  "description": "Public @programmable/launch 3.3.9 input contract. Omitted profileVersion defaults to live profile 3.3.0. Explicit profile 3.4.0 remains preparatory and is rejected by live capability validation until independently activated. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
   "x-programmable-status": "live-with-preparatory-profile",
   "x-programmable-live-contract": {
-    "cliReleaseVersion": "3.3.8",
+    "cliReleaseVersion": "3.3.9",
     "profileVersion": "3.3.0"
   },
   "x-programmable-profile-3-4-contract": {

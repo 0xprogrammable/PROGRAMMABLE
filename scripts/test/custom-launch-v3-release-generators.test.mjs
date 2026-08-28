@@ -139,7 +139,7 @@ async function releaseFixture(t) {
   const backendRoot = join(root, "backend");
   await json(join(websiteRoot, "public/openapi/custom-launch-v3.json"), {
     openapi: "3.1.0",
-    info: { title: "fixture", version: "3.3.7" },
+    info: { title: "fixture", version: "3.3.9" },
     "x-programmable-profile": {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileVersion: "3.3.0",
@@ -155,7 +155,7 @@ async function releaseFixture(t) {
   });
   await json(join(websiteRoot, "packages/launch/package.json"), {
     name: "@programmable/launch",
-    version: "3.3.7",
+    version: "3.3.9",
   });
   const profile = {
     schemaVersion: "programmable.direct-native-hook-graph-admission-profile.v3",

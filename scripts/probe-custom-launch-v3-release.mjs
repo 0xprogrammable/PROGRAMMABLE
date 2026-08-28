@@ -10,6 +10,7 @@ const MAX_LAUNCH_CHECKSUM_BYTES = 256;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const COMMIT = /^[0-9a-f]{40}$/u;
 const CURSOR = /^[A-Za-z0-9_-]{16,512}$/u;
+const PROFILE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const HARD_BLOCK_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "RUNTIME_CALLCODE", targetRoles: Object.freeze(["any"]) }),
   Object.freeze({ code: "RUNTIME_SELFDESTRUCT", targetRoles: Object.freeze(["any"]) }),
@@ -20,13 +21,13 @@ const HARD_BLOCK_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
 ]);
 const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
-  version: "3.3.7",
+  version: "3.3.9",
   tarballUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
   checksumUrl:
-    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
+    "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
   tarballSha256:
-    "sha256:ced51e3bad5aee678aef1ba5dba8e6d43c7612ca81e010c7746479cc6e03202b",
+    "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
 });
 
 function canonicalize(value) {
@@ -41,6 +42,154 @@ function canonicalize(value) {
 
 function sha256(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function compareProfileVersions(left, right) {
+  const leftParts = left.split(".").map((part) => Number.parseInt(part, 10));
+  const rightParts = right.split(".").map((part) => Number.parseInt(part, 10));
+  for (let index = 0; index < leftParts.length; index += 1) {
+    const delta = leftParts[index] - rightParts[index];
+    if (delta !== 0) return delta;
+  }
+  return 0;
+}
+
+function readOrderedProfileVersions(value, label) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${label} must be a non-empty ordered profile-version array`);
+  }
+  for (const entry of value) {
+    if (typeof entry !== "string" || !PROFILE_VERSION.test(entry)) {
+      throw new Error(`${label} must contain only x.y.z profile versions`);
+    }
+  }
+  if (new Set(value).size !== value.length) {
+    throw new Error(`${label} must not contain duplicate profile versions`);
+  }
+  for (let index = 1; index < value.length; index += 1) {
+    if (compareProfileVersions(value[index - 1], value[index]) >= 0) {
+      throw new Error(`${label} must remain strictly ascending`);
+    }
+  }
+  return value;
+}
+
+function assertProjectMetadataCapabilities(projectMetadata) {
+  const {
+    requiredForProfileVersions: _requiredForProfileVersions,
+    strictMetadataProfileVersions: _strictMetadataProfileVersions,
+    legacyMetadataProfileVersions: _legacyMetadataProfileVersions,
+    ...stableProjectMetadata
+  } = projectMetadata ?? {};
+  if (
+    canonicalize(stableProjectMetadata) !== canonicalize({
+      schemaVersion: "programmable.project-metadata.v1",
+      inputSchemaVersion: "programmable.project-metadata-input.v1",
+      requiredForProfileVersion: "3.3.0",
+      strictNewPackPolicyProfileVersion: "3.3.0",
+      enforcement: {
+        routes: [
+          "POST /v3/custom-launches/preflight",
+          "POST /v3/custom-launches",
+        ],
+        serverSide: true,
+        clientBypassAccepted: false,
+        failureCode: "PROJECT_METADATA_POLICY_INVALID",
+        legacyProfilesNotRetrofitted: true,
+      },
+      profilePolicy: {
+        schemaVersion: "programmable.project-metadata-policy.v1",
+        descriptionMinimumUtf8Bytes: 20,
+        descriptionMaximumUtf8Bytes: 4096,
+        descriptionMinimumUnicodeLettersOrNumbers: 8,
+        imageRequired: true,
+        imageReceiptSourceManifestBindingRequired: true,
+        imageMediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+        linksMaximumCount: 32,
+        requiredLinkKinds: ["website", "x"],
+        exactlyOneRequiredLinkPerKind: true,
+        websiteUriPolicy: "canonical-public-credential-free-https",
+        xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
+      },
+      legacyWithoutMetadataProfileVersions: ["2.0.0", "3.0.0", "3.1.0"],
+      requiredFields: [
+        "token.name",
+        "token.symbol",
+        "presentation.description",
+        "presentation.image",
+        "presentation.links",
+      ],
+      imageMayBeNull: false,
+      legacyImageMayBeNullProfileVersions: ["3.2.0"],
+      description: {
+        minimumUtf8Bytes: 20,
+        maximumUtf8Bytes: 4096,
+        minimumUnicodeLettersOrNumbers: 8,
+        nfcAndTrimmedRequired: true,
+      },
+      image: {
+        required: true,
+        exactContentSha256Required: true,
+        exactByteLengthRequired: true,
+        sourceManifestFileBindingRequired: true,
+        mediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+      },
+      exactlyOneRequiredLinkPerKind: true,
+      requiredLinkKinds: ["website", "x"],
+      websiteUriPolicy: "canonical-public-credential-free-https",
+      xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
+      maximumLinks: 32,
+      linkKinds: [
+        "website",
+        "documentation",
+        "x",
+        "telegram",
+        "discord",
+        "github",
+        "other",
+      ],
+      projectMetadataHashDomain: "programmable.project-metadata.v1",
+      graphBundleHashBindingDomain:
+        "programmable.custom-graph-project-metadata.v1",
+      postDeploymentTokenReadbackRequired: true,
+    })
+  ) {
+    throw new Error("Custom Launch API V3 project-metadata capabilities differ from the public contract");
+  }
+  const required = readOrderedProfileVersions(
+    projectMetadata?.requiredForProfileVersions,
+    "capabilities.projectMetadata.requiredForProfileVersions",
+  );
+  const strict = readOrderedProfileVersions(
+    projectMetadata?.strictMetadataProfileVersions,
+    "capabilities.projectMetadata.strictMetadataProfileVersions",
+  );
+  const legacy = readOrderedProfileVersions(
+    projectMetadata?.legacyMetadataProfileVersions,
+    "capabilities.projectMetadata.legacyMetadataProfileVersions",
+  );
+  if (
+    !required.includes("3.2.0")
+    || !required.includes("3.3.0")
+    || !required.every((profileVersion) => compareProfileVersions(profileVersion, "3.2.0") >= 0)
+  ) {
+    throw new Error("Custom Launch API V3 required metadata profile versions lost the known live baseline");
+  }
+  if (
+    !strict.includes("3.3.0")
+    || !strict.every((profileVersion) => required.includes(profileVersion))
+    || !strict.every((profileVersion) => compareProfileVersions(profileVersion, "3.3.0") >= 0)
+  ) {
+    throw new Error("Custom Launch API V3 strict metadata profile versions differ from the known live baseline");
+  }
+  if (
+    !legacy.includes("3.2.0")
+    || !legacy.every((profileVersion) => required.includes(profileVersion))
+    || !legacy.every((profileVersion) => compareProfileVersions(profileVersion, "3.3.0") < 0)
+    || !legacy.every((profileVersion) => !strict.includes(profileVersion))
+  ) {
+    throw new Error("Custom Launch API V3 legacy metadata profile versions differ from the known live baseline");
+  }
 }
 
 function exactKeys(value, keys, label) {
@@ -182,7 +331,7 @@ export async function probeCustomLaunchV3Release(input) {
   }
   const openApi = parseJson(openApiResult.bytes, "staged V3 OpenAPI");
   if (
-    openApi?.info?.version !== "3.3.7"
+    openApi?.info?.version !== "3.3.9"
     || openApi?.["x-programmable-profile"]?.profileId
       !== "programmable.direct-native-hook-graph.v1"
     || openApi?.["x-programmable-profile"]?.profileVersion !== "3.3.0"
@@ -328,79 +477,6 @@ export async function probeCustomLaunchV3Release(input) {
     || capabilities?.routes?.list !== "/v3/custom-launches"
     || capabilities?.routes?.status !== "/v3/custom-launches/{launchId}"
     || capabilities?.routes?.finalizedMetadata !== "/v3/finalized-custom-launches"
-    || canonicalize(capabilities?.projectMetadata) !== canonicalize({
-      schemaVersion: "programmable.project-metadata.v1",
-      inputSchemaVersion: "programmable.project-metadata-input.v1",
-      requiredForProfileVersion: "3.3.0",
-      requiredForProfileVersions: ["3.2.0", "3.3.0"],
-      strictNewPackPolicyProfileVersion: "3.3.0",
-      enforcement: {
-        routes: [
-          "POST /v3/custom-launches/preflight",
-          "POST /v3/custom-launches",
-        ],
-        serverSide: true,
-        clientBypassAccepted: false,
-        failureCode: "PROJECT_METADATA_POLICY_INVALID",
-        legacyProfilesNotRetrofitted: true,
-      },
-      profilePolicy: {
-        schemaVersion: "programmable.project-metadata-policy.v1",
-        descriptionMinimumUtf8Bytes: 20,
-        descriptionMaximumUtf8Bytes: 4096,
-        descriptionMinimumUnicodeLettersOrNumbers: 8,
-        imageRequired: true,
-        imageReceiptSourceManifestBindingRequired: true,
-        imageMediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
-        linksMaximumCount: 32,
-        requiredLinkKinds: ["website", "x"],
-        exactlyOneRequiredLinkPerKind: true,
-        websiteUriPolicy: "canonical-public-credential-free-https",
-        xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
-      },
-      legacyWithoutMetadataProfileVersions: ["2.0.0", "3.0.0", "3.1.0"],
-      legacyMetadataProfileVersions: ["3.2.0"],
-      requiredFields: [
-        "token.name",
-        "token.symbol",
-        "presentation.description",
-        "presentation.image",
-        "presentation.links",
-      ],
-      imageMayBeNull: false,
-      legacyImageMayBeNullProfileVersions: ["3.2.0"],
-      description: {
-        minimumUtf8Bytes: 20,
-        maximumUtf8Bytes: 4096,
-        minimumUnicodeLettersOrNumbers: 8,
-        nfcAndTrimmedRequired: true,
-      },
-      image: {
-        required: true,
-        exactContentSha256Required: true,
-        exactByteLengthRequired: true,
-        sourceManifestFileBindingRequired: true,
-        mediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
-      },
-      exactlyOneRequiredLinkPerKind: true,
-      requiredLinkKinds: ["website", "x"],
-      websiteUriPolicy: "canonical-public-credential-free-https",
-      xUriPattern: "^https://x\\.com/[A-Za-z0-9_]{1,64}$",
-      maximumLinks: 32,
-      linkKinds: [
-        "website",
-        "documentation",
-        "x",
-        "telegram",
-        "discord",
-        "github",
-        "other",
-      ],
-      projectMetadataHashDomain: "programmable.project-metadata.v1",
-      graphBundleHashBindingDomain:
-        "programmable.custom-graph-project-metadata.v1",
-      postDeploymentTokenReadbackRequired: true,
-    })
     || capabilities?.preflight?.quotaConsumed !== false
     || capabilities?.preflight?.nonceAllocated !== false
     || capabilities?.preflight?.persisted !== false
@@ -419,6 +495,7 @@ export async function probeCustomLaunchV3Release(input) {
     || capabilities?.auditClaim !== false
     || capabilities?.universalCompatibilityClaim !== false
   ) throw new Error("Custom Launch API V3 capabilities differ from the public contract");
+  assertProjectMetadataCapabilities(capabilities?.projectMetadata);
 
   const listResult = await fetchBytes(new URL("/v3/custom-launches?limit=1", apiOrigin), {
     method: "GET",
