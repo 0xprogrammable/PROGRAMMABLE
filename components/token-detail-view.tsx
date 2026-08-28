@@ -28,6 +28,8 @@ import {
 } from "@/components/token-price-chart";
 import { TokenDetailShell } from "@/components/token-detail-shell";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
+import { PartnerLaunchAttribution } from
+  "@/components/partner-launch-attribution";
 import { CreatorArticle } from "@/components/creator-article";
 import { CreatorArticleEditAction } from
   "@/components/creator-article-edit-action";
@@ -74,6 +76,8 @@ import {
 import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
   "@/lib/creator-article/programmable-example-v1";
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
+import { parseLaunchPartnerAttributionV1 } from
+  "@/lib/launch-partner-attribution";
 import styles from "./token-experience.module.css";
 
 type DetailToken = LauncherToken & Readonly<{
@@ -497,6 +501,12 @@ function parseLauncherToken(value: unknown): DetailToken | null {
         .map(parseTokenLink)
         .filter((link): link is TokenLink => link !== null)
     : [];
+  const partnerAttribution = value.partnerAttribution === undefined
+    ? undefined
+    : parseLaunchPartnerAttributionV1(value.partnerAttribution);
+  if (value.partnerAttribution !== undefined && partnerAttribution === null) {
+    return null;
+  }
   const uniswapV4Pool =
     value.uniswapV4Pool === undefined
       ? undefined
@@ -513,6 +523,7 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     imageUrl: safePublicImageUrl(value.imageUrl),
     uniswapV4Pool: uniswapV4Pool ?? undefined,
     ...(platformFeePolicy ? { platformFeePolicy } : {}),
+    ...(partnerAttribution ? { partnerAttribution } : {}),
   };
   const valuation = value.valuation === undefined
     ? exploreValuation(token)
@@ -803,6 +814,25 @@ function parseRouterTradeProject(
       ...(candidate.poolId === undefined ? {} : { poolId: candidate.poolId }),
     });
     if (capability === null) return null;
+    const baseCurrency = capability.poolKey.currency0AssetId
+        === baseAsset.assetId
+      ? capability.poolKey.currency0
+      : capability.poolKey.currency1;
+    const quoteCurrency = capability.poolKey.currency0AssetId
+        === quoteAsset.assetId
+      ? capability.poolKey.currency0
+      : capability.poolKey.currency1;
+    const namespace = `eip155:${token.launchStampProvenance.chainId}`;
+    if (
+      baseAsset.identity.namespace !== namespace
+      || quoteAsset.identity.namespace !== namespace
+      || !isAddress(baseAsset.identity.value)
+      || !isAddress(quoteAsset.identity.value)
+      || baseCurrency.value.toLowerCase()
+        !== baseAsset.identity.value.toLowerCase()
+      || quoteCurrency.value.toLowerCase()
+        !== quoteAsset.identity.value.toLowerCase()
+    ) return null;
     markets.push({
       marketId: candidate.marketId,
       kind: candidate.kind,
@@ -819,9 +849,7 @@ function parseRouterTradeProject(
       market.status === "active" &&
       market.poolId?.toLowerCase() === token.poolId.toLowerCase() &&
       market.baseAsset.identity.value.toLowerCase() ===
-        token.tokenAddress.toLowerCase() &&
-      market.quoteAsset.identity.value.toLowerCase() ===
-        "0x0000000000000000000000000000000000000000",
+        token.tokenAddress.toLowerCase(),
   );
   if (!exactMarket) return null;
 
@@ -1895,6 +1923,12 @@ function TokenDetailContent({
               >
                 {token.name}
               </h1>
+              {token.partnerAttribution ? (
+                <PartnerLaunchAttribution
+                  attribution={token.partnerAttribution}
+                  compact
+                />
+              ) : null}
               <div className={styles.addressActions}>
                 <button
                   className={styles.address}
@@ -2005,8 +2039,8 @@ function TokenDetailContent({
             <div className={styles.routerNotice} role="status">
               <strong>Router launch</strong>
               <p>
-                This page shows launch data only. Trading is not enabled here
-                for this PoolKey.
+                Onsite trading is not enabled for this launch. Launch details
+                remain available.
               </p>
             </div>
           ) : !canUseClassicTrade || classicSwapFeeBps === null ? (

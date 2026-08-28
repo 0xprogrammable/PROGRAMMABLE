@@ -15,7 +15,6 @@ import type {
   DiscoverableMarketTradeCapabilityV1,
 } from "../../custom-launch/contract-v2";
 import {
-  resolveRouterTradeAdapterV1,
   routerTradeAdapterForProjectIdV1,
   type RouterTradeAdapterV1,
 } from "../../custom-launch/router-trade-adapters-v1";
@@ -40,13 +39,17 @@ import {
   type CustomMarketTradeRequestV1,
 } from "../../custom-launch/trade-v1";
 import type { PreparedTradeTransaction } from "../../prepared-transaction";
-import { readFinalizedRouterCustomExploreEntriesV1 } from
+import { readFinalizedRouterCustomIdentitySnapshotV1 } from
   "../../alchemy/router-custom-public.server";
 import { getProductionWebsiteProjectionTargetV1 } from "../projection-target/website-target";
 import {
   isCustomLaunchPublicEnabled,
   isCustomLaunchRegistryPublicReadEnabled,
 } from "./public-readiness";
+import { findServerBoundRouterTradeAdapterV1 } from
+  "./router-trade-descriptor-v1";
+import { isFinalizedTradeAdapterMarketIdV1 } from
+  "./finalized-trade-adapter-descriptor-v1";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const GAS_PRICE_BUFFER_BPS = 12_500n;
@@ -288,23 +291,29 @@ export async function prepareCustomMarketTradeV1(input: Readonly<{
   let projectChainProfileHash: `sha256:${string}`;
   let market: DiscoverableLaunchMarketV2 | undefined;
   let routerAdapter: RouterTradeAdapterV1 | null = null;
-  const requestedRouterAdapter = routerTradeAdapterForProjectIdV1(
+  const isReviewedRouterProject = routerTradeAdapterForProjectIdV1(
     input.request.projectId,
+  ) !== null;
+  const isDescriptorRouterMarket = isFinalizedTradeAdapterMarketIdV1(
+    input.request.marketId,
   );
-  if (requestedRouterAdapter !== null) {
-    const entries = await readFinalizedRouterCustomExploreEntriesV1({
+  if (isReviewedRouterProject || isDescriptorRouterMarket) {
+    const snapshot = await readFinalizedRouterCustomIdentitySnapshotV1({
       signal: AbortSignal.timeout(10_000),
     });
-    const matches = entries.flatMap((entry) => {
-      const adapter = resolveRouterTradeAdapterV1(entry);
-      return adapter?.projectId === input.request.projectId ? [adapter] : [];
+    routerAdapter = findServerBoundRouterTradeAdapterV1(snapshot, {
+      projectId: input.request.projectId,
     });
-    if (matches.length !== 1) {
-      throw new CustomMarketTradeUnavailableErrorV1(
-        "The Router Custom project is not an exact finalized adapter",
-      );
-    }
-    routerAdapter = matches[0]!;
+  }
+  if (
+    (isReviewedRouterProject || isDescriptorRouterMarket)
+    && routerAdapter === null
+  ) {
+    throw new CustomMarketTradeUnavailableErrorV1(
+      "The Router Custom project is not an exact finalized adapter",
+    );
+  }
+  if (routerAdapter !== null) {
     projectId = routerAdapter.projectId;
     projectChainId = routerAdapter.chainId;
     projectChainProfileId = routerAdapter.chainProfileId;

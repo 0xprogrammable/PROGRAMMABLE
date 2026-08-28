@@ -19,6 +19,10 @@ import {
   parseLaunchPartnerAttributionV1,
   type LaunchPartnerAttributionV1,
 } from "../../launch-partner-attribution";
+import {
+  parseFinalizedTradeAdapterDescriptorV1,
+  type FinalizedTradeAdapterDescriptorV1,
+} from "./finalized-trade-adapter-descriptor-v1";
 
 export const FINALIZED_CUSTOM_LAUNCH_METADATA_FEED_URL =
   "https://api.programmable.market/v3/finalized-custom-launches" as const;
@@ -170,6 +174,7 @@ export type FinalizedCustomLaunchMetadataV1 = Readonly<{
   projectMetadata: ProjectMetadataV1;
   projectMetadataHash: Sha256Digest;
   partnerAttribution?: LaunchPartnerAttributionV1;
+  tradeAdapterDescriptor?: FinalizedTradeAdapterDescriptorV1;
   bindings: Readonly<{
     requestHash: Sha256Digest;
     launchIntentHash: Sha256Digest;
@@ -229,6 +234,7 @@ export type RouterCustomMetadataOverlayBindingV1 = Readonly<{
   unboundGraphBundleHash: Sha256Digest;
   artifactHash: Sha256Digest;
   partnerAttribution?: LaunchPartnerAttributionV1;
+  tradeAdapterDescriptor?: FinalizedTradeAdapterDescriptorV1;
   tokenMetadataReadback: Readonly<{
     status: "matching" | "unavailable";
     observedAtBlockNumber: string | null;
@@ -497,6 +503,9 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
       ...(metadata.partnerAttribution
         ? { partnerAttribution: metadata.partnerAttribution }
         : {}),
+      ...(metadata.tradeAdapterDescriptor
+        ? { tradeAdapterDescriptor: metadata.tradeAdapterDescriptor }
+        : {}),
       tokenMetadataReadback: Object.freeze({
         status: metadata.tokenMetadataReadback.status,
         observedAtBlockNumber:
@@ -669,12 +678,17 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     && typeof value === "object"
     && !Array.isArray(value)
     && Object.hasOwn(value, "partnerAttribution");
+  const hasTradeAdapterDescriptor = value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.hasOwn(value, "tradeAdapterDescriptor");
   const record = exactRecord(value, [
     "schemaVersion", "resourceId", "routerLaunchId", "chainId", "router",
     "token", "hook", "poolManager", "poolId", "projectMetadata",
     "projectMetadataHash", "bindings", "tokenMetadataReadback", "finality",
     "createdAt", "finalizedAt",
     ...(hasPartnerAttribution ? ["partnerAttribution"] : []),
+    ...(hasTradeAdapterDescriptor ? ["tradeAdapterDescriptor"] : []),
   ], "Finalized Custom metadata item");
   if (
     record.schemaVersion !== FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1
@@ -733,6 +747,39 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     throw new Error("Finalized Custom metadata timestamps are invalid");
   }
   const finality = parseFinalityV1(record.finality);
+  const routerLaunchId = lowerBytes32(
+    record.routerLaunchId,
+    "Router launch id",
+  );
+  const router = canonicalAddress(record.router, "Router address");
+  const token = canonicalAddress(record.token, "token address");
+  const hook = canonicalAddress(record.hook, "hook address");
+  const poolManager = canonicalAddress(
+    record.poolManager,
+    "PoolManager address",
+  );
+  const poolId = lowerBytes32(record.poolId, "pool id");
+  const tradeAdapterDescriptor = hasTradeAdapterDescriptor
+    ? parseFinalizedTradeAdapterDescriptorV1(
+        record.tradeAdapterDescriptor,
+        {
+          routerLaunchId,
+          router,
+          token,
+          hook,
+          poolManager,
+          poolId,
+          artifactHash: bindings.artifactHash,
+          graphBundleHash: bindings.graphBundleHash,
+          finality: {
+            transactionHash: finality.transactionHash,
+            blockNumber: finality.blockNumber,
+            blockHash: finality.blockHash,
+            logIndex: finality.logIndex,
+          },
+        },
+      )
+    : null;
   const readback = parseTokenMetadataReadbackV1(
     record.tokenMetadataReadback,
     projectMetadata,
@@ -745,16 +792,17 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
   return deepFreeze({
     schemaVersion: FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1,
     resourceId: record.resourceId,
-    routerLaunchId: lowerBytes32(record.routerLaunchId, "Router launch id"),
+    routerLaunchId,
     chainId: "1",
-    router: canonicalAddress(record.router, "Router address"),
-    token: canonicalAddress(record.token, "token address"),
-    hook: canonicalAddress(record.hook, "hook address"),
-    poolManager: canonicalAddress(record.poolManager, "PoolManager address"),
-    poolId: lowerBytes32(record.poolId, "pool id"),
+    router,
+    token,
+    hook,
+    poolManager,
+    poolId,
     projectMetadata,
     projectMetadataHash,
     ...(partnerAttribution ? { partnerAttribution } : {}),
+    ...(tradeAdapterDescriptor ? { tradeAdapterDescriptor } : {}),
     bindings,
     tokenMetadataReadback: readback,
     finality,

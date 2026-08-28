@@ -106,7 +106,10 @@ describe("token detail layout", () => {
     );
     expect(detailSource).toContain('className={styles.routerNotice} role="status"');
     expect(detailSource).toContain("market availability");
-    expect(detailSource).toContain("This page shows launch data only.");
+    expect(detailSource).toContain(
+      "Onsite trading is not enabled for this launch.",
+    );
+    expect(detailSource).toContain("Launch details");
     expect(detailSource).toContain("routerTradeAvailable && routerTradeProject");
     expect(detailSource).toContain("project={routerTradeProject}");
     expect(detailStyles).toMatch(

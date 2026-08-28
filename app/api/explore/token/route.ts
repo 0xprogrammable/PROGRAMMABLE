@@ -23,8 +23,8 @@ import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
 import { readProductionSourceVerificationDisplayV1 } from
   "../../../../lib/server/custom-launch/source-verification-display-v1";
-import { routerTradeProjectForEntryV1 } from
-  "../../../../lib/custom-launch/router-trade-adapters-v1";
+import { routerTradeProjectForServerBoundEntryV1 } from
+  "../../../../lib/server/custom-launch/router-trade-descriptor-v1";
 import {
   publicExploreCatalogEntriesV1,
   publicExplorePresentationEntryV1,
@@ -402,7 +402,10 @@ export async function GET(request: NextRequest) {
   }
 
   const routerTradeProject = entry.exploreKind === "token"
-    ? routerTradeProjectForEntryV1(entry)
+    ? routerTradeProjectForServerBoundEntryV1(
+        entry,
+        acceptedRouterSnapshot,
+      )
     : null;
   const sourceVerificationPromise = entry.exploreKind === "token"
       && entry.launchCategoryProvenance.category === "custom"

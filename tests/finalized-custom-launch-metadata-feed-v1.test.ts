@@ -357,6 +357,29 @@ describe("finalized Custom launch metadata feed v1", () => {
     );
   });
 
+  it("quarantines an invalid trade descriptor without hiding launch metadata", async () => {
+    const feed = await parsedFeed({
+      ...launchFixture(),
+      tradeAdapterDescriptor: {
+        schemaVersion: "caller-authored",
+      },
+    } as unknown as ReturnType<typeof launchFixture>);
+    expect(feed.launches[0]?.tradeAdapterDescriptor).toBeUndefined();
+
+    const result = await enrichRouterCustomSnapshotWithFinalizedMetadataV1(
+      routerSnapshot(),
+      { readFeed: async () => feed },
+    );
+    expect(result.entries[0]?.description).toBe(
+      "A finalized Custom Graph project.",
+    );
+    if ("metadataOverlay" in result) {
+      expect(
+        result.metadataOverlay.appliedBindings[0]?.tradeAdapterDescriptor,
+      ).toBeUndefined();
+    }
+  });
+
   it("strictly parses and hash-binds every page of the finalized inventory", async () => {
     const first = launchFixture();
     const second = launchFixture({

@@ -200,7 +200,7 @@ describe("partner attribution UI", () => {
     }
   });
 
-  it("keeps attribution in public Explore and Profile render paths", () => {
+  it("keeps attribution in public Explore, Profile and direct token paths", () => {
     const explore = readFileSync(
       new URL("../components/explore-view.tsx", import.meta.url),
       "utf8",
@@ -209,8 +209,29 @@ describe("partner attribution UI", () => {
       new URL("../components/profile-view.tsx", import.meta.url),
       "utf8",
     );
+    const tokenDetail = readFileSync(
+      new URL("../components/token-detail-view.tsx", import.meta.url),
+      "utf8",
+    );
     expect(explore).toContain("<PartnerLaunchAttribution");
     expect(profile).toContain("<PartnerLaunchAttribution");
+    expect(tokenDetail).toContain("<PartnerLaunchAttribution");
+    expect(tokenDetail).toContain(
+      "parseLaunchPartnerAttributionV1(value.partnerAttribution)",
+    );
+  });
+
+  it("discovers partner administration only after the server allows the wallet", () => {
+    const wallet = readFileSync(
+      new URL("../components/wallet-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(wallet).toContain(
+      "const response = await fetch(`/api/admin/partners?${query}`",
+    );
+    expect(wallet).toContain("if (response.ok && !controller.signal.aborted)");
+    expect(wallet).toContain("=== wallet.account.toLowerCase() ? (");
+    expect(wallet).toContain('href="/admin/partners"');
   });
 
   it("keeps permanent partner revocation and bounded pages explicit", () => {

@@ -11,7 +11,17 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/alchemy/router-custom-public.server", () => ({
-  readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  readFinalizedRouterCustomIdentitySnapshotV1: async () => ({
+    schemaVersion: "programmable.router-custom-identity-snapshot.v1",
+    source: "canonical-launch-stamp-router",
+    status: "current",
+    generatedAt: "2026-08-27T00:00:00.000Z",
+    asOfBlock: "25850000",
+    asOfBlockHash: `0x${"a".repeat(64)}`,
+    finalityConfirmations: 64,
+    identityCommitment: `sha256:${"b".repeat(64)}`,
+    entries: await mocks.readRouter(),
+  }),
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchPublicEnabled: mocks.publicEnabled,
