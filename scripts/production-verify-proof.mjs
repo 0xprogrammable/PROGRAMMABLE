@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 export const PRODUCTION_VERIFY_PROOF_SCHEMA_VERSION =
   "programmable.production-verify-proof.v4";
 export const PRODUCTION_VERIFY_PROOF_MAX_AGE_MS = 6 * 60 * 60 * 1_000;
-export const PRODUCTION_REPOSITORY = "0xprogrammable/programmable";
+export const PRODUCTION_REPOSITORY = "0xprogrammable/PROGRAMMABLE-EVM";
 export const PRODUCTION_REPOSITORY_ID = 1_314_365_508;
 export const PRODUCTION_REF = "refs/heads/production";
 export const VERIFY_WORKFLOW_PATH = ".github/workflows/verify.yml";
@@ -50,7 +50,7 @@ const EXPECTED_GITHUB_API_URL = "https://api.github.com";
 
 function isProductionRepository(value) {
   return typeof value === "string"
-    && value.toLowerCase() === PRODUCTION_REPOSITORY;
+    && value.toLowerCase() === PRODUCTION_REPOSITORY.toLowerCase();
 }
 
 export function canonicalProductionRepository(value, name = "repository") {

@@ -2,7 +2,7 @@
 
 ## Canonical repository
 
-- The public product repository is `https://github.com/0xprogrammable/programmable`.
+- The public product repository is `https://github.com/0xprogrammable/PROGRAMMABLE-EVM`.
 - `production` is the canonical full-product branch and the only branch used for website production releases.
 - `main` remains the public contracts and release-evidence branch. Never deploy the website from `main`.
 - Confirm the destination remote before every push. Do not assume that a remote named `origin` is canonical.

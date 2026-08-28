@@ -31,6 +31,13 @@ function workflowFailures(source) {
     "name: Consume exact full production Verify proof",
   );
   requireText(
+    "canonical-production-repository",
+    "github.repository == '0xprogrammable/PROGRAMMABLE-EVM'",
+  );
+  if (source.includes("github.repository == '0xprogrammable/programmable'")) {
+    failures.push("retired-production-repository");
+  }
+  requireText(
     "proof-exact-artifact-download",
     "artifact-ids: ${{ steps.resolve-proof.outputs.artifact_id }}",
   );
@@ -627,6 +634,10 @@ test("workflow contract detects weakened record and stage-only gates", async () 
     source.replace(
       "node scripts/production-verify-proof.mjs resolve",
       "node scripts/production-verify-proof.mjs verify",
+    ),
+    source.replaceAll(
+      "github.repository == '0xprogrammable/PROGRAMMABLE-EVM'",
+      "github.repository == '0xprogrammable/programmable'",
     ),
     source.replace("workflow_dispatch:\n", "push:\n    branches: [production]\n"),
     source.replace(
