@@ -78,7 +78,13 @@ const repositoryRoot = path.resolve(path.dirname(scriptPath), "..");
 const HOST = "127.0.0.1";
 const DEFAULT_PORT = 4184;
 const REQUEST_TIMEOUT_MS = 15_000;
-const RPC_RATE_LIMIT_RETRY_DELAYS_MS = Object.freeze([0, 1_500, 4_000]);
+const RPC_RATE_LIMIT_RETRY_DELAYS_MS = Object.freeze([
+  0,
+  1_500,
+  4_000,
+  9_000,
+  18_000,
+]);
 const MAX_REQUEST_BYTES = 4_096;
 const MAX_PRIORITY_FEE_WEI = 5_000_000_000n;
 const MAX_FEE_WEI = 200_000_000_000n;
