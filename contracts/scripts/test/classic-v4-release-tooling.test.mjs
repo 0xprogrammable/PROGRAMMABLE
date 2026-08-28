@@ -1679,6 +1679,33 @@ test("deployment, source and lifecycle evidence fail closed on drift", () => {
 
   const publicPoolActivity = structuredClone(lifecycle);
   publicPoolActivity.observations.exclusiveHookActivity.nativeAccrualEvents = 334;
+  const creatorTotal = BigInt(publicPoolActivity.claims.creator.amount) + 123n;
+  const launcherTotal = BigInt(publicPoolActivity.claims.launcher.amount) + 45n;
+  for (const key of ["amount", "vaultCheckpointAmount", "beneficiaryAmount"]) {
+    publicPoolActivity.claims.creator[key] = creatorTotal.toString();
+  }
+  publicPoolActivity.claims.launcher.amount = launcherTotal.toString();
+  Object.assign(publicPoolActivity.feeConservation, {
+    creatorAccrualTotal: creatorTotal.toString(),
+    launcherAccrualTotal: launcherTotal.toString(),
+    totalAccrual: (creatorTotal + launcherTotal).toString(),
+  });
+  const setHookTotals = (snapshot, creator, launcher) => {
+    snapshot.creatorFeesAccrued = creator.toString();
+    snapshot.launcherFeesAccrued = launcher.toString();
+    snapshot.totalNativeFeesAccrued = (creator + launcher).toString();
+    snapshot.poolManagerNativeClaims = (creator + launcher).toString();
+  };
+  const checkpoints = publicPoolActivity.feeConservation.checkpoints;
+  setHookTotals(checkpoints.beforeCreatorClaim.hook, creatorTotal, launcherTotal);
+  setHookTotals(checkpoints.afterCreatorClaim.hook, 0n, launcherTotal);
+  setHookTotals(checkpoints.beforeLauncherClaim.hook, 0n, launcherTotal);
+  for (const name of ["afterCreatorClaim", "final"]) {
+    const vault = checkpoints[name].vault;
+    vault.totalCreatorFeesReceived = creatorTotal.toString();
+    vault.totalCreatorFeesClaimed = creatorTotal.toString();
+    vault.beneficiaryClaimed = creatorTotal.toString();
+  }
   assert.doesNotThrow(() =>
     validateClassicV4LifecycleEvidence(
       plan,
@@ -2343,7 +2370,7 @@ test("lifecycle receipts, calldata, quotes, claims and global baseline cannot se
         source,
         forgedClaim,
       ),
-    /claims do not equal exact canary accruals/,
+    /claims do not cover the required canary accruals/,
   );
 
   const forgedOrder = structuredClone(lifecycle);
