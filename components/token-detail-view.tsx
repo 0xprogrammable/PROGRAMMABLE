@@ -78,6 +78,11 @@ import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import { parseLaunchPartnerAttributionV1 } from
   "@/lib/launch-partner-attribution";
+import {
+  parsePlatformFeeCertificationV1,
+  platformFeeCertificationForTokenV1,
+  type PlatformFeeCertificationV1,
+} from "@/lib/platform-fee-certification";
 import styles from "./token-experience.module.css";
 
 type DetailToken = LauncherToken & Readonly<{
@@ -107,6 +112,7 @@ type DetailPayload = {
   token: DetailToken | null;
   customProject: DetailCustomProject | null;
   routerTradeProject: RouterTradeProject | null;
+  platformFeeCertification: PlatformFeeCertificationV1 | null;
   sourceVerification: SourceVerificationDisplay | null;
   creatorArticle: CreatorArticleV1 | null;
   snapshot: { chainId: number } | null;
@@ -121,6 +127,7 @@ export type DetailState =
       phase: "ready";
       token: DetailToken;
       routerTradeProject: RouterTradeProject | null;
+      platformFeeCertification: PlatformFeeCertificationV1 | null;
       sourceVerification: SourceVerificationDisplay | null;
       creatorArticle: CreatorArticleV1 | null;
       chainId: number;
@@ -896,6 +903,31 @@ export function parseDetailPayload(value: unknown): DetailPayload {
   ) {
     throw new Error("The token registry returned an invalid Router trade route");
   }
+  const platformFeeCertification =
+    value.platformFeeCertification === null ||
+      value.platformFeeCertification === undefined
+      ? null
+      : parsePlatformFeeCertificationV1(value.platformFeeCertification);
+  if (
+    value.platformFeeCertification !== null &&
+    value.platformFeeCertification !== undefined &&
+    platformFeeCertification === null
+  ) {
+    throw new Error("The token registry returned invalid fee certification");
+  }
+  const expectedPlatformFeeCertification = token
+    ? platformFeeCertificationForTokenV1(token)
+    : null;
+  if (
+    platformFeeCertification !== null &&
+    (expectedPlatformFeeCertification === null ||
+      platformFeeCertification.status !==
+        expectedPlatformFeeCertification.status ||
+      platformFeeCertification.programmableFeeBps !==
+        expectedPlatformFeeCertification.programmableFeeBps)
+  ) {
+    throw new Error("The token registry returned conflicting fee certification");
+  }
   const sourceVerification = parseSourceVerificationDisplay(
     value.sourceVerification,
   );
@@ -939,6 +971,7 @@ export function parseDetailPayload(value: unknown): DetailPayload {
     token,
     customProject,
     routerTradeProject,
+    platformFeeCertification,
     sourceVerification,
     creatorArticle,
     snapshot,
@@ -1008,6 +1041,7 @@ function detailStateFromResponse(
       phase: "ready",
       token: payload.token!,
       routerTradeProject: payload.routerTradeProject,
+      platformFeeCertification: payload.platformFeeCertification,
       sourceVerification: payload.sourceVerification,
       creatorArticle: payload.creatorArticle,
     chainId: payload.snapshot.chainId,
@@ -1326,10 +1360,13 @@ export function buildTokenDetailMetrics(
   );
 }
 
-export function platformFeePolicyDisclosure(token: LauncherToken) {
-  return token.platformFeePolicy?.status === "onchain-confirmed"
-    ? "Platform fee policy recorded: 10 bps are configured for this stamped pool. This does not prove current accrual or a claimable balance."
-    : null;
+export function platformFeePolicyDisclosure(
+  token: LauncherToken,
+  certification?: PlatformFeeCertificationV1 | null,
+) {
+  return (
+    certification ?? platformFeeCertificationForTokenV1(token)
+  )?.label ?? null;
 }
 
 export function canUseClassicTokenTrade(token: LauncherToken) {
@@ -1560,6 +1597,7 @@ function TokenDetailContent({
   preview,
   creatorArticle = null,
   routerTradeProject = null,
+  platformFeeCertification = null,
   sourceVerification = null,
 }: {
   token: LauncherToken;
@@ -1567,6 +1605,7 @@ function TokenDetailContent({
   preview: boolean;
   creatorArticle?: CreatorArticleV1 | null;
   routerTradeProject?: RouterTradeProject | null;
+  platformFeeCertification?: PlatformFeeCertificationV1 | null;
   sourceVerification?: SourceVerificationDisplay | null;
 }) {
   const {
@@ -1677,7 +1716,10 @@ function TokenDetailContent({
       buildChartVolumeMetric(chartVolume),
     );
   }, [chartVolume, token]);
-  const platformFeeDisclosure = platformFeePolicyDisclosure(token);
+  const platformFeeDisclosure = platformFeePolicyDisclosure(
+    token,
+    platformFeeCertification,
+  );
 
   const explorerBase =
     chainId === 1
@@ -1988,7 +2030,15 @@ function TokenDetailContent({
               ) : null}
 
               {platformFeeDisclosure ? (
-                <p className={styles.sourceVerification}>
+                <p
+                  className={styles.sourceVerification}
+                  data-status={
+                    platformFeeCertification?.status === "certified" ||
+                      token.platformFeePolicy?.status === "onchain-confirmed"
+                      ? "verified"
+                      : undefined
+                  }
+                >
                   {platformFeeDisclosure}
                 </p>
               ) : null}
@@ -2691,6 +2741,7 @@ export function TokenDetailView({
         chainId={activeState.chainId}
         preview={false}
         routerTradeProject={activeState.routerTradeProject}
+        platformFeeCertification={activeState.platformFeeCertification}
         sourceVerification={activeState.sourceVerification}
         creatorArticle={activeState.creatorArticle}
       />
