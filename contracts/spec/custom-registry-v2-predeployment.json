@@ -48,7 +48,7 @@
     "contracts/scripts/custom-registry-v2-transaction-journal.mjs": "0x617f4dad1431fa1160f85ab9274a206c0087db510689bd84777bbd85ffc5eeb5",
     "contracts/scripts/custom-registry-v2-release-evidence.mjs": "0x7026891d390aa4a71192fad9bf5a4590639aa7a85438818335b66cb0d7302d9d",
     "contracts/scripts/custom-registry-v2-keychain-custody.mjs": "0x6f9a6f478cde8310f20c55cc5c360bc7ae9a0d4a91e23d59cb0d7100ad26fddf",
-    "contracts/scripts/custom-registry-v2-source-verification-core.mjs": "0x32f410407ac55e2d64c463a1864f0531d2ff0cc55fef8a4aa76b7c0a50f9494b",
+    "contracts/scripts/custom-registry-v2-source-verification-core.mjs": "0x83ace993910f67f64fbf1d7be32fbf4b5b5867a7d8027826762f974a5047feba",
     "contracts/scripts/broadcast-custom-registry-v2-deployment.mjs": "0xce013e413a481332364e2370707dcb6051b3696084fa134e96de8c578d35bbd1",
     "contracts/scripts/verify-custom-registry-v2-deployment.mjs": "0x4ae43fdfef88e943d1fc2e20ba23e5c4cc34fbf87e0d16c5ca0d99fa48b9b504",
     "contracts/scripts/verify-custom-registry-v2-source.mjs": "0xb13bfe577d930bda408d5eac5ba9bc11c3ab495b0fd0ce49115e18f155daf0e6",
