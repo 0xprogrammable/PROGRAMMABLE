@@ -31,6 +31,12 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       "handledInitialExploreRequestKey(initialState, requestKey)",
     );
+    expect(source).toContain(
+      "isClassicV4AnchoredPublicReleaseBinding(",
+    );
+    expect(source).toContain(
+      '...(classicV4IsBound ? ["classic-v4"] : [])',
+    );
     expect(source).not.toContain("useLiveDataRefresh");
     expect(source).toContain(
       "const [valuationSort, setValuationSort] = useState<ExploreValuationSort>",
