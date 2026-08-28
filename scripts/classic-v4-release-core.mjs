@@ -1962,6 +1962,27 @@ export function validateClassicV4LaunchAuthorization(canary, value) {
   };
 }
 
+export function classicV4ReleaseBindingDigest({
+  planDigest,
+  deploymentEvidenceDigest,
+  sourceEvidenceDigest,
+}) {
+  return digestJson(
+    {
+      planDigest: assertNonzeroBytes32(planDigest, "plan digest"),
+      deploymentEvidenceDigest: assertNonzeroBytes32(
+        deploymentEvidenceDigest,
+        "deployment evidence digest",
+      ),
+      sourceEvidenceDigest: assertNonzeroBytes32(
+        sourceEvidenceDigest,
+        "source evidence digest",
+      ),
+    },
+    CLASSIC_V4_DIGEST_DOMAINS.releaseBinding,
+  );
+}
+
 export function buildClassicV4LifecycleReleaseCandidate(
   plan,
   deployment,
@@ -1972,14 +1993,11 @@ export function buildClassicV4LifecycleReleaseCandidate(
     chainId: 1,
     releaseCommit: plan.releaseCommit,
     sourceCommitment: plan.sourceCommitment,
-    releaseBindingDigest: digestJson(
-      {
-        planDigest: plan.planDigest,
-        deploymentEvidence: deployment,
-        sourceEvidence: source,
-      },
-      CLASSIC_V4_DIGEST_DOMAINS.releaseBinding,
-    ),
+    releaseBindingDigest: classicV4ReleaseBindingDigest({
+      planDigest: plan.planDigest,
+      deploymentEvidenceDigest: deployment.evidenceDigest,
+      sourceEvidenceDigest: source.evidenceDigest,
+    }),
     addresses: {
       deployer: plan.deployer,
       launcherFeeRecipient: plan.launcherFeeRecipient,

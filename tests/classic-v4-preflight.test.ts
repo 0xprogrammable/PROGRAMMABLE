@@ -118,7 +118,9 @@ function address(index: number) {
   return `0x${index.toString(16).padStart(40, "0")}` as Address;
 }
 
-function activeReleaseManifest() {
+function activeReleaseManifest(
+  sourceMatchTier: "match" | "exact-match" = "exact-match",
+) {
   const newContracts = [
     "hookFactory",
     "feeHook",
@@ -195,12 +197,12 @@ function activeReleaseManifest() {
           encodedConstructorArguments: "0x",
           deploymentTransaction: deploymentTransactions[name],
           deploymentBlock: deploymentBlocks[name],
-          status: "exact-match",
+          status: sourceMatchTier,
           providers: [
             {
               name: "Sourcify",
-              status: "exact-match",
-              url: `https://repo.sourcify.dev/contracts/full_match/1/${addresses[name]}/`,
+              status: sourceMatchTier,
+              url: `https://sourcify.dev/server/v2/contract/1/${addresses[name]}`,
             },
           ],
         },
@@ -215,7 +217,14 @@ function activeReleaseManifest() {
       CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
     ),
   };
-  const releaseBindingDigest = hash("release-binding");
+  const releaseBindingDigest = digestJson(
+    {
+      planDigest,
+      deploymentEvidenceDigest: deploymentVerification.evidenceDigest,
+      sourceEvidenceDigest: sourceVerification.evidenceDigest,
+    },
+    CLASSIC_V4_DIGEST_DOMAINS.releaseBinding,
+  );
   const launchTimestamp = 1_788_000_000n;
   const launchValidAfter = launchTimestamp - 30n;
   const launchDeadline = launchTimestamp + 300n;
@@ -1276,6 +1285,14 @@ describe("Classic V4 release and launch preflight", () => {
       parseClassicV4PublicRelease(
         sourcifyMatch,
         trustedBindingFor(sourcifyMatch),
+      ),
+    ).toBeNull();
+
+    const canonicalSourcifyMatch = activeReleaseManifest("match");
+    expect(
+      parseClassicV4PublicRelease(
+        canonicalSourcifyMatch,
+        trustedBindingFor(canonicalSourcifyMatch),
       ),
     ).toMatchObject({ releaseStatus: "indexer-activated" });
 

@@ -24,7 +24,7 @@ import {
 } from "../scripts/classic-v4-digest.mjs";
 // The release tool is the canonical 51d93b Router authorization verifier.
 // @ts-expect-error The frozen operational .mjs intentionally has no TS declaration surface.
-import { validateClassicV4LaunchAuthorization as validateClassicV4LaunchAuthorizationCore } from "../scripts/classic-v4-release-core.mjs";
+import { classicV4ReleaseBindingDigest as classicV4ReleaseBindingDigestCore, validateClassicV4LaunchAuthorization as validateClassicV4LaunchAuthorizationCore } from "../scripts/classic-v4-release-core.mjs";
 import { CLASSIC_V4_LAUNCH_STAMP_ROUTER } from "./classic-v4";
 
 export const CLASSIC_V4_RELEASE_MANIFEST_PATH =
@@ -717,6 +717,16 @@ function validRichLifecycleEvidence(input: {
     deploymentVerification,
     source,
   } = input;
+  let expectedReleaseBindingDigest: string;
+  try {
+    expectedReleaseBindingDigest = classicV4ReleaseBindingDigestCore({
+      planDigest: manifest.planDigest,
+      deploymentEvidenceDigest: deploymentVerification.evidenceDigest,
+      sourceEvidenceDigest: source.evidenceDigest,
+    });
+  } catch {
+    return false;
+  }
   if (
     lifecycle.schemaVersion !== 1 ||
     lifecycle.chainId !== 1 ||
@@ -730,6 +740,8 @@ function validRichLifecycleEvidence(input: {
     !strictIsoDateTime(lifecycle.checkedAt) ||
     !bytes32(lifecycle.canaryPlanDigest) ||
     !bytes32(lifecycle.releaseBindingDigest) ||
+    String(lifecycle.releaseBindingDigest).toLowerCase() !==
+      expectedReleaseBindingDigest.toLowerCase() ||
     String(lifecycle.deploymentEvidenceDigest).toLowerCase() !==
       String(deploymentVerification.evidenceDigest).toLowerCase() ||
     String(lifecycle.sourceEvidenceDigest).toLowerCase() !==

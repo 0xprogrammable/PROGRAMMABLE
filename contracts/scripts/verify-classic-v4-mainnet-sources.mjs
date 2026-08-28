@@ -188,6 +188,19 @@ export async function captureSourcify(address, artifact, fetchJsonClient) {
 }
 
 export function assertSourcifyMatch(payload, address, artifact) {
+  let providerAddress;
+  try {
+    providerAddress = canonicalAddress(payload?.address, "Sourcify address");
+  } catch {
+    fail(`${address} Sourcify identity differs`);
+  }
+  if (
+    payload?.chainId !== "1" ||
+    providerAddress.toLowerCase() !==
+      canonicalAddress(address, "requested Sourcify address").toLowerCase()
+  ) {
+    fail(`${address} Sourcify identity differs`);
+  }
   const matchFields = [
     payload?.match,
     payload?.creationMatch,

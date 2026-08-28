@@ -26,6 +26,7 @@ import {
   buildClassicV4LifecycleCanaryPlan,
   buildClassicV4LifecycleReleaseCandidate,
   buildClassicV4PreparationPlan,
+  classicV4ReleaseBindingDigest,
   computeClassicV4BuildCommitments,
   computeClassicV4SourceCommitment,
   createClassicV4ReleaseManifest,
@@ -444,7 +445,11 @@ function deploymentEvidence(plan) {
   }, CLASSIC_V4_DIGEST_DOMAINS.deploymentEvidence);
 }
 
-function sourceEvidence(plan, deployment) {
+function sourceEvidence(plan, deployment, sourcifyStatus = "match") {
+  assert.ok(
+    sourcifyStatus === "match" || sourcifyStatus === "exact-match",
+    "Sourcify fixture status must be match or exact-match",
+  );
   const names = {
     hookFactory: "EthCreatorFeeHookFactoryV4",
     feeHook: "EthCreatorFeeHookV4",
@@ -474,11 +479,11 @@ function sourceEvidence(plan, deployment) {
           encodedConstructorArguments: plan.constructorArguments[name],
           deploymentTransaction: deployment.contracts[name].transactionHash,
           deploymentBlock: deployment.contracts[name].blockNumber,
-          status: "exact-match",
+          status: sourcifyStatus,
           providers: [
             {
               name: "Sourcify",
-              status: "exact-match",
+              status: sourcifyStatus,
               url: `https://sourcify.dev/server/v2/contract/1/${deployment.contracts[name].address}`,
             },
           ],
@@ -1535,7 +1540,7 @@ test("deployment, source and lifecycle evidence fail closed on drift", () => {
   );
 
   const mismatchedSourceStatus = structuredClone(source);
-  mismatchedSourceStatus.contracts.feeHook.providers[0].status = "match";
+  mismatchedSourceStatus.contracts.feeHook.providers[0].status = "exact-match";
   mismatchedSourceStatus.evidenceDigest = digestJson(
     Object.fromEntries(
       Object.entries(mismatchedSourceStatus).filter(
@@ -1554,19 +1559,40 @@ test("deployment, source and lifecycle evidence fail closed on drift", () => {
     /source verification is incomplete/,
   );
 
-  const sourcifyMatch = structuredClone(source);
-  sourcifyMatch.contracts.feeHook.status = "match";
-  sourcifyMatch.contracts.feeHook.providers[0].status = "match";
-  sourcifyMatch.evidenceDigest = digestJson(
-    Object.fromEntries(
-      Object.entries(sourcifyMatch).filter(
-        ([key]) => key !== "evidenceDigest",
+  const sourcifyExact = sourceEvidence(plan, deployment, "exact-match");
+  assert.doesNotThrow(() =>
+    validateClassicV4SourceEvidence(plan, deployment, sourcifyExact),
+  );
+  assert.throws(
+    () =>
+      validateClassicV4LifecycleEvidence(
+        plan,
+        deployment,
+        sourcifyExact,
+        lifecycle,
       ),
-    ),
-    CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
+    /release binding differs/,
+  );
+  const sourcifyExactLifecycle = lifecycleEvidence(
+    plan,
+    deployment,
+    sourcifyExact,
   );
   assert.doesNotThrow(() =>
-    validateClassicV4SourceEvidence(plan, deployment, sourcifyMatch),
+    validateClassicV4LifecycleEvidence(
+      plan,
+      deployment,
+      sourcifyExact,
+      sourcifyExactLifecycle,
+    ),
+  );
+  assert.equal(
+    sourcifyExactLifecycle.releaseBindingDigest,
+    classicV4ReleaseBindingDigest({
+      planDigest: plan.planDigest,
+      deploymentEvidenceDigest: deployment.evidenceDigest,
+      sourceEvidenceDigest: sourcifyExact.evidenceDigest,
+    }),
   );
 
   const wrongSourceIdentity = structuredClone(source);
@@ -1755,17 +1781,36 @@ test("final manifest is schema-valid and exposes exact indexer handoff", () => {
   );
 
   const sourcifyMatch = structuredClone(manifest);
-  for (const contract of Object.values(
-    sourcifyMatch.sourceVerification.contracts,
-  )) {
-    contract.status = "match";
-    contract.providers[0].status = "match";
-  }
   assert.equal(
     validateSchema(sourcifyMatch),
     true,
     JSON.stringify(validateSchema.errors),
   );
+
+  const exactSource = sourceEvidence(plan, deployment, "exact-match");
+  const exactLifecycle = lifecycleEvidence(plan, deployment, exactSource);
+  const exactManifest = createClassicV4ReleaseManifest({
+    plan,
+    deploymentEvidence: deployment,
+    sourceEvidence: exactSource,
+    lifecycleEvidence: exactLifecycle,
+    capturedAt: exactLifecycle.checkedAt,
+  });
+  assert.equal(
+    validateSchema(exactManifest),
+    true,
+    JSON.stringify(validateSchema.errors),
+  );
+
+  const matchWithExactProvider = structuredClone(sourcifyMatch);
+  matchWithExactProvider.sourceVerification.contracts.feeHook.providers[0].status =
+    "exact-match";
+  assert.equal(validateSchema(matchWithExactProvider), false);
+
+  const exactWithMatchProvider = structuredClone(exactManifest);
+  exactWithMatchProvider.sourceVerification.contracts.feeHook.providers[0].status =
+    "match";
+  assert.equal(validateSchema(exactWithMatchProvider), false);
 
   const contradictory = structuredClone(manifest);
   contradictory.releaseStatus = "publicly-available";
@@ -2241,6 +2286,8 @@ test("Sourcify v2 lookup accepts truthful match fields and preserves canonical e
       const name = nameByAddress[address];
       assert.ok(name, `Unexpected Sourcify address ${address}`);
       return {
+        chainId: "1",
+        address,
         match: "match",
         creationMatch: "match",
         runtimeMatch: "match",
@@ -2270,6 +2317,7 @@ test("Sourcify v2 lookup accepts truthful match fields and preserves canonical e
 
 test("source providers require accepted matches, exact source closure and no Etherscan similarity", () => {
   const providerArtifact = artifacts.launcher;
+  const providerAddress = "0xa11CE00000000000000000000000000000000004";
   const providerSources = {
     "src/launcher.sol": { content: "source:launcher" },
     "lib/v4-core/src/Test.sol": {
@@ -2277,13 +2325,15 @@ test("source providers require accepted matches, exact source closure and no Eth
     },
   };
   const sourcify = {
+    chainId: "1",
+    address: providerAddress,
     match: "exact_match",
     creationMatch: "exact_match",
     runtimeMatch: "exact_match",
     sources: providerSources,
   };
   assert.equal(
-    assertSourcifyMatch(sourcify, "0xa11ce", providerArtifact),
+    assertSourcifyMatch(sourcify, providerAddress, providerArtifact),
     "exact-match",
   );
   assert.equal(
@@ -2294,7 +2344,7 @@ test("source providers require accepted matches, exact source closure and no Eth
         creationMatch: "match",
         runtimeMatch: "match",
       },
-      "0xa11ce",
+      providerAddress,
       providerArtifact,
     ),
     "match",
@@ -2302,7 +2352,7 @@ test("source providers require accepted matches, exact source closure and no Eth
   assert.equal(
     assertSourcifyMatch(
       { ...sourcify, runtimeMatch: "match" },
-      "0xa11ce",
+      providerAddress,
       providerArtifact,
     ),
     "match",
@@ -2311,7 +2361,7 @@ test("source providers require accepted matches, exact source closure and no Eth
     () =>
       assertSourcifyMatch(
         { ...sourcify, runtimeMatch: "partial_match" },
-        "0xa11ce",
+        providerAddress,
         providerArtifact,
       ),
     /not a complete Sourcify match/,
@@ -2320,7 +2370,7 @@ test("source providers require accepted matches, exact source closure and no Eth
     () =>
       assertSourcifyMatch(
         { ...sourcify, creationMatch: null },
-        "0xa11ce",
+        providerAddress,
         providerArtifact,
       ),
     /not a complete Sourcify match/,
@@ -2329,14 +2379,31 @@ test("source providers require accepted matches, exact source closure and no Eth
     () =>
       assertSourcifyMatch(
         {
-          match: "exact_match",
-          creationMatch: "exact_match",
-          runtimeMatch: "exact_match",
+          ...sourcify,
+          sources: {},
         },
-        "0xa11ce",
+        providerAddress,
         providerArtifact,
       ),
     /source path closure differs/,
+  );
+  assert.throws(
+    () =>
+      assertSourcifyMatch(
+        { ...sourcify, chainId: "11155111" },
+        providerAddress,
+        providerArtifact,
+      ),
+    /Sourcify identity differs/,
+  );
+  assert.throws(
+    () =>
+      assertSourcifyMatch(
+        { ...sourcify, address: "0x0000000000000000000000000000000000000001" },
+        providerAddress,
+        providerArtifact,
+      ),
+    /Sourcify identity differs/,
   );
 
   const target = {
@@ -2423,7 +2490,7 @@ test("source providers require accepted matches, exact source closure and no Eth
             "lib/rogue/Rogue.sol": { content: "contract Rogue {}" },
           },
         },
-        "0xa11ce",
+        providerAddress,
         providerArtifact,
       ),
     /source path closure differs/,
@@ -2438,7 +2505,7 @@ test("source providers require accepted matches, exact source closure and no Eth
             "src/launcher.sol": { content: "forged source bytes" },
           },
         },
-        "0xa11ce",
+        providerAddress,
         providerArtifact,
       ),
     /source bytes differ at src\/launcher\.sol/,
