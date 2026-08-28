@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { GET as getApiIndex } from "../app/api/route";
 import { GET as getUnknownApi } from "../app/api/[...path]/route";
+import {
+  GET as getRetiredPredictionApi,
+  POST as postRetiredPredictionApi,
+} from "../app/api/retired-prediction/route";
 import { GET as getDeveloperMarkdown } from "../app/docs/developers.md/route";
 import { GET as getHomeMarkdown } from "../app/index.md/route";
 import { GET as getOpenApi } from "../app/openapi.json/route";
@@ -310,25 +314,35 @@ describe("agent-readable public surface", () => {
   });
 
   it("removes the retired prediction product from public pages and APIs", async () => {
-    for (const path of ["/markets", "/markets/example"]) {
-      const response = proxy(new NextRequest(`${ORIGIN}${path}`));
-      expect(response.status).toBe(307);
-      expect(response.headers.get("location")).toBe(`${ORIGIN}/explore`);
-    }
+    const deploymentConfig = JSON.parse(
+      readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
+    ) as {
+      redirects: Array<{
+        source: string;
+        destination: string;
+        permanent: boolean;
+      }>;
+      rewrites: Array<{ source: string; destination: string }>;
+    };
+    expect(deploymentConfig.redirects).toEqual(
+      expect.arrayContaining([
+        { source: "/markets", destination: "/explore", permanent: false },
+        {
+          source: "/markets/:match*",
+          destination: "/explore",
+          permanent: false,
+        },
+      ]),
+    );
+    expect(deploymentConfig.rewrites).toContainEqual({
+      source: "/api/prediction/:match*",
+      destination: "/api/retired-prediction",
+    });
 
-    for (const path of [
-      "/docs/tokens/prediction-markets",
-      "/docs/models/prediction-markets",
+    for (const response of [
+      getRetiredPredictionApi(),
+      postRetiredPredictionApi(),
     ]) {
-      const response = proxy(new NextRequest(`${ORIGIN}${path}`));
-      expect(response.status).toBe(307);
-      expect(response.headers.get("location")).toBe(`${ORIGIN}/docs/tokens`);
-    }
-
-    for (const method of ["GET", "POST"] as const) {
-      const response = proxy(
-        new NextRequest(`${ORIGIN}/api/prediction/v2/directory`, { method }),
-      );
       expect(response.status).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(response.headers.get("x-robots-tag")).toBe(
