@@ -13,6 +13,7 @@ import {
   PARTNER_ADMIN_SCHEMA_V1,
   PARTNER_BUDGET_LIMITS_V1,
   parsePartnerListV1,
+  parsePartnerListPageV1,
   parsePartnerRootKeyMutationV1,
 } from "../lib/partner-admin-contract";
 
@@ -140,6 +141,41 @@ describe("partner attribution UI", () => {
     })).toBeNull();
   });
 
+  it("binds bounded partner pagination and accepts the backend root-key ceiling", () => {
+    const roots = Array.from({ length: 500 }, () => ROOT_KEY);
+    const page = parsePartnerListPageV1({
+      schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+      partners: [{ ...PARTNER, rootKeys: roots }],
+      pagination: {
+        page: 2,
+        pageSize: 12,
+        totalPartners: 13,
+        totalPages: 2,
+      },
+    });
+    expect(page?.partners[0]?.rootKeys).toHaveLength(500);
+    expect(parsePartnerListPageV1({
+      schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+      partners: [{ ...PARTNER, rootKeys: [...roots, ROOT_KEY] }],
+      pagination: {
+        page: 2,
+        pageSize: 12,
+        totalPartners: 13,
+        totalPages: 2,
+      },
+    })).toBeNull();
+    expect(parsePartnerListPageV1({
+      schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+      partners: [PARTNER],
+      pagination: {
+        page: 2,
+        pageSize: 12,
+        totalPartners: 25,
+        totalPages: 2,
+      },
+    })).toBeNull();
+  });
+
   it("enforces the backend budget ceilings in browser-facing metadata", () => {
     const maximumBudgets = PARTNER_BUDGET_LIMITS_V1;
     expect(parsePartnerListV1({
@@ -175,5 +211,16 @@ describe("partner attribution UI", () => {
     );
     expect(explore).toContain("<PartnerLaunchAttribution");
     expect(profile).toContain("<PartnerLaunchAttribution");
+  });
+
+  it("keeps permanent partner revocation and bounded pages explicit", () => {
+    const source = readFileSync(
+      new URL("../components/partner-admin-console.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("Revoke permanently");
+    expect(source).toContain("This cannot be undone");
+    expect(source).toContain('aria-label="Partner pages"');
+    expect(source).toContain("ROOT_KEYS_PER_PAGE");
   });
 });

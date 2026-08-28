@@ -222,12 +222,22 @@
 .keyHeading,
 .partnerActions,
 .keyActions,
+.partnerPagination,
+.keyPagination,
+.partnerPagination > div,
+.keyPagination > div,
 .confirmation > div,
 .secretValue {
   align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
+}
+
+.directoryCount {
+  color: var(--dim);
+  font-size: 11px;
+  margin: 6px 0 0;
 }
 
 .refreshButton {
@@ -461,6 +471,29 @@
 .keyActions,
 .partnerActions {
   justify-content: flex-start;
+  margin-top: 10px;
+}
+
+.partnerPagination,
+.keyPagination {
+  border-top: 1px solid var(--admin-line);
+  color: var(--dim);
+  font-size: 11px;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.partnerPagination > div,
+.keyPagination > div {
+  justify-content: flex-end;
+}
+
+.partnerPagination button,
+.keyPagination button {
+  gap: 5px;
+}
+
+.keyPagination {
   margin-top: 10px;
 }
 
@@ -700,9 +733,21 @@
   }
 
   .partnerActions,
-  .confirmation > div {
+  .confirmation > div,
+  .partnerPagination,
+  .keyPagination {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .partnerPagination > div,
+  .keyPagination > div {
+    width: 100%;
+  }
+
+  .partnerPagination button,
+  .keyPagination button {
+    flex: 1;
   }
 
   .keyHeading label {

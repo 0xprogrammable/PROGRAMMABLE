@@ -335,6 +335,12 @@ describe("partner admin same-origin bridge", () => {
     expect(body).toEqual({
       schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
       partners: [browserPartner()],
+      pagination: {
+        page: 1,
+        pageSize: 12,
+        totalPartners: 1,
+        totalPages: 1,
+      },
     });
     expect(JSON.stringify(body)).not.toContain(ROOT_SECRET);
     expect(JSON.stringify(body)).not.toContain("must-not-cross");
@@ -487,6 +493,78 @@ describe("partner admin same-origin bridge", () => {
       method: "GET",
       requestTarget: `/v1/admin/partners/${PARTNER_ID}/root-keys`,
     });
+  });
+
+  it("permanently revokes the exact partner and returns its revoked roots", async () => {
+    const revokedAt = "2026-08-27T08:07:00.000Z";
+    fetchBackend
+      .mockResolvedValueOnce(backendJson(
+        "programmable.partner.v1",
+        backendPartner({
+          status: "revoked",
+          updatedAt: revokedAt,
+          revokedAt,
+        }),
+      ))
+      .mockResolvedValueOnce(backendJson(
+        "programmable.partner-root-credential-list.v1",
+        { credentials: [backendRoot({ revokedAt })] },
+      ));
+
+    const response = await bridge().revokePartner(new Request(
+      `https://programmable.market/api/admin/partners/${PARTNER_ID}?walletAddress=${WALLET}`,
+      { method: "DELETE", headers: browserHeaders() },
+    ), PARTNER_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+      partner: {
+        ...browserPartner([browserRoot({ revokedAt })]),
+        status: "revoked",
+        updatedAt: revokedAt,
+        revokedAt,
+      },
+    });
+    expectSignedBackendCall(fetchBackend.mock.calls[0], {
+      method: "DELETE",
+      requestTarget: `/v1/admin/partners/${PARTNER_ID}`,
+    });
+    expectSignedBackendCall(fetchBackend.mock.calls[1], {
+      method: "GET",
+      requestTarget: `/v1/admin/partners/${PARTNER_ID}/root-keys`,
+    });
+  });
+
+  it("pages the bounded 500-partner contract before loading root lists", async () => {
+    const partnerCount = 25;
+    fetchBackend.mockResolvedValueOnce(backendJson(
+      "programmable.partner-list.v1",
+      { partners: Array.from({ length: partnerCount }, () => backendPartner()) },
+    ));
+    for (let index = 0; index < 12; index += 1) {
+      fetchBackend.mockResolvedValueOnce(backendJson(
+        "programmable.partner-root-credential-list.v1",
+        { credentials: Array.from({ length: 500 }, () => backendRoot()) },
+      ));
+    }
+
+    const response = await bridge().list(new Request(
+      `https://programmable.market/api/admin/partners?walletAddress=${WALLET}&page=2&pageSize=12`,
+      { headers: browserHeaders() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.pagination).toEqual({
+      page: 2,
+      pageSize: 12,
+      totalPartners: 25,
+      totalPages: 3,
+    });
+    expect(body.partners).toHaveLength(12);
+    expect(body.partners[0].rootKeys).toHaveLength(500);
+    expect(fetchBackend).toHaveBeenCalledTimes(13);
   });
 
   it("issues one root secret and keeps idempotent replay secretless", async () => {
@@ -817,6 +895,23 @@ describe("partner admin same-origin bridge", () => {
       "partner_admin_service_unavailable",
     );
 
+    fetchBackend.mockResolvedValueOnce(backendJson(
+      "programmable.partner.v1",
+      backendPartner({
+        partnerId: OTHER_PARTNER_ID,
+        status: "revoked",
+        revokedAt: ASSERTION_ISSUED_AT,
+      }),
+    ));
+    const partnerRevocation = await bridge().revokePartner(new Request(
+      `https://programmable.market/api/admin/partners/${PARTNER_ID}?walletAddress=${WALLET}`,
+      { method: "DELETE", headers: browserHeaders() },
+    ), PARTNER_ID);
+    expect(partnerRevocation.status).toBe(503);
+    expect((await correlatedError(partnerRevocation)).error.code).toBe(
+      "partner_admin_service_unavailable",
+    );
+
     const mismatches = [
       { partnerId: OTHER_PARTNER_ID, rootKeyId: ROOT_KEY_ID },
       { partnerId: PARTNER_ID, rootKeyId: ROTATED_ROOT_KEY_ID },
@@ -961,7 +1056,7 @@ describe("partner admin same-origin bridge", () => {
 
     fetchBackend.mockResolvedValueOnce(new Response("{}", {
       headers: {
-        "content-length": "262145",
+        "content-length": "1048577",
         "content-type": "application/json",
       },
     }));
@@ -1026,6 +1121,8 @@ describe("partner admin same-origin bridge", () => {
     expect(root).toContain(".create(request)");
     expect(route("app/api/admin/partners/[partnerId]/status/route.ts"))
       .toContain(".setStatus(request, partnerId)");
+    expect(route("app/api/admin/partners/[partnerId]/route.ts"))
+      .toContain(".revokePartner(request, partnerId)");
     expect(route("app/api/admin/partners/[partnerId]/root-keys/route.ts"))
       .toContain(".issueRootKey(request, partnerId)");
     expect(route(
