@@ -1189,6 +1189,16 @@ test("source pins require compiled libraries to be clean pinned Git checkouts", 
       contractsDirectory: reviewedContractsDirectory,
     }),
   );
+  assert.throws(
+    () =>
+      verifyClassicV4SourcePins({
+        sourcePins,
+        localDirectories,
+        dependencyRoots: ["v4-core"],
+        dependencyGitStates: reviewedGitState,
+      }),
+    /Pinned Git checkout differs for v4-core/u,
+  );
   const forgedGitState = structuredClone(dependencyGitStates);
   forgedGitState["v4-core"].head = "0".repeat(40);
   assert.throws(

@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+} from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
   loadClassicV4ReleaseArtifactContext,
+  resolveClassicV4ReviewedReleaseWorktree,
   resolveClassicV4ReleaseValidation,
 } from "../classic-v4-release-validation.mjs";
 import { verifyClassicV4RollforwardBlockLineageAtEndpoint } from
@@ -16,6 +24,13 @@ const repositoryRoot = path.resolve(path.dirname(testPath), "..", "..", "..");
 const hash = `0x${"11".repeat(32)}`;
 const commit = "1".repeat(40);
 const tree = "2".repeat(40);
+const cleanToolIdentity = Object.freeze({
+  topLevel: repositoryRoot,
+  clean: true,
+  detached: false,
+  commit: "a".repeat(40),
+  tree: "b".repeat(40),
+});
 
 test("release validation dispatch keeps legacy default and selects V4 rollforward explicitly", () => {
   const legacy = resolveClassicV4ReleaseValidation({ status: "simulation-only" });
@@ -101,6 +116,232 @@ test("rollforward artifact loading rejects Git or source-pin drift before buildi
     /source pins differ/,
   );
   assert.equal(builds, 0);
+});
+
+test("reviewed release worktree must be absolute, real, clean and detached", async () => {
+  const created = await mkdtemp(path.join(os.tmpdir(), "classic-v4-reviewed-"));
+  const directory = await realpath(created);
+  const symbolic = `${directory}-symbolic`;
+  const identity = {
+    topLevel: directory,
+    clean: true,
+    detached: true,
+    commit,
+    tree,
+  };
+  try {
+    assert.deepEqual(
+      await resolveClassicV4ReviewedReleaseWorktree(directory, {
+        identityReader: async (root) => {
+          assert.equal(root, directory);
+          return identity;
+        },
+      }),
+      { root: directory, identity },
+    );
+    await assert.rejects(
+      resolveClassicV4ReviewedReleaseWorktree("relative/release", {
+        identityReader: async () => identity,
+      }),
+      /path must be absolute/u,
+    );
+    await symlink(directory, symbolic);
+    await assert.rejects(
+      resolveClassicV4ReviewedReleaseWorktree(symbolic, {
+        identityReader: async () => identity,
+      }),
+      /real canonical directory/u,
+    );
+    for (const changed of [
+      { clean: false },
+      { detached: false },
+      { topLevel: path.dirname(directory) },
+    ]) {
+      await assert.rejects(
+        resolveClassicV4ReviewedReleaseWorktree(directory, {
+          identityReader: async () => ({ ...identity, ...changed }),
+        }),
+        /clean detached Git top level/u,
+      );
+    }
+  } finally {
+    await rm(symbolic, { force: true });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("reviewed release worktree is checked against the exact sealed plan before builds", async () => {
+  const created = await mkdtemp(path.join(os.tmpdir(), "classic-v4-seal-"));
+  const directory = await realpath(created);
+  const plan = {
+    status: "launcher-rollforward-composite",
+    releaseCommit: commit,
+    releaseTree: tree,
+    parentBundle: {
+      launcherUpgrade: { plan: { sourcePinsDigest: hash } },
+    },
+  };
+  let builds = 0;
+  try {
+    for (const changed of [
+      { commit: "3".repeat(40) },
+      { tree: "4".repeat(40) },
+    ]) {
+      await assert.rejects(
+        loadClassicV4ReleaseArtifactContext(plan, {
+          reviewedReleaseWorktree: directory,
+          toolIdentityReader: async () => cleanToolIdentity,
+          identityReader: async () => ({
+            topLevel: directory,
+            clean: true,
+            detached: true,
+            commit,
+            tree,
+            ...changed,
+          }),
+          sourcePinReader: async (root) => {
+            assert.equal(root, directory);
+            return { digest: hash };
+          },
+          retainedArtifactBuilder: async () => {
+            builds += 1;
+            return {};
+          },
+          launcherArtifactBuilder: async () => {
+            builds += 1;
+            return {};
+          },
+          rollforwardPlanValidator: () => plan,
+        }),
+        /clean Git identity differs/u,
+      );
+    }
+    assert.equal(builds, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("reviewed release builders use only reviewedRoot/contracts and recheck drift", async () => {
+  const created = await mkdtemp(path.join(os.tmpdir(), "classic-v4-build-root-"));
+  const directory = await realpath(created);
+  const plan = {
+    status: "launcher-rollforward-composite",
+    releaseCommit: commit,
+    releaseTree: tree,
+    parentBundle: {
+      launcherUpgrade: { plan: { sourcePinsDigest: hash } },
+    },
+  };
+  const identity = {
+    topLevel: directory,
+    clean: true,
+    detached: true,
+    commit,
+    tree,
+  };
+  try {
+    const builderRoots = [];
+    await assert.rejects(
+      loadClassicV4ReleaseArtifactContext(plan, {
+        reviewedReleaseWorktree: directory,
+        toolIdentityReader: async () => cleanToolIdentity,
+        identityReader: async () => identity,
+        sourcePinReader: async (root) => {
+          assert.equal(root, directory);
+          return { digest: hash };
+        },
+        retainedArtifactBuilder: async ({ contractsDirectory }) => {
+          builderRoots.push(contractsDirectory);
+          throw new Error("reviewed builder stop");
+        },
+        launcherArtifactBuilder: async ({ contractsDirectory }) => {
+          builderRoots.push(contractsDirectory);
+          throw new Error("reviewed builder stop");
+        },
+        rollforwardPlanValidator: () => plan,
+      }),
+      /reviewed builder stop/u,
+    );
+    assert.deepEqual(builderRoots, [
+      path.join(directory, "contracts"),
+      path.join(directory, "contracts"),
+    ]);
+
+    let identityReads = 0;
+    await assert.rejects(
+      loadClassicV4ReleaseArtifactContext(plan, {
+        reviewedReleaseWorktree: directory,
+        toolIdentityReader: async () => cleanToolIdentity,
+        identityReader: async () => {
+          identityReads += 1;
+          return identityReads === 1
+            ? identity
+            : { ...identity, commit: "5".repeat(40) };
+        },
+        sourcePinReader: async () => ({ digest: hash }),
+        retainedArtifactBuilder: async () => ({}),
+        launcherArtifactBuilder: async () => ({}),
+        rollforwardPlanValidator: () => plan,
+      }),
+      /clean Git identity differs/u,
+    );
+
+    let pinReads = 0;
+    await assert.rejects(
+      loadClassicV4ReleaseArtifactContext(plan, {
+        reviewedReleaseWorktree: directory,
+        toolIdentityReader: async () => cleanToolIdentity,
+        identityReader: async () => identity,
+        sourcePinReader: async () => {
+          pinReads += 1;
+          return { digest: pinReads === 1 ? hash : `0x${"22".repeat(32)}` };
+        },
+        retainedArtifactBuilder: async () => ({}),
+        launcherArtifactBuilder: async () => ({}),
+        rollforwardPlanValidator: () => plan,
+      }),
+      /source pins differ/u,
+    );
+
+    await assert.rejects(
+      loadClassicV4ReleaseArtifactContext(plan, {
+        reviewedReleaseWorktree: directory,
+        toolIdentityReader: async () => ({
+          ...cleanToolIdentity,
+          clean: false,
+        }),
+        identityReader: async () => identity,
+        sourcePinReader: async () => ({ digest: hash }),
+        retainedArtifactBuilder: async () => ({}),
+        launcherArtifactBuilder: async () => ({}),
+        rollforwardPlanValidator: () => plan,
+      }),
+      /lifecycle tool Git identity must be clean/u,
+    );
+
+    let toolIdentityReads = 0;
+    await assert.rejects(
+      loadClassicV4ReleaseArtifactContext(plan, {
+        reviewedReleaseWorktree: directory,
+        toolIdentityReader: async () => {
+          toolIdentityReads += 1;
+          return toolIdentityReads === 1
+            ? cleanToolIdentity
+            : { ...cleanToolIdentity, tree: "c".repeat(40) };
+        },
+        identityReader: async () => identity,
+        sourcePinReader: async () => ({ digest: hash }),
+        retainedArtifactBuilder: async () => ({}),
+        launcherArtifactBuilder: async () => ({}),
+        rollforwardPlanValidator: () => plan,
+      }),
+      /lifecycle tool changed during the sealed build/u,
+    );
+    assert.equal(toolIdentityReads, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("rollforward artifact validation requires the exact explicit seal context", () => {
