@@ -862,7 +862,6 @@ jobs:
           let response;
           let body;
           let expectedLaunchSource;
-          let catalogMode;
           let exactCatalog = false;
           for (let attempt = 0; attempt < 5; attempt += 1) {
             response = undefined;
@@ -914,60 +913,11 @@ jobs:
                 : registryCustomCurrent && routerCustomStatus === "last-known-good"
                   ? "last-known-good"
                   : "unavailable";
-            const classicCurrent =
-              body?.catalog?.completeness?.classic === "current" &&
-              body.catalog.evidence?.kind === "envio-indexer-state" &&
-              body.catalog.evidence?.progressBlock === body.catalog.asOfBlock &&
-              /^sha256:[0-9a-f]{64}$/u.test(
-                body.catalog.evidence?.commitment ?? "",
-              );
-            const routerStamp = body?.catalog?.routerStamp;
-            const routerOnlyFallback =
-              body?.catalog?.launchSource === "canonical-launch-stamp-router" &&
-              body.catalog.status === "last-known-good" &&
-              body.catalog.completeness?.classic === "unavailable" &&
-              body.catalog.completeness?.custom === "unavailable" &&
-              body.catalog.completeness?.registryCustom === "unavailable" &&
-              routerCustomAvailable &&
-              Number.isSafeInteger(body.catalog.identityCount) &&
-              body.catalog.identityCount > 0 &&
-              body.catalog.identityCount === body.total &&
-              JSON.stringify(body.catalog.scope?.included) ===
-                JSON.stringify(["canonical-launch-stamp-router"]) &&
-              JSON.stringify(body.catalog.scope?.excluded) ===
-                JSON.stringify([
-                  "classic-v1",
-                  "classic-v2",
-                  "stock-paired-v1",
-                  "stock-paired-v2",
-                  "stock-paired-v3",
-                ]) &&
-              /^sha256:[0-9a-f]{64}$/u.test(
-                body.catalog.identityCommitment ?? "",
-              ) &&
-              body.catalog.evidence === undefined &&
-              /^[1-9][0-9]*$/u.test(String(body.catalog.asOfBlock ?? "")) &&
-              /^0x[0-9a-f]{64}$/u.test(body.catalog.asOfBlockHash ?? "") &&
-              routerStamp?.source === "canonical-launch-stamp-router" &&
-              routerStamp.status === routerCustomStatus &&
-              routerStamp.finalityConfirmations === 64 &&
-              Number.isSafeInteger(routerStamp.verifiedIdentityCount) &&
-              routerStamp.verifiedIdentityCount >= body.catalog.identityCount &&
-              routerStamp.projectedIdentityCount === body.catalog.identityCount &&
-              routerStamp.generatedAt === body.catalog.lastIndexedAt &&
-              routerStamp.asOfBlock === body.catalog.asOfBlock &&
-              routerStamp.asOfBlockHash === body.catalog.asOfBlockHash &&
-              /^sha256:[0-9a-f]{64}$/u.test(
-                routerStamp.identityCommitment ?? "",
-              ) &&
-              response.headers.get("x-programmable-canonical-read-status") ===
-                "unavailable" &&
-              response.headers.get("x-programmable-router-read-status") ===
-                routerCustomStatus;
             exactCatalog =
               body?.status === "ready" &&
               body?.catalog?.source === "envio-classic-v3" &&
               body.catalog.launchSource === expectedLaunchSource &&
+              body.catalog.completeness?.classic === "current" &&
               body.catalog.completeness?.custom === expectedCustomStatus &&
               ["current", "unavailable"].includes(
                 body.catalog.completeness?.registryCustom,
@@ -976,19 +926,18 @@ jobs:
                 routerCustomStatus,
               ) &&
               body.catalog.completeness?.stock === "excluded" &&
-              (classicCurrent || routerOnlyFallback) &&
+              body.catalog.evidence?.kind === "envio-indexer-state" &&
+              body.catalog.evidence?.progressBlock === body.catalog.asOfBlock &&
+              /^sha256:[0-9a-f]{64}$/u.test(
+                body.catalog.evidence?.commitment ?? "",
+              ) &&
               JSON.stringify(body.catalog.scope?.publicCategories) ===
                 JSON.stringify(["classic", "custom"]) &&
               Number.isSafeInteger(body.total) && body.total >= 1 &&
               Array.isArray(body.tokens) && body.tokens.length === 1 &&
               response.headers.get("x-programmable-launch-source") ===
                 expectedLaunchSource;
-            if (exactCatalog) {
-              catalogMode = classicCurrent
-                ? "envio-classic-current"
-                : "bounded-router-only-fallback";
-              break;
-            }
+            if (exactCatalog) break;
             if (attempt < 4) {
               await new Promise((resolve) => setTimeout(resolve, 5_000));
             }
@@ -998,7 +947,7 @@ jobs:
           }
           appendFileSync(
             process.env.GITHUB_OUTPUT,
-            `block_number=${body.catalog.asOfBlock}\ntoken_count=${body.total}\ncatalog_mode=${catalogMode}\n`,
+            `block_number=${body.catalog.asOfBlock}\ntoken_count=${body.total}\n`,
           );
           NODE
 
@@ -1475,7 +1424,6 @@ jobs:
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
           CATALOG_BLOCK_NUMBER: ${{ steps.envio-catalog-probe.outputs.block_number }}
           CATALOG_TOKEN_COUNT: ${{ steps.envio-catalog-probe.outputs.token_count }}
-          CATALOG_MODE: ${{ steps.envio-catalog-probe.outputs.catalog_mode }}
         run: |
           {
             echo "## Staged production candidate"
@@ -1486,10 +1434,9 @@ jobs:
             echo "- Stable protected preview: $STABLE_PREVIEW_URL"
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
-            echo "- Launch identities: validated current Classic or bounded Router fallback"
-            echo "- Catalog mode: \`$CATALOG_MODE\`"
-            echo "- Catalog progress block: \`$CATALOG_BLOCK_NUMBER\`"
-            echo "- Catalog identity count: \`$CATALOG_TOKEN_COUNT\`"
+            echo "- Launch identities: validated Envio Classic V3 catalog"
+            echo "- Envio catalog progress block: \`$CATALOG_BLOCK_NUMBER\`"
+            echo "- Envio catalog identity count: \`$CATALOG_TOKEN_COUNT\`"
             echo "- Market data provider: Dexscreener (optional enrichment)"
             echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
             echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"

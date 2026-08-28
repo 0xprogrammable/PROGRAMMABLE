@@ -1939,8 +1939,7 @@ export function evaluateReadModelOperationsSourceContracts(
   const envioClassicV3Catalog =
     source("lib/market-data/envio-classic-v3-catalog.server.ts") ?? "";
   const envioClassicV4CatalogBinding =
-    source("lib/data-pipeline/envio-classic-v4-catalog-binding.server.ts") ??
-    "";
+    source("lib/data-pipeline/envio-classic-v4-catalog-binding.server.ts") ?? "";
   const dexscreenerExplore =
     source("lib/market-data/dexscreener-explore.server.ts") ?? "";
   const dexscreenerShadow =
@@ -1970,27 +1969,20 @@ export function evaluateReadModelOperationsSourceContracts(
     "\nexport function ",
     primaryResolverStart + 1,
   );
-  const primaryResolver =
-    primaryResolverStart >= 0
-      ? websiteRpcProviders.slice(
-          primaryResolverStart,
-          primaryResolverEnd >= 0 ? primaryResolverEnd : undefined,
-        )
-      : "";
-  const classicProfileGetEnd = publicClassicProfile.indexOf(
-    "export async function POST",
-  );
-  const publicClassicProfileGet =
-    classicProfileGetEnd >= 0
-      ? publicClassicProfile.slice(0, classicProfileGetEnd)
-      : "";
-  const stockProfileGetEnd = publicStockProfile.indexOf(
-    "export async function POST",
-  );
-  const publicStockProfileGet =
-    stockProfileGetEnd >= 0
-      ? publicStockProfile.slice(0, stockProfileGetEnd)
-      : "";
+  const primaryResolver = primaryResolverStart >= 0
+    ? websiteRpcProviders.slice(
+        primaryResolverStart,
+        primaryResolverEnd >= 0 ? primaryResolverEnd : undefined,
+      )
+    : "";
+  const classicProfileGetEnd = publicClassicProfile.indexOf("export async function POST");
+  const publicClassicProfileGet = classicProfileGetEnd >= 0
+    ? publicClassicProfile.slice(0, classicProfileGetEnd)
+    : "";
+  const stockProfileGetEnd = publicStockProfile.indexOf("export async function POST");
+  const publicStockProfileGet = stockProfileGetEnd >= 0
+    ? publicStockProfile.slice(0, stockProfileGetEnd)
+    : "";
   const retiredCandidateCutover = Object.freeze({
     productionRunbook: productionCutoverRunbook,
     envioRunbook: envioCandidateRunbook,
@@ -2100,9 +2092,10 @@ export function evaluateReadModelOperationsSourceContracts(
     'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
   ]);
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
-  const primaryRpcLaunchCatalogCacheStart = primaryRpcLaunchCatalog.indexOf(
-    "export function createPrimaryRpcLaunchCatalogCacheV1",
-  );
+  const primaryRpcLaunchCatalogCacheStart =
+    primaryRpcLaunchCatalog.indexOf(
+      "export function createPrimaryRpcLaunchCatalogCacheV1",
+    );
   const primaryRpcLaunchCatalogCacheEnd = primaryRpcLaunchCatalog.indexOf(
     "function catalogCacheKey(",
     primaryRpcLaunchCatalogCacheStart,
@@ -2160,8 +2153,8 @@ export function evaluateReadModelOperationsSourceContracts(
       "createEnvioClient({",
       '{ model: { _eq: "classic" } }',
       '{ releaseVersion: { _in: ["classic-v3", "classic-v4"] } }',
-      "{ isComplete: { _eq: true } }",
-      "{ provenanceValid: { _eq: true } }",
+      '{ isComplete: { _eq: true } }',
+      '{ provenanceValid: { _eq: true } }',
       "assertLaunchEventBinding(launch, event, release)",
       'source: "envio-classic-v3" as const',
       'stock: "excluded" as const',
@@ -2264,7 +2257,7 @@ export function evaluateReadModelOperationsSourceContracts(
       "mergeEnvioClassicV3CatalogEntriesV1(",
       "readProductionCustomExploreDirectoryV1(request.signal)",
       'let customStatus: "current" | "unavailable" = "unavailable"',
-      "`${catalog.source}+registry.custom-launched`",
+      '`${catalog.source}+registry.custom-launched`',
       'schemaVersion: "programmable.market-chart-error.v1"',
       'reason: "identity-unavailable"',
       '"X-Programmable-Market-Provider": "bitquery"',
@@ -2291,7 +2284,7 @@ export function evaluateReadModelOperationsSourceContracts(
       "routerCustomEntriesAtOrBeforeBlockV1",
       "mergeRouterCustomCreatorProfileV1",
       "BigInt(stamp.blockNumber) > snapshotBlock",
-      "entry.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE",
+      'entry.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE',
     ]);
   check(
     "ops-public-provider-split-source-contract",
@@ -2324,7 +2317,7 @@ export function evaluateReadModelOperationsSourceContracts(
       "const launchSource = result === null",
       'routerStatus !== "unavailable"',
       ': "envio-classic-v3"',
-      ": `${launchSource}+rpc`",
+      ': `${launchSource}+rpc`',
       '"X-Programmable-Router-Read-Status": routerStatus',
       '"X-Programmable-Router-Claim-Read-Status": routerClaimStatus',
       '"X-Programmable-Rpc-Provider": rpcProvider',
@@ -2394,9 +2387,7 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       publicProfileAndActionRoutes.every(
         (route) =>
-          !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(
-            route,
-          ),
+          !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
       ),
     "Profile identity combines Envio with the bounded durable Router Custom snapshot and remains fail-closed without either identity source, while reviewed reward reads, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
   );
@@ -2410,13 +2401,7 @@ export function evaluateReadModelOperationsSourceContracts(
         '"/api/explore?limit=1&page=1&sort=newest"',
         "response.status === 200",
         'body?.catalog?.source === "envio-classic-v3"',
-        "const classicCurrent =",
-        'body?.catalog?.completeness?.classic === "current"',
-        "const routerOnlyFallback =",
-        'body?.catalog?.launchSource === "canonical-launch-stamp-router"',
-        'body.catalog.completeness?.classic === "unavailable"',
-        "routerStamp.projectedIdentityCount === body.catalog.identityCount",
-        "classicCurrent || routerOnlyFallback",
+        'body.catalog.completeness?.classic === "current"',
         'body.catalog.completeness?.stock === "excluded"',
         'body.catalog.evidence?.kind === "envio-indexer-state"',
         "body.total >= 1",
@@ -2426,13 +2411,13 @@ export function evaluateReadModelOperationsSourceContracts(
         "response = undefined",
         "if (attempt === 4) throw error",
         "continue;",
-        "if (exactCatalog) {",
+        "if (exactCatalog) break",
       ]) &&
       !stagedCatalogProbeBlock.includes("body.tokens[0]?.launchModel") &&
       !stagedCatalogProbeBlock.includes("CRON_SECRET") &&
       !stagedCatalogProbeBlock.includes("/api/ops/index-v2") &&
       !stagedCatalogProbeBlock.includes("        if:"),
-    "every exact staged candidate proves either a non-empty current Envio Classic V3 catalog or an exact bounded Router-only fallback before public Fast-Lane smoke",
+    "every exact staged candidate proves a non-empty verified Envio Classic V3 catalog before public Fast-Lane smoke",
   );
   check(
     "ops-protected-public-provider-stage-smoke",
@@ -2494,15 +2479,15 @@ export function evaluateReadModelOperationsSourceContracts(
         "!exactSamePageOrder(highest, newest)",
         'token.exploreKind === "token"',
         'token.exploreKind !== "custom-project" ||\n    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customProjectId ?? ""))',
-        "token.customProjectId",
-        "token.customLaunchId",
-        "Array.isArray(token.markets)",
+        'token.customProjectId',
+        'token.customLaunchId',
+        'Array.isArray(token.markets)',
         "const deterministicMarkets = markets",
         "exactIdentity(detailToken) !== exactIdentity(selectedToken)",
         "detail.body?.token ?? detail.body?.customProject",
         "catalogBoundary.launchSource",
         "const profileFailClosed =",
-        "profile.status === 503",
+        'profile.status === 503',
         'exactObjectKeys(profile.body, ["error", "status"])',
         'exactObjectKeys(profile.body?.error, ["code", "kind", "message"])',
         'profile.body?.error?.code === "creator_profile_temporarily_unavailable"',
@@ -2532,7 +2517,7 @@ export function evaluateReadModelOperationsSourceContracts(
         'profile.headers.get("x-programmable-read-source") ===\n        "envio-classic-v3+rpc"',
         'schemaVersion !== "programmable.market-chart.v1"',
         'chart.body?.source !== "bitquery"',
-        "chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase()",
+        'chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase()',
         'chart.headers.get("cache-control") !==\n      "public, max-age=0, s-maxage=2, stale-while-revalidate=2"',
         'chart.headers.get("x-programmable-market-provider") !== "bitquery"',
         'chart.headers.get("x-programmable-valuation-block") !== null',
@@ -2685,7 +2670,7 @@ export function evaluateReadModelOperationsSourceContracts(
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
       includesEverySourceFragment(postPromotionVerifierBlock, [
-        "target.toString() !== `${PRODUCTION_ORIGIN}/`",
+        'target.toString() !== `${PRODUCTION_ORIGIN}/`',
         'throw new Error("exact production deployment binding is required")',
         "verifyProductionDeploymentBinding({",
         "runProductionStaticDexscreenerSmokeV1({ fetchImpl })",
