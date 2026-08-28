@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Script } from "node:vm";
 
 import { getContractAddress, keccak256 } from "viem";
 
@@ -16,7 +17,10 @@ import {
   validateClassicV4LauncherUpgradePlan,
   validateClassicV4LauncherUpgradeReceiptEvidence,
 } from "../../../scripts/classic-v4-launcher-upgrade-core.mjs";
-import { renderClassicV4LauncherUpgradeHtml } from "../../../scripts/serve-classic-v4-launcher-upgrade.mjs";
+import {
+  isRetryableClassicV4LauncherUpgradeRecordError,
+  renderClassicV4LauncherUpgradeHtml,
+} from "../../../scripts/serve-classic-v4-launcher-upgrade.mjs";
 import {
   assertClassicV4LauncherUpgradePlanWriteAcknowledgement,
   assertClassicV4LauncherUpgradeRpcEndpoints,
@@ -395,6 +399,47 @@ test("local console exposes one owner-triggered MetaMask request and no signing 
   }
   assert.ok(html.includes("MetaMask remains the only signer"));
   assert.ok(html.includes("0 ETH"));
+  assert.ok(html.includes("Submitted transaction hash"));
+  assert.ok(html.includes("localStorage.setItem(submittedHashStorageKey,hash)"));
+  const browserSource = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
+  assert.ok(browserSource);
+  assert.doesNotThrow(() => new Script(browserSource));
+  const sendIndex = html.indexOf(
+    'const hash=await request("eth_sendTransaction",[prepared.request])',
+  );
+  const persistIndex = html.indexOf("showSubmittedHash(hash);", sendIndex);
+  const recordIndex = html.indexOf("await record(hash)", persistIndex);
+  assert.ok(sendIndex >= 0 && persistIndex > sendIndex && recordIndex > persistIndex);
+});
+
+test("receipt polling retries transient RPC failures but not integrity failures", () => {
+  for (const message of [
+    "Launcher transaction is not visible on both RPCs",
+    "RPC eth_getCode returned HTTP 408",
+    "RPC eth_getTransactionReceipt returned HTTP 429",
+    "RPC eth_getBlockByNumber returned HTTP 503",
+    "The operation was aborted due to timeout",
+    "fetch failed: socket hang up",
+  ]) {
+    assert.equal(
+      isRetryableClassicV4LauncherUpgradeRecordError(new Error(message)),
+      true,
+      message,
+    );
+  }
+  for (const message of [
+    "Independent RPCs disagree on launcher receipt evidence",
+    "Submitted transaction differs from the reviewed launcher deployment",
+    "Launcher deployment receipt differs from the reviewed transaction",
+    "Launcher runtime differs from the reviewed artifact",
+    "Existing receipt evidence belongs to another launcher transaction",
+  ]) {
+    assert.equal(
+      isRetryableClassicV4LauncherUpgradeRecordError(new Error(message)),
+      false,
+      message,
+    );
+  }
 });
 
 test("RPC endpoint guard requires distinct credential-free HTTPS hosts", () => {
