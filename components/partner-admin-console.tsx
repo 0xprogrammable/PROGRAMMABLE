@@ -148,6 +148,7 @@ function PartnerListSkeleton() {
 export function PartnerAdminConsole() {
   const {
     authReady,
+    authenticated,
     connecting,
     getAccessToken,
     getIdentityToken,
@@ -162,6 +163,8 @@ export function PartnerAdminConsole() {
     useState<Record<string, number>>({});
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [accessDenied, setAccessDenied] =
+    useState<PartnerAdminBrowserErrorV1 | null>(null);
+  const [walletNotLinked, setWalletNotLinked] =
     useState<PartnerAdminBrowserErrorV1 | null>(null);
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
@@ -179,6 +182,25 @@ export function PartnerAdminConsole() {
   const [keyExpiryDays, setKeyExpiryDays] = useState<Record<string, string>>({});
   const secretRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  const applyAuthorityError = useCallback((error: unknown) => {
+    if (
+      !(error instanceof PartnerAdminBrowserErrorV1)
+      || (!error.accessDenied && !error.walletNotLinked)
+    ) return false;
+    setPartners([]);
+    setPartnerPagination(EMPTY_PARTNER_PAGINATION);
+    setConfirmation(null);
+    setLoadState("error");
+    if (error.walletNotLinked) {
+      setWalletNotLinked(error);
+      setAccessDenied(null);
+    } else {
+      setAccessDenied(error);
+      setWalletNotLinked(null);
+    }
+    return true;
+  }, []);
 
   const getAuthHeaders = useCallback(async (json = false) => {
     const identityToken = await getIdentityToken().catch(() => null);
@@ -202,6 +224,8 @@ export function PartnerAdminConsole() {
     if (!account) return;
     setLoadState("loading");
     setPageError("");
+    setAccessDenied(null);
+    setWalletNotLinked(null);
     try {
       const query = new URLSearchParams({
         walletAddress: account,
@@ -229,21 +253,18 @@ export function PartnerAdminConsole() {
       setPartners([...parsed.partners]);
       setPartnerPagination(parsed.pagination);
       setAccessDenied(null);
+      setWalletNotLinked(null);
       setLoadState("ready");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
-        setPartners([]);
-        setPartnerPagination(EMPTY_PARTNER_PAGINATION);
-        setAccessDenied(error);
+      if (applyAuthorityError(error)) {
         setPageError("");
-        setLoadState("error");
         return;
       }
       setPageError(error instanceof Error ? error.message : "Unable to load partners.");
       setLoadState("error");
     }
-  }, [account, getAuthHeaders]);
+  }, [account, applyAuthorityError, getAuthHeaders]);
 
   useEffect(() => {
     if (!authReady || !account) return;
@@ -356,8 +377,7 @@ export function PartnerAdminConsole() {
       }
       void loadPartners(undefined, 1);
     } catch (error) {
-      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
-        setAccessDenied(error);
+      if (applyAuthorityError(error)) {
         setFormError("");
         return;
       }
@@ -397,8 +417,7 @@ export function PartnerAdminConsole() {
       setConfirmation(null);
       setStatusMessage(success(partner));
     } catch (error) {
-      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
-        setAccessDenied(error);
+      if (applyAuthorityError(error)) {
         setPageError("");
         return;
       }
@@ -495,8 +514,7 @@ export function PartnerAdminConsole() {
       setRootKeyPages((current) => ({ ...current, [partner.id]: 1 }));
       void loadPartners(undefined, partnerPagination.page);
     } catch (error) {
-      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
-        setAccessDenied(error);
+      if (applyAuthorityError(error)) {
         setPageError("");
         return;
       }
@@ -538,8 +556,7 @@ export function PartnerAdminConsole() {
       setStatusMessage(`${partner.displayName} root key was revoked.`);
       await loadPartners(undefined, partnerPagination.page);
     } catch (error) {
-      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
-        setAccessDenied(error);
+      if (applyAuthorityError(error)) {
         setPageError("");
         return;
       }
@@ -619,11 +636,35 @@ export function PartnerAdminConsole() {
         </section>
       ) : !account ? (
         <section className={styles.statePanel}>
-          <h2>Connect the admin wallet</h2>
-          <p>The backend verifies admin access after the wallet session is connected.</p>
+          <h2>{authenticated ? "Link an admin wallet" : "Connect the admin wallet"}</h2>
+          <p>
+            {authenticated
+              ? "Link or select an Ethereum wallet before checking partner access."
+              : "The backend verifies admin access after the wallet session is connected."}
+          </p>
           <button type="button" disabled={connecting} onClick={openWallet}>
-            {connecting ? "Connecting wallet" : "Connect wallet"}
+            {connecting
+              ? "Connecting wallet"
+              : authenticated
+                ? "Manage wallets"
+                : "Connect wallet"}
           </button>
+        </section>
+      ) : walletNotLinked ? (
+        <section className={styles.statePanel} data-state="wallet-not-linked">
+          <p className={styles.kicker}>Wallet setup</p>
+          <h2>Link this wallet to continue</h2>
+          <p>
+            This wallet is connected but not linked to your Programmable
+            sign-in. Link it or select another linked wallet.
+          </p>
+          {walletNotLinked.requestId ? (
+            <p className={styles.requestId}>
+              <span>Request ID</span>
+              <code>{walletNotLinked.requestId}</code>
+            </p>
+          ) : null}
+          <button type="button" onClick={openWallet}>Manage wallets</button>
         </section>
       ) : accessDenied ? (
         <section className={styles.statePanel} data-state="access-denied">

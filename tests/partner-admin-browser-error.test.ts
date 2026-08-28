@@ -40,6 +40,34 @@ describe("partner admin browser errors", () => {
     expect(JSON.stringify(error)).not.toContain("pm_partner_root_");
   });
 
+  it("keeps an unlinked wallet separate from backend access denial", () => {
+    const error = partnerAdminBrowserErrorV1(
+      new Response(null, {
+        status: 403,
+        headers: { "x-request-id": REQUEST_ID },
+      }),
+      {
+        schemaVersion: "programmable.partner-admin.v1",
+        error: {
+          code: "wallet_not_linked",
+          message: "The request could not be completed.",
+          requestId: REQUEST_ID,
+        },
+      },
+      "Unable to load partners.",
+    );
+
+    expect(error).toMatchObject({
+      status: 403,
+      code: "wallet_not_linked",
+      requestId: REQUEST_ID,
+      retryAfter: null,
+      accessDenied: false,
+      walletNotLinked: true,
+      message: "This wallet is connected but not linked to your Programmable sign-in.",
+    });
+  });
+
   it("keeps bounded retry and request correlation for ordinary errors", () => {
     const error = partnerAdminBrowserErrorV1(
       new Response(null, {

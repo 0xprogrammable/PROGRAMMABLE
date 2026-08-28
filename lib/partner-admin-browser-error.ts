@@ -4,6 +4,7 @@ const RETRY_AFTER_SECONDS = /^[1-9][0-9]{0,4}$/u;
 
 export class PartnerAdminBrowserErrorV1 extends Error {
   readonly accessDenied: boolean;
+  readonly walletNotLinked: boolean;
 
   constructor(
     readonly status: number,
@@ -15,6 +16,7 @@ export class PartnerAdminBrowserErrorV1 extends Error {
     super(message);
     this.name = "PartnerAdminBrowserErrorV1";
     this.accessDenied = status === 403 && code === "PARTNER_ADMIN_FORBIDDEN";
+    this.walletNotLinked = status === 403 && code === "wallet_not_linked";
   }
 }
 
@@ -44,6 +46,16 @@ export function partnerAdminBrowserErrorV1(
       requestId,
       null,
       "This wallet is signed in but does not have partner administration access.",
+    );
+  }
+
+  if (response.status === 403 && code === "wallet_not_linked") {
+    return new PartnerAdminBrowserErrorV1(
+      response.status,
+      code,
+      requestId,
+      null,
+      "This wallet is connected but not linked to your Programmable sign-in.",
     );
   }
 

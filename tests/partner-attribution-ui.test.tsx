@@ -244,4 +244,22 @@ describe("partner attribution UI", () => {
     expect(source).toContain('aria-label="Partner pages"');
     expect(source).toContain("ROOT_KEYS_PER_PAGE");
   });
+
+  it("recovers an unlinked partner-admin wallet without retrying the request", () => {
+    const source = readFileSync(
+      new URL("../components/partner-admin-console.tsx", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf('data-state="wallet-not-linked"');
+    const end = source.indexOf(") : accessDenied ? (", start);
+    const walletRecoveryState = source.slice(start, end);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(walletRecoveryState).toContain("Link this wallet to continue");
+    expect(walletRecoveryState).toContain("select another linked wallet");
+    expect(walletRecoveryState).toContain("onClick={openWallet}");
+    expect(walletRecoveryState).toContain("Manage wallets");
+    expect(walletRecoveryState).not.toContain("Try again");
+  });
 });
