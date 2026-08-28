@@ -18,7 +18,10 @@ import {
   validateClassicV4LauncherUpgradeReceiptEvidence,
 } from "../../../scripts/classic-v4-launcher-upgrade-core.mjs";
 import {
+  CLASSIC_V4_LAUNCHER_UPGRADE_RECOVERY_USAGE,
   isRetryableClassicV4LauncherUpgradeRecordError,
+  parseClassicV4LauncherUpgradeArguments,
+  recoverClassicV4LauncherUpgradeReceipt,
   renderClassicV4LauncherUpgradeHtml,
 } from "../../../scripts/serve-classic-v4-launcher-upgrade.mjs";
 import {
@@ -440,6 +443,114 @@ test("receipt polling retries transient RPC failures but not integrity failures"
       message,
     );
   }
+});
+
+test("receipt recovery parses without a wallet or signer surface", () => {
+  const argv = [
+    "--plan",
+    "/private/tmp/launcher-plan.json",
+    "--evidence-output",
+    "/private/tmp/launcher-receipt.json",
+    "--acknowledge-plan-digest",
+    HASH("b"),
+    "--recover-transaction-hash",
+    TRANSACTION_HASH,
+  ];
+  const options = parseClassicV4LauncherUpgradeArguments(argv);
+  assert.equal(options.recoverTransactionHash, TRANSACTION_HASH);
+  assert.equal(options.wallet, null);
+  assert.ok(
+    CLASSIC_V4_LAUNCHER_UPGRADE_RECOVERY_USAGE.includes(
+      "--recover-transaction-hash",
+    ),
+  );
+  assert.ok(!CLASSIC_V4_LAUNCHER_UPGRADE_RECOVERY_USAGE.includes("--wallet"));
+  assert.throws(
+    () =>
+      parseClassicV4LauncherUpgradeArguments([
+        ...argv,
+        "--wallet",
+        CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER,
+      ]),
+    /does not accept --wallet or expose a signer/,
+  );
+  assert.throws(
+    () => parseClassicV4LauncherUpgradeArguments(["--check", ...argv]),
+    /mutually exclusive/,
+  );
+});
+
+test("receipt recovery captures exact evidence without a nonce preflight", async () => {
+  const artifact = artifactFixture();
+  const plan = planFixture();
+  const { transaction, receipt } = receiptFixture(plan);
+  const evidence = buildClassicV4LauncherUpgradeReceiptEvidence({
+    plan,
+    transactionHash: TRANSACTION_HASH,
+    transaction,
+    receipt,
+  });
+  const endpoints = ["https://rpc-a.example", "https://rpc-b.example"];
+  let captured;
+  const recovered = await recoverClassicV4LauncherUpgradeReceipt({
+    plan,
+    artifact,
+    endpoints,
+    evidenceOutput: "/private/tmp/launcher-receipt.json",
+    transactionHash: TRANSACTION_HASH,
+    captureReceipt: async (input) => {
+      captured = input;
+      return evidence;
+    },
+  });
+  assert.equal(recovered, evidence);
+  assert.equal(captured.transactionHash, TRANSACTION_HASH);
+  assert.equal(captured.plan, plan);
+  assert.equal(captured.artifact, artifact);
+
+  await assert.rejects(
+    () =>
+      recoverClassicV4LauncherUpgradeReceipt({
+        plan,
+        artifact,
+        endpoints,
+        evidenceOutput: "/private/tmp/launcher-receipt.json",
+        transactionHash: TRANSACTION_HASH,
+        captureReceipt: async () => null,
+      }),
+    /recovery is retryable: the transaction receipt is not yet available/,
+  );
+  await assert.rejects(
+    () =>
+      recoverClassicV4LauncherUpgradeReceipt({
+        plan,
+        artifact,
+        endpoints,
+        evidenceOutput: "/private/tmp/launcher-receipt.json",
+        transactionHash: TRANSACTION_HASH,
+        captureReceipt: async () => {
+          throw new Error("RPC eth_getTransactionReceipt returned HTTP 408");
+        },
+      }),
+    /recovery is retryable: RPC eth_getTransactionReceipt returned HTTP 408/,
+  );
+  const integrityError = new Error(
+    "Submitted transaction differs from the reviewed launcher deployment",
+  );
+  await assert.rejects(
+    () =>
+      recoverClassicV4LauncherUpgradeReceipt({
+        plan,
+        artifact,
+        endpoints,
+        evidenceOutput: "/private/tmp/launcher-receipt.json",
+        transactionHash: TRANSACTION_HASH,
+        captureReceipt: async () => {
+          throw integrityError;
+        },
+      }),
+    (error) => error === integrityError,
+  );
 });
 
 test("RPC endpoint guard requires distinct credential-free HTTPS hosts", () => {

@@ -46,6 +46,8 @@ const DEFAULT_RPC_ENDPOINTS = [
   "https://eth.drpc.org",
 ];
 const MAX_REQUEST_BYTES = 4_096;
+export const CLASSIC_V4_LAUNCHER_UPGRADE_RECOVERY_USAGE =
+  "node scripts/serve-classic-v4-launcher-upgrade.mjs --plan <absolute-plan.json> --evidence-output <absolute-receipt.json> --acknowledge-plan-digest <planDigest> --recover-transaction-hash <0x-hash>";
 
 function fail(message) {
   throw new Error(message);
@@ -63,7 +65,7 @@ async function readJson(file, label) {
   }
 }
 
-function parseArguments(argv) {
+export function parseClassicV4LauncherUpgradeArguments(argv) {
   const forbidden = argv.find(
     (argument) =>
       argument === "--broadcast" ||
@@ -84,6 +86,7 @@ function parseArguments(argv) {
     rpcB: process.env.CLASSIC_V4_LAUNCHER_UPGRADE_RPC_B ?? DEFAULT_RPC_ENDPOINTS[1],
     port: Number(process.env.CLASSIC_V4_LAUNCHER_UPGRADE_PORT ?? DEFAULT_PORT),
     check: false,
+    recoverTransactionHash: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -103,6 +106,7 @@ function parseArguments(argv) {
         "--rpc-a",
         "--rpc-b",
         "--port",
+        "--recover-transaction-hash",
       ].includes(key)
     ) {
       fail(`Unknown argument: ${key}`);
@@ -116,6 +120,9 @@ function parseArguments(argv) {
     if (key === "--rpc-a") options.rpcA = value;
     if (key === "--rpc-b") options.rpcB = value;
     if (key === "--port") options.port = Number(value);
+    if (key === "--recover-transaction-hash") {
+      options.recoverTransactionHash = value.toLowerCase();
+    }
   }
   if (!options.plan || !path.isAbsolute(options.plan)) {
     fail("--plan must be an absolute path");
@@ -123,7 +130,17 @@ function parseArguments(argv) {
   if (!options.evidenceOutput || !path.isAbsolute(options.evidenceOutput)) {
     fail("--evidence-output must be an absolute path");
   }
-  if (
+  if (options.recoverTransactionHash) {
+    if (options.check) {
+      fail("--check and --recover-transaction-hash are mutually exclusive");
+    }
+    if (!/^0x[0-9a-f]{64}$/.test(options.recoverTransactionHash)) {
+      fail("--recover-transaction-hash must be a transaction hash");
+    }
+    if (options.wallet) {
+      fail("Receipt recovery does not accept --wallet or expose a signer");
+    }
+  } else if (
     !options.wallet ||
     canonicalAddress(options.wallet, "wallet") !==
       canonicalAddress(CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER)
@@ -242,10 +259,12 @@ async function recordAtEndpoint({
   transactionHash,
   rpcClient,
 }) {
-  const [transaction, receipt] = await Promise.all([
+  const [chainId, transaction, receipt] = await Promise.all([
+    rpcClient(endpoint, "eth_chainId"),
     rpcClient(endpoint, "eth_getTransactionByHash", [transactionHash]),
     rpcClient(endpoint, "eth_getTransactionReceipt", [transactionHash]),
   ]);
+  if (normalizeHex(chainId) !== "0x1") fail("RPC is not Ethereum Mainnet");
   if (!transaction) fail("Launcher transaction is not visible on both RPCs");
   if (!receipt) return null;
   const evidence = buildClassicV4LauncherUpgradeReceiptEvidence({
@@ -474,8 +493,47 @@ export function isRetryableClassicV4LauncherUpgradeRecordError(error) {
   );
 }
 
+export async function recoverClassicV4LauncherUpgradeReceipt({
+  plan,
+  artifact,
+  endpoints,
+  evidenceOutput,
+  transactionHash,
+  rpcClient = classicV4LauncherUpgradeRpc,
+  captureReceipt = captureClassicV4LauncherUpgradeReceipt,
+}) {
+  assertClassicV4LauncherUpgradeRpcEndpoints(endpoints);
+  let evidence;
+  try {
+    evidence = await captureReceipt({
+      plan,
+      artifact,
+      endpoints,
+      evidenceOutput,
+      transactionHash,
+      rpcClient,
+    });
+  } catch (error) {
+    if (!isRetryableClassicV4LauncherUpgradeRecordError(error)) throw error;
+    fail(
+      `Launcher receipt recovery is retryable: ${error?.message ?? String(error)}`,
+    );
+  }
+  if (!evidence) {
+    fail(
+      "Launcher receipt recovery is retryable: the transaction receipt is not yet available on both RPCs",
+    );
+  }
+  validateClassicV4LauncherUpgradeReceiptEvidence(plan, evidence);
+  return evidence;
+}
+
 export async function main(argv = process.argv.slice(2)) {
-  const options = parseArguments(argv);
+  if (argv.includes("--help")) {
+    process.stdout.write(`${CLASSIC_V4_LAUNCHER_UPGRADE_RECOVERY_USAGE}\n`);
+    return;
+  }
+  const options = parseClassicV4LauncherUpgradeArguments(argv);
   const endpoints = [options.rpcA, options.rpcB];
   assertClassicV4LauncherUpgradeRpcEndpoints(endpoints);
   await assertEvidenceOutputPath(options.evidenceOutput);
@@ -485,6 +543,28 @@ export async function main(argv = process.argv.slice(2)) {
   }
   const artifact = await loadClassicV4LauncherUpgradeSealedBuild(plan);
   validateClassicV4LauncherUpgradePlan(plan, artifact);
+  if (options.recoverTransactionHash) {
+    const evidence = await recoverClassicV4LauncherUpgradeReceipt({
+      plan,
+      artifact,
+      endpoints,
+      evidenceOutput: options.evidenceOutput,
+      transactionHash: options.recoverTransactionHash,
+    });
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          mode: "receipt-recovery",
+          plan: publicPlan(plan),
+          evidence,
+          evidenceOutput: options.evidenceOutput,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    return;
+  }
   const initial = await inspectClassicV4LauncherUpgrade({
     plan,
     artifact,
