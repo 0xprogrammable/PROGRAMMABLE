@@ -15,11 +15,11 @@ description: Official Programmable product, source, community and analytics link
 | Custom Launch API keys  | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)                         |
 | Custom Launch API guide | [programmable.market/developers/custom-launch-api-v1.md](https://programmable.market/developers/custom-launch-api-v1.md) |
 | Custom Launch V1 OpenAPI | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
-| Custom Launch V2 OpenAPI | [V2 request and read compatibility](https://programmable.market/openapi/custom-launch-v2.json)                     |
+| Custom Launch V2 OpenAPI | [V2 reads, schemas and write fence](https://programmable.market/openapi/custom-launch-v2.json)                     |
 | Custom Launch V3 OpenAPI | [live general-hook creation and lifecycle contract](https://programmable.market/openapi/custom-launch-v3.json)     |
 | Custom Launch API      | [api.programmable.market](https://api.programmable.market)                                                         |
 | Custom API readiness    | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                           |
-| Custom Launch CLI 3.3.6 | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz) |
+| Custom Launch CLI 3.3.7 | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz) |
 | Custom Launch CLI 1.0.1 | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Launch policy           | [github.com/0xprogrammable/launch-policy](https://github.com/0xprogrammable/launch-policy)                         |
 | Read-only developer API | [developers.programmable.family](https://developers.programmable.family)                                           |
@@ -28,11 +28,12 @@ description: Official Programmable product, source, community and analytics link
 | Dune                    | [Programmable analytics](https://dune.com/0xprogrammable6098/programmable-analytics)                               |
 | V4 token                | [Dexscreener](https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0) |
 
-Use `api.programmable.market` for authenticated public V3 general-hook creation and wallet-owned lifecycle reads. The
+Use `api.programmable.market` for authenticated public V3 general-hook creation and exact-credential-principal lifecycle reads with wallet keys, partner roots or bounded partner subkeys. The
 default profile is revision 3 with `profileVersion: 3.3.0`; it requires and binds canonical project metadata, including
 an exact source-bound image, into the launch hashes. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and byte-identical retryable under their original immutable policies,
-and revision 2 remains compatible. V2 and V1 history remain
-readable, V1 creation remains read only, and legacy Registry and GitHub submission intake is closed. Use the read-only
+and revision 2 remains compatible. V2 and V1 history and schemas remain readable, while fresh creation returns
+non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 accepts new submissions.
+Legacy Registry and GitHub submission intake is closed. Use the read-only
 developer service and current deployment manifest when verifying Ethereum source or deployment data. Use the Prediction
 Markets repository for its current networks, contracts and release evidence. Community posts and analytics are useful
 context but do not replace the contract address, canonical chain record or versioned release evidence.

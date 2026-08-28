@@ -7,8 +7,6 @@ import {
   CREATE_PATH_V1,
   CREATE_PATH_V2,
   CREATE_PATH_V3,
-  CREATE_REQUEST_SCHEMA_V1,
-  CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_ID,
   DIRECT_NATIVE_PROFILE_REVISION,
@@ -43,6 +41,8 @@ const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
+const PARTNER_API_KEY =
+  /^pm_partner_(?:root_)?[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
 const MAX_SUBMISSION_JOURNAL_BYTES = 12_582_912;
 const PREFLIGHT_DISPOSITIONS = new Set([
   "supported",
@@ -165,7 +165,12 @@ export async function submitLaunch(options) {
     launchPath,
     configPath: options.configPath,
   });
-  const requestPath = createPathForRequestSchema(validation.schemaVersion);
+  if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3) {
+    throw new TypeError(
+      `LEGACY_SUBMISSION_READ_ONLY: V1 and V2 launch creation are read-only; submit a ${CREATE_REQUEST_SCHEMA_V3} request built for profile version ${DIRECT_NATIVE_PROFILE_VERSION}`,
+    );
+  }
+  const requestPath = CREATE_PATH_V3;
   const requestBytes = Buffer.from(await (options.readLaunchBytesImpl ?? readFile)(launchPath));
   const requestSha256 = sha256Digest(requestBytes);
   if (requestSha256 !== validation.requestSha256) {
@@ -278,7 +283,9 @@ export async function statusLaunch(options) {
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
       const action = resourceActionSummary(resource);
-      const permitRecovery = permitRecoverySummary(resource);
+      const permitRecovery = permitRecoverySummary(resource, {
+        permitReissueInspectionAvailable: !PARTNER_API_KEY.test(apiKey),
+      });
       return {
         httpStatus: result.status,
         stopped,
@@ -334,6 +341,15 @@ export async function requestPermitReissueDisposition(options) {
   };
   const apiOrigin = productionApiOrigin(options.apiOrigin);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
+  if (PARTNER_API_KEY.test(apiKey)) {
+    throw new ProgrammableApiError(
+      "Router V1 permit-reissue disposition is available only to wallet API keys; partner launches recover by packing and submitting a new request",
+      {
+        code: "PERMIT_REISSUE_WALLET_KEY_REQUIRED",
+        expectedCredentialKind: "wallet",
+      },
+    );
+  }
   const requestPath = PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
     "{launchId}",
     encodeURIComponent(options.launchId),
@@ -874,7 +890,10 @@ function resourceActionSummary(resource, { walletHandoffBaseUrl } = {}) {
   return summary;
 }
 
-function permitRecoverySummary(resource) {
+function permitRecoverySummary(
+  resource,
+  { permitReissueInspectionAvailable = true } = {},
+) {
   if (resource?.status !== "failed"
     || resource?.failure?.code !== "PERMIT_EXPIRED"
     || resource?.onchainLaunchId !== null) {
@@ -891,12 +910,14 @@ function permitRecoverySummary(resource) {
     requiresNewIdempotencyKey: true,
     predictedAddressesMayChange: true,
     automaticReissue: false,
-    permitReissueEndpoint: launchId === null
-      ? PERMIT_REISSUE_PATH_TEMPLATE_V3
-      : PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
-          "{launchId}",
-          encodeURIComponent(launchId),
-        ),
+    permitReissueEndpoint: permitReissueInspectionAvailable
+      ? launchId === null
+        ? PERMIT_REISSUE_PATH_TEMPLATE_V3
+        : PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
+            "{launchId}",
+            encodeURIComponent(launchId),
+          )
+      : null,
   };
 }
 
@@ -1012,13 +1033,6 @@ function productionApiOrigin(value) {
   throw new TypeError(
     `API origin is fixed to ${API_ORIGIN}; test network behavior through an injected fetch implementation`,
   );
-}
-
-function createPathForRequestSchema(schemaVersion) {
-  if (schemaVersion === CREATE_REQUEST_SCHEMA_V1) return CREATE_PATH_V1;
-  if (schemaVersion === CREATE_REQUEST_SCHEMA_V2) return CREATE_PATH_V2;
-  if (schemaVersion === CREATE_REQUEST_SCHEMA_V3) return CREATE_PATH_V3;
-  throw new TypeError("launch request schema does not map to a Custom Launch API route");
 }
 
 function createPathForApiVersion(value) {

@@ -473,7 +473,7 @@ describe("Launch Stamp developer documentation", () => {
     expect(page).toMatch(/PCAN.*token symbol in this test case/s);
     expect(page).toContain("does not replace it");
     expect(page).toMatch(
-      /Custom launch\s+preparation uses a wallet-bound key and the authenticated API/,
+      /Custom launch\s+preparation uses a scoped wallet, partner-root or partner-subkey\s+credential and the authenticated API/,
     );
     expect(page).toContain('href="/docs/trust"');
     expect(page).toContain('href="/docs/creators/launch"');

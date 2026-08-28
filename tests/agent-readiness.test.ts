@@ -115,7 +115,7 @@ describe("agent-readable public surface", () => {
     await expect(response.json()).resolves.toEqual(programmablePublicOpenApi);
   });
 
-  it("keeps V1 reads live and exposes only the explicit V1 write fence", () => {
+  it("keeps legacy reads live and exposes the V1 and V2 write fences", () => {
     const prohibitedSegments = new Set([
       "claim",
       "profile",
@@ -154,10 +154,20 @@ describe("agent-readable public surface", () => {
       ),
     ).toEqual(["get"]);
     expect(programmablePublicOpenApi["x-programmable-api-scopes"]).toMatchObject({
-      "custom-launch:create": { state: "v1-write-fenced-v3-live" },
+      "custom-launch:create": { state: "v1-v2-write-fenced-v3.3-live" },
       "fees:claim": { state: "reserved-disabled" },
       "buybacks:manage": { state: "reserved-disabled" },
     });
+    expect(programmablePublicOpenApi["x-programmable-availability"].v2)
+      .toMatchObject({
+        reads: "live",
+        create: "read-only",
+        createHttpStatus: 409,
+        createErrorCode: "CUSTOM_LAUNCH_V2_READ_ONLY",
+        retryable: false,
+        preparedAndSimulatingReads: "observation-only",
+        readMayAuthorize: false,
+      });
   });
 
   it("publishes typed and unambiguous Custom launch lifecycle identifiers", () => {

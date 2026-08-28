@@ -162,15 +162,15 @@ test("published V3 pack-config schema binds exact ordered liquidity assessment v
 
 test("published V3 pack-config schema matches fee and salt-grind parser bounds", () => {
   const config = baseConfig();
-  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "999999";
+  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "100000";
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
-  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "1000000";
+  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "100001";
   assert.equal(validate(config), false);
 
   config.launchProfile.accountingMode = "additive-platform-share";
-  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "998999";
+  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "100000";
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
-  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "999000";
+  config.launchProfile.applicantSelectedBuyHundredthsOfBip = "100001";
   assert.equal(validate(config), false);
 
   config.launchProfile.accountingMode = "inclusive-selected-total";

@@ -5,6 +5,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { getAddress, isAddress } from "viem";
 
 import {
+  PARTNER_ADMIN_LIST_LIMITS_V1,
   PARTNER_ADMIN_SCHEMA_V1,
   PARTNER_BUDGET_LIMITS_V1,
   PARTNER_ROOT_KEY_SCOPES_V1,
@@ -45,9 +46,10 @@ const ROOT_RESULT_SCHEMA = "programmable.partner-root-credential-result.v1";
 const ROOT_LIST_SCHEMA = "programmable.partner-root-credential-list.v1";
 const ROOT_REVOCATION_SCHEMA = "programmable.partner-root-revocation.v1";
 const MAXIMUM_BROWSER_BODY_BYTES = 16_384;
-const MAXIMUM_BACKEND_BODY_BYTES = 262_144;
-const MAXIMUM_PARTNERS = 100;
-const MAXIMUM_ROOT_KEYS = 100;
+const MAXIMUM_BACKEND_BODY_BYTES = 1_048_576;
+const MAXIMUM_PARTNERS = PARTNER_ADMIN_LIST_LIMITS_V1.maximumPartners;
+const MAXIMUM_ROOT_KEYS =
+  PARTNER_ADMIN_LIST_LIMITS_V1.maximumRootKeysPerPartner;
 const DEFAULT_TIMEOUT_MS = 7_500;
 const MAXIMUM_EXPIRY_DAYS = 366;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/u;
@@ -65,6 +67,7 @@ const RESPONSE_HEADERS = Object.freeze({
 export interface PartnerAdminBridgeV1 {
   list(request: Request): Promise<Response>;
   create(request: Request): Promise<Response>;
+  revokePartner(request: Request, partnerId: string): Promise<Response>;
   setStatus(request: Request, partnerId: string): Promise<Response>;
   issueRootKey(request: Request, partnerId: string): Promise<Response>;
   rotateRootKey(
@@ -191,9 +194,12 @@ export function createPartnerAdminBridgeV1(input: Readonly<{
       if (request.method !== "GET") return errorResponse(405, "method_not_allowed", "GET");
       try {
         requireJsonResponse(request);
-        const walletInput = exactWalletQuery(request);
+        const query = partnerListQuery(request);
         const principal = await input.authenticator.authenticate(request);
-        const walletAddress = requireLinkedWallet(principal, walletInput);
+        const walletAddress = requireLinkedWallet(
+          principal,
+          query.walletAddress,
+        );
         const backend = await callBackend(
           request,
           principal,
@@ -209,13 +215,29 @@ export function createPartnerAdminBridgeV1(input: Readonly<{
           throw new BackendContractErrorV1();
         }
         const metadata = record.partners.map(parseBackendPartnerMetadata);
-        const roots = await Promise.all(metadata.map((partner) =>
+        const totalPartners = metadata.length;
+        const totalPages = Math.ceil(totalPartners / query.pageSize);
+        const page = totalPages === 0
+          ? 1
+          : Math.min(query.page, totalPages);
+        const pageStart = (page - 1) * query.pageSize;
+        const pageMetadata = metadata.slice(
+          pageStart,
+          pageStart + query.pageSize,
+        );
+        const roots = await Promise.all(pageMetadata.map((partner) =>
           rootKeysForPartner(request, principal, walletAddress, partner.id)));
-        const partners = metadata.map((partner, index) =>
+        const partners = pageMetadata.map((partner, index) =>
           requireNormalizedPartner({ ...partner, rootKeys: roots[index] ?? [] }));
         return jsonResponse(200, {
           schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
           partners,
+          pagination: Object.freeze({
+            page,
+            pageSize: query.pageSize,
+            totalPartners,
+            totalPages,
+          }),
         });
       } catch (error) {
         return mappedError(error);
@@ -273,6 +295,50 @@ export function createPartnerAdminBridgeV1(input: Readonly<{
           schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
           partner,
           ...rootMutation,
+        });
+      } catch (error) {
+        return mappedError(error);
+      }
+    },
+
+    async revokePartner(request: Request, partnerId: string) {
+      if (request.method !== "DELETE") {
+        return errorResponse(405, "method_not_allowed", "DELETE");
+      }
+      try {
+        requireJsonResponse(request);
+        const normalizedPartnerId = requireBrowserUuid(
+          partnerId,
+          "partner_id_invalid",
+        );
+        const walletInput = exactWalletQuery(request);
+        const principal = await input.authenticator.authenticate(request);
+        const walletAddress = requireLinkedWallet(principal, walletInput);
+        const backend = await callBackend(
+          request,
+          principal,
+          walletAddress,
+          "DELETE",
+          `/v1/admin/partners/${encodeURIComponent(normalizedPartnerId)}`,
+        );
+        if (!backend.ok) throw await mappedBackendError(backend);
+        if (backend.status !== 200) throw new BackendContractErrorV1();
+        const record = jsonRecord(await readBoundedBackendJson(backend));
+        requireSchema(record, PARTNER_RESOURCE_SCHEMA);
+        const metadata = parseBackendPartnerMetadata(record);
+        if (
+          metadata.id !== normalizedPartnerId
+          || metadata.status !== "revoked"
+        ) throw new BackendContractErrorV1();
+        const rootKeys = await rootKeysForPartner(
+          request,
+          principal,
+          walletAddress,
+          normalizedPartnerId,
+        );
+        return jsonResponse(backend.status, {
+          schemaVersion: PARTNER_ADMIN_SCHEMA_V1,
+          partner: requireNormalizedPartner({ ...metadata, rootKeys }),
         });
       } catch (error) {
         return mappedError(error);
@@ -691,6 +757,49 @@ function exactWalletQuery(request: Request) {
     throw new BrowserRequestErrorV1(400, "request_schema_invalid");
   }
   return entries[0][1];
+}
+
+function partnerListQuery(request: Request) {
+  const entries = [...new URL(request.url).searchParams.entries()];
+  const allowed = new Set(["walletAddress", "page", "pageSize"]);
+  if (
+    entries.length < 1
+    || entries.length > allowed.size
+    || entries.some(([key]) => !allowed.has(key))
+    || new Set(entries.map(([key]) => key)).size !== entries.length
+  ) throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+  const values = new Map(entries);
+  const walletAddress = values.get("walletAddress");
+  if (!walletAddress) {
+    throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+  }
+  const page = boundedPositiveQueryInteger(
+    values.get("page"),
+    1,
+    PARTNER_ADMIN_LIST_LIMITS_V1.maximumPartners,
+  );
+  const pageSize = boundedPositiveQueryInteger(
+    values.get("pageSize"),
+    PARTNER_ADMIN_LIST_LIMITS_V1.defaultPageSize,
+    PARTNER_ADMIN_LIST_LIMITS_V1.maximumPageSize,
+  );
+  return Object.freeze({ walletAddress, page, pageSize });
+}
+
+function boundedPositiveQueryInteger(
+  value: string | undefined,
+  fallback: number,
+  maximum: number,
+) {
+  if (value === undefined) return fallback;
+  if (!/^[1-9]\d{0,3}$/u.test(value)) {
+    throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed > maximum) {
+    throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+  }
+  return parsed;
 }
 
 function requireLinkedWallet(principal: AuthenticatedWalletPrincipalV1, value: string) {

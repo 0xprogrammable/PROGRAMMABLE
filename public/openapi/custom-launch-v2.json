@@ -3,8 +3,8 @@
   "info": {
     "title": "Programmable Custom Launch API V2",
     "version": "2.0.0",
-    "summary": "V2 compatibility request and wallet-owned lifecycle contract.",
-    "description": "This compatibility contract describes the immutable V2 request, lifecycle and wallet-handoff shapes for existing Ethereum Mainnet resources. New general project-owned hook graphs use the separate public V3 contract. V1 history reads remain governed by the V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
+    "summary": "Read existing wallet-owned V2 launch resources on Ethereum Mainnet.",
+    "description": "This compatibility contract preserves the immutable V2 resource and lifecycle shapes for existing Ethereum Mainnet launches. V2 creation is write-fenced: every authenticated POST /v2/custom-launches returns 409 CUSTOM_LAUNCH_V2_READ_ONLY and must not be retried. Fresh writes use the separate public V3.3 contract. V1 history reads remain governed by the V1 contract. An API key never signs or broadcasts a controller-wallet transaction."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -25,17 +25,25 @@
   "x-programmable-availability": {
     "status": "live",
     "release": "2.0.0",
-    "publicAuthorized": true,
+    "publicAuthorized": false,
     "privateCanaryOnly": false,
     "publicCreate": {
-      "status": "live"
+      "status": "read-only",
+      "httpStatus": 409,
+      "errorCode": "CUSTOM_LAUNCH_V2_READ_ONLY",
+      "retryable": false
     },
-    "activationRule": "Only the exact published Rev3 production profile is accepted. API authorization never replaces separate controller-wallet review and signing.",
+    "readSemantics": {
+      "preparedAndSimulating": "observation-only",
+      "readMayAuthorize": false,
+      "authorizedAndSubmittedReconciliation": "bounded"
+    },
+    "activationRule": "V2 reads remain live for existing resources. Fresh V2 writes are not accepted; use the public V3.3 contract. API authorization never replaces separate controller-wallet review and signing.",
     "v1Contract": "https://programmable.market/openapi/custom-launch-v1.json",
     "currentProductionContract": "https://programmable.market/openapi/custom-launch-v3.json"
   },
   "x-programmable-release-candidate": {
-    "status": "promoted-to-public",
+    "status": "read-compatibility",
     "packageName": "@programmable/launch",
     "binary": "programmable-launch",
     "version": "2.0.1",
@@ -43,7 +51,7 @@
     "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
     "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
     "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
-    "productionLaunchAuthorized": true
+    "productionLaunchAuthorized": false
   },
   "x-programmable-release": {
     "packageName": "@programmable/launch",
@@ -53,13 +61,14 @@
     "releaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v2.0.1",
     "tarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v2.0.1/programmable-launch-2.0.1.tgz",
     "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
-    "productionLaunchAuthorized": true
+    "productionLaunchAuthorized": false
   },
   "x-programmable-fee-policy": {
     "profileId": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1",
     "profileRevision": 3,
     "launchProfileHash": "sha256:fd2d738117c4c69304efb49c75d402d2e8b8968832fd2e27548c3d9814c5c9ee",
-    "productionLaunchAuthorized": true,
+    "productionLaunchAuthorized": false,
+    "appliesToExistingV2Resources": true,
     "chainId": "1",
     "network": "Ethereum Mainnet",
     "chargeTrigger": "successful-swap",
@@ -81,13 +90,7 @@
   },
   "x-programmable-error-status": {
     "400": [
-      "INVALID_IDEMPOTENCY_KEY",
-      "INVALID_JSON",
-      "INVALID_REQUEST",
-      "INVALID_URL",
-      "LAUNCH_INTENT_HASH_MISMATCH",
-      "PROFILE_HASH_MISMATCH",
-      "SOURCE_BUNDLE_SUBSTITUTION"
+      "INVALID_REQUEST"
     ],
     "401": [
       "UNAUTHENTICATED"
@@ -100,40 +103,27 @@
       "NOT_FOUND"
     ],
     "409": [
-      "IDEMPOTENCY_CONFLICT",
-      "NONCE_CONFLICT",
-      "PERMIT_EXPIRED"
-    ],
-    "413": [
-      "REQUEST_TOO_LARGE"
-    ],
-    "415": [
-      "UNSUPPORTED_MEDIA_TYPE"
-    ],
-    "422": [
-      "BUNDLE_INVALID",
-      "HOOK_PERMISSION_ADDRESS_MISMATCH",
-      "PROFILE_INVALID",
-      "SIMULATION_REVERTED"
-    ],
-    "429": [
-      "LAUNCH_QUOTA_EXCEEDED"
+      "CUSTOM_LAUNCH_V2_READ_ONLY"
     ],
     "503": [
       "CUSTOM_LAUNCH_V2_UNAVAILABLE",
-      "LAUNCH_UNAVAILABLE",
-      "SIMULATION_UNAVAILABLE"
+      "LAUNCH_UNAVAILABLE"
     ],
     "500": [
       "INTERNAL_ERROR"
     ]
   },
-  "x-programmable-admission": {
-    "scope": "global-v2-created-requests",
-    "hourlyLimit": 120,
-    "dailyLimit": 500,
-    "exactIdempotentReplayConsumesCapacity": false,
-    "enforcement": "durable-transactional"
+  "x-programmable-write-fence": {
+    "route": "POST /v2/custom-launches",
+    "authenticated": true,
+    "status": "read-only",
+    "httpStatus": 409,
+    "errorCode": "CUSTOM_LAUNCH_V2_READ_ONLY",
+    "requestBodyRead": false,
+    "idempotencyKeyRead": false,
+    "retryable": false,
+    "freshWritesContract": "https://programmable.market/openapi/custom-launch-v3.json",
+    "freshWritesProfileVersion": "3.3.0"
   },
   "paths": {
     "/v2/custom-launches": {
@@ -170,7 +160,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Private-canary wallet-owned V2 page. This response is not a claim of public activation.",
+            "description": "Wallet-owned V2 compatibility page for existing resources.",
             "content": {
               "application/json": {
                 "schema": {
@@ -198,68 +188,11 @@
       },
       "post": {
         "operationId": "createCustomLaunchV2",
-        "summary": "Prepare a fee-enforced V2 launch",
-        "description": "The request is byte- and hash-bound to the frozen Rev3 production profile, five-target graph, exact source, runtime materialization and agent attestation. A new durable request returns 202; an exact Idempotency-Key replay can return 200. Never mutate request bytes when retrying a transient response.",
-        "x-programmable-public-availability": "live",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "description": "Persistently bound to the exact request bytes. Reuse only for byte-identical retries.",
-            "schema": {
-              "type": "string",
-              "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9._:-]+$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "description": "Closed JSON object. The streaming body limit is 8,388,608 bytes.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CustomLaunchCreateRequestV2"
-              }
-            }
-          }
-        },
+        "deprecated": true,
+        "summary": "V2 launch creation is read-only",
+        "description": "The V2 creation route is retained only as an authenticated write fence. After successful API-key authentication and scope checks it returns 409 CUSTOM_LAUNCH_V2_READ_ONLY before reading an Idempotency-Key or request body. This response is non-retryable. Use the live V2 GET operations for existing history and the separate public V3.3 contract for fresh writes.",
+        "x-programmable-public-availability": "read-only",
         "responses": {
-          "200": {
-            "description": "Private-canary idempotent replay of an existing byte-identical request.",
-            "headers": {
-              "Location": {
-                "$ref": "#/components/headers/ResourceLocation"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CustomLaunchResourceV2"
-                }
-              }
-            }
-          },
-          "202": {
-            "description": "New public V2 request durably accepted. Poll the Location resource.",
-            "headers": {
-              "Location": {
-                "$ref": "#/components/headers/ResourceLocation"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CustomLaunchResourceV2"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
@@ -267,25 +200,22 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/Unprocessable"
-          },
-          "429": {
-            "$ref": "#/components/responses/LaunchQuotaExceeded"
-          },
-          "503": {
-            "$ref": "#/components/responses/V2Unavailable"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
+            "description": "V2 launch creation is read-only. Do not retry this request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomLaunchApiErrorV2"
+                },
+                "example": {
+                  "schemaVersion": "programmable.api-error.v1",
+                  "error": {
+                    "code": "CUSTOM_LAUNCH_V2_READ_ONLY",
+                    "message": "V2 launch creation is read-only; use the public V3.3 launch contract",
+                    "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -294,7 +224,7 @@
       "get": {
         "operationId": "getCustomLaunchV2",
         "summary": "Read one wallet-owned V2 launch request",
-        "description": "Public V2 single-resource polling contract. The simulating state exposes no output. Only an authorized resource can contain the exact simulation-passed wallet transaction for separate wallet review. The service never signs or broadcasts for the controller wallet. A missing launch and another principal's launch both return 404.",
+        "description": "Observation-only V2 single-resource read for existing resources. Reads of prepared or simulating resources never resume work, advance authorization or expose a new wallet transaction. An already authorized or submitted resource can retain its historical wallet transaction and receive bounded onchain reconciliation toward finality. The service never signs or broadcasts for the controller wallet. A missing launch and another principal's launch both return 404.",
         "x-programmable-public-availability": "live",
         "parameters": [
           {
@@ -346,7 +276,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "pm_live_<22-char-key-id>_<43-char-secret>",
-        "description": "Wallet-bound key created at https://programmable.market/developers/api-keys. The key requires the V2 route scope, is limited to its bound wallet and never grants wallet signing authority."
+        "description": "Wallet-bound key created at https://programmable.market/developers/api-keys. Existing keys can read their wallet-owned V2 history. A custom-launch:create scope does not override the V2 write fence, and no API key grants wallet signing authority."
       }
     },
     "headers": {

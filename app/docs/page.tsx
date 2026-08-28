@@ -112,7 +112,7 @@ export default function DocsIndexPage() {
             <h3>Creators</h3>
             <p>
               Build and package a concrete project locally, then use the public
-              V3 API for a wallet-owned Custom launch on Ethereum Mainnet.
+              V3 API for an exact-controller Custom launch on Ethereum Mainnet.
             </p>
           </div>
           <div>
@@ -254,8 +254,7 @@ export default function DocsIndexPage() {
               <span>
                 <strong>Custom Launch API keys</strong>
                 <small>
-                  Manage wallet-bound keys for existing V1 launch-history
-                  reads.
+                  Manage wallet-bound keys for V3 creation and lifecycle reads.
                 </small>
               </span>
               <ArrowRight aria-hidden="true" size={17} strokeWidth={1.8} />

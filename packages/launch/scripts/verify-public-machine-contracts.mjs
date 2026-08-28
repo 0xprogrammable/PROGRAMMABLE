@@ -64,10 +64,14 @@ for (const [pathName, method] of [
   ["/v3/custom-launches", "post"],
   ["/v3/custom-launches", "get"],
   ["/v3/custom-launches/{launchId}", "get"],
-  ["/v3/custom-launches/{launchId}/permit-reissues", "post"],
 ]) {
   assertPlainObject(v3.paths[pathName]?.[method], `V3 operation ${method.toUpperCase()} ${pathName}`);
 }
+assertJsonEqual(
+  v3.paths["/v3/custom-launches/{launchId}/permit-reissues"].post.security,
+  [{ WalletCustomLaunchApiKey: [] }],
+  "wallet-only permit-reissue disposition security",
+);
 assertJsonEqual(
   v3.components.securitySchemes.CustomLaunchApiKey,
   {
@@ -77,6 +81,16 @@ assertJsonEqual(
     description: v3.components.securitySchemes.CustomLaunchApiKey.description,
   },
   "API-key security scheme",
+);
+assertJsonEqual(
+  v3.components.securitySchemes.WalletCustomLaunchApiKey,
+  {
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "pm_live_*",
+    description: v3.components.securitySchemes.WalletCustomLaunchApiKey.description,
+  },
+  "wallet-only API-key security scheme",
 );
 
 const publicSchemaPath = path.join(
