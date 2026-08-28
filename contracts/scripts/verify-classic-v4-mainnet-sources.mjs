@@ -223,7 +223,7 @@ export function assertSourcifyMatch(payload, address, artifact) {
     : "match";
 }
 
-async function captureEtherscan(
+export async function captureEtherscan(
   address,
   target,
   constructorArguments,
