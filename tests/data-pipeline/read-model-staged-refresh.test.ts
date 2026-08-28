@@ -405,7 +405,18 @@ describe("staged Envio catalog probe source contract", () => {
     [
       "drops Classic catalog completeness",
       (step: string) =>
-        step.replace('              body.catalog.completeness?.classic === "current" &&\n', ""),
+        step.replace(
+          '              body?.catalog?.completeness?.classic === "current" &&\n',
+          "",
+        ),
+    ],
+    [
+      "drops the bounded Router-only fallback",
+      (step: string) =>
+        step.replace(
+          "            const routerOnlyFallback =\n",
+          "            const routerOnlyFallbackDisabled =\n",
+        ),
     ],
     [
       "allows stock families",
