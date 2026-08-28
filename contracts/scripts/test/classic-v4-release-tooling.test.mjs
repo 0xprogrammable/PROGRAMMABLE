@@ -2418,7 +2418,7 @@ test("Sourcify v2 lookup accepts truthful match fields and preserves canonical e
   }
 });
 
-test("source providers require accepted matches, exact source closure and no Etherscan similarity", () => {
+test("source providers require accepted matches, exact source closure and no Etherscan similarity", async () => {
   const providerArtifact = artifacts.launcher;
   const providerAddress = "0xa11CE00000000000000000000000000000000004";
   const providerSources = {
@@ -2539,7 +2539,15 @@ test("source providers require accepted matches, exact source closure and no Eth
       ),
     }),
   };
-  assert.doesNotThrow(() =>
+  const compileProviderInput = async () => ({
+    evm: {
+      bytecode: { object: providerArtifact.bytecode.object.slice(2) },
+      deployedBytecode: {
+        object: providerArtifact.deployedBytecode.object.slice(2),
+      },
+    },
+  });
+  await assert.doesNotReject(
     assertExactEtherscanMatch(
       { status: "1" },
       source,
@@ -2547,45 +2555,46 @@ test("source providers require accepted matches, exact source closure and no Eth
       "0x1234",
       settings,
       providerArtifact,
+      compileProviderInput,
     ),
   );
-  assert.throws(
-    () =>
-      assertExactEtherscanMatch(
-        { status: "1" },
-        {
-          ...source,
-          SimilarMatch: "0x0000000000000000000000000000000000000001",
-        },
-        target,
-        "0x1234",
-        settings,
-        providerArtifact,
-      ),
+  await assert.rejects(
+    assertExactEtherscanMatch(
+      { status: "1" },
+      {
+        ...source,
+        SimilarMatch: "0x0000000000000000000000000000000000000001",
+      },
+      target,
+      "0x1234",
+      settings,
+      providerArtifact,
+      compileProviderInput,
+    ),
     /Etherscan metadata differs/,
   );
-  assert.throws(
-    () =>
-      assertExactEtherscanMatch(
-        { status: "1" },
-        {
-          ...source,
-          SourceCode: JSON.stringify({
-            language: "Solidity",
-            sources: {
-              ...providerSources,
-              "src/launcher.sol": { content: "forged source bytes" },
-            },
-            settings: standardJsonCompilerInputSettings(
-              providerArtifact.metadata.settings,
-            ),
-          }),
-        },
-        target,
-        "0x1234",
-        settings,
-        providerArtifact,
-      ),
+  await assert.rejects(
+    assertExactEtherscanMatch(
+      { status: "1" },
+      {
+        ...source,
+        SourceCode: JSON.stringify({
+          language: "Solidity",
+          sources: {
+            ...providerSources,
+            "src/launcher.sol": { content: "forged source bytes" },
+          },
+          settings: standardJsonCompilerInputSettings(
+            providerArtifact.metadata.settings,
+          ),
+        }),
+      },
+      target,
+      "0x1234",
+      settings,
+      providerArtifact,
+      compileProviderInput,
+    ),
     /source bytes differ/,
   );
   assert.throws(

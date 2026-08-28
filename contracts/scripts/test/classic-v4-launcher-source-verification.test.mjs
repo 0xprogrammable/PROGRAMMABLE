@@ -40,6 +40,21 @@ const runtimeTemplate = "0x6000600055";
 const runtimeCode = "0x60ff600055";
 const transactionHash = `0x${"ab".repeat(32)}`;
 const transactionBlockHash = `0x${"cd".repeat(32)}`;
+let freshArtifactPromise;
+
+function freshArtifact() {
+  freshArtifactPromise ??= compileClassicV4LauncherUpgradeFreshArtifact();
+  return freshArtifactPromise;
+}
+
+function compiledArtifactOutput(artifact) {
+  return {
+    evm: {
+      bytecode: { object: artifact.bytecode.object.slice(2) },
+      deployedBytecode: { object: artifact.deployedBytecode.object.slice(2) },
+    },
+  };
+}
 
 function fixtureArtifact() {
   return {
@@ -229,6 +244,8 @@ test("uses Etherscan only when a key exists and never records it", async () => {
     checkedAt: "2027-01-15T08:00:00.000Z",
     fetchJsonClient: providerFetch(values, calls),
     etherscanApiKey: "test-only-key",
+    compileEtherscanStandardJsonInput: async () =>
+      compiledArtifactOutput(values.artifact),
   });
 
   assert.equal(evidence.status, "sourcify-and-etherscan-verified");
@@ -301,6 +318,9 @@ test("rejects missing or contradictory Etherscan Standard JSON settings", async 
       },
     ),
     (input) => {
+      input.settings.stopAfter = "parsing";
+    },
+    (input) => {
       input.settings = {
         ...input.settings,
         viaIR: true,
@@ -325,7 +345,8 @@ test("rejects missing or contradictory Etherscan Standard JSON settings", async 
   }
 });
 
-test("accepts Forge standard JSON without output-only compilationTarget", () => {
+test("accepts real Forge input only after exact sealed bytecode compilation", async () => {
+  const artifact = await freshArtifact();
   const result = spawnSync(
     "forge",
     [
@@ -344,57 +365,62 @@ test("accepts Forge standard JSON without output-only compilationTarget", () => 
   const standardJsonInput = JSON.parse(result.stdout);
   assert(!Object.hasOwn(standardJsonInput.settings, "compilationTarget"));
   assert(Object.hasOwn(standardJsonInput.settings, "outputSelection"));
-  const artifactSettings = { ...standardJsonInput.settings };
-  delete artifactSettings.outputSelection;
-  artifactSettings.compilationTarget = {
-    [launcherPath]: "MemeLaunchV4",
+  assert.notDeepEqual(
+    standardJsonInput.settings.remappings,
+    artifact.metadata.settings.remappings,
+  );
+  const providerSource = {
+    ContractName: "MemeLaunchV4",
+    ContractFileName: launcherPath,
+    CompilerType: "solc",
+    CompilerVersion: "v0.8.26+commit.8a97fa7a",
+    OptimizationUsed: "1",
+    Runs: "1000",
+    EVMVersion: "cancun",
+    Proxy: "0",
+    Implementation: "",
+    SimilarMatch: "",
+    ConstructorArguments: "1234",
+    SourceCode: JSON.stringify(standardJsonInput),
   };
-  const artifact = {
-    metadata: {
-      compiler: { version: "0.8.26+commit.8a97fa7a" },
-      settings: artifactSettings,
-      sources: Object.fromEntries(
-        Object.entries(standardJsonInput.sources).map(
-          ([sourcePath, { content }]) => [
-            sourcePath,
-            { keccak256: keccak256(stringToHex(content)) },
-          ],
-        ),
-      ),
-    },
+  const providerSettings = {
+    compilerVersion: "v0.8.26+commit.8a97fa7a",
+    optimizationUsed: "1",
+    optimizerRuns: "1000",
+    evmVersion: "cancun",
   };
-  assert.doesNotThrow(() =>
+  await assert.doesNotReject(
     assertExactEtherscanMatch(
       { status: "1" },
-      {
-        ContractName: "MemeLaunchV4",
-        ContractFileName: launcherPath,
-        CompilerType: "solc",
-        CompilerVersion: "v0.8.26+commit.8a97fa7a",
-        OptimizationUsed: "1",
-        Runs: "1000",
-        EVMVersion: "cancun",
-        Proxy: "0",
-        Implementation: "",
-        SimilarMatch: "",
-        ConstructorArguments: "1234",
-        SourceCode: JSON.stringify(standardJsonInput),
-      },
+      providerSource,
       { contractName: "MemeLaunchV4", fqcn: `${launcherPath}:MemeLaunchV4` },
       "0x1234",
-      {
-        compilerVersion: "v0.8.26+commit.8a97fa7a",
-        optimizationUsed: "1",
-        optimizerRuns: "1000",
-        evmVersion: "cancun",
-      },
+      providerSettings,
       artifact,
     ),
+  );
+  await assert.rejects(
+    assertExactEtherscanMatch(
+      { status: "1" },
+      providerSource,
+      { contractName: "MemeLaunchV4", fqcn: `${launcherPath}:MemeLaunchV4` },
+      "0x1234",
+      providerSettings,
+      artifact,
+      async () => ({
+        ...compiledArtifactOutput(artifact),
+        evm: {
+          ...compiledArtifactOutput(artifact).evm,
+          bytecode: { object: "6000" },
+        },
+      }),
+    ),
+    /compiled bytecode differs from the sealed artifact/,
   );
 });
 
 test("frozen publication input compiles with pinned solc 0.8.26", async () => {
-  const artifact = await compileClassicV4LauncherUpgradeFreshArtifact();
+  const artifact = await freshArtifact();
   const { standardJsonInput } =
     await buildClassicV4LauncherStandardJsonInput({ artifact });
   assert(!Object.hasOwn(standardJsonInput.settings, "compilationTarget"));

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +17,7 @@ import {
   validateClassicV4PreparationPlan,
   validateClassicV4SourceEvidence,
 } from "../../scripts/classic-v4-release-core.mjs";
+import { resolvePinnedSolc } from "./custom-registry-v2-source-verification-core.mjs";
 import { loadClassicV4SealedBuild } from "./prepare-classic-v4-mainnet-release.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -168,6 +170,24 @@ function hasCompleteMaterialCompilerSettings(settings) {
   ].every((key) => Object.hasOwn(settings ?? {}, key));
 }
 
+const allowedProviderCompilerSettingKeys = new Set([
+  "remappings",
+  "optimizer",
+  "metadata",
+  "evmVersion",
+  "viaIR",
+  "libraries",
+  "debug",
+  "outputSelection",
+  "compilationTarget",
+]);
+
+function compilerProvenMaterialSettings(settings) {
+  const { remappings: _remappings, ...material } =
+    materialCompilerSettings(settings);
+  return material;
+}
+
 function canonicalJson(value) {
   return JSON.stringify(value, (_, item) => {
     if (item === null || Array.isArray(item) || typeof item !== "object") {
@@ -241,6 +261,61 @@ function etherscanStandardJsonInput(sourceCode, label) {
   return input;
 }
 
+async function compileProviderStandardJsonInput(input, target) {
+  const [sourcePath] = target.fqcn.split(":", 1);
+  const compiler = await resolvePinnedSolc();
+  const compilationInput = structuredClone(input);
+  compilationInput.settings = {
+    ...compilationInput.settings,
+    outputSelection: {
+      [sourcePath]: {
+        [target.contractName]: [
+          "evm.bytecode.object",
+          "evm.deployedBytecode.object",
+        ],
+      },
+    },
+  };
+  let output;
+  try {
+    output = JSON.parse(
+      execFileSync(compiler.path, ["--standard-json"], {
+        input: Buffer.from(JSON.stringify(compilationInput)),
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024,
+      }),
+    );
+  } finally {
+    if (compiler.cleanupDirectory) {
+      await rm(compiler.cleanupDirectory, { recursive: true, force: true });
+    }
+  }
+  if (output.errors?.some(({ severity }) => severity === "error")) {
+    fail(`${target.contractName} Etherscan Standard JSON does not compile`);
+  }
+  const compiled = output.contracts?.[sourcePath]?.[target.contractName];
+  if (!compiled) {
+    fail(`${target.contractName} Etherscan compiler output is unavailable`);
+  }
+  return compiled;
+}
+
+function normalizedBytecode(value) {
+  const bytecode = value?.startsWith("0x") ? value : `0x${value ?? ""}`;
+  return bytecode.toLowerCase();
+}
+
+function assertExactCompiledBytecode(compiled, artifact, label) {
+  if (
+    normalizedBytecode(compiled?.evm?.bytecode?.object) !==
+      normalizedBytecode(artifact?.bytecode?.object) ||
+    normalizedBytecode(compiled?.evm?.deployedBytecode?.object) !==
+      normalizedBytecode(artifact?.deployedBytecode?.object)
+  ) {
+    fail(`${label} compiled bytecode differs from the sealed artifact`);
+  }
+}
+
 export async function captureSourcify(address, artifact, fetchJsonClient) {
   const providerUrl = new URL(
     `https://sourcify.dev/server/v2/contract/1/${address}`,
@@ -299,6 +374,7 @@ export async function captureEtherscan(
   artifact,
   fetchJsonClient,
   etherscanApiKey,
+  compileStandardJsonInput = compileProviderStandardJsonInput,
 ) {
   if (!etherscanApiKey) return null;
   const settings = artifactCompilerSettings(artifact, target.contractName);
@@ -310,13 +386,14 @@ export async function captureEtherscan(
   query.searchParams.set("apikey", etherscanApiKey);
   const payload = await fetchJsonClient(query);
   const source = payload?.result?.[0];
-  assertExactEtherscanMatch(
+  await assertExactEtherscanMatch(
     payload,
     source,
     target,
     constructorArguments,
     settings,
     artifact,
+    compileStandardJsonInput,
   );
   return {
     name: "Etherscan",
@@ -325,13 +402,14 @@ export async function captureEtherscan(
   };
 }
 
-export function assertExactEtherscanMatch(
+export async function assertExactEtherscanMatch(
   payload,
   source,
   target,
   constructorArguments,
   settings,
   artifact,
+  compileStandardJsonInput = compileProviderStandardJsonInput,
 ) {
   const [contractFileName] = target.fqcn.split(":", 1);
   const standardJsonInput = etherscanStandardJsonInput(
@@ -361,13 +439,23 @@ export function assertExactEtherscanMatch(
     typeof source?.SourceCode !== "string" ||
     source.SourceCode.length === 0 ||
     !hasCompleteMaterialCompilerSettings(standardJsonInput.settings) ||
-    canonicalJson(materialCompilerSettings(standardJsonInput.settings)) !==
-      canonicalJson(expectedMaterialSettings)
+    Object.keys(standardJsonInput.settings).some(
+      (key) => !allowedProviderCompilerSettingKeys.has(key),
+    ) ||
+    canonicalJson(
+      compilerProvenMaterialSettings(standardJsonInput.settings),
+    ) !== canonicalJson(compilerProvenMaterialSettings(expectedMaterialSettings))
   ) {
     fail(`${target.contractName} Etherscan metadata differs`);
   }
   assertExactProviderSourceClosure(
     standardJsonInput.sources,
+    artifact,
+    `${target.contractName} Etherscan`,
+  );
+  const compiled = await compileStandardJsonInput(standardJsonInput, target);
+  assertExactCompiledBytecode(
+    compiled,
     artifact,
     `${target.contractName} Etherscan`,
   );
@@ -428,6 +516,7 @@ export async function verifyClassicV4SourceProviders({
   checkedAt = new Date().toISOString(),
   fetchJsonClient = fetchJson,
   etherscanApiKey = process.env.ETHERSCAN_API_KEY?.trim() || null,
+  compileEtherscanStandardJsonInput = compileProviderStandardJsonInput,
 }) {
   validateClassicV4PreparationPlan(plan, artifacts);
   validateClassicV4DeploymentEvidence(plan, deploymentEvidence);
@@ -445,6 +534,7 @@ export async function verifyClassicV4SourceProviders({
           artifacts[name],
           fetchJsonClient,
           etherscanApiKey,
+          compileEtherscanStandardJsonInput,
         ),
       ])
     ).filter(Boolean);

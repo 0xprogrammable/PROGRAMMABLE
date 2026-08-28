@@ -365,6 +365,7 @@ export async function verifyClassicV4LauncherSourceProviders({
   checkedAt = new Date().toISOString(),
   fetchJsonClient = fetchJson,
   etherscanApiKey = process.env.ETHERSCAN_API_KEY?.trim() || null,
+  compileEtherscanStandardJsonInput,
 }) {
   validateClassicV4LauncherUpgradePlan(plan, artifact);
   validateClassicV4LauncherFinalityEvidence({
@@ -404,6 +405,7 @@ export async function verifyClassicV4LauncherSourceProviders({
       artifact,
       fetchJsonClient,
       etherscanApiKey,
+      compileEtherscanStandardJsonInput,
     );
     etherscanRecord = {
       ...etherscan,
