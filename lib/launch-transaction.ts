@@ -381,7 +381,7 @@ export function validateAdaptiveLaunchDraft(
     );
   }
   for (let index = 0; index < points.length; index += 1) {
-    const point = points[index];
+    const point = points[index]!;
     if (
       !Number.isSafeInteger(point.fdvIndex) ||
       !Number.isSafeInteger(point.totalSwapFeeBps)
@@ -394,7 +394,7 @@ export function validateAdaptiveLaunchDraft(
     ) {
       throw new LaunchInputError("Keep every curve fee between 1% and 10%");
     }
-    if (index > 0 && point.fdvIndex <= points[index - 1].fdvIndex) {
+    if (index > 0 && point.fdvIndex <= points[index - 1]!.fdvIndex) {
       throw new LaunchInputError(
         "Curve points must move from lower to higher onchain value",
       );

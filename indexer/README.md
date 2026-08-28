@@ -7,8 +7,8 @@ active Programmable releases on Ethereum Mainnet:
 - Stock-Paired V1, V2 and V3
 
 Classic V4 ABI and handlers are source-ready but deliberately have no chain
-binding before the exact verified Mainnet release manifest exists. All other
-releases are intentionally out of scope. Source addresses and
+binding before the provider-backed, sealed-source Mainnet release manifest
+exists. All other releases are intentionally out of scope. Source addresses and
 inclusive start blocks are pinned to the checked-in deployment manifests.
 Shared Stock V2/V3 hook and vault-factory events are attributed only after an
 indexed `poolId` relation identifies the release.
@@ -122,7 +122,8 @@ local test must not update that binding.
 
 The pre-deploy `chains[].contracts` list contains no Classic V4 entry. After
 `contracts/deployments/mainnet-classic-v4.json` has been generated from
-finalized deployment, exact source-verification, and lifecycle evidence, first
+finalized deployment, provider-backed source matching with exact sealed source
+closure, and lifecycle evidence, first
 inspect the deterministic activation plan:
 
 ```bash
