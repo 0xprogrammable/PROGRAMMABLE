@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import {
   concat,
+  decodeAbiParameters,
   decodeFunctionData,
   encodeAbiParameters,
   encodeFunctionData,
@@ -566,7 +567,7 @@ function activeReleaseManifest(
     rewardVault: routerLaunch.expectedResult.rewardVault,
     poolId: routerLaunch.expectedResult.poolId,
     positionRecipient: routerLaunch.expectedResult.positionRecipient,
-    positionTokenId: routerLaunch.expectedResult.positionTokenId.toString(),
+    positionTokenId: routerLaunch.actualPositionTokenId.toString(),
     actions,
     swaps,
     claims: {
@@ -601,7 +602,7 @@ function activeReleaseManifest(
       positionLock: {
         owner: address(32),
         approved: zeroAddress,
-        tokenId: routerLaunch.expectedResult.positionTokenId.toString(),
+        tokenId: routerLaunch.actualPositionTokenId.toString(),
         positionLiquidity: "1000000",
         activePoolLiquidity: "1000000",
         tickLower: 174_800,
@@ -869,6 +870,7 @@ type RouterFixtureVariant =
   | "valid"
   | "permit-kind"
   | "expected-result"
+  | "position-sentinel"
   | "stamp-token"
   | "component-kind"
   | "component-runtime"
@@ -890,6 +892,7 @@ function preparedV4RouterTransaction(
   const token = address(30);
   const rewardVault = address(31);
   const positionRecipient = address(32);
+  const actualPositionTokenId = 123n;
   const hook = manifest.addresses.feeHook;
   const poolKey = {
     currency0: zeroAddress as Address,
@@ -916,7 +919,8 @@ function preparedV4RouterTransaction(
     token,
     rewardVault,
     positionRecipient,
-    positionTokenId: 123n,
+    positionTokenId:
+      variant === "position-sentinel" ? actualPositionTokenId : 0n,
     tokenLiquidityAmount: 999_999_999n * 10n ** 18n,
     lockedTokenDust: 1n * 10n ** 18n,
     initialBuyNativeAmount:
@@ -1126,6 +1130,7 @@ function preparedV4RouterTransaction(
       message: permit,
     }),
     token,
+    actualPositionTokenId,
     expectedResult,
     stampRequest,
     planHash: buildPlanHash(account, {
@@ -1253,6 +1258,17 @@ describe("Classic V4 release and launch preflight", () => {
   it("accepts only a complete indexer-activated release manifest", () => {
     const manifest = activeReleaseManifest();
     const binding = trustedBindingFor(manifest);
+    const launchCall = decodeFunctionData({
+      abi: routerAbi,
+      data: manifest.lifecycleEvidence.launchAuthorization.transaction.calldata,
+    });
+    expect(launchCall.functionName).toBe("launchAndStampV1");
+    const [route] = decodeAbiParameters(routeParameters, launchCall.args[2]);
+    expect(route.expectedResult.positionTokenId).toBe(0n);
+    expect(manifest.lifecycleEvidence.positionTokenId).toBe("123");
+    expect(manifest.lifecycleEvidence.postState.positionLock.tokenId).toBe(
+      "123",
+    );
     expect(parseClassicV4PublicRelease(manifest, binding)).toMatchObject({
       releaseStatus: "indexer-activated",
       verification: { indexerActivated: true, publicAvailable: false },
@@ -1369,6 +1385,44 @@ describe("Classic V4 release and launch preflight", () => {
       ),
     ).toBeNull();
 
+    const zeroActualPosition = structuredClone(manifest);
+    zeroActualPosition.lifecycleEvidence.positionTokenId = "0";
+    zeroActualPosition.lifecycleEvidence.postState.positionLock.tokenId = "0";
+    zeroActualPosition.lifecycleEvidence.evidenceDigest = digest(
+      zeroActualPosition.lifecycleEvidence,
+      "evidenceDigest",
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+    );
+    zeroActualPosition.manifestDigest = digest(
+      zeroActualPosition,
+      "manifestDigest",
+    );
+    expect(
+      parseClassicV4PublicRelease(
+        zeroActualPosition,
+        trustedBindingFor(zeroActualPosition),
+      ),
+    ).toBeNull();
+
+    const mismatchedActualPosition = structuredClone(manifest);
+    mismatchedActualPosition.lifecycleEvidence.postState.positionLock.tokenId =
+      "124";
+    mismatchedActualPosition.lifecycleEvidence.evidenceDigest = digest(
+      mismatchedActualPosition.lifecycleEvidence,
+      "evidenceDigest",
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+    );
+    mismatchedActualPosition.manifestDigest = digest(
+      mismatchedActualPosition,
+      "manifestDigest",
+    );
+    expect(
+      parseClassicV4PublicRelease(
+        mismatchedActualPosition,
+        trustedBindingFor(mismatchedActualPosition),
+      ),
+    ).toBeNull();
+
     const forgedFinality = structuredClone(manifest);
     forgedFinality.deploymentVerification.confirmations.launcher += 1;
     forgedFinality.manifestDigest = digest(forgedFinality, "manifestDigest");
@@ -1418,6 +1472,7 @@ describe("Classic V4 release and launch preflight", () => {
           }),
       ],
       ["expected result", () => routerTamperedRelease("expected-result")],
+      ["position sentinel", () => routerTamperedRelease("position-sentinel")],
       ["stamp request", () => routerTamperedRelease("stamp-token")],
       ["component semantics", () => routerTamperedRelease("component-kind")],
       ["component runtime", () => routerTamperedRelease("component-runtime")],
@@ -1555,6 +1610,23 @@ describe("Classic V4 release and launch preflight", () => {
         browserBinding,
       ),
     ).toEqual(prepared.transaction);
+    const stalePosition = preparedV4RouterTransaction(
+      draft,
+      manifest,
+      { validAfter: 100n, deadline: 430n },
+      salt,
+      "position-sentinel",
+    );
+    expect(() =>
+      validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
+        {
+          ...routerInput,
+          transaction: stalePosition.transaction,
+          planHash: stalePosition.planHash,
+        },
+        browserBinding,
+      ),
+    ).toThrow("prepared Classic launch result");
     expect(() =>
       validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
         { ...routerInput, planHash: hash("tampered plan") },

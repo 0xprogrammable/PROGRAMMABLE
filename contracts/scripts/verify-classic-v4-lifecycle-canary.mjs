@@ -50,6 +50,7 @@ const universalRouterAbi = parseAbi([
 ]);
 const launcherReadAbi = parseAbi([
   "function launchHashOf(address token) view returns (bytes32)",
+  "function positionTokenIdOf(address token) view returns (uint256)",
   "function rewardVaultOf(address token) view returns (address)",
   "function initialBuyCustodyOf(address token) view returns (address)",
   "function poolKey(address token) view returns ((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks))",
@@ -184,6 +185,24 @@ function fail(message) {
 
 function assert(condition, message) {
   if (!condition) fail(message);
+}
+
+export function assertClassicV4PositionTokenEvidence({
+  signedPositionTokenId,
+  eventPositionTokenId,
+  storedPositionTokenId,
+}) {
+  assert(
+    signedPositionTokenId === 0n,
+    "Router expected position token ID is not the zero authorization sentinel",
+  );
+  assert(eventPositionTokenId > 0n, "Position token ID is zero");
+  if (storedPositionTokenId !== undefined) {
+    assert(
+      storedPositionTokenId === eventPositionTokenId,
+      "Launcher position token ID mapping differs from the launch event",
+    );
+  }
 }
 
 function parseArguments(argv) {
@@ -724,7 +743,6 @@ function validateLaunch(action, canary, artifacts, plan) {
     launched.args.rewardConfigurationHash,
     "reward configuration hash",
   );
-  assert(launched.args.positionTokenId > 0n, "Position token ID is zero");
   sameAddress(launched.args.feeHook, canary.feeHook, "Launch hook");
   assert(
     Number(launched.args.buySwapFeeBps) === 100 &&
@@ -810,9 +828,12 @@ function validateLaunch(action, canary, artifacts, plan) {
   sameAddress(expectedResult.initialBuyCustody, ZERO_ADDRESS, "Router result custody");
   sameHex(expectedResult.poolId, poolId, "Router result pool");
   sameHex(expectedResult.launchHash, launchHash, "Router result launch hash");
+  assertClassicV4PositionTokenEvidence({
+    signedPositionTokenId: expectedResult.positionTokenId,
+    eventPositionTokenId: launched.args.positionTokenId,
+  });
   assert(
-    expectedResult.positionTokenId === launched.args.positionTokenId &&
-      expectedResult.tokenLiquidityAmount === liquidity.args.tokenLiquidityAmount &&
+    expectedResult.tokenLiquidityAmount === liquidity.args.tokenLiquidityAmount &&
       expectedResult.lockedTokenDust === liquidity.args.lockedTokenDust &&
       expectedResult.initialBuyNativeAmount === initialBuy.args.nativeAmount &&
       expectedResult.initialBuyTokenAmount === initialBuy.args.tokenAmount,
@@ -2026,6 +2047,7 @@ async function verifyFinalState(
   const shared = plan.sharedDependencies;
   const [
     launchHash,
+    storedPositionTokenId,
     rewardVaultOf,
     initialBuyCustody,
     launcherPoolKey,
@@ -2074,6 +2096,14 @@ async function verifyFinalState(
     readContract(endpoint, tag, canary.launcher, launcherReadAbi, "launchHashOf", [
       launch.token,
     ]),
+    readContract(
+      endpoint,
+      tag,
+      canary.launcher,
+      launcherReadAbi,
+      "positionTokenIdOf",
+      [launch.token],
+    ),
     readContract(endpoint, tag, canary.launcher, launcherReadAbi, "rewardVaultOf", [
       launch.token,
     ]),
@@ -2217,6 +2247,11 @@ async function verifyFinalState(
   ]);
 
   sameHex(launchHash, launch.launchHash, "Launcher launch hash mapping");
+  assertClassicV4PositionTokenEvidence({
+    signedPositionTokenId: launch.routerProof.route.expectedResult.positionTokenId,
+    eventPositionTokenId: launch.positionTokenId,
+    storedPositionTokenId,
+  });
   sameAddress(rewardVaultOf, launch.rewardVault, "Launcher reward vault mapping");
   sameAddress(initialBuyCustody, ZERO_ADDRESS, "Launcher initial custody mapping");
   assertPoolKey(launcherPoolKey, launch.poolKey, "Launcher pool key");
