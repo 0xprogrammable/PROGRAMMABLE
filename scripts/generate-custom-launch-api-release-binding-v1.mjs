@@ -83,6 +83,41 @@ const PLATFORM_ADMISSION_POLICY = Object.freeze({
   safetyClaim: false,
   feeBehaviorClaim: false,
 });
+const PROFILE_ACTIVATION_POLICY = Object.freeze({
+  status: "runner-settlement-and-deployment-readback-gated",
+  currentWriteProfileUntilActivation: CURRENT_WRITE_PROFILE_VERSION,
+  requiresConfiguredSignedRunner: true,
+  requiresFrozenFeeObservationAbi: true,
+  requiresCustomApiSettlementDataflowClosureReceiptV2: true,
+  requiresProductionRuntimeDeploymentReadbackMatch: true,
+  configurationIsExecutionEvidence: false,
+});
+const BEHAVIOR_EVIDENCE_READINESS = Object.freeze({
+  runnerConfigured: false,
+  executionMode: "not_configured",
+  configurationIsExecutionEvidence: false,
+  requiredForProfileVersion: BACKEND_PROFILE_VERSION,
+  requiredPlatformFeeConformanceStatus: "verified",
+  nonFeeVectorsMayRemainUnverified: true,
+  walletHandoffRequiresVerifiedEvidence: false,
+  notConfiguredDisposition: "claims_remain_unverified",
+  unavailableDisposition: "claims_remain_unverified",
+  executedFeeFailureDisposition: "blocks_wallet_handoff",
+  executedHardInvariantFailureDisposition: "blocks_wallet_handoff",
+  feeBehaviorClaim: false,
+});
+const SETTLEMENT_DATAFLOW_CLOSURE_READINESS = Object.freeze({
+  configured: false,
+  evidenceAuthority: "programmable-custom-launch-api-settlement-authority",
+  receiptSchemaVersion: "programmable.custom-api-settlement-dataflow-receipt.v2",
+  exactLaunchGraphAndRouteBindingRequired: true,
+  completeValueFlowInventoryRequired: true,
+  applicationOrGithubIntakeRequired: false,
+  independentReplayRequired: true,
+  runnerNoBypassScope: "canonical-vault-entrypoints-only",
+  candidateRouteCoverageComesFromRunner: false,
+  walletHandoffRequiresClosure: false,
+});
 const EXPECTED_MIGRATIONS = Object.freeze([
   "0001_custom_launch_api_private_schema_v1.sql",
   "0002_reserve_custom_launch_permit_nonce.sql",
@@ -99,6 +134,7 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   "0013_partner_launch_api_v1.sql",
   "0014_behavior_fee_evidence_jobs_v3.sql",
   "0015_partner_credential_lifecycle_hardening_v1.sql",
+  "0016_post_finality_trade_adapter_v1.sql",
 ]);
 const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260824110842_programmable_custom_launch_api_private_schema_v1.sql",
@@ -116,6 +152,7 @@ const EXPECTED_SUPABASE_MIGRATIONS = Object.freeze([
   "20260827202458_partner_launch_api_v1.sql",
   "20260827213000_behavior_fee_evidence_jobs_v3.sql",
   "20260828075854_partner_credential_lifecycle_hardening_v1.sql",
+  "20260828164455_post_finality_trade_adapter_v1.sql",
 ]);
 const EXPECTED_API_ROUTES = Object.freeze([
   Object.freeze({ method: "GET", path: "/v1/admin/partners" }),
@@ -159,6 +196,8 @@ const READINESS_KEYS = Object.freeze([
   "migrationInventorySha256",
   "apiContractSha256",
   "walletAdminSecurity",
+  "behaviorEvidence",
+  "settlementDataflowClosure",
   "publicProfile",
   "chain",
 ]);
@@ -434,6 +473,8 @@ function validateProfile(profile) {
     || profile.productionLaunchAuthorized !== true
     || !isObject(profile.chain)
     || !isObject(profile.platformAdmissionPolicy)
+    || canonicalize(profile.activationPolicy)
+      !== canonicalize(PROFILE_ACTIVATION_POLICY)
     || Object.hasOwn(profile, "platformFeeProofPolicy")
     || canonicalize(profile.platformAdmissionPolicy)
       !== canonicalize(PLATFORM_ADMISSION_POLICY)) {
@@ -509,6 +550,10 @@ function validateReadiness(
       !== walletAdminSecurity.assertionMode
     || readiness.walletAdminSecurity.legacyBearerRequestsAccepted
       !== walletAdminSecurity.legacyBearerRequestsAccepted
+    || canonicalize(readiness.behaviorEvidence)
+      !== canonicalize(BEHAVIOR_EVIDENCE_READINESS)
+    || canonicalize(readiness.settlementDataflowClosure)
+      !== canonicalize(SETTLEMENT_DATAFLOW_CLOSURE_READINESS)
     || !exactKeys(readiness.publicProfile, PUBLIC_PROFILE_KEYS)
     || readiness.publicProfile.profileId !== profile.profileId
     || readiness.publicProfile.profileVersion !== profile.profileVersion
@@ -717,6 +762,10 @@ export async function materializeCustomLaunchApiReleaseBindingV1(input) {
       apiContractSha256: identities.apiContractSha256,
       profileId: PUBLIC_PROFILE_ID,
       profileVersion: BACKEND_PROFILE_VERSION,
+      currentWriteProfileVersion:
+        readinessDocument.value.publicProfile.currentWriteProfileVersion,
+      runtimeProductionLaunchAuthorized:
+        readinessDocument.value.publicProfile.productionLaunchAuthorized,
       publicProfilePath: PROFILE_PATH,
       publicProfileSha256: identities.profileSha256,
     },

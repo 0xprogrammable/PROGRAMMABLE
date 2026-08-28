@@ -20,6 +20,32 @@ const HARD_BLOCK_FINDING_RULES = Object.freeze([
   Object.freeze({ code: "V4_CALLBACK_POOL_MANAGER_MISMATCH", targetRoles: Object.freeze(["hook"]) }),
   Object.freeze({ code: "V4_ENABLED_CALLBACK_IMPLEMENTATION_MISSING", targetRoles: Object.freeze(["hook"]) }),
 ]);
+const BEHAVIOR_EVIDENCE_READINESS = Object.freeze({
+  runnerConfigured: false,
+  executionMode: "not_configured",
+  configurationIsExecutionEvidence: false,
+  requiredForProfileVersion: "3.4.0",
+  requiredPlatformFeeConformanceStatus: "verified",
+  nonFeeVectorsMayRemainUnverified: true,
+  walletHandoffRequiresVerifiedEvidence: false,
+  notConfiguredDisposition: "claims_remain_unverified",
+  unavailableDisposition: "claims_remain_unverified",
+  executedFeeFailureDisposition: "blocks_wallet_handoff",
+  executedHardInvariantFailureDisposition: "blocks_wallet_handoff",
+  feeBehaviorClaim: false,
+});
+const SETTLEMENT_DATAFLOW_CLOSURE_READINESS = Object.freeze({
+  configured: false,
+  evidenceAuthority: "programmable-custom-launch-api-settlement-authority",
+  receiptSchemaVersion: "programmable.custom-api-settlement-dataflow-receipt.v2",
+  exactLaunchGraphAndRouteBindingRequired: true,
+  completeValueFlowInventoryRequired: true,
+  applicationOrGithubIntakeRequired: false,
+  independentReplayRequired: true,
+  runnerNoBypassScope: "canonical-vault-entrypoints-only",
+  candidateRouteCoverageComesFromRunner: false,
+  walletHandoffRequiresClosure: false,
+});
 const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
   version: "3.3.9",
   tarballUrl:
@@ -168,26 +194,13 @@ function assertProjectMetadataCapabilities(projectMetadata) {
     projectMetadata?.legacyMetadataProfileVersions,
     "capabilities.projectMetadata.legacyMetadataProfileVersions",
   );
-  if (
-    !required.includes("3.2.0")
-    || !required.includes("3.3.0")
-    || !required.every((profileVersion) => compareProfileVersions(profileVersion, "3.2.0") >= 0)
-  ) {
+  if (canonicalize(required) !== canonicalize(["3.2.0", "3.3.0", "3.4.0"])) {
     throw new Error("Custom Launch API V3 required metadata profile versions lost the known live baseline");
   }
-  if (
-    !strict.includes("3.3.0")
-    || !strict.every((profileVersion) => required.includes(profileVersion))
-    || !strict.every((profileVersion) => compareProfileVersions(profileVersion, "3.3.0") >= 0)
-  ) {
+  if (canonicalize(strict) !== canonicalize(["3.3.0", "3.4.0"])) {
     throw new Error("Custom Launch API V3 strict metadata profile versions differ from the known live baseline");
   }
-  if (
-    !legacy.includes("3.2.0")
-    || !legacy.every((profileVersion) => required.includes(profileVersion))
-    || !legacy.every((profileVersion) => compareProfileVersions(profileVersion, "3.3.0") < 0)
-    || !legacy.every((profileVersion) => !strict.includes(profileVersion))
-  ) {
+  if (canonicalize(legacy) !== canonicalize(["3.2.0"])) {
     throw new Error("Custom Launch API V3 legacy metadata profile versions differ from the known live baseline");
   }
 }
@@ -429,7 +442,7 @@ export async function probeCustomLaunchV3Release(input) {
   exactKeys(readiness, [
     "schemaVersion", "status", "service", "sourceCommit", "sourceTree",
     "migrationInventorySha256", "apiContractSha256", "walletAdminSecurity",
-    "publicProfile", "chain",
+    "behaviorEvidence", "settlementDataflowClosure", "publicProfile", "chain",
   ], "Custom Launch API readiness");
   exactKeys(readiness.walletAdminSecurity, [
     "assertionVersion", "assertionMode", "legacyBearerRequestsAccepted",
@@ -456,10 +469,18 @@ export async function probeCustomLaunchV3Release(input) {
     || readiness.walletAdminSecurity.assertionVersion !== "2"
     || readiness.walletAdminSecurity.assertionMode !== "enforced"
     || readiness.walletAdminSecurity.legacyBearerRequestsAccepted !== false
+    || canonicalize(readiness.behaviorEvidence)
+      !== canonicalize(BEHAVIOR_EVIDENCE_READINESS)
+    || canonicalize(readiness.settlementDataflowClosure)
+      !== canonicalize(SETTLEMENT_DATAFLOW_CLOSURE_READINESS)
     || readiness.publicProfile.profileId !== observation.api.profileId
     || readiness.publicProfile.profileVersion !== observation.api.profileVersion
     || readiness.publicProfile.profileSha256 !== observation.api.publicProfileSha256
+    || readiness.publicProfile.productionLaunchAuthorized
+      !== observation.api.runtimeProductionLaunchAuthorized
     || readiness.publicProfile.productionLaunchAuthorized !== false
+    || readiness.publicProfile.currentWriteProfileVersion
+      !== observation.api.currentWriteProfileVersion
     || readiness.publicProfile.currentWriteProfileVersion !== "3.3.0"
     || canonicalize(readiness.chain) !== canonicalize(observation.chain)
     || readinessIdentitySha256 !== observation.api.readinessIdentitySha256
@@ -478,14 +499,45 @@ export async function probeCustomLaunchV3Release(input) {
     || capabilities?.profile?.profileId
       !== "programmable.direct-native-hook-graph.v1"
     || capabilities?.profile?.profileRevision !== 3
-    || capabilities?.profile?.profileVersion !== "3.3.0"
+    || capabilities?.profile?.profileVersion
+      !== observation.api.currentWriteProfileVersion
     || capabilities?.profile?.productionLaunchAuthorized !== true
-    || capabilities?.routes?.capabilities !== "/v3/capabilities"
-    || capabilities?.routes?.preflight !== "/v3/custom-launches/preflight"
-    || capabilities?.routes?.create !== "/v3/custom-launches"
-    || capabilities?.routes?.list !== "/v3/custom-launches"
-    || capabilities?.routes?.status !== "/v3/custom-launches/{launchId}"
-    || capabilities?.routes?.finalizedMetadata !== "/v3/finalized-custom-launches"
+    || canonicalize(capabilities?.routes) !== canonicalize({
+      create: "/v3/custom-launches",
+      preflight: "/v3/custom-launches/preflight",
+      status: "/v3/custom-launches/{launchId}",
+      permitReissue: "/v3/custom-launches/{launchId}/permit-reissues",
+      list: "/v3/custom-launches",
+      finalizedMetadata: "/v3/finalized-custom-launches",
+      capabilities: "/v3/capabilities",
+    })
+    || canonicalize(capabilities?.profile34Activation) !== canonicalize({
+      profileVersion: observation.api.profileVersion,
+      active: false,
+      productionLaunchAuthorized: false,
+      requiredRunnerReadback:
+        "configured-signed-runner-and-frozen-fee-observation-abi",
+      requiredSettlementDataflowReadback:
+        "configured-custom-api-authority-v2-exact-route-closure-receipt",
+      mandatoryServerGates: [
+        "exact-source-compiler-graph-binding",
+        "static-hard-block-policy",
+        "platform-admission-receipt",
+        "exact-settlement-dataflow-closure",
+        "exact-router-simulation",
+        "verified-behavior-evidence",
+        "verified-exact-ten-bps-fee-path",
+      ],
+    })
+    || canonicalize(capabilities?.requestProfiles) !== canonicalize({
+      current: observation.api.currentWriteProfileVersion,
+      parseableExactVersions: ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0", "3.4.0"],
+      freshSubmissionExactVersions: [observation.api.currentWriteProfileVersion],
+      legacyReadableAndExactRetryableVersions:
+        ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0"],
+      newProfileVersionsAreImplicitlyAccepted: false,
+      unsupportedVersionReasonCode: "PROFILE_VERSION_NOT_ADMITTED",
+    })
     || capabilities?.preflight?.quotaConsumed !== false
     || capabilities?.preflight?.nonceAllocated !== false
     || capabilities?.preflight?.persisted !== false
