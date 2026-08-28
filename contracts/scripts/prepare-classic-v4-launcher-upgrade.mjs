@@ -2,6 +2,7 @@
 
 import { execFile } from "node:child_process";
 import {
+  lstat,
   mkdtemp,
   readFile,
   readdir,
@@ -46,7 +47,6 @@ const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
 const contractsRoot = path.join(repositoryRoot, "contracts");
-const sourcePinsPath = path.join(contractsRoot, "dependencies/source-pins.json");
 const DEFAULT_RPC_ENDPOINTS = [
   "https://ethereum-rpc.publicnode.com",
   "https://eth.drpc.org",
@@ -181,37 +181,99 @@ export async function classicV4LauncherUpgradeRpc(
   return payload.result;
 }
 
-async function gitIdentity(execute = execFileAsync) {
-  const [topLevel, head, tree, statusOutput] = await Promise.all([
-    execute("git", ["rev-parse", "--show-toplevel"], { cwd: repositoryRoot }),
-    execute("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot }),
-    execute("git", ["rev-parse", "HEAD^{tree}"], { cwd: repositoryRoot }),
-    execute("git", ["status", "--porcelain", "--untracked-files=all"], {
-      cwd: repositoryRoot,
+async function gitIdentity({
+  repositoryDirectory = repositoryRoot,
+  execute = execFileAsync,
+  lstatReader = lstat,
+  realpathReader = realpath,
+} = {}) {
+  const [
+    topLevel,
+    head,
+    tree,
+    statusOutput,
+    branch,
+    worktreeList,
+    rootStats,
+    rootRealpath,
+  ] = await Promise.all([
+    execute("git", ["rev-parse", "--show-toplevel"], {
+      cwd: repositoryDirectory,
     }),
+    execute("git", ["rev-parse", "HEAD"], { cwd: repositoryDirectory }),
+    execute("git", ["rev-parse", "HEAD^{tree}"], {
+      cwd: repositoryDirectory,
+    }),
+    execute("git", ["status", "--porcelain", "--untracked-files=all"], {
+      cwd: repositoryDirectory,
+    }),
+    execute("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: repositoryDirectory,
+    }),
+    execute("git", ["worktree", "list", "--porcelain", "-z"], {
+      cwd: repositoryDirectory,
+    }),
+    lstatReader(repositoryDirectory),
+    realpathReader(repositoryDirectory),
   ]);
+  const releaseCommit = head.stdout.trim().toLowerCase();
+  const worktreeRecord = worktreeList.stdout
+    .split("\0\0")
+    .map((record) => record.split("\0"))
+    .find((record) => record.includes("worktree " + repositoryDirectory));
   return {
     repositoryTopLevel: topLevel.stdout.trim(),
-    releaseCommit: head.stdout.trim().toLowerCase(),
+    repositoryRealpath: rootRealpath,
+    repositoryDevice: String(rootStats.dev),
+    repositoryInode: String(rootStats.ino),
+    repositoryIsDirectory: rootStats.isDirectory(),
+    repositoryIsSymbolicLink: rootStats.isSymbolicLink(),
+    releaseCommit,
     releaseTree: tree.stdout.trim().toLowerCase(),
     repositoryClean: statusOutput.stdout.trim() === "",
+    detached: branch.stdout.trim() === "HEAD",
+    registeredDetachedWorktree:
+      worktreeRecord?.includes("HEAD " + releaseCommit) === true &&
+      worktreeRecord.includes("detached"),
   };
 }
 
-function assertExactIdentity(identity, expected = null) {
+function assertExactIdentity(
+  identity,
+  expected = null,
+  {
+    repositoryDirectory = repositoryRoot,
+    requireDetached = false,
+  } = {},
+) {
   if (
-    identity?.repositoryTopLevel !== repositoryRoot ||
+    identity?.repositoryTopLevel !== repositoryDirectory ||
+    identity?.repositoryRealpath !== repositoryDirectory ||
+    identity?.repositoryIsDirectory !== true ||
+    identity?.repositoryIsSymbolicLink !== false ||
     identity?.repositoryClean !== true ||
+    (requireDetached &&
+      (identity?.detached !== true ||
+        identity?.registeredDetachedWorktree !== true)) ||
     (expected &&
       (identity.releaseCommit !== expected.releaseCommit ||
-        identity.releaseTree !== expected.releaseTree))
+        identity.releaseTree !== expected.releaseTree)) ||
+    (expected?.repositoryDevice !== undefined &&
+      (identity.repositoryDevice !== expected.repositoryDevice ||
+        identity.repositoryInode !== expected.repositoryInode))
   ) {
     fail("Current clean Git identity differs from the launcher upgrade release");
   }
 }
 
-async function dependencyGitState(root, execute = execFileAsync) {
-  const directory = path.join(contractsRoot, "lib", root);
+async function dependencyGitState(
+  root,
+  {
+    contractsDirectory = contractsRoot,
+    execute = execFileAsync,
+  } = {},
+) {
+  const directory = path.join(contractsDirectory, "lib", root);
   try {
     const [topLevel, head, statusOutput, remoteUrl] = await Promise.all([
       execute("git", ["rev-parse", "--show-toplevel"], { cwd: directory }),
@@ -232,12 +294,24 @@ async function dependencyGitState(root, execute = execFileAsync) {
   }
 }
 
-async function sourcePinState(roots, execute = execFileAsync) {
+async function sourcePinState(
+  roots,
+  {
+    contractsDirectory = contractsRoot,
+    execute = execFileAsync,
+  } = {},
+) {
   const [sourcePins, entries, states] = await Promise.all([
-    readFile(sourcePinsPath, "utf8").then(JSON.parse),
-    readdir(path.join(contractsRoot, "lib"), { withFileTypes: true }),
+    readFile(
+      path.join(contractsDirectory, "dependencies/source-pins.json"),
+      "utf8",
+    ).then(JSON.parse),
+    readdir(path.join(contractsDirectory, "lib"), { withFileTypes: true }),
     Promise.all(
-      roots.map(async (root) => [root, await dependencyGitState(root, execute)]),
+      roots.map(async (root) => [
+        root,
+        await dependencyGitState(root, { contractsDirectory, execute }),
+      ]),
     ),
   ]);
   const localDirectories = entries
@@ -253,6 +327,7 @@ async function sourcePinState(roots, execute = execFileAsync) {
       localDirectories,
       dependencyRoots: roots,
       dependencyGitStates,
+      contractsDirectory,
     }),
   };
 }
@@ -515,21 +590,52 @@ export async function prepareClassicV4LauncherUpgradeSnapshot({
   };
 }
 
-async function freshBuildAndPins({
-  identityReader = gitIdentity,
-  artifactBuilder = compileClassicV4LauncherUpgradeFreshArtifact,
-  sourcePinReader = sourcePinState,
-} = {}) {
+async function freshBuildAndPins(options = {}) {
+  const repositoryDirectory = options.repositoryDirectory ?? repositoryRoot;
+  const reviewedContractsDirectory = path.join(
+    repositoryDirectory,
+    "contracts",
+  );
+  const requireDetached = options.requireDetached === true;
+  const expectedIdentity = options.expectedIdentity ?? null;
+  const identityReader =
+    options.identityReader ??
+    (() => gitIdentity({ repositoryDirectory }));
+  const artifactBuilder =
+    options.artifactBuilder ??
+    (() =>
+      compileClassicV4LauncherUpgradeFreshArtifact({
+        contractsDirectory: reviewedContractsDirectory,
+      }));
+  const sourcePinReader =
+    options.sourcePinReader ??
+    ((roots) =>
+      sourcePinState(roots, {
+        contractsDirectory: reviewedContractsDirectory,
+      }));
   const beforeIdentity = await identityReader();
-  assertExactIdentity(beforeIdentity);
-  const beforePins = await sourcePinReader(ALL_PINNED_DEPENDENCY_ROOTS);
-  const artifact = await artifactBuilder();
+  assertExactIdentity(beforeIdentity, expectedIdentity, {
+    repositoryDirectory,
+    requireDetached,
+  });
+  const buildContext = {
+    repositoryDirectory,
+    contractsDirectory: reviewedContractsDirectory,
+  };
+  const beforePins = await sourcePinReader(
+    ALL_PINNED_DEPENDENCY_ROOTS,
+    buildContext,
+  );
+  const artifact = await artifactBuilder(buildContext);
   const build = computeClassicV4LauncherUpgradeBuildCommitments(artifact);
   const [afterIdentity, afterPins] = await Promise.all([
     identityReader(),
-    sourcePinReader(ALL_PINNED_DEPENDENCY_ROOTS),
+    sourcePinReader(ALL_PINNED_DEPENDENCY_ROOTS, buildContext),
   ]);
-  assertExactIdentity(afterIdentity, beforeIdentity);
+  assertExactIdentity(afterIdentity, beforeIdentity, {
+    repositoryDirectory,
+    requireDetached,
+  });
   if (normalizeHex(beforePins.digest) !== normalizeHex(afterPins.digest)) {
     fail("Source pins changed during the deterministic launcher build");
   }
@@ -545,11 +651,59 @@ async function freshBuildAndPins({
   };
 }
 
+export async function resolveClassicV4LauncherReviewedReleaseWorktree(
+  candidate,
+  {
+    realpathReader = realpath,
+    lstatReader = lstat,
+  } = {},
+) {
+  if (!candidate || !path.isAbsolute(candidate)) {
+    fail("--reviewed-release-worktree must be an absolute path");
+  }
+  const resolved = path.resolve(candidate);
+  let actual;
+  let stats;
+  try {
+    [actual, stats] = await Promise.all([
+      realpathReader(resolved),
+      lstatReader(resolved),
+    ]);
+  } catch {
+    fail("Reviewed release worktree is not a readable real directory");
+  }
+  if (
+    !stats.isDirectory() ||
+    stats.isSymbolicLink() ||
+    actual !== resolved
+  ) {
+    fail("Reviewed release worktree must be a real non-symlink directory");
+  }
+  return actual;
+}
+
 export async function loadClassicV4LauncherUpgradeSealedBuild(
   plan,
   dependencies = {},
 ) {
-  const sealed = await freshBuildAndPins(dependencies);
+  const {
+    reviewedReleaseWorktree = null,
+    ...sealedBuildDependencies
+  } = dependencies;
+  const repositoryDirectory = reviewedReleaseWorktree
+    ? await resolveClassicV4LauncherReviewedReleaseWorktree(
+        reviewedReleaseWorktree,
+      )
+    : repositoryRoot;
+  const sealed = await freshBuildAndPins({
+    ...sealedBuildDependencies,
+    repositoryDirectory,
+    requireDetached: reviewedReleaseWorktree !== null,
+    expectedIdentity: {
+      releaseCommit: plan?.releaseCommit,
+      releaseTree: plan?.releaseTree,
+    },
+  });
   if (
     sealed.identity.releaseCommit !== plan?.releaseCommit ||
     sealed.identity.releaseTree !== plan?.releaseTree

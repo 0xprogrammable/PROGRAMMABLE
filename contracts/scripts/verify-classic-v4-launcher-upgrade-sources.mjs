@@ -29,7 +29,10 @@ import {
   digestJson,
   normalizeHex,
 } from "../../scripts/classic-v4-release-core.mjs";
-import { loadClassicV4LauncherUpgradeSealedBuild } from "./prepare-classic-v4-launcher-upgrade.mjs";
+import {
+  loadClassicV4LauncherUpgradeSealedBuild,
+  resolveClassicV4LauncherReviewedReleaseWorktree,
+} from "./prepare-classic-v4-launcher-upgrade.mjs";
 import {
   captureEtherscan,
   captureSourcify,
@@ -183,9 +186,12 @@ function artifactMetadata(artifact) {
   }
 }
 
-async function readLocalSource(sourcePath) {
-  const absolute = path.resolve(contractsRoot, sourcePath);
-  const relative = path.relative(contractsRoot, absolute);
+async function readLocalSource(
+  sourcePath,
+  contractsDirectory = contractsRoot,
+) {
+  const absolute = path.resolve(contractsDirectory, sourcePath);
+  const relative = path.relative(contractsDirectory, absolute);
   assert(
     relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative),
     `Invalid artifact source path ${sourcePath}`,
@@ -472,7 +478,7 @@ export function computeClassicV4LauncherSourceEvidenceReviewDigest(evidence) {
   return digestJson(reviewedEvidence, SOURCE_EVIDENCE_REVIEW_DOMAIN);
 }
 
-function parseArguments(argv) {
+export function parseClassicV4LauncherSourceVerificationArguments(argv) {
   const forbidden = argv.find(
     (argument) =>
       argument === "--broadcast" ||
@@ -490,6 +496,7 @@ function parseArguments(argv) {
     plan: null,
     receiptEvidence: null,
     finalityEvidence: null,
+    reviewedReleaseWorktree: null,
     mode: "verify",
     write: false,
     output: null,
@@ -518,6 +525,7 @@ function parseArguments(argv) {
         "--plan",
         "--receipt-evidence",
         "--finality-evidence",
+        "--reviewed-release-worktree",
         "--output",
         "--wallet",
         "--acknowledge-evidence-digest",
@@ -531,6 +539,9 @@ function parseArguments(argv) {
     if (key === "--plan") options.plan = value;
     if (key === "--receipt-evidence") options.receiptEvidence = value;
     if (key === "--finality-evidence") options.finalityEvidence = value;
+    if (key === "--reviewed-release-worktree") {
+      options.reviewedReleaseWorktree = value;
+    }
     if (key === "--output") options.output = value;
     if (key === "--wallet") options.wallet = value;
     if (key === "--acknowledge-evidence-digest")
@@ -545,6 +556,12 @@ function parseArguments(argv) {
   ]) {
     if (!value || !path.isAbsolute(value))
       fail(`--${label} must be an absolute path`);
+  }
+  if (
+    !options.reviewedReleaseWorktree ||
+    !path.isAbsolute(options.reviewedReleaseWorktree)
+  ) {
+    fail("--reviewed-release-worktree must be an absolute path");
   }
   if (options.mode !== "verify" && options.write) {
     fail("--write is only valid in source verification mode");
@@ -770,13 +787,24 @@ async function runInternalSubmission(argv) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const options = parseArguments(argv);
+  const options =
+    parseClassicV4LauncherSourceVerificationArguments(argv);
+  const reviewedReleaseWorktree =
+    await resolveClassicV4LauncherReviewedReleaseWorktree(
+      options.reviewedReleaseWorktree,
+    );
+  const reviewedContractsRoot = path.join(
+    reviewedReleaseWorktree,
+    "contracts",
+  );
   const [plan, receiptEvidence, finalityEvidence] = await Promise.all([
     readJson(options.plan, "launcher upgrade plan"),
     readJson(options.receiptEvidence, "launcher receipt evidence"),
     readJson(options.finalityEvidence, "launcher finality evidence"),
   ]);
-  const artifact = await loadClassicV4LauncherUpgradeSealedBuild(plan);
+  const artifact = await loadClassicV4LauncherUpgradeSealedBuild(plan, {
+    reviewedReleaseWorktree,
+  });
   validateClassicV4LauncherFinalityEvidence({
     plan,
     receiptEvidence,
@@ -791,6 +819,8 @@ export async function main(argv = process.argv.slice(2)) {
           receiptEvidence,
           finalityEvidence,
           artifact,
+          sourceReader: (sourcePath) =>
+            readLocalSource(sourcePath, reviewedContractsRoot),
         });
   if (options.mode === "review") {
     process.stdout.write(

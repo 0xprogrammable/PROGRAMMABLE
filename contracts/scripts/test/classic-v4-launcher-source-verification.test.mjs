@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +26,7 @@ import {
   buildClassicV4LauncherPublicationBundle,
   buildClassicV4LauncherStandardJsonInput,
   computeClassicV4LauncherSourceEvidenceReviewDigest,
+  parseClassicV4LauncherSourceVerificationArguments,
   submitSources,
   validateClassicV4LauncherFinalityEvidence,
   verifyClassicV4LauncherSourceProviders,
@@ -25,6 +34,8 @@ import {
 } from "../verify-classic-v4-launcher-upgrade-sources.mjs";
 import {
   compileClassicV4LauncherUpgradeFreshArtifact,
+  loadClassicV4LauncherUpgradeSealedBuild,
+  resolveClassicV4LauncherReviewedReleaseWorktree,
 } from "../prepare-classic-v4-launcher-upgrade.mjs";
 import {
   assertExactEtherscanMatch,
@@ -37,7 +48,7 @@ const contractsRoot = path.resolve(path.dirname(testPath), "..", "..");
 const launcherPath = "src/MemeLaunchV4.sol";
 const launcherSource =
   "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26; contract MemeLaunchV4 {}\n";
-const dependencyPath = "lib/example/src/Dependency.sol";
+const dependencyPath = "lib/v4-core/src/Dependency.sol";
 const dependencySource =
   "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26; library Dependency {}\n";
 const runtimeTemplate = "0x6000600055";
@@ -213,6 +224,176 @@ function providerFetch(values, calls) {
     );
   };
 }
+
+test("source verifier requires an explicit absolute reviewed release worktree", () => {
+  const required = [
+    "--plan",
+    "/tmp/launcher-plan.json",
+    "--receipt-evidence",
+    "/tmp/launcher-receipt.json",
+    "--finality-evidence",
+    "/tmp/launcher-finality.json",
+  ];
+  assert.throws(
+    () => parseClassicV4LauncherSourceVerificationArguments(required),
+    /reviewed-release-worktree must be an absolute path/,
+  );
+  assert.throws(
+    () =>
+      parseClassicV4LauncherSourceVerificationArguments([
+        ...required,
+        "--reviewed-release-worktree",
+        "relative/release",
+      ]),
+    /reviewed-release-worktree must be an absolute path/,
+  );
+  const parsed = parseClassicV4LauncherSourceVerificationArguments([
+    ...required,
+    "--reviewed-release-worktree",
+    "/tmp/reviewed-release",
+  ]);
+  assert.equal(
+    parsed.reviewedReleaseWorktree,
+    "/tmp/reviewed-release",
+  );
+});
+
+test("reviewed release worktree resolver rejects root and parent symlinks", async (t) => {
+  const temporaryRoot = await realpath(
+    await mkdtemp(path.join(tmpdir(), "classic-v4-reviewed-root-")),
+  );
+  t.after(async () => {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  });
+  const realParent = path.join(temporaryRoot, "real-parent");
+  const reviewedRoot = path.join(realParent, "reviewed-release");
+  await mkdir(reviewedRoot, { recursive: true });
+  assert.equal(
+    await resolveClassicV4LauncherReviewedReleaseWorktree(reviewedRoot),
+    reviewedRoot,
+  );
+
+  const rootLink = path.join(temporaryRoot, "reviewed-link");
+  await symlink(reviewedRoot, rootLink);
+  await assert.rejects(
+    resolveClassicV4LauncherReviewedReleaseWorktree(rootLink),
+    /real non-symlink directory/,
+  );
+
+  const parentLink = path.join(temporaryRoot, "parent-link");
+  await symlink(realParent, parentLink);
+  await assert.rejects(
+    resolveClassicV4LauncherReviewedReleaseWorktree(
+      path.join(parentLink, "reviewed-release"),
+    ),
+    /real non-symlink directory/,
+  );
+});
+
+test("sealed build uses only the exact clean registered detached release root", async (t) => {
+  const values = fixture();
+  const reviewedRoot = await realpath(
+    await mkdtemp(path.join(tmpdir(), "classic-v4-sealed-root-")),
+  );
+  t.after(async () => {
+    await rm(reviewedRoot, { recursive: true, force: true });
+  });
+  const rootStats = await stat(reviewedRoot);
+  const identity = {
+    repositoryTopLevel: reviewedRoot,
+    repositoryRealpath: reviewedRoot,
+    repositoryDevice: String(rootStats.dev),
+    repositoryInode: String(rootStats.ino),
+    repositoryIsDirectory: true,
+    repositoryIsSymbolicLink: false,
+    releaseCommit: values.plan.releaseCommit,
+    releaseTree: values.plan.releaseTree,
+    repositoryClean: true,
+    detached: true,
+    registeredDetachedWorktree: true,
+  };
+  const buildContexts = [];
+  const sourcePinContexts = [];
+  const artifact = await loadClassicV4LauncherUpgradeSealedBuild(
+    values.plan,
+    {
+      reviewedReleaseWorktree: reviewedRoot,
+      identityReader: async () => structuredClone(identity),
+      sourcePinReader: async (_roots, context) => {
+        sourcePinContexts.push(context);
+        return { digest: values.plan.sourcePinsDigest };
+      },
+      artifactBuilder: async (context) => {
+        buildContexts.push(context);
+        return values.artifact;
+      },
+    },
+  );
+  const expectedContext = {
+    repositoryDirectory: reviewedRoot,
+    contractsDirectory: path.join(reviewedRoot, "contracts"),
+  };
+  assert.equal(artifact, values.artifact);
+  assert.deepEqual(buildContexts, [expectedContext]);
+  assert.deepEqual(sourcePinContexts, [
+    expectedContext,
+    expectedContext,
+  ]);
+
+  for (const mutate of [
+    (changed) => {
+      changed.detached = false;
+    },
+    (changed) => {
+      changed.registeredDetachedWorktree = false;
+    },
+    (changed) => {
+      changed.repositoryClean = false;
+    },
+    (changed) => {
+      changed.releaseCommit = "9".repeat(40);
+    },
+    (changed) => {
+      changed.releaseTree = "8".repeat(40);
+    },
+  ]) {
+    const changed = structuredClone(identity);
+    mutate(changed);
+    await assert.rejects(
+      loadClassicV4LauncherUpgradeSealedBuild(values.plan, {
+        reviewedReleaseWorktree: reviewedRoot,
+        identityReader: async () => structuredClone(changed),
+        sourcePinReader: async () => ({
+          digest: values.plan.sourcePinsDigest,
+        }),
+        artifactBuilder: async () => values.artifact,
+      }),
+      /Git identity differs/,
+    );
+  }
+
+  let identityRead = 0;
+  await assert.rejects(
+    loadClassicV4LauncherUpgradeSealedBuild(values.plan, {
+      reviewedReleaseWorktree: reviewedRoot,
+      identityReader: async () => {
+        identityRead += 1;
+        return {
+          ...structuredClone(identity),
+          repositoryInode:
+            identityRead === 1
+              ? identity.repositoryInode
+              : String(Number(identity.repositoryInode) + 1),
+        };
+      },
+      sourcePinReader: async () => ({
+        digest: values.plan.sourcePinsDigest,
+      }),
+      artifactBuilder: async () => values.artifact,
+    }),
+    /Git identity differs/,
+  );
+});
 
 test("requires Sourcify and emits deterministic launcher-only evidence", async () => {
   const values = fixture();
