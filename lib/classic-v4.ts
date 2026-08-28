@@ -249,7 +249,7 @@ export function buildClassicV4LaunchDisclosure(
     ),
     rewards: configuration.rewards.beneficiaries.map((beneficiary, index) => ({
       beneficiary,
-      share: formatClassicV3Percent(configuration.rewards.sharesBps[index]),
+      share: formatClassicV3Percent(configuration.rewards.sharesBps[index]!),
     })),
     liquidity:
       "About 29.86% more active liquidity at launch · bounded to about 18.9× the opening price and about 5.9 ETH net capacity · one position, permanently locked",
