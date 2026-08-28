@@ -11,7 +11,7 @@ import { parse } from "yaml";
 import {
   CLASSIC_V4_DIGEST_DOMAINS,
   digestJson,
-} from "../../scripts/classic-v4-digest.mjs";
+} from "./classic-v4-digest.mjs";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const INDEXER_ROOT = path.resolve(path.dirname(SCRIPT_PATH), "..");
@@ -676,7 +676,8 @@ function parseAuditReleaseBinding(value, endpoint, expectedIdentity) {
 }
 
 function parseArgs(argv) {
-  const [command, ...rest] = argv;
+  const [command, ...rawRest] = argv;
+  const rest = rawRest[0] === "--" ? rawRest.slice(1) : rawRest;
   if (rest.length % 2 !== 0) throw new Error("every option requires one value");
   const values = {};
   for (let index = 0; index < rest.length; index += 2) {
