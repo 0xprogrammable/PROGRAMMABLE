@@ -2743,6 +2743,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     disconnect,
     openWallet,
     preloadWallet,
+    getAccessToken,
+    getIdentityToken,
   } = useWallet();
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -2750,6 +2752,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCopied, setMenuCopied] = useState(false);
   const [menuError, setMenuError] = useState("");
+  const [partnerAdminAccount, setPartnerAdminAccount] =
+    useState<string | null>(null);
   const hydrationPending = !authReady;
   const openingWallet = connecting && authReady;
 
@@ -2779,6 +2783,46 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    const account = wallet?.account ?? null;
+    if (!menuOpen || !account) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const [accessToken, identityToken] = await Promise.all([
+          getAccessToken(),
+          getIdentityToken().catch(() => null),
+        ]);
+        if (!accessToken || controller.signal.aborted) return;
+        const headers = new Headers({
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        });
+        if (identityToken) {
+          headers.set("X-Privy-Identity-Token", identityToken);
+        }
+        const query = new URLSearchParams({
+          walletAddress: account,
+          page: "1",
+          pageSize: "1",
+        });
+        const response = await fetch(`/api/admin/partners?${query}`, {
+          cache: "no-store",
+          headers,
+          signal: controller.signal,
+        });
+        if (response.ok && !controller.signal.aborted) {
+          setPartnerAdminAccount(account);
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setPartnerAdminAccount(null);
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [getAccessToken, getIdentityToken, menuOpen, wallet?.account]);
 
   const label = disconnecting
     ? "Disconnecting"
@@ -2823,6 +2867,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       onClick={() => {
         if (wallet) {
           setMenuError("");
+          setPartnerAdminAccount(null);
           setMenuOpen((current) => !current);
         } else {
           openWallet();
@@ -2904,6 +2949,17 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         >
           API keys
         </Link>
+        {partnerAdminAccount?.toLowerCase()
+            === wallet.account.toLowerCase() ? (
+          <Link
+            href="/admin/partners"
+            prefetch={false}
+            tabIndex={menuOpen ? undefined : -1}
+            onClick={() => setMenuOpen(false)}
+          >
+            Partner admin
+          </Link>
+        ) : null}
         <button
           type="button"
           tabIndex={menuOpen ? undefined : -1}
