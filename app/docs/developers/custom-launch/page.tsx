@@ -53,7 +53,7 @@ const lifecycle = [
   ["validating", "Request and graph validation are running."],
   [
     "pending_review",
-    "Exact-source admission or Router preparation is still running. No wallet transaction exists.",
+    "Server-side admission and the selected lane's per-launch evidence decision are still running. No wallet transaction exists.",
   ],
   [
     "action_required",
@@ -61,7 +61,7 @@ const lifecycle = [
   ],
   [
     "awaiting_funding_authorization",
-    "EIP-3009 mode only: review and sign the exact typed data in the connected controller wallet.",
+    "EIP-3009 mode only, after the server evidence gate: review and sign the exact typed data in the connected controller wallet.",
   ],
   [
     "funding_authorization_verified",
@@ -74,7 +74,7 @@ const lifecycle = [
   ],
   [
     "authorized",
-    "The platform permit and exact output.walletTransaction exist. The controller wallet has not signed or broadcast it.",
+    "The server verified the evidence required by the selected lane, and the platform permit and exact output.walletTransaction exist. The controller wallet has not signed or broadcast it.",
   ],
   [
     "submitted",
@@ -96,19 +96,19 @@ const cliInstallCommands = [
     "Create an isolated download directory.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz',
     "Download the pinned release asset.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256',
     "Download its checksum sidecar.",
   ],
   [
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)',
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)',
     "Continue only after this reports OK.",
   ],
   [
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"',
     "Install the verified local bytes.",
   ],
 ] as const;
@@ -163,18 +163,19 @@ export default function CustomLaunchApiDocsPage() {
       title="Custom Launch API"
     >
       <p className={styles.bodyCopy}>
-        Public V3 is the general custom-hook creation contract. V2 and V1
-        history remain readable, while
-        V1 creation is permanently write fenced with the nonretryable error{" "}
-        <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+        Public V3.3 is the current custom-hook creation contract. V2 and V1
+        history and schemas remain readable, while fresh creation is permanently
+        write fenced with nonretryable{" "}
+        <code>CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
+        <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new submissions.
       </p>
 
       <section id="quickstart">
         <div className={styles.sectionIntro}>
           <h2>Quickstart</h2>
           <p>
-            Public V3 launch creation is live on Ethereum Mainnet. V1 history
-            reads remain available, while V1 creation stays read-only. Legacy
+            Public V3.3 launch creation is live on Ethereum Mainnet. V2 and V1
+            history and schemas remain available, while their fresh POSTs stay read-only. Legacy
             Registry and GitHub submission intake is closed. Use the{" "}
             <a href="/openapi/custom-launch-v3.json">
               public V3 machine contract
@@ -189,8 +190,8 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> 3.3.6 from the{" "}
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz">
+            Install <code>@programmable/launch</code> 3.3.7 from the{" "}
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz">
               immutable GitHub Release asset
             </a>
             . The binary is{" "}
@@ -199,7 +200,8 @@ export default function CustomLaunchApiDocsPage() {
           <li>
             Run <code>pack</code> and <code>validate --remote</code> against exact
             Standard JSON, compiler artifacts and evidence files. Never enter
-            derived hashes by hand.
+            derived hashes by hand. These checks prepare and classify the request;
+            they are not the server&apos;s launch decision.
           </li>
           <li>
             For a wallet key, use <Link href="/developers/api-keys">API keys</Link>.
@@ -209,7 +211,7 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             Run <code>submit ./launch.json --config programmable-launch.config.json</code>.
-            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; status --watch --until authorized -&gt; wallet -&gt; status --watch --until finalized</code>.
+            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; server evidence decision -&gt; status --watch --until authorized -&gt; wallet -&gt; status --watch --until finalized</code>.
             Authenticated CLI traffic is fixed to <code>https://api.programmable.market</code>. Wallet is a separate controller action, not a CLI command. At <code>authorized</code>, stop for exact wallet review and signing,
             then run <code>status REQUEST_UUID --watch --until finalized</code>.
           </li>
@@ -318,7 +320,9 @@ export default function CustomLaunchApiDocsPage() {
             <code>solc 0.8.26+commit.8a97fa7a</code>, identify the distinct
             token, hook and initializer roles, map address dependencies, and
             declare the real hook permissions, pool, funding, liquidity, fee,
-            custody and withdrawal behavior.
+            custody and withdrawal behavior. Collect the required token name,
+            symbol, meaningful description, non-empty local image, website and X
+            profile; other public links are optional.
           </li>
           <li>
             Create a <code>programmable.launch-pack-config.v3</code> input from
@@ -341,8 +345,10 @@ export default function CustomLaunchApiDocsPage() {
              <code> productTruthAxes</code>: <code>deployment</code>,{" "}
              <code>trading</code>, <code>platform_fee_evidence</code>,{" "}
              <code>source_verification</code>, <code>indexing</code> and{" "}
-             <code>featured</code>. A not-executed behavior vector remains
-             outstanding; it is not a caller-declared pass.
+             <code>featured</code>. A not-executed or needs-evidence result remains
+             outstanding; it is not a caller-declared pass and cannot authorize a
+             wallet handoff. The API server must verify every behavior, fee and
+             liquidity evidence axis required by the selected lane.
           </li>
           <li>
             In EIP-3009 mode, accept the exact CLI-derived funding descriptor.
@@ -400,8 +406,10 @@ export default function CustomLaunchApiDocsPage() {
             multi-contract launch graphs. The default profile uses{" "}
             <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
             <code>profileRevision: 3</code> and{" "}
-            <code>profileVersion: 3.3.0</code>. It binds canonical project name,
-            symbol, presentation and image bytes into the launch identity. Its selection uses{" "}
+            <code>profileVersion: 3.3.0</code>. It requires and binds canonical
+            project name, symbol, meaningful description, non-empty local image,
+            one website and one X profile into the launch identity. Other public
+            links are optional. Its selection uses{" "}
             <code>
               programmable.direct-native-hook-graph-profile-selection-binding.v3
             </code>
@@ -421,11 +429,11 @@ export default function CustomLaunchApiDocsPage() {
             low address bits match exactly.
           </li>
           <li>
-            The 10 bps Programmable share may be additive or included in the
-            selected total. The declared economics are bound to the launch
-            intent. Revision 3 does not issue a fee-conformance certification;
-            it requires role-aware static admission and final Router simulation
-            before its permit signer is called. Static fees and the{" "}
+            A 10 bps Programmable share applies only to a fee-certified profile
+            or adapter and its exact stamped PoolKey after server-authored
+            per-launch fee evidence is verified. Arbitrary custom hooks are not
+            automatically fee-enforced, and the open arbitrary-hook lane carries
+            no Programmable fee claim. Static fees and the{" "}
             <code>0x800000</code> dynamic-fee sentinel are supported.
           </li>
           <li>
@@ -433,7 +441,7 @@ export default function CustomLaunchApiDocsPage() {
             Funding can be absent, carried as the exact native value of the
             separately reviewed Router transaction, or use an unsigned USDC
             EIP-3009 descriptor. Only the EIP-3009 mode contains a funding
-            challenge and authorization patch. CLI 3.3.6 uses{" "}
+            challenge and authorization patch. CLI 3.3.7 uses{" "}
             <code>programmable.eip3009-authorization-patch.v2</code> to bind
             the zero nonce, r, s and v ABI leaves before any wallet signature.
           </li>
@@ -519,7 +527,8 @@ export default function CustomLaunchApiDocsPage() {
           <p>
             <code>POST /v3/custom-launches</code> accepts only the exact,
             byte-bound general-profile request. Earlier versions remain
-            available for existing history; V1 POST stays read-only.
+            available for existing history and schemas; fresh V2 and V1 POSTs
+            return their nonretryable read-only 409 errors.
           </p>
         </div>
 
@@ -566,16 +575,27 @@ export default function CustomLaunchApiDocsPage() {
         </div>
 
         <p className={styles.bodyCopy}>
-          Every V3 request must bind and disclose a Programmable share of{" "}
-          <code>1,000 ppm = 0.10% = 10 bps</code> of its declared assessment
-          basis. It may be additive to the selected fee or included in that
-          selected total. The server recomputes the declared buy and sell
-          project share, effective total, fee currency and rounding. The request-bound
-          claim destination is controlled by{" "}
+          A Programmable share of <code>1,000</code> hundredths of a bip, equal to{" "}
+          <code>0.10% = 10 bps</code>, is
+          claimed only for a fee-certified profile or adapter and its exact
+          stamped PoolKey. That lane requires server-authored per-launch
+          fee-behavior evidence before wallet handoff. Arbitrary custom hooks are
+          not automatically fee-enforced, and the open arbitrary-hook lane carries
+          no Programmable fee claim. Revision-3 local validation, static admission
+          and Router simulation do not independently create{" "}
+          <code>feeBehaviorClaim: true</code>. For that certified lane, the bound
+          Programmable recipient is{" "}
           <code>0x4957f49620AFf3Adbbe8195a4f633E49cc93376c</code>.
-          Revision-3 static admission carries <code>feeBehaviorClaim: false</code>.
-          It does not certify or enforce how arbitrary custom code charges or
-          routes fees on later swaps; inspect the exact implementation.
+        </p>
+
+        <p className={styles.bodyCopy}>
+          Where a selected lane uses applicant buy or sell rates, each rate is
+          capped at <code>100,000</code> hundredths of a bip, equal to{" "}
+          <code>1,000 bps = 10%</code>. The API server enforces the cap in both{" "}
+          <code>additive-platform-share</code> and{" "}
+          <code>inclusive-selected-total</code> modes. The separate platform value
+          remains <code>1,000</code> hundredths of a bip, equal to{" "}
+          <code>10 bps</code>.
         </p>
 
         <aside className={styles.callout}>
@@ -663,8 +683,9 @@ export default function CustomLaunchApiDocsPage() {
             key bound to different bytes is a conflict.
           </li>
           <li>
-            Stop at <code>authorized</code>. The API and CLI never sign or
-            broadcast the returned transaction.
+            The API server exposes no wallet handoff until the evidence required
+            by the selected lane is verified. Stop at <code>authorized</code>. The
+            API and CLI never sign or broadcast the returned transaction.
           </li>
           <li>
             Keep deployment, trading, platform-fee evidence, source verification,
@@ -677,6 +698,14 @@ export default function CustomLaunchApiDocsPage() {
           Service readiness and API authorization do not replace controller
           approval. The connected wallet must review the exact chain, sender,
           Router, value and calldata before a separate signature.
+        </p>
+
+        <p className={styles.bodyCopy}>
+          During <code>simulating</code>, a signed permit may exist only inside a
+          worker-private simulation envelope. Public output remains null in{" "}
+          <code>simulating</code> and <code>failed</code>; the evidence gate controls
+          permit and wallet-transaction exposure, not internal permit signing
+          required for simulation.
         </p>
 
         <p className={styles.bodyCopy}>

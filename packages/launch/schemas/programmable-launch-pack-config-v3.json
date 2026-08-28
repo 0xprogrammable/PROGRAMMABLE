@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
   "title": "Programmable Custom Launch V3 pack config",
-  "description": "Closed public input contract for @programmable/launch 3.3.6. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
+  "description": "Closed public input contract for @programmable/launch 3.3.7. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -102,13 +102,10 @@
     },
     "feeUintString": {
       "type": "string",
-      "pattern": "^(?:0|[1-9][0-9]{0,5})$"
+      "pattern": "^(?:0|[1-9][0-9]{0,4}|100000)$"
     },
     "additiveFeeUintString": {
-      "allOf": [
-        { "$ref": "#/$defs/feeUintString" },
-        { "not": { "type": "string", "pattern": "^999[0-9]{3}$" } }
-      ]
+      "$ref": "#/$defs/feeUintString"
     },
     "identifier": {
       "type": "string",

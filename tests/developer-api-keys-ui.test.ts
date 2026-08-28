@@ -384,16 +384,16 @@ describe("developer API key interface", () => {
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility,
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized",
+      "pack -> validate --remote -> submit -> server evidence decision -> status --watch --until authorized -> wallet -> status --watch --until finalized",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli).toContain(
-      "programmable-launch-v3.3.6",
+      "programmable-launch-v3.3.7",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "Before pack, collect the project name and symbol",
+      "Before pack, collect the required project name and symbol",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
-      "local source file and its canonical public HTTPS, IPFS or Arweave URI",
+      "non-empty local PNG, JPEG, WebP or GIF plus its canonical public HTTPS, IPFS or Arweave URI",
     );
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       "website shows the same metadata read-only",

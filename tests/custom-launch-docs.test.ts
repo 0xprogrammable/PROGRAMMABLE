@@ -60,7 +60,7 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/authorized[\s\S]{0,240}(?:walletTransaction|wallet transaction)/i);
     }
     expect(createGuide).toContain(
-      "pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized",
+      "pack -> validate --remote -> submit -> server evidence decision -> status --watch --until authorized -> wallet -> status --watch --until finalized",
     );
     expect(createGuide).toContain("/openapi/custom-launch-v3.json");
     expect(createGuide).toContain("awaiting_funding_authorization");
@@ -114,16 +114,16 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("PROGRAMMABLE_API_KEY");
       expect(source).toMatch(/(?:without (?:signing|a wallet signature).{0,40}(?:or|and) broadcast(?:ing)?|never[^\n]{0,80}sign[^\n]{0,40}broadcast)/i);
     }
-    expect(gitBookGuide).toContain("programmable-launch-3.3.6.tgz");
-    expect(rawGuide).toContain("programmable-launch-3.3.6.tgz");
-    expect(developerDocsMarkdown).toContain("programmable-launch-3.3.6.tgz");
+    expect(gitBookGuide).toContain("programmable-launch-3.3.7.tgz");
+    expect(rawGuide).toContain("programmable-launch-3.3.7.tgz");
+    expect(developerDocsMarkdown).toContain("programmable-launch-3.3.7.tgz");
     expect(gitBookGuide).toContain("examples/direct-native-v3-no-broadcast/README.md");
     expect(gitBookGuide).toContain("deterministic-hook-permission-grind-v1");
     expect(gitBookGuide).toContain("programmable-launch submit ./launch.json");
   });
 
   it("keeps the website agent prompt on the current public CLI release", () => {
-    expect(createGuide).toContain("public CLI 3.3.6 state machine");
+    expect(createGuide).toContain("public CLI 3.3.7 state machine");
     expect(createGuide).not.toContain("public CLI 3.1.0 flow");
   });
 
@@ -152,7 +152,7 @@ describe("Custom Launch API documentation", () => {
       ]));
   });
 
-  it("publishes public V3 while retaining the exact V1 write fence", () => {
+  it("publishes public V3.3 while retaining the exact V1 and V2 write fences", () => {
     for (const source of [
       gitBookGuide,
       websiteGuide,
@@ -160,10 +160,12 @@ describe("Custom Launch API documentation", () => {
       developerDocsMarkdown,
     ]) {
       expect(source).toContain("CUSTOM_LAUNCH_V1_READ_ONLY");
+      expect(source).toContain("CUSTOM_LAUNCH_V2_READ_ONLY");
       expect(source).toMatch(/V1[\s\S]{0,200}(?:read-only|read only|write fence)/i);
+      expect(source).toMatch(/V2[\s\S]{0,200}(?:read-only|read only|write fence)/i);
       expect(source).toMatch(/Public V3/i);
     }
-    expect(createGuide).toMatch(/submit\s+the byte-identical request/i);
+    expect(createGuide).toMatch(/submit only (?:the|those) byte-identical/i);
     for (const source of [gitBookGuide, websiteGuide, rawGuide, developerDocsMarkdown]) {
       expect(source).toContain("Retry-After");
       expect(source).toMatch(/V3[^\n]{0,120}(?:public|live)/i);
@@ -187,9 +189,13 @@ describe("Custom Launch API documentation", () => {
           retryable: false,
         },
         v2: {
-          status: "live",
-          createHttpStatus: 202,
-          replayHttpStatus: 200,
+          reads: "live",
+          create: "read-only",
+          createHttpStatus: 409,
+          createErrorCode: "CUSTOM_LAUNCH_V2_READ_ONLY",
+          retryable: false,
+          preparedAndSimulatingReads: "observation-only",
+          readMayAuthorize: false,
         },
         v3: {
           status: "live",
@@ -208,21 +214,22 @@ describe("Custom Launch API documentation", () => {
     for (const source of [gitBookGuide, websiteGuide, rawGuide, cliGuide]) {
       expect(source).toContain("Ethereum Mainnet");
       expect(source).toContain("productionLaunchAuthorized: true");
-      expect(source).toContain("1,000 ppm = 0.10% = 10 bps");
+      expect(source).toMatch(/1,000/);
+      expect(source).toMatch(/0\.10%[^\n]{0,20}10 bps/i);
       expect(source).toContain("0x4957f49620AFf3Adbbe8195a4f633E49cc93376c");
       expect(source).toContain("shasum -a 256 -c");
       expect(source).toMatch(/platform admission|admission receipt|static admission/i);
       expect(source).toMatch(/concrete reachable\s+callback implementation/i);
-      expect(source).toMatch(/not (?:an )?audit|does not audit/i);
+      expect(source).toMatch(/not (?:an )?audit|does not audit|universal\s+audit/i);
       expect(source).toMatch(/fee\s+behavior|fee-behavior/i);
       expect(source).toContain("LP fee is separate");
       expect(source).toMatch(/Generic fee claiming and\s+buyback/);
       expect(source).toMatch(/V3/i);
     }
     for (const source of [gitBookGuide, rawGuide, cliGuide]) {
-      expect(source).toContain("programmable-launch-3.3.6.tgz.sha256");
+      expect(source).toContain("programmable-launch-3.3.7.tgz.sha256");
     }
-    expect(websiteGuide).toContain("programmable-launch-3.3.6.tgz.sha256");
+    expect(websiteGuide).toContain("programmable-launch-3.3.7.tgz.sha256");
 
     expect(v3OpenApi["x-programmable-profile"]).toMatchObject({
       profileId: "programmable.direct-native-hook-graph.v1",
@@ -239,6 +246,9 @@ describe("Custom Launch API documentation", () => {
       ],
       rateDenominator: "1000000",
       programmableFeeHundredthsOfBip: "1000",
+      applicantSelectedMaximumHundredthsOfBip: "100000",
+      maximumAdditiveEffectiveTotalHundredthsOfBip: "101000",
+      lpPoolFeeMaximumUnchanged: true,
       invariants: {
         "additive-platform-share":
           "effectiveTotal=selected+1000; projectShare=selected",
@@ -246,6 +256,9 @@ describe("Custom Launch API documentation", () => {
           "effectiveTotal=max(selected,1000); projectShare=effectiveTotal-1000",
       },
       derivedResultsAreRecomputedByServer: true,
+      feeBehaviorClaim: false,
+      tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence: true,
+      tenBpsClaimScope: "exact-launch-and-stamped-poolkey-only",
     });
   });
 

@@ -68,6 +68,29 @@ describe("Custom Launch cold-agent remediation contract", () => {
       manualProjectAllowlist: false,
       automaticAdmission: true,
       automaticRouterSimulation: true,
+      clientChecks: "preparation-only",
+      decisionAuthority: "api-server",
+      walletAuthorizationGate: {
+        requiredServerEvidenceAxes: [
+          "behavior",
+          "platform_fee",
+          "liquidity",
+        ],
+        behaviorEvidence: {
+          configurationIsExecutionEvidence: false,
+          walletHandoffRequiresVerifiedEvidence: true,
+          minimumWalletHandoffEvidenceStatus: "verified",
+          walletHandoffFailureCode: "BEHAVIOR_EVIDENCE_NOT_VERIFIED",
+          notConfiguredDisposition: "blocks_wallet_handoff",
+          unavailableDisposition: "blocks_wallet_handoff",
+        },
+        feePolicy: {
+          feeBehaviorClaim: false,
+          tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence: true,
+          claimScope: "exact-launch-and-stamped-poolkey-only",
+        },
+        localOrModelApprovalAccepted: false,
+      },
       fundingAuthorizationPatch: {
         schemaVersion: "programmable.eip3009-authorization-patch.v2",
         configKey: "fundingSignaturePatch",
@@ -154,11 +177,11 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.3.6",
+        cliReleaseVersion: "3.3.7",
         cliChecksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         cliTarballSha256:
-          "sha256:3c76730d7748db8ceca6ee06ae02e0aebf5ff6d98d526ea2ed7fa69ed21cff25",
+          "sha256:f45dcb6bf79d93bdf1459802b47989078b57f311095d43319468c549feec0ccc",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
@@ -276,7 +299,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.3.6");
+    expect(openApi.info.version).toBe("3.3.7");
     const v2Patch =
       openApi.components.schemas.FundingAuthorizationPatchDescriptorV2;
     expect(v2Patch.required).toEqual([
@@ -328,7 +351,7 @@ describe("Custom Launch cold-agent remediation contract", () => {
       legacyExactProfileVersions: ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
       routerSimulationBeforeAuthorization: true,
       blockingStatus: "action_required",
-      warningDisposition: "continue-to-router-simulation",
+      warningDisposition: "continue-to-server-evidence-evaluation",
     });
     expect(catalog.automaticAdmission.routerSimulationRole).toContain(
       "not a safety",

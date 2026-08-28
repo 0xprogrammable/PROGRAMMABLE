@@ -229,22 +229,30 @@ test("V3 selection closes funding, accounting, claim, and applicant-selected rat
   });
   assert.equal(validateDirectNativeProfileSelection({
     ...SELECTION,
-    applicantSelectedBuyHundredthsOfBip: "999999",
-  }).applicantSelectedBuyHundredthsOfBip, "999999");
+    applicantSelectedBuyHundredthsOfBip: "100000",
+  }).applicantSelectedBuyHundredthsOfBip, "100000");
   assert.throws(
     () => validateDirectNativeProfileSelection({
       ...SELECTION,
-      applicantSelectedBuyHundredthsOfBip: "1000000",
+      applicantSelectedBuyHundredthsOfBip: "100001",
     }),
-    /between 0 and 999999/u,
+    /between 0 and 100000/u,
   );
+  assert.equal(validateDirectNativeProfileSelection({
+    ...SELECTION,
+    accountingMode: "additive-platform-share",
+    applicantSelectedBuyHundredthsOfBip: "100000",
+  }).applicantSelectedBuyHundredthsOfBip, "100000");
+  assert.equal(validateDirectNativeProfileSelection({
+    ...SELECTION,
+    applicantSelectedSellHundredthsOfBip: "100000",
+  }).applicantSelectedSellHundredthsOfBip, "100000");
   assert.throws(
     () => validateDirectNativeProfileSelection({
       ...SELECTION,
-      accountingMode: "additive-platform-share",
-      applicantSelectedBuyHundredthsOfBip: "999999",
+      applicantSelectedSellHundredthsOfBip: "100001",
     }),
-    /must not exceed 998999/u,
+    /between 0 and 100000/u,
   );
   assert.deepEqual(validateDirectNativeProfileSelection({
     ...SELECTION,

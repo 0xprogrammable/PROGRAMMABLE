@@ -227,6 +227,7 @@ function usage(command) {
     submit: [
       "Usage: programmable-launch submit <launch.json> --config <programmable-launch.config.json> [--idempotency-key key]",
       "The API key is read only from PROGRAMMABLE_API_KEY or the OS secret store.",
+      "Only V3.3 requests can be submitted. V1 and V2 remain readable but their create routes are closed.",
     ],
     status: [
       "Usage: programmable-launch status <request-id> [--api-version 1|2|3] [--watch] [--until authorized|finalized]",
@@ -238,8 +239,8 @@ function usage(command) {
     ...(command && details[command] ? details[command] : header),
     "",
     `Guide: ${GUIDE_URL}`,
-    `OpenAPI V1 (read-only create): ${OPENAPI_URL_V1}`,
-    `OpenAPI V2 (public create): ${OPENAPI_URL_V2}`,
+    `OpenAPI V1 (read compatibility; create fenced): ${OPENAPI_URL_V1}`,
+    `OpenAPI V2 (read compatibility; create fenced): ${OPENAPI_URL_V2}`,
     `OpenAPI V3 general hook profile: ${OPENAPI_URL_V3}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,
     `Public V3 release: ${RELEASE_URL}`,

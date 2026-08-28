@@ -70,7 +70,7 @@ export default function MachineReadableDocsPage() {
             </a>
             <span>
               Standalone OpenAPI contract for live Bearer-authenticated V1
-              reads and the explicit V1 write fence.
+              reads, preserved schemas and its explicit fresh-write fence.
             </span>
           </li>
           <li>
@@ -78,7 +78,9 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v2.json</code>
             </a>
             <span>
-              Compatibility contract for existing V2 resources and clients.
+              Compatibility contract for existing V2 resources, schemas and
+              the explicit fresh-write fence. Prepared and simulating detail
+              reads are observation-only and cannot expose a new wallet action.
             </span>
           </li>
           <li>
@@ -119,8 +121,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz">
-              <code>@programmable/launch 3.3.6</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz">
+              <code>@programmable/launch 3.3.7</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and
@@ -293,9 +295,12 @@ export default function MachineReadableDocsPage() {
             requires a wallet-bound <code>pm_live_</code> Bearer key.
           </li>
           <li>
-            Public V3 creation, list and single-resource reads are live. V2 and
-            V1 history remain readable, while authenticated V1 POST returns
-            non-retryable <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>.
+            Public V3.3 creation, list and single-resource reads are live. V2 and
+            V1 history and schemas remain readable, while fresh authenticated
+            POSTs return non-retryable{" "}
+            <code>409 CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
+            <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new
+            submissions.
           </li>
           <li>
             The default V3 profile uses{" "}
@@ -304,7 +309,9 @@ export default function MachineReadableDocsPage() {
             <code>profileVersion: 3.3.0</code>. It supports project-owned tokens,
             hooks, 3–16 exact direct graph targets and every valid Uniswap v4
             permission mask. Profile 3.3.0 requires and binds canonical project name,
-            symbol, presentation and exact image bytes into the launch identity. Its selection uses{" "}
+            symbol, meaningful description, exact non-empty local image, one
+            website and one X profile into the launch identity. Other public
+            links are optional. Its selection uses{" "}
             <code>
               programmable.direct-native-hook-graph-profile-selection-binding.v3
             </code>
@@ -324,24 +331,32 @@ export default function MachineReadableDocsPage() {
             require evidence instead of categorical rejection. A hard-block
             code-and-role match returns <code>action_required</code>; other
             findings remain visible. There is no manual project allowlist. A
-            final Router simulation is mandatory before authorization.
+            final Router simulation is mandatory. The API server also verifies
+            the per-launch behavior, fee and liquidity evidence required by the
+            selected lane before wallet handoff.
           </li>
           <li>
             Public <code>GET /v3/capabilities</code> and authenticated,
             side-effect-free <code>POST /v3/custom-launches/preflight</code>
             expose risk classification, platform-owned behavior evidence and
-            six separate product-truth axes. A not-executed behavior vector is
-            outstanding, not verified.
+            six separate product-truth axes. A not-executed or needs-evidence
+            result is outstanding, not verified, and cannot authorize a wallet
+            handoff. CLI and preflight results are preparation; the API server is
+            the decision authority.
           </li>
           <li>
             Admission and simulation are not an audit or a guarantee of safety,
             honeypot resistance, liquidity, tradeability or fee behavior.
+            A 10 bps claim applies only to a fee-certified profile or adapter and
+            its exact stamped PoolKey; arbitrary custom hooks are not automatically
+            fee-enforced.
           </li>
           <li>
             <code>prepared</code> contains an artifact but no wallet transaction.
-            <code>authorized</code> contains the permit-attached transaction for
-            the bound wallet to review, sign and broadcast. The API key is not
-            wallet authority.
+            <code>authorized</code> is possible only after the server verifies the
+            evidence required by the selected lane and contains the permit-attached
+            transaction for the bound wallet to review, sign and broadcast. The API
+            key is not wallet authority.
           </li>
           <li>
             <code>GET /v3/custom-launches</code> returns a wallet-owned,

@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Programmable Custom Launch API V3 general hook profile",
-    "version": "3.3.6",
+    "version": "3.3.7",
     "summary": "General project-owned Uniswap v4 hook graph request contract.",
-    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Complete-metadata profile 3.3.0 is current; exact profile 3.2.0 remains readable and retryable with its original permissive metadata semantics, while exact profiles 3.1.0 and 3.0.0 retain immutable metadata-absent semantics. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. A platform-issued admission receipt binds the exact graph, role-aware static classification and Router simulation boundary before wallet authorization. These checks are not an audit, honeypot guarantee, liquidity or tradeability guarantee, or fee-behavior certification. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. Wallet and partner API keys use the same V3 endpoints, but no API key can sign or broadcast a wallet transaction. Partner attribution is server-owned provenance, not project verification or a safety claim. Revision 2 requests also remain readable and retryable with their original exact bytes.",
+    "description": "This document publishes revision 3 of programmable.direct-native-hook-graph.v1. Complete-metadata profile 3.3.0 is the only fresh-write profile; exact earlier versions remain readable and preserve immutable compatibility semantics. The current profile accepts project-owned tokens, project-owned hooks, all valid Uniswap v4 permission masks and three to sixteen exact direct graph targets. Every target is rebuilt with solc 0.8.26+commit.8a97fa7a from exact Standard JSON and materialized runtime bytes. CLI, client and model checks prepare and bind a request but never authorize it. The API server withholds every wallet transaction until exact per-launch behavior evidence reaches verified and the required platform-fee and declared-liquidity paths are server-verified. Missing runner configuration and runner unavailability block wallet handoff. These checks are not an audit, honeypot guarantee, universal safety guarantee, universal compatibility claim or universal 10 bps claim. Any 10 bps claim is limited to the exact launch and stamped PoolKey with verified fee-path evidence. Funding may be absent, carried as exact native Router transaction value, or use a separate EIP-3009 wallet signature. Wallet and partner API keys use the same V3 endpoints, but no API key can sign or broadcast a wallet transaction. Partner attribution is server-owned provenance, not project verification or a safety claim. Revision 2 requests also remain readable with their original exact bytes.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -59,6 +59,19 @@
     },
     "stableProductionVersion": "3",
     "stableOpenApiUrl": "https://programmable.market/openapi/custom-launch-v3.json",
+    "freshWritesOnlyProfileVersion": "3.3.0",
+    "walletHandoffEvidenceGate": {
+      "decisionAuthority": "api-server",
+      "clientChecks": "preparation-only",
+      "walletHandoffRequiresVerifiedEvidence": true,
+      "minimumWalletHandoffEvidenceStatus": "verified",
+      "walletHandoffFailureCode": "BEHAVIOR_EVIDENCE_NOT_VERIFIED",
+      "configurationIsExecutionEvidence": false,
+      "notConfiguredDisposition": "blocks_wallet_handoff",
+      "unavailableDisposition": "blocks_wallet_handoff",
+      "requiredServerEvidenceAxes": ["behavior", "platform_fee", "liquidity"],
+      "localOrModelApprovalAccepted": false
+    },
     "activationBlockers": []
   },
   "x-programmable-agent-integration": {
@@ -93,6 +106,21 @@
     "preflightAndSubmitCapabilitiesFailClosedBeforeApiKey": true,
     "manualProjectAllowlist": false,
     "automaticAdmission": true,
+    "automaticRouterSimulation": true,
+    "clientChecks": "preparation-only",
+    "decisionAuthority": "api-server",
+    "walletAuthorizationGate": {
+      "walletHandoffRequiresVerifiedEvidence": true,
+      "minimumWalletHandoffEvidenceStatus": "verified",
+      "walletHandoffFailureCode": "BEHAVIOR_EVIDENCE_NOT_VERIFIED",
+      "configurationIsExecutionEvidence": false,
+      "notConfiguredDisposition": "blocks_wallet_handoff",
+      "unavailableDisposition": "blocks_wallet_handoff",
+      "requiredServerEvidenceAxes": ["behavior", "platform_fee", "liquidity"],
+      "tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence": true,
+      "feeBehaviorClaim": false,
+      "localOrModelApprovalAccepted": false
+    },
     "remotePreflight": {
       "quotaConsumed": false,
       "nonceAllocated": false,
@@ -116,6 +144,8 @@
     "projectOwnedHook": true,
     "platformAdmissionReceiptRequired": true,
     "routerSimulationRequiredBeforeAuthorization": true,
+    "serverVerifiedEvidenceRequiredBeforeAuthorization": true,
+    "minimumWalletHandoffEvidenceStatus": "verified",
     "safetyClaim": false,
     "feeBehaviorClaim": false
   },
@@ -217,11 +247,17 @@
     ],
     "rateDenominator": "1000000",
     "programmableFeeHundredthsOfBip": "1000",
+    "applicantSelectedMaximumHundredthsOfBip": "100000",
+    "maximumAdditiveEffectiveTotalHundredthsOfBip": "101000",
+    "lpPoolFeeMaximumUnchanged": true,
     "invariants": {
       "additive-platform-share": "effectiveTotal=selected+1000; projectShare=selected",
       "inclusive-selected-total": "effectiveTotal=max(selected,1000); projectShare=effectiveTotal-1000"
     },
-    "derivedResultsAreRecomputedByServer": true
+    "derivedResultsAreRecomputedByServer": true,
+    "tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence": true,
+    "tenBpsClaimScope": "exact-launch-and-stamped-poolkey-only",
+    "feeBehaviorClaim": false
   },
   "tags": [
     {
@@ -1592,6 +1628,7 @@
           "liquidityModels",
           "evidenceTiers",
           "productTruthAxes",
+          "behaviorEvidence",
           "hardSafetyInvariants",
           "advancedFeaturesRequireEvidence",
           "feePolicy",
@@ -1911,6 +1948,42 @@
             ],
             "description": "Independent product claims. Evidence for one axis never proves another."
           },
+          "behaviorEvidence": {
+            "type": "object",
+            "required": [
+              "runnerConfigured",
+              "executionMode",
+              "vectorSetVersion",
+              "maximumConfiguredRunnerAttempts",
+              "configurationIsExecutionEvidence",
+              "walletHandoffRequiresVerifiedEvidence",
+              "minimumWalletHandoffEvidenceStatus",
+              "walletHandoffFailureCode",
+              "notConfiguredDisposition",
+              "unavailableDisposition",
+              "feeBehaviorClaim"
+            ],
+            "properties": {
+              "runnerConfigured": {
+                "type": "boolean",
+                "description": "Runtime configuration only. It is never per-launch execution evidence."
+              },
+              "executionMode": {
+                "enum": ["remote-ephemeral-mainnet-fork", "not_configured"]
+              },
+              "vectorSetVersion": { "const": "1.1.0" },
+              "maximumConfiguredRunnerAttempts": { "const": 3 },
+              "configurationIsExecutionEvidence": { "const": false },
+              "walletHandoffRequiresVerifiedEvidence": { "const": true },
+              "minimumWalletHandoffEvidenceStatus": { "const": "verified" },
+              "walletHandoffFailureCode": { "const": "BEHAVIOR_EVIDENCE_NOT_VERIFIED" },
+              "notConfiguredDisposition": { "const": "blocks_wallet_handoff" },
+              "unavailableDisposition": { "const": "blocks_wallet_handoff" },
+              "feeBehaviorClaim": { "const": false }
+            },
+            "description": "Server decision boundary. Runner configuration is not evidence; missing or unavailable execution leaves the launch without a wallet handoff.",
+            "additionalProperties": false
+          },
           "hardSafetyInvariants": {
             "const": [
               "exact-source-runtime-request-binding",
@@ -1944,6 +2017,7 @@
               "denominator",
               "requestBindingRequired",
               "behaviorProofRequiredForRoutableClaim",
+              "tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence",
               "genericClaimingLive",
               "buybackManagementLive"
             ],
@@ -1958,6 +2032,9 @@
                 "const": true
               },
               "behaviorProofRequiredForRoutableClaim": {
+                "const": true
+              },
+              "tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence": {
                 "const": true
               },
               "genericClaimingLive": {
@@ -1986,7 +2063,7 @@
             "const": false
           }
         },
-        "description": "Public additive discovery for the current V3 structural and operational boundary. It grants no authorization and makes no universal, audit or safety claim.",
+        "description": "Public additive discovery for the current V3 structural and operational boundary. It grants no authorization and makes no universal, audit, safety or fee-behavior claim. Per-launch verified behavior evidence is required before the server can return a wallet handoff.",
         "additionalProperties": true
       },
       "ProjectMetadataCapabilitiesV1": {
@@ -2239,7 +2316,7 @@
             "const": false
           }
         },
-        "description": "Side-effect-free classification of one exact V3 request. Risk classification, platform-owned behavior requirements and six independent product-truth axes are explicit. An unexecuted behavior vector is not a failure and never becomes a caller-declared pass. This response is not a durable launch resource, deployment proof, trading proof, audit, source-verification result, indexing result or feature-placement promise.",
+        "description": "Side-effect-free classification of one exact V3 request. Risk classification, platform-owned behavior requirements and six independent product-truth axes are explicit. An unexecuted behavior vector is not a terminal failure and never becomes a caller-declared pass, but it does block wallet-transaction exposure and wallet handoff until the API server records verified evidence. This response is not a durable launch resource, deployment proof, trading proof, audit, source-verification result, indexing result or feature-placement promise.",
         "additionalProperties": true
       },
       "CustomLaunchFindingCodeListV1": {
@@ -2365,7 +2442,11 @@
           "swap.second-user",
           "swap.time-advance",
           "liquidity.lifecycle.add-remove-withdraw",
+          "callback.permission-mask-and-declaration",
+          "callback.enabled-entrypoints-and-selectors",
+          "callback.canonical-pool-manager-only",
           "callback.unauthorized-rejected",
+          "callback.wrong-pool-rejected-or-isolated",
           "fee.programmable-ten-bps",
           "fee.no-bypass",
           "fee.no-overcharge",
@@ -2399,6 +2480,7 @@
               "enum": [
                 "deployability-hard-invariant",
                 "platform-fee-conformance",
+                "liquidity-conformance",
                 "routability"
               ]
             },
@@ -2423,7 +2505,7 @@
           "schemaVersion": {
             "const": "programmable.custom-launch-behavior-requirements.v1"
           },
-          "vectorSetVersion": { "const": "1.0.0" },
+          "vectorSetVersion": { "const": "1.1.0" },
           "riskClass": {
             "enum": ["standard-swaps", "advanced-custom-accounting"]
           },
@@ -2444,8 +2526,8 @@
             "items": {
               "$ref": "#/components/schemas/RequiredCustomLaunchBehaviorVectorV3"
             },
-            "minItems": 12,
-            "maxItems": 16,
+            "minItems": 16,
+            "maxItems": 20,
             "uniqueItems": true
           },
           "requirementsSha256": {
@@ -2534,8 +2616,8 @@
             "items": {
               "$ref": "#/components/schemas/CustomLaunchBehaviorExecutionVectorV3"
             },
-            "minItems": 12,
-            "maxItems": 16
+            "minItems": 16,
+            "maxItems": 20
           }
         },
         "description": "Accepted only from a platform runtime executor and bound to the exact subject and requirement hashes. Caller or agent declarations never satisfy this schema.",
@@ -2568,6 +2650,7 @@
               "enum": [
                 "deployability-hard-invariant",
                 "platform-fee-conformance",
+                "liquidity-conformance",
                 "routability"
               ]
             },
@@ -2597,6 +2680,7 @@
         "required": [
           "deployability",
           "platformFeeConformance",
+          "liquidityConformance",
           "routability",
           "featured",
           "finality"
@@ -2628,6 +2712,9 @@
             "additionalProperties": false
           },
           "platformFeeConformance": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorVerificationAxisV3"
+          },
+          "liquidityConformance": {
             "$ref": "#/components/schemas/CustomLaunchBehaviorVerificationAxisV3"
           },
           "routability": {
@@ -2708,8 +2795,8 @@
             "items": {
               "$ref": "#/components/schemas/CustomLaunchBehaviorVectorSummaryV3"
             },
-            "minItems": 12,
-            "maxItems": 16
+            "minItems": 16,
+            "maxItems": 20
           },
           "outstandingVectorIds": {
             "type": "array",
@@ -2720,7 +2807,72 @@
             "$ref": "#/components/schemas/CustomLaunchBehaviorClaimAxesV3"
           }
         },
-        "description": "Platform-owned runtime-evidence summary. not_executed means the vectors remain outstanding; it never means verified and cannot be supplied by the API caller.",
+        "description": "Platform-owned runtime-evidence summary. not_executed means the vectors remain outstanding; it never means verified, cannot be supplied by the API caller and blocks wallet-transaction exposure and wallet handoff.",
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorAssuranceAxisV3": {
+        "type": "object",
+        "required": ["status", "basis"],
+        "properties": {
+          "status": {
+            "enum": ["not_verified", "verified", "conditional", "blocked"]
+          },
+          "basis": {
+            "enum": [
+              "behavior-evidence-required",
+              "exact-ten-bps-evidence-required",
+              "liquidity-lifecycle-evidence-required",
+              "exact-runtime-evidence",
+              "mutable-authority-evidence-required",
+              "behavior-vector-failed"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomLaunchBehaviorAssuranceV3": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "authorizationScope",
+          "evidenceAuthority",
+          "behaviorExecution",
+          "mutableAuthorityConditional",
+          "routability",
+          "platformFeeConformance",
+          "liquidityConformance",
+          "safety"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.custom-launch-behavior-assurance.v1"
+          },
+          "authorizationScope": { "const": "exact-launch-provenance-only" },
+          "evidenceAuthority": {
+            "enum": ["platform-runtime-executor", "none"]
+          },
+          "behaviorExecution": { "enum": ["executed", "not_executed"] },
+          "mutableAuthorityConditional": { "type": "boolean" },
+          "routability": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorAssuranceAxisV3"
+          },
+          "platformFeeConformance": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorAssuranceAxisV3"
+          },
+          "liquidityConformance": {
+            "$ref": "#/components/schemas/CustomLaunchBehaviorAssuranceAxisV3"
+          },
+          "safety": {
+            "type": "object",
+            "required": ["status", "basis"],
+            "properties": {
+              "status": { "const": "not_verified" },
+              "basis": { "const": "no-universal-safety-claim" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "description": "Server-authored projection of what the exact per-launch runtime evidence can support. The authorized wallet handoff requires verified behavior, platform-fee, liquidity and routability axes; no safety claim is produced.",
         "additionalProperties": false
       },
       "CustomLaunchProductTruthAxesV3": {
@@ -2901,7 +3053,12 @@
       "SelectedFeeHundredthsOfBipV1": {
         "type": "string",
         "pattern": "^(?:0|[1-9][0-9]{0,5})$",
-        "description": "Intent-bound selected fee from 0 through 999999 hundredths of a bip. In additive mode the effective total is selected+1000; in inclusive mode it is max(selected,1000)."
+        "description": "Derived fee-economics amount from 0 through 999999 hundredths of a bip. This shared output range deliberately permits the additive effective total of 101000 when the applicant selects the maximum 100000 and the separate platform share is 1000."
+      },
+      "ApplicantSelectedFeeHundredthsOfBipV1": {
+        "type": "string",
+        "pattern": "^(?:0|[1-9][0-9]{0,4}|100000)$",
+        "description": "Applicant-selected project fee from 0 through 100000 hundredths of a bip. The API server enforces this cap independently for buy and sell in both accounting modes. The separate Programmable share remains exactly 1000."
       },
       "DirectNativeTargetRolesV1": {
         "type": "object",
@@ -3613,7 +3770,7 @@
         ],
         "properties": {
           "applicantSelectedHundredthsOfBip": {
-            "$ref": "#/components/schemas/SelectedFeeHundredthsOfBipV1"
+            "$ref": "#/components/schemas/ApplicantSelectedFeeHundredthsOfBipV1"
           },
           "projectHundredthsOfBip": {
             "$ref": "#/components/schemas/SelectedFeeHundredthsOfBipV1"
@@ -3850,7 +4007,7 @@
           },
           "liquidityModel": {
             "$ref": "#/components/schemas/DirectNativeLiquidityModelIntentV1",
-            "description": "Current CLI 3.3.6 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
+            "description": "Current CLI 3.3.7 output always includes this exact hash-bound intent. Omission is accepted only for byte-compatible earlier V3 requests and resolves to legacy external concentrated liquidity without inventing a binding claim."
           }
         },
         "allOf": [
@@ -4004,7 +4161,7 @@
             "$ref": "#/components/schemas/FundingSignaturePatchDescriptorV1"
           }
         ],
-        "description": "CLI 3.3.6 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
+        "description": "CLI 3.3.7 uses authorization patch V2. V1 remains accepted only for existing exact request compatibility."
       },
       "Eip3009FundingAuthorizationDescriptorV1": {
         "type": "object",
@@ -5521,7 +5678,7 @@
             "const": false
           }
         },
-        "description": "Revision 3 admission classification after the exact-source static baseline found no hard-blocking code and target-role pair. Evidence duties remain bound and visible without becoming routing, fee, source, indexing or feature claims. Router simulation is still required. This is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
+        "description": "Revision 3 admission classification after the exact-source static baseline found no hard-blocking code and target-role pair. Evidence duties remain bound and visible without becoming routing, fee, source, indexing or feature claims. Router simulation and server-verified per-launch behavior, platform-fee and liquidity evidence are still required before wallet handoff. This is not an audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee.",
         "additionalProperties": false
       },
       "StaticBaselineSourceLocationV1": {
@@ -5996,7 +6153,9 @@
               "observationWindow",
               "onchain",
               "walletTransaction",
-              "simulation"
+              "simulation",
+              "behaviorEvidence",
+              "behaviorAssurance"
             ],
             "properties": {
               "schemaVersion": {
@@ -6012,6 +6171,8 @@
                 "type": "object",
                 "required": [
                   "kind",
+                  "walletHandoffUrl",
+                  "expiresAt",
                   "transaction",
                   "graphCommitment",
                   "artifactHash",
@@ -6022,6 +6183,16 @@
                 "properties": {
                   "kind": {
                     "const": "send-router-transaction"
+                  },
+                  "walletHandoffUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "First-party review page for this exact authorized resource."
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Expiry of the exact prepared Router permit and wallet handoff."
                   },
                   "transaction": {
                     "$ref": "#/components/schemas/ExactWalletTransactionV3"
@@ -6074,6 +6245,12 @@
               },
               "simulation": {
                 "$ref": "#/components/schemas/ExactSimulationEvidenceV3"
+              },
+              "behaviorEvidence": {
+                "$ref": "#/components/schemas/CustomLaunchBehaviorEvidenceSummaryV3"
+              },
+              "behaviorAssurance": {
+                "$ref": "#/components/schemas/CustomLaunchBehaviorAssuranceV3"
               }
             },
             "additionalProperties": false
@@ -6215,7 +6392,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Durable lifecycle state. action_required carries a deterministic static-baseline report and bound remediation for an exact blocking target-role condition; it is not a wallet action or a request for manual approval. Only awaiting_funding_authorization and authorized expose separate controller-wallet handoffs.",
+            "description": "Durable lifecycle state. action_required carries a deterministic static-baseline report and bound remediation for an exact blocking target-role condition; it is not a wallet action or a request for manual approval. awaiting_funding_authorization can request a separate funding signature. authorized can expose the Router wallet transaction only after the API server has verified all required per-launch behavior, platform-fee and declared-liquidity evidence.",
             "enum": [
               "received",
               "validating",
@@ -6292,7 +6469,7 @@
                 "type": "null"
               }
             ],
-            "description": "HTTPS controller-wallet handoff for the current explicit signing stage. It is absent or null outside a wallet action and never grants signing authority to the API key."
+            "description": "HTTPS controller-wallet handoff for the current explicit signing stage. It is absent or null until the API server's per-launch evidence gate is verified, remains absent outside a wallet action and never grants signing authority to the API key."
           },
           "expiresAt": {
             "oneOf": [
@@ -6315,7 +6492,7 @@
                 "type": "null"
               }
             ],
-            "description": "Null while simulating. The signed permit and exact wallet transaction are exposed only after the resource reaches authorized."
+            "description": "Null while simulating. CLI, client or model output cannot advance this state. The signed permit and exact wallet transaction are exposed only after the API server verifies required per-launch behavior, platform-fee and declared-liquidity evidence and the resource reaches authorized."
           },
           "failure": {
             "oneOf": [

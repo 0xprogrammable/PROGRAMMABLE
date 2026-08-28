@@ -274,12 +274,10 @@ export function validateDirectNativeProfileSelection(value) {
       : {}),
     applicantSelectedBuyHundredthsOfBip: canonicalApplicantSelectedFee(
       value.applicantSelectedBuyHundredthsOfBip,
-      value.accountingMode,
       "direct-native launchProfile.applicantSelectedBuyHundredthsOfBip",
     ),
     applicantSelectedSellHundredthsOfBip: canonicalApplicantSelectedFee(
       value.applicantSelectedSellHundredthsOfBip,
-      value.accountingMode,
       "direct-native launchProfile.applicantSelectedSellHundredthsOfBip",
     ),
   };
@@ -1511,13 +1509,10 @@ function canonicalUint64(value, label, allowZero = true) {
   return normalized;
 }
 
-function canonicalApplicantSelectedFee(value, accountingMode, label) {
+function canonicalApplicantSelectedFee(value, label) {
   const normalized = canonicalUint(value, label);
-  if (BigInt(normalized) > 999_999n) {
-    throw new TypeError(`${label} must be between 0 and 999999`);
-  }
-  if (accountingMode === "additive-platform-share" && BigInt(normalized) > 998_999n) {
-    throw new TypeError(`${label} must not exceed 998999 in additive-platform-share mode`);
+  if (BigInt(normalized) > 100_000n) {
+    throw new TypeError(`${label} must be between 0 and 100000`);
   }
   return normalized;
 }

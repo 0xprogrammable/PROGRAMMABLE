@@ -12,16 +12,18 @@ A hook is a smart contract that a Uniswap v4 pool calls at defined points in a t
 
 ## Local packaging and API availability
 
-Build and test the exact project. The public `programmable-launch` 3.3.6 CLI derives the deterministic source manifest,
+Build and test the exact project. The public `programmable-launch` 3.3.7 CLI derives the deterministic source manifest,
 graph bundle, CREATE2 locators, evidence digests and exact-source verification bundle against the [Custom Launch API
 schema](../developers/custom-launch.md). The default `programmable.direct-native-hook-graph-profile.v3` profile uses
 `profileRevision: 3`, `profileVersion: 3.3.0` and exact `solc 0.8.26+commit.8a97fa7a`. It also binds canonical project
 name, symbol, description, an exact source-bound image and links into the request and graph hashes. Exact `3.2.0`, `3.1.0` and `3.0.0`
 requests remain readable and byte-identical retryable under their original immutable policies, and revision 2 remains
 compatible. Profile `3.2.0` keeps its original nullable-image metadata semantics.
-Run `pack`, `validate --remote`, `submit` and `status --watch --until authorized` for the byte-identical public V3
-request. Stop for every explicit wallet handoff, then resume `status --watch --until finalized`. The API key and CLI
-never sign or broadcast.
+Run `pack`, `validate --remote`, `submit` and `status --watch --until authorized` for the byte-identical current V3.3
+request. The CLI and preflight prepare and classify exact bytes; the API server makes the durable decision and exposes
+no wallet handoff until the per-launch behavior, fee and liquidity evidence required by the selected lane is verified.
+Stop for every explicit wallet handoff, then resume `status --watch --until finalized`. The API key and CLI never sign
+or broadcast.
 
 Profile 3.3.0 applies role-aware exact-source static admission. Exactly seven objective rules hard-block deployment;
 proxy/delegatecall, mint/tax/pause, liquidity and return-delta surfaces require evidence instead of categorical
@@ -29,11 +31,13 @@ rejection. A hard-block code-and-role match moves the request to `action_require
 Router simulation is mandatory before authorization. If action is required, keep the request ID and contact support
 without sending the API key.
 
-Existing durable resources record the API's declared bundle checks. `prepared` means the exact artifact exists while the
+Existing durable resources record server-authored bundle and evidence checks. `prepared` means the exact artifact exists while the
 signed permit and wallet transaction remain null. An already `authorized` resource supplies the permit-attached
 transaction for separate controller-wallet review. Exact-source provider status begins only after finality and never
 revises it. Static admission and simulation are not an audit or a guarantee of safety, honeypot resistance, liquidity,
-tradeability or fee behavior. The API does not sign or broadcast, and the API key is not wallet authority.
+tradeability or fee behavior. A 10 bps claim exists only for a fee-certified profile or adapter and its exact stamped
+PoolKey; arbitrary custom hooks are not automatically fee-enforced. The API does not sign or broadcast, and the API key
+is not wallet authority.
 
 ## Release binding
 

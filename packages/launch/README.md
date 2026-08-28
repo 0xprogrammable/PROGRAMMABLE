@@ -8,16 +8,16 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.3.6`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.3.7`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
 The release includes `npm-shrinkwrap.json` so the runtime dependency closure is integrity-pinned. Release operators
@@ -26,8 +26,9 @@ published bytes, not a substitute for verifying the downloaded asset.
 
 The public CLI source and package are licensed under the included MIT license.
 
-The immutable V1 package remains available only for compatibility preparation and reads. New V1 submissions are
-read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY`:
+The immutable V1 package remains available only for compatibility preparation and reads. New V1 and V2 submissions
+are read-only fenced with non-retryable `CUSTOM_LAUNCH_V1_READ_ONLY` and `CUSTOM_LAUNCH_V2_READ_ONLY`. Existing V1
+and V2 resources remain readable through their original status routes:
 
 ```sh
 npm install --global \
@@ -41,11 +42,13 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-Package `3.3.6` supports production general profile
+Package `3.3.7` supports production general profile
 `programmable.direct-native-hook-graph.v1` version `3.3.0`. New packs use complete-metadata `3.3.0`; exact `3.2.0`
 requests retain their original permissive metadata semantics, while metadata-absent `3.1.0`, `3.0.0`, and `2.0.0`
 requests remain reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
-is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable.
+is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable, but their create
+routes are closed. The CLI rejects legacy submit attempts locally before reading request bytes, credentials, state,
+or network.
 
 The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook
 and initializer roles are distinct. The token, hook and all other targets are project-owned exact artifacts. All valid
@@ -56,25 +59,29 @@ and project values. Static pool fees and the `0x800000` dynamic-fee sentinel are
 
 Funding can be absent, carried as exact native value on the separately reviewed Router transaction, or use an unsigned
 USDC EIP-3009 descriptor with an exact v2 nonce+r+s+v ABI-path patch. The connected wallet separately signs EIP-3009 data when that
-mode is selected. Only after exact-source graph admission and Router simulation does the website present the Router
-transaction. The CLI never accepts an API key argument, signs, requests approval, or broadcasts either wallet action.
+mode is selected. The website presents the Router transaction only after the API server has verified the required
+per-launch behavior, platform-fee, liquidity, and routability evidence for the selected launch lane. Missing,
+unavailable, conditional, or failed required evidence cannot produce a wallet handoff. The CLI never accepts an API
+key argument, decides authorization, signs, requests approval, or broadcasts either wallet action.
 
-Revision 3 admission binds exact source, compiler output, the complete graph and a role-aware static report. Findings
-outside a blocking code and target-role pair remain bound and visible warnings; a blocking match stops before Router
-simulation with `action_required`. Admission and simulation are not an audit or a guarantee of safety, honeypot
-absence, liquidity, tradeability, or fee behavior.
+Revision 3 preparation binds exact source, compiler output, the complete graph and a role-aware static report. Local
+validation, remote preflight, model output, and client-side findings are preparation only. The API server is the
+authorization decision point and derives required evidence from the selected launch lane. No stage is a universal
+audit or guarantee of safety, honeypot absence, liquidity, tradeability, or fee behavior.
 
 ## Platform fee policy
 
 The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
 `productionLaunchAuthorized: true`.
 
-Every V3 request must bind and disclose a Programmable share of 1,000 parts per 1,000,000 of its declared assessment
+Every V3 request must bind and disclose a declared Programmable share of 1,000 parts per 1,000,000 of its assessment
 basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is additive or inclusive, and the server recomputes the
 declared buy and sell economics. Its exact claim binding is controlled by
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The exact binding is part of the launch intent, but the revision 3
-admission receipt carries `feeBehaviorClaim: false`: it does not certify or enforce how arbitrary custom code charges
-or routes fees on later swaps. Projects and users must inspect the exact implementation.
+`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. That binding is a request commitment, not proof of runtime enforcement:
+the revision 3 admission receipt carries `feeBehaviorClaim: false`. Ten bps is enforced only for fee-certified profiles
+or adapters and only for the stamped PoolKey after launch-specific server evidence verifies the fee path. Arbitrary
+custom hooks are not automatically fee-enforced. Projects and users must inspect the exact implementation and
+launch-specific server evidence.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -118,7 +125,7 @@ no key-valued flag. Authenticated traffic is fixed to the exact origin `https://
 CLI has no API-origin override. Both remote preflight and V3 submit require the exact public capability contract before
 the CLI loads the key. Tests replace the transport implementation without redirecting a production key.
 
-Preflight is a support and evidence classification, not a launch. A conforming
+Preflight is a support and evidence classification, not a launch or authorization. A conforming
 `programmable.custom-launch-preflight.v1` response binds `requestHash` to the server's domain-separated canonical
 JCS digest of the parsed V3 request, while the CLI separately retains the raw launch-file SHA-256 for byte-race and
 retry-journal integrity. The response also binds profile revision and server time and reports
@@ -127,6 +134,8 @@ one of `supported`, `supported_with_warnings`, `needs_evidence`, or `unsupported
 baseline and typed remediation. The CLI rejects a response unless it explicitly confirms `quotaConsumed: false`,
 `nonceAllocated: false`, `persisted: false`, `walletSignatureRequiredLater: true`, and
 `walletBroadcastByService: false`. Unknown additive capability and preflight fields remain present in CLI JSON.
+Neither a favorable preflight disposition nor local checks can approve wallet handoff. The server must later bind and
+verify the launch-specific behavior, fee, liquidity, and routability evidence required by the selected lane.
 
 Use `examples/direct-native-v3-no-broadcast/README.md` shipped with the release for a no-broadcast cold-room
 rehearsal. It invokes real solc, uses exact sources and artifacts, and stops after byte-reproducible `pack` and
@@ -136,14 +145,16 @@ Save the API key only as the encrypted environment secret `PROGRAMMABLE_API_KEY`
 secret store. Put the literal text `$PROGRAMMABLE_API_KEY` in agent setup or chat, never the key. On macOS, the fallback
 secret-store lookup is the Keychain service `api.programmable.market`, account `PROGRAMMABLE_API_KEY`.
 
-V3 `submit` routes only to `/v3/custom-launches`. It never falls back to an older create route. Preserve the exact request bytes and
+V3 `submit` routes only to `/v3/custom-launches`. V1 and V2 submit are rejected locally and their server create routes
+are non-retryable write fences. The CLI never falls back to an older create route. Preserve the exact request bytes and
 idempotency key across timeout, `429`, or `503` retries and honor `Retry-After`. At `authorized`, stop the agent flow:
 the controller reviews the exact `walletTransaction` and signs it in a separate wallet flow. After a human broadcast,
 use `status REQUEST_UUID --watch --until finalized`. V3 is the default status route; use `--api-version 1` or
 `--api-version 2` only when reading a legacy request. `finalized`, `failed`, and `cancelled` always stop polling.
 
 When the API returns them, `submit` and `status` promote `actionRequired`, the safe `walletHandoffUrl`, `expiresAt`,
-and `secondsRemaining` alongside the complete resource. Open the handoff in the separate website wallet flow. These
+and `secondsRemaining` alongside the complete resource. These handoff fields may appear only after the server has
+verified every evidence axis required for the selected launch lane. Open the handoff in the separate website wallet flow. These
 fields do not give the CLI signer or broadcaster authority, and an expired handoff must not be reused.
 
 ```sh
@@ -252,15 +263,16 @@ The V3 `launchProfile` uses schema
 `inclusive-selected-total`; binds either `executed-gross-declared-quote` with `declared-quote-currency` or
 `settled-input-before-platform-fee` with `input-currency`; selects
 `immutable-payout-recipient` or `claim-authority-selected-recipient`; and supplies both applicant-selected fee values.
-Those fee values are decimal hundredths of a bip from `0` through `999999`; additive mode stops at `998999` so the
-additional `1000` platform units fit the denominator. `payoutRecipient` is present only for the immutable mode and
+Those applicant-selected fee values are decimal hundredths of a bip from `0` through `100000` for both accounting
+modes. The server enforces the same 1,000 bps / 10% applicant cap. The separate `1000` platform units are added in
+additive mode or included in the selected total in inclusive mode. `payoutRecipient` is present only for the immutable mode and
 must equal `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The EIP-3009 mode additionally requires the exact
 `fundingAuthorization` and unsigned `fundingSignaturePatch` top-level objects; the other funding modes forbid them.
 For new requests the patch input contains exactly `targetId`, `nonceArgumentPath`, `rArgumentPath`, `sArgumentPath`,
 and `vArgumentPath`. Each path is a non-empty array of zero-based ABI indices: its first index selects a top-level
 initializer input and later indices descend only static tuples or fixed-size static arrays. The four distinct zero
 leaves must resolve to `bytes32`, `bytes32`, `bytes32`, and `uint8`. The CLI derives and proves them from the compiled
-ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.6
+ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.7
 schema. Legacy r/s/v-only v1 descriptors remain readable for exact retries and emit
 `FUNDING_SIGNATURE_PATCH_V1_LEGACY`, but new integrations must use v2.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
@@ -307,12 +319,12 @@ codes include `PACK_CONFIG_V3_MISSING`,
 `PACK_CONFIG_V3_INVALID`, `FUNDING_AUTHORIZATION_PATCH_PATH_INVALID`, and the legacy migration code
 `FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL`. Raw source-string indicators never become hard safety findings; a legacy
 descriptor may instead return nonblocking `FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED` or
-`FUNDING_NONCE_CONFORMANCE_UNPROVEN`. Exact Router simulation remains the execution gate.
+`FUNDING_NONCE_CONFORMANCE_UNPROVEN`. Exact Router simulation is one required input, not authorization by itself.
 
 V3 deterministic packaging permits project-owned proxy or delegating hook runtimes. Exact source, compiler, config,
 runtime, graph, and request binding proves reproducibility, not safety approval. Role-aware platform admission,
-Router simulation, wallet authorization, deployment, and availability remain separate gates; admission does not
-certify fee behavior.
+server-executed behavior, fee, liquidity and routability evidence, wallet authorization, deployment, and availability
+remain separate gates; admission does not certify fee behavior.
 
 The deterministic source-content digest is SHA-256 of RFC 8785/JCS bytes for
 `{schemaVersion:"programmable.source-bundle-content.v1",entries:[manifest fields plus contentBase64]}`. Entries are

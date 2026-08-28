@@ -24,7 +24,7 @@ export const programmablePublicOpenApi = {
     summary:
       "Verified launch discovery plus public wallet-owned V3 general-hook creation on Ethereum.",
     description:
-      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable and V1 creation remains read-only with non-retryable 409 CUSTOM_LAUNCH_V1_READ_ONLY. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
+      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public V3.3 contract and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -52,7 +52,7 @@ export const programmablePublicOpenApi = {
     {
       name: "Custom launch",
       description:
-        "Public wallet-bound V3 general-hook creation plus retained V2 and V1 history. Manage API keys at programmable.market/developers/api-keys.",
+        "Fresh wallet-bound writes use V3.3. V2 and V1 remain available for existing history only. Manage API keys at programmable.market/developers/api-keys.",
     },
   ],
   paths: {
@@ -276,7 +276,7 @@ export const programmablePublicOpenApi = {
         deprecated: true,
         summary: "V1 launch creation is read-only",
         description:
-          "The V1 creation route is retained only as an explicit write fence. After successful API-key authentication and scope checks it returns 409 CUSTOM_LAUNCH_V1_READ_ONLY before reading an idempotency key or request body. This response is non-retryable. Use the live V1 GET operations for existing history and the standalone public V2 contract for new launches.",
+          "The V1 creation route is retained only as an explicit write fence. After successful API-key authentication and scope checks it returns 409 CUSTOM_LAUNCH_V1_READ_ONLY before reading an idempotency key or request body. This response is non-retryable. Use the live V1 GET operations for existing history and the standalone public V3.3 contract for fresh writes.",
         tags: ["Custom launch"],
         servers: [
           {
@@ -303,7 +303,7 @@ export const programmablePublicOpenApi = {
                   schemaVersion: "programmable.api-error.v1",
                   error: {
                     code: "CUSTOM_LAUNCH_V1_READ_ONLY",
-                    message: "V1 launch creation is read-only; use the fee-enforced V2 launch profile",
+                    message: "V1 launch creation is read-only; use the public V3.3 launch contract",
                     requestId: "018f1f8e-7d93-7c2f-8d7f-e114942e7f25",
                   },
                 },
@@ -410,7 +410,7 @@ export const programmablePublicOpenApi = {
         scheme: "bearer",
         bearerFormat: "pm_live_<22-char-key-id>_<43-char-secret>",
         description:
-          "Wallet-bound API key managed at https://programmable.market/developers/api-keys. Keys can use authorized V2 operations and read their wallet-owned V1 history. Keys are not wallets and cannot sign or broadcast transactions.",
+          "Wallet-bound API key managed at https://programmable.market/developers/api-keys. Keys can create through V3.3 and read wallet-owned V2 and V1 history. A create scope does not override either legacy write fence. Keys are not wallets and cannot sign or broadcast transactions.",
       },
     },
     schemas: {
@@ -1659,16 +1659,20 @@ export const programmablePublicOpenApi = {
       retryable: false,
     },
     v2ReleaseCandidate: {
-      status: "promoted-to-public",
+      status: "retired-to-read-compatibility",
       release: "2.0.0",
-      publicAuthorization: true,
+      publicAuthorization: false,
       openApiUrl: `${SITE_ORIGIN}/openapi/custom-launch-v2.json`,
     },
     v2: {
-      status: "live",
-      createHttpStatus: 202,
-      replayHttpStatus: 200,
-      retryAfter: "honor-on-429-or-503",
+      reads: "live",
+      create: "read-only",
+      createHttpStatus: 409,
+      createErrorCode: "CUSTOM_LAUNCH_V2_READ_ONLY",
+      retryable: false,
+      preparedAndSimulatingReads: "observation-only",
+      readMayAuthorize: false,
+      authorizedAndSubmittedReconciliation: "bounded",
       openApiUrl: `${SITE_ORIGIN}/openapi/custom-launch-v2.json`,
     },
     v3: {
@@ -1676,6 +1680,7 @@ export const programmablePublicOpenApi = {
       profileId: "programmable.direct-native-hook-graph.v1",
       profileRevision: 3,
       profileVersion: "3.3.0",
+      freshWritesOnly: true,
       compatibleProfileVersions: ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
       productionLaunchAuthorized: true,
       createHttpStatus: 202,
@@ -1697,13 +1702,28 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "Public V3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. V2 and V1 history remain readable and V1 creation remains write-fenced. Exact-source provider verification runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+      "Fresh V3.3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. V2 and V1 history remain readable and both legacy creation routes remain write-fenced. CLI, client and model output is preparation only; the API server withholds the wallet transaction unless required per-launch behavior, platform-fee and liquidity evidence is server-verified. Exact-source provider verification runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+  },
+  "x-programmable-wallet-authorization-gate": {
+    decisionAuthority: "api-server",
+    clientChecks: "preparation-only",
+    localOrModelApprovalAccepted: false,
+    walletHandoffRequiresVerifiedEvidence: true,
+    minimumWalletHandoffEvidenceStatus: "verified",
+    requiredServerEvidenceAxes: ["behavior", "platform_fee", "liquidity"],
+    configurationIsExecutionEvidence: false,
+    notConfiguredDisposition: "blocks_wallet_handoff",
+    unavailableDisposition: "blocks_wallet_handoff",
+    walletHandoffFailureCode: "BEHAVIOR_EVIDENCE_NOT_VERIFIED",
+    feeBehaviorClaim: false,
+    tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence: true,
+    tenBpsClaimScope: "exact-launch-and-stamped-poolkey-only",
   },
   "x-programmable-api-scopes": {
     "custom-launch:create": {
-      state: "v1-write-fenced-v3-live",
+      state: "v1-v2-write-fenced-v3.3-live",
       description:
-        "Authorized public V3 general-hook creation is live. V2 remains compatible and V1 POST remains non-retryable CUSTOM_LAUNCH_V1_READ_ONLY.",
+        "Fresh writes use public V3.3. V2 and V1 POST remain non-retryable write fences with CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY.",
     },
     "custom-launch:read": {
       state: "grantable",

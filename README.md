@@ -41,8 +41,10 @@ contract workspace, the public read model and the evidence that binds what the p
 
 Classic is the direct launch model for a fixed supply token, a permanently locked ETH pool and configurable creator
 rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or
-execution graph. Public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and
-V1 history remain readable, and V1 POST is read-only.
+execution graph. Public V3.3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2
+and V1 history and schemas remain readable, while fresh authenticated POSTs are permanently read-only with
+non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY` responses. Only V3.3 accepts new
+submissions.
 Prediction Markets is a separately versioned Uniswap v4 launch model for onchain outcome markets. Its current
 capabilities, contracts and release evidence live in the public
 [`Prediction-Markets`](https://github.com/0xprogrammable/Prediction-Markets) repository.
@@ -137,10 +139,10 @@ provider availability or onchain lifecycle completion.
 | Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
 | Wallet-owned V1 launch reads | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
 | Custom Launch API readiness  | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                  |
-| Custom Launch CLI 3.3.6      | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz) |
+| Custom Launch CLI 3.3.7      | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz) |
 | Custom Launch CLI 1.0.1      | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Custom Launch V1 OpenAPI     | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
-| Custom Launch V2 OpenAPI     | [V2 request and read compatibility](https://programmable.market/openapi/custom-launch-v2.json)             |
+| Custom Launch V2 OpenAPI     | [V2 reads, schemas and write fence](https://programmable.market/openapi/custom-launch-v2.json)             |
 | Custom Launch V3 OpenAPI     | [live general-hook creation and lifecycle contract](https://programmable.market/openapi/custom-launch-v3.json) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
@@ -150,11 +152,13 @@ Ethereum contract addresses and integration data should come from the versioned 
 token names or third-party metadata. For Prediction Markets, use the canonical repository for the current networks,
 supported market types, economics, resolution rules, contract addresses and release evidence.
 
-V1 list and single-resource launch reads remain live for existing wallet-owned requests. V1 POST is read-only and
-returns non-retryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Public V3 creation, list and single-resource reads are the
-current production contract; V2 remains available for existing resources. Runtime trust roots, exact-source
-reconstruction, role-aware static admission and Router simulation still fail closed per request. Admission is not an
-audit or a safety, honeypot, liquidity, tradeability, or fee-behavior guarantee. Legacy Registry and GitHub submission
+V2 and V1 list and single-resource reads remain live for existing wallet-owned requests. Fresh POSTs return
+non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 is the current
+production submission contract. CLI and preflight checks prepare and classify exact bytes, while the API server makes
+the durable decision and exposes no wallet handoff until the per-launch behavior, fee and liquidity evidence required
+by the selected lane is verified. A 10 bps claim applies only to a fee-certified profile or adapter and its exact
+stamped PoolKey; arbitrary Custom hooks are not automatically fee-enforced. No admission result is an audit or a
+universal safety, honeypot, liquidity, tradeability or fee-behavior guarantee. Legacy Registry and GitHub submission
 intake is closed.
 
 ## Related repositories

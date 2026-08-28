@@ -7,8 +7,6 @@ import {
   CREATE_PATH_V1,
   CREATE_PATH_V2,
   CREATE_PATH_V3,
-  CREATE_REQUEST_SCHEMA_V1,
-  CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
   DIRECT_NATIVE_PROFILE_ID,
   DIRECT_NATIVE_PROFILE_REVISION,
@@ -165,7 +163,12 @@ export async function submitLaunch(options) {
     launchPath,
     configPath: options.configPath,
   });
-  const requestPath = createPathForRequestSchema(validation.schemaVersion);
+  if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3) {
+    throw new TypeError(
+      `LEGACY_SUBMISSION_READ_ONLY: V1 and V2 launch creation are read-only; submit a ${CREATE_REQUEST_SCHEMA_V3} request built for profile version ${DIRECT_NATIVE_PROFILE_VERSION}`,
+    );
+  }
+  const requestPath = CREATE_PATH_V3;
   const requestBytes = Buffer.from(await (options.readLaunchBytesImpl ?? readFile)(launchPath));
   const requestSha256 = sha256Digest(requestBytes);
   if (requestSha256 !== validation.requestSha256) {
@@ -1012,13 +1015,6 @@ function productionApiOrigin(value) {
   throw new TypeError(
     `API origin is fixed to ${API_ORIGIN}; test network behavior through an injected fetch implementation`,
   );
-}
-
-function createPathForRequestSchema(schemaVersion) {
-  if (schemaVersion === CREATE_REQUEST_SCHEMA_V1) return CREATE_PATH_V1;
-  if (schemaVersion === CREATE_REQUEST_SCHEMA_V2) return CREATE_PATH_V2;
-  if (schemaVersion === CREATE_REQUEST_SCHEMA_V3) return CREATE_PATH_V3;
-  throw new TypeError("launch request schema does not map to a Custom Launch API route");
 }
 
 function createPathForApiVersion(value) {

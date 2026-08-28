@@ -31,7 +31,7 @@ const customLaunchPreflightUrl =
 const customLaunchFinalizedMetadataUrl =
   "https://api.programmable.market/v3/finalized-custom-launches";
 const customLaunchCliReleaseUrl =
-  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.6/programmable-launch-3.3.6.tgz";
+  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz";
 
 const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
@@ -54,7 +54,7 @@ export function buildDeveloperDocsMarkdown(): string {
   return [
     "# Programmable developer APIs",
     "",
-    "> Public wallet-owned V3 general-hook launch creation plus verified Router-stamped Programmable provenance on Ethereum.",
+    "> Public wallet-owned V3.3 general-hook launch creation plus verified Router-stamped Programmable provenance on Ethereum.",
     "",
     `Custom Launch API: ${customLaunchApiOrigin}`,
     `Manage API keys: ${apiKeysUrl}`,
@@ -80,25 +80,27 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "## Custom Launch API availability",
     "",
-    `Public V3 creation, list and single-resource reads are live for wallet-bound requests on Ethereum Mainnet at ${customLaunchApiOrigin}/v3/custom-launches. V2 and V1 history remain readable; V1 creation stays read-only with non-retryable \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. Legacy Registry and GitHub submission intake is closed.`,
+    `Public V3.3 creation, list and single-resource reads are live for wallet-bound requests on Ethereum Mainnet at ${customLaunchApiOrigin}/v3/custom-launches. V2 and V1 history and schemas remain readable; fresh creation returns non-retryable \`409 CUSTOM_LAUNCH_V2_READ_ONLY\` and \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.`,
     `The exact public request, lifecycle, idempotency and wallet-handoff contract is ${customLaunchApiV3OpenApiUrl}.`,
-    "The default profile uses `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and `profileVersion: 3.3.0`; its selection binding uses `programmable.direct-native-hook-graph-profile-selection-binding.v3`. It requires canonical project name, symbol, description, an exact source-bound image and sorted public links. The CLI binds their digest into the graph and launch intent. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and byte-identical retryable under their original immutable policies; revision 2 also remains compatible. Profile 3.2.0 keeps its original nullable-image metadata semantics. The current profile accepts a project-owned token, a project-owned hook, native or ERC-20 quote currency, all fourteen structurally valid Uniswap v4 permission bits and an exact 3-16 target graph. Structural support is not universal compatibility or a safety promise.",
-    "Profile 3.3.0 uses role-aware exact-source static admission with exactly seven objective hard-block rules: runtime CALLCODE, source or runtime SELFDESTRUCT, definitively missing or invalid callback authentication, a literal wrong PoolManager, and a missing enabled callback implementation. Proxy/delegatecall, mint/tax/pause/transfer controls, liquidity custody or locking, external dependencies and return-delta custom accounting remain evidence duties rather than categorical deployment blocks. Every finding remains bound and visible. A hard-block code-and-role match returns `action_required`; other findings populate needs-evidence or warning codes. There is no manual project allowlist. A final Router simulation is mandatory before permit authorization. Admission and simulation are not an audit or a guarantee of safety, honeypot resistance, liquidity, tradeability or fee behavior.",
+    "V2 detail reads are observation-only while an existing request is prepared or simulating: GET does not advance simulation or authorization and cannot expose a new walletTransaction. Existing authorized and submitted reconciliation and finalized reads remain available.",
+    "The default profile uses `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and `profileVersion: 3.3.0`; its selection binding uses `programmable.direct-native-hook-graph-profile-selection-binding.v3`. It requires canonical project name, symbol, meaningful description, an exact non-empty source-bound image, one website and one X profile; other public links are optional. The CLI binds their digest into the graph and launch intent. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and byte-identical retryable under their original immutable policies; revision 2 also remains compatible. Profile 3.2.0 keeps its original nullable-image metadata semantics. The current profile accepts a project-owned token, a project-owned hook, native or ERC-20 quote currency, all fourteen structurally valid Uniswap v4 permission bits and an exact 3-16 target graph. Structural support is not universal compatibility or a safety promise.",
+    "Profile 3.3.0 uses role-aware exact-source static admission with exactly seven objective hard-block rules: runtime CALLCODE, source or runtime SELFDESTRUCT, definitively missing or invalid callback authentication, a literal wrong PoolManager, and a missing enabled callback implementation. Proxy/delegatecall, mint/tax/pause/transfer controls, liquidity custody or locking, external dependencies and return-delta custom accounting remain evidence duties rather than categorical deployment blocks. Every finding remains bound and visible. A hard-block code-and-role match returns `action_required`; other findings populate needs-evidence or warning codes. There is no manual project allowlist. A final Router simulation is mandatory, but the API server also verifies the per-launch behavior, fee and liquidity evidence required by the selected lane before wallet handoff. Local checks, preflight and simulation are not the server decision, an audit or a guarantee of safety, honeypot resistance, liquidity, tradeability or fee behavior.",
     "With no hard-blocking match, server-authored `platformAdmission` binds the report SHA-256, needs-evidence and warning codes with `disposition: no_blocking_static_finding`, requires Router simulation and carries `safetyClaim: false` and `feeBehaviorClaim: false`. A hard-blocking match instead exposes the exact static report through `action_required`.",
-    "Every V3 request must bind and disclose a 10 bps Programmable share, additive or included in the selected total. This is a request-bound launch policy, not a certification or enforcement of later swap behavior: the revision-3 admission status carries `feeBehaviorClaim: false`. Funding may be absent, use exact native Router transaction value, or use a separate unsigned EIP-3009 descriptor. Funding signing and Router sending remain separate explicit wallet actions; neither is automatic.",
+    "A 10 bps Programmable share applies only to a fee-certified profile or adapter and its exact stamped PoolKey after server-authored per-launch fee-behavior evidence is verified. Arbitrary custom hooks are not automatically fee-enforced, and the open arbitrary-hook lane carries no Programmable fee claim. Funding may be absent, use exact native Router transaction value, or use a separate unsigned EIP-3009 descriptor. Funding signing and Router sending remain separate explicit wallet actions; neither is automatic.",
+    "Where a selected lane uses applicant buy or sell rates, each rate is capped at 100,000 hundredths of a bip, equal to 1,000 bps or 10%. The API server enforces this cap in additive-platform-share and inclusive-selected-total modes. The separate platform value is 1,000 hundredths of a bip, equal to 10 bps, and creates a claim only in the fee-certified lane.",
     "",
     "Verify the pinned public CLI checksum before installation:",
     "```sh",
     'programmable_cli_dir="$(mktemp -d)"',
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz" ${customLaunchCliReleaseUrl}`,
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.6.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.6.tgz.sha256)',
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.6.tgz"',
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" ${customLaunchCliReleaseUrl}`,
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"',
     "programmable-launch --version",
     "```",
-    "Continue only after the checksum reports `OK` and the version is `3.3.6`. The package is `@programmable/launch` and the binary is `programmable-launch`.",
+    "Continue only after the checksum reports `OK` and the version is `3.3.7`. The package is `@programmable/launch` and the binary is `programmable-launch`.",
     "",
-    "Use `pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until finalized`. Remote validation repeats local byte-identical validation, fails closed on profile, revision, version, route or authentication drift, and preflights those exact bytes without consuming launch quota, allocating a nonce or persisting a launch. Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`. Wallet is a separate connected-controller action, not a CLI command. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. The CLI never signs or broadcasts.",
+    "Use `pack -> validate --remote -> submit -> server evidence decision -> status --watch --until authorized -> wallet -> status --watch --until finalized`. Remote validation repeats local byte-identical validation, fails closed on profile, revision, version, route or authentication drift, and preflights those exact bytes without consuming launch quota, allocating a nonce or persisting a launch. CLI and preflight results are preparation, not the launch decision. The API server exposes no wallet handoff until it verifies every per-launch behavior, fee and liquidity evidence axis required by the selected lane. Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`. Wallet is a separate connected-controller action, not a CLI command. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. The CLI never signs or broadcasts.",
     "",
     `Connect a wallet and create a key at ${apiKeysUrl}. Store the one-time \`pm_live_\` secret only as the encrypted environment secret \`PROGRAMMABLE_API_KEY\` or in the OS secret store. Put only \`$PROGRAMMABLE_API_KEY\` in chat, prompts and agent setup.`,
     "",
@@ -106,11 +108,11 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "Keys expire after 90 days by default, may be issued for at most 366 days, and are limited to 10 active keys per wallet.",
     "",
-    "An API key is not a wallet or private key. Existing durable resources record the platform's manifest, graph, attestation, exact-source admission and permit checks. `prepared` contains an exact artifact but no wallet transaction. `authorized` contains the permit-attached wallet transaction, which the controller wallet reviews, signs and broadcasts separately. The API key and CLI never sign or broadcast. Programmable does not audit the project or attest safety.",
+    "An API key is not a wallet or private key. Existing durable resources record server-authored manifest, graph, evidence, admission and permit checks. `prepared` contains an exact artifact but no wallet transaction. `authorized` is possible only after the selected lane's required behavior, fee and liquidity evidence is verified and contains the permit-attached wallet transaction, which the controller wallet reviews, signs and broadcasts separately. The API key and CLI never sign or broadcast. Programmable does not audit the project or attest safety.",
     "",
     "### Public V3 submission",
     "",
-    `GET ${customLaunchCapabilitiesUrl} is public and non-authorizing. POST ${customLaunchPreflightUrl} requires the wallet-bound Bearer key and returns programmable.custom-launch-preflight.v1 with disposition, launch eligibility, evidence tier, riskClassification, platform-owned behaviorEvidence, all six productTruthAxes, typed finding codes, static baseline and remediations. A not_executed behavior vector remains outstanding; it is not a caller-declared pass. Its fixed fields are quotaConsumed: false, nonceAllocated: false, persisted: false, walletSignatureRequiredLater: true and walletBroadcastByService: false.`,
+    `GET ${customLaunchCapabilitiesUrl} is public and non-authorizing. POST ${customLaunchPreflightUrl} requires the wallet-bound Bearer key and returns programmable.custom-launch-preflight.v1 with disposition, launch eligibility, evidence tier, riskClassification, platform-owned behaviorEvidence, all six productTruthAxes, typed finding codes, static baseline and remediations. A not_executed or needs_evidence result remains outstanding; it is not a caller-declared pass and cannot authorize a wallet handoff. Its fixed fields are quotaConsumed: false, nonceAllocated: false, persisted: false, walletSignatureRequiredLater: true and walletBroadcastByService: false.`,
     "",
     "The six independent product-truth axes are `deployment`, `trading`, `platform_fee_evidence`, `source_verification`, `indexing` and `featured`. Preflight does not collapse or prove them, and no disposition is an audit, universal compatibility statement or safety guarantee.",
     "",
@@ -137,7 +139,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "- `agentAttestation`: one `AgentLaunchAttestationV2` self-attestation bound to `launchIntentHash`",
     "- `verificationBundle`: required exact-source material using `programmable.exact-source-verification-bundle.v2`",
     "",
-    "Exact profile `3.2.0` requests remain readable and byte-identical retryable with their original nullable-image metadata policy. Exact `3.1.0`, `3.0.0` and revision-2 requests remain readable and byte-identical retryable without project metadata under their original immutable policies. New requests use profile `3.3.0`; V1 creation is permanently write fenced.",
+    "Exact profile `3.2.0` requests remain readable and byte-identical retryable with their original nullable-image metadata policy. Exact `3.1.0`, `3.0.0` and revision-2 requests remain readable and byte-identical retryable without project metadata under their original immutable policies. New requests use profile `3.3.0`; fresh V2 and V1 creation are permanently write fenced.",
     "",
     "`sourceDescriptor` requires exactly `schemaVersion: 2.0.0`, `kind: deterministic-source-bundle`, `controllerWallet`, `sourceLineageNonce`, `sourceBundleDigest`, `bundleContentSha256`, and `publicOriginCommitment`. `controllerWallet` must equal `launchWallet`. `graphBundle.sourceBundleSha256` must equal `sourceDescriptor.bundleContentSha256`.",
     "",
@@ -169,7 +171,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "The path keeps the legacy name `launchId`, but its value is the API request UUID. Every resource returns that UUID as both `launchId` and the explicit `requestId`. The separate `onchainLaunchId` is a bytes32 Router identifier; it is null before preparation and when a terminal failure clears the durable output.",
     "",
-    "`prepared` means an exact artifact exists. `authorized` means the platform permit is attached and the wallet action is ready; it is still not wallet-signed or broadcast. Follow only the HTTPS `walletHandoffUrl` before its `expiresAt`, then refetch the single-resource status. Every response `requestHash` is the server's canonical idempotency digest and is distinct from the CLI's local SHA-256 of exact request bytes. `submitted` means a canonical Router event and same-block `launchStamp` getter record match the prepared artifact but have fewer than 64 confirmations. `finalized` means the same evidence reached at least 64 confirmations.",
+    "`prepared` means an exact artifact exists. During `simulating`, a signed permit may exist only inside a worker-private simulation envelope; public output remains null in `simulating` and `failed`, so the evidence gate controls permit and wallet-transaction exposure rather than internal simulation signing. `authorized` means the API server verified the evidence required by the selected lane and made the permit and wallet action public; it is still not wallet-signed or broadcast. Follow only the HTTPS `walletHandoffUrl` before its `expiresAt`, then refetch the single-resource status. Every response `requestHash` is the server's canonical idempotency digest and is distinct from the CLI's local SHA-256 of exact request bytes. `submitted` means a canonical Router event and same-block `launchStamp` getter record match the prepared artifact but have fewer than 64 confirmations. `finalized` means the same evidence reached at least 64 confirmations.",
     "",
     "After the controller wallet broadcasts the exact transaction, poll the single-resource GET. That route is the canonical full-output status path. POST only captures the bounded observation window; the durable lifecycle worker and list reads can make bounded progress on pending rows. Additive `lifecycleQueue` reports worker scheduling and retry state only: queue completion is not launch finality, and queue retry does not change launch status. After website discovery refreshes, a finalized launch is eligible to appear in Explore and the connected wallet's Profile without Registry publication. Third-party discovery and listing depend on each indexer implementing the published Router verification flow.",
     "",
@@ -324,7 +326,7 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     "It does not establish safety, tradability, current liquidity or pool state, audit coverage, review status, approval, endorsement, permission to launch, or terminal support. It does not automatically list or label a launch in GMGN, Axiom, FOMO, or any other terminal; each consumer must implement the published verification procedure.",
     "",
-    `Router verification and the Developer API are read-only. Public V3 creation and lifecycle reads use a wallet-bound key from ${apiKeysUrl}; earlier history remains readable and V1 creation remains write-fenced. The provenance reference alone grants neither access nor wallet authorization.`,
+    `Router verification and the Developer API are read-only. Public V3.3 creation and lifecycle reads use a wallet-bound key from ${apiKeysUrl}; earlier V2 and V1 history and schemas remain readable while their fresh POSTs are write-fenced. The provenance reference alone grants neither access nor wallet authorization.`,
   ].join("\n");
 }
 
@@ -384,7 +386,7 @@ export function buildProgrammableLlmsIndex(): string {
   return [
     "# Programmable",
     "",
-    "> Agent guide for public V3 general-hook launch creation and verified Programmable launch discovery.",
+    "> Agent guide for public V3.3 general-hook launch creation and verified Programmable launch discovery.",
     "",
     "## When to use Programmable",
     "",
@@ -394,7 +396,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- Understand the public scope, creator information, launch provenance, and available market context before directing a user to the website.",
     "- Integrate a read-only terminal, wallet, scanner, catalog, or research tool with the documented public endpoints.",
     "- Package, validate, submit and track a Custom launch with the pinned public CLI.",
-    "- Use public wallet-owned V3 creation and lifecycle reads. V2 and V1 history remain readable, V1 POST remains read-only, and legacy Registry and GitHub submission intake is closed.",
+    "- Use public wallet-owned V3.3 creation and lifecycle reads. V2 and V1 history and schemas remain readable, their fresh POSTs return non-retryable read-only 409 responses, and legacy Registry and GitHub submission intake is closed.",
     "- Direct a human to trade, manage a project, claim rewards, or sign an authorized Custom launch transaction through the website. A prepared Custom launch has no wallet transaction. Every wallet action requires explicit wallet authority.",
     "",
     "## Do not use Programmable to infer",
@@ -402,6 +404,8 @@ export function buildProgrammableLlmsIndex(): string {
     "- Safety, endorsement, audit coverage, liquidity, price accuracy, tradability, or future value from a verified identity.",
     "- Public eligibility for Classic V1, other Classic V2 launches, any Stock family, or a Custom launch without successful Registry verification or a finalized verified Router stamp.",
     "- Transaction authority from an API key. The Custom Launch API validates and prepares an exact action, but it cannot sign or broadcast for the controller wallet.",
+    "- Wallet authorization from CLI, preflight, model or caller-attested output. The API server must verify the per-launch behavior, fee and liquidity evidence required by the selected lane before wallet handoff.",
+    "- A universal Programmable fee from an arbitrary Custom hook. A 10 bps claim applies only to a fee-certified profile or adapter and its exact stamped PoolKey.",
     "- Generic fee claiming or buyback management from a Custom Launch API key. `fees:claim` and `buybacks:manage` are reserved and disabled; FADE uses a separately bound adapter.",
     "- Sponsored or autonomous Prediction Market creation unless the active canonical release explicitly enables it and publishes the required service boundary.",
     "",
@@ -423,7 +427,8 @@ export function buildProgrammableLlmsIndex(): string {
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Custom Launch API readiness: ${customLaunchReadyzUrl}`,
-    `- Programmable Launch CLI 3.3.6: ${customLaunchCliReleaseUrl}`,
+    `- Programmable Launch CLI 3.3.7: ${customLaunchCliReleaseUrl}`,
+    `- V2 write fence: POST ${customLaunchApiOrigin}/v2/custom-launches returns 409 CUSTOM_LAUNCH_V2_READ_ONLY`,
     `- V1 write fence: POST ${customLaunchApiOrigin}/v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY`,
     `- Create or list wallet-owned Custom launches: POST or GET ${customLaunchApiOrigin}/v3/custom-launches`,
     `- Discover V3 capabilities without authentication: GET ${customLaunchCapabilitiesUrl}`,
@@ -473,7 +478,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- Protocol fee claim discovery is a separate index: complete Classic Launcher and Custom Registry scans plus the fixed Stock release set. Unknown or unverified sources fail closed. Generic fee claiming for arbitrary Custom hooks is not live.",
     "- The live claim boundary is published at https://claimhazard.vercel.app/claim-discovery.json and requires one wallet-declared atomic batch from the fixed reward wallet.",
     "- A Router record establishes provenance only after the required address, runtime, binding, lookup, and cross-check verification passes. It does not establish safety, tradability, current liquidity, audit coverage, endorsement, terminal support, or launch authorization.",
-    `- Public V3 creation and lifecycle reads are a separate authenticated path from this provenance reference. Earlier history remains readable and V1 creation remains write-fenced; the provenance reference grants neither API access nor wallet authorization.`,
+    `- Public V3.3 creation and lifecycle reads are a separate authenticated path from this provenance reference. Earlier V2 and V1 history and schemas remain readable while fresh POSTs remain write-fenced; the provenance reference grants neither API access nor wallet authorization.`,
   ].join("\n");
 }
 
