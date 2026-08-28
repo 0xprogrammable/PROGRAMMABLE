@@ -35,13 +35,13 @@ describe("public Custom Launch CLI surface", () => {
       cli: {
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.8",
+        releaseVersion: "3.3.9",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
         tarballSha256:
-          "sha256:13b7a73ab87fa2acca8d3be672e32b89c2d895fe7a715c09f3b3617379f77a30",
+          "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
       },
       compatibility: {
         v1: {
@@ -69,13 +69,13 @@ describe("public Custom Launch CLI surface", () => {
         cli: {
           packageName: "@programmable/launch",
           binary: "programmable-launch",
-          releaseVersion: "3.3.8",
+          releaseVersion: "3.3.9",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256",
+            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
           tarballSha256:
-            "sha256:13b7a73ab87fa2acca8d3be672e32b89c2d895fe7a715c09f3b3617379f77a30",
+            "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
         },
       },
       generalHookProfile: {
@@ -92,7 +92,7 @@ describe("public Custom Launch CLI surface", () => {
         preflightPath: "/v3/custom-launches/preflight",
         finalizedMetadataPath: "/v3/finalized-custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.3.8",
+        cliReleaseVersion: "3.3.9",
         admissionPolicy: {
           manualProjectAllowlist: false,
           hardBlockFindingRules: [
@@ -164,16 +164,16 @@ describe("public Custom Launch CLI surface", () => {
         artifactPublished: true,
         packageName: "@programmable/launch",
         binary: "programmable-launch",
-        releaseVersion: "3.3.8",
-        releaseTag: "programmable-launch-v3.3.8",
+        releaseVersion: "3.3.9",
+        releaseTag: "programmable-launch-v3.3.9",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.8",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
         tarballSha256:
-          "sha256:13b7a73ab87fa2acca8d3be672e32b89c2d895fe7a715c09f3b3617379f77a30",
+          "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -197,7 +197,7 @@ describe("public Custom Launch CLI surface", () => {
           safetyClaim: false,
           feeBehaviorClaim: false,
           tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence: true,
-          tenBpsClaimScope: "exact-launch-and-stamped-poolkey-only",
+          claimScope: "exact-launch-and-stamped-poolkey-only",
           lpFee: "separate-from-platform-fee",
           genericFeeClaiming: "not-live",
           genericBuybackManagement: "not-live",
@@ -261,7 +261,7 @@ describe("public Custom Launch CLI surface", () => {
         "--json",
       ], { cwd: root, stdio: "pipe" });
       const tarball = readFileSync(
-        join(temporaryRoot, "programmable-launch-3.3.8.tgz"),
+        join(temporaryRoot, "programmable-launch-3.3.9.tgz"),
       );
       const digest = `sha256:${createHash("sha256").update(tarball).digest("hex")}`;
       const document = programmableWellKnownDocumentV1(
@@ -269,13 +269,13 @@ describe("public Custom Launch CLI surface", () => {
       );
       expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/u);
       expect(tarball.byteLength).toBeGreaterThan(0);
-      expect(document.customLaunchApi.cli.releaseVersion).toBe("3.3.8");
+      expect(document.customLaunchApi.cli.releaseVersion).toBe("3.3.9");
       expect(document.customLaunchApi.releaseCandidate).toMatchObject({
         status: "promoted-to-public",
         artifactPublished: true,
-        releaseVersion: "3.3.8",
+        releaseVersion: "3.3.9",
         tarballSha256:
-          "sha256:13b7a73ab87fa2acca8d3be672e32b89c2d895fe7a715c09f3b3617379f77a30",
+          "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
       });
       expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
     } finally {
@@ -486,12 +486,12 @@ describe("public Custom Launch CLI surface", () => {
     ));
 
     expect(v3.openapi).toBe("3.1.0");
-    expect(v3.info.version).toBe("3.3.8");
+    expect(v3.info.version).toBe("3.3.9");
     expect(v3["x-programmable-availability"]).toMatchObject({
       status: "live",
       publicAuthorized: true,
       liveContract: {
-        cliReleaseVersion: "3.3.8",
+        cliReleaseVersion: "3.3.9",
         profileVersion: "3.3.0",
         discoveryAuthority: "https://programmable.market/.well-known/programmable.json",
       },
@@ -523,23 +523,27 @@ describe("public Custom Launch CLI surface", () => {
         "https://programmable.market/openapi/custom-launch-v3.json",
       freshWritesOnlyProfileVersion: "3.3.0",
       pendingProfileVersion: "3.4.0",
-      preparatoryProfileCliReleaseVersion: "3.3.8",
+      preparatoryProfileCliReleaseVersion: "3.3.9",
       walletHandoffEvidenceGate: {
         decisionAuthority: "api-server",
         clientChecks: "preparation-only",
-        walletHandoffRequiresVerifiedEvidence: true,
+        requiredForProfileVersion: "3.4.0",
+        walletHandoffRequiresVerifiedEvidence: false,
         configurationIsExecutionEvidence: false,
-        notConfiguredDisposition: "blocks_wallet_handoff",
-        unavailableDisposition: "blocks_wallet_handoff",
-        executedFailureDisposition: "blocks_wallet_handoff",
-        immutableFeePathRequired: true,
+        requiredPlatformFeeConformanceStatus: "verified",
+        nonFeeVectorsMayRemainUnverified: true,
+        evidenceAuthority: "platform-runtime-executor",
+        signedExecutionReceiptRequired: true,
+        notConfiguredDisposition: "claims_remain_unverified",
+        unavailableDisposition: "claims_remain_unverified",
+        executedFeeFailureDisposition: "blocks_wallet_handoff",
+        executedHardInvariantFailureDisposition: "blocks_wallet_handoff",
+        feeBehaviorClaim: false,
+        tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence: true,
+        claimScope: "exact-launch-and-stamped-poolkey-only",
         mandatoryServerGates: [
-          "exact-source-compiler-graph-binding",
           "static-hard-block-policy",
-          "platform-admission-receipt",
           "exact-router-simulation",
-          "verified-behavior-evidence",
-          "verified-exact-ten-bps-fee-path",
         ],
         localOrModelApprovalAccepted: false,
       },
@@ -656,26 +660,65 @@ describe("public Custom Launch CLI surface", () => {
     expect(v3.components.schemas.CustomLaunchCapabilitiesV1.properties
       .behaviorEvidence).toMatchObject({
         required: expect.arrayContaining([
+          "requiredForProfileVersion",
           "configurationIsExecutionEvidence",
           "walletHandoffRequiresVerifiedEvidence",
+          "requiredPlatformFeeConformanceStatus",
+          "nonFeeVectorsMayRemainUnverified",
+          "evidenceAuthority",
+          "signedExecutionReceiptRequired",
           "notConfiguredDisposition",
           "unavailableDisposition",
-          "executedFailureDisposition",
-          "feeBehaviorClaim",
+          "executedFeeFailureDisposition",
+          "executedHardInvariantFailureDisposition",
         ]),
         properties: {
+          requiredForProfileVersion: { const: "3.4.0" },
           configurationIsExecutionEvidence: { const: false },
           walletHandoffRequiresVerifiedEvidence: { const: false },
+          requiredPlatformFeeConformanceStatus: { const: "verified" },
+          nonFeeVectorsMayRemainUnverified: { const: true },
+          evidenceAuthority: { const: "platform-runtime-executor" },
+          signedExecutionReceiptRequired: { const: true },
           notConfiguredDisposition: { const: "claims_remain_unverified" },
           unavailableDisposition: { const: "claims_remain_unverified" },
-          executedFailureDisposition: { const: "blocks_wallet_handoff" },
-          feeBehaviorClaim: { const: false },
+          executedFeeFailureDisposition: { const: "blocks_wallet_handoff" },
+          executedHardInvariantFailureDisposition: {
+            const: "blocks_wallet_handoff",
+          },
         },
       });
+    expect(v3.components.schemas.ProjectMetadataCapabilitiesV1.properties
+      .requiredForProfileVersions)
+      .toEqual({ const: ["3.2.0", "3.3.0", "3.4.0"] });
+    expect(v3.components.schemas.ProjectMetadataCapabilitiesV1.properties
+      .strictMetadataProfileVersions)
+      .toEqual({ const: ["3.3.0", "3.4.0"] });
+    expect(v3.components.schemas.ProjectMetadataCapabilitiesV1.properties
+      .legacyMetadataProfileVersions)
+      .toEqual({ const: ["3.2.0"] });
+    expect(v3.components.schemas.CustomLaunchCapabilitiesV1.properties
+      .feePolicy.properties
+      .feeBehaviorClaim)
+      .toEqual({ const: false });
     expect(v3.components.schemas.CustomLaunchCapabilitiesV1.properties
       .feePolicy.properties
       .tenBpsClaimRequiresExactPerLaunchVerifiedFeePathEvidence)
       .toEqual({ const: true });
+    expect(v3.components.schemas.CustomLaunchCapabilitiesV1.properties
+      .feePolicy.properties
+      .claimScope)
+      .toEqual({ const: "exact-launch-and-stamped-poolkey-only" });
+    expect(v3.components.schemas.FinalizedCustomLaunchMetadataV1.required)
+      .toContain("launchProfileVersion");
+    expect(v3.components.schemas.FinalizedCustomLaunchMetadataV1.properties
+      .launchProfileVersion)
+      .toMatchObject({
+        description: expect.stringContaining(
+          "clients cannot infer current metadata requirements without this value",
+        ),
+        enum: ["2.0.0", "3.0.0", "3.1.0", "3.2.0", "3.3.0", "3.4.0"],
+      });
     expect(v3.components.schemas.CustomLaunchResourceV3.required)
       .toContain("lifecycleQueue");
     expect(v3.components.schemas.CustomLaunchResourceV3.properties
@@ -1304,7 +1347,7 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "The released package `3.3.8` uses live/default general profile",
+      "The released package `3.3.9` uses live/default general profile",
     );
     expect(packageGuide).toContain(
       "same package contains explicit preparatory support for",

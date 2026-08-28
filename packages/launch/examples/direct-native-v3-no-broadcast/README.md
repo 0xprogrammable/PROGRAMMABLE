@@ -10,7 +10,7 @@ is the frozen `programmable:settlement-fee-vault:v1` release module, constructed
 with `bindRoute(initializer)`. The initializer then deliberately reverts so this offline fixture cannot retain or move funds.
 
 Passing this fixture proves only local source/build reproduction plus deterministic pack and validation for the exact
-inputs. CLI `3.3.8` defaults this cold pack to live profile `3.3.0`; explicit profile `3.4.0` remains preparatory until
+inputs. CLI `3.3.9` defaults this cold pack to live profile `3.3.0`; explicit profile `3.4.0` remains preparatory until
 backend capability activation. A serialized `productionLaunchAuthorized: true` profile field does not prove
 that activation and does not turn this deliberately reverting rehearsal initializer or its declarative sample runner
 step into verified behavior, an approved request or a submitted launch. This fixture is not

@@ -96,7 +96,7 @@ The versioned [`programmable.direct-native-hook-graph.v1` OpenAPI](https://progr
 defines the live create, list and single-resource shapes. The default profile uses
 `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and
 `profileVersion: 3.3.0`; its selection binding uses
-`programmable.direct-native-hook-graph-profile-selection-binding.v3`. CLI `3.3.8` defaults to this live `3.3.0`
+`programmable.direct-native-hook-graph-profile-selection-binding.v3`. CLI `3.3.9` defaults to this live `3.3.0`
 profile. Explicit profile `3.4.0` output is preparatory and is rejected by live capabilities until backend and
 `.well-known` activation are independently verified.
 Exact `3.2.0` requests retain their original nullable-image rules, and metadata-absent `3.1.0` and `3.0.0` requests remain readable and
@@ -247,16 +247,16 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.9.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.9.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.8`. Omit `profileVersion`
+Continue only after the checksum command reports `OK` and the version command prints `3.3.9`. Omit `profileVersion`
 for the live `3.3.0` default. Explicit `3.4.0` output remains preparatory and is rejected until backend activation.
 
 The release includes `examples/direct-native-v3-no-broadcast/README.md`, real Solidity sources, exact Standard JSON and
@@ -382,8 +382,12 @@ letters or numbers), exact non-empty local PNG/JPEG/WebP/GIF bytes, one public H
 `https://x.com/<handle>` profile. Other links are optional. The packer includes image
 bytes in the source manifest, sorts links and derives `projectMetadata`, `projectMetadataHash` and the metadata-bound
 `graphBundleHash`. It statically compares an unambiguous constructor or initializer name/symbol argument when one
-exists, without forcing arbitrary tokens into a specific constructor. Finalized launches expose the declaration plus
-server-authored onchain name/symbol readback through the public finalized-metadata endpoint.
+exists, without forcing arbitrary tokens into a specific constructor. Discovery advertises
+`requiredForProfileVersions = ["3.2.0","3.3.0","3.4.0"]`, `strictMetadataProfileVersions = ["3.3.0","3.4.0"]`, and
+`legacyMetadataProfileVersions = ["3.2.0"]`, so exact `3.2.0`, `3.3.0` and pending `3.4.0` all carry metadata while
+only exact `3.3.0` and pending `3.4.0` use the strict current policy and only exact `3.2.0` preserves its older
+nullable-image semantics. Finalized launches expose the declaration plus server-authored onchain name/symbol readback through the
+public finalized-metadata endpoint.
 
 Profile `3.4.0` also requires `behaviorScenarioInputs` with 1–128 ordered declarative steps. Each step binds a unique
 ID, fixed phase and actor, an exact prepared target, the canonical PoolManager binding or the fixed `v4-actions-v1`
@@ -396,9 +400,13 @@ assertion and vector-verdict authority.
 `GET /v3/finalized-custom-launches` returns the page array as top-level `launches` and always includes top-level
 `quality`. Quality is `complete` or `partial` and carries `sourceRowCount`, `publishedRowCount`,
 `quarantinedRowCount`, and row-indexed `FINALIZED_ROW_QUARANTINED` diagnostics. Consumers must not mistake a partial
-page for a complete inventory.
+page for a complete inventory. Each launch item also carries required `launchProfileVersion` (`2.0.0`, `3.0.0`,
+`3.1.0`, `3.2.0`, `3.3.0`, or `3.4.0`) so profile-conditional metadata can be interpreted without inference.
 
-The finalized feed remains additive across finalized compatible profile versions. An item may include
+The finalized feed remains additive across finalized compatible profile versions. `projectMetadata` and
+`projectMetadataHash` remain conditional to `launchProfileVersion`: exact `3.2.0`, `3.3.0` and pending `3.4.0`
+carry metadata, while legacy `2.0.0`, `3.0.0` and `3.1.0` remain additive compatibility records under their original
+semantics. An item may include
 server-authored `tradeAdapterDescriptor` only after exact route, PoolKey, asset, runtime and adapter review. The field
 is never accepted in pack, preflight or create requests and is separate from the 10 bps behavior gate. If it is absent,
 invalid or disabled, the launch remains indexed and machine-readable but consumers must show launch data only and must

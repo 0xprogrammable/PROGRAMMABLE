@@ -92,6 +92,13 @@ const SECRET_PATTERNS = Object.freeze([
 type Sha256Digest = `sha256:${string}`;
 type Hex32 = `0x${string}`;
 type Address = `0x${string}`;
+type LaunchProfileVersionV1 =
+  | "2.0.0"
+  | "3.0.0"
+  | "3.1.0"
+  | "3.2.0"
+  | "3.3.0"
+  | "3.4.0";
 
 type LaunchPresentationLinkKindV1 =
   | "website"
@@ -165,14 +172,15 @@ export type FinalizedCustomLaunchMetadataV1 = Readonly<{
   schemaVersion: typeof FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1;
   resourceId: string;
   routerLaunchId: Hex32;
+  launchProfileVersion: LaunchProfileVersionV1;
   chainId: "1";
   router: Address;
   token: Address;
   hook: Address;
   poolManager: Address;
   poolId: Hex32;
-  projectMetadata: ProjectMetadataV1;
-  projectMetadataHash: Sha256Digest;
+  projectMetadata: ProjectMetadataV1 | null;
+  projectMetadataHash: Sha256Digest | null;
   partnerAttribution?: LaunchPartnerAttributionV1;
   tradeAdapterDescriptor?: FinalizedTradeAdapterDescriptorV1;
   bindings: Readonly<{
@@ -466,6 +474,9 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
       });
       return entry;
     }
+    if (metadata.projectMetadata === null || metadata.projectMetadataHash === null) {
+      return entry;
+    }
     let presentation: ProjectedLaunchPresentationV1;
     try {
       presentation = projectLaunchPresentationV1(
@@ -744,7 +755,8 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     && Object.hasOwn(value, "tradeAdapterDescriptor");
   const record = exactRecord(value, [
     "schemaVersion", "resourceId", "routerLaunchId", "chainId", "router",
-    "token", "hook", "poolManager", "poolId", "projectMetadata",
+    "token", "hook", "poolManager", "poolId", "launchProfileVersion",
+    "projectMetadata",
     "projectMetadataHash", "bindings", "tokenMetadataReadback", "finality",
     "createdAt", "finalizedAt",
     ...(hasPartnerAttribution ? ["partnerAttribution"] : []),
@@ -756,16 +768,32 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     || !UUID.test(record.resourceId)
     || record.chainId !== "1"
   ) throw new Error("Finalized Custom metadata item is invalid");
-
-  const projectMetadata = parseProjectMetadataV1(record.projectMetadata);
-  const projectMetadataHash = digest(
-    record.projectMetadataHash,
-    "project metadata hash",
-  );
   if (
-    canonicalSha256(PROJECT_METADATA_SCHEMA_V1, projectMetadata)
-      !== projectMetadataHash
-  ) throw new Error("Finalized Custom project metadata hash is invalid");
+    record.launchProfileVersion !== "2.0.0"
+    && record.launchProfileVersion !== "3.0.0"
+    && record.launchProfileVersion !== "3.1.0"
+    && record.launchProfileVersion !== "3.2.0"
+    && record.launchProfileVersion !== "3.3.0"
+    && record.launchProfileVersion !== "3.4.0"
+  ) throw new Error("Finalized Custom metadata launch profile version is invalid");
+  const metadataRequired = launchProfileUsesProjectMetadataV1(
+    record.launchProfileVersion,
+  );
+  let projectMetadata: ProjectMetadataV1 | null = null;
+  let projectMetadataHash: Sha256Digest | null = null;
+  if (metadataRequired) {
+    projectMetadata = parseProjectMetadataV1(record.projectMetadata);
+    projectMetadataHash = digest(
+      record.projectMetadataHash,
+      "project metadata hash",
+    );
+    if (
+      canonicalSha256(PROJECT_METADATA_SCHEMA_V1, projectMetadata)
+        !== projectMetadataHash
+    ) throw new Error("Finalized Custom project metadata hash is invalid");
+  } else if (record.projectMetadata !== null || record.projectMetadataHash !== null) {
+    throw new Error("Finalized Custom legacy launch metadata fields must be null");
+  }
   const partnerAttribution = hasPartnerAttribution
     ? parseLaunchPartnerAttributionV1(record.partnerAttribution)
     : null;
@@ -795,7 +823,8 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     artifactHash: digest(bindingsRecord.artifactHash, "artifact hash"),
   });
   if (
-    canonicalSha256(PROJECT_METADATA_GRAPH_BINDING_DOMAIN_V1, {
+    metadataRequired
+    && canonicalSha256(PROJECT_METADATA_GRAPH_BINDING_DOMAIN_V1, {
       graphBundleHash: bindings.unboundGraphBundleHash,
       projectMetadataHash,
     }) !== bindings.graphBundleHash
@@ -853,6 +882,7 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     schemaVersion: FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1,
     resourceId: record.resourceId,
     routerLaunchId,
+    launchProfileVersion: record.launchProfileVersion,
     chainId: "1",
     router,
     token,
@@ -871,9 +901,17 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
   });
 }
 
+function launchProfileUsesProjectMetadataV1(
+  launchProfileVersion: LaunchProfileVersionV1,
+) {
+  return launchProfileVersion === "3.2.0"
+    || launchProfileVersion === "3.3.0"
+    || launchProfileVersion === "3.4.0";
+}
+
 function parseTokenMetadataReadbackV1(
   value: JsonValue | undefined,
-  metadata: ProjectMetadataV1,
+  metadata: ProjectMetadataV1 | null,
 ): FinalizedCustomLaunchMetadataV1["tokenMetadataReadback"] {
   const record = exactRecord(value, [
     "status", "declared", "observed", "observedAtBlockNumber", "observedAt",
@@ -893,8 +931,10 @@ function parseTokenMetadataReadbackV1(
     symbol: humanText(declaredRecord.symbol, 1, 16, "declared token symbol"),
   });
   if (
-    declared.name !== metadata.token.name
-    || declared.symbol !== metadata.token.symbol
+    (metadata !== null && (
+      declared.name !== metadata.token.name
+      || declared.symbol !== metadata.token.symbol
+    ))
     || (record.status !== "matching"
       && record.status !== "mismatch"
       && record.status !== "unavailable")

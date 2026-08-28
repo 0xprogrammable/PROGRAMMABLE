@@ -46,7 +46,7 @@ test("published V3 pack-config schema accepts v2 nested authorization paths", ()
 test("preparatory profile 3.4 schema requires four targets and pins the fee module", () => {
   assert.equal(schema["x-programmable-status"], "live-with-preparatory-profile");
   assert.deepEqual(schema["x-programmable-live-contract"], {
-    cliReleaseVersion: "3.3.8",
+    cliReleaseVersion: "3.3.9",
     profileVersion: "3.3.0",
   });
   assert.equal(schema.properties.targets.minItems, 3);

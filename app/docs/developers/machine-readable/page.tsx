@@ -88,7 +88,8 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v3.json</code>
             </a>
             <span>
-              Preparatory profile 3.4 request and evidence contract. It does not
+              Preparatory profile 3.4 request contract plus the live 3.3
+              capabilities, fee-policy and finalized-feed surface. It does not
               activate profile 3.4 or replace live/default profile 3.3.0.
             </span>
           </li>
@@ -121,8 +122,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz">
-              <code>@programmable/launch 3.3.8</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz">
+              <code>@programmable/launch 3.3.9</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and
@@ -304,7 +305,7 @@ export default function MachineReadableDocsPage() {
             submissions.
           </li>
           <li>
-            CLI <code>3.3.8</code> is the current installable release and
+            CLI <code>3.3.9</code> is the current installable release and
             defaults to live profile <code>3.3.0</code>. Explicit profile{" "}
             <code>3.4.0</code> output remains preparatory and is rejected by live
             capabilities until backend and <code>.well-known</code> activation.

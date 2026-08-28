@@ -76,11 +76,17 @@ describe("Custom Launch cold-agent remediation contract", () => {
           "exact-router-simulation",
         ],
         behaviorEvidence: {
+          requiredForProfileVersion: "3.4.0",
           configurationIsExecutionEvidence: false,
           walletHandoffRequiresVerifiedEvidence: false,
+          requiredPlatformFeeConformanceStatus: "verified",
+          nonFeeVectorsMayRemainUnverified: true,
+          evidenceAuthority: "platform-runtime-executor",
+          signedExecutionReceiptRequired: true,
           notConfiguredDisposition: "claims_remain_unverified",
           unavailableDisposition: "claims_remain_unverified",
-          executedFailureDisposition: "blocks_wallet_handoff",
+          executedFeeFailureDisposition: "blocks_wallet_handoff",
+          executedHardInvariantFailureDisposition: "blocks_wallet_handoff",
         },
         feePolicy: {
           feeBehaviorClaim: false,
@@ -179,11 +185,11 @@ describe("Custom Launch cold-agent remediation contract", () => {
       status: "live",
       authoritativeSources: {
         packConfigSchemaUrl,
-        cliReleaseVersion: "3.3.8",
+        cliReleaseVersion: "3.3.9",
         cliChecksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256",
+          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
         cliTarballSha256:
-          "sha256:13b7a73ab87fa2acca8d3be672e32b89c2d895fe7a715c09f3b3617379f77a30",
+          "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
       },
       profile: {
         profileId: "programmable.direct-native-hook-graph.v1",
@@ -303,12 +309,12 @@ describe("Custom Launch cold-agent remediation contract", () => {
         "programmable.eip3009-signature-patch.v1",
       signatureIncludedInCreateRequest: false,
     });
-    expect(openApi.info.version).toBe("3.3.8");
+    expect(openApi.info.version).toBe("3.3.9");
     expect(openApi["x-programmable-availability"]).toMatchObject({
       status: "live",
       publicAuthorized: true,
       liveContract: {
-        cliReleaseVersion: "3.3.8",
+        cliReleaseVersion: "3.3.9",
         profileVersion: "3.3.0",
       },
       pendingProfileVersion: "3.4.0",

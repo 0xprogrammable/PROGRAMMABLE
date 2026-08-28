@@ -65,7 +65,8 @@ export function validProjectMetadataCapabilities() {
     schemaVersion: "programmable.project-metadata.v1",
     inputSchemaVersion: "programmable.project-metadata-input.v1",
     requiredForProfileVersion: DIRECT_NATIVE_PROFILE_VERSION,
-    requiredForProfileVersions: ["3.2.0", "3.3.0"],
+    requiredForProfileVersions: ["3.2.0", "3.3.0", "3.4.0"],
+    strictMetadataProfileVersions: ["3.3.0", "3.4.0"],
     strictNewPackPolicyProfileVersion: DIRECT_NATIVE_PROFILE_VERSION,
     enforcement: {
       routes: ["POST /v3/custom-launches/preflight", "POST /v3/custom-launches"],

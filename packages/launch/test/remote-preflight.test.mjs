@@ -322,6 +322,15 @@ test("remote validation fails closed on profile, route, and auth capability drif
         (field) => field !== "presentation.links",
       );
     }],
+    ["projectMetadata.requiredForProfileVersions", (value) => {
+      value.projectMetadata.requiredForProfileVersions = ["3.2.0", "3.4.0"];
+    }],
+    ["projectMetadata.strictMetadataProfileVersions", (value) => {
+      value.projectMetadata.strictMetadataProfileVersions = ["3.4.0"];
+    }],
+    ["projectMetadata.legacyMetadataProfileVersions", (value) => {
+      value.projectMetadata.legacyMetadataProfileVersions = ["3.3.0"];
+    }],
     ["projectMetadata.profilePolicy", (value) => {
       value.projectMetadata.profilePolicy.xUriPattern = "^https://twitter.com/";
     }],
@@ -363,6 +372,36 @@ test("remote validation fails closed on profile, route, and auth capability drif
     assert.equal(calls, 1, expectedField);
     assert.equal(keyLoads, 0, expectedField);
   }
+});
+
+test("remote validation accepts additive future metadata profile versions", async () => {
+  const capabilities = validCapabilities();
+  capabilities.projectMetadata.requiredForProfileVersions = ["3.2.0", "3.3.0", "3.4.0", "3.5.0"];
+  capabilities.projectMetadata.strictMetadataProfileVersions = ["3.3.0", "3.4.0", "3.5.0"];
+
+  const result = await validateLaunchRemote({
+    launchPath: "/does/not/need/to/exist.json",
+    configPath: "/does/not/need/to/exist.config.json",
+    maxAttempts: 1,
+    readLaunchBytesImpl: async () => CANONICAL_REQUEST_VECTOR_BYTES,
+    validateLaunchFileImpl: async () => ({
+      schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+      requestSha256: sha256Digest(CANONICAL_REQUEST_VECTOR_BYTES),
+    }),
+    fetchImpl: async (url, options = {}) => {
+      if (String(url).endsWith("/v3/capabilities")) return jsonResponse(capabilities);
+      if (String(url).endsWith("/v3/custom-launches/preflight")) {
+        assert.equal(options.headers.authorization, `Bearer ${API_KEY}`);
+        return jsonResponse(validPreflight(CANONICAL_REQUEST_VECTOR_HASH));
+      }
+      throw new Error(`unexpected request ${url}`);
+    },
+    loadApiKeyImpl: async () => API_KEY,
+  });
+
+  assert.equal(result.remoteValidation, true);
+  assert.equal(result.capabilities.projectMetadata.requiredForProfileVersions.at(-1), "3.5.0");
+  assert.equal(result.capabilities.projectMetadata.strictMetadataProfileVersions.at(-1), "3.5.0");
 });
 
 test("V3 submit rechecks capabilities before loading a key", async () => {

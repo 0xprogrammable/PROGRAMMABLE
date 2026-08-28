@@ -24,7 +24,8 @@ Readiness: <https://api.programmable.market/readyz>
 The live unauthenticated `GET /v3/finalized-custom-launches` response uses top-level `launches` and required top-level
 `quality`. Quality contains `status` (`complete` or `partial`), `sourceRowCount`, `publishedRowCount`,
 `quarantinedRowCount`, and row-indexed `FINALIZED_ROW_QUARANTINED` diagnostics. A partial page is not a complete
-inventory.
+inventory. Each launch item also carries required `launchProfileVersion` (`2.0.0`, `3.0.0`, `3.1.0`, `3.2.0`,
+`3.3.0`, or `3.4.0`) so clients can interpret profile-conditional metadata without inference.
 
 ## Existing-project integration
 
@@ -94,7 +95,7 @@ a project-owned hook, native or ERC-20 quote currency, all fourteen Uniswap v4 p
 permission must resolve to a concrete reachable callback implementation;
 an interface declaration or fallback-only route does not qualify.
 
-CLI `3.3.8` is the current installable release and defaults fresh packs to live profile `3.3.0`. Explicit profile
+CLI `3.3.9` is the current installable release and defaults fresh packs to live profile `3.3.0`. Explicit profile
 `3.4.0` output remains preparatory and is rejected by live capabilities until backend and `.well-known` activation.
 Pending `3.4.0` requires 4-16 targets inclusive of the exact
 `programmable:settlement-fee-vault:v1`; applicants cannot select another platform fee target. Its release binding is
@@ -189,16 +190,16 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.9.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.9.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.8`. The package name is
+Continue only after the checksum command reports `OK` and the version command prints `3.3.9`. The package name is
 `@programmable/launch`; the binary is `programmable-launch`. Omit `profileVersion` for live `3.3.0`; explicit `3.4.0`
 output is rejected until backend activation. Do not substitute an unverified npm registry package.
 
@@ -220,7 +221,10 @@ Current profile `3.3.0` requires `projectMetadata`: owner-supplied token name an
 description with at least eight Unicode letters or numbers, non-empty local PNG/JPEG/WebP/GIF bytes, exactly one public
 HTTPS website and exactly one canonical `https://x.com/<handle>` profile. Other link kinds remain optional. The CLI
 binds the exact image digest, byte length, media type, dimensions, and source-manifest file; it never invents or uploads
-metadata. Exact `3.2.0` retries preserve their older permissive metadata semantics.
+metadata. Discovery advertises `requiredForProfileVersions = ["3.2.0","3.3.0","3.4.0"]`,
+`strictMetadataProfileVersions = ["3.3.0","3.4.0"]`, and `legacyMetadataProfileVersions = ["3.2.0"]`, so exact
+`3.2.0`, `3.3.0` and pending `3.4.0` all carry metadata while only exact `3.3.0` and pending `3.4.0` use the strict
+current policy and only exact `3.2.0` preserves its older nullable-image semantics.
 
 Use a stable content URI and make HTTPS image bytes browser-readable with CORS. Wallet review fetches the raw bytes
 and checks the bound SHA-256, length, type and dimensions before rendering; IPFS and Arweave use fixed public gateways.

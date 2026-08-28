@@ -129,6 +129,7 @@ function projectMetadata(
 type LaunchFixtureOptions = Readonly<{
   resourceId?: string;
   routerLaunchId?: `0x${string}`;
+  launchProfileVersion?: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0" | "3.3.0" | "3.4.0";
   tokenAddress?: `0x${string}`;
   createdAt?: string;
   finalizedAt?: string;
@@ -179,6 +180,7 @@ function launchFixture(input: LaunchFixtureOptions = {}) {
     resourceId: input.resourceId ?? "123e4567-e89b-42d3-a456-426614174000",
     routerLaunchId: input.routerLaunchId
       ?? customGraphExploreEntry.launchStampProvenance.launchId,
+    launchProfileVersion: input.launchProfileVersion ?? "3.3.0",
     chainId: "1",
     router: customGraphExploreEntry.launchStampProvenance.routerAddress,
     token: input.tokenAddress ?? customGraphExploreEntry.tokenAddress,
@@ -257,7 +259,7 @@ function launchFixture(input: LaunchFixtureOptions = {}) {
 }
 
 function feedPage(
-  launches: readonly ReturnType<typeof launchFixture>[],
+  launches: readonly Readonly<Record<string, unknown>>[],
   nextCursor: string | null = null,
   quality?: Readonly<Record<string, unknown>>,
 ) {
@@ -304,7 +306,7 @@ function jsonResponse(value: unknown) {
 }
 
 async function parsedFeed(
-  launch = launchFixture(),
+  launch: Readonly<Record<string, unknown>> = launchFixture(),
 ) {
   return await readFinalizedCustomLaunchMetadataPagesV1({
     fetchFeed: (async () => jsonResponse(feedPage([launch]))) as typeof fetch,
@@ -370,6 +372,26 @@ describe("finalized Custom launch metadata feed v1", () => {
     });
 
     expect(feed.launches[0]?.routerLaunchId).toBe(launch.routerLaunchId);
+  });
+
+  it("accepts legacy finalized entries with explicit null metadata keyed by launchProfileVersion", async () => {
+    const current = launchFixture({ launchProfileVersion: "3.1.0" });
+    const legacy = {
+      ...current,
+      projectMetadata: null,
+      projectMetadataHash: null,
+      bindings: {
+        ...current.bindings,
+        graphBundleHash: current.bindings.unboundGraphBundleHash,
+      },
+    } as const;
+    const feed = await parsedFeed(legacy);
+
+    expect(feed.launches[0]).toMatchObject({
+      launchProfileVersion: "3.1.0",
+      projectMetadata: null,
+      projectMetadataHash: null,
+    });
   });
 
   it.each([
@@ -523,8 +545,16 @@ describe("finalized Custom launch metadata feed v1", () => {
       schemaVersion: "programmable.finalized-custom-launch-metadata-list.v1",
       generatedAt: GENERATED_AT,
       launches: [
-        { resourceId: first.resourceId, routerLaunchId: first.routerLaunchId },
-        { resourceId: second.resourceId, routerLaunchId: second.routerLaunchId },
+        {
+          resourceId: first.resourceId,
+          routerLaunchId: first.routerLaunchId,
+          launchProfileVersion: first.launchProfileVersion,
+        },
+        {
+          resourceId: second.resourceId,
+          routerLaunchId: second.routerLaunchId,
+          launchProfileVersion: second.launchProfileVersion,
+        },
       ],
     });
     expect(feed.launches[0]?.projectMetadataHash).toBe(canonicalSha256(
