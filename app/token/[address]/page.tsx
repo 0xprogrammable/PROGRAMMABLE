@@ -1,5 +1,6 @@
+import type { Metadata } from "next";
 import { NextRequest } from "next/server";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 
 import { GET as readTokenDetailResponse } from
   "@/app/api/explore/token/route";
@@ -8,6 +9,8 @@ import {
   type TokenDetailInitialResponse,
 } from "@/components/token-detail-view";
 import { TokenDetailShell } from "@/components/token-detail-shell";
+import { tokenDetailMetadataFromProjection } from
+  "@/lib/token-detail-metadata";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +50,33 @@ export async function readInitialTokenDetailWithinDeadline(
   }
 }
 
+const readInitialTokenDetail = cache(async (address: string) => {
+  const search = new URLSearchParams({ address });
+  return await readInitialTokenDetailWithinDeadline(async (signal) => {
+    const response = await readTokenDetailResponse(new NextRequest(
+      `http://programmable.local/api/explore/token?${search.toString()}`,
+      {
+        headers: { Accept: "application/json" },
+        signal,
+      },
+    ));
+    const body: unknown = await response.json().catch(() => null);
+    return { status: response.status, body };
+  });
+});
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ address: string }>;
+}): Promise<Metadata> {
+  const { address } = await params;
+  return tokenDetailMetadataFromProjection(
+    address,
+    await readInitialTokenDetail(address),
+  );
+}
+
 export default async function TokenPage({
   params,
 }: {
@@ -61,20 +91,7 @@ export default async function TokenPage({
 }
 
 async function InitialTokenDetail({ address }: { address: string }) {
-  const search = new URLSearchParams({ address });
-  const initialResponse = await readInitialTokenDetailWithinDeadline(
-    async (signal) => {
-      const response = await readTokenDetailResponse(new NextRequest(
-        `http://programmable.local/api/explore/token?${search.toString()}`,
-        {
-          headers: { Accept: "application/json" },
-          signal,
-        },
-      ));
-      const body: unknown = await response.json().catch(() => null);
-      return { status: response.status, body };
-    },
-  );
+  const initialResponse = await readInitialTokenDetail(address);
 
   return (
     <TokenDetailView
