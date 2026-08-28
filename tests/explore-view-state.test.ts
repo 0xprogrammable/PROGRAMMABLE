@@ -1067,6 +1067,72 @@ describe("Explore refresh state", () => {
     )).resolves.toMatchObject({ total: tokens.length, totalPages: 2 });
   });
 
+  it("accepts Router cursor progress when the public identity stays exact", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "unavailable"),
+    );
+    const routerCatalogBoundary = {
+      ...catalogBoundary,
+      launchSource:
+        "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router" as const,
+      completeness: {
+        ...catalogBoundary.completeness,
+        registryCustom: "current" as const,
+        routerCustom: "current" as const,
+      },
+      scope: {
+        ...catalogBoundary.scope,
+        included: [
+          ...catalogBoundary.scope.included,
+          "canonical-launch-stamp-router",
+        ] as const,
+      },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        return new Response(JSON.stringify({
+          status: "ready",
+          tokens: tokens.slice((page - 1) * pageSize, page * pageSize),
+          page,
+          pageSize,
+          total: tokens.length,
+          totalPages: 2,
+          catalog: {
+            ...routerCatalogBoundary,
+            identityCount: tokens.length,
+            routerStamp: {
+              source: "canonical-launch-stamp-router",
+              status: "current",
+              finalityConfirmations: 64,
+              verifiedIdentityCount: page === 1 ? 4 : 5,
+              projectedIdentityCount: 1,
+              generatedAt: page === 1
+                ? "2026-08-14T00:00:00.000Z"
+                : "2026-08-14T00:00:12.000Z",
+              asOfBlock: page === 1 ? "25739998" : "25739999",
+              asOfBlockHash: page === 1
+                ? `0x${"12".repeat(32)}`
+                : `0x${"34".repeat(32)}`,
+              identityCommitment: page === 1
+                ? `sha256:${"56".repeat(32)}`
+                : `sha256:${"78".repeat(32)}`,
+            },
+          },
+        }), { status: 200 });
+      },
+    );
+
+    await expect(loadExploreModelDataset(
+      "router-progress-only-drift-model-dataset",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    )).resolves.toMatchObject({ total: tokens.length, totalPages: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("preserves an all-page transport marker and does not cache the degraded model dataset", async () => {
     const tokens = [
       ...Array.from(
