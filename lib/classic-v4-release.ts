@@ -1180,7 +1180,8 @@ function validRichLifecycleEvidence(input: {
     !approvals ||
     exclusive.fromBlock !== record(actions.launch)?.blockNumber ||
     exclusive.toBlock !== lifecycle.verificationBlock ||
-    exclusive.nativeAccrualEvents !== 5 ||
+    !Number.isSafeInteger(exclusive.nativeAccrualEvents) ||
+    exclusive.nativeAccrualEvents < 5 ||
     exclusive.creatorClaimEvents !== 1 ||
     exclusive.launcherClaimEvents !== 1
   ) {

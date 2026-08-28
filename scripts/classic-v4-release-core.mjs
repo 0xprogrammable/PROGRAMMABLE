@@ -3132,7 +3132,8 @@ export function validateClassicV4LifecycleEvidence(
   assert(
     exclusive.fromBlock === evidence.actions.launch.blockNumber &&
       exclusive.toBlock === evidence.verificationBlock &&
-      exclusive.nativeAccrualEvents === 5 &&
+      Number.isSafeInteger(exclusive.nativeAccrualEvents) &&
+      exclusive.nativeAccrualEvents >= 5 &&
       exclusive.creatorClaimEvents === 1 &&
       exclusive.launcherClaimEvents === 1,
     "Exclusive hook activity differs",

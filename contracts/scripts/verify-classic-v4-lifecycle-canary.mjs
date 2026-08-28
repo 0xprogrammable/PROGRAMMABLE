@@ -494,6 +494,15 @@ function isBefore(left, right) {
   );
 }
 
+function isEventBefore(left, right) {
+  return (
+    isBefore(left, right) ||
+    (left.blockNumber === right.blockNumber &&
+      left.transactionIndex === right.transactionIndex &&
+      left.logIndex < right.logIndex)
+  );
+}
+
 export async function loadClassicV4BlockAtExactNumber(
   endpoint,
   blockNumber,
@@ -1771,6 +1780,9 @@ async function verifyExclusiveHookActivity(
     },
   ]);
   const events = decodeEvents({ logs }, artifacts.feeHook.abi, canary.feeHook);
+  const registrations = events.filter(
+    (event) => event.eventName === "PoolRegistered",
+  );
   const accruals = events.filter(
     (event) => event.eventName === "NativeSwapFeesAccrued",
   );
@@ -1788,30 +1800,68 @@ async function verifyExclusiveHookActivity(
     "sellExactOutput",
   ].map((key) => actions[key].anchor.transactionHash);
   assert(
-    accruals.length === 5 &&
+    registrations.length === 1 &&
+      accruals.length >= expectedAccrualHashes.length &&
       creatorClaims.length === 1 &&
       launcherClaims.length === 1 &&
-      new Set(accruals.map((event) => event.transactionHash)).size === 5 &&
       expectedAccrualHashes.every((hash) =>
-        accruals.some(
+        accruals.filter(
           (event) => normalizeHex(event.transactionHash) === normalizeHex(hash),
-        ),
+        ).length === 1,
       ) &&
+      normalizeHex(registrations[0].transactionHash) ===
+        normalizeHex(actions.launch.anchor.transactionHash) &&
       normalizeHex(creatorClaims[0].transactionHash) ===
         normalizeHex(actions.creatorClaim.anchor.transactionHash) &&
       normalizeHex(launcherClaims[0].transactionHash) ===
         normalizeHex(actions.launcherClaim.anchor.transactionHash),
-    "Foreign fee activity exists in the canary verification window",
+    "Required canary hook activity is incomplete or ambiguous",
   );
-  for (const event of [...accruals, ...creatorClaims]) {
-    sameHex(event.args.poolId, launch.poolId, "Exclusive hook activity pool");
+  for (const event of [...registrations, ...accruals, ...creatorClaims]) {
+    sameHex(event.args.poolId, launch.poolId, "Canary hook activity pool");
+  }
+  assert(
+    accruals.every(
+      (event) =>
+        isEventBefore(registrations[0], event) &&
+        isEventBefore(event, creatorClaims[0]),
+    ) && isEventBefore(creatorClaims[0], launcherClaims[0]),
+    "Canary hook activity is outside the claim accounting window",
+  );
+
+  let creatorAccrualTotal = 0n;
+  let launcherAccrualTotal = 0n;
+  for (const event of accruals) {
+    const expectedFeeBps = event.args.isBuy ? 100 : 200;
+    const grossNativeAmount = event.args.grossNativeAmount;
+    const creatorFee = event.args.creatorFee;
+    const launcherFee = event.args.launcherFee;
+    const totalFee = creatorFee + launcherFee;
+    const feeFloor =
+      (grossNativeAmount * BigInt(expectedFeeBps)) / 10_000n;
+    const feeCeiling =
+      (grossNativeAmount * BigInt(expectedFeeBps) + 9_999n) / 10_000n;
+    assert(
+      Number(event.args.appliedTotalSwapFeeBps) === expectedFeeBps &&
+        grossNativeAmount > 0n &&
+        totalFee > 0n &&
+        (totalFee === feeFloor || totalFee === feeCeiling) &&
+        launcherFee === (grossNativeAmount * 10n) / 10_000n,
+      "Canary hook fee event does not match the registered fee policy",
+    );
+    creatorAccrualTotal += creatorFee;
+    launcherAccrualTotal += launcherFee;
   }
   return {
-    fromBlock,
-    toBlock: verificationBlock,
-    nativeAccrualEvents: accruals.length,
-    creatorClaimEvents: creatorClaims.length,
-    launcherClaimEvents: launcherClaims.length,
+    observation: {
+      fromBlock,
+      toBlock: verificationBlock,
+      nativeAccrualEvents: accruals.length,
+      creatorClaimEvents: creatorClaims.length,
+      launcherClaimEvents: launcherClaims.length,
+    },
+    creatorAccrualTotal,
+    launcherAccrualTotal,
   };
 }
 
@@ -1951,17 +2001,22 @@ async function verifyAccountingTimeline(
   swaps,
   claims,
   canary,
+  hookActivity,
 ) {
-  const creatorSum =
+  const requiredCreatorSum =
     launch.initialFee.creatorFee +
     Object.values(swaps).reduce((sum, swap) => sum + BigInt(swap.creatorFee), 0n);
-  const launcherSum =
+  const requiredLauncherSum =
     launch.initialFee.launcherFee +
     Object.values(swaps).reduce((sum, swap) => sum + BigInt(swap.launcherFee), 0n);
+  const creatorSum = hookActivity.creatorAccrualTotal;
+  const launcherSum = hookActivity.launcherAccrualTotal;
   assert(
-    claims.creator.hookAmount === creatorSum &&
+    creatorSum >= requiredCreatorSum &&
+      launcherSum >= requiredLauncherSum &&
+      claims.creator.hookAmount === creatorSum &&
       claims.launcher.amount === launcherSum,
-    "Claim amounts differ from the five canary accrual events",
+    "Claim amounts differ from the complete canary-pool accrual history",
   );
 
   const baselineBlock = actions.launch.anchor.blockNumber - 1;
@@ -2620,16 +2675,16 @@ async function verifyAtEndpoint(
   );
   for (const [key, quote] of quoteEntries) swaps[key].quote = quote;
   const claims = validateClaims(actions, launch, canary, artifacts);
-  const [exclusiveHookActivity, feeConservation, sellExactInputApproval, sellExactOutputApproval, postState] =
+  const hookActivity = await verifyExclusiveHookActivity(
+    endpoint,
+    verificationBlock,
+    actions,
+    launch,
+    canary,
+    artifacts,
+  );
+  const [feeConservation, sellExactInputApproval, sellExactOutputApproval, postState] =
     await Promise.all([
-      verifyExclusiveHookActivity(
-        endpoint,
-        verificationBlock,
-        actions,
-        launch,
-        canary,
-        artifacts,
-      ),
       verifyAccountingTimeline(
         endpoint,
         verificationBlock,
@@ -2638,6 +2693,7 @@ async function verifyAtEndpoint(
         swaps,
         claims,
         canary,
+        hookActivity,
       ),
       verifySellApproval(
         endpoint,
@@ -2692,7 +2748,7 @@ async function verifyAtEndpoint(
     postState,
     feeConservation,
     observations: {
-      exclusiveHookActivity,
+      exclusiveHookActivity: hookActivity.observation,
       sellApprovals: {
         sellExactInput: sellExactInputApproval,
         sellExactOutput: sellExactOutputApproval,

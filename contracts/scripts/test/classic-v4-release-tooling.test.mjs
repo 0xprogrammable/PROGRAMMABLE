@@ -1677,6 +1677,30 @@ test("deployment, source and lifecycle evidence fail closed on drift", () => {
     validateClassicV4LifecycleEvidence(plan, deployment, source, lifecycle),
   );
 
+  const publicPoolActivity = structuredClone(lifecycle);
+  publicPoolActivity.observations.exclusiveHookActivity.nativeAccrualEvents = 334;
+  assert.doesNotThrow(() =>
+    validateClassicV4LifecycleEvidence(
+      plan,
+      deployment,
+      source,
+      redigestLifecycle(publicPoolActivity),
+    ),
+  );
+
+  const incompleteRequiredActivity = structuredClone(lifecycle);
+  incompleteRequiredActivity.observations.exclusiveHookActivity.nativeAccrualEvents = 4;
+  assert.throws(
+    () =>
+      validateClassicV4LifecycleEvidence(
+        plan,
+        deployment,
+        source,
+        redigestLifecycle(incompleteRequiredActivity),
+      ),
+    /Exclusive hook activity differs/,
+  );
+
   const differentActualPosition = structuredClone(lifecycle);
   differentActualPosition.positionTokenId = "43";
   differentActualPosition.postState.positionLock.tokenId = "43";
@@ -1981,6 +2005,27 @@ test("final manifest is schema-valid and exposes exact indexer handoff", () => {
   assert.equal(manifest.verification.publicAvailable, false);
   assert.equal(
     validateSchema(manifest),
+    true,
+    JSON.stringify(validateSchema.errors),
+  );
+
+  const publicPoolLifecycle = structuredClone(lifecycle);
+  publicPoolLifecycle.observations.exclusiveHookActivity.nativeAccrualEvents = 334;
+  const unsignedPublicPoolLifecycle = structuredClone(publicPoolLifecycle);
+  delete unsignedPublicPoolLifecycle.evidenceDigest;
+  publicPoolLifecycle.evidenceDigest = digestJson(
+    unsignedPublicPoolLifecycle,
+    CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+  );
+  const publicPoolManifest = createClassicV4ReleaseManifest({
+    plan,
+    deploymentEvidence: deployment,
+    sourceEvidence: source,
+    lifecycleEvidence: publicPoolLifecycle,
+    capturedAt: publicPoolLifecycle.checkedAt,
+  });
+  assert.equal(
+    validateSchema(publicPoolManifest),
     true,
     JSON.stringify(validateSchema.errors),
   );

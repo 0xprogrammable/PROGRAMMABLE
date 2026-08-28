@@ -1277,6 +1277,25 @@ describe("Classic V4 release and launch preflight", () => {
     const parsedIndexerRelease = parseClassicV4PublicRelease(manifest, binding);
     expect(isClassicV4PublicActionRelease(parsedIndexerRelease)).toBe(false);
 
+    const publicPoolActivity = structuredClone(manifest);
+    publicPoolActivity.lifecycleEvidence.observations.exclusiveHookActivity.nativeAccrualEvents =
+      334;
+    publicPoolActivity.lifecycleEvidence.evidenceDigest = digest(
+      publicPoolActivity.lifecycleEvidence,
+      "evidenceDigest",
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+    );
+    publicPoolActivity.manifestDigest = digest(
+      publicPoolActivity,
+      "manifestDigest",
+    );
+    expect(
+      parseClassicV4PublicRelease(
+        publicPoolActivity,
+        trustedBindingFor(publicPoolActivity),
+      ),
+    ).toMatchObject({ releaseStatus: "indexer-activated" });
+
     const sourcifyMatch = structuredClone(manifest);
     for (const contract of Object.values(
       sourcifyMatch.sourceVerification.contracts,
