@@ -764,8 +764,8 @@
     "sourceVerified": true,
     "lifecycleVerified": true,
     "activationEligible": true,
-    "indexerBindingDigest": "0x2dc00f506772ea6d33619e8b6a929b7ed5832158a76a51ae00bb8f31656a4459",
+    "indexerBindingDigest": "0xd085482bdc589774b4d36507baa9f01e444cbd46d5761ad2997933087af0280d",
     "activated": true
   },
-  "manifestDigest": "0x7b50b4b98bbdc86f4b0b9d28d80fec8c21942d951920469c206425651ca2daf8"
+  "manifestDigest": "0xb08e7032c801ddc3d5ba958eb389d2728bb439e4105aef4e7706969f7426ee00"
 }

@@ -91,7 +91,7 @@ export const CLASSIC_V4_PUBLIC_RELEASE_BINDING:
   | null = Object.freeze({
   chainId: 1,
   launcher: "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
-  manifestDigest: "0x7b50b4b98bbdc86f4b0b9d28d80fec8c21942d951920469c206425651ca2daf8",
+  manifestDigest: "0xb08e7032c801ddc3d5ba958eb389d2728bb439e4105aef4e7706969f7426ee00",
   releaseStatus: "publicly-available",
   publicAvailable: true,
   transactionHash: "0xbb6b4c9fc70600e4d5dd394314a49630bf9f837a82065013c397ebebd978aa7c",

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "status": "indexer-activated",
   "chainId": 1,
-  "manifestDigest": "0x7b50b4b98bbdc86f4b0b9d28d80fec8c21942d951920469c206425651ca2daf8",
+  "manifestDigest": "0xb08e7032c801ddc3d5ba958eb389d2728bb439e4105aef4e7706969f7426ee00",
   "launcher": "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699",
   "releaseBinding": {
     "schemaVersion": 1,
@@ -11,7 +11,7 @@
     "confirmations": 12,
     "envio": {
       "deploymentLabel": "production-6157d22",
-      "graphqlEndpoint": "https://indexer.hyperindex.xyz/5093e75/v1/graphql",
+      "graphqlEndpoint": "https://indexer.hyperindex.xyz/f6714ef/v1/graphql",
       "schemaVersion": "1",
       "sourceCommit": "6157d221f53d70dc1439226365f9be3c1f260b4b",
       "configSha256": "0xb2d34d55b7d733452b011c5030ad773e9cafd0fd3d18364f2de5699e02fd7a43",
