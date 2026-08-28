@@ -1874,7 +1874,7 @@ export function validateClassicV4LaunchAuthorization(canary, value) {
       normalizeHex(stampRequest.hookRuntimeCodeHash) ===
         normalizeHex(canary.runtimeCodeHashes.feeHook) &&
       normalizeHex(classicV4PoolId(poolKey)) === normalizeHex(result.poolId) &&
-      result.positionTokenId > 0n &&
+      result.positionTokenId === 0n &&
       result.tokenLiquidityAmount > 0n &&
       result.tokenLiquidityAmount + result.lockedTokenDust ===
         CLASSIC_V4_TOKEN_SUPPLY &&
@@ -2298,12 +2298,9 @@ export function validateClassicV4LifecycleEvidence(
       normalizeHex(launchProof.route.expectedResult.poolId),
     "Canary pool ID differs from the signed Router result",
   );
-  assert(
-    decimalBigInt(evidence.positionTokenId, "position token ID", {
-      positive: true,
-    }) === launchProof.route.expectedResult.positionTokenId,
-    "Canary position token ID differs from the signed Router result",
-  );
+  decimalBigInt(evidence.positionTokenId, "position token ID", {
+    positive: true,
+  });
   assertNonNegativeInteger(evidence.verificationBlock, "lifecycle verification block");
   assert(evidence.verificationBlock > 0, "Lifecycle verification block must be positive");
   assertNonzeroBytes32(

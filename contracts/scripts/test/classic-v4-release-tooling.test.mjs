@@ -61,7 +61,10 @@ import {
   loadClassicV4SharedObservedBlock,
   verifyClassicV4SourcePins,
 } from "../prepare-classic-v4-mainnet-release.mjs";
-import { loadClassicV4BlockAtExactNumber } from "../verify-classic-v4-lifecycle-canary.mjs";
+import {
+  assertClassicV4PositionTokenEvidence,
+  loadClassicV4BlockAtExactNumber,
+} from "../verify-classic-v4-lifecycle-canary.mjs";
 import { verifyClassicV4ReleasePrerequisites } from "../verify-classic-v4-release-prerequisites.mjs";
 import {
   assertFreshDeploymentEvidence,
@@ -215,7 +218,7 @@ function classicLaunchAuthorization(
     token,
     rewardVault,
     positionRecipient,
-    positionTokenId: 42n,
+    positionTokenId: 0n,
     tokenLiquidityAmount: 999_999_999n * 10n ** 18n,
     lockedTokenDust: 1n * 10n ** 18n,
     initialBuyNativeAmount: BigInt(request.valueWei),
@@ -1410,6 +1413,43 @@ test("numeric RPC block tags reject N-plus-one response headers", async () => {
   );
 });
 
+test("position token evidence separates the Router sentinel from the minted NFT", () => {
+  assert.doesNotThrow(() =>
+    assertClassicV4PositionTokenEvidence({
+      signedPositionTokenId: 0n,
+      eventPositionTokenId: 123n,
+      storedPositionTokenId: 123n,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertClassicV4PositionTokenEvidence({
+        signedPositionTokenId: 123n,
+        eventPositionTokenId: 123n,
+        storedPositionTokenId: 123n,
+      }),
+    /zero authorization sentinel/,
+  );
+  assert.throws(
+    () =>
+      assertClassicV4PositionTokenEvidence({
+        signedPositionTokenId: 0n,
+        eventPositionTokenId: 0n,
+        storedPositionTokenId: 0n,
+      }),
+    /Position token ID is zero/,
+  );
+  assert.throws(
+    () =>
+      assertClassicV4PositionTokenEvidence({
+        signedPositionTokenId: 0n,
+        eventPositionTokenId: 123n,
+        storedPositionTokenId: 124n,
+      }),
+    /mapping differs from the launch event/,
+  );
+});
+
 test("deployment receipts and transactions must bind to the fetched canonical block", () => {
   const blockNumber = 25_700_100;
   const blockHash = txHash("canonical-deployment-block");
@@ -1496,6 +1536,17 @@ test("deployment, source and lifecycle evidence fail closed on drift", () => {
   const deployment = deploymentEvidence(plan);
   const source = sourceEvidence(plan, deployment);
   const lifecycle = lifecycleEvidence(plan, deployment, source);
+  const redigestLifecycle = (value) => {
+    const unsigned = structuredClone(value);
+    delete unsigned.evidenceDigest;
+    return {
+      ...unsigned,
+      evidenceDigest: digestJson(
+        unsigned,
+        CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+      ),
+    };
+  };
   assert.doesNotThrow(() =>
     validateClassicV4DeploymentEvidence(plan, deployment),
   );
@@ -1509,6 +1560,45 @@ test("deployment, source and lifecycle evidence fail closed on drift", () => {
   );
   assert.doesNotThrow(() =>
     validateClassicV4LifecycleEvidence(plan, deployment, source, lifecycle),
+  );
+
+  const differentActualPosition = structuredClone(lifecycle);
+  differentActualPosition.positionTokenId = "43";
+  differentActualPosition.postState.positionLock.tokenId = "43";
+  assert.doesNotThrow(() =>
+    validateClassicV4LifecycleEvidence(
+      plan,
+      deployment,
+      source,
+      redigestLifecycle(differentActualPosition),
+    ),
+  );
+
+  const zeroActualPosition = structuredClone(lifecycle);
+  zeroActualPosition.positionTokenId = "0";
+  zeroActualPosition.postState.positionLock.tokenId = "0";
+  assert.throws(
+    () =>
+      validateClassicV4LifecycleEvidence(
+        plan,
+        deployment,
+        source,
+        redigestLifecycle(zeroActualPosition),
+      ),
+    /Invalid position token ID/,
+  );
+
+  const mismatchedPositionState = structuredClone(lifecycle);
+  mismatchedPositionState.postState.positionLock.tokenId = "43";
+  assert.throws(
+    () =>
+      validateClassicV4LifecycleEvidence(
+        plan,
+        deployment,
+        source,
+        redigestLifecycle(mismatchedPositionState),
+      ),
+    /Permanent Classic position lock differs/,
   );
 
   const runtimeDrift = structuredClone(deployment);
@@ -2013,6 +2103,11 @@ test("canary preparation covers launch, all four swap quadrants and both claims"
     canary.launchAuthorization.transaction.calldata,
     authorization.transaction.calldata.toLowerCase(),
   );
+  assert.equal(
+    validateClassicV4LaunchAuthorization(canary, authorization).route
+      .expectedResult.positionTokenId,
+    0n,
+  );
   assert.match(canary.actions[1].guard, /amountOutMinimum>0/);
   assert.match(canary.actions[2].guard, /amountInMaximum>0/);
   assert.equal(
@@ -2098,6 +2193,13 @@ test("Classic Router authorization rejects every foreign binding", () => {
       () =>
         rewriteClassicLaunchAuthorization(authorization, ({ route }) => {
           route.expectedResult.initialBuyNativeAmount += 1n;
+        }),
+    ],
+    [
+      "position token sentinel",
+      () =>
+        rewriteClassicLaunchAuthorization(authorization, ({ route }) => {
+          route.expectedResult.positionTokenId = 42n;
         }),
     ],
     [
