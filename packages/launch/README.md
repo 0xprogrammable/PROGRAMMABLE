@@ -134,6 +134,9 @@ one of `supported`, `supported_with_warnings`, `needs_evidence`, or `unsupported
 baseline and typed remediation. The CLI rejects a response unless it explicitly confirms `quotaConsumed: false`,
 `nonceAllocated: false`, `persisted: false`, `walletSignatureRequiredLater: true`, and
 `walletBroadcastByService: false`. Unknown additive capability and preflight fields remain present in CLI JSON.
+`quotaConsumed: false` means the preflight creates no durable launch and consumes no launch-creation quota; it does not
+mean the authenticated HTTP request is unmetered. Normal route limits still apply, and a partner preflight consumes its
+`prepareRequestsPerHour` budget.
 Neither a favorable preflight disposition nor local checks can approve wallet handoff. The server must later bind and
 verify the launch-specific behavior, fee, liquidity, and routability evidence required by the selected lane.
 
@@ -345,14 +348,23 @@ The API key is never written to the journal or output. For support, send only th
 UTC time, and the public error code. Never send the API key.
 
 Wallet keys, partner root keys, and bounded partner subkeys all use the same `PROGRAMMABLE_API_KEY`, CLI commands, and
-V3 endpoints. Launch operations use `custom-launch:create` and reads use `custom-launch:read`; only a root partner key
-may hold `partner-subkeys:manage`. The controller wallet still owns the launch and separately signs and broadcasts.
+V3 create, preflight, list and status endpoints. Launch operations use `custom-launch:create` and reads use
+`custom-launch:read`; only a root partner key may hold `partner-subkeys:manage`. A wallet key requires `launchWallet`
+to match its wallet binding. A partner credential selects the exact controller in the immutable request but gains no
+wallet authority; that controller still owns the launch and separately signs and broadcasts. The current Router V1
+permit-reissue disposition endpoint is the wallet-key-only exception.
 When a partner credential is used, the server may return immutable `partnerAttribution`; callers cannot supply or
 override it. “Launched via” is provenance only, never verification, a safety mark, endorsement, or an economic category.
 
-For a failed, unconsumed `PERMIT_EXPIRED` launch, the Router V1 permit-reissue endpoint returns a typed `409`; this
-release defines no `2xx` reissue response and reserves no replacement nonce or permit. Repack and submit a new launch
-request with a fresh nonce and new Idempotency-Key. All fee and security gates run again and predicted addresses may change.
+Partner history is isolated by credential principal. A root cannot list or read child launches, and a child cannot read
+root or sibling launches. Rotating a subkey revokes its launch bridges and creates a replacement principal; private
+launch history is not migrated to the replacement. The root subkey list retains bounded credential metadata, not the
+child's launch resources. Every subkey-admin route consumes the root's `subkeyAdminRequestsPerHour` budget.
+
+For a failed, unconsumed wallet-key `PERMIT_EXPIRED` launch, the Router V1 permit-reissue endpoint returns a typed `409`;
+this release defines no `2xx` reissue response and reserves no replacement nonce or permit. Partner credentials are not
+authenticated on that endpoint. In either case, repack and submit a new launch request with a fresh nonce and new
+Idempotency-Key. All fee and security gates run again and predicted addresses may change.
 
 API errors retain the server's structured `error.details` on `ProgrammableApiError.details.serverDetails` for
 programmatic diagnosis and expose validated `programmable.custom-launch-remediation.v1` objects separately. CLI

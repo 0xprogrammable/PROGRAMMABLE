@@ -30,7 +30,7 @@
     "cliReleaseUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.7",
     "cliTarballUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz",
     "cliChecksumUrl": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
-    "cliTarballSha256": "sha256:f45dcb6bf79d93bdf1459802b47989078b57f311095d43319468c549feec0ccc"
+    "cliTarballSha256": "sha256:bd769e52ffd0ac2fb6577149590860edaa18be0c055959c4048c7fcf8a4cd4e7"
   },
   "agentContract": {
     "coldStartUrl": "https://programmable.market/.well-known/programmable.json",
@@ -50,6 +50,8 @@
     "automaticBroadcast": false,
     "remotePreflight": {
       "quotaConsumed": false,
+      "quotaConsumedMeaning": "no-launch-creation-quota-or-durable-reservation",
+      "authenticatedRequestRateBudgetConsumed": true,
       "nonceAllocated": false,
       "persisted": false,
       "walletSignatureRequiredLater": true,
@@ -107,7 +109,7 @@
     {
       "step": 5,
       "id": "validate",
-      "action": "Run validate with --remote and the same config. It first requires byte-identical local reproduction, then fetches public capabilities and posts those same bytes to authenticated preflight. Require quotaConsumed=false, nonceAllocated=false and persisted=false. Read riskClassification, behaviorEvidence and all six productTruthAxes independently. Treat local validation and preflight only as preparation and classification; neither is the server's durable launch decision."
+      "action": "Run validate with --remote and the same config. It first requires byte-identical local reproduction, then fetches public capabilities and posts those same bytes to authenticated preflight. Require quotaConsumed=false, nonceAllocated=false and persisted=false. quotaConsumed=false means no launch-creation quota or durable reservation; the authenticated call still consumes its ordinary route rate budget, including partner prepareRequestsPerHour. Read riskClassification, behaviorEvidence and all six productTruthAxes independently. Treat local validation and preflight only as preparation and classification; neither is the server's durable launch decision."
     },
     {
       "step": 6,

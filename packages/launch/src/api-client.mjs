@@ -41,6 +41,8 @@ const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
+const PARTNER_API_KEY =
+  /^pm_partner_(?:root_)?[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
 const MAX_SUBMISSION_JOURNAL_BYTES = 12_582_912;
 const PREFLIGHT_DISPOSITIONS = new Set([
   "supported",
@@ -281,7 +283,9 @@ export async function statusLaunch(options) {
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
       const action = resourceActionSummary(resource);
-      const permitRecovery = permitRecoverySummary(resource);
+      const permitRecovery = permitRecoverySummary(resource, {
+        permitReissueInspectionAvailable: !PARTNER_API_KEY.test(apiKey),
+      });
       return {
         httpStatus: result.status,
         stopped,
@@ -337,6 +341,15 @@ export async function requestPermitReissueDisposition(options) {
   };
   const apiOrigin = productionApiOrigin(options.apiOrigin);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
+  if (PARTNER_API_KEY.test(apiKey)) {
+    throw new ProgrammableApiError(
+      "Router V1 permit-reissue disposition is available only to wallet API keys; partner launches recover by packing and submitting a new request",
+      {
+        code: "PERMIT_REISSUE_WALLET_KEY_REQUIRED",
+        expectedCredentialKind: "wallet",
+      },
+    );
+  }
   const requestPath = PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
     "{launchId}",
     encodeURIComponent(options.launchId),
@@ -877,7 +890,10 @@ function resourceActionSummary(resource, { walletHandoffBaseUrl } = {}) {
   return summary;
 }
 
-function permitRecoverySummary(resource) {
+function permitRecoverySummary(
+  resource,
+  { permitReissueInspectionAvailable = true } = {},
+) {
   if (resource?.status !== "failed"
     || resource?.failure?.code !== "PERMIT_EXPIRED"
     || resource?.onchainLaunchId !== null) {
@@ -894,12 +910,14 @@ function permitRecoverySummary(resource) {
     requiresNewIdempotencyKey: true,
     predictedAddressesMayChange: true,
     automaticReissue: false,
-    permitReissueEndpoint: launchId === null
-      ? PERMIT_REISSUE_PATH_TEMPLATE_V3
-      : PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
-          "{launchId}",
-          encodeURIComponent(launchId),
-        ),
+    permitReissueEndpoint: permitReissueInspectionAvailable
+      ? launchId === null
+        ? PERMIT_REISSUE_PATH_TEMPLATE_V3
+        : PERMIT_REISSUE_PATH_TEMPLATE_V3.replace(
+            "{launchId}",
+            encodeURIComponent(launchId),
+          )
+      : null,
   };
 }
 

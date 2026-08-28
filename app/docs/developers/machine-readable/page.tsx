@@ -11,7 +11,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
   description:
-    "Public-read contracts, wallet-owned V3 resources, compatibility history, Markdown guides, manifests and canonical verification files.",
+    "Public-read contracts, credential-principal V3 resources, compatibility history, Markdown guides, manifests and canonical verification files.",
   alternates: { canonical: "/docs/developers/machine-readable" },
 };
 
@@ -60,8 +60,8 @@ export default function MachineReadableDocsPage() {
             </a>
             <span>
               Combined developer contract. Public discovery and Registry reads
-              are unauthenticated; Custom launch routes use a wallet-bound
-              Bearer API key.
+              are unauthenticated; Custom launch routes use a wallet key,
+              partner root or bounded partner subkey.
             </span>
           </li>
           <li>
@@ -292,7 +292,8 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             <code>https://api.programmable.market/v3/custom-launches</code>{" "}
-            requires a wallet-bound <code>pm_live_</code> Bearer key.
+            requires a scoped wallet, partner-root or partner-subkey Bearer
+            credential.
           </li>
           <li>
             Public V3.3 creation, list and single-resource reads are live. V2 and
@@ -359,8 +360,9 @@ export default function MachineReadableDocsPage() {
             key is not wallet authority.
           </li>
           <li>
-            <code>GET /v3/custom-launches</code> returns a wallet-owned,
-            cursor-paginated snapshot. It makes a bounded best-effort
+            <code>GET /v3/custom-launches</code> returns an exact-launch-principal,
+            cursor-paginated snapshot. Partner roots do not aggregate child
+            history and rotation does not migrate it. It makes a bounded best-effort
             reconciliation pass over pending rows and still returns durable
             history when RPC is unavailable. Resource
             <code> lifecycleQueue</code> is bounded worker scheduling guidance,

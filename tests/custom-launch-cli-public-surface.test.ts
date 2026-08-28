@@ -41,7 +41,7 @@ describe("public Custom Launch CLI surface", () => {
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         tarballSha256:
-          "sha256:f45dcb6bf79d93bdf1459802b47989078b57f311095d43319468c549feec0ccc",
+          "sha256:bd769e52ffd0ac2fb6577149590860edaa18be0c055959c4048c7fcf8a4cd4e7",
       },
       compatibility: {
         v1: {
@@ -75,7 +75,7 @@ describe("public Custom Launch CLI surface", () => {
           checksumUrl:
             "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
           tarballSha256:
-            "sha256:f45dcb6bf79d93bdf1459802b47989078b57f311095d43319468c549feec0ccc",
+            "sha256:bd769e52ffd0ac2fb6577149590860edaa18be0c055959c4048c7fcf8a4cd4e7",
         },
       },
       generalHookProfile: {
@@ -173,7 +173,7 @@ describe("public Custom Launch CLI surface", () => {
         checksumUrl:
           "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
         tarballSha256:
-          "sha256:f45dcb6bf79d93bdf1459802b47989078b57f311095d43319468c549feec0ccc",
+          "sha256:bd769e52ffd0ac2fb6577149590860edaa18be0c055959c4048c7fcf8a4cd4e7",
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
         feePolicy: {
@@ -274,7 +274,7 @@ describe("public Custom Launch CLI surface", () => {
         artifactPublished: true,
         releaseVersion: "3.3.7",
         tarballSha256:
-          "sha256:f45dcb6bf79d93bdf1459802b47989078b57f311095d43319468c549feec0ccc",
+          "sha256:bd769e52ffd0ac2fb6577149590860edaa18be0c055959c4048c7fcf8a4cd4e7",
       });
       expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
     } finally {
@@ -507,6 +507,8 @@ describe("public Custom Launch CLI surface", () => {
         authentication: "bearer-api-key",
         requiredScope: "custom-launch:create",
         quotaConsumed: false,
+        quotaConsumedMeaning: "no-launch-creation-quota-or-durable-reservation",
+        authenticatedRequestRateBudgetConsumed: true,
         nonceAllocated: false,
         persisted: false,
       },
@@ -560,6 +562,8 @@ describe("public Custom Launch CLI surface", () => {
       .schema.pattern).toBe("^[1-9][0-9]*$");
     expect(preflight["x-programmable-side-effects"]).toEqual({
       quotaConsumed: false,
+      quotaConsumedMeaning: "no-launch-creation-quota-or-durable-reservation",
+      authenticatedRequestRateBudgetConsumed: true,
       nonceAllocated: false,
       persisted: false,
       walletSignatureRequiredLater: true,

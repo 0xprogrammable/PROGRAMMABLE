@@ -18,7 +18,7 @@ Prediction Markets is available from [Create](https://programmable.market/launch
 
 Build and test the exact hook project. Use the versioned public `programmable-launch` CLI to derive the deterministic source manifest, graph bundle, address locators, evidence digests and exact-source verification metadata described by the [Custom Launch API schema](../developers/custom-launch.md).
 
-Run `pack`, `validate`, `submit` and `status` for the byte identical current V3.3 request with a [wallet-bound API key](https://programmable.market/developers/api-keys). Keep the key in an encrypted environment or secret store, never in chat or prompts. Local CLI checks and preflight prepare the request; the API server is the decision authority and exposes no wallet handoff until it has verified the per-launch behavior, fee and liquidity evidence required by the selected lane. At `authorized`, the controller reviews and signs the exact Router transaction separately.
+Run `pack`, `validate`, `submit` and `status` for the byte identical current V3.3 request with a wallet key, partner root or bounded partner subkey; [wallet keys are managed here](https://programmable.market/developers/api-keys). Keep the credential in an encrypted environment or secret store, never in chat or prompts. Local CLI checks and preflight prepare the request; the API server is the decision authority and exposes no wallet handoff until it has verified the per-launch behavior, fee and liquidity evidence required by the selected lane. At `authorized`, the controller reviews and signs the exact Router transaction separately.
 
 ## Reusable work
 

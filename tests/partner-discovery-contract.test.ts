@@ -91,6 +91,10 @@ describe("partner credential discovery", () => {
       .toContain("pm_partner_root_");
     expect(openApi.components.securitySchemes.CustomLaunchApiKey.bearerFormat)
       .toContain("pm_partner_");
+    expect(openApi.components.securitySchemes.WalletCustomLaunchApiKey)
+      .toMatchObject({ bearerFormat: "pm_live_*" });
+    expect(openApi.paths["/v3/custom-launches/{launchId}/permit-reissues"]
+      .post.security).toEqual([{ WalletCustomLaunchApiKey: [] }]);
   });
 
   it("keeps the dynamic contract free of OpenAPI-only route aliases", () => {
@@ -111,6 +115,16 @@ describe("partner credential discovery", () => {
     expect(openApi.paths["/v1/partner/subkeys"]).toBeDefined();
     expect(openApi.paths["/v1/partner/subkeys/{subkeyId}"]).toBeDefined();
     expect(openApi.components.schemas.LaunchPartnerAttributionV1).toBeDefined();
+    expect(openApi["x-programmable-partner-credentials"])
+      .toMatchObject({
+        permitReissueDispositionCredentialKind: "wallet-only",
+        metadataPolicySameAsWalletKeys: true,
+        launchHistoryVisibility: {
+          rootAggregatesSubkeys: false,
+          rotationMigratesHistory: false,
+          revokedCredentialCanRead: false,
+        },
+      });
   });
 
   it("documents roots and subkeys without wallet-authority claims", () => {

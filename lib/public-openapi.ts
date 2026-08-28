@@ -22,9 +22,9 @@ export const programmablePublicOpenApi = {
     title: "Programmable developer APIs",
     version: "1.6.0",
     summary:
-      "Verified launch discovery plus public wallet-owned V3 general-hook creation on Ethereum.",
+      "Verified launch discovery plus public credential-principal V3 general-hook creation on Ethereum.",
     description:
-      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public V3.3 contract and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
+      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public V3.3 contract and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -52,7 +52,7 @@ export const programmablePublicOpenApi = {
     {
       name: "Custom launch",
       description:
-        "Fresh wallet-bound writes use V3.3. V2 and V1 remain available for existing history only. Manage API keys at programmable.market/developers/api-keys.",
+        "Fresh wallet-key, partner-root and bounded-partner-subkey writes use V3.3. V2 and V1 remain available for existing history only. Manage wallet keys at programmable.market/developers/api-keys.",
     },
   ],
   paths: {

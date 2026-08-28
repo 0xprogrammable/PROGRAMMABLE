@@ -54,6 +54,8 @@
       "authentication": "bearer-api-key",
       "requiredScope": "custom-launch:create",
       "quotaConsumed": false,
+      "quotaConsumedMeaning": "no-launch-creation-quota-or-durable-reservation",
+      "authenticatedRequestRateBudgetConsumed": true,
       "nonceAllocated": false,
       "persisted": false
     },
@@ -123,6 +125,8 @@
     },
     "remotePreflight": {
       "quotaConsumed": false,
+      "quotaConsumedMeaning": "no-launch-creation-quota-or-durable-reservation",
+      "authenticatedRequestRateBudgetConsumed": true,
       "nonceAllocated": false,
       "persisted": false,
       "walletSignatureRequiredLater": true,
@@ -172,6 +176,20 @@
       "POST /v1/partner/subkeys/{subkeyId}/rotate",
       "DELETE /v1/partner/subkeys/{subkeyId}"
     ],
+    "permitReissueDispositionCredentialKind": "wallet-only",
+    "metadataPolicySameAsWalletKeys": true,
+    "controllerWallet": {
+      "walletKey": "must-equal-key-wallet-binding",
+      "partnerCredential": "selected-by-exact-request",
+      "mustReviewSignAndBroadcast": true
+    },
+    "launchHistoryVisibility": {
+      "root": "root-credential-principal-only",
+      "subkey": "subkey-credential-principal-only",
+      "rootAggregatesSubkeys": false,
+      "rotationMigratesHistory": false,
+      "revokedCredentialCanRead": false
+    },
     "secretDelivery": "issue-and-rotation-response-only",
     "walletSigningAuthority": false,
     "walletBroadcastAuthority": false,
@@ -379,13 +397,15 @@
       "post": {
         "operationId": "preflightDirectNativeCustomLaunchV3",
         "summary": "Evaluate the exact V3 request without creating a launch",
-        "description": "Run the production profile parser, exact source/build binding and deterministic static baseline against the same byte-identical V3 body later used by create. Preflight consumes no launch quota, allocates no nonce, persists no launch and never signs or broadcasts. Its deployable, routable and featured booleans are distinct eligibility axes at the reported evidence tier; they are not deployment, trading, source-verification, indexing or feature-placement proof and are never a safety guarantee.",
+        "description": "Run the production profile parser, exact source/build binding and deterministic static baseline against the same byte-identical V3 body later used by create. quotaConsumed=false means no launch-creation quota or durable launch reservation is consumed; the authenticated call still consumes its ordinary route rate budget, including a partner credential's prepareRequestsPerHour budget. Preflight allocates no nonce, persists no launch and never signs or broadcasts. Its deployable, routable and featured booleans are distinct eligibility axes at the reported evidence tier; they are not deployment, trading, source-verification, indexing or feature-placement proof and are never a safety guarantee.",
         "tags": [
           "V3 general hooks"
         ],
         "x-programmable-public-availability": "live",
         "x-programmable-side-effects": {
           "quotaConsumed": false,
+          "quotaConsumedMeaning": "no-launch-creation-quota-or-durable-reservation",
+          "authenticatedRequestRateBudgetConsumed": true,
           "nonceAllocated": false,
           "persisted": false,
           "walletSignatureRequiredLater": true,
@@ -454,7 +474,7 @@
       "post": {
         "operationId": "createDirectNativeCustomLaunchV3",
         "summary": "Submit an exact V3 general-hook request",
-        "description": "Submit the byte-identical CLI-derived request. Every target remains per-launch bound to exact source, compiler, build, creation/runtime bytes, final calldata and simulation evidence. Role-aware blocking indicators stop before wallet authorization; bound warnings remain visible and continue to exact Router simulation. Admission is not an audit or a safety, liquidity, tradeability, honeypot, or fee-behavior guarantee.",
+        "description": "Submit the byte-identical CLI-derived request. A wallet key requires launchWallet to equal its wallet binding. A partner root or subkey selects the exact controller in launchWallet but gains no signing authority; that controller remains the wallet that must review, sign and broadcast. Partner credentials use the same current-profile metadata policy as wallet keys. Every target remains per-launch bound to exact source, compiler, build, creation/runtime bytes, final calldata and simulation evidence. Role-aware blocking indicators stop before wallet authorization; bound warnings remain visible and continue to exact Router simulation. Admission is not an audit or a safety, liquidity, tradeability, honeypot, or fee-behavior guarantee.",
         "tags": [
           "V3 general hooks"
         ],
@@ -571,8 +591,8 @@
       },
       "get": {
         "operationId": "listDirectNativeCustomLaunchesV3",
-        "summary": "List wallet-owned V3 resources",
-        "description": "Version-matched newest-first wallet-owned list. Pending rows may receive bounded best-effort reconciliation; use single-resource GET for precise polling.",
+        "summary": "List V3 resources visible to the authenticated credential",
+        "description": "Version-matched newest-first list for the authenticated launch principal. A wallet key sees its wallet principal. A partner root sees only launches created by that exact root credential, and a subkey sees only launches created by that exact subkey; a root does not aggregate child history. Subkey rotation creates a new launch principal and does not migrate prior history. Pending rows may receive bounded best-effort reconciliation; use single-resource GET for precise polling.",
         "tags": [
           "V3 general hooks"
         ],
@@ -603,7 +623,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Wallet-owned V3 resource page.",
+            "description": "Credential-principal-scoped V3 resource page.",
             "content": {
               "application/json": {
                 "schema": {
@@ -633,8 +653,8 @@
     "/v3/custom-launches/{launchId}": {
       "get": {
         "operationId": "getDirectNativeCustomLaunchV3",
-        "summary": "Read one wallet-owned V3 resource",
-        "description": "The single-resource contract is the precise polling source for conformance state, any exact funding challenge and, after validation and simulation, the exact Router transaction. The API never signs or broadcasts either wallet action.",
+        "summary": "Read one V3 resource visible to the authenticated credential",
+        "description": "The single-resource contract is the precise polling source for conformance state, any exact funding challenge and, after validation and simulation, the exact Router transaction. Partner roots and subkeys are isolated by their own launch principal; a root cannot read a child's launch and a rotated replacement cannot inherit the revoked key's history. The API never signs or broadcasts either wallet action.",
         "tags": [
           "V3 general hooks"
         ],
@@ -662,7 +682,7 @@
             }
           },
           "404": {
-            "description": "Launch not found for this wallet principal.",
+            "description": "Launch not found for this wallet or exact partner-credential principal.",
             "content": {
               "application/json": {
                 "schema": {
@@ -849,11 +869,11 @@
       "post": {
         "operationId": "requestPermitReissueDispositionV3",
         "summary": "Inspect the Router V1 permit-reissue disposition",
-        "description": "This deployed-contract release has no successful permit-reissue operation and therefore defines no 2xx response. Router V1 uses the signed permit nonce as the CREATE2 route nonce, so changing it would change the predicted route. A conforming call returns a typed 409 explaining why reissue is unsupported, not applicable, or bound to different request bytes. The current recovery is to repack and submit a new launch request with a fresh nonce and new Idempotency-Key; full fee and security gates run again and predicted addresses may change. This endpoint never reserves a replacement nonce, issues a replacement permit, signs, or broadcasts.",
+        "description": "Wallet-key-only inspection for the current deployed-contract boundary. Partner roots and subkeys are not authenticated on this route and recover directly by repacking and submitting a new launch request. This release has no successful permit-reissue operation and therefore defines no 2xx response. Router V1 uses the signed permit nonce as the CREATE2 route nonce, so changing it would change the predicted route. A conforming wallet-key call returns a typed 409 explaining why reissue is unsupported, not applicable, or bound to different request bytes. The current recovery is to repack and submit a new launch request with a fresh nonce and new Idempotency-Key; full fee and security gates run again and predicted addresses may change. This endpoint never reserves a replacement nonce, issues a replacement permit, signs, or broadcasts.",
         "tags": ["V3 general hooks"],
         "x-programmable-public-availability": "live-unsupported-disposition-only",
         "x-programmable-required-scope": "custom-launch:create",
-        "security": [{ "CustomLaunchApiKey": [] }],
+        "security": [{ "WalletCustomLaunchApiKey": [] }],
         "parameters": [
           {
             "name": "launchId",
@@ -887,7 +907,7 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": {
-            "description": "Launch not found for this authenticated credential.",
+            "description": "Launch not found for this authenticated wallet principal.",
             "content": {
               "application/json": {
                 "schema": {
@@ -939,10 +959,11 @@
       "get": {
         "operationId": "listPartnerSubkeysV1",
         "summary": "List subkeys owned by the authenticated partner root",
-        "description": "Returns at most 500 newest-first child credentials for the exact authenticated root. No query parameters are accepted. Secrets are never returned by list. A root credential with partner-subkeys:manage is required; wallet keys and partner subkeys cannot call this route.",
+        "description": "Returns at most 500 newest-first child credentials for the exact authenticated root, including revoked and rotated metadata. It does not return child launch history. No query parameters are accepted. Secrets are never returned by list. A root credential with partner-subkeys:manage is required; wallet keys and partner subkeys cannot call this route. The call consumes the root's partner-subkey-admin request budget.",
         "tags": ["Partner subkeys"],
         "x-programmable-public-availability": "live",
         "x-programmable-required-scope": "partner-subkeys:manage",
+        "x-programmable-budget-class": "partner-subkey-admin",
         "security": [{ "PartnerRootApiKey": [] }],
         "responses": {
           "200": {
@@ -967,10 +988,11 @@
       "post": {
         "operationId": "createPartnerSubkeyV1",
         "summary": "Issue one bounded partner subkey",
-        "description": "Issues a child credential whose scopes and budgets cannot exceed the authenticated root and whose expiry cannot exceed the root expiry. The Idempotency-Key binds the canonical request. The first committed response is 201 and delivers apiKey exactly once; an exact replay is 200 with apiKey null. Preserve the original body and Idempotency-Key across ambiguous transport failure. No query parameters are accepted.",
+        "description": "Issues a child credential with its own isolated launch principal. Its scopes and budgets cannot exceed the authenticated root and its expiry cannot exceed the root expiry. The Idempotency-Key binds the canonical request. The first committed response is 201 and delivers apiKey exactly once; an exact replay is 200 with apiKey null. Preserve the original body and Idempotency-Key across ambiguous transport failure. No query parameters are accepted. The call consumes the root's partner-subkey-admin request budget.",
         "tags": ["Partner subkeys"],
         "x-programmable-public-availability": "live",
         "x-programmable-required-scope": "partner-subkeys:manage",
+        "x-programmable-budget-class": "partner-subkey-admin",
         "security": [{ "PartnerRootApiKey": [] }],
         "parameters": [
           {
@@ -1035,10 +1057,11 @@
       "post": {
         "operationId": "rotatePartnerSubkeyV1",
         "summary": "Rotate one subkey owned by the authenticated root",
-        "description": "Revokes the selected child and creates its replacement atomically for this root. The replacement remains bounded by the authenticated root. The first committed response is 201 with the replacement apiKey exactly once; an exact idempotent replay is 200 with apiKey null. No query parameters are accepted.",
+        "description": "Revokes the selected child and its launch bridges, then creates its replacement atomically for this root. The replacement receives a new isolated launch principal; authenticated launch history is not migrated and the root does not inherit it. The replacement remains bounded by the authenticated root. The first committed response is 201 with the replacement apiKey exactly once; an exact idempotent replay is 200 with apiKey null. No query parameters are accepted. The call consumes the root's partner-subkey-admin request budget.",
         "tags": ["Partner subkeys"],
         "x-programmable-public-availability": "live",
         "x-programmable-required-scope": "partner-subkeys:manage",
+        "x-programmable-budget-class": "partner-subkey-admin",
         "security": [{ "PartnerRootApiKey": [] }],
         "parameters": [
           {
@@ -1111,10 +1134,11 @@
       "delete": {
         "operationId": "revokePartnerSubkeyV1",
         "summary": "Revoke one subkey owned by the authenticated root",
-        "description": "Revokes a child credential and its launch-principal bridge. Repeating deletion of the same owned credential returns 200 with disposition already_revoked. No request body, Idempotency-Key, query parameter, or secret is accepted or returned.",
+        "description": "Revokes a child credential and its launch-principal bridges. The revoked credential can no longer read its authenticated history, and the root does not inherit that history. Repeating deletion of the same owned credential returns 200 with disposition already_revoked. No request body, Idempotency-Key, query parameter, or secret is accepted or returned. The call consumes the root's partner-subkey-admin request budget.",
         "tags": ["Partner subkeys"],
         "x-programmable-public-availability": "live",
         "x-programmable-required-scope": "partner-subkeys:manage",
+        "x-programmable-budget-class": "partner-subkey-admin",
         "security": [{ "PartnerRootApiKey": [] }],
         "parameters": [
           {
@@ -1174,7 +1198,13 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "pm_live_* | pm_partner_root_<22>_<43> | pm_partner_<22>_<43>",
-        "description": "Wallet, partner-root, or bounded partner-subkey credential loaded from the same PROGRAMMABLE_API_KEY or supported operating-system secret store. It is never accepted as an argument or prompt. Partner credentials use the canonical V3 flow and may add server-owned attribution, but no credential grants wallet signing, broadcast, or gate-bypass authority."
+        "description": "Wallet, partner-root, or bounded partner-subkey credential loaded from the same PROGRAMMABLE_API_KEY or supported operating-system secret store. It is never accepted as an argument or prompt. Partner credentials use the canonical V3 create, preflight, list and status flow and may add server-owned attribution, but no credential grants wallet signing, broadcast, or gate-bypass authority. The Router V1 permit-reissue disposition route is the explicit wallet-key-only exception."
+      },
+      "WalletCustomLaunchApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "pm_live_*",
+        "description": "Wallet-bound API key loaded from PROGRAMMABLE_API_KEY or a supported operating-system secret store. The Router V1 permit-reissue disposition route does not authenticate partner roots or subkeys."
       },
       "CustomLaunchWebsiteToken": {
         "type": "http",
@@ -1551,7 +1581,8 @@
             "oneOf": [
               { "type": "string", "format": "uuid" },
               { "type": "null" }
-            ]
+            ],
+            "description": "The revoked predecessor for a rotation, or null for an original issue. Rotation creates a new launch principal and does not migrate authenticated launch history."
           }
         },
         "additionalProperties": false
@@ -1783,7 +1814,8 @@
             ],
             "properties": {
               "quotaConsumed": {
-                "const": false
+                "const": false,
+                "description": "No launch-creation quota or durable launch reservation is consumed. The authenticated preflight request still consumes its ordinary route rate budget."
               },
               "nonceAllocated": {
                 "const": false
@@ -2301,7 +2333,8 @@
             }
           },
           "quotaConsumed": {
-            "const": false
+            "const": false,
+            "description": "No launch-creation quota or durable launch reservation is consumed. The authenticated call still consumes its ordinary route rate budget; partner credentials use prepareRequestsPerHour."
           },
           "nonceAllocated": {
             "const": false
@@ -4800,7 +4833,8 @@
             "const": "programmable.custom-launch-create-request.v3"
           },
           "launchWallet": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
+            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress",
+            "description": "Exact controller wallet. It must equal a wallet API key's wallet binding. A partner credential may select it in the immutable request but gains no signing authority; this address must review, sign and broadcast the wallet handoff."
           },
           "chainId": {
             "const": "1"
@@ -4821,7 +4855,8 @@
             "$ref": "#/components/schemas/CustomGraphBundleV3"
           },
           "projectMetadata": {
-            "$ref": "#/components/schemas/ProjectMetadataV1"
+            "$ref": "#/components/schemas/ProjectMetadataV1",
+            "description": "Required complete metadata for every fresh profile 3.3.0 request, including partner-created requests. It is optional only under the exact legacy profile branches defined below."
           },
           "projectMetadataHash": {
             "$ref": "./custom-launch-v2.json#/components/schemas/Sha256Digest",
@@ -5280,7 +5315,8 @@
             "const": "1"
           },
           "from": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
+            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress",
+            "description": "Exact request controller and resource ownerWallet. The connected wallet must match this address before signing or sending."
           },
           "to": {
             "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
@@ -6388,7 +6424,8 @@
             "const": "custom-launch:create:v3"
           },
           "ownerWallet": {
-            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress"
+            "$ref": "./custom-launch-v2.json#/components/schemas/EthereumAddress",
+            "description": "The immutable launchWallet/controller selected by the request. For wallet credentials it equals the key binding; for partner credentials it remains the separate wallet that must review, sign and broadcast."
           },
           "status": {
             "type": "string",

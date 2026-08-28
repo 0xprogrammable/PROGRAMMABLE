@@ -35,8 +35,10 @@ Fetch public `GET https://api.programmable.market/v3/capabilities`, then use the
 `pack -> validate --remote -> submit -> status --watch --until authorized -> wallet -> status --watch --until
 finalized`. `validate --remote` first repeats local byte-identical
 validation and then posts those same bytes to Bearer-authenticated `POST /v3/custom-launches/preflight`. The preflight
-uses scope `custom-launch:create`, consumes no launch quota, allocates no nonce, persists no launch, requires a later
-wallet signature and never broadcasts. `wallet` is a separate connected-controller action, not a CLI command.
+uses scope `custom-launch:create`, consumes no launch-creation quota, allocates no nonce, persists no launch, requires a
+later wallet signature and never broadcasts. `quotaConsumed: false` does not mean the HTTP call is unmetered: its
+ordinary authenticated route rate budget still applies, and partner preflight counts against `prepareRequestsPerHour`. `wallet` is a
+separate connected-controller action, not a CLI command.
 Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`; there is no origin override.
 Local CLI results and preflight prepare and classify the exact request; neither is the launch decision. After durable
 submission, the API server must verify every per-launch behavior, fee and liquidity evidence axis required by the
@@ -206,10 +208,14 @@ and checks the bound SHA-256, length, type and dimensions before rendering; IPFS
 An unavailable or mismatched remote image remains a digest plus placeholder. The platform does not upload or replace
 the image, mutate the launch, or sign automatically.
 
-Partner root keys and subkeys use the same `PROGRAMMABLE_API_KEY` and canonical V3 flow as wallet keys. The server
+Partner root keys and subkeys use the same `PROGRAMMABLE_API_KEY` and canonical V3 create, preflight, list and status
+flow as wallet keys. The current Router V1 permit-reissue disposition route is wallet-key-only. The server
 derives immutable `partnerAttribution`; callers cannot set it, and it is provenance only, not a safety or verification
-claim. The controller wallet remains the signer and broadcaster. Router V1 permit reissue defines only typed `409`
-responses; recover by repacking a new request with a fresh nonce and Idempotency-Key, with full gates rerun.
+claim. A wallet key requires `launchWallet` to equal its bound wallet. A partner credential instead selects the exact
+controller in the immutable request but never acquires that wallet's authority. The selected controller remains the
+signer and broadcaster, and the same complete name, symbol, description, image, website and X metadata policy applies.
+For an expired partner launch, recover directly by repacking a new request with a fresh nonce and Idempotency-Key, with
+full gates rerun.
 
 ### Public partner subkeys
 
@@ -217,7 +223,14 @@ A partner root with `partner-subkeys:manage` may list, issue, rotate, and revoke
 public `/v1/partner/subkeys` operations in the V3 OpenAPI. The root credential is read only from
 `PROGRAMMABLE_API_KEY`. Children
 may hold `custom-launch:create` and/or `custom-launch:read`, never `partner-subkeys:manage`, and cannot exceed the root's
-budgets or expiry. Private partner and root administration routes are not public.
+budgets or expiry. Every subkey-admin operation, including list, consumes the root's
+`subkeyAdminRequestsPerHour` budget. Private partner and root administration routes are not public.
+
+Launch reads are credential-principal scoped. A root lists and reads only launches created by that exact root key; it
+does not aggregate launches created by its subkeys. Each subkey sees only its own launches, including launches for the
+different controller wallets it selected. Rotation atomically revokes the old child and its launch bridges, then
+creates a replacement with a new launch principal. Authenticated launch history is not migrated to the replacement or
+inherited by the root. Finalized public metadata remains a separate unauthenticated feed.
 
 ```sh
 curl --fail-with-body \
@@ -237,7 +250,8 @@ The closed `programmable.partner-subkey-request.v1` body contains `displayName`,
 `prepareRequestsPerHour`, `readRequestsPerMinute`, and a millisecond UTC `expiresAt`. The first committed issue or
 rotation returns `201` with `secretState: delivered-once` and the one-time `apiKey`; an exact replay returns `200` with
 `secretState: already-delivered` and `apiKey: null`. Keep the exact body and Idempotency-Key for retry. Rotation is
-`POST /v1/partner/subkeys/{subkeyId}/rotate`; revocation is `DELETE /v1/partner/subkeys/{subkeyId}`. Honor
+`POST /v1/partner/subkeys/{subkeyId}/rotate`; revocation is `DELETE /v1/partner/subkeys/{subkeyId}`. Plan history
+retention before rotation because the replacement credential cannot poll the predecessor's private resources. Honor
 `Retry-After` on `429`. Every error includes a correlation `requestId`, and a bounded `500` never includes secrets.
 
 When the selected token ABI and exact constructor or initializer values expose one unambiguous name or symbol string,
@@ -257,7 +271,8 @@ environment variable named `PROGRAMMABLE_API_KEY`, or in the supported operating
 `$PROGRAMMABLE_API_KEY` in chat, prompts and agent setup. The CLI has no API key argument, never prints the key and
 never stores it in its journal.
 
-The API key is bound to its controller wallet and API scopes. The API and CLI never sign or broadcast. The API server
+Wallet keys are bound to their controller wallet and API scopes. Partner credentials are bound to their own isolated
+launch principal; they select an exact controller in each request but cannot sign for it. The API and CLI never sign or broadcast. The API server
 exposes no wallet handoff until every per-launch behavior, fee and liquidity evidence axis required by the selected lane
 is verified; client output cannot bypass that gate. At `authorized`, the API returns the exact prepared wallet
 transaction. Stop the agent flow so the connected controller can independently review the chain, sender, Router,

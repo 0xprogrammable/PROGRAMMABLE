@@ -53,8 +53,10 @@ For an existing project, the agent must inspect the exact repository rather than
 Before submission, fetch unauthenticated `GET https://api.programmable.market/v3/capabilities`, then run
 `programmable-launch validate launch.json --config programmable-launch.config.json --remote`. Remote validation first
 repeats the exact local validation and byte reproduction, then sends those same request bytes to authenticated
-`POST /v3/custom-launches/preflight` with the wallet-bound Bearer API key. Preflight consumes no launch quota, allocates
-no nonce and persists no launch. It never signs or broadcasts. A successful response is
+`POST /v3/custom-launches/preflight` with a create-scoped wallet key, partner root or bounded partner subkey. Preflight
+consumes no launch-creation quota or durable launch reservation, allocates no nonce and persists no launch. The
+authenticated request still consumes its ordinary route rate budget, including a partner credential's
+`prepareRequestsPerHour` budget. It never signs or broadcasts. A successful response is
 `programmable.custom-launch-preflight.v1` and carries the exact `requestHash`, `profileRevision`, `serverTime`,
 `disposition`, `launchEligibility`, `evidenceTier`, `riskClassification`, platform-owned `behaviorEvidence`, all six
    `productTruthAxes`, hard-block, needs-evidence and warning code arrays, the bounded `staticBaseline`, typed
@@ -284,8 +286,9 @@ present, use only the resource's HTTPS `walletHandoffUrl` before its `expiresAt`
 expiry rather than signing stale material.
 After the wallet broadcasts, continue with `--until finalized`; terminal failures always stop polling.
 
-Manage a wallet-bound key at [API keys](https://programmable.market/developers/api-keys). Store it in an encrypted
-secret or environment variable named `PROGRAMMABLE_API_KEY`. Put only the literal placeholder
+For a wallet flow, manage a wallet-bound key at [API keys](https://programmable.market/developers/api-keys). A partner
+flow uses its issued root or bounded subkey. Store the selected credential in an encrypted secret or environment
+variable named `PROGRAMMABLE_API_KEY`. Put only the literal placeholder
 `$PROGRAMMABLE_API_KEY` in chat, prompts, agent setup and documentation. The CLI also supports the operating system
 secret store. It has no `--api-key` flag and does not persist the key.
 
@@ -338,7 +341,7 @@ available for compatibility, while their fresh POSTs return non-retryable `409 C
 | Field | Requirement |
 | --- | --- |
 | `schemaVersion` | `programmable.custom-launch-create-request.v3` |
-| `launchWallet` | The Ethereum wallet bound to the API key |
+| `launchWallet` | The wallet key's bound address, or the exact controller selected by a partner credential; this controller later reviews, signs and broadcasts |
 | `chainId` | String `1` |
 | `nonce` | A nonzero lowercase `bytes32` |
 | `sourceDescriptor` | One `DeterministicSourceBundleV2` descriptor |
@@ -369,15 +372,27 @@ against the bound SHA-256, length, media type and dimensions before rendering; I
 gateways. If the bytes cannot be read or do not match, the review uses the digest and a placeholder. It never uploads
 or substitutes content, mutates the launch, or signs automatically.
 
-Wallet and partner root/subkeys use the same `PROGRAMMABLE_API_KEY`, CLI, and V3 routes. Partner attribution is
+Wallet and partner root/subkeys use the same `PROGRAMMABLE_API_KEY`, CLI, and V3 create, preflight, list and status
+routes within their scopes. A wallet key must use its bound wallet as `launchWallet`. A partner credential selects the
+exact controller in the request but gains no signing authority; that controller still reviews, signs and broadcasts.
+Partner credentials follow the same current-profile metadata requirements as wallet keys. Partner attribution is
 snapshotted by the server from the authenticated credential and cannot be supplied in the create body. It is a
-“Launched via” provenance label only, not verification, safety, endorsement, or an economic category. The controller
-wallet still signs and broadcasts. Router V1 permit reissue has no successful response; expired permits require a new
-pack and request with a fresh nonce and Idempotency-Key, and predicted addresses may change.
+“Launched via” provenance label only, not verification, safety, endorsement, or an economic category.
+
+Private launch history is isolated by the exact authenticated launch principal. A root sees only launches made by that
+root credential, not launches made by its children; each subkey sees only its own. Rotation revokes the old subkey and
+creates a replacement with a new launch principal. It does not migrate private launch history, and neither the
+replacement nor the root inherits the revoked key's private reads. Finalized public metadata remains available through
+the separate public discovery surfaces.
+
+The Router V1 permit-reissue disposition route is wallet-key-only and has no successful response. Partner credentials
+recover directly by repacking and submitting a new request. Expired permits require a fresh nonce and Idempotency-Key,
+and predicted addresses may change.
 
 ### Manage partner subkeys
 
-A partner root with `partner-subkeys:manage` may create bounded child credentials through the public API. The root uses
+A partner root with `partner-subkeys:manage` may create bounded child credentials through the public API. Every list,
+issue, rotate and revoke call consumes the root's `subkeyAdminRequestsPerHour` budget. The root uses
 the same encrypted `PROGRAMMABLE_API_KEY` environment variable as the launch CLI. A child may hold only
 `custom-launch:create` and/or `custom-launch:read`; its budgets and expiry cannot exceed the authenticated root. Wallet
 keys and child subkeys cannot manage other credentials. Partner creation, root issuance, suspension, and other admin
@@ -422,7 +437,8 @@ directly into the child's encrypted `PROGRAMMABLE_API_KEY`; do not put it in cha
 An exact replay returns `200`, `secretState: already-delivered`, and `apiKey: null`. Rotation uses
 `POST /v1/partner/subkeys/{subkeyId}/rotate` with the same body and idempotency contract. Revocation uses
 `DELETE /v1/partner/subkeys/{subkeyId}` and returns `revoked` or `already_revoked`. On `429`, honor `Retry-After` and
-retry only the same operation. Error bodies contain a support `requestId`; a bounded `500` never contains a secret.
+retry only the same operation. Rotation does not transfer the old subkey's private launch history. Error bodies contain
+a support `requestId`; a bounded `500` never contains a secret.
 
 `verificationBundle` is required in V3. Its compilation units
 are uniquely UTF-8 sorted by `compilationUnitId`; its components are uniquely UTF-8 sorted by `targetId` and exactly

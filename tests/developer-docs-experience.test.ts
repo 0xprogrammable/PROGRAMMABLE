@@ -220,7 +220,7 @@ describe("Developer documentation experience", () => {
       "each consumer must implement the published verification procedure",
     );
     expect(developerDocsMarkdown).toMatch(
-      /Public V3 creation and lifecycle reads use a wallet-bound key/,
+      /Public V3\.3 creation and lifecycle reads use a scoped wallet key, partner root or bounded partner subkey/,
     );
     expect(developerDocsMarkdown).toContain(
       "https://api.programmable.market/v3/custom-launches",

@@ -258,10 +258,17 @@ export default function CustomLaunchApiDocsPage() {
             <code>customLaunchApi.partnerCredentials</code> in discovery.
           </li>
           <li>
+            A wallet key uses its bound wallet as <code>launchWallet</code>. A
+            partner credential selects the exact controller in the request but
+            cannot sign for it. The same current-profile metadata requirements
+            apply to both credential kinds.
+          </li>
+          <li>
             Send <code>Authorization: Bearer $PROGRAMMABLE_API_KEY</code> only
             to <code>https://api.programmable.market</code>. Wallet keys,
             partner roots and bounded partner subkeys use the same canonical V3
-            launch routes.
+            create, preflight, list and status routes within their scopes. The
+            Router V1 permit-reissue disposition route is wallet-key-only.
           </li>
           <li>
             Do not send the website wallet session token to the Custom Launch
@@ -271,6 +278,11 @@ export default function CustomLaunchApiDocsPage() {
             A partner root may manage one level of subkeys. A child&apos;s scopes,
             budgets and expiry cannot exceed its root, and a child cannot manage
             credentials.
+          </li>
+          <li>
+            Partner root and child launch histories are isolated. A root does not
+            aggregate child launches, and rotation does not migrate private launch
+            history to the replacement credential.
           </li>
           <li>
             API scopes grant API operations only. No wallet key, partner root or
@@ -338,8 +350,11 @@ export default function CustomLaunchApiDocsPage() {
             Fetch public <code>GET /v3/capabilities</code>, then run the exact
             request through <code>validate --remote</code>. The authenticated
             <code> POST /v3/custom-launches/preflight</code> uses those same bytes,
-            consumes no launch quota, allocates no nonce, persists no launch and
-            never signs or broadcasts. It returns additive
+            consumes no launch-creation quota or durable launch reservation,
+            allocates no nonce, persists no launch and never signs or broadcasts.
+            The authenticated request still consumes its ordinary route rate budget,
+            including a partner credential&apos;s <code>prepareRequestsPerHour</code>
+            budget. It returns additive
              <code> riskClassification</code>, platform-owned
              <code> behaviorEvidence</code> and all six
              <code> productTruthAxes</code>: <code>deployment</code>,{" "}
@@ -740,7 +755,7 @@ export default function CustomLaunchApiDocsPage() {
         <p className={styles.bodyCopy}>
           After wallet broadcast, poll the single-resource route to drive exact
           reconciliation. <code>GET /v3/custom-launches</code> is a newest-first
-          wallet-owned history view with bounded summaries; its{" "}
+          exact-credential-principal history view with bounded summaries; its{" "}
           <code>output</code> is always <code>null</code>. Use the single-resource
           route for the artifact, wallet transaction and durable failure. Its
           additive <code>lifecycleQueue</code> reports bounded worker scheduling

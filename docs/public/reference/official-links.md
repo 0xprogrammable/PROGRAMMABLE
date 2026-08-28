@@ -28,7 +28,7 @@ description: Official Programmable product, source, community and analytics link
 | Dune                    | [Programmable analytics](https://dune.com/0xprogrammable6098/programmable-analytics)                               |
 | V4 token                | [Dexscreener](https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0) |
 
-Use `api.programmable.market` for authenticated public V3 general-hook creation and wallet-owned lifecycle reads. The
+Use `api.programmable.market` for authenticated public V3 general-hook creation and exact-credential-principal lifecycle reads with wallet keys, partner roots or bounded partner subkeys. The
 default profile is revision 3 with `profileVersion: 3.3.0`; it requires and binds canonical project metadata, including
 an exact source-bound image, into the launch hashes. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and byte-identical retryable under their original immutable policies,
 and revision 2 remains compatible. V2 and V1 history and schemas remain readable, while fresh creation returns

@@ -26,7 +26,7 @@ const PUBLIC_LAUNCH_PACKAGE_RELEASE = Object.freeze({
   checksumUrl:
     "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256",
   tarballSha256:
-    "sha256:f45dcb6bf79d93bdf1459802b47989078b57f311095d43319468c549feec0ccc",
+    "sha256:bd769e52ffd0ac2fb6577149590860edaa18be0c055959c4048c7fcf8a4cd4e7",
 });
 
 function canonicalize(value) {

@@ -137,7 +137,10 @@ describe("Custom Launch API documentation", () => {
       expect(source).toContain("platform_fee_evidence");
       expect(source).toContain("behaviorEvidence");
       expect(source).toContain("lifecycleQueue");
-      expect(source).toMatch(/no (?:launch )?quota|quotaConsumed: false/i);
+      expect(source).toMatch(
+        /no (?:launch[- ]creation )?quota|quotaConsumed: false/i,
+      );
+      expect(source).toMatch(/rate budget/i);
       expect(source).toMatch(/(?:allocates\s+no nonce|nonceAllocated: false)/i);
       expect(source).toMatch(/(?:persists no launch|persisted: false)/i);
     }
