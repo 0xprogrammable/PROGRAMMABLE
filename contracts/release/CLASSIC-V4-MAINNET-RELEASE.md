@@ -17,7 +17,18 @@ There is intentionally no checked-in `contracts/deployments/mainnet-classic-v4.j
 npm run contracts:classic-v4:release:test
 ```
 
-The release tooling requires Node.js 24 or newer and a clean named Git revision. Preparation rejects inherited `FOUNDRY_*`, `DAPP_*`, `REMAPPINGS` and compiler override variables, then performs a forced offline build with an allowlisted environment, explicit tracked config and fresh temporary output/cache directories. Artifacts are loaded only from that temporary output; ignored `contracts/out` bytes are never a release authority. Every downstream deployment, source, canary, lifecycle and capture CLI repeats the same sealed fresh build and validates its plan against those exact artifacts. Every local dependency must be its own clean Git checkout with exact pinned `HEAD` and `origin` before and after compilation. The plan commits the tracked source-pins digest, artifact digest, and the exact compiler-metadata dependency source paths and hashes.
+The release tooling requires Node.js `>=24.14.0` and `<25` and a clean named
+Git revision. Preparation rejects inherited `FOUNDRY_*`, `DAPP_*`,
+`REMAPPINGS` and compiler override variables, then performs a forced offline
+build with an allowlisted environment, explicit tracked config and fresh
+temporary output/cache directories. Artifacts are loaded only from that
+temporary output; ignored `contracts/out` bytes are never a release authority.
+Every downstream deployment, source, canary, lifecycle and capture CLI repeats
+the same sealed fresh build and validates its plan against those exact
+artifacts. Every local dependency must be its own clean Git checkout with exact
+pinned `HEAD` and `origin` before and after compilation. The plan commits the
+tracked source-pins digest, artifact digest, and the exact compiler-metadata
+dependency source paths and hashes.
 
 ## 1. Read-only deployment preparation
 
@@ -107,17 +118,78 @@ The launch action is Mainnet Router-only. It must call `launchAndStampV1` on the
 Once deployment and source evidence are verified, first print the exact external authorization request:
 
 ```bash
-npm run contracts:classic-v4:mainnet:canary:prepare -- \
+umask 077
+export CLASSIC_V4_AUTHORIZATION_REQUEST=/absolute/classic-v4-authorization-request.json
+
+npm run --silent contracts:classic-v4:mainnet:canary:prepare -- \
   --plan </absolute/classic-v4-plan.json> \
   --deployment-evidence </absolute/classic-v4-deployment-evidence.json> \
   --source-evidence </absolute/classic-v4-source-evidence.json> \
   --rpc-a <https-rpc-one> \
   --rpc-b <https-rpc-two> \
   --wallet <human-canary-wallet> \
-  --authorization-request-only
+  --authorization-request-only \
+  > "$CLASSIC_V4_AUTHORIZATION_REQUEST"
 ```
 
-Submit only that JSON through the authenticated, owner-only Website canary handoff and download the returned signed authorization JSON. The release CLI does not accept Website bearer tokens, assertion secrets, private keys or a general authorization API. The wire field named `releaseManifestDigest` is bound here to the preliminary `releaseBindingDigest`; it is not proof that a final manifest already exists.
+Save that output outside the repository, canonicalize it once, and install the
+exact bytes and their Keccak digest as Website server environment:
+
+```bash
+export CLASSIC_V4_AUTHORIZATION_REQUEST_CANONICAL=/absolute/classic-v4-authorization-request.canonical.json
+
+jq -cS . < "$CLASSIC_V4_AUTHORIZATION_REQUEST" | tr -d '\n' \
+  > "$CLASSIC_V4_AUTHORIZATION_REQUEST_CANONICAL"
+
+export PROGRAMMABLE_CLASSIC_V4_CANARY_AUTHORIZATION_ENABLED=enabled
+export PROGRAMMABLE_CLASSIC_V4_CANARY_AUTHORIZATION_REQUEST_BASE64URL="$(
+  base64 < "$CLASSIC_V4_AUTHORIZATION_REQUEST_CANONICAL" | \
+    tr -d '\n' | tr '+/' '-_' | tr -d '='
+)"
+export PROGRAMMABLE_CLASSIC_V4_CANARY_AUTHORIZATION_REQUEST_DIGEST="$(
+  cast keccak "$(< "$CLASSIC_V4_AUTHORIZATION_REQUEST_CANONICAL")"
+)"
+```
+
+The hidden, `noindex` Website page is `/ops/classic-v4-canary`. It is available
+only while the explicit enable flag and valid installed bytes are present. The
+browser sends only the digest acknowledgement plus its Privy session. The
+Website server re-reads the linked wallet, constructs assertion-v2 with its
+existing server-only secrets, calls the existing authorization bridge and
+returns only an authorization that is fully bound to the installed Router
+request. Download the signed JSON from that page. Never expose Website bearer,
+BFF assertion, Privy or signer secrets to the browser or release CLI.
+
+The Website deployment must already have
+`PROGRAMMABLE_CUSTOM_LAUNCH_API_BASE_URL`,
+`PROGRAMMABLE_CUSTOM_LAUNCH_WEBSITE_TOKEN`,
+`PROGRAMMABLE_CUSTOM_LAUNCH_BFF_ASSERTION_KEY_V2`,
+`NEXT_PUBLIC_PRIVY_APP_ID` and `PRIVY_APP_SECRET`. The backend pre-public lane
+must use `CLASSIC_V4_AUTHORIZATION_MODE=canary`,
+`PROGRAMMABLE_CUSTOM_LAUNCH_BFF_ASSERTION_MODE=enforced`, the
+exact preliminary binding digest, canary wallet, launcher calldata hash, value,
+launcher/hook addresses and runtime hashes. Keep the public Classic V4 binding
+null and do not set the final `CLASSIC_V4_RELEASE_MANIFEST_DIGEST` for this
+lane. Disable and remove the installed canary request immediately after the
+Router launch succeeds.
+
+The exact backend canary tuple is:
+
+- `CLASSIC_V4_PRELIMINARY_RELEASE_BINDING_DIGEST` = request
+  `releaseManifestDigest`;
+- `CLASSIC_V4_CANARY_WALLET` = request `launchWallet`;
+- `CLASSIC_V4_CANARY_LAUNCHER_CALLDATA_HASH` = Keccak-256 of request
+  `launcherCalldata`;
+- `CLASSIC_V4_CANARY_VALUE_WEI` = request `valueWei`;
+- `CLASSIC_V4_LAUNCHER` and `CLASSIC_V4_LAUNCHER_RUNTIME_CODE_HASH` = request
+  launcher binding; and
+- `CLASSIC_V4_FEE_HOOK` and `CLASSIC_V4_FEE_HOOK_RUNTIME_CODE_HASH` = request
+  hook binding.
+
+The release CLI does not accept Website bearer tokens, assertion secrets,
+private keys or a general authorization API. The wire field named
+`releaseManifestDigest` is bound here to the preliminary
+`releaseBindingDigest`; it is not proof that a final manifest already exists.
 
 The permit window is at most 330 seconds. Acquire the artifact immediately before preparing and signing the launch. Then pass its absolute path to the normal preparation run:
 
@@ -161,6 +233,94 @@ npm run contracts:classic-v4:mainnet:canary:prepare -- \
 ```
 
 The saved plan embeds the normalized authorization and its dedicated digest. Preparing the plan does not fund, approve, sign or run the canary. The launch transaction must submit the plan's exact Router destination, value and calldata before its deadline. After the two human wallets have submitted the seven reviewed actions, record only their actual hashes in an external file:
+
+For desktop and mobile browser QA, start the inert fixture instead of loading
+release evidence:
+
+```bash
+npm run contracts:classic-v4:mainnet:canary:execute -- --ui-check
+```
+
+This loopback page renders the realistic seven-step review state but has no
+RPC, wallet, file-write, signing or broadcast path. It is not canary evidence.
+
+Run the lifecycle console in read-only mode first. Keep both RPC URLs in the
+process environment so they are not printed by the command:
+
+```bash
+export CLASSIC_V4_CANARY_RPC_A=<https-rpc-one>
+export CLASSIC_V4_CANARY_RPC_B=<https-rpc-two>
+
+npm run contracts:classic-v4:mainnet:canary:execute -- \
+  --plan </absolute/classic-v4-plan.json> \
+  --deployment-evidence </absolute/classic-v4-deployment-evidence.json> \
+  --source-evidence </absolute/classic-v4-source-evidence.json> \
+  --canary-plan </absolute/classic-v4-canary-plan.json> \
+  --wallet <human-canary-wallet>
+```
+
+The execution console accepts only credential-free HTTPS origins with no URL
+path, query, fragment or user information. In write mode those origins are
+environment-only; command-line RPC flags are rejected so provider material
+does not enter shell history or process arguments. The two origins must use
+different hosts, stay within two Mainnet blocks and return a shared head no
+more than 60 seconds old.
+
+The check repeats the sealed build, deployment, source and plan bindings and
+prints only a read-only summary. To start the loopback MetaMask console, create
+one owner-only directory outside the repository, use the exact new leaf names
+`journal.json` and `transactions.json` inside it,
+and acknowledge the freshly printed canary plan digest:
+
+```bash
+export CLASSIC_V4_CANARY_OUTPUT_DIR=/absolute/outside-repository/classic-v4-canary-output
+install -d -m 700 "$CLASSIC_V4_CANARY_OUTPUT_DIR"
+
+npm run contracts:classic-v4:mainnet:canary:execute -- \
+  --plan </absolute/classic-v4-plan.json> \
+  --deployment-evidence </absolute/classic-v4-deployment-evidence.json> \
+  --source-evidence </absolute/classic-v4-source-evidence.json> \
+  --canary-plan </absolute/classic-v4-canary-plan.json> \
+  --wallet <human-canary-wallet> \
+  --write \
+  --journal-output "$CLASSIC_V4_CANARY_OUTPUT_DIR/journal.json" \
+  --transactions-output "$CLASSIC_V4_CANARY_OUTPUT_DIR/transactions.json" \
+  --acknowledge-plan-digest <fresh-canary-plan-digest>
+```
+
+Open only the randomized `127.0.0.1` URL printed by that process. The server
+has no signing or broadcast endpoint: the browser asks MetaMask for each exact
+transaction and the owner confirms it. It rejects a wrong chain, wrong wallet,
+pending nonce, contract signer, divergent RPC result, changed quote, stale fee
+ceiling, insufficient balance, changed allowance or altered mined envelope.
+Operator actions require the canary wallet; the final launcher claim requires
+the exact treasury EOA, so switch wallets only when the console asks. Token and
+Permit2 approvals are exact and appear in the journal but never in the final
+seven-hash file. A rejected or stale unsubmitted review can be discarded; a
+submitted hash is immutable. After mining, every swap is quoted again at its
+actual parent block and the journal fails closed if its calldata was not bound
+to that quote. Every new request is simulated and sealed from a canonical block
+with 12 confirmations. The next action therefore waits until the preceding
+wallet nonce is visible at that stable anchor. The exact anchor hash is checked
+again before the request is returned for wallet signing and before a submitted
+hash is recorded. Restarting the same command resumes the `0600` single-link
+journal and reconciles receipts through both RPCs. The output directory must
+remain a real, canonical, owner-owned `0700` directory; symlinked parents,
+symlinked or hard-linked files, path collisions and looser permissions fail
+closed. Alternate, case-variant or Unicode-equivalent output leaf names are not
+accepted.
+
+The console writes the final transaction file automatically only after all
+seven required actions are successful, remain canonical through both RPCs,
+are in distinct increasing blocks and the final action has at least 12
+confirmations. An adjacent private PID lock plus its persistent kernel-lock
+guard prevents concurrent consoles and concurrent stale-lock recoverers from
+updating one journal. Stale or partial lock state is removed only while holding
+that guard. The lock also binds the PID to its process-start identity so a reused
+PID cannot inherit stale ownership, and release removes only the exact inode and
+random ownership token created by this process. Journal, transaction, lock and
+quarantine updates are synced to the file and directory before continuing. Its
+shape is exactly:
 
 ```json
 {
