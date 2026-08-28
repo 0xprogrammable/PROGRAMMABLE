@@ -80,7 +80,7 @@ jobs:
   release-gate:
     name: Consume exact full production Verify proof
     if: >-
-      github.repository == '0xprogrammable/programmable' &&
+      github.repository_id == 1314365508 &&
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production'
     permissions:
@@ -205,7 +205,7 @@ jobs:
     name: Stage programmable.market candidate
     needs: release-gate
     if: >-
-      github.repository == '0xprogrammable/programmable' &&
+      github.repository_id == 1314365508 &&
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production' &&
       needs.release-gate.outputs.verified_sha == github.sha
@@ -379,7 +379,7 @@ jobs:
             --header "Authorization: Bearer $COMMAND_CENTER_GITHUB_TOKEN" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
             --output "$record_commit_json" \
-            "https://api.github.com/repos/0xprogrammable/programmable/commits/$RECORD_COMMIT_SHA"
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$RECORD_COMMIT_SHA"
           RECORD_COMMIT_JSON="$record_commit_json" node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
           const commit = JSON.parse(readFileSync(process.env.RECORD_COMMIT_JSON, "utf8"));
@@ -463,7 +463,7 @@ jobs:
             --header "Authorization: Bearer $COMMAND_CENTER_GITHUB_TOKEN" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
             --output "$record_commit_json" \
-            "https://api.github.com/repos/0xprogrammable/programmable/commits/$RECORD_COMMIT_SHA"
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$RECORD_COMMIT_SHA"
           RECORD_COMMIT_JSON="$record_commit_json" node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
           const commit = JSON.parse(readFileSync(process.env.RECORD_COMMIT_JSON, "utf8"));
@@ -1515,7 +1515,7 @@ jobs:
     needs: [release-gate, deploy]
     if: >-
       always() &&
-      github.repository == '0xprogrammable/programmable' &&
+      github.repository_id == 1314365508 &&
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production' &&
       needs.release-gate.result == 'success' &&
