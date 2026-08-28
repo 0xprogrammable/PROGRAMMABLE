@@ -177,6 +177,48 @@ test("rejects retired applicant fee and Registry V1 bindings", async () => {
   }
 });
 
+test("allows only the complete reviewed Registry V1 indexer compatibility surface", async () => {
+  const registryMarkers = [
+    "CustomAtomicRegistrarV1",
+    "CustomPartnerFactoryRegistryV1",
+    "CustomRegistryV1",
+    ["0x17e18c88bda9bfb73924cdc989c07b070", "7e72671"].join(""),
+    ["0xf8aef69201621ad20fa256da595426b7e", "6192dba"].join(""),
+    ["0xcc916e5200d2626edfd918dc219bc4296", "629e997"].join(""),
+  ];
+  const exactSurface = `${registryMarkers.join("\n")}\n`;
+  const acceptedRoot = await fixture({
+    "indexer/config.yaml": exactSurface,
+  });
+  const accepted = verify(acceptedRoot);
+  assert.equal(accepted.status, 0, accepted.stderr);
+
+  const incompleteRoot = await fixture({
+    "indexer/config.yaml": `${registryMarkers.slice(0, -1).join("\n")}\n`,
+  });
+  const incomplete = verify(incompleteRoot);
+  assert.equal(incomplete.status, 1);
+  assert.match(incomplete.stderr, /indexer\/config\.yaml/u);
+
+  const wrongPathRoot = await fixture({
+    "config/release.json": exactSurface,
+  });
+  const wrongPath = verify(wrongPathRoot);
+  assert.equal(wrongPath.status, 1);
+  assert.match(wrongPath.stderr, /config\/release\.json/u);
+
+  const applicantToken = [
+    "0x7a814ecb2d2b8be2debb29481f25f06e",
+    "976559eec41fa7c8d92e030ec69fc9ff",
+  ].join("");
+  const contaminatedRoot = await fixture({
+    "indexer/config.yaml": `${exactSurface}${applicantToken}\n`,
+  });
+  const contaminated = verify(contaminatedRoot);
+  assert.equal(contaminated.status, 1);
+  assert.match(contaminated.stderr, /indexer\/config\.yaml/u);
+});
+
 test("rejects the retired Solidity identity and intake markers", async () => {
   const providerIdentifier = ["AEON", "PROVIDER", "ID"].join("_");
   const intake = ["aeon", "-v1"].join("");

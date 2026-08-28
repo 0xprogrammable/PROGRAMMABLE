@@ -31,18 +31,39 @@ afterEach(async () => {
 });
 
 describe("Classic V4 browser release activation", () => {
-  it("keeps the base browser trust root disabled", async () => {
+  it("binds the browser trust root to the promoted public manifest", async () => {
     const source = await readFile(
       new URL("../../lib/classic-v4-public-release.ts", import.meta.url),
       "utf8",
     );
+    const manifest = JSON.parse(await readFile(
+      new URL(
+        "../../contracts/deployments/mainnet-classic-v4.json",
+        import.meta.url,
+      ),
+      "utf8",
+    )) as {
+      releaseStatus: string;
+      manifestDigest: string;
+      addresses: { launcher: string };
+      verification: { publicAvailable: boolean };
+    };
     const start = source.indexOf("// CLASSIC_V4_PUBLIC_RELEASE_BINDING_START");
     const end = source.indexOf("// CLASSIC_V4_PUBLIC_RELEASE_BINDING_END");
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const bindingBlock = source.slice(start, end);
-    expect(bindingBlock).toMatch(/\|\s*null\s*=\s*null;/u);
-    expect(bindingBlock).not.toContain("launcher:");
+    expect(manifest).toMatchObject({
+      releaseStatus: "publicly-available",
+      verification: { publicAvailable: true },
+    });
+    expect(bindingBlock).not.toMatch(/\|\s*null\s*=\s*null;/u);
+    expect(bindingBlock).toContain(`launcher: "${manifest.addresses.launcher}"`);
+    expect(bindingBlock).toContain(
+      `manifestDigest: "${manifest.manifestDigest}"`,
+    );
+    expect(bindingBlock).toContain('releaseStatus: "publicly-available"');
+    expect(bindingBlock).toContain("publicAvailable: true");
   });
 
   it("refuses activation without an immutable Envio release audit", async () => {

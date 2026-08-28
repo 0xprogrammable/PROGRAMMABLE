@@ -91,10 +91,16 @@ const applicantCardMarkers = Object.freeze([
   ["0xcc916e5200d2626edfd918dc219bc4296", "629e997"].join(""),
   ["0x7a814ecb2d2b8be2debb29481f25f06e", "976559eec41fa7c8d92e030ec69fc9ff"].join(""),
 ]);
+const applicantCardPatterns = Object.freeze(
+  applicantCardMarkers.map((name) => new RegExp(name, "iu")),
+);
+const reviewedRegistryV1CompatibilityPatterns = new Set(
+  applicantCardPatterns.slice(8, 11),
+);
 const forbiddenContent = Object.freeze([
   ...projectNamePatterns,
   ...applicantIdentityPatterns,
-  ...applicantCardMarkers.map((name) => new RegExp(name, "iu")),
+  ...applicantCardPatterns,
   new RegExp(["submit-launch", "pull", "13"].join("[/# ]+"), "iu"),
   /manual[-_ ]?router/iu,
   /manual[-_ ]?applicant/iu,
@@ -139,6 +145,20 @@ const reviewedRouterAdapterTestMarkers = Object.freeze([
   "canonicalSha256(",
   ".toEqual(shardRouterTradeStamp)",
 ]);
+const reviewedRegistryV1IndexerPaths = new Set([
+  "indexer/config.yaml",
+  "indexer/live-production-92f6373.config.yaml",
+  "indexer/src/lib/release-map.ts",
+  "indexer/test/replay.test.ts",
+]);
+const reviewedRegistryV1IndexerMarkers = Object.freeze([
+  "CustomAtomicRegistrarV1",
+  "CustomPartnerFactoryRegistryV1",
+  "CustomRegistryV1",
+  applicantCardMarkers[8],
+  applicantCardMarkers[9],
+  applicantCardMarkers[10],
+]);
 
 function containsEvery(source, markers) {
   return markers.every((marker) => source.toLowerCase().includes(
@@ -160,6 +180,18 @@ function allowsReviewedRouterAdapterProjectName(
   }
   return repositoryPath.startsWith(".next/server/")
     && containsEvery(source, reviewedRouterAdapterRuntimeMarkers);
+}
+
+function allowsReviewedRegistryV1IndexerCompatibility(
+  repositoryPath,
+  source,
+  pattern,
+) {
+  return (
+    reviewedRegistryV1CompatibilityPatterns.has(pattern) &&
+    reviewedRegistryV1IndexerPaths.has(repositoryPath) &&
+    containsEvery(source, reviewedRegistryV1IndexerMarkers)
+  );
 }
 
 async function exists(path) {
@@ -206,14 +238,20 @@ for (const absolutePath of discovered) {
     continue;
   }
   const source = await readFile(absolutePath, "utf8");
-  const matchedPattern = forbiddenContent.find((pattern) =>
-    pattern.test(source)
-    && !allowsReviewedRouterAdapterProjectName(
-      repositoryPath,
-      source,
-      pattern,
-    ));
-  if (matchedPattern) {
+  const disallowedPattern = forbiddenContent
+    .filter((pattern) => pattern.test(source))
+    .find((pattern) =>
+      !allowsReviewedRouterAdapterProjectName(
+        repositoryPath,
+        source,
+        pattern,
+      ) &&
+      !allowsReviewedRegistryV1IndexerCompatibility(
+        repositoryPath,
+        source,
+        pattern,
+      ));
+  if (disallowedPattern) {
     failures.push(`${repositoryPath}: forbidden candidate or legacy route content`);
   }
 }
