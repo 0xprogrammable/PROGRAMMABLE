@@ -7,29 +7,47 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { Check, Copy, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  RefreshCw,
+} from "lucide-react";
 
 import { useWallet } from "@/components/wallet-provider";
 import {
+  PARTNER_ADMIN_LIST_LIMITS_V1,
   PARTNER_ADMIN_SCHEMA_V1,
   PARTNER_BUDGET_LIMITS_V1,
   displayPartnerKeyPrefix,
-  parsePartnerListV1,
+  parsePartnerListPageV1,
   parsePartnerMutationV1,
   parsePartnerRootKeyMutationV1,
   type PartnerRootKeyMutationV1,
   type PartnerRootKeySummaryV1,
   type PartnerSummaryV1,
+  type PartnerListPaginationV1,
 } from "@/lib/partner-admin-contract";
 import {
   parseLaunchPartnerNameV1,
   parseLaunchPartnerWebsiteV1,
 } from "@/lib/launch-partner-attribution";
+import {
+  PartnerAdminBrowserErrorV1,
+  partnerAdminBrowserErrorV1,
+} from "@/lib/partner-admin-browser-error";
 import styles from "@/components/partner-admin-console.module.css";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type Confirmation = Readonly<{
-  kind: "suspend" | "activate" | "rotate" | "revoke";
+  kind:
+    | "suspend"
+    | "activate"
+    | "rotate"
+    | "revoke-root"
+    | "revoke-partner";
   partnerId: string;
   keyId?: string;
 }> | null;
@@ -43,26 +61,20 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   timeStyle: "short",
 });
 
+const ROOT_KEYS_PER_PAGE = 5;
+const EMPTY_PARTNER_PAGINATION = Object.freeze({
+  page: 1,
+  pageSize: PARTNER_ADMIN_LIST_LIMITS_V1.defaultPageSize,
+  totalPartners: 0,
+  totalPages: 0,
+}) satisfies PartnerListPaginationV1;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function readJson(response: Response): Promise<unknown> {
   return response.json().catch(() => null);
-}
-
-function apiError(response: Response, value: unknown, fallback: string) {
-  if (!isRecord(value) || !isRecord(value.error)) return fallback;
-  const message = typeof value.error.message === "string" && value.error.message
-    ? value.error.message
-    : fallback;
-  const requestId = typeof value.error.requestId === "string"
-    ? value.error.requestId
-    : null;
-  const retryAfter = response.headers.get("retry-after");
-  return `${message}${retryAfter ? ` Try again in ${retryAfter} seconds.` : ""}${
-    requestId ? ` Request ID: ${requestId}.` : ""
-  }`;
 }
 
 function formatDate(value: string | null, fallback = "Never") {
@@ -144,7 +156,13 @@ export function PartnerAdminConsole() {
   } = useWallet();
   const account = wallet?.account ?? null;
   const [partners, setPartners] = useState<PartnerSummaryV1[]>([]);
+  const [partnerPagination, setPartnerPagination] =
+    useState<PartnerListPaginationV1>(EMPTY_PARTNER_PAGINATION);
+  const [rootKeyPages, setRootKeyPages] =
+    useState<Record<string, number>>({});
   const [loadState, setLoadState] = useState<LoadState>("idle");
+  const [accessDenied, setAccessDenied] =
+    useState<PartnerAdminBrowserErrorV1 | null>(null);
   const [pageError, setPageError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -177,13 +195,21 @@ export function PartnerAdminConsole() {
     return headers;
   }, [getAccessToken, getIdentityToken]);
 
-  const loadPartners = useCallback(async (signal?: AbortSignal) => {
+  const loadPartners = useCallback(async (
+    signal?: AbortSignal,
+    requestedPage = 1,
+  ) => {
     if (!account) return;
-    setLoadState((current) => current === "ready" ? current : "loading");
+    setLoadState("loading");
     setPageError("");
     try {
+      const query = new URLSearchParams({
+        walletAddress: account,
+        page: String(requestedPage),
+        pageSize: String(PARTNER_ADMIN_LIST_LIMITS_V1.defaultPageSize),
+      });
       const response = await fetch(
-        `/api/admin/partners?walletAddress=${encodeURIComponent(account)}`,
+        `/api/admin/partners?${query.toString()}`,
         {
         cache: "no-store",
         headers: await getAuthHeaders(),
@@ -192,14 +218,28 @@ export function PartnerAdminConsole() {
       );
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to load partners."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to load partners.",
+        );
       }
-      const parsed = parsePartnerListV1(body);
+      const parsed = parsePartnerListPageV1(body);
       if (!parsed) throw new Error("The API returned an invalid partner list.");
-      setPartners(parsed);
+      setPartners([...parsed.partners]);
+      setPartnerPagination(parsed.pagination);
+      setAccessDenied(null);
       setLoadState("ready");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setPartners([]);
+        setPartnerPagination(EMPTY_PARTNER_PAGINATION);
+        setAccessDenied(error);
+        setPageError("");
+        setLoadState("error");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : "Unable to load partners.");
       setLoadState("error");
     }
@@ -208,7 +248,7 @@ export function PartnerAdminConsole() {
   useEffect(() => {
     if (!authReady || !account) return;
     const controller = new AbortController();
-    queueMicrotask(() => void loadPartners(controller.signal));
+    queueMicrotask(() => void loadPartners(controller.signal, 1));
     return () => controller.abort();
   }, [account, authReady, loadPartners]);
 
@@ -284,12 +324,27 @@ export function PartnerAdminConsole() {
       });
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to create the partner."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to create the partner.",
+        );
       }
       const mutation = parsePartnerRootKeyMutationV1(body);
       if (!mutation?.partner) throw new Error("The API returned an invalid partner.");
       const partner = mutation.partner;
-      setPartners((current) => applyRootKeyMutation(current, partner.id, mutation));
+      setPartners([partner]);
+      setPartnerPagination((current) => {
+        const totalPartners = mutation.secretState === "delivered-once"
+          ? Math.min(current.totalPartners + 1, PARTNER_ADMIN_LIST_LIMITS_V1.maximumPartners)
+          : current.totalPartners;
+        return {
+          page: 1,
+          pageSize: current.pageSize,
+          totalPartners,
+          totalPages: Math.ceil(totalPartners / current.pageSize),
+        };
+      });
       setDisplayName("");
       setSlug("");
       setPublicUrl("");
@@ -299,7 +354,13 @@ export function PartnerAdminConsole() {
       } else {
         setStatusMessage(`${partner.displayName} already exists. Its secret cannot be shown again.`);
       }
+      void loadPartners(undefined, 1);
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setFormError("");
+        return;
+      }
       setFormError(error instanceof Error ? error.message : "Unable to create the partner.");
     } finally {
       setBusy(null);
@@ -324,7 +385,11 @@ export function PartnerAdminConsole() {
       });
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to update the partner."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to update the partner.",
+        );
       }
       const partner = parsePartnerMutationV1(body);
       if (!partner) throw new Error("The API returned an invalid partner update.");
@@ -332,6 +397,11 @@ export function PartnerAdminConsole() {
       setConfirmation(null);
       setStatusMessage(success(partner));
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setPageError("");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : "Unable to update the partner.");
     } finally {
       setBusy(null);
@@ -352,6 +422,17 @@ export function PartnerAdminConsole() {
       },
       `status:${partner.id}`,
       (updated) => `${updated.displayName} is now ${updated.status}.`,
+    );
+
+  const revokePartner = (partner: PartnerSummaryV1) =>
+    !account ? undefined :
+    mutatePartner(
+      `/api/admin/partners/${encodeURIComponent(partner.id)}?walletAddress=${
+        encodeURIComponent(account)
+      }`,
+      { method: "DELETE" },
+      `revoke-partner:${partner.id}`,
+      (updated) => `${updated.displayName} was permanently revoked.`,
     );
 
   const rootKeyMutation = async (
@@ -391,7 +472,11 @@ export function PartnerAdminConsole() {
       });
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, `Unable to ${operation} the root key.`));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          `Unable to ${operation} the root key.`,
+        );
       }
       const mutation = parsePartnerRootKeyMutationV1(body);
       if (!mutation) throw new Error("The API returned an invalid root-key result.");
@@ -407,8 +492,14 @@ export function PartnerAdminConsole() {
       } else {
         setStatusMessage("The root-key operation already completed. Its secret cannot be shown again.");
       }
-      void loadPartners();
+      setRootKeyPages((current) => ({ ...current, [partner.id]: 1 }));
+      void loadPartners(undefined, partnerPagination.page);
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setPageError("");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : `Unable to ${operation} the root key.`);
     } finally {
       setBusy(null);
@@ -431,7 +522,11 @@ export function PartnerAdminConsole() {
       );
       const body = await readJson(response);
       if (!response.ok) {
-        throw new Error(apiError(response, body, "Unable to revoke the root key."));
+        throw partnerAdminBrowserErrorV1(
+          response,
+          body,
+          "Unable to revoke the root key.",
+        );
       }
       if (
         !isRecord(body)
@@ -441,8 +536,13 @@ export function PartnerAdminConsole() {
       ) throw new Error("The API returned an invalid revocation result.");
       setConfirmation(null);
       setStatusMessage(`${partner.displayName} root key was revoked.`);
-      await loadPartners();
+      await loadPartners(undefined, partnerPagination.page);
     } catch (error) {
+      if (error instanceof PartnerAdminBrowserErrorV1 && error.accessDenied) {
+        setAccessDenied(error);
+        setPageError("");
+        return;
+      }
       setPageError(error instanceof Error ? error.message : "Unable to revoke the root key.");
     } finally {
       setBusy(null);
@@ -466,6 +566,26 @@ export function PartnerAdminConsole() {
     setSecretReveal(null);
     setCopyState("idle");
     setStatusMessage("Root-key secret hidden.");
+  };
+
+  const partnerRangeStart = partnerPagination.totalPartners === 0
+    ? 0
+    : ((partnerPagination.page - 1) * partnerPagination.pageSize) + 1;
+  const partnerRangeEnd = partnerPagination.totalPartners === 0
+    ? 0
+    : Math.min(
+        partnerPagination.page * partnerPagination.pageSize,
+        partnerPagination.totalPartners,
+      );
+
+  const changePartnerPage = (page: number) => {
+    if (
+      busy
+      || loadState === "loading"
+      || page < 1
+      || page > partnerPagination.totalPages
+    ) return;
+    void loadPartners(undefined, page);
   };
 
   return (
@@ -504,6 +624,54 @@ export function PartnerAdminConsole() {
           <button type="button" disabled={connecting} onClick={openWallet}>
             {connecting ? "Connecting wallet" : "Connect wallet"}
           </button>
+        </section>
+      ) : accessDenied ? (
+        <section className={styles.statePanel} data-state="access-denied">
+          <p className={styles.kicker}>Access denied</p>
+          <h2>This wallet cannot manage partners</h2>
+          <p>
+            Your wallet session is valid, but partner administration access is
+            controlled by the server. If you expected access, send the Request
+            ID below to the Programmable team.
+          </p>
+          {accessDenied.requestId ? (
+            <p className={styles.requestId}>
+              <span>Request ID</span>
+              <code>{accessDenied.requestId}</code>
+            </p>
+          ) : null}
+          <button
+            type="button"
+            disabled={loadState === "loading"}
+            onClick={() => void loadPartners()}
+          >
+            {loadState === "loading" ? "Checking access" : "Check again"}
+          </button>
+        </section>
+      ) : loadState !== "ready" && partners.length === 0 ? (
+        <section
+          className={styles.statePanel}
+          data-state="access-check"
+          aria-busy={loadState === "idle" || loadState === "loading"}
+        >
+          {loadState === "error" ? null : (
+            <span className={styles.spinner} aria-hidden="true" />
+          )}
+          <h2>
+            {loadState === "error"
+              ? "Partner access is unavailable"
+              : "Checking partner access"}
+          </h2>
+          <p>
+            {loadState === "error"
+              ? pageError || "The server could not verify partner administration access."
+              : "The server is verifying this wallet before showing administration controls."}
+          </p>
+          {loadState === "error" ? (
+            <button type="button" onClick={() => void loadPartners()}>
+              Try again
+            </button>
+          ) : null}
         </section>
       ) : (
         <>
@@ -622,19 +790,26 @@ export function PartnerAdminConsole() {
                 <div>
                   <p className={styles.kicker}>Access directory</p>
                   <h2 id="partner-directory-title">Partners</h2>
+                  {partnerPagination.totalPartners > 0 ? (
+                    <p className={styles.directoryCount}>
+                      Showing {partnerRangeStart}–{partnerRangeEnd} of{
+                        ` ${partnerPagination.totalPartners.toLocaleString("en")}`
+                      }
+                    </p>
+                  ) : null}
                 </div>
-                <button className={styles.refreshButton} disabled={loadState === "loading" || busy !== null} type="button" onClick={() => void loadPartners()}>
+                <button className={styles.refreshButton} disabled={loadState === "loading" || busy !== null} type="button" onClick={() => void loadPartners(undefined, partnerPagination.page)}>
                   <RefreshCw aria-hidden="true" size={16} data-spinning={loadState === "loading" ? "true" : "false"} />
                   Refresh
                 </button>
               </div>
               {pageError ? <p className={styles.error} role="alert">{pageError}</p> : null}
-              {loadState === "loading" ? <PartnerListSkeleton /> : null}
+              {loadState === "loading" && partners.length === 0 ? <PartnerListSkeleton /> : null}
               {loadState === "error" && partners.length === 0 ? (
                 <div className={styles.emptyState}>
                   <h3>Partner access is unavailable</h3>
                   <p>Check the admin session or try the request again.</p>
-                  <button type="button" onClick={() => void loadPartners()}>Try again</button>
+                  <button type="button" onClick={() => void loadPartners(undefined, partnerPagination.page)}>Try again</button>
                 </div>
               ) : null}
               {loadState === "ready" && partners.length === 0 ? (
@@ -648,6 +823,20 @@ export function PartnerAdminConsole() {
                   {partners.map((partner) => {
                     const liveKeys = partner.rootKeys.filter(activeRootKey);
                     const expiry = keyExpiryDays[partner.id] ?? "366";
+                    const rootKeyPageCount = Math.max(
+                      1,
+                      Math.ceil(partner.rootKeys.length / ROOT_KEYS_PER_PAGE),
+                    );
+                    const rootKeyPage = Math.min(
+                      rootKeyPages[partner.id] ?? 1,
+                      rootKeyPageCount,
+                    );
+                    const rootKeyPageStart =
+                      (rootKeyPage - 1) * ROOT_KEYS_PER_PAGE;
+                    const visibleRootKeys = partner.rootKeys.slice(
+                      rootKeyPageStart,
+                      rootKeyPageStart + ROOT_KEYS_PER_PAGE,
+                    );
                     return (
                       <li className={styles.partnerCard} key={partner.id}>
                         <div className={styles.partnerTopline}>
@@ -692,7 +881,7 @@ export function PartnerAdminConsole() {
                           <p className={styles.noKeys}>No root key has been issued.</p>
                         ) : (
                           <ul className={styles.keyList}>
-                            {partner.rootKeys.map((key) => (
+                            {visibleRootKeys.map((key) => (
                               <li key={key.id}>
                                 <div className={styles.keyIdentity}>
                                   <div><strong>{key.label}</strong><code>{displayPartnerKeyPrefix(key.keyPrefix)}</code></div>
@@ -722,26 +911,92 @@ export function PartnerAdminConsole() {
                                 ) : activeRootKey(key) ? (
                                   <div className={styles.keyActions}>
                                     <button type="button" disabled={busy !== null || Boolean(secretReveal)} onClick={() => setConfirmation({ kind: "rotate", partnerId: partner.id, keyId: key.id })}>Rotate</button>
-                                    <button type="button" disabled={busy !== null || Boolean(secretReveal)} onClick={() => setConfirmation({ kind: "revoke", partnerId: partner.id, keyId: key.id })}>Revoke</button>
+                                    <button type="button" disabled={busy !== null || Boolean(secretReveal)} onClick={() => setConfirmation({ kind: "revoke-root", partnerId: partner.id, keyId: key.id })}>Revoke</button>
                                   </div>
                                 ) : null}
                               </li>
                             ))}
                           </ul>
                         )}
+                        {partner.rootKeys.length > ROOT_KEYS_PER_PAGE ? (
+                          <nav className={styles.keyPagination} aria-label={`${partner.displayName} root-key pages`}>
+                            <span>
+                              {rootKeyPageStart + 1}–{Math.min(
+                                rootKeyPageStart + ROOT_KEYS_PER_PAGE,
+                                partner.rootKeys.length,
+                              )} of {partner.rootKeys.length.toLocaleString("en")}
+                            </span>
+                            <div>
+                              <button
+                                type="button"
+                                aria-label={`Previous ${partner.displayName} root-key page`}
+                                disabled={busy !== null || rootKeyPage === 1}
+                                onClick={() => setRootKeyPages((current) => ({
+                                  ...current,
+                                  [partner.id]: Math.max(1, rootKeyPage - 1),
+                                }))}
+                              >
+                                <ChevronLeft aria-hidden="true" size={15} />
+                                Previous
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Next ${partner.displayName} root-key page`}
+                                disabled={busy !== null || rootKeyPage === rootKeyPageCount}
+                                onClick={() => setRootKeyPages((current) => ({
+                                  ...current,
+                                  [partner.id]: Math.min(
+                                    rootKeyPageCount,
+                                    rootKeyPage + 1,
+                                  ),
+                                }))}
+                              >
+                                Next
+                                <ChevronRight aria-hidden="true" size={15} />
+                              </button>
+                            </div>
+                          </nav>
+                        ) : null}
                         <div className={styles.partnerActions}>
                           <button type="button" disabled={busy !== null || Boolean(secretReveal) || partner.status !== "active"} onClick={() => void rootKeyMutation(partner, "issue")}>Issue root key</button>
                           {partner.status !== "revoked" ? (
-                            <button type="button" disabled={busy !== null || Boolean(secretReveal)} onClick={() => setConfirmation({ kind: partner.status === "active" ? "suspend" : "activate", partnerId: partner.id })}>{partner.status === "active" ? "Suspend partner" : "Reactivate partner"}</button>
+                            <>
+                              <button type="button" disabled={busy !== null || Boolean(secretReveal)} onClick={() => setConfirmation({ kind: partner.status === "active" ? "suspend" : "activate", partnerId: partner.id })}>{partner.status === "active" ? "Suspend partner" : "Reactivate partner"}</button>
+                              <button className={styles.dangerButton} type="button" disabled={busy !== null || Boolean(secretReveal)} onClick={() => setConfirmation({ kind: "revoke-partner", partnerId: partner.id })}>Revoke permanently</button>
+                            </>
                           ) : null}
                         </div>
                         {confirmation?.partnerId === partner.id && !confirmation.keyId ? (
                           <div className={styles.confirmation} role="group" aria-label={`${confirmation.kind} ${partner.displayName}`}>
-                            <p>{confirmation.kind === "suspend" ? "Suspend this partner? Its root keys and subkeys stop authorizing launches and reads." : "Reactivate this partner? Existing unexpired keys can authorize launches and reads again."}</p>
+                            <p>
+                              {confirmation.kind === "suspend"
+                                ? "Suspend this partner? Its root keys and subkeys stop authorizing launches and reads."
+                                : confirmation.kind === "activate"
+                                  ? "Reactivate this partner? Existing unexpired keys can authorize launches and reads again."
+                                  : `Permanently revoke ${partner.displayName}? Every root key and subkey stops working immediately. This cannot be undone.`}
+                            </p>
                             <div>
                               <button type="button" onClick={() => setConfirmation(null)}>Cancel</button>
-                              <button className={confirmation.kind === "suspend" ? styles.dangerButton : styles.primaryButton} disabled={busy !== null} type="button" onClick={() => void setPartnerStatus(partner, confirmation.kind === "suspend" ? "suspended" : "active")}>
-                                {confirmation.kind === "suspend" ? "Suspend partner" : "Reactivate partner"}
+                              <button
+                                className={confirmation.kind === "activate" ? styles.primaryButton : styles.dangerButton}
+                                disabled={busy !== null}
+                                type="button"
+                                onClick={() => confirmation.kind === "revoke-partner"
+                                  ? void revokePartner(partner)
+                                  : void setPartnerStatus(
+                                      partner,
+                                      confirmation.kind === "suspend"
+                                        ? "suspended"
+                                        : "active",
+                                    )}
+                              >
+                                {confirmation.kind === "suspend"
+                                  ? "Suspend partner"
+                                  : confirmation.kind === "activate"
+                                    ? "Reactivate partner"
+                                    : busy === `revoke-partner:${partner.id}`
+                                      ? "Revoking partner"
+                                      : "Permanently revoke"}
                               </button>
                             </div>
                           </div>
@@ -750,6 +1005,39 @@ export function PartnerAdminConsole() {
                     );
                   })}
                 </ul>
+              ) : null}
+              {partnerPagination.totalPages > 1 ? (
+                <nav className={styles.partnerPagination} aria-label="Partner pages">
+                  <span>
+                    Page {partnerPagination.page} of {partnerPagination.totalPages}
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      disabled={
+                        loadState === "loading"
+                        || busy !== null
+                        || partnerPagination.page === 1
+                      }
+                      onClick={() => changePartnerPage(partnerPagination.page - 1)}
+                    >
+                      <ChevronLeft aria-hidden="true" size={15} />
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        loadState === "loading"
+                        || busy !== null
+                        || partnerPagination.page === partnerPagination.totalPages
+                      }
+                      onClick={() => changePartnerPage(partnerPagination.page + 1)}
+                    >
+                      Next
+                      <ChevronRight aria-hidden="true" size={15} />
+                    </button>
+                  </div>
+                </nav>
               ) : null}
             </section>
           </div>

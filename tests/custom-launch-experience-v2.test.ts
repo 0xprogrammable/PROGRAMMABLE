@@ -1579,7 +1579,7 @@ describe("custom launch browser authority", () => {
   it("renders route-specific standard and no-market fee summaries", () => {
     const standard = descriptor().routes[0]!.feePolicy;
     expect(customLaunchFeeReviewV1(standard)).toEqual({
-      summary: "10 bps Programmable, added on top",
+      summary: "Configured market path: 10 bps Programmable, additive",
       identity: "programmable · custom-contract-graph / standard-custom · v1.0.0",
       marketPath: "official-market-path-v1",
       recipients: [{

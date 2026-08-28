@@ -8,7 +8,7 @@ coverY: 0
 
 Programmable is a launch platform for Uniswap v4 products. Classic turns a focused set of choices into a fixed supply token, a permanently locked ETH pool and creator rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or execution graph. Prediction Markets is the separately versioned launch model for onchain outcome markets.
 
-Classic and Prediction Markets are available from Create. Public V3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable, while authenticated V1 POST returns the nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the wallet reviews and signs its own transaction on the required network.
+Classic and Prediction Markets are available from Create. Public V3.3 general-hook creation and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the controller wallet reviews and signs its own transaction on the required network.
 
 {% hint style="info" %}
 These docs describe current public products and the evidence available for them. A successful check, prepared artifact, authorized transaction or visible token page is not a guarantee of safety, liquidity or future value.
@@ -39,8 +39,8 @@ To inspect an existing token, begin with [Explore](https://programmable.market/e
 
 ## How a launch becomes public
 
-1. The creator configures a supported launch or prepares one exact Custom API bundle.
-2. The creator wallet checks the network, destination, calldata and value, then signs the transaction.
+1. The creator configures a supported launch or prepares and submits one exact Custom API bundle. CLI and preflight results are preparation, not the server's launch decision.
+2. For Custom, the API server enforces objective static hard blocks and exact Router simulation before it exposes a wallet handoff. Missing behavior evidence keeps related product claims unverified; an authenticated executed failure blocks. The creator wallet then checks the network, destination, calldata and value and signs the transaction.
 3. The required network confirms the transaction and the launch reaches the required finality.
 4. The appropriate website surface publishes the canonical token, pool or prediction market identity. The developer feeds currently cover the Ethereum launch records. Optional price, chart and liquidity data remain separate.
 

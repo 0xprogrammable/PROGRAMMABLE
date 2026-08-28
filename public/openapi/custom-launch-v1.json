@@ -4,7 +4,7 @@
     "title": "Programmable Custom Launch API",
     "version": "1.4.0",
     "summary": "Read existing wallet-bound V1 Custom launch history on Ethereum Mainnet.",
-    "description": "V1 list and single-resource reads remain live for existing wallet-bound launch requests. V1 creation is write-fenced: every authenticated POST /v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY and must not be retried. Public V3 general-hook creation and lifecycle reads are defined by the separate V3 contract; V2 remains available for its existing resources. Legacy Registry and GitHub submission intake is closed. Existing finalized resources and server-authored exact-source verification remain readable. An API key is not wallet signing authority."
+    "description": "V1 list and single-resource reads remain live for existing wallet-bound launch requests. V1 creation is write-fenced: every authenticated POST /v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY and must not be retried. Public V3.3 general-hook creation and lifecycle reads are defined by the separate V3 contract; V2 remains readable for its existing resources while V2 creation is also write-fenced. Legacy Registry and GitHub submission intake is closed. Existing finalized resources and server-authored exact-source verification remain readable. An API key is not wallet signing authority."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -83,7 +83,7 @@
         "operationId": "createCustomLaunch",
         "deprecated": true,
         "summary": "V1 launch creation is read-only",
-        "description": "The V1 creation route is retained only as an explicit write fence. After successful API-key authentication and scope checks it returns 409 CUSTOM_LAUNCH_V1_READ_ONLY before reading an idempotency key or request body. This response is non-retryable. Use the live V1 GET operations for existing history and the separate public V2 contract for new launches.",
+        "description": "The V1 creation route is retained only as an explicit write fence. After successful API-key authentication and scope checks it returns 409 CUSTOM_LAUNCH_V1_READ_ONLY before reading an idempotency key or request body. This response is non-retryable. Use the live V1 GET operations for existing history and the separate public V3.3 contract for fresh writes.",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -102,7 +102,7 @@
                   "schemaVersion": "programmable.api-error.v1",
                   "error": {
                     "code": "CUSTOM_LAUNCH_V1_READ_ONLY",
-                    "message": "V1 launch creation is read-only; use the fee-enforced V2 launch profile",
+                    "message": "V1 launch creation is read-only; use the public V3.3 launch contract",
                     "requestId": "018f1f8e-7d93-7c2f-8d7f-e114942e7f25"
                   }
                 }
@@ -1869,16 +1869,20 @@
       "retryable": false
     },
     "v2ReleaseCandidate": {
-      "status": "promoted-to-public",
+      "status": "retired-to-read-compatibility",
       "release": "2.0.0",
-      "publicAuthorization": true,
+      "publicAuthorization": false,
       "openApiUrl": "https://programmable.market/openapi/custom-launch-v2.json"
     },
     "v2": {
-      "status": "live",
-      "createHttpStatus": 202,
-      "replayHttpStatus": 200,
-      "retryAfter": "honor-on-429-or-503",
+      "reads": "live",
+      "create": "read-only",
+      "createHttpStatus": 409,
+      "createErrorCode": "CUSTOM_LAUNCH_V2_READ_ONLY",
+      "retryable": false,
+      "preparedAndSimulatingReads": "observation-only",
+      "readMayAuthorize": false,
+      "authorizedAndSubmittedReconciliation": "bounded",
       "openApiUrl": "https://programmable.market/openapi/custom-launch-v2.json"
     },
     "v3": {
@@ -1886,6 +1890,7 @@
       "profileId": "programmable.direct-native-hook-graph.v1",
       "profileRevision": 3,
       "profileVersion": "3.3.0",
+      "freshWritesOnly": true,
       "compatibleProfileVersions": ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
       "productionLaunchAuthorized": true,
       "createHttpStatus": 202,
@@ -1899,7 +1904,7 @@
     }
   },
   "x-programmable-scopes": {
-    "custom-launch:create": "write-fenced",
+    "custom-launch:create": "v1-v2-write-fenced-v3.3-live",
     "custom-launch:read": "grantable",
     "fees:claim": "reserved-disabled",
     "buybacks:manage": "reserved-disabled"

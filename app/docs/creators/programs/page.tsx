@@ -31,9 +31,10 @@ export default function CreatorProgramsDocsPage() {
       <section id="partnerships">
         <h2>Partnerships</h2>
         <p>
-          Partnerships do not create a special production fee path. Custom
-          launches remain bound to the standard 10 bps policy or the explicit
-          no-market zero-fee state.
+          Partnerships do not create a special production fee path. An open
+          arbitrary-hook launch has no automatic Programmable fee claim. A 10
+          bps claim exists only for an exact fee-certified profile or adapter
+          and its stamped PoolKey after server fee-path evidence is verified.
         </p>
         <p>
           No partner version is assumed active by this reference. The exact

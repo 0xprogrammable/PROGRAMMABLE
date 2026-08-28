@@ -16,6 +16,7 @@ import {
 } from "../src/api-client.mjs";
 import { formatCliError } from "../src/cli.mjs";
 import {
+  CREATE_REQUEST_SCHEMA_V3,
   HOOK_PERMISSION_BITS,
   HOOK_PERMISSIONS,
 } from "../src/constants.mjs";
@@ -23,6 +24,7 @@ import { buildLaunch, packLaunch } from "../src/pack.mjs";
 import { hashLaunchProfile, resolveLaunchProfile } from "../src/profile-v2.mjs";
 import { sha256Digest } from "../src/io.mjs";
 import { validateLaunchFile, validateLaunchRequest } from "../src/validate.mjs";
+import { jsonResponse, validCapabilities } from "./fixtures/capabilities.mjs";
 
 test("pack derives byte-identical exact-source requests from real solc output", async () => {
   const fixture = await materializeCompiledFixture();
@@ -78,6 +80,7 @@ test("submit persists exact bytes and retries ambiguity with the same key", asyn
   const calls = [];
   const sleeps = [];
   const fetchImpl = async (_url, options) => {
+    if (options.method === "GET") return jsonResponse(validCapabilities());
     calls.push({
       body: Buffer.from(options.body),
       idempotencyKey: options.headers["idempotency-key"],
@@ -85,7 +88,7 @@ test("submit persists exact bytes and retries ambiguity with the same key", asyn
     });
     if (calls.length === 1) throw new Error("socket closed after upload");
     return new Response(JSON.stringify({
-      schemaVersion: "programmable.custom-launch.v1",
+      schemaVersion: "programmable.custom-launch.v3",
       launchId: "8d89c4e5-ec5f-4df7-8f52-10f134d25cab",
       requestId: "8d89c4e5-ec5f-4df7-8f52-10f134d25cab",
       status: "received",
@@ -98,6 +101,7 @@ test("submit persists exact bytes and retries ambiguity with the same key", asyn
     apiOrigin: "https://api.programmable.market",
     stateDirectory,
     maxAttempts: 2,
+    validateLaunchFileImpl: v3Validation(packed),
     fetchImpl,
     sleepImpl: async (milliseconds) => sleeps.push(milliseconds),
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
@@ -117,11 +121,13 @@ test("submit refuses an idempotency key rebound to different request bytes", asy
   const fixture = await materializeCompiledFixture();
   const packed = await packLaunch({ configPath: fixture.configPath });
   const stateDirectory = path.join(fixture.root, "state-conflict");
-  const fetchImpl = async () => new Response(JSON.stringify({
-    requestId: "36dd2926-e4f0-445e-9503-46be9989c50f",
-    launchId: "36dd2926-e4f0-445e-9503-46be9989c50f",
-    status: "received",
-  }), { status: 202, headers: { "content-type": "application/json" } });
+  const fetchImpl = async (_url, options) => options.method === "GET"
+    ? jsonResponse(validCapabilities())
+    : new Response(JSON.stringify({
+      requestId: "36dd2926-e4f0-445e-9503-46be9989c50f",
+      launchId: "36dd2926-e4f0-445e-9503-46be9989c50f",
+      status: "received",
+    }), { status: 202, headers: { "content-type": "application/json" } });
   const common = {
     configPath: fixture.configPath,
     idempotencyKey: "binding-conflict-0001",
@@ -131,7 +137,11 @@ test("submit refuses an idempotency key rebound to different request bytes", asy
     fetchImpl,
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
   };
-  await submitLaunch({ ...common, launchPath: packed.outputPath });
+  await submitLaunch({
+    ...common,
+    launchPath: packed.outputPath,
+    validateLaunchFileImpl: v3Validation(packed),
+  });
   const changedConfig = JSON.parse(await readFile(fixture.configPath, "utf8"));
   changedConfig.nonce = `0x${"45".repeat(32)}`;
   changedConfig.targets[1].applicantSalt = {
@@ -141,9 +151,16 @@ test("submit refuses an idempotency key rebound to different request bytes", asy
   };
   await writeFile(fixture.configPath, `${JSON.stringify(changedConfig, null, 2)}\n`, "utf8");
   const alternate = path.join(fixture.root, "alternate-launch.json");
-  await packLaunch({ configPath: fixture.configPath, outputPath: alternate });
+  const alternatePacked = await packLaunch({
+    configPath: fixture.configPath,
+    outputPath: alternate,
+  });
   await assert.rejects(
-    () => submitLaunch({ ...common, launchPath: alternate }),
+    () => submitLaunch({
+      ...common,
+      launchPath: alternate,
+      validateLaunchFileImpl: v3Validation(alternatePacked),
+    }),
     /IDEMPOTENCY_BINDING_CONFLICT/,
   );
 });
@@ -177,6 +194,7 @@ test("concurrent first submit atomically binds one body to an idempotency key", 
     stateDirectory,
     maxAttempts: 1,
     fetchImpl: async (_url, options) => {
+      if (options.method === "GET") return jsonResponse(validCapabilities());
       networkBodies.push(Buffer.from(options.body));
       return new Response(JSON.stringify({
         requestId: "4af272f8-9f25-4bad-92fa-d2ab6579a9e2",
@@ -191,11 +209,13 @@ test("concurrent first submit atomically binds one body to an idempotency key", 
       ...common,
       launchPath: first.outputPath,
       configPath: firstFixture.configPath,
+      validateLaunchFileImpl: v3Validation(first),
     }),
     submitLaunch({
       ...common,
       launchPath: second.outputPath,
       configPath: secondFixture.configPath,
+      validateLaunchFileImpl: v3Validation(second),
     }),
   ]);
   assert.equal(settled.filter(({ status }) => status === "fulfilled").length, 1);
@@ -235,6 +255,7 @@ test("submit refuses bytes changed after exact validation", async () => {
     () => submitLaunch({
       launchPath: packed.outputPath,
       configPath: fixture.configPath,
+      validateLaunchFileImpl: v3Validation(packed),
       readLaunchBytesImpl: async () => Buffer.concat([exactBytes, Buffer.from(" ")]),
       fetchImpl: async () => {
         networkCalls += 1;
@@ -247,23 +268,25 @@ test("submit refuses bytes changed after exact validation", async () => {
   assert.equal(networkCalls, 0);
 });
 
-test("submit treats the V1 read-only 409 as non-retryable", async () => {
+test("submit treats a V3 policy 409 as non-retryable", async () => {
   const fixture = await materializeCompiledFixture();
   const packed = await packLaunch({ configPath: fixture.configPath });
   let networkCalls = 0;
   await assert.rejects(() => submitLaunch({
     launchPath: packed.outputPath,
     configPath: fixture.configPath,
-    idempotencyKey: "v1-read-only-no-retry-0001",
+    idempotencyKey: "v3-policy-no-retry-0001",
     apiOrigin: "https://api.programmable.market",
-    stateDirectory: path.join(fixture.root, "v1-read-only-state"),
+    stateDirectory: path.join(fixture.root, "v3-policy-state"),
     maxAttempts: 5,
-    fetchImpl: async () => {
+    validateLaunchFileImpl: v3Validation(packed),
+    fetchImpl: async (_url, options) => {
+      if (options.method === "GET") return jsonResponse(validCapabilities());
       networkCalls += 1;
       return new Response(JSON.stringify({
         error: {
-          code: "CUSTOM_LAUNCH_V1_READ_ONLY",
-          message: "V1 launch creation is read-only",
+          code: "PROFILE_INVALID",
+          message: "The current V3.3 profile is required",
           requestId: "9be43bed-a5f2-4c15-b0d0-2f0f0ae942f0",
         },
       }), { status: 409, headers: { "content-type": "application/json" } });
@@ -272,7 +295,7 @@ test("submit treats the V1 read-only 409 as non-retryable", async () => {
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
   }), (error) => {
     assert.equal(error.details.httpStatus, 409);
-    assert.equal(error.details.code, "CUSTOM_LAUNCH_V1_READ_ONLY");
+    assert.equal(error.details.code, "PROFILE_INVALID");
     assert.equal(error.details.requestId, "9be43bed-a5f2-4c15-b0d0-2f0f0ae942f0");
     return true;
   });
@@ -798,31 +821,29 @@ test("V2 pack rejects constructor, initializer, and LP-fee policy mutations", as
   }
 });
 
-test("V2 submit and status use the schema-selected path and bind it in the journal", async () => {
+test("V2 submit is locally fenced while historical status keeps the V2 path", async () => {
   const fixture = await materializeV2CompiledFixture();
   const packed = await packLaunch({ configPath: fixture.configPath });
-  const stateDirectory = path.join(fixture.root, "v2-state");
   const urls = [];
-  const submitResult = await submitLaunch({
+  let submitApiKeyReads = 0;
+  await assert.rejects(() => submitLaunch({
     launchPath: packed.outputPath,
     configPath: fixture.configPath,
     idempotencyKey: "fee-enforced-v2-route-0001",
     apiOrigin: "https://api.programmable.market",
-    stateDirectory,
+    stateDirectory: path.join(fixture.root, "v2-state"),
     maxAttempts: 1,
     fetchImpl: async (url) => {
       urls.push(url);
-      return new Response(JSON.stringify({
-        requestId: "515a4b20-a7bd-40e1-8cfa-f6da5457036b",
-        launchId: "515a4b20-a7bd-40e1-8cfa-f6da5457036b",
-        status: "received",
-      }), { status: 202, headers: { "content-type": "application/json" } });
+      throw new Error("V2 submit must not reach the network");
     },
-    loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
-  });
-  assert.equal(urls[0], "https://api.programmable.market/v2/custom-launches");
-  const journal = JSON.parse(await readFile(submitResult.journalPath, "utf8"));
-  assert.equal(journal.requestPath, "/v2/custom-launches");
+    loadApiKeyImpl: async () => {
+      submitApiKeyReads += 1;
+      return "must-not-be-read";
+    },
+  }), /LEGACY_SUBMISSION_READ_ONLY/);
+  assert.equal(submitApiKeyReads, 0);
+  assert.deepEqual(urls, []);
 
   const statusResult = await statusLaunch({
     requestId: "515a4b20-a7bd-40e1-8cfa-f6da5457036b",
@@ -840,7 +861,7 @@ test("V2 submit and status use the schema-selected path and bind it in the journ
     loadApiKeyImpl: async () => "pm_live_publictest_secretvalue",
   });
   assert.equal(
-    urls[1],
+    urls[0],
     "https://api.programmable.market/v2/custom-launches/515a4b20-a7bd-40e1-8cfa-f6da5457036b",
   );
   assert.equal(statusResult.resource.status, "received");
@@ -853,6 +874,13 @@ test("V2 pack rejects executable custom-module delegation opcodes", async () => 
     /CUSTOM_MODULE_FORBIDDEN_OPCODE:.*DELEGATECALL/,
   );
 });
+
+function v3Validation(packed) {
+  return async () => ({
+    schemaVersion: CREATE_REQUEST_SCHEMA_V3,
+    requestSha256: packed.requestSha256,
+  });
+}
 
 async function materializeV2CompiledFixture({ dangerousCustomModule = false } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "programmable-launch-v2-cli-"));

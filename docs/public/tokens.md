@@ -28,7 +28,7 @@ Classic creates a fixed supply of one billion tokens and initializes its ETH poo
 
 ## Custom
 
-Custom releases are for products whose behavior cannot be represented by the Classic settings. A hook is code that can change how a Uniswap v4 pool behaves during a transaction. Each Custom request identifies the exact source bundle, graph, permissions, transaction fees, dependencies, transaction construction and controller wallet. Preparation uses a [wallet-bound API key](https://programmable.market/developers/api-keys), while signing remains with the controller wallet rather than the API key or a project name.
+Custom releases are for products whose behavior cannot be represented by the Classic settings. A hook is code that can change how a Uniswap v4 pool behaves during a transaction. Each Custom request identifies the exact source bundle, graph, permissions, transaction fees, dependencies, transaction construction and controller wallet. Preparation uses a wallet key, partner root or bounded partner subkey; [wallet keys are managed here](https://programmable.market/developers/api-keys). Signing remains with the controller wallet rather than the API credential or a project name.
 
 {% content-ref url="models/custom.md" %}
 [custom.md](models/custom.md)

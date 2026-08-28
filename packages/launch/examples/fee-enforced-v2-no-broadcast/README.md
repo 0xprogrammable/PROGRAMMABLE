@@ -32,6 +32,6 @@ programmable-launch validate launch.json --config programmable-launch.config.jso
 selected artifact, and records only pre-submit evidence. The evidence says `submit:false`, `status:false`,
 `stopAt:"pre-submit"`, and `walletBroadcast:false`. A successful validation proves deterministic preparation only.
 
-Authenticated `submit` and `status` are separate later actions. The CLI must stop at an unavailable response or at the
-returned wallet handoff. A human controller reviews and signs the exact transaction separately; this example never
-calls `eth_sendTransaction`.
+V2 creation is retired. The current CLI rejects a V2 `submit` locally, the server returns non-retryable
+`409 CUSTOM_LAUNCH_V2_READ_ONLY`, and only historical V2 `status` reads remain available. To submit a new launch, build
+the current V3.3 request instead. This example never calls `eth_sendTransaction`.
