@@ -854,6 +854,7 @@
 }
 
 .formPage :global(.classic-v3-fees),
+.formPage :global(.classic-v3-liquidity-presets),
 .formPage :global(.classic-v3-reward-mode),
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy),
 .formPage :global(.classic-v3-custody) {
@@ -865,11 +866,13 @@
 }
 
 .formPage :global(.classic-v3-fees legend),
+.formPage :global(.classic-v3-liquidity-presets legend),
 .formPage :global(.classic-v3-reward-mode legend) {
   padding-inline: 5px;
 }
 
 .formPage :global(.launch-select-trigger),
+.formPage :global(.classic-v3-fee-input),
 .formPage :global(.classic-v3-address-field input),
 .formPage :global(.classic-v3-split-row input),
 .formPage :global(.classic-v3-custody input) {
@@ -890,6 +893,11 @@
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy) {
   align-content: start;
   grid-template-columns: minmax(128px, 0.8fr) minmax(190px, 1.2fr);
+}
+
+.formPage :global(.classic-v3-amount-label small) {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .formPage :global(.classic-v3-custody) {
@@ -1321,6 +1329,7 @@
 .formPage.formPage :global(.classic-link-disclosure summary),
 .formPage.formPage :global(.launch-select-trigger),
 .formPage.formPage :global(.launch-select-option),
+.formPage.formPage :global(.classic-v3-fee-quick button),
 .formPage.formPage :global(.classic-v3-reward-mode button),
 .formPage.formPage
   :global(.classic-v3-initial-buy .meme-dev-buy-input button),
@@ -1358,6 +1367,8 @@
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.classic-v3-fees),
 .formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-liquidity-presets),
+.formPage.formPage[data-launch-model="classic-v3"]
   :global(.classic-v3-reward-mode),
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.classic-v3-initial-buy .meme-dev-buy),
@@ -1377,6 +1388,8 @@
   :global(.meme-dev-buy-input),
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.launch-select-trigger),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-fee-input),
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.classic-v3-address-field input),
 .formPage.formPage[data-launch-model="classic-v3"]
@@ -1423,6 +1436,30 @@
   border-color: var(--webde-line);
   box-shadow: none;
   color: #fff;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-liquidity-option),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-fee-quick button) {
+  background: transparent;
+  border-color: var(--webde-line);
+  box-shadow: none;
+  color: var(--webde-muted);
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-liquidity-option[data-selected="true"]),
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-fee-quick button[aria-pressed="true"]) {
+  background: var(--webde-control);
+  border-color: #555;
+  color: #fff;
+}
+
+.formPage.formPage[data-launch-model="classic-v3"]
+  :global(.classic-v3-fee-input:has(input[aria-invalid="true"])) {
+  border-color: var(--danger);
 }
 
 .formPage.formPage[data-launch-model="classic-v3"]
@@ -1478,6 +1515,8 @@
 .formPage.formPage :global(.classic-link-disclosure summary:focus-visible),
 .formPage.formPage :global(.launch-select-trigger:focus-visible),
 .formPage.formPage :global(.launch-select-option:focus-visible),
+.formPage.formPage :global(.classic-v3-fee-quick button:focus-visible),
+.formPage.formPage :global(.classic-v3-liquidity-option input:focus-visible),
 .formPage.formPage
   :global(.classic-v3-reward-mode button:focus-visible),
 .formPage.formPage
@@ -1625,6 +1664,7 @@
 .formPage :global(.field textarea),
 .formPage :global(.meme-dev-buy-input),
 .formPage :global(.launch-select-trigger),
+.formPage :global(.classic-v3-fee-input),
 .formPage :global(.classic-v3-address-field input),
 .formPage :global(.classic-v3-split-row input),
 .formPage :global(.classic-link-disclosure summary) {
@@ -1636,6 +1676,7 @@
 }
 
 .formPage :global(.classic-v3-fees),
+.formPage :global(.classic-v3-liquidity-presets),
 .formPage :global(.classic-v3-reward-mode),
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy),
 .formPage :global(.classic-v3-custody) {

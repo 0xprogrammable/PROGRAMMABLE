@@ -8,19 +8,24 @@ import {
   calculateBuyMaxWei,
   calculateEthVolumeUsdValue,
   calculateTradeTokenEstimate,
-  calculatePriceImpactPercent,
   calculateTradeUsdValue,
   formatTradeAmount,
   getTradeAmountValidationError,
   parseTradeSlippageBps,
 } from "../components/token-trade";
+import {
+  calculateNativeHookTradeCosts,
+  formatFixedBasisPoints,
+} from "../lib/trade/metrics";
+import { TRADE_SLIPPAGE_PRESET_BPS } from "../lib/trade/policy";
 
 const OWNER = getAddress("0x5555555555555555555555555555555555555555");
 const TOKEN = getAddress("0x1111111111111111111111111111111111111111");
 
 describe("TokenTrade request construction", () => {
-  it("defaults to five percent slippage", () => {
-    expect(DEFAULT_TRADE_SLIPPAGE_BPS).toBe(500);
+  it("defaults to one percent slippage", () => {
+    expect(DEFAULT_TRADE_SLIPPAGE_BPS).toBe(100);
+    expect(TRADE_SLIPPAGE_PRESET_BPS).toEqual([50, 100, 300]);
   });
 
   it("converts editable percentage input to basis points", () => {
@@ -51,7 +56,7 @@ describe("TokenTrade request construction", () => {
       side: "buy",
       amountIn: "1000000000000000",
       slippageBps: 250,
-      deadline: "2200",
+      deadline: "1300",
     });
   });
 
@@ -206,25 +211,36 @@ describe("TokenTrade request construction", () => {
     ).toBeNull();
   });
 
-  it("derives a reviewable price impact from the onchain spot price", () => {
+  it("separates the native hook fee from curve price impact", () => {
     expect(
-      calculatePriceImpactPercent({
+      calculateNativeHookTradeCosts({
         side: "buy",
         amountIn: "1000000000000000000",
         amountOut: "900000000000000000000",
         tokenDecimals: 18,
         tokenPriceEth: "0.001",
+        hookSwapFeeBps: 100,
       }),
-    ).toBeCloseTo(11.1111, 3);
+    ).toEqual({
+      hookSwapFeeBps: 100n,
+      curvePriceImpactBps: 1_000n,
+      totalExecutionCostBps: 1_111n,
+    });
     expect(
-      calculatePriceImpactPercent({
+      calculateNativeHookTradeCosts({
         side: "sell",
         amountIn: "1000000000000000000000",
         amountOut: "900000000000000000",
         tokenDecimals: 18,
         tokenPriceEth: "0.001",
+        hookSwapFeeBps: 100,
       }),
-    ).toBeCloseTo(10, 3);
+    ).toEqual({
+      hookSwapFeeBps: 100n,
+      curvePriceImpactBps: 909n,
+      totalExecutionCostBps: 1_000n,
+    });
+    expect(formatFixedBasisPoints(909n)).toBe("9.09%");
   });
 
   it("formats token approval amounts in the token unit", () => {

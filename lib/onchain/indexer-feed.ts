@@ -149,6 +149,7 @@ function launchIdentity(token: LauncherToken) {
       : token.launchModel === "stock-paired" ||
           token.launchModel === "custom-graph" ||
           token.launchModelVersion === "classic-v3" ||
+          token.launchModelVersion === "classic-v4" ||
           token.launchModelVersion === "programmable-launch-stamp-router-v1"
         ? token.launchModelVersion ?? null
         : null;

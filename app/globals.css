@@ -6247,7 +6247,7 @@ html[data-theme="dark"] .theme-toggle-sun {
 
 .classic-token-section .field > span,
 .classic-v3-settings legend,
-.classic-v3-fee-control > span,
+.classic-v3-fee-control > label,
 .classic-v3-custody label > span:first-child {
   line-height: 1.25;
   white-space: nowrap;
@@ -7088,6 +7088,82 @@ html[data-theme="dark"] .theme-toggle-sun {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.classic-v3-liquidity-presets {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+  padding: 13px;
+}
+
+.classic-v3-liquidity-presets legend {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 640;
+  padding: 0 4px;
+}
+
+.classic-v3-liquidity-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.classic-v3-liquidity-option {
+  align-items: flex-start;
+  background: var(--surface-raised);
+  border: 1px solid var(--control-border);
+  border-radius: 13px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-height: 64px;
+  padding: 11px 12px;
+}
+
+.classic-v3-liquidity-option[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--border));
+  box-shadow: 0 0 0 2px var(--accent-wash);
+}
+
+.classic-v3-liquidity-option input {
+  accent-color: var(--accent-strong);
+  flex: none;
+  height: 18px;
+  margin: 2px 0 0;
+  width: 18px;
+}
+
+.classic-v3-liquidity-option input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.classic-v3-liquidity-option > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.classic-v3-liquidity-option strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.classic-v3-liquidity-option small,
+.classic-v3-liquidity-note {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.classic-v3-liquidity-note {
+  margin: 0;
+}
+
 .classic-v3-fees,
 .classic-v3-reward-mode {
   background: var(--surface-soft);
@@ -7113,7 +7189,7 @@ html[data-theme="dark"] .theme-toggle-sun {
   min-width: 0;
 }
 
-.classic-v3-fee-control > span,
+.classic-v3-fee-control > label,
 .classic-v3-fees legend,
 .classic-v3-reward-mode legend,
 .classic-v3-split-row label > span:first-child,
@@ -7128,6 +7204,79 @@ html[data-theme="dark"] .theme-toggle-sun {
   font-size: 13px;
   line-height: 1.4;
   margin: 0;
+}
+
+.classic-v3-fee-input {
+  align-items: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--control-border);
+  border-radius: 13px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 46px;
+  overflow: hidden;
+}
+
+.classic-v3-fee-input input {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  outline: 0;
+  padding: 0 4px 0 12px;
+  width: 100%;
+}
+
+.classic-v3-fee-input > span {
+  color: var(--muted);
+  padding: 0 12px 0 4px;
+}
+
+.classic-v3-fee-input:has(input:focus-visible) {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--border));
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.classic-v3-fee-input:has(input[aria-invalid="true"]) {
+  border-color: var(--danger);
+}
+
+.classic-v3-fee-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.classic-v3-fee-quick {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.classic-v3-fee-quick button {
+  background: transparent;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.classic-v3-fee-quick button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  color: var(--text);
+}
+
+.classic-v3-fee-quick button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .classic-v3-fee-breakdown {
@@ -7612,6 +7761,7 @@ html[data-theme="dark"] .launch-page[data-launch-model="classic-v3"] {
 }
 
 .launch-page[data-launch-model="classic-v3"] .classic-v3-fees,
+.launch-page[data-launch-model="classic-v3"] .classic-v3-liquidity-presets,
 .launch-page[data-launch-model="classic-v3"] .classic-v3-reward-mode,
 .launch-page[data-launch-model="classic-v3"]
   .classic-v3-initial-buy
@@ -7622,6 +7772,7 @@ html[data-theme="dark"] .launch-page[data-launch-model="classic-v3"] {
 }
 
 .launch-page[data-launch-model="classic-v3"] .launch-select-trigger,
+.launch-page[data-launch-model="classic-v3"] .classic-v3-fee-input,
 .launch-page[data-launch-model="classic-v3"] .classic-v3-address-field input,
 .launch-page[data-launch-model="classic-v3"] .classic-v3-split-row input,
 .launch-page[data-launch-model="classic-v3"] .classic-v3-custody input,
@@ -7643,12 +7794,35 @@ html[data-theme="dark"] .launch-page[data-launch-model="classic-v3"] {
 .launch-page[data-launch-model="classic-v3"]
   .launch-select-trigger:focus-visible,
 .launch-page[data-launch-model="classic-v3"]
+  .classic-v3-fee-input:has(input:focus-visible),
+.launch-page[data-launch-model="classic-v3"]
   .classic-v3-reward-mode
   button:focus-visible {
   border-color: var(--classic-control-border-strong);
   box-shadow: none;
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.launch-page[data-launch-model="classic-v3"] .classic-v3-liquidity-option {
+  background: var(--classic-control-surface);
+  border-color: var(--classic-control-border);
+}
+
+.launch-page[data-launch-model="classic-v3"]
+  .classic-v3-liquidity-option[data-selected="true"],
+.launch-page[data-launch-model="classic-v3"]
+  .classic-v3-fee-quick
+  button[aria-pressed="true"] {
+  background: var(--classic-control-surface-selected);
+  border-color: var(--classic-control-border-strong);
+  box-shadow: none;
+  color: var(--text);
+}
+
+.launch-page[data-launch-model="classic-v3"] .classic-v3-fee-quick button {
+  border-color: var(--classic-control-border);
+  color: var(--muted);
 }
 
 .launch-page[data-launch-model="classic-v3"] .launch-select-menu {
@@ -7988,6 +8162,10 @@ html[data-theme="dark"] .launch-page[data-launch-model="classic-v3"] {
 }
 
 @media (max-width: 720px) {
+  .classic-v3-liquidity-options {
+    grid-template-columns: 1fr;
+  }
+
   .classic-v3-initial-buy {
     grid-template-columns: 1fr;
   }

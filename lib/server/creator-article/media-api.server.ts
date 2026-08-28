@@ -1,5 +1,6 @@
 import "server-only";
 
+import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 
 import { put, type PutBlobResult } from "@vercel/blob";
@@ -141,7 +142,7 @@ export function getProductionCreatorArticleMediaUploadHandlerV1() {
     authorityReader: createProductionCreatorArticleAuthorityReaderV1(),
     media: Object.freeze({
       async put(pathname, bytes) {
-        return put(pathname, bytes, {
+        return put(pathname, Buffer.from(bytes), {
           access: "public",
           token,
           addRandomSuffix: false,

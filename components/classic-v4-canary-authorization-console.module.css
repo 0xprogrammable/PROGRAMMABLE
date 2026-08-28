@@ -1,0 +1,433 @@
+.page {
+  width: min(100%, 1180px);
+  min-height: calc(100svh - var(--header-height));
+  margin: 0 auto;
+  padding: 80px 24px 96px;
+  color: var(--text);
+}
+
+.header {
+  max-width: 680px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.eyebrow {
+  margin: 0 0 16px;
+  color: var(--brand-pink);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  max-width: 680px;
+  margin: 0;
+  color: var(--text);
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.intro {
+  max-width: 680px;
+  margin: 24px 0 0;
+  color: var(--text-soft);
+  font-size: 18px;
+  line-height: 28px;
+  text-wrap: pretty;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 64px;
+  align-items: start;
+  margin-top: 64px;
+}
+
+.binding {
+  padding-top: 8px;
+}
+
+.bindingHeading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.bindingHeading > span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: var(--brand-pink);
+}
+
+.bindingHeading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.bindingSteps {
+  position: relative;
+  display: grid;
+  gap: 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bindingSteps::before {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 15px;
+  width: 1px;
+  background: var(--border-strong);
+  content: "";
+}
+
+.bindingSteps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.bindingSteps li > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 9999px;
+  background: var(--body-background);
+  color: var(--muted);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.bindingSteps strong {
+  display: block;
+  margin: 4px 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.bindingSteps p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  text-wrap: pretty;
+}
+
+.console {
+  padding: 32px;
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 24px 64px var(--card-shadow);
+}
+
+.factRow {
+  display: grid;
+  grid-template-columns: 144px minmax(0, 1fr);
+  gap: 16px;
+  align-items: baseline;
+  padding: 12px 0;
+}
+
+.factRow > span,
+.digestBlock > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.factRow strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.factRow code,
+.digestBlock code {
+  color: var(--text);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.digestBlock {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  box-shadow: inset 0 0 0 1px var(--panel-border-soft);
+}
+
+.walletBoundary {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.actionState {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.actionState p {
+  max-width: 360px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 20px;
+  text-wrap: pretty;
+}
+
+.actionState button,
+.primaryAction {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--brand-pink-action);
+  color: var(--brand-pink-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px var(--card-shadow);
+  transition-duration: 180ms;
+  transition-property: background-color, color, transform, box-shadow;
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.actionState button:hover,
+.primaryAction:hover {
+  background: var(--brand-pink-hover);
+  box-shadow: 0 12px 32px var(--hover-shadow);
+}
+
+.actionState button:active,
+.primaryAction:active {
+  transform: scale(0.96);
+}
+
+.actionState button:focus-visible,
+.primaryAction:focus-visible,
+.acknowledgement input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.actionState button:disabled,
+.primaryAction:disabled {
+  opacity: 0.58;
+  cursor: wait;
+  box-shadow: none;
+}
+
+.sessionPending {
+  display: grid;
+  grid-template-columns: 40px 120px;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+}
+
+.sessionPending > span {
+  display: block;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--skeleton-base);
+}
+
+.sessionPending > span:first-child {
+  width: 40px;
+}
+
+.sessionPending p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.sessionMatch {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.sessionMatch span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: var(--success);
+}
+
+.sessionMatch p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.acknowledgement {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 44px;
+  padding: 12px;
+  border-radius: 8px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.acknowledgement:hover {
+  background: var(--accent-soft);
+}
+
+.acknowledgement input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--brand-pink-action);
+}
+
+.acknowledgement span {
+  font-size: 14px;
+  line-height: 20px;
+  text-wrap: pretty;
+}
+
+.fieldError {
+  min-height: 20px;
+  margin: -8px 0 0 36px;
+  color: var(--danger);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.primaryAction {
+  width: 100%;
+}
+
+.status {
+  min-height: 20px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  text-wrap: pretty;
+}
+
+.statusSuccess {
+  color: var(--success);
+}
+
+.statusError {
+  color: var(--danger);
+}
+
+@media (max-width: 800px) {
+  .page {
+    padding-top: 48px;
+    padding-bottom: 80px;
+  }
+
+  .header h1 {
+    font-size: 36px;
+    line-height: 40px;
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+    margin-top: 48px;
+  }
+
+  .binding {
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 520px) {
+  .page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .console {
+    padding: 24px 16px;
+    border-radius: 12px;
+  }
+
+  .factRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .actionState {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .actionState button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actionState button,
+  .primaryAction {
+    transition-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .bindingHeading > span,
+  .sessionMatch span {
+    background: CanvasText;
+  }
+
+  .actionState button,
+  .primaryAction {
+    border: 1px solid ButtonText;
+  }
+}

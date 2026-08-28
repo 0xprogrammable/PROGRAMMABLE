@@ -4,8 +4,11 @@ import { readFileSync } from "node:fs";
 import {
   buildLaunchSummary,
   buildPlainTextPlan,
+  createClassicV3Draft,
   createEmptyDraft,
+  getClassicInitialBuyCurveQuote,
   getClassicInitialBuyPreview,
+  getLegacyClassicInitialBuyPreview,
   getDraftAssetLabel,
   getInitialBuyEthLabel,
   getMemeFeeBreakdown,
@@ -17,6 +20,7 @@ import {
   MEME_STARTING_FDV_ETH_LABEL,
   MEME_TOKEN_SUPPLY_WHOLE,
   parseInitialBuyWei,
+  parseClassicFeePercentToBps,
   parseTotalSwapFeeBps,
 } from "../lib/launch";
 
@@ -69,6 +73,40 @@ describe("Classic launch plan", () => {
     );
   });
 
+  it("routes V4 through the manifest gate and returns only a signed Router handoff", () => {
+    const preflightSource = readFileSync(
+      new URL("../app/api/launch/preflight/route.ts", import.meta.url),
+      "utf8",
+    );
+    const classicV4Section = preflightSource.slice(
+      preflightSource.indexOf("async function prepareClassicV4Launch("),
+      preflightSource.indexOf(
+        "// Retained as historical release evidence.",
+      ),
+    );
+
+    expect(preflightSource).toContain(
+      'draft.classicContractRelease === "classic-v4"',
+    );
+    expect(preflightSource).toContain(
+      "getConfiguredClassicV4PublicRelease(",
+    );
+    expect(preflightSource).toContain(
+      "if (!isClassicV4PublicActionRelease(release))",
+    );
+    expect(preflightSource).toContain("prepareClassicV4Launch(");
+    expect(classicV4Section).toContain(".authorize(request, {");
+    expect(classicV4Section).toContain('title: "Ready for wallet review"');
+    expect(classicV4Section).toContain(
+      'detail: "The exact Classic launch passed the signed Router simulation"',
+    );
+    expect(classicV4Section).not.toContain("rpcClient.call({");
+    expect(classicV4Section).toContain("transaction: {");
+    expect(classicV4Section).toContain(
+      "releaseManifestDigest: release.manifestDigest",
+    );
+  });
+
   it("starts every new draft on the single supported launch path", () => {
     const draft = createEmptyDraft();
 
@@ -78,6 +116,48 @@ describe("Classic launch plan", () => {
     expect(draft.selectedBehaviors).toEqual(["fixed-fee"]);
     expect(draft.lpFeePercent).toBe("0");
     expect(draft.initialBuyEth).toBe(MEME_MIN_INITIAL_BUY_ETH);
+    expect(createClassicV3Draft()).toMatchObject({
+      launchModel: "classic-v3",
+    });
+    expect(createClassicV3Draft()).not.toHaveProperty(
+      "classicLiquidityPreset",
+    );
+  });
+
+  it("parses Classic fee decimals exactly in 0.1% steps", () => {
+    for (const [value, expected] of [
+      ["0.1", 10],
+      ["0.10", 10],
+      [" 1 ", 100],
+      ["1.0", 100],
+      ["1.00", 100],
+      ["1.5", 150],
+      ["3.7", 370],
+      ["9.9", 990],
+      ["10", 1_000],
+      ["10.00", 1_000],
+    ] as const) {
+      expect(parseClassicFeePercentToBps(value)).toBe(expected);
+    }
+
+    for (const value of [
+      "",
+      "0",
+      "0.01",
+      "0.11",
+      ".1",
+      "01",
+      "1.",
+      "1.01",
+      "1e0",
+      "1,0",
+      "+1",
+      "-1",
+      "10.1",
+      "11",
+    ]) {
+      expect(parseClassicFeePercentToBps(value)).toBeNull();
+    }
   });
 
   it("accepts a creator-selected Dev Buy at or above the minimum", () => {
@@ -121,22 +201,70 @@ describe("Classic launch plan", () => {
 
     expect(minimumBuy).not.toBeNull();
     expect(minimumBuy?.poolEthAmount).toBeCloseTo(0.000594, 12);
-    expect(minimumBuy?.tokenAmount).toBeCloseTo(437_971.7816, 3);
-    expect(minimumBuy?.supplyPercent).toBeCloseTo(0.043797, 5);
-    expect(largerBuy?.tokenAmount).toBeCloseTo(21_438_505.518, 2);
-    expect(largerBuy?.supplyPercent).toBeCloseTo(2.143851, 5);
+    expect(minimumBuy?.tokenAmount).toBeCloseTo(438_015.8934, 3);
+    expect(minimumBuy?.supplyPercent).toBeCloseTo(0.043802, 5);
+    expect(largerBuy?.tokenAmount).toBeCloseTo(21_544_712.788, 2);
+    expect(largerBuy?.supplyPercent).toBeCloseTo(2.154471, 5);
   });
 
   it("accounts for the selected buy fee in the initial buy preview", () => {
+    const minimumFee = getClassicInitialBuyPreview("0.03", "0.1");
     const onePercentFee = getClassicInitialBuyPreview("0.03", "1");
     const tenPercentFee = getClassicInitialBuyPreview("0.03", "10");
 
+    expect(minimumFee?.poolEthAmount).toBeCloseTo(0.02997, 12);
+    expect(minimumFee?.tokenAmount).toBeGreaterThan(
+      onePercentFee?.tokenAmount ?? Number.POSITIVE_INFINITY,
+    );
     expect(tenPercentFee?.tokenAmount).toBeLessThan(
       onePercentFee?.tokenAmount ?? 0,
     );
     expect(getClassicInitialBuyPreview("0.0005", "1")).toBeNull();
-    expect(getClassicInitialBuyPreview("0.03", "1.5")).toBeNull();
+    expect(getClassicInitialBuyPreview("0.03", "1.01")).toBeNull();
     expect(getClassicInitialBuyPreview("0.03", "11")).toBeNull();
+  });
+
+  it("uses the one bounded Classic liquidity range", () => {
+    const preview = getClassicInitialBuyPreview("0.03", "1");
+
+    expect(preview?.tokenAmount).toBeCloseTo(21_544_712.788, 2);
+    expect(preview?.curveCapacityWei).toBe(5_895_641_055_945_908_140n);
+    expect(preview?.remainingCurveCapacityWei).toBe(
+      5_865_941_055_945_908_140n,
+    );
+    expect(preview?.endPriceMultipleWad).toBe(
+      18_913_066_072_547_532_342n,
+    );
+  });
+
+  it("keeps the already-deployed V3 preview on its historical range", () => {
+    const preview = getLegacyClassicInitialBuyPreview("0.03", "1");
+
+    expect(preview?.tokenAmount).toBeCloseTo(21_438_505.518, 2);
+    expect(preview?.bounded).toBe(false);
+    expect(preview?.curveCapacityWei).toBeNull();
+  });
+
+  it("uses exact fee rounding and rejects rather than clamps over-capacity Classic buys", () => {
+    const exact = getClassicInitialBuyCurveQuote(
+      "5.901542598544452592",
+      "0.1",
+    );
+    const over = getClassicInitialBuyCurveQuote(
+      "5.901542598544452593",
+      "0.1",
+    );
+
+    expect(exact.status).toBe("ready");
+    if (exact.status === "ready") {
+      expect(exact.preview.poolEthWei).toBeLessThanOrEqual(
+        exact.preview.curveCapacityWei ?? 0n,
+      );
+      expect(exact.preview.tokenAmountWei).toBeLessThanOrEqual(
+        1_000_000_000n * 10n ** 18n,
+      );
+    }
+    expect(over.status).toBe("over-capacity");
   });
 
   it("copies the selected Dev Buy into the launch summary", () => {

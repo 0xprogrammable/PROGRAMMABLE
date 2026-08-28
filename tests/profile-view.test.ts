@@ -249,6 +249,7 @@ const classicAllocation = {
 };
 
 const classicReward = {
+  releaseVersion: "classic-v3",
   tokenAddress: secondAddress,
   tokenName: "Second",
   tokenSymbol: "SECOND",

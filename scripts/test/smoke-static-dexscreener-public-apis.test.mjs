@@ -11,6 +11,18 @@ const NOW = "2026-08-16T08:00:00.000Z";
 const TOKEN = "0x1111111111111111111111111111111111111111";
 const CREATOR = "0x2222222222222222222222222222222222222222";
 const POOL = `0x${"33".repeat(32)}`;
+const NATIVE_CURRENCY_ADDRESS =
+  "0x0000000000000000000000000000000000000000";
+const CLASSIC_V4_HOOK = "0x6666666666666666666666666666666666666666";
+const CLASSIC_V4_REWARD_VAULT =
+  "0x7777777777777777777777777777777777777777";
+const CLASSIC_V4_POSITION_RECIPIENT =
+  "0x8888888888888888888888888888888888888888";
+const CLASSIC_V4_CUSTODY = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const CLASSIC_V4_LAUNCH_HASH = `0x${"de".repeat(32)}`;
+const CLASSIC_V4_TRANSACTION_HASH = `0x${"ef".repeat(32)}`;
+const CLASSIC_V4_CUSTODY_HASH = `0x${"12".repeat(32)}`;
+const CLASSIC_V4_TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
 const CUSTOM_TOKEN = "0x9999999999999999999999999999999999999999";
 const ROUTER_TOKEN = "0x6969696969696969696969696969696969696969";
 const ROUTER_LAUNCH_ID = `0x${"ab".repeat(32)}`;
@@ -47,6 +59,80 @@ function entry(index) {
     launchModel: "classic",
     launchModelVersion: "classic-v3",
     valuation: { status: "unavailable", reason: "source-unavailable" },
+  };
+}
+
+function classicV4Custody(mode) {
+  if (mode === "unlocked") {
+    return {
+      custodyAddress: null,
+      mode,
+      durationDays: 0,
+      cliffDays: 0,
+      configurationHash: CLASSIC_V4_CUSTODY_HASH,
+      cliffTimestamp: NOW,
+      releaseTimestamp: NOW,
+    };
+  }
+  const durationDays = 30;
+  const cliffDays = mode === "cliff-linear" ? 7 : 0;
+  const timestampAfterDays = (days) =>
+    new Date(Date.parse(NOW) + days * 86_400_000).toISOString();
+  return {
+    custodyAddress: CLASSIC_V4_CUSTODY,
+    mode,
+    durationDays,
+    cliffDays,
+    configurationHash: CLASSIC_V4_CUSTODY_HASH,
+    cliffTimestamp: mode === "fixed-lock"
+      ? timestampAfterDays(durationDays)
+      : timestampAfterDays(cliffDays),
+    releaseTimestamp: timestampAfterDays(durationDays),
+  };
+}
+
+function classicV4Entry({ custodyMode = "unlocked" } = {}) {
+  const token = entry(0);
+  return {
+    ...token,
+    hookAddress: CLASSIC_V4_HOOK,
+    creatorAddress: CREATOR,
+    rewardVaultAddress: CLASSIC_V4_REWARD_VAULT,
+    positionRecipient: CLASSIC_V4_POSITION_RECIPIENT,
+    positionTokenId: "1",
+    launchHash: CLASSIC_V4_LAUNCH_HASH,
+    launchBlockNumber: "25740000",
+    launchTransactionHash: CLASSIC_V4_TRANSACTION_HASH,
+    launchTransactionIndex: 2,
+    launchLogIndex: 7,
+    totalSupplyRaw: CLASSIC_V4_TOTAL_SUPPLY.toString(),
+    tokenDecimals: 18,
+    tokenLiquidityAmountRaw: (CLASSIC_V4_TOTAL_SUPPLY - 1n).toString(),
+    lockedTokenDustRaw: "1",
+    initialBuyEthAmountWei: "600000000000000",
+    initialBuyTokenAmountRaw: "1000000000000000000",
+    initialBuyCustody: classicV4Custody(custodyMode),
+    quoteAssetAddress: "0x0000000000000000000000000000000000000000",
+    quoteAssetSymbol: "ETH",
+    quoteAssetName: "Ether",
+    buyHookFeeBps: 10,
+    sellHookFeeBps: 1_000,
+    totalSwapFeeBps: 1_000,
+    initialTick: 204_200,
+    tickLower: 174_800,
+    tickUpper: 204_200,
+    lpFeePips: 0,
+    launchModel: "classic",
+    launchModelVersion: "classic-v4",
+    liquidityPath: "meme",
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "classic",
+      source: "canonical-launch-read-model",
+      recordId: token.id,
+      modelId: "classic",
+      modelVersion: "classic-v4",
+    },
   };
 }
 
@@ -406,6 +492,50 @@ function stagedFetch(
   };
 }
 
+function classicV4StagedFetch({
+  token = classicV4Entry(),
+  classicV4Bound = true,
+  includeClassicV4Identity = true,
+  scopeIncluded,
+} = {}) {
+  const selectedToken = includeClassicV4Identity ? token : entry(0);
+  const included = scopeIncluded ?? [
+    "classic-v3",
+    ...(classicV4Bound ? ["classic-v4"] : []),
+    "official-main-token",
+    "registry.custom-launched",
+  ];
+  return stagedFetch(({ body, url }) => {
+    if (url.pathname === "/api/explore") {
+      return {
+        ...body,
+        tokens: [selectedToken, entry(1)],
+        catalog: {
+          ...body.catalog,
+          scope: {
+            ...body.catalog.scope,
+            included,
+          },
+        },
+      };
+    }
+    if (url.pathname === "/api/explore/token") {
+      return {
+        ...body,
+        token: selectedToken,
+        catalog: {
+          ...body.catalog,
+          scope: {
+            ...body.catalog.scope,
+            included,
+          },
+        },
+      };
+    }
+    return body;
+  });
+}
+
 function routerCustomStagedFetch(
   mutate = (value) => value,
   {
@@ -637,6 +767,149 @@ test("staged smoke accepts identity-only Explore and token responses", async () 
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
   assert.equal(output.length, 1);
   assert.match(output[0][1], /market_read_status=unavailable/u);
+});
+
+test("staged smoke accepts exact canonical Classic V4 custody shapes", async () => {
+  for (const custodyMode of [
+    "unlocked",
+    "fixed-lock",
+    "linear",
+    "cliff-linear",
+  ]) {
+    const result = await runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: classicV4StagedFetch({
+        token: classicV4Entry({ custodyMode }),
+      }),
+      appendOutput: () => undefined,
+    });
+
+    assert.equal(result.tokenAddress, TOKEN);
+    assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+  }
+});
+
+test("staged smoke rejects malformed Classic V4 identity and policy fields", async () => {
+  const scenarios = [
+    (value) => ({ ...value, hookAddress: NATIVE_CURRENCY_ADDRESS }),
+    (value) => ({ ...value, launchHash: `0x${"00".repeat(32)}` }),
+    (value) => ({ ...value, buyHookFeeBps: 11 }),
+    (value) => ({ ...value, tickLower: 174_600 }),
+    (value) => ({ ...value, initialBuyEthAmountWei: "0" }),
+    (value) => ({ ...value, launchStampProvenance: {} }),
+    (value) => ({
+      ...value,
+      launchCategoryProvenance: {
+        ...value.launchCategoryProvenance,
+        source: "registry.custom-launched",
+      },
+    }),
+    (value) => ({
+      ...value,
+      launchCategoryProvenance: {
+        ...value.launchCategoryProvenance,
+        recordId: `1:${CUSTOM_TOKEN}`,
+      },
+    }),
+    (value) => ({
+      ...value,
+      initialBuyCustody: classicV4Custody("unsupported"),
+    }),
+    (value) => ({
+      ...value,
+      initialBuyCustody: {
+        ...classicV4Custody("fixed-lock"),
+        cliffTimestamp: NOW,
+      },
+    }),
+    (value) => ({
+      ...value,
+      initialBuyCustody: {
+        ...classicV4Custody("cliff-linear"),
+        cliffDays: 30,
+      },
+    }),
+  ];
+
+  for (const mutate of scenarios) {
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: classicV4StagedFetch({ token: mutate(classicV4Entry()) }),
+        appendOutput: () => undefined,
+      }),
+      /Explore identity set is malformed or duplicated/u,
+    );
+  }
+});
+
+test("staged smoke does not generically admit another Classic release", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: classicV4StagedFetch({
+        token: {
+          ...classicV4Entry(),
+          launchModelVersion: "classic-v5",
+        },
+      }),
+      appendOutput: () => undefined,
+    }),
+    /Explore identity set is malformed or duplicated/u,
+  );
+
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: classicV4StagedFetch({
+        scopeIncluded: [
+          "classic-v3",
+          "classic-v4",
+          "classic-v5",
+          "official-main-token",
+          "registry.custom-launched",
+        ],
+      }),
+      appendOutput: () => undefined,
+    }),
+    /Highest FDV response contract is invalid/u,
+  );
+});
+
+test("staged smoke fail-closes Classic V4 catalog release binding", async () => {
+  for (const options of [
+    { classicV4Bound: false },
+    { classicV4Bound: true, includeClassicV4Identity: false },
+  ]) {
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: classicV4StagedFetch(options),
+        appendOutput: () => undefined,
+      }),
+      /Classic V4 identities are not bound to the exact catalog release/u,
+    );
+  }
 });
 
 test("staged smoke accepts an exact Router Custom token identity", async () => {

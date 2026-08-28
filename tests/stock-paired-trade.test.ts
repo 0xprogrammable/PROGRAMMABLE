@@ -60,7 +60,7 @@ function request(side: "buy" | "sell") {
     side,
     amountIn: AMOUNT_IN,
     slippageBps: 100,
-    deadline: 10_900n,
+    deadline: 10_300n,
   } as const;
 }
 
@@ -429,7 +429,7 @@ describe("Stock-Paired server trading", () => {
         owner: STOCK_TEST_ACCOUNT,
         amountIn: AMOUNT_IN,
         slippageBps: 100,
-        deadline: 10_900n,
+        deadline: 10_300n,
       },
     );
     expect(conversion).toMatchObject({
@@ -482,7 +482,7 @@ describe("Stock-Paired server trading", () => {
         owner: STOCK_TEST_ACCOUNT,
         amountIn: AMOUNT_IN,
         slippageBps: 100,
-        deadline: 10_900n,
+        deadline: 10_300n,
       },
     );
     expect(approval).toMatchObject({
@@ -516,7 +516,7 @@ describe("Stock-Paired server trading", () => {
           owner: STOCK_TEST_ACCOUNT,
           amountIn: AMOUNT_IN,
           slippageBps: 100,
-          deadline: 10_900n,
+          deadline: 10_300n,
         },
       ),
     ).rejects.toThrow(/stock balance/);
@@ -531,7 +531,7 @@ describe("Stock-Paired server trading", () => {
           owner: STOCK_TEST_ACCOUNT,
           amountIn: AMOUNT_IN,
           slippageBps: 100,
-          deadline: 10_900n,
+          deadline: 10_300n,
         },
       ),
     ).rejects.toThrow(/more ETH/);

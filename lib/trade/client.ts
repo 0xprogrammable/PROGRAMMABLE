@@ -19,6 +19,10 @@ import {
   type ClassicTradeDeployment,
   type ClassicTradeSide,
 } from "./classic";
+import {
+  MAX_TRADE_SLIPPAGE_BPS,
+  TRADE_QUOTE_VALIDITY_SECONDS,
+} from "./policy";
 import { getConfiguredStockPairedReleaseByHook } from "../stock-paired-release";
 import {
   buildStockPairedPermit2ApprovalTransaction,
@@ -35,6 +39,11 @@ import {
   parsePreparedTransaction,
   type PreparedTradeTransaction,
 } from "../prepared-transaction";
+import {
+  CLASSIC_V4_PUBLIC_RELEASE_BINDING,
+  isClassicV4PublicActionBinding,
+  type ClassicV4PublicReleaseBinding,
+} from "../classic-v4-public-release";
 
 export type PreparedTokenTrade = {
   status: "ready" | "approval-required";
@@ -72,6 +81,7 @@ export type PreparedTradeValidationContext = {
   slippageBps: number;
   deadline: string;
   launchModel?: "classic" | "adaptive" | "deep" | "stock-paired";
+  launchModelVersion?: string;
   quoteAsset?: Address;
 };
 
@@ -241,6 +251,8 @@ function tradeEnvelope(transaction: {
 export function validatePreparedTradeResponse(
   input: unknown,
   context: PreparedTradeValidationContext,
+  classicV4PublicRelease: ClassicV4PublicReleaseBinding | null =
+    CLASSIC_V4_PUBLIC_RELEASE_BINDING,
 ): PreparedTokenTrade {
   if (context.chainId !== 1 && context.chainId !== 11_155_111) {
     throw new Error("The prepared trade has an unsupported chain");
@@ -260,6 +272,12 @@ export function validatePreparedTradeResponse(
   if (context.launchModel === "adaptive") {
     throw new Error("Adaptive trading is not supported by this trade path");
   }
+  if (
+    context.launchModelVersion === "classic-v4" &&
+    !isClassicV4PublicActionBinding(classicV4PublicRelease)
+  ) {
+    throw new Error("Classic V4 trading is not enabled by the browser release binding");
+  }
   const expectedAmountIn = positiveIntegerString(
     context.amountIn,
     "input amount",
@@ -271,7 +289,7 @@ export function validatePreparedTradeResponse(
   if (
     !Number.isInteger(context.slippageBps) ||
     context.slippageBps < 1 ||
-    context.slippageBps > 1_000
+    context.slippageBps > MAX_TRADE_SLIPPAGE_BPS
   ) {
     throw new Error("The prepared trade has invalid slippage");
   }
@@ -455,7 +473,7 @@ export function validatePreparedTradeResponse(
   }
   const amountIn = BigInt(expectedAmountIn);
   const deadline = BigInt(expectedDeadline);
-  const referenceNow = deadline - 1_200n;
+  const referenceNow = deadline - BigInt(TRADE_QUOTE_VALIDITY_SECONDS);
   if (referenceNow < 0n) {
     throw new Error("The prepared trade deadline is invalid");
   }

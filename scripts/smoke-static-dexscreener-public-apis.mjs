@@ -8,6 +8,17 @@ const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const CATALOG_SOURCES = new Set(["envio-classic-v3"]);
+const NATIVE_CURRENCY_ADDRESS =
+  "0x0000000000000000000000000000000000000000";
+const CLASSIC_V4_POLICY = Object.freeze({
+  minimumTotalSwapFeeBps: 10,
+  maximumTotalSwapFeeBps: 1_000,
+  totalSwapFeeStepBps: 10,
+  initialTick: 204_200,
+  liquidityTickLower: 174_800,
+  liquidityTickUpper: 204_200,
+  lpFeePips: 0,
+});
 const PROGRAMMABLE_MAIN_ASSET_ADDRESS =
   "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
 const SHARD_TOKEN_ADDRESS = [
@@ -148,6 +159,176 @@ function exactShardRouterTradeDetail(response) {
       SHARD_ROUTER_TRADE_CAPABILITY_HASH;
 }
 
+function unsignedInteger(value) {
+  return typeof value === "string" && /^(?:0|[1-9][0-9]*)$/u.test(value);
+}
+
+function exactClassicV4Custody(custody, launchedAt) {
+  if (
+    !exactObjectKeys(custody, [
+      "cliffDays",
+      "cliffTimestamp",
+      "configurationHash",
+      "custodyAddress",
+      "durationDays",
+      "mode",
+      "releaseTimestamp",
+    ]) ||
+    !BYTES32.test(String(custody.configurationHash ?? "").toLowerCase()) ||
+    BigInt(custody.configurationHash) === 0n
+  ) return false;
+  const launchTimestamp = Date.parse(launchedAt);
+  if (!Number.isFinite(launchTimestamp)) return false;
+  const timestampAfterDays = (days) =>
+    new Date(launchTimestamp + days * 86_400_000).toISOString();
+  if (custody.mode === "unlocked") {
+    return custody.custodyAddress === null &&
+      custody.durationDays === 0 &&
+      custody.cliffDays === 0 &&
+      custody.cliffTimestamp === launchedAt &&
+      custody.releaseTimestamp === launchedAt;
+  }
+  const custodyAddress = String(custody.custodyAddress ?? "").toLowerCase();
+  if (
+    !ADDRESS.test(custodyAddress) ||
+    BigInt(custodyAddress) === 0n ||
+    !Number.isSafeInteger(custody.durationDays) ||
+    custody.durationDays < 1 ||
+    custody.durationDays > 3_650 ||
+    !Number.isSafeInteger(custody.cliffDays)
+  ) return false;
+  const releaseTimestamp = timestampAfterDays(custody.durationDays);
+  if (
+    custody.mode === "fixed-lock" ||
+    custody.mode === "linear"
+  ) {
+    const cliffTimestamp = custody.mode === "fixed-lock"
+      ? releaseTimestamp
+      : launchedAt;
+    return custody.cliffDays === 0 &&
+      custody.cliffTimestamp === cliffTimestamp &&
+      custody.releaseTimestamp === releaseTimestamp;
+  }
+  if (custody.mode !== "cliff-linear") return false;
+  return custody.cliffDays >= 1 &&
+    custody.cliffDays < custody.durationDays &&
+    custody.cliffTimestamp === timestampAfterDays(custody.cliffDays) &&
+    custody.releaseTimestamp === releaseTimestamp;
+}
+
+function exactClassicV4Identity(token, tokenAddress, poolId) {
+  const category = token.launchCategoryProvenance;
+  const hookAddress = String(token.hookAddress ?? "").toLowerCase();
+  const creatorAddress = String(token.creatorAddress ?? "").toLowerCase();
+  const rewardVaultAddress = String(
+    token.rewardVaultAddress ?? "",
+  ).toLowerCase();
+  const positionRecipient = String(
+    token.positionRecipient ?? "",
+  ).toLowerCase();
+  const launchHash = String(token.launchHash ?? "").toLowerCase();
+  const launchTransactionHash = String(
+    token.launchTransactionHash ?? "",
+  ).toLowerCase();
+  const custody = token.initialBuyCustody;
+  const buyFee = token.buyHookFeeBps;
+  const sellFee = token.sellHookFeeBps;
+  const totalSupplyRaw = token.totalSupplyRaw;
+  const tokenLiquidityAmountRaw = token.tokenLiquidityAmountRaw;
+  const lockedTokenDustRaw = token.lockedTokenDustRaw;
+  if (
+    token.id !== `1:${tokenAddress}` ||
+    BigInt(tokenAddress) === 0n ||
+    BigInt(poolId) === 0n ||
+    token.launchModel !== "classic" ||
+    token.launchModelVersion !== "classic-v4" ||
+    token.launchStampProvenance !== undefined ||
+    token.liquidityPath !== "meme" ||
+    !exactObjectKeys(category, [
+      "category",
+      "modelId",
+      "modelVersion",
+      "recordId",
+      "schemaVersion",
+      "source",
+    ]) ||
+    category.schemaVersion !==
+      "programmable.explore-launch-category-provenance.v1" ||
+    category.category !== "classic" ||
+    category.source !== "canonical-launch-read-model" ||
+    category.recordId !== token.id ||
+    category.modelId !== "classic" ||
+    category.modelVersion !== "classic-v4" ||
+    !ADDRESS.test(hookAddress) ||
+    BigInt(hookAddress) === 0n ||
+    !ADDRESS.test(creatorAddress) ||
+    BigInt(creatorAddress) === 0n ||
+    !ADDRESS.test(rewardVaultAddress) ||
+    BigInt(rewardVaultAddress) === 0n ||
+    !ADDRESS.test(positionRecipient) ||
+    BigInt(positionRecipient) === 0n ||
+    !BYTES32.test(launchHash) ||
+    BigInt(launchHash) === 0n ||
+    !BYTES32.test(launchTransactionHash) ||
+    BigInt(launchTransactionHash) === 0n ||
+    !POSITIVE_INTEGER.test(String(token.launchBlockNumber ?? "")) ||
+    !Number.isSafeInteger(token.launchTransactionIndex) ||
+    token.launchTransactionIndex < 0 ||
+    !Number.isSafeInteger(token.launchLogIndex) ||
+    token.launchLogIndex < 0 ||
+    !POSITIVE_INTEGER.test(String(token.positionTokenId ?? "")) ||
+    !ISO_TIMESTAMP.test(String(token.launchedAt ?? "")) ||
+    new Date(Date.parse(token.launchedAt)).toISOString() !== token.launchedAt ||
+    token.tokenDecimals !== 18 ||
+    !POSITIVE_INTEGER.test(String(totalSupplyRaw ?? "")) ||
+    !POSITIVE_INTEGER.test(String(tokenLiquidityAmountRaw ?? "")) ||
+    !unsignedInteger(lockedTokenDustRaw) ||
+    BigInt(tokenLiquidityAmountRaw) + BigInt(lockedTokenDustRaw) !==
+      BigInt(totalSupplyRaw) ||
+    !POSITIVE_INTEGER.test(String(token.initialBuyEthAmountWei ?? "")) ||
+    !POSITIVE_INTEGER.test(String(token.initialBuyTokenAmountRaw ?? "")) ||
+    String(token.quoteAssetAddress ?? "").toLowerCase() !==
+      NATIVE_CURRENCY_ADDRESS ||
+    token.quoteAssetSymbol !== "ETH" ||
+    token.quoteAssetName !== "Ether" ||
+    !Number.isSafeInteger(buyFee) ||
+    !Number.isSafeInteger(sellFee) ||
+    buyFee < CLASSIC_V4_POLICY.minimumTotalSwapFeeBps ||
+    buyFee > CLASSIC_V4_POLICY.maximumTotalSwapFeeBps ||
+    sellFee < CLASSIC_V4_POLICY.minimumTotalSwapFeeBps ||
+    sellFee > CLASSIC_V4_POLICY.maximumTotalSwapFeeBps ||
+    buyFee % CLASSIC_V4_POLICY.totalSwapFeeStepBps !== 0 ||
+    sellFee % CLASSIC_V4_POLICY.totalSwapFeeStepBps !== 0 ||
+    token.totalSwapFeeBps !== Math.max(buyFee, sellFee) ||
+    token.initialTick !== CLASSIC_V4_POLICY.initialTick ||
+    token.tickLower !== CLASSIC_V4_POLICY.liquidityTickLower ||
+    token.tickUpper !== CLASSIC_V4_POLICY.liquidityTickUpper ||
+    token.lpFeePips !== CLASSIC_V4_POLICY.lpFeePips ||
+    !exactClassicV4Custody(custody, token.launchedAt)
+  ) return null;
+  return JSON.stringify([
+    "classic-v4-token",
+    token.id,
+    tokenAddress,
+    poolId,
+    hookAddress,
+    creatorAddress,
+    rewardVaultAddress,
+    positionRecipient,
+    token.positionTokenId,
+    launchHash,
+    token.launchBlockNumber,
+    launchTransactionHash,
+    token.launchTransactionIndex,
+    token.launchLogIndex,
+    buyFee,
+    sellFee,
+    token.initialTick,
+    token.tickLower,
+    token.tickUpper,
+  ]);
+}
+
 function exactIdentity(token) {
   if (typeof token?.id !== "string" || token.id.trim() === "") return null;
   if (token.exploreKind === "token") {
@@ -201,6 +382,9 @@ function exactIdentity(token) {
     const exactOfficialException =
       tokenAddress === PROGRAMMABLE_MAIN_ASSET_ADDRESS &&
       token.launchModelVersion === "classic-v2";
+    if (token.launchModelVersion === "classic-v4") {
+      return exactClassicV4Identity(token, tokenAddress, poolId);
+    }
     if (
       token.launchModel !== "classic" ||
       (token.launchModelVersion !== "classic-v3" && !exactOfficialException) ||
@@ -480,6 +664,7 @@ function exactCatalogSnapshot(
       scope: catalog.scope,
       evidenceDeployment: null,
       evidenceSourceCommit: null,
+      classicV4Bound: false,
       routerEvidence: {
         asOfBlock: routerStamp.asOfBlock,
         identityCommitment: routerStamp.identityCommitment,
@@ -504,7 +689,7 @@ function exactCatalogSnapshot(
           routerCustomStatus === "last-known-good"
         ? "last-known-good"
         : "unavailable";
-  const expectedIncluded = [
+  const baseIncluded = [
     "classic-v3",
     "official-main-token",
     "registry.custom-launched",
@@ -512,6 +697,17 @@ function exactCatalogSnapshot(
       ? ["canonical-launch-stamp-router"]
       : []),
   ];
+  const classicV4Included = [
+    "classic-v3",
+    "classic-v4",
+    "official-main-token",
+    "registry.custom-launched",
+    ...(routerCustomAvailable
+      ? ["canonical-launch-stamp-router"]
+      : []),
+  ];
+  const included = JSON.stringify(catalog.scope?.included);
+  const classicV4Bound = included === JSON.stringify(classicV4Included);
   if (!(
     CATALOG_SOURCES.has(source) &&
     CATALOG_STATUSES.has(catalog?.status) &&
@@ -526,8 +722,7 @@ function exactCatalogSnapshot(
     ["current", "last-known-good", "unavailable"].includes(
       routerCustomStatus,
     ) &&
-    JSON.stringify(catalog.scope?.included) ===
-      JSON.stringify(expectedIncluded) &&
+    (included === JSON.stringify(baseIncluded) || classicV4Bound) &&
     JSON.stringify(catalog.scope?.excluded) === JSON.stringify([
       "classic-v1",
       "classic-v2",
@@ -579,6 +774,7 @@ function exactCatalogSnapshot(
     scope: catalog.scope,
     evidenceDeployment: catalog.evidence.deployment,
     evidenceSourceCommit: catalog.evidence.sourceCommit,
+    classicV4Bound,
     launchSource,
   });
 }
@@ -797,6 +993,20 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         identities.some((identity) => identity === null) ||
         new Set(identities).size !== identities.length
       ) throw new Error("Explore identity set is malformed or duplicated");
+      const catalogBoundary = JSON.parse(highestCatalog);
+      const classicV4IdentityCount = completeCatalogTokens.filter(
+        (token) =>
+          token?.exploreKind === "token" &&
+          token.launchModel === "classic" &&
+          token.launchModelVersion === "classic-v4",
+      ).length;
+      if (
+        catalogBoundary.classicV4Bound !== (classicV4IdentityCount > 0)
+      ) {
+        throw new Error(
+          "Classic V4 identities are not bound to the exact catalog release",
+        );
+      }
       const initialNewestIdentities = newestTokens.map(exactIdentity);
       if (
         initialNewestIdentities.some((identity) => identity === null) ||
@@ -833,7 +1043,6 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
       );
       const detailToken = detail.body?.token ?? detail.body?.customProject;
-      const catalogBoundary = JSON.parse(highestCatalog);
       const detailCatalog = exactCatalogSnapshot(
         { ...detail, body: {
           ...detail.body,

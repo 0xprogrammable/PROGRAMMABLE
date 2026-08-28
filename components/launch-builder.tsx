@@ -28,11 +28,15 @@ import { useWallet } from "@/components/wallet-provider";
 import extendedLayout from "@/components/extended-launch-layout.module.css";
 import launchExperience from "@/components/launch-experience.module.css";
 import { validatePreparedClassicLaunchTransaction } from "@/lib/classic-launch-validation";
-import { validatePreparedClassicV3LaunchTransaction } from "@/lib/classic-v3-launch-validation";
+import {
+  validatePreparedClassicV3LaunchTransaction,
+  validatePreparedClassicV4LaunchTransaction,
+} from "@/lib/classic-v3-launch-validation";
 import {
   formatClassicV3Percent,
   validateClassicV3LaunchDraft,
 } from "@/lib/classic-v3";
+import { validateClassicV4LaunchDraft } from "@/lib/classic-v4";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import {
   deepV3PresetDisclosure,
@@ -77,11 +81,15 @@ import {
   createClassicV3Draft,
   createEmptyDraft,
   createStockPairedDraft,
+  getClassicInitialBuyCurveQuote,
   getClassicInitialBuyPreview,
+  getLegacyClassicInitialBuyCurveQuote,
+  getLegacyClassicInitialBuyPreview,
   maximumClassicDevBuyWei,
   MEME_MIN_INITIAL_BUY_ETH,
   MEME_MIN_INITIAL_BUY_ETH_LABEL,
   MEME_TOKEN_SUPPLY_WHOLE,
+  parseClassicFeePercentToBps,
   parseInitialBuyWei,
   PLATFORM_FEE_BPS,
   type LaunchDraft,
@@ -949,8 +957,12 @@ function updateDraft(
 }
 
 function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
-  return {
+  const normalizedDraft = {
     ...initialDraft,
+  } as LaunchDraft & { classicLiquidityPreset?: unknown };
+  delete normalizedDraft.classicLiquidityPreset;
+  return {
+    ...normalizedDraft,
     launchModel: "classic",
     assetMode: "new",
     tokenSupply: "1000000000",
@@ -970,18 +982,36 @@ function normalizeStandardDraft(initialDraft: LaunchDraft): LaunchDraft {
   };
 }
 
-function normalizeClassicV3Draft(initialDraft: LaunchDraft): LaunchDraft {
+export function normalizeClassicV3Draft(
+  initialDraft: LaunchDraft,
+  enableV4 = false,
+): LaunchDraft {
   return {
     ...normalizeStandardDraft(initialDraft),
     launchModel: "classic-v3",
+    classicContractRelease: enableV4 ? "classic-v4" : "classic-v3",
     buySwapFeePercent: initialDraft.buySwapFeePercent || "1",
     sellSwapFeePercent: initialDraft.sellSwapFeePercent || "1",
     rewardDestinationMode: initialDraft.rewardDestinationMode || "launcher",
-    initialBuyCustodyMode:
-      initialDraft.initialBuyCustodyMode || "unlocked",
-    initialBuyDurationDays: initialDraft.initialBuyDurationDays || "30",
-    initialBuyCliffDays: initialDraft.initialBuyCliffDays || "7",
+    initialBuyCustodyMode: enableV4
+      ? "unlocked"
+      : initialDraft.initialBuyCustodyMode || "unlocked",
+    initialBuyDurationDays: enableV4
+      ? "0"
+      : initialDraft.initialBuyDurationDays || "30",
+    initialBuyCliffDays: enableV4
+      ? "0"
+      : initialDraft.initialBuyCliffDays || "7",
   };
+}
+
+export function classicMaximumCheckDraft(
+  initialDraft: LaunchDraft,
+  enableV4: boolean,
+): LaunchDraft {
+  return enableV4 && initialDraft.launchModel === "classic-v3"
+    ? { ...initialDraft, initialBuyEth: MEME_MIN_INITIAL_BUY_ETH }
+    : initialDraft;
 }
 
 export function normalizeDeepDraft(initialDraft: LaunchDraft): LaunchDraft {
@@ -1031,6 +1061,23 @@ const classicV3LaunchAvailable =
   (process.env.NODE_ENV !== "production" &&
     process.env.NEXT_PUBLIC_CLASSIC_V3_UI_PREVIEW === "true") ||
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
+const classicV4UiPreviewEnabled =
+  process.env.NODE_ENV !== "production" &&
+  process.env.NEXT_PUBLIC_CLASSIC_V4_UI_PREVIEW === "true";
+const classicV4UiReleaseEnabled =
+  process.env.NEXT_PUBLIC_CLASSIC_V4_UI_ENABLED === "true";
+const classicV4UiEnabled =
+  classicV4UiPreviewEnabled || classicV4UiReleaseEnabled;
+
+export function classicV4TransactionBlockReason(
+  model: LaunchModel,
+  previewEnabled: boolean,
+  releaseEnabled = false,
+) {
+  return model === "classic-v3" && previewEnabled && !releaseEnabled
+    ? "Classic V4 is a preview. Wallet transactions stay disabled until the V4 deployment and preflight release are verified."
+    : "";
+}
 function browserPendingLaunchStorages(): PendingLaunchStorage[] {
   if (typeof window === "undefined") return [];
   const storages: PendingLaunchStorage[] = [];
@@ -1205,7 +1252,7 @@ export function LaunchBuilderForm({
     model === "stock-paired"
       ? normalizeStockPairedDraft(createStockPairedDraft())
       : model === "classic-v3"
-        ? createClassicV3Draft()
+        ? normalizeClassicV3Draft(createClassicV3Draft(), classicV4UiEnabled)
         : normalizeStandardDraft(createEmptyDraft());
 
   return (
@@ -1229,8 +1276,14 @@ function LaunchBuilderFormView({
   onBackToModels: () => void;
   stockPairedPublicLaunchEnabled: boolean;
 }) {
-  const { wallet, openWallet, readNativeBalance, sendTransaction } =
-    useWallet();
+  const {
+    wallet,
+    openWallet,
+    readNativeBalance,
+    sendTransaction,
+    getAccessToken,
+    getIdentityToken,
+  } = useWallet();
   const [draft, setDraft] = useState<LaunchDraft>(initialDraft);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1601,7 +1654,7 @@ function LaunchBuilderFormView({
     transactionHash,
   ]);
 
-  function validateLaunch() {
+  function validateLaunch(checkedDraft = draft) {
     if (
       tokenImageState.status === "preparing" ||
       tokenImageState.status === "waiting" ||
@@ -1615,18 +1668,22 @@ function LaunchBuilderFormView({
     try {
       if (model === "deep") {
         if (!wallet) return "Connect a wallet to verify the launch";
-        validateDeepV3LaunchDraft(draft, wallet.account);
+        validateDeepV3LaunchDraft(checkedDraft, wallet.account);
       } else if (model === "stock-paired") {
         if (!wallet) return "Connect a wallet to verify the launch";
         if (!stockPairedLaunchAllowed) {
           return "Stock-Paired is coming soon";
         }
-        validateStockPairedLaunchDraft(draft, wallet.account);
+        validateStockPairedLaunchDraft(checkedDraft, wallet.account);
       } else if (model === "classic-v3") {
         if (!wallet) return "Connect a wallet to verify the reward setup";
-        validateClassicV3LaunchDraft(draft, wallet.account);
+        if (classicV4UiEnabled) {
+          validateClassicV4LaunchDraft(checkedDraft, wallet.account);
+        } else {
+          validateClassicV3LaunchDraft(checkedDraft, wallet.account);
+        }
       } else {
-        validateMemeLaunchDraft(draft);
+        validateMemeLaunchDraft(checkedDraft);
       }
       return "";
     } catch (caught) {
@@ -1649,12 +1706,30 @@ function LaunchBuilderFormView({
     connectedWallet: NonNullable<typeof wallet>,
   ) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    const timeout = window.setTimeout(() => controller.abort(), 65_000);
 
     try {
+      const headers = new Headers({ "Content-Type": "application/json" });
+      if (
+        classicV4UiReleaseEnabled
+        && checkedDraft.launchModel === "classic-v3"
+        && checkedDraft.classicContractRelease === "classic-v4"
+      ) {
+        const [accessToken, identityToken] = await Promise.all([
+          getAccessToken(),
+          getIdentityToken().catch(() => null),
+        ]);
+        if (!accessToken) {
+          throw new Error("Reconnect the launch wallet and try again");
+        }
+        headers.set("Authorization", `Bearer ${accessToken}`);
+        if (identityToken) {
+          headers.set("X-Privy-Identity-Token", identityToken);
+        }
+      }
       const response = await fetch("/api/launch/preflight", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           account: connectedWallet.account,
           walletChainId: connectedWallet.chainId,
@@ -1697,7 +1772,11 @@ function LaunchBuilderFormView({
       return;
     }
 
-    const validationError = validateLaunch();
+    const maximumCheckDraft = classicMaximumCheckDraft(
+      draft,
+      model === "classic-v3" && classicV4UiEnabled,
+    );
+    const validationError = validateLaunch(maximumCheckDraft);
     if (validationError) {
       setFormError(validationError);
       return;
@@ -1709,12 +1788,15 @@ function LaunchBuilderFormView({
     try {
       let checkedDraft =
         model === "deep"
-          ? normalizeDeepDraft(draft)
+          ? normalizeDeepDraft(maximumCheckDraft)
           : model === "stock-paired"
-            ? normalizeStockPairedDraft(draft)
+            ? normalizeStockPairedDraft(maximumCheckDraft)
             : model === "classic-v3"
-              ? normalizeClassicV3Draft(draft)
-              : normalizeStandardDraft(draft);
+              ? normalizeClassicV3Draft(
+                  maximumCheckDraft,
+                  classicV4UiEnabled,
+                )
+              : normalizeStandardDraft(maximumCheckDraft);
       if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
         checkedDraft = {
           ...checkedDraft,
@@ -1726,16 +1808,29 @@ function LaunchBuilderFormView({
       const prepared = await prepareLaunch(checkedDraft, wallet);
       const balances = await readNativeBalance();
       const gasLimit = BigInt(prepared.transaction.gasLimit);
-      const maximum = maximumClassicDevBuyWei({
+      let maximum = maximumClassicDevBuyWei({
         nativeBalanceWei: balances.nativeBalanceWei,
         gasLimit,
         gasPriceWei: balances.gasPriceWei,
       });
+      if (model === "classic-v3" && classicV4UiEnabled) {
+        const curve = getClassicInitialBuyCurveQuote(
+          MEME_MIN_INITIAL_BUY_ETH,
+          checkedDraft.buySwapFeePercent,
+        );
+        if (
+          curve.status === "ready" &&
+          curve.preview.maximumGrossActivationBuyWei !== null &&
+          maximum > curve.preview.maximumGrossActivationBuyWei
+        ) {
+          maximum = curve.preview.maximumGrossActivationBuyWei;
+        }
+      }
       const minimum = parseInitialBuyWei(MEME_MIN_INITIAL_BUY_ETH) ?? 0n;
 
       if (maximum < minimum) {
         throw new Error(
-          "This wallet needs more ETH for the minimum Dev Buy and network gas",
+          "This wallet needs more ETH for the minimum Activation Buy and network gas",
         );
       }
 
@@ -1752,7 +1847,7 @@ function LaunchBuilderFormView({
       setFormError(
         caught instanceof Error
           ? caught.message
-          : "The maximum Dev Buy could not be calculated",
+          : "The maximum Activation Buy could not be calculated",
       );
     } finally {
       setSettingMaxBuy(false);
@@ -1763,6 +1858,13 @@ function LaunchBuilderFormView({
     initialLaunchDraft: LaunchDraft,
     connectedWallet: NonNullable<typeof wallet>,
   ) {
+    const previewBlockReason = classicV4TransactionBlockReason(
+      initialLaunchDraft.launchModel,
+      classicV4UiPreviewEnabled,
+      classicV4UiReleaseEnabled,
+    );
+    if (previewBlockReason) throw new Error(previewBlockReason);
+
     let checkedDraft = initialLaunchDraft;
     let result = await requestLaunchCheck(checkedDraft, connectedWallet);
 
@@ -1779,18 +1881,38 @@ function LaunchBuilderFormView({
     if (result.status !== "ready" || !result.transaction || !result.planHash) {
       throw new Error(result.detail || "The launch could not be prepared");
     }
+    if (
+      checkedDraft.classicContractRelease === "classic-v4" &&
+      (!result.releaseLauncher || !result.releaseManifestDigest)
+    ) {
+      throw new Error(
+        "Classic V4 is not enabled by a public release manifest",
+      );
+    }
 
     return {
       kind: "launch" as const,
       checkedDraft,
       planHash: result.planHash,
       predictedToken: result.predictedToken,
+      releaseLauncher: result.releaseLauncher,
+      releaseManifestDigest: result.releaseManifestDigest,
       transaction: result.transaction,
     };
   }
 
   async function launchToken() {
     if (draftLocked) return;
+
+    const previewBlockReason = classicV4TransactionBlockReason(
+      model,
+      classicV4UiPreviewEnabled,
+      classicV4UiReleaseEnabled,
+    );
+    if (previewBlockReason) {
+      setFormError(previewBlockReason);
+      return;
+    }
 
     if (!wallet) {
       openWallet();
@@ -1811,7 +1933,7 @@ function LaunchBuilderFormView({
         : model === "stock-paired"
           ? normalizeStockPairedDraft(draft)
           : model === "classic-v3"
-            ? normalizeClassicV3Draft(draft)
+            ? normalizeClassicV3Draft(draft, classicV4UiEnabled)
             : normalizeStandardDraft(draft);
     if (!/^0x[a-fA-F0-9]{64}$/.test(checkedDraft.launchSalt)) {
       checkedDraft = {
@@ -1862,12 +1984,21 @@ function LaunchBuilderFormView({
                 planHash: prepared.planHash,
               })
             : model === "classic-v3"
-              ? validatePreparedClassicV3LaunchTransaction({
-                  transaction: prepared.transaction,
-                  draft: checkedDraft,
-                  account: launchWallet.account,
-                  planHash: prepared.planHash,
-                })
+              ? checkedDraft.classicContractRelease === "classic-v4"
+                ? validatePreparedClassicV4LaunchTransaction({
+                    transaction: prepared.transaction,
+                    draft: checkedDraft,
+                    account: launchWallet.account,
+                    planHash: prepared.planHash,
+                    releaseLauncher: prepared.releaseLauncher,
+                    releaseManifestDigest: prepared.releaseManifestDigest,
+                  })
+                : validatePreparedClassicV3LaunchTransaction({
+                    transaction: prepared.transaction,
+                    draft: checkedDraft,
+                    account: launchWallet.account,
+                    planHash: prepared.planHash,
+                  })
               : validatePreparedClassicLaunchTransaction({
                   transaction: prepared.transaction,
                   draft: checkedDraft,
@@ -1878,10 +2009,15 @@ function LaunchBuilderFormView({
       const hash = await sendTransaction(validatedTransaction);
       const initialBuyPreview =
         model === "classic-v3"
-          ? getClassicInitialBuyPreview(
-              checkedDraft.initialBuyEth,
-              checkedDraft.buySwapFeePercent,
-            )
+          ? classicV4UiEnabled
+            ? getClassicInitialBuyPreview(
+                checkedDraft.initialBuyEth,
+                checkedDraft.buySwapFeePercent,
+              )
+            : getLegacyClassicInitialBuyPreview(
+                checkedDraft.initialBuyEth,
+                checkedDraft.buySwapFeePercent,
+              )
           : null;
       const pendingSubmission: PendingLaunchSubmission = {
         version: 2,
@@ -2212,25 +2348,36 @@ function LaunchBuilderFormView({
         !pendingRestoreComplete ||
         launching ||
         walletRequestPending ||
-        (model === "classic-v3" && !classicV3LaunchAvailable) ||
+        (model === "classic-v3" &&
+          !classicV4UiEnabled &&
+          !classicV3LaunchAvailable) ||
+        (model === "classic-v3" &&
+          classicV4UiPreviewEnabled &&
+          !classicV4UiReleaseEnabled) ||
         (model === "stock-paired" && !stockPairedLaunchAllowed)
       }
     >
       {model === "stock-paired" && !stockPairedLaunchAllowed
         ? "Stock-Paired is coming soon"
-        : model === "classic-v3" && !classicV3LaunchAvailable
-          ? "Classic is not deployed"
-          : !pendingRestoreComplete
-            ? "Checking launch status"
-            : walletRequestPending && !launching
-              ? "Confirm in other tab"
-            : launchPhase === "preparing"
-              ? "Preparing launch"
-              : launchPhase === "confirming"
-                ? "Confirm in wallet"
-                : wallet
-                  ? "Create Classic Token"
-                  : "Connect wallet"}
+        : model === "classic-v3" &&
+            classicV4UiPreviewEnabled &&
+            !classicV4UiReleaseEnabled
+          ? "Classic V4 preview"
+          : model === "classic-v3" &&
+              !classicV4UiEnabled &&
+              !classicV3LaunchAvailable
+            ? "Classic is not deployed"
+            : !pendingRestoreComplete
+              ? "Checking launch status"
+              : walletRequestPending && !launching
+                ? "Confirm in other tab"
+                : launchPhase === "preparing"
+                  ? "Preparing launch"
+                  : launchPhase === "confirming"
+                    ? "Confirm in wallet"
+                    : wallet
+                      ? "Create Classic Token"
+                      : "Connect wallet"}
     </button>
   );
 
@@ -2306,6 +2453,7 @@ function LaunchBuilderFormView({
               onEdit={markDraftEdited}
               settingMaxBuy={settingMaxBuy}
               onMaximumDevBuy={() => void setMaximumDevBuy()}
+              enableV4={classicV4UiEnabled}
             />
           ) : model === "stock-paired" ? (
             <StockPairedStep
@@ -2360,6 +2508,7 @@ function LaunchBuilderFormView({
               : undefined
           }
           account={submittedAccount}
+          classicV4={classicV4UiEnabled}
           onClose={closeSuccessDialog}
         />
       ) : null}
@@ -2380,11 +2529,13 @@ function LaunchSuccessDialog({
   launch,
   draft,
   account,
+  classicV4 = false,
   onClose,
 }: {
   launch: LaunchSuccessSummary;
   draft?: LaunchDraft;
   account?: string;
+  classicV4?: boolean;
   onClose: () => void;
 }) {
   const viewLinkRef = useRef<HTMLAnchorElement>(null);
@@ -2474,11 +2625,15 @@ function LaunchSuccessDialog({
     };
   }, [onClose]);
   let classicConfiguration:
-    ReturnType<typeof validateClassicV3LaunchDraft> | undefined;
+    | ReturnType<typeof validateClassicV3LaunchDraft>
+    | ReturnType<typeof validateClassicV4LaunchDraft>
+    | undefined;
   const deepLaunch = draft?.launchModel === "deep";
   try {
     if (draft?.launchModel === "classic-v3" && account) {
-      classicConfiguration = validateClassicV3LaunchDraft(draft, account);
+      classicConfiguration = classicV4
+        ? validateClassicV4LaunchDraft(draft, account)
+        : validateClassicV3LaunchDraft(draft, account);
     }
   } catch {
     classicConfiguration = undefined;
@@ -2551,7 +2706,11 @@ function LaunchSuccessDialog({
         {launch.estimatedInitialBuyTokenAmount !== undefined ? (
           <dl className="launch-success-tokens">
             <div>
-              <dt>Estimated tokens from initial buy</dt>
+              <dt>
+                {classicV4
+                  ? "Estimated tokens from Activation Buy"
+                  : "Estimated tokens from initial buy"}
+              </dt>
               <dd>
                 ≈{" "}
                 {compactInitialBuyTokenFormatter.format(
@@ -2584,7 +2743,12 @@ function LaunchSuccessDialog({
               <dd>
                 {formatClassicV3Percent(
                   classicConfiguration.fees.buySwapFeeBps,
-                )}
+                )}{" "}
+                total ·{" "}
+                {formatClassicV3Percent(
+                  classicConfiguration.fees.buyCreatorFeeBps,
+                )}{" "}
+                creator · 0.10% Programmable
               </dd>
             </div>
             <div>
@@ -2592,7 +2756,12 @@ function LaunchSuccessDialog({
               <dd>
                 {formatClassicV3Percent(
                   classicConfiguration.fees.sellSwapFeeBps,
-                )}
+                )}{" "}
+                total ·{" "}
+                {formatClassicV3Percent(
+                  classicConfiguration.fees.sellCreatorFeeBps,
+                )}{" "}
+                creator · 0.10% Programmable
               </dd>
             </div>
             <div>
@@ -3277,6 +3446,7 @@ export function DeepFeeStep({
   );
 }
 
+const classicFeeQuickValues = ["0.1", "1", "3", "10"] as const;
 const classicFeeOptions: readonly LaunchSelectOption<string>[] = Array.from(
   { length: 10 },
   (_, index) => ({
@@ -3284,6 +3454,86 @@ const classicFeeOptions: readonly LaunchSelectOption<string>[] = Array.from(
     label: `${index + 1}.00%`,
   }),
 );
+
+function ClassicFeeControl({
+  direction,
+  value,
+  onChange,
+}: {
+  direction: "buy" | "sell";
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const label = direction === "buy" ? "Buy fee" : "Sell fee";
+  const inputId = `classic-${direction}-fee`;
+  const hintId = `${inputId}-hint`;
+  const breakdownId = `${inputId}-breakdown`;
+  const totalFeeBps = parseClassicFeePercentToBps(value);
+  const creatorFeeBps =
+    totalFeeBps === null ? null : totalFeeBps - PLATFORM_FEE_BPS;
+
+  return (
+    <div className="classic-v3-fee-control">
+      <label htmlFor={inputId}>{label}</label>
+      <span className="classic-v3-fee-input">
+        <input
+          id={inputId}
+          type="text"
+          inputMode="decimal"
+          value={value}
+          maxLength={5}
+          autoComplete="off"
+          spellCheck={false}
+          aria-describedby={`${hintId} ${breakdownId}`}
+          aria-invalid={value.trim().length > 0 && totalFeeBps === null}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <span aria-hidden="true">%</span>
+      </span>
+      <p className="classic-v3-fee-hint" id={hintId}>
+        0.1% to 10% in 0.1% steps
+      </p>
+      <div
+        className="classic-v3-fee-quick"
+        role="group"
+        aria-label={`${label} quick choices`}
+      >
+        {classicFeeQuickValues.map((quickValue) => (
+          <button
+            type="button"
+            aria-pressed={
+              totalFeeBps === parseClassicFeePercentToBps(quickValue)
+            }
+            onClick={() => onChange(quickValue)}
+            key={quickValue}
+          >
+            {quickValue}%
+          </button>
+        ))}
+      </div>
+      <dl className="classic-v3-fee-breakdown" id={breakdownId}>
+        <div>
+          <dt>Total</dt>
+          <dd>
+            {totalFeeBps === null ? "—" : formatClassicV3Percent(totalFeeBps)}
+          </dd>
+        </div>
+        <div>
+          <dt>Creator</dt>
+          <dd>
+            {creatorFeeBps === null
+              ? "—"
+              : formatClassicV3Percent(creatorFeeBps)}
+          </dd>
+        </div>
+        <div>
+          <dt>Programmable</dt>
+          <dd>0.10%</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 
 const initialBuyAccessOptions: readonly LaunchSelectOption<
   LaunchDraft["initialBuyCustodyMode"]
@@ -3304,18 +3554,24 @@ const initialBuySupplyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-function EnhancedClassicFeeStep({
+const activationBuyEthFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 6,
+});
+
+export function EnhancedClassicFeeStep({
   draft,
   setDraft,
   onEdit,
   settingMaxBuy,
   onMaximumDevBuy,
+  enableV4 = true,
 }: {
   draft: LaunchDraft;
   setDraft: Dispatch<SetStateAction<LaunchDraft>>;
   onEdit: () => void;
   settingMaxBuy: boolean;
   onMaximumDevBuy: () => void;
+  enableV4?: boolean;
 }) {
   const updateClassicV3Draft = (patch: Partial<LaunchDraft>) => {
     onEdit();
@@ -3338,10 +3594,32 @@ function EnhancedClassicFeeStep({
     return Number.isFinite(share) ? total + share : total;
   }, 0);
   const splitIsComplete = Math.abs(splitTotal - 100) < 0.001;
-  const initialBuyPreview = getClassicInitialBuyPreview(
-    draft.initialBuyEth,
-    draft.buySwapFeePercent,
-  );
+  const initialBuyCurveQuote = enableV4
+    ? getClassicInitialBuyCurveQuote(
+        draft.initialBuyEth,
+        draft.buySwapFeePercent,
+      )
+    : getLegacyClassicInitialBuyCurveQuote(
+        draft.initialBuyEth,
+        draft.buySwapFeePercent,
+      );
+  const initialBuyPreview =
+    initialBuyCurveQuote.status === "ready"
+      ? initialBuyCurveQuote.preview
+      : null;
+  const activationBuyCapacityNote =
+    !enableV4
+      ? ""
+      : initialBuyCurveQuote.status === "over-capacity"
+        ? `Activation Buy exceeds the Classic liquidity range. Maximum ${formatEther(initialBuyCurveQuote.maximumGrossActivationBuyWei)} ETH at this buy fee.`
+        : initialBuyCurveQuote.status === "ready" &&
+            initialBuyCurveQuote.preview.remainingCurveCapacityWei !== null
+          ? `${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.poolEthWei)))} ETH reaches the curve after fees. ${activationBuyEthFormatter.format(Number(formatEther(initialBuyCurveQuote.preview.remainingCurveCapacityWei)))} ETH net capacity remains before the 18.91× end price.${
+              initialBuyCurveQuote.preview.remainingCurveCapacityWei === 0n
+                ? " This fully consumes the Classic range; another buy requires a sell or outside liquidity first."
+                : ""
+            }`
+          : "Enter a valid Activation Buy to check the remaining Classic capacity.";
   const initialBuyTokenLabel = draft.tokenSymbol.trim()
     ? `$${draft.tokenSymbol.trim().toUpperCase()}`
     : "tokens";
@@ -3367,6 +3645,17 @@ function EnhancedClassicFeeStep({
                 direction === "buy"
                   ? "buySwapFeePercent"
                   : "sellSwapFeePercent";
+              if (enableV4) {
+                return (
+                  <ClassicFeeControl
+                    direction={direction}
+                    value={draft[key]}
+                    onChange={(value) => updateClassicV3Draft({ [key]: value })}
+                    key={direction}
+                  />
+                );
+              }
+
               const totalFeeBps = Number(draft[key]) * 100;
               const creatorFeeBps = Math.max(0, totalFeeBps - PLATFORM_FEE_BPS);
               return (
@@ -3530,7 +3819,7 @@ function EnhancedClassicFeeStep({
       ) : null}
 
       <div className="classic-v3-subsection-heading">
-        <h3>Initial buy</h3>
+        <h3>{enableV4 ? "Activation Buy" : "Initial buy"}</h3>
       </div>
 
       <div className="classic-v3-initial-buy">
@@ -3539,8 +3828,11 @@ function EnhancedClassicFeeStep({
             className="classic-v3-amount-label"
             htmlFor="classic-v3-dev-buy"
           >
-            <strong>Amount</strong>
-            <small>Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}</small>
+            <strong>{enableV4 ? "Activation Buy amount" : "Amount"}</strong>
+            <small>
+              Minimum {MEME_MIN_INITIAL_BUY_ETH_LABEL}
+              {enableV4 ? " · paid in addition to network gas" : ""}
+            </small>
           </label>
           <span className="meme-dev-buy-input">
             <input
@@ -3559,7 +3851,9 @@ function EnhancedClassicFeeStep({
             />
             <button
               type="button"
-              disabled={settingMaxBuy || !classicV3LaunchAvailable}
+              disabled={
+                settingMaxBuy || (!enableV4 && !classicV3LaunchAvailable)
+              }
               onClick={onMaximumDevBuy}
             >
               {settingMaxBuy ? "Checking" : "Max"}
@@ -3588,69 +3882,83 @@ function EnhancedClassicFeeStep({
               </strong>
             </span>
           </div>
+          {activationBuyCapacityNote ? (
+            <p
+              className="classic-v3-liquidity-note"
+              role={
+                initialBuyCurveQuote.status === "over-capacity"
+                  ? "alert"
+                  : "status"
+              }
+            >
+              {activationBuyCapacityNote}
+            </p>
+          ) : null}
         </div>
 
-        <fieldset
-          className="classic-v3-custody"
-          data-mode={draft.initialBuyCustodyMode}
-        >
-          <legend className="sr-only">Dev supply</legend>
-          <label>
-            <span>Dev supply</span>
-            <LaunchSelect
-              id="classic-initial-buy-access"
-              label="Dev supply access"
-              value={draft.initialBuyCustodyMode}
-              options={initialBuyAccessOptions}
-              placement="top"
-              onChange={(value) =>
-                updateClassicV3Draft({
-                  initialBuyCustodyMode: value,
-                })
-              }
-            />
-          </label>
-          {draft.initialBuyCustodyMode !== "unlocked" ? (
+        {!enableV4 ? (
+          <fieldset
+            className="classic-v3-custody"
+            data-mode={draft.initialBuyCustodyMode}
+          >
+            <legend className="sr-only">Dev supply</legend>
             <label>
-              <span>
-                {draft.initialBuyCustodyMode === "fixed-lock"
-                  ? "Lock period"
-                  : "Vesting period"}
-              </span>
-              <span className="classic-v3-days-input">
-                <input
-                  inputMode="numeric"
-                  value={draft.initialBuyDurationDays}
-                  maxLength={4}
-                  onChange={(event) =>
-                    updateClassicV3Draft({
-                      initialBuyDurationDays: event.target.value,
-                    })
-                  }
-                />
-                <span>days</span>
-              </span>
+              <span>Dev supply</span>
+              <LaunchSelect
+                id="classic-initial-buy-access"
+                label="Dev supply access"
+                value={draft.initialBuyCustodyMode}
+                options={initialBuyAccessOptions}
+                placement="top"
+                onChange={(value) =>
+                  updateClassicV3Draft({
+                    initialBuyCustodyMode: value,
+                  })
+                }
+              />
             </label>
-          ) : null}
-          {draft.initialBuyCustodyMode === "cliff-linear" ? (
-            <label>
-              <span>Cliff</span>
-              <span className="classic-v3-days-input">
-                <input
-                  inputMode="numeric"
-                  value={draft.initialBuyCliffDays}
-                  maxLength={4}
-                  onChange={(event) =>
-                    updateClassicV3Draft({
-                      initialBuyCliffDays: event.target.value,
-                    })
-                  }
-                />
-                <span>days</span>
-              </span>
-            </label>
-          ) : null}
-        </fieldset>
+            {draft.initialBuyCustodyMode !== "unlocked" ? (
+              <label>
+                <span>
+                  {draft.initialBuyCustodyMode === "fixed-lock"
+                    ? "Lock period"
+                    : "Vesting period"}
+                </span>
+                <span className="classic-v3-days-input">
+                  <input
+                    inputMode="numeric"
+                    value={draft.initialBuyDurationDays}
+                    maxLength={4}
+                    onChange={(event) =>
+                      updateClassicV3Draft({
+                        initialBuyDurationDays: event.target.value,
+                      })
+                    }
+                  />
+                  <span>days</span>
+                </span>
+              </label>
+            ) : null}
+            {draft.initialBuyCustodyMode === "cliff-linear" ? (
+              <label>
+                <span>Cliff</span>
+                <span className="classic-v3-days-input">
+                  <input
+                    inputMode="numeric"
+                    value={draft.initialBuyCliffDays}
+                    maxLength={4}
+                    onChange={(event) =>
+                      updateClassicV3Draft({
+                        initialBuyCliffDays: event.target.value,
+                      })
+                    }
+                  />
+                  <span>days</span>
+                </span>
+              </label>
+            ) : null}
+          </fieldset>
+        ) : null}
       </div>
     </section>
   );

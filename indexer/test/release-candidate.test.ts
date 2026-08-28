@@ -3,9 +3,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import baseReleaseBinding from "../../config/data-pipeline-release.v1.json";
+
 // The release gate is deliberately a standalone Node script rather than indexer runtime code.
 // @ts-expect-error The checked-in mjs script has no declaration file by design.
-import { IDENTITY_KEYS, INVENTORY_QUERY, LAUNCH_FIELDS, STABLE_LAUNCH_FIELDS, assertFrozenBaseline, auditCandidate, endpointIdFromUrl, localIdentity, parseBaseline, parseCandidateIdentity, snapshotBaseline } from "../scripts/release-candidate.mjs";
+import { IDENTITY_KEYS, INVENTORY_QUERY, LAUNCH_FIELDS, STABLE_LAUNCH_FIELDS, assertFrozenBaseline, auditWorkingTreeCandidate, endpointIdFromUrl, parseBaseline, parseCandidateIdentity, parseReleaseAuditArtifact, releaseBindingDigest, snapshotBaseline, workingTreeIdentity } from "../scripts/release-candidate.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const REPOSITORY_ROOT = path.resolve(ROOT, "..");
@@ -25,6 +27,7 @@ const RELEASES = [
   "stock-paired-v2",
   "stock-paired-v3",
 ] as const;
+type SupportedRelease = (typeof RELEASES)[number] | "classic-v4";
 
 type JsonRecord = Record<string, unknown>;
 type FixtureOptions = Readonly<{
@@ -39,7 +42,7 @@ function hex(bytes: number, value: number): string {
   return `0x${value.toString(16).padStart(bytes * 2, "0")}`;
 }
 
-function launchRow(releaseVersion: (typeof RELEASES)[number], index: number): JsonRecord {
+function launchRow(releaseVersion: SupportedRelease, index: number): JsonRecord {
   const model = releaseVersion.startsWith("classic") ? "classic" : "stock-paired";
   const stock = model === "stock-paired";
   return {
@@ -57,8 +60,8 @@ function launchRow(releaseVersion: (typeof RELEASES)[number], index: number): Js
     positionRecipient: stock ? null : hex(20, 700 + index),
     positionTokenId: stock ? null : String(800 + index),
     totalSwapFeeBps: stock ? null : 100,
-    buySwapFeeBps: releaseVersion === "classic-v3" ? 100 : null,
-    sellSwapFeeBps: releaseVersion === "classic-v3" ? 100 : null,
+    buySwapFeeBps: releaseVersion === "classic-v3" || releaseVersion === "classic-v4" ? 100 : null,
+    sellSwapFeeBps: releaseVersion === "classic-v3" || releaseVersion === "classic-v4" ? 100 : null,
     rewardConfigurationHash: releaseVersion === "classic-v2" ? null : hex(32, 900 + index),
     quoteConfigurationHash: stock ? hex(32, 1_000 + index) : null,
     totalSupply: String(1_000_000 + index),
@@ -179,6 +182,58 @@ function deployment(identity: JsonRecord): JsonRecord {
   };
 }
 
+function releaseBinding(identity: JsonRecord, includeClassicV4 = false): JsonRecord {
+  const binding = structuredClone(baseReleaseBinding) as JsonRecord;
+  binding.envio = {
+    deploymentLabel: identity.deployment,
+    graphqlEndpoint: CANDIDATE_ENDPOINT,
+    schemaVersion: "1",
+    sourceCommit: identity.sourceCommit,
+    configSha256: identity.configSha256,
+    schemaSha256: identity.schemaSha256,
+    handlerSha256: identity.handlerSha256,
+    sourceRegistrySha256: identity.sourceRegistrySha256,
+    eventSetSha256: identity.eventSetSha256,
+    eventCount: identity.eventCount,
+  };
+  if (!includeClassicV4) return binding;
+  const sources = binding.sources as JsonRecord[];
+  sources.push(
+    {
+      contractName: "ClassicV4Hook",
+      address: hex(20, 0x20cc),
+      startBlock: 1_050,
+      runtimeCodeHash: hex(32, 0x44),
+    },
+    {
+      contractName: "ClassicV4Launcher",
+      address: hex(20, 0x3000),
+      startBlock: 1_051,
+      runtimeCodeHash: hex(32, 0x45),
+    },
+  );
+  (binding.releases as JsonRecord[]).push({
+    model: "classic",
+    releaseVersion: "classic-v4",
+    activationBlock: 1_051,
+    sourceContracts: [
+      "ClassicV3RewardVaultFactory",
+      "ClassicV3VestingWalletFactory",
+      "ClassicV4Hook",
+      "ClassicV4Launcher",
+    ],
+    dynamicContracts: ["ClassicV3RewardVault"],
+  });
+  return binding;
+}
+
+async function auditCandidate(input: Record<string, unknown>) {
+  return auditWorkingTreeCandidate({
+    releaseBinding: releaseBinding(input.expectedIdentity as JsonRecord),
+    ...input,
+  });
+}
+
 function changedValue(field: string, current: unknown): unknown {
   if (typeof current === "boolean") return !current;
   if (typeof current === "number") return current + 1;
@@ -200,30 +255,24 @@ function changedValue(field: string, current: unknown): unknown {
 }
 
 describe("Envio release candidate identity", () => {
-  it("recomputes the exact eight-key identity from the reviewed checkout", () => {
-    const identity = JSON.parse(
-      execFileSync(
-        process.execPath,
-        [SCRIPT, "identity", "--source-commit", SOURCE_COMMIT],
-        { cwd: ROOT, encoding: "utf8" },
-      ),
-    ) as JsonRecord;
+  it("recomputes the exact eight-key identity from candidate working bytes", () => {
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
 
     expect(Object.keys(identity)).toEqual(IDENTITY_KEYS);
     expect(identity).toEqual({
       deployment: `production-${SOURCE_COMMIT.slice(0, 7)}`,
       sourceCommit: SOURCE_COMMIT,
       configSha256:
-        "0x378e3a799c762cb31107792c7123f5f90b54b5826884c398995e7465176fe1c2",
+        "0x0286e176b7e8f9baf49a6751390abb6ca97c246e717d00fda34dbe023830d2a6",
       schemaSha256:
         "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
       handlerSha256:
-        "0x9f68d05cc8907f1c422cb2584b338ed42375eb4b6033cbec1338d00577267491",
+        "0x3249c4d6e733e271ce1cd9a9407a1e3881fa79491500143b08e77c1d7e5e1fdf",
       sourceRegistrySha256:
-        "0x55e7a7c7cd0e419a6be0f9c784990f5048b9845e46e329939025c3fab405565a",
+        "0x98d6a49f606f198340f1938127744ee5d12b786e0d1b7cd1e31a1b1b4a713ef0",
       eventSetSha256:
-        "0x7481d6fa986d706e46b9834e40574dd84f21be80b041d35e7d47dbfa59d69243",
-      eventCount: 51,
+        "0x79bd6a7e9c4e4c76141ff72dd1a295b32c8115d85cd6826c7c9a403a4ed3c63f",
+      eventCount: 60,
     });
   });
 
@@ -242,12 +291,12 @@ describe("Envio release candidate identity", () => {
   });
 
   it("rejects partial, extra and mistyped candidate identity JSON", () => {
-    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     const partial = { ...identity };
     delete partial.eventCount;
     expect(() => parseCandidateIdentity(partial)).toThrow(/exactly/u);
     expect(() => parseCandidateIdentity({ ...identity, arbitrary: true })).toThrow(/exactly/u);
-    expect(() => parseCandidateIdentity({ ...identity, eventCount: "51" })).toThrow(/safe integer/u);
+    expect(() => parseCandidateIdentity({ ...identity, eventCount: "60" })).toThrow(/safe integer/u);
     expect(() =>
       parseCandidateIdentity({ ...identity, handlerSha256: String(identity.handlerSha256).toUpperCase() }),
     ).toThrow(/invalid/u);
@@ -286,6 +335,7 @@ describe("Envio endpoint and frozen evidence", () => {
     expect(firstFixture.inventoryReads()).toBe(2);
     expect(INVENTORY_QUERY).toContain("updatedBlock: { _lte: $anchorBlock }");
     expect(first.entries).toHaveLength(5);
+    expect(first.inventory.perRelease).toMatchObject({ "classic-v4": 0 });
     expect(Object.keys(first.entries[0] as JsonRecord)).toEqual(LAUNCH_FIELDS);
     expect(first.inventory.sha256).toMatch(/^0x[0-9a-f]{64}$/u);
     expect(first.digest).toMatch(/^0x[0-9a-f]{64}$/u);
@@ -399,7 +449,7 @@ describe("Envio endpoint and frozen evidence", () => {
 
 describe("Envio candidate audit", () => {
   it("corroborates control-plane, endpoint, reviewed runtime and baseline evidence", async () => {
-    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     const frozenBaseline = await baseline();
     const firstFixture = fixtureFetcher({ identity, progressBlock: 1_100 });
     const first = await auditCandidate({
@@ -432,15 +482,68 @@ describe("Envio candidate audit", () => {
       endpointId: "cand001",
     });
     expect(first.identity).toEqual(identity);
+    expect(first.releaseBinding).toEqual(releaseBinding(identity));
+    expect(first.releaseBindingDigest).toBe(
+      releaseBindingDigest(releaseBinding(identity)),
+    );
+    expect(first.classicV4Activated).toBe(false);
     expect(first.baseline.digest).toBe(frozenBaseline.digest);
     expect(first.anchor.progressBlock).toBe("1100");
     expect(first.inventory.sha256).toMatch(/^0x[0-9a-f]{64}$/u);
     expect(first.authenticatedCoordinatorCreatorRepairs).toEqual([]);
     expect(first.digest).toMatch(/^0x[0-9a-f]{64}$/u);
+    expect(parseReleaseAuditArtifact(first)).toEqual(first);
+
+    const tamperedDigest = structuredClone(first);
+    tamperedDigest.releaseBindingDigest = hex(32, 9_999);
+    expect(() => parseReleaseAuditArtifact(tamperedDigest)).toThrow(
+      /binding digest mismatch/u,
+    );
+  });
+
+  it("requires an activated source inventory to contain a Classic V4 canary", async () => {
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
+    const frozenBaseline = await baseline();
+    const activatedRows = [...rows(), launchRow("classic-v4", 9)].sort((left, right) =>
+      String(left.id).localeCompare(String(right.id)),
+    );
+    const common = {
+      endpoint: CANDIDATE_ENDPOINT,
+      expectedIdentity: identity,
+      releaseBinding: releaseBinding(identity, true),
+      baseline: frozenBaseline,
+      sourceCommit: SOURCE_COMMIT,
+      deployment: deployment(identity),
+      progressBlock: 1_100,
+      classicV4ActivationReader: () => true,
+      now: () => new Date(CAPTURED_AT),
+    };
+    const artifact = await auditWorkingTreeCandidate({
+      ...common,
+      fetcher: fixtureFetcher({
+        identity,
+        rows: activatedRows,
+        progressBlock: 1_100,
+      }).fetcher,
+    });
+
+    expect(artifact.classicV4Activated).toBe(true);
+    expect(artifact.inventory.perRelease["classic-v4"]).toBe(1);
+    expect(
+      parseReleaseAuditArtifact(artifact, { requireClassicV4: true }),
+    ).toEqual(artifact);
+
+    await expect(
+      auditWorkingTreeCandidate({
+        ...common,
+        fetcher: fixtureFetcher({ identity, rows: rows(), progressBlock: 1_100 })
+          .fetcher,
+      }),
+    ).rejects.toThrow(/no classic-v4 launches/u);
   });
 
   it("includes an exact Stock coordinator creator repair in signed audit evidence", async () => {
-    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     const frozenRows = rows();
     const stockIndex = frozenRows.findIndex(
       (row) => row.releaseVersion === "stock-paired-v1",
@@ -485,7 +588,7 @@ describe("Envio candidate audit", () => {
   });
 
   it("rejects identity JSON that differs from the reviewed checkout", async () => {
-    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     await expect(
       auditCandidate({
         endpoint: CANDIDATE_ENDPOINT,
@@ -499,7 +602,7 @@ describe("Envio candidate audit", () => {
   });
 
   it("rejects endpoint, deployment-label and runtime identity substitution", async () => {
-    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     const frozenBaseline = await baseline();
     const common = {
       expectedIdentity: identity,
@@ -544,7 +647,7 @@ describe("Envio candidate audit", () => {
   });
 
   it("rejects a candidate behind the frozen checkpoint", async () => {
-    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     await expect(
       auditCandidate({
         endpoint: CANDIDATE_ENDPOINT,
@@ -558,7 +661,7 @@ describe("Envio candidate audit", () => {
   });
 
   it("rejects a change to a frozen launch even when all digests are otherwise valid", async () => {
-    const identity = localIdentity(SOURCE_COMMIT) as JsonRecord;
+    const identity = workingTreeIdentity(SOURCE_COMMIT) as JsonRecord;
     const frozenBaseline = await baseline();
     const changed = rows();
     changed[0] = { ...changed[0], totalSupply: "999999999" };

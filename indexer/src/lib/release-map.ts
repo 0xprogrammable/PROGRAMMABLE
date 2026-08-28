@@ -9,7 +9,7 @@ export type SourceRegistryEntry = {
   startBlock: number;
 };
 
-export const SOURCE_REGISTRY = [
+const BASE_SOURCE_REGISTRY = [
   {
     contractName: "ClassicV2Hook",
     address: "0x025a386eaa79f6067d29848fd05ccc71beab20cc",
@@ -92,6 +92,29 @@ export const SOURCE_REGISTRY = [
   },
 ] as const satisfies readonly SourceRegistryEntry[];
 
+// CLASSIC_V4_ACTIVATION_START
+const ACTIVATED_CLASSIC_V4_SOURCES = [] as const satisfies readonly SourceRegistryEntry[];
+// CLASSIC_V4_ACTIVATION_END
+
+export const SOURCE_REGISTRY = [
+  ...BASE_SOURCE_REGISTRY,
+  ...ACTIVATED_CLASSIC_V4_SOURCES,
+] as const satisfies readonly SourceRegistryEntry[];
+
+if (
+  new Set(SOURCE_REGISTRY.map(({ contractName }) => contractName)).size !==
+    SOURCE_REGISTRY.length ||
+  new Set(SOURCE_REGISTRY.map(({ address }) => address.toLowerCase())).size !==
+    SOURCE_REGISTRY.length ||
+  SOURCE_REGISTRY.some(({ address, startBlock }) =>
+    !/^0x(?!0{40}$)[0-9a-f]{40}$/u.test(address) ||
+    !Number.isSafeInteger(startBlock) ||
+    startBlock <= 0
+  )
+) {
+  throw new Error("Invalid or duplicate indexed source registry identity");
+}
+
 export function staticReleaseForContract(
   contractName: string,
 ): ReleaseIdentity | undefined {
@@ -100,6 +123,12 @@ export function staticReleaseForContract(
   }
   if (CLASSIC_V3_CONTRACTS.has(contractName)) {
     return { model: "classic", releaseVersion: "classic-v3" };
+  }
+  if (
+    CLASSIC_V4_CONTRACTS.has(contractName) &&
+    sourceStartBlock(contractName) !== undefined
+  ) {
+    return { model: "classic", releaseVersion: "classic-v4" };
   }
   if (STOCK_V1_CONTRACTS.has(contractName)) {
     return { model: "stock-paired", releaseVersion: "stock-paired-v1" };
@@ -145,6 +174,10 @@ const CLASSIC_V3_CONTRACTS = new Set([
   "ClassicV3Launcher",
   "ClassicV3RewardVaultFactory",
   "ClassicV3VestingWalletFactory",
+]);
+const CLASSIC_V4_CONTRACTS = new Set([
+  "ClassicV4Hook",
+  "ClassicV4Launcher",
 ]);
 const STOCK_V1_CONTRACTS = new Set([
   "StockV1Hook",

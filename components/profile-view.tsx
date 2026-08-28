@@ -2643,6 +2643,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
           action,
           account: actionAccount,
           vaultAddress: reward.vaultAddress,
+          releaseVersion: reward.releaseVersion ?? "classic-v3",
           newPayoutAddress,
           allocationIndex,
           chainId: scopedClassicV3Rewards.chainId,

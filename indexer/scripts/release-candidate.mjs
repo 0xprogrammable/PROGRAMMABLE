@@ -8,22 +8,32 @@ import { fileURLToPath } from "node:url";
 
 import { parse } from "yaml";
 
+import {
+  CLASSIC_V4_DIGEST_DOMAINS,
+  digestJson,
+} from "../../scripts/classic-v4-digest.mjs";
+
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const INDEXER_ROOT = path.resolve(path.dirname(SCRIPT_PATH), "..");
 const REPOSITORY_ROOT = path.resolve(INDEXER_ROOT, "..");
 const ENVIO_HOST = "indexer.hyperindex.xyz";
 const ENVIO_OWNER = "0xprogrammable";
 const ENVIO_PROJECT = "programmable-indexer";
-const RELEASES = Object.freeze([
+const HISTORICAL_RELEASES = Object.freeze([
   "classic-v2",
   "classic-v3",
   "stock-paired-v1",
   "stock-paired-v2",
   "stock-paired-v3",
 ]);
+const SUPPORTED_RELEASES = Object.freeze([
+  ...HISTORICAL_RELEASES,
+  "classic-v4",
+]);
 const MODELS = Object.freeze({
   "classic-v2": "classic",
   "classic-v3": "classic",
+  "classic-v4": "classic",
   "stock-paired-v1": "stock-paired",
   "stock-paired-v2": "stock-paired",
   "stock-paired-v3": "stock-paired",
@@ -33,7 +43,7 @@ const STOCK_COORDINATOR_SOURCES = Object.freeze({
   "stock-paired-v2": "0xfb9e1034df6161088e8f358502b19e7515c30fd2",
   "stock-paired-v3": "0xddc3abbab0df7f1189310a4f70e7e365796b74e2",
 });
-const EXPECTED_CONTRACTS = Object.freeze([
+const BASE_CHAIN_CONTRACTS = Object.freeze([
   "ClassicV2Hook",
   "ClassicV2Launcher",
   "ClassicV3Hook",
@@ -54,6 +64,12 @@ const EXPECTED_CONTRACTS = Object.freeze([
   "StockV3EthCoordinator",
   "StockV3Launcher",
 ].sort(compareUtf8));
+const EXPECTED_ABI_CONTRACTS = Object.freeze([
+  ...BASE_CHAIN_CONTRACTS,
+  "ClassicV4Hook",
+  "ClassicV4Launcher",
+].sort(compareUtf8));
+const ACTIVATED_CHAIN_CONTRACTS = EXPECTED_ABI_CONTRACTS;
 
 const ARTIFACTS = Object.freeze({
   configSha256: "config.yaml",
@@ -182,6 +198,10 @@ function sha256(value) {
   return `0x${createHash("sha256").update(value).digest("hex")}`;
 }
 
+function releaseBindingDigest(value) {
+  return digestJson(value, CLASSIC_V4_DIGEST_DOMAINS.releaseBinding);
+}
+
 function exactObject(value, label, keys) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
@@ -292,15 +312,78 @@ function exactEndpointId(value) {
   return exactString(value, "Envio endpoint id", /^[a-z0-9]{7,64}$/u, 64);
 }
 
-function exactNames(label, names) {
+function exactNames(label, names, expectedNames) {
   const sorted = [...names].sort(compareUtf8);
   if (
-    sorted.length !== EXPECTED_CONTRACTS.length ||
+    sorted.length !== expectedNames.length ||
     new Set(sorted).size !== sorted.length ||
-    sorted.some((name, index) => name !== EXPECTED_CONTRACTS[index])
+    sorted.some((name, index) => name !== expectedNames[index])
   ) {
     throw new Error(`${label} must be the exact reviewed contract scope`);
   }
+}
+
+function exactChainContractScope(contracts) {
+  if (!Array.isArray(contracts)) {
+    throw new Error("chain registry must be the exact reviewed contract scope");
+  }
+  const names = contracts.map((entry) => entry?.name);
+  const sorted = [...names].sort(compareUtf8);
+  const baseline = [...BASE_CHAIN_CONTRACTS];
+  const activated = [...ACTIVATED_CHAIN_CONTRACTS];
+  const matches = (expected) =>
+    sorted.length === expected.length &&
+    new Set(sorted).size === sorted.length &&
+    sorted.every((name, index) => name === expected[index]);
+  if (matches(baseline)) return false;
+  if (!matches(activated)) {
+    throw new Error("chain registry must be the exact reviewed contract scope");
+  }
+  for (const contractName of ["ClassicV4Hook", "ClassicV4Launcher"]) {
+    const source = contracts.find((entry) => entry?.name === contractName);
+    exactAddress(source?.address, `${contractName} chain address`);
+  }
+  return true;
+}
+
+function validatedConfig(configBytes) {
+  const config = parse(configBytes.toString("utf8"));
+  if (!Array.isArray(config?.contracts) || !Array.isArray(config?.chains)) {
+    throw new Error("config.yaml is missing the reviewed contract registry");
+  }
+  if (
+    config.chains.length !== 1 ||
+    config.chains[0]?.id !== 1 ||
+    config.chains[0]?.block_lag !== 12 ||
+    config.chains[0]?.max_reorg_depth !== 200
+  ) {
+    throw new Error("config.yaml must retain the reviewed Ethereum finality policy");
+  }
+  exactNames(
+    "ABI registry",
+    config.contracts.map((entry) => entry?.name),
+    EXPECTED_ABI_CONTRACTS,
+  );
+  const classicV4Activated = exactChainContractScope(
+    config.chains[0].contracts,
+  );
+  return Object.freeze({ configBytes, config, classicV4Activated });
+}
+
+function validatedLocalConfig(sourceCommit) {
+  return validatedConfig(
+    localArtifactBytes(sourceCommit, ARTIFACTS.configSha256),
+  );
+}
+
+function workingTreeArtifactBytes(relativePath) {
+  return readFileSync(path.join(INDEXER_ROOT, relativePath));
+}
+
+function workingTreeClassicV4Activated() {
+  return validatedConfig(
+    workingTreeArtifactBytes(ARTIFACTS.configSha256),
+  ).classicV4Activated;
 }
 
 function reviewedArtifactBytes(sourceCommit, relativePath) {
@@ -324,23 +407,10 @@ function localArtifactBytes(sourceCommit, relativePath) {
   return local;
 }
 
-function localIdentity(sourceCommitInput) {
+function identityFromArtifactReader(sourceCommitInput, readArtifact) {
   const sourceCommit = exactCommit(sourceCommitInput);
-  const configBytes = localArtifactBytes(sourceCommit, ARTIFACTS.configSha256);
-  const config = parse(configBytes.toString("utf8"));
-  if (!Array.isArray(config?.contracts) || !Array.isArray(config?.chains)) {
-    throw new Error("config.yaml is missing the reviewed contract registry");
-  }
-  if (
-    config.chains.length !== 1 ||
-    config.chains[0]?.id !== 1 ||
-    config.chains[0]?.block_lag !== 12 ||
-    config.chains[0]?.max_reorg_depth !== 200
-  ) {
-    throw new Error("config.yaml must retain the reviewed Ethereum finality policy");
-  }
-  exactNames("ABI registry", config.contracts.map((entry) => entry?.name));
-  exactNames("chain registry", config.chains[0].contracts?.map((entry) => entry?.name) ?? []);
+  const configBytes = readArtifact(ARTIFACTS.configSha256);
+  const { config } = validatedConfig(configBytes);
 
   const events = [];
   for (const contract of config.contracts) {
@@ -363,14 +433,31 @@ function localIdentity(sourceCommitInput) {
     deployment: `production-${sourceCommit.slice(0, 7)}`,
     sourceCommit,
     configSha256: sha256(configBytes),
-    schemaSha256: sha256(localArtifactBytes(sourceCommit, ARTIFACTS.schemaSha256)),
-    handlerSha256: sha256(localArtifactBytes(sourceCommit, ARTIFACTS.handlerSha256)),
+    schemaSha256: sha256(readArtifact(ARTIFACTS.schemaSha256)),
+    handlerSha256: sha256(readArtifact(ARTIFACTS.handlerSha256)),
     sourceRegistrySha256: sha256(
-      localArtifactBytes(sourceCommit, ARTIFACTS.sourceRegistrySha256),
+      readArtifact(ARTIFACTS.sourceRegistrySha256),
     ),
     eventSetSha256: sha256(eventSet),
     eventCount: events.length,
   });
+}
+
+function localIdentity(sourceCommitInput) {
+  const sourceCommit = exactCommit(sourceCommitInput);
+  return identityFromArtifactReader(
+    sourceCommit,
+    (relativePath) => localArtifactBytes(sourceCommit, relativePath),
+  );
+}
+
+// Exported only for deterministic unit fixtures. Production CLI/audit paths
+// continue to use localIdentity, which requires byte equality with the reviewed commit.
+function workingTreeIdentity(sourceCommitInput) {
+  return identityFromArtifactReader(
+    sourceCommitInput,
+    workingTreeArtifactBytes,
+  );
 }
 
 function parseCandidateIdentity(value, label = "candidate identity") {
@@ -401,6 +488,75 @@ function assertSameIdentity(actual, expected, label) {
       throw new Error(`${label} identity mismatch at ${key}`);
     }
   }
+}
+
+function parseAuditReleaseBinding(value, endpoint, expectedIdentity) {
+  const binding = exactObject(value, "release binding", [
+    "schemaVersion",
+    "chainId",
+    "startBlock",
+    "confirmations",
+    "envio",
+    "uniswapV4Subgraph",
+    "sources",
+    "releases",
+  ]);
+  const envio = exactObject(binding.envio, "release binding Envio identity", [
+    "deploymentLabel",
+    "graphqlEndpoint",
+    "schemaVersion",
+    "sourceCommit",
+    "configSha256",
+    "schemaSha256",
+    "handlerSha256",
+    "sourceRegistrySha256",
+    "eventSetSha256",
+    "eventCount",
+  ]);
+  const releaseIdentity = parseCandidateIdentity({
+    deployment: envio.deploymentLabel,
+    sourceCommit: envio.sourceCommit,
+    configSha256: envio.configSha256,
+    schemaSha256: envio.schemaSha256,
+    handlerSha256: envio.handlerSha256,
+    sourceRegistrySha256: envio.sourceRegistrySha256,
+    eventSetSha256: envio.eventSetSha256,
+    eventCount: envio.eventCount,
+  }, "release binding Envio identity");
+  assertSameIdentity(releaseIdentity, expectedIdentity, "release binding");
+  if (
+    binding.schemaVersion !== 1 ||
+    binding.chainId !== 1 ||
+    !Number.isSafeInteger(binding.startBlock) ||
+    binding.startBlock <= 0 ||
+    binding.confirmations !== 12 ||
+    envio.schemaVersion !== "1" ||
+    envio.graphqlEndpoint !== endpoint ||
+    !Array.isArray(binding.sources) ||
+    binding.sources.length === 0 ||
+    !Array.isArray(binding.releases) ||
+    binding.releases.length === 0
+  ) {
+    throw new Error("release binding does not match the audited Envio deployment");
+  }
+  const uniswap = exactObject(
+    binding.uniswapV4Subgraph,
+    "release binding Uniswap v4 identity",
+    ["subgraphId", "deployment"],
+  );
+  exactString(
+    uniswap.subgraphId,
+    "release binding Uniswap v4 subgraph",
+    /^[1-9A-HJ-NP-Za-km-z]+$/u,
+    96,
+  );
+  exactString(
+    uniswap.deployment,
+    "release binding Uniswap v4 deployment",
+    /^[1-9A-HJ-NP-Za-km-z]+$/u,
+    96,
+  );
+  return binding;
 }
 
 function parseArgs(argv) {
@@ -551,7 +707,10 @@ function stableLaunch(value, label = "launch") {
 }
 
 function assertEligibleLaunch(row) {
-  if (!RELEASES.includes(row.releaseVersion) || row.model !== MODELS[row.releaseVersion]) {
+  if (
+    !SUPPORTED_RELEASES.includes(row.releaseVersion) ||
+    row.model !== MODELS[row.releaseVersion]
+  ) {
     throw new Error(`unsupported release in inventory: ${row.releaseVersion}`);
   }
   if (row.provenanceValid !== true || row.isComplete !== true) {
@@ -568,7 +727,10 @@ function assertEligibleLaunch(row) {
 }
 
 function assertSupportedLaunch(row) {
-  if (!RELEASES.includes(row.releaseVersion) || row.model !== MODELS[row.releaseVersion]) {
+  if (
+    !SUPPORTED_RELEASES.includes(row.releaseVersion) ||
+    row.model !== MODELS[row.releaseVersion]
+  ) {
     throw new Error(`unsupported release in inventory: ${row.releaseVersion}`);
   }
 }
@@ -577,9 +739,14 @@ function canonicalRows(launches) {
   return Buffer.from(`${launches.map((row) => JSON.stringify(row)).join("\n")}\n`, "utf8");
 }
 
-function inventoryEvidence(launches) {
-  const perRelease = Object.fromEntries(RELEASES.map((release) => [release, 0]));
-  for (const row of launches) perRelease[row.releaseVersion] += 1;
+function inventoryEvidence(launches, releases = SUPPORTED_RELEASES) {
+  const perRelease = Object.fromEntries(releases.map((release) => [release, 0]));
+  for (const row of launches) {
+    if (!Object.hasOwn(perRelease, row.releaseVersion)) {
+      throw new Error(`inventory release is outside its declared scope: ${row.releaseVersion}`);
+    }
+    perRelease[row.releaseVersion] += 1;
+  }
   return {
     count: launches.length,
     perRelease,
@@ -725,7 +892,7 @@ async function snapshotBaseline(endpointInput, fetcher = fetch, now = () => new 
   if (launches.length === 0) throw new Error("baseline inventory is empty");
   for (const row of launches) assertSupportedLaunch(row);
   const inventory = inventoryEvidence(launches);
-  for (const release of RELEASES) {
+  for (const release of HISTORICAL_RELEASES) {
     if (inventory.perRelease[release] === 0) {
       throw new Error("baseline does not contain every reviewed historical release");
     }
@@ -744,10 +911,32 @@ async function snapshotBaseline(endpointInput, fetcher = fetch, now = () => new 
 
 function parseInventory(value, label) {
   const object = exactObject(value, label, ["count", "perRelease", "sha256"]);
-  const perRelease = exactObject(object.perRelease, `${label}.perRelease`, RELEASES);
+  const actualReleaseKeys = object.perRelease !== null &&
+      typeof object.perRelease === "object" &&
+      !Array.isArray(object.perRelease)
+    ? Object.keys(object.perRelease).sort(compareUtf8)
+    : [];
+  const matchesReleaseKeys = (expected) => {
+    const sorted = [...expected].sort(compareUtf8);
+    return actualReleaseKeys.length === sorted.length &&
+      actualReleaseKeys.every((key, index) => key === sorted[index]);
+  };
+  const releaseKeys = matchesReleaseKeys(SUPPORTED_RELEASES)
+    ? SUPPORTED_RELEASES
+    : matchesReleaseKeys(HISTORICAL_RELEASES)
+      ? HISTORICAL_RELEASES
+      : null;
+  if (!releaseKeys) {
+    throw new Error(`${label}.perRelease has an unsupported release scope`);
+  }
+  const perRelease = exactObject(
+    object.perRelease,
+    `${label}.perRelease`,
+    releaseKeys,
+  );
   const canonicalPerRelease = {};
   let total = 0;
-  for (const release of RELEASES) {
+  for (const release of releaseKeys) {
     const count = exactSafeInteger(perRelease[release], `${label}.perRelease.${release}`, 0);
     canonicalPerRelease[release] = count;
     total += count;
@@ -872,7 +1061,10 @@ function parseBaseline(value) {
     }
   }
   const inventory = parseInventory(object.inventory, "baseline.inventory");
-  const computedInventory = inventoryEvidence(entries);
+  const computedInventory = inventoryEvidence(
+    entries,
+    Object.keys(inventory.perRelease),
+  );
   if (JSON.stringify(inventory) !== JSON.stringify(computedInventory)) {
     throw new Error("baseline inventory count or digest does not match its entries");
   }
@@ -943,6 +1135,245 @@ function assertFrozenBaseline(launches, baseline) {
   return repairs;
 }
 
+function parseControlPlaneDeployment(value, endpoint, identity) {
+  const deployment = exactObject(value, "release audit deployment", [
+    "provider",
+    "owner",
+    "project",
+    "mirrorCommit",
+    "deploymentLabel",
+    "endpointId",
+  ]);
+  const endpointId = endpointIdFromUrl(endpoint);
+  const canonical = {
+    provider: deployment.provider,
+    owner: deployment.owner,
+    project: deployment.project,
+    mirrorCommit: exactCommit(
+      deployment.mirrorCommit,
+      "release audit mirror commit",
+    ),
+    deploymentLabel: exactString(
+      deployment.deploymentLabel,
+      "release audit deployment label",
+      /^[a-z0-9][a-z0-9._-]{0,127}$/u,
+      128,
+    ),
+    endpointId: exactEndpointId(deployment.endpointId),
+  };
+  if (
+    canonical.provider !== "envio-cloud" ||
+    canonical.owner !== ENVIO_OWNER ||
+    canonical.project !== ENVIO_PROJECT ||
+    canonical.deploymentLabel !== identity.deployment ||
+    canonical.endpointId !== endpointId
+  ) {
+    throw new Error("release audit deployment identity is invalid");
+  }
+  return canonical;
+}
+
+function parseBaselineSummary(value) {
+  const baseline = exactObject(value, "release audit baseline", [
+    "digest",
+    "deployment",
+    "anchor",
+    "inventory",
+  ]);
+  const deploymentValue = exactObject(
+    baseline.deployment,
+    "release audit baseline deployment",
+    ["provider", "host", "endpointId", "deploymentLabel", "chainId"],
+  );
+  const endpointId = exactEndpointId(deploymentValue.endpointId);
+  const deploymentLabel = exactString(
+    deploymentValue.deploymentLabel,
+    "release audit baseline deployment label",
+    /^[a-z0-9][a-z0-9._-]{0,127}$/u,
+    128,
+  );
+  const deployment = {
+    provider: deploymentValue.provider,
+    host: deploymentValue.host,
+    endpointId,
+    deploymentLabel,
+    chainId: deploymentValue.chainId,
+  };
+  if (
+    deployment.provider !== "envio-cloud" ||
+    deployment.host !== ENVIO_HOST ||
+    deployment.chainId !== 1
+  ) {
+    throw new Error("release audit baseline deployment is invalid");
+  }
+  return {
+    digest: exactSha256(baseline.digest, "release audit baseline digest"),
+    deployment,
+    anchor: parseAnchor(baseline.anchor, "release audit baseline anchor"),
+    inventory: parseInventory(
+      baseline.inventory,
+      "release audit baseline inventory",
+    ),
+  };
+}
+
+function parseCoordinatorCreatorRepairs(value) {
+  if (!Array.isArray(value)) {
+    throw new Error("release audit coordinator repairs must be an array");
+  }
+  return value.map((entry, index) => {
+    const label = `release audit coordinator repair ${index}`;
+    const repair = exactObject(entry, label, [
+      "id",
+      "releaseVersion",
+      "priorCoordinatorSource",
+      "authenticatedCreator",
+      "launchOccurrenceId",
+      "coordinatorOccurrenceId",
+    ]);
+    const releaseVersion = exactString(
+      repair.releaseVersion,
+      `${label}.releaseVersion`,
+      /^stock-paired-v[123]$/u,
+      32,
+    );
+    const priorCoordinatorSource = exactAddress(
+      repair.priorCoordinatorSource,
+      `${label}.priorCoordinatorSource`,
+    );
+    if (priorCoordinatorSource !== STOCK_COORDINATOR_SOURCES[releaseVersion]) {
+      throw new Error(`${label} has an invalid prior coordinator source`);
+    }
+    return {
+      id: exactString(repair.id, `${label}.id`, /^[\x21-\x7e]+$/u, 512),
+      releaseVersion,
+      priorCoordinatorSource,
+      authenticatedCreator: exactAddress(
+        repair.authenticatedCreator,
+        `${label}.authenticatedCreator`,
+      ),
+      launchOccurrenceId: exactString(
+        repair.launchOccurrenceId,
+        `${label}.launchOccurrenceId`,
+        /^[\x21-\x7e]+$/u,
+        512,
+      ),
+      coordinatorOccurrenceId: exactString(
+        repair.coordinatorOccurrenceId,
+        `${label}.coordinatorOccurrenceId`,
+        /^[\x21-\x7e]+$/u,
+        512,
+      ),
+    };
+  });
+}
+
+function parseReleaseAuditArtifact(value, options = {}) {
+  const artifact = exactObject(value, "release audit", [
+    "schemaVersion",
+    "kind",
+    "endpoint",
+    "capturedAt",
+    "deployment",
+    "identity",
+    "releaseBindingDigest",
+    "releaseBinding",
+    "classicV4Activated",
+    "baseline",
+    "anchor",
+    "inventory",
+    "authenticatedCoordinatorCreatorRepairs",
+    "digest",
+  ]);
+  if (
+    artifact.schemaVersion !== 2 ||
+    artifact.kind !== "envio-release-inventory" ||
+    typeof artifact.classicV4Activated !== "boolean"
+  ) {
+    throw new Error("release audit identity is invalid");
+  }
+  const endpoint = exactString(
+    artifact.endpoint,
+    "release audit endpoint",
+    /^https:\/\//u,
+    256,
+  );
+  endpointIdFromUrl(endpoint);
+  const identity = parseCandidateIdentity(
+    artifact.identity,
+    "release audit IndexerState identity",
+  );
+  const deployment = parseControlPlaneDeployment(
+    artifact.deployment,
+    endpoint,
+    identity,
+  );
+  const releaseBinding = parseAuditReleaseBinding(
+    artifact.releaseBinding,
+    endpoint,
+    identity,
+  );
+  const bindingDigest = releaseBindingDigest(releaseBinding);
+  if (artifact.releaseBindingDigest !== bindingDigest) {
+    throw new Error("release audit binding digest mismatch");
+  }
+  const baseline = parseBaselineSummary(artifact.baseline);
+  const anchor = parseAnchor(artifact.anchor, "release audit anchor");
+  if (BigInt(anchor.progressBlock) < BigInt(baseline.anchor.progressBlock)) {
+    throw new Error("release audit regressed behind its frozen baseline");
+  }
+  const inventory = parseInventory(artifact.inventory, "release audit inventory");
+  if (
+    Object.keys(inventory.perRelease).length !== SUPPORTED_RELEASES.length ||
+    SUPPORTED_RELEASES.some((release) =>
+      !Object.hasOwn(inventory.perRelease, release)
+    )
+  ) {
+    throw new Error("release audit inventory omits a supported release");
+  }
+  for (const release of HISTORICAL_RELEASES) {
+    if (inventory.perRelease[release] < 1) {
+      throw new Error(`release audit has no ${release} launches`);
+    }
+  }
+  const classicV4Count = inventory.perRelease["classic-v4"];
+  if (
+    typeof classicV4Count !== "number" ||
+    (artifact.classicV4Activated && classicV4Count < 1) ||
+    (!artifact.classicV4Activated && classicV4Count !== 0) ||
+    (options.requireClassicV4 === true && !artifact.classicV4Activated)
+  ) {
+    throw new Error("release audit does not prove an activated Classic V4 canary");
+  }
+  const authenticatedCoordinatorCreatorRepairs =
+    parseCoordinatorCreatorRepairs(
+      artifact.authenticatedCoordinatorCreatorRepairs,
+    );
+  const canonical = {
+    schemaVersion: 2,
+    kind: "envio-release-inventory",
+    endpoint,
+    capturedAt: exactTimestamp(
+      artifact.capturedAt,
+      "release audit capture timestamp",
+    ),
+    deployment,
+    identity,
+    releaseBindingDigest: bindingDigest,
+    releaseBinding,
+    classicV4Activated: artifact.classicV4Activated,
+    baseline,
+    anchor,
+    inventory,
+    authenticatedCoordinatorCreatorRepairs,
+  };
+  const expectedDigest = withDigest("envio-release-inventory", canonical).digest;
+  if (artifact.digest !== expectedDigest) {
+    throw new Error("release audit digest mismatch");
+  }
+  return Object.freeze({ ...canonical, digest: expectedDigest });
+}
+
 function candidateDeployment(values, endpoint, expectedIdentity) {
   const endpointId = exactEndpointId(values["deployment-endpoint-id"]);
   endpointIdFromUrl(endpoint, endpointId);
@@ -980,23 +1411,35 @@ function identityFromState(state) {
   return parseCandidateIdentity(identity, "candidate IndexerState");
 }
 
-async function auditCandidate({
+async function auditCandidateWithReaders({
   endpoint: endpointInput,
   expectedIdentity: identityInput,
+  releaseBinding: releaseBindingInput,
   baseline: baselineInput,
   sourceCommit: sourceCommitInput,
   deployment,
   fetcher = fetch,
   now = () => new Date(),
+  identityReader = localIdentity,
+  classicV4ActivationReader = (sourceCommit) =>
+    validatedLocalConfig(sourceCommit).classicV4Activated,
 }) {
   const sourceCommit = exactCommit(sourceCommitInput);
   const expectedFileIdentity = parseCandidateIdentity(identityInput);
   if (expectedFileIdentity.sourceCommit !== sourceCommit) {
     throw new Error("candidate identity sourceCommit does not match reviewed input");
   }
-  const expectedIdentity = localIdentity(sourceCommit);
+  const expectedIdentity = identityReader(sourceCommit);
+  const classicV4Activated = classicV4ActivationReader(sourceCommit);
   assertSameIdentity(expectedFileIdentity, expectedIdentity, "reviewed checkout");
   const endpoint = exactString(endpointInput, "endpoint", /^https:\/\//u, 256);
+  endpointIdFromUrl(endpoint);
+  const releaseBinding = parseAuditReleaseBinding(
+    releaseBindingInput,
+    endpoint,
+    expectedIdentity,
+  );
+  const bindingDigest = releaseBindingDigest(releaseBinding);
   const controlPlane = candidateDeployment(deployment, endpoint, expectedIdentity);
   const baseline = parseBaseline(baselineInput);
   const { progress, afterProgress, anchor, launches } = await readFrozenInventory(
@@ -1032,19 +1475,28 @@ async function auditCandidate({
     launchHashes.add(row.launchHash);
   }
   const inventory = inventoryEvidence(launches);
-  for (const release of RELEASES) {
+  for (const release of HISTORICAL_RELEASES) {
     if (inventory.perRelease[release] === 0) {
       throw new Error(`candidate has no ${release} launches`);
     }
   }
+  if (classicV4Activated && inventory.perRelease["classic-v4"] === 0) {
+    throw new Error("candidate has no classic-v4 launches");
+  }
+  if (!classicV4Activated && inventory.perRelease["classic-v4"] !== 0) {
+    throw new Error("candidate exposes classic-v4 before source activation");
+  }
   const authenticatedCoordinatorCreatorRepairs = assertFrozenBaseline(launches, baseline);
-  return withDigest("envio-release-inventory", {
+  return parseReleaseAuditArtifact(withDigest("envio-release-inventory", {
     schemaVersion: 2,
     kind: "envio-release-inventory",
     endpoint,
     capturedAt: now().toISOString(),
     deployment: controlPlane,
     identity: expectedIdentity,
+    releaseBindingDigest: bindingDigest,
+    releaseBinding,
+    classicV4Activated,
     baseline: {
       digest: baseline.digest,
       deployment: baseline.deployment,
@@ -1054,6 +1506,29 @@ async function auditCandidate({
     anchor,
     inventory,
     authenticatedCoordinatorCreatorRepairs,
+  }));
+}
+
+async function auditCandidate(input) {
+  return await auditCandidateWithReaders({
+    ...input,
+    identityReader: localIdentity,
+    classicV4ActivationReader: (sourceCommit) =>
+      validatedLocalConfig(sourceCommit).classicV4Activated,
+  });
+}
+
+// Test-only entrypoint: it validates and hashes the current candidate bytes,
+// but it cannot be selected through the production CLI.
+async function auditWorkingTreeCandidate(input) {
+  const {
+    classicV4ActivationReader = () => workingTreeClassicV4Activated(),
+    ...candidate
+  } = input;
+  return await auditCandidateWithReaders({
+    ...candidate,
+    identityReader: workingTreeIdentity,
+    classicV4ActivationReader,
   });
 }
 
@@ -1070,6 +1545,7 @@ async function main(argv = process.argv.slice(2)) {
     const baseline = await snapshotBaseline(values.endpoint);
     writeFileSync(path.resolve(values.output), `${JSON.stringify(baseline, null, 2)}\n`, {
       flag: "wx",
+      flush: true,
     });
     return;
   }
@@ -1081,20 +1557,30 @@ async function main(argv = process.argv.slice(2)) {
       "mirror-commit",
       "source-commit",
       "identity",
+      "release-binding",
       "baseline",
     ];
     exactCommandArgs(command, values, [...required, "output"], required);
     const expectedIdentity = JSON.parse(readFileSync(path.resolve(values.identity), "utf8"));
+    const releaseBinding = JSON.parse(
+      readFileSync(path.resolve(values["release-binding"]), "utf8"),
+    );
     const baseline = JSON.parse(readFileSync(path.resolve(values.baseline), "utf8"));
     const evidence = await auditCandidate({
       endpoint: values.endpoint,
       expectedIdentity,
+      releaseBinding,
       baseline,
       sourceCommit: values["source-commit"],
       deployment: values,
     });
     const output = `${JSON.stringify(evidence, null, 2)}\n`;
-    if (values.output) writeFileSync(path.resolve(values.output), output, { flag: "wx" });
+    if (values.output) {
+      writeFileSync(path.resolve(values.output), output, {
+        flag: "wx",
+        flush: true,
+      });
+    }
     else process.stdout.write(output);
     return;
   }
@@ -1117,10 +1603,15 @@ export {
   STABLE_LAUNCH_FIELDS,
   assertFrozenBaseline,
   auditCandidate,
+  auditWorkingTreeCandidate,
   endpointIdFromUrl,
   localIdentity,
   parseBaseline,
   parseCandidateIdentity,
+  parseReleaseAuditArtifact,
+  releaseBindingDigest,
   snapshotBaseline,
   stableLaunch,
+  workingTreeClassicV4Activated,
+  workingTreeIdentity,
 };

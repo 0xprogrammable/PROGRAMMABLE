@@ -6,7 +6,9 @@ active Programmable releases on Ethereum Mainnet:
 - Classic V2 and Classic V3
 - Stock-Paired V1, V2 and V3
 
-All other releases are intentionally out of scope. Source addresses and
+Classic V4 ABI and handlers are source-ready but deliberately have no chain
+binding before the exact verified Mainnet release manifest exists. All other
+releases are intentionally out of scope. Source addresses and
 inclusive start blocks are pinned to the checked-in deployment manifests.
 Shared Stock V2/V3 hook and vault-factory events are attributed only after an
 indexed `poolId` relation identifies the release.
@@ -115,6 +117,44 @@ The product release binding remains pinned to the last activated Envio
 identity until a new indexer deployment has been reviewed, backfilled,
 reconciled, and explicitly promoted. A candidate source checkout or passing
 local test must not update that binding.
+
+## Classic V4 source activation
+
+The pre-deploy `chains[].contracts` list contains no Classic V4 entry. After
+`contracts/deployments/mainnet-classic-v4.json` has been generated from
+finalized deployment, exact source-verification, and lifecycle evidence, first
+inspect the deterministic activation plan:
+
+```bash
+pnpm classic-v4:activate -- \
+  --release-audit </absolute/immutable-envio-release-audit.json>
+```
+
+The command rejects missing or mismatched provenance, a wrong hook flag mask,
+source collisions, any reward/vesting factory that differs from the exact
+already-bound shared factory, and an audit whose control-plane identity, live
+`IndexerState`, frozen inventory, release-binding digest, or Classic V4 canary
+does not match. The audit must be emitted by `release-candidate.mjs audit`; a
+bare hand-authored binding is not an activation input. The command commits the
+typed, domain-separated digest of that exact expanded binding into the final
+manifest and does not write by default. To apply the exact manifest after
+review, provide the same immutable audit and its printed final manifest digest:
+
+```bash
+pnpm classic-v4:activate -- \
+  --release-audit </absolute/immutable-envio-release-audit.json> \
+  --write \
+  --acknowledge-manifest-digest 0x<exact-manifest-digest>
+```
+
+This binds the exact V4 hook/launcher addresses and deployment blocks in the
+indexer sources, writes the separate V4 catalog artifact and browser binding,
+then replaces the canonical manifest last under an exclusive, fsynced durable
+transaction journal. A restart rolls back any prefix before that commit point
+and cleans up a fully committed transaction. It does not deploy Envio or mutate
+the frozen five-release `config/data-pipeline-release.v1.json`; the reviewed
+expanded Envio deployment must already exist before this command can activate
+the website catalog.
 
 ## Production status
 

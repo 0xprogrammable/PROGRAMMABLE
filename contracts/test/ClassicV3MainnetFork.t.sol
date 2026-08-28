@@ -47,7 +47,6 @@ struct ClassicV3ExactInputSingleParams {
     bool zeroForOne;
     uint128 amountIn;
     uint128 amountOutMinimum;
-    uint256 minHopPriceX36;
     bytes hookData;
 }
 
@@ -207,6 +206,22 @@ contract ClassicV3MainnetForkTest is Test {
         assertEq(poolManager.balanceOf(address(feeHook), Currency.wrap(address(0)).toId()), 0);
     }
 
+    function test_exactInputSingleEncodingMatchesMainnetUniversalRouterV2() public view {
+        PoolKey memory key = launcher.poolKey(address(1));
+        ClassicV3ExactInputSingleParams memory swap = ClassicV3ExactInputSingleParams({
+            poolKey: key, zeroForOne: true, amountIn: 1, amountOutMinimum: 2, hookData: ""
+        });
+
+        bytes memory encoded = abi.encode(swap);
+        assertEq(encoded.length, 352);
+        ClassicV3ExactInputSingleParams memory decoded = abi.decode(encoded, (ClassicV3ExactInputSingleParams));
+        assertEq(PoolId.unwrap(decoded.poolKey.toId()), PoolId.unwrap(key.toId()));
+        assertTrue(decoded.zeroForOne);
+        assertEq(decoded.amountIn, 1);
+        assertEq(decoded.amountOutMinimum, 2);
+        assertEq(decoded.hookData.length, 0);
+    }
+
     function _assertOfficialDependencyHashes() private view {
         assertEq(POOL_MANAGER.codehash, POOL_MANAGER_CODE_HASH);
         assertEq(POSITION_MANAGER.codehash, POSITION_MANAGER_CODE_HASH);
@@ -268,12 +283,7 @@ contract ClassicV3MainnetForkTest is Test {
         uint256 value
     ) private {
         ClassicV3ExactInputSingleParams memory swap = ClassicV3ExactInputSingleParams({
-            poolKey: key,
-            zeroForOne: zeroForOne,
-            amountIn: amountIn,
-            amountOutMinimum: amountOutMinimum,
-            minHopPriceX36: 0,
-            hookData: ""
+            poolKey: key, zeroForOne: zeroForOne, amountIn: amountIn, amountOutMinimum: amountOutMinimum, hookData: ""
         });
         bytes memory actions = abi.encodePacked(SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL);
         bytes[] memory actionParameters = new bytes[](3);

@@ -5,6 +5,7 @@ export const CLASSIC_TOTAL_SWAP_FEE_PERCENT = "1";
 export const CLASSIC_TOTAL_SWAP_FEE_BPS = 100;
 export const LAUNCH_DRAFT_STORAGE_KEY = "launcher.launch-draft.v1";
 export const MEME_TOKEN_SUPPLY_WHOLE = 1_000_000_000;
+export const MEME_TOKEN_SUPPLY_WEI = 1_000_000_000n * 10n ** 18n;
 export const MEME_INITIAL_TICK = 204_200;
 export const CLASSIC_DEV_BUY_GAS_BUFFER_BPS = 15_000n;
 export const MEME_STARTING_FDV_ETH = 1.3556577608171038;
@@ -14,12 +15,22 @@ export const MEME_MIN_INITIAL_BUY_WEI = 600_000_000_000_000n;
 export const MEME_MIN_INITIAL_BUY_ETH = "0.0006";
 export const MEME_MIN_INITIAL_BUY_ETH_LABEL =
   `${MEME_MIN_INITIAL_BUY_ETH} ETH`;
-const MEME_MIN_USABLE_TICK = -887_200;
-const MEME_INITIAL_SQRT_PRICE = 1.0001 ** (MEME_INITIAL_TICK / 2);
-const MEME_MIN_SQRT_PRICE = 1.0001 ** (MEME_MIN_USABLE_TICK / 2);
-const MEME_INITIAL_LIQUIDITY =
-  MEME_TOKEN_SUPPLY_WHOLE /
-  (MEME_INITIAL_SQRT_PRICE - MEME_MIN_SQRT_PRICE);
+export const CLASSIC_LIQUIDITY_TICK_LOWER = 174_800;
+const Q96 = 1n << 96n;
+// Exact TickMath Q64.96 outputs pinned by ClassicPositionPlannerV1.
+const MEME_INITIAL_SQRT_PRICE_X96 =
+  2_151_813_121_295_408_910_812_139_624_586_144n;
+const LEGACY_CLASSIC_MIN_SQRT_PRICE_X96 = 4_310_618_292n;
+const CLASSIC_LIQUIDITY_SQRT_PRICE_X96 =
+  494_793_039_472_815_777_531_937_397_972_213n;
+const LEGACY_CLASSIC_INITIAL_LIQUIDITY =
+  (MEME_TOKEN_SUPPLY_WEI * Q96) /
+  (MEME_INITIAL_SQRT_PRICE_X96 - LEGACY_CLASSIC_MIN_SQRT_PRICE_X96);
+const CLASSIC_INITIAL_LIQUIDITY =
+  (MEME_TOKEN_SUPPLY_WEI * Q96) /
+  (MEME_INITIAL_SQRT_PRICE_X96 - CLASSIC_LIQUIDITY_SQRT_PRICE_X96);
+const CLASSIC_END_PRICE_MULTIPLE_WAD =
+  18_913_066_072_547_532_342n;
 export const ADAPTIVE_MIN_FDV_INDEX = -887_272;
 export const ADAPTIVE_MAX_FDV_INDEX = 887_272;
 export const ADAPTIVE_MIN_FEE_BPS = 100;
@@ -29,6 +40,9 @@ export const ADAPTIVE_MAX_CURVE_POINTS = 8;
 export const CLASSIC_V3_MIN_FEE_BPS = 100;
 export const CLASSIC_V3_MAX_FEE_BPS = 1_000;
 export const CLASSIC_V3_FEE_STEP_BPS = 100;
+export const CLASSIC_V4_MIN_FEE_BPS = 10;
+export const CLASSIC_V4_MAX_FEE_BPS = 1_000;
+export const CLASSIC_V4_FEE_STEP_BPS = 10;
 export const CLASSIC_V3_MAX_REWARD_BENEFICIARIES = 5;
 export const CLASSIC_INITIAL_BUY_MIN_DURATION_DAYS = 1;
 export const CLASSIC_INITIAL_BUY_MAX_DURATION_DAYS = 3_650;
@@ -50,6 +64,7 @@ export type LaunchModel =
   | "deep"
   | "stock-paired";
 export type RewardDestinationMode = "launcher" | "external" | "split";
+export type ClassicContractRelease = "classic-v3" | "classic-v4";
 export type ClassicInitialBuyCustodyMode =
   | "unlocked"
   | "fixed-lock"
@@ -57,11 +72,32 @@ export type ClassicInitialBuyCustodyMode =
   | "cliff-linear";
 
 export type ClassicInitialBuyPreview = {
+  grossEthWei: bigint;
+  poolEthWei: bigint;
+  tokenAmountWei: bigint;
   grossEthAmount: number;
   poolEthAmount: number;
   tokenAmount: number;
   supplyPercent: number;
+  bounded: boolean;
+  curveCapacityWei: bigint | null;
+  remainingCurveCapacityWei: bigint | null;
+  maximumGrossActivationBuyWei: bigint | null;
+  endPriceMultipleWad: bigint | null;
 };
+
+export type ClassicInitialBuyCurveQuote =
+  | { status: "invalid" }
+  | {
+      status: "over-capacity";
+      grossEthWei: bigint;
+      poolEthWei: bigint;
+      curveCapacityWei: bigint;
+      maximumGrossActivationBuyWei: bigint;
+      bounded: boolean;
+      endPriceMultipleWad: bigint | null;
+    }
+  | { status: "ready"; preview: ClassicInitialBuyPreview };
 
 export type AdaptiveCurvePointDraft = {
   fdvIndex: number;
@@ -113,6 +149,7 @@ export type LaunchDraft = {
   adaptiveCurvePoints: AdaptiveCurvePointDraft[];
   buySwapFeePercent: string;
   sellSwapFeePercent: string;
+  classicContractRelease: ClassicContractRelease;
   rewardDestinationMode: RewardDestinationMode;
   rewardExternalAddress: string;
   rewardSplits: RewardSplitDraft[];
@@ -163,6 +200,7 @@ export function createEmptyDraft(): LaunchDraft {
     adaptiveCurvePoints: [],
     buySwapFeePercent: "1",
     sellSwapFeePercent: "1",
+    classicContractRelease: "classic-v3",
     rewardDestinationMode: "launcher",
     rewardExternalAddress: "",
     rewardSplits: [
@@ -183,6 +221,7 @@ export function createClassicV3Draft(): LaunchDraft {
     selectedBehaviors: ["fixed-fee"],
     buySwapFeePercent: "1",
     sellSwapFeePercent: "1",
+    classicContractRelease: "classic-v3",
     rewardDestinationMode: "launcher",
     initialBuyCustodyMode: "unlocked",
     initialBuyDurationDays: "30",
@@ -243,6 +282,21 @@ export function parseTotalSwapFeeBps(value: string) {
     : null;
 }
 
+export function parseClassicFeePercentToBps(value: string) {
+  const normalized = value.trim();
+  if (!/^(?:0|[1-9]|10)(?:\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const [whole, fraction = ""] = normalized.split(".");
+  const basisPoints = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return basisPoints >= CLASSIC_V4_MIN_FEE_BPS &&
+    basisPoints <= CLASSIC_V4_MAX_FEE_BPS &&
+    basisPoints % CLASSIC_V4_FEE_STEP_BPS === 0
+    ? basisPoints
+    : null;
+}
+
 export function parseInitialBuyWei(value: string | null | undefined) {
   const normalized = typeof value === "string" ? value.trim() : "";
   if (
@@ -265,51 +319,174 @@ export function getClassicInitialBuyPreview(
   initialBuyEth: string,
   buyFeePercent: string,
 ): ClassicInitialBuyPreview | null {
-  const initialBuyWei = parseInitialBuyWei(initialBuyEth);
-  const normalizedFeePercent = Number(buyFeePercent.trim());
+  const quote = getClassicInitialBuyCurveQuote(initialBuyEth, buyFeePercent);
+  return quote.status === "ready" ? quote.preview : null;
+}
 
-  if (
-    initialBuyWei === null ||
-    !Number.isInteger(normalizedFeePercent) ||
-    normalizedFeePercent < 1 ||
-    normalizedFeePercent > 10
-  ) {
-    return null;
+export function getLegacyClassicInitialBuyPreview(
+  initialBuyEth: string,
+  buyFeePercent: string,
+): ClassicInitialBuyPreview | null {
+  const quote = getLegacyClassicInitialBuyCurveQuote(
+    initialBuyEth,
+    buyFeePercent,
+  );
+  return quote.status === "ready" ? quote.preview : null;
+}
+
+function divideRoundingUp(numerator: bigint, denominator: bigint) {
+  return (numerator + denominator - 1n) / denominator;
+}
+
+function amount0DeltaRoundingUp(
+  sqrtPriceAX96: bigint,
+  sqrtPriceBX96: bigint,
+  liquidity: bigint,
+) {
+  const lower =
+    sqrtPriceAX96 < sqrtPriceBX96 ? sqrtPriceAX96 : sqrtPriceBX96;
+  const upper =
+    sqrtPriceAX96 < sqrtPriceBX96 ? sqrtPriceBX96 : sqrtPriceAX96;
+  const numerator = divideRoundingUp(
+    (liquidity << 96n) * (upper - lower),
+    upper,
+  );
+  return divideRoundingUp(numerator, lower);
+}
+
+function maximumGrossForNetCapacity(
+  netCapacityWei: bigint,
+  feeBps: number,
+) {
+  return (
+    (netCapacityWei * 10_000n) /
+    (10_000n - BigInt(feeBps))
+  );
+}
+
+function decimalNumber(value: bigint, decimals = 18) {
+  const divisor = 10n ** BigInt(decimals);
+  const whole = value / divisor;
+  const remainder = (value % divisor).toString().padStart(decimals, "0");
+  return Number(`${whole}.${remainder}`);
+}
+
+/**
+ * Mirrors the launcher's zero-for-one exact-input v4 math using integer
+ * rounding. The returned token amount is a deterministic preview; the launch
+ * route must still execute the complete transaction with eth_call before a
+ * wallet is opened.
+ */
+export function getClassicInitialBuyCurveQuote(
+  initialBuyEth: string,
+  buyFeePercent: string,
+): ClassicInitialBuyCurveQuote {
+  return getClassicInitialBuyCurveQuoteForRange(
+    initialBuyEth,
+    buyFeePercent,
+    true,
+  );
+}
+
+export function getLegacyClassicInitialBuyCurveQuote(
+  initialBuyEth: string,
+  buyFeePercent: string,
+): ClassicInitialBuyCurveQuote {
+  return getClassicInitialBuyCurveQuoteForRange(
+    initialBuyEth,
+    buyFeePercent,
+    false,
+  );
+}
+
+function getClassicInitialBuyCurveQuoteForRange(
+  initialBuyEth: string,
+  buyFeePercent: string,
+  canonicalRange: boolean,
+): ClassicInitialBuyCurveQuote {
+  const initialBuyWei = parseInitialBuyWei(initialBuyEth);
+  const buyFeeBps = parseClassicFeePercentToBps(buyFeePercent);
+
+  if (initialBuyWei === null || buyFeeBps === null) {
+    return { status: "invalid" };
+  }
+
+  const poolEthWei =
+    initialBuyWei -
+    (initialBuyWei * BigInt(buyFeeBps)) / 10_000n;
+  const initialLiquidity = canonicalRange
+    ? CLASSIC_INITIAL_LIQUIDITY
+    : LEGACY_CLASSIC_INITIAL_LIQUIDITY;
+  const lowerSqrtPriceX96 = canonicalRange
+    ? CLASSIC_LIQUIDITY_SQRT_PRICE_X96
+    : LEGACY_CLASSIC_MIN_SQRT_PRICE_X96;
+  const curveCapacityWei = amount0DeltaRoundingUp(
+    lowerSqrtPriceX96,
+    MEME_INITIAL_SQRT_PRICE_X96,
+    initialLiquidity,
+  );
+  const maximumGrossActivationBuyWei = maximumGrossForNetCapacity(
+    curveCapacityWei,
+    buyFeeBps,
+  );
+
+  if (poolEthWei > curveCapacityWei) {
+    return {
+      status: "over-capacity",
+      grossEthWei: initialBuyWei,
+      poolEthWei,
+      curveCapacityWei,
+      maximumGrossActivationBuyWei,
+      bounded: canonicalRange,
+      endPriceMultipleWad: canonicalRange
+        ? CLASSIC_END_PRICE_MULTIPLE_WAD
+        : null,
+    };
+  }
+
+  const nextSqrtPriceX96 =
+    poolEthWei === curveCapacityWei
+      ? lowerSqrtPriceX96
+      : divideRoundingUp(
+          (initialLiquidity << 96n) * MEME_INITIAL_SQRT_PRICE_X96,
+          (initialLiquidity << 96n) +
+            poolEthWei * MEME_INITIAL_SQRT_PRICE_X96,
+        );
+  const tokenAmountWei =
+    (initialLiquidity *
+      (MEME_INITIAL_SQRT_PRICE_X96 - nextSqrtPriceX96)) /
+    Q96;
+  if (tokenAmountWei <= 0n || tokenAmountWei > MEME_TOKEN_SUPPLY_WEI) {
+    return { status: "invalid" };
   }
 
   const grossEthAmount = Number(formatEther(initialBuyWei));
-  const poolEthAmount = grossEthAmount * (1 - normalizedFeePercent / 100);
-
-  if (
-    !Number.isFinite(grossEthAmount) ||
-    !Number.isFinite(poolEthAmount) ||
-    poolEthAmount <= 0
-  ) {
-    return null;
-  }
-
-  const nextSqrtPrice =
-    (MEME_INITIAL_LIQUIDITY * MEME_INITIAL_SQRT_PRICE) /
-    (MEME_INITIAL_LIQUIDITY +
-      poolEthAmount * MEME_INITIAL_SQRT_PRICE);
-  const tokenAmount = Math.max(
-    0,
-    Math.min(
-      MEME_TOKEN_SUPPLY_WHOLE,
-      MEME_INITIAL_LIQUIDITY *
-        (MEME_INITIAL_SQRT_PRICE - nextSqrtPrice),
-    ),
-  );
-
-  if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) {
-    return null;
-  }
-
+  const poolEthAmount = Number(formatEther(poolEthWei));
+  const tokenAmount = decimalNumber(tokenAmountWei);
   return {
-    grossEthAmount,
-    poolEthAmount,
-    tokenAmount,
-    supplyPercent: (tokenAmount / MEME_TOKEN_SUPPLY_WHOLE) * 100,
+    status: "ready",
+    preview: {
+      grossEthWei: initialBuyWei,
+      poolEthWei,
+      tokenAmountWei,
+      grossEthAmount,
+      poolEthAmount,
+      tokenAmount,
+      supplyPercent:
+        Number((tokenAmountWei * 100_000_000n) / MEME_TOKEN_SUPPLY_WEI) /
+        1_000_000,
+      bounded: canonicalRange,
+      curveCapacityWei: canonicalRange ? curveCapacityWei : null,
+      remainingCurveCapacityWei: canonicalRange
+        ? curveCapacityWei - poolEthWei
+        : null,
+      maximumGrossActivationBuyWei: canonicalRange
+        ? maximumGrossActivationBuyWei
+        : null,
+      endPriceMultipleWad: canonicalRange
+        ? CLASSIC_END_PRICE_MULTIPLE_WAD
+        : null,
+    },
   };
 }
 

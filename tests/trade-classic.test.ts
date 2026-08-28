@@ -14,6 +14,7 @@ import {
 import {
   CLASSIC_TICK_SPACING,
   NATIVE_ETH,
+  assertClassicV4Deadline,
   buildClassicPermit2ApprovalTransaction,
   buildClassicSwapTransaction,
   buildClassicTokenApprovalTransaction,
@@ -95,7 +96,7 @@ describe("Classic v4 swap construction", () => {
       quotedAmountOut: 10_000n,
       slippageBps: 250,
       now: 1_000n,
-      deadline: 1_900n,
+      deadline: 1_300n,
     });
     const { actions } = parsedV4Actions(prepared.data);
     const swap = actionValue(actions, "SWAP_EXACT_IN_SINGLE")[0]
@@ -124,7 +125,9 @@ describe("Classic v4 swap construction", () => {
     expect(swap.amountOutMinimum.toString()).toBe("9750");
     expect(swap.hookData).toBe("0x");
     expect(settle[0].value).toBe(NATIVE_ETH);
+    expect(String(settle[1].value)).toBe("1000");
     expect(take[0].value).toBe(TOKEN);
+    expect(String(take[1].value)).toBe("9750");
   });
 
   it("encodes token sells in the reverse direction without ETH value", () => {
@@ -136,7 +139,7 @@ describe("Classic v4 swap construction", () => {
       quotedAmountOut: 5_000n,
       slippageBps: 100,
       now: 5_000n,
-      deadline: 5_600n,
+      deadline: 5_300n,
     });
     const { actions } = parsedV4Actions(prepared.data);
     const swap = actionValue(actions, "SWAP_EXACT_IN_SINGLE")[0]
@@ -152,7 +155,9 @@ describe("Classic v4 swap construction", () => {
     expect(swap.zeroForOne).toBe(false);
     expect(swap.amountOutMinimum.toString()).toBe("4950");
     expect(settle[0].value).toBe(TOKEN);
+    expect(String(settle[1].value)).toBe("2000");
     expect(take[0].value).toBe(NATIVE_ETH);
+    expect(String(take[1].value)).toBe("4950");
   });
 
   it("uses the explicit deadline and rejects stale or excessive windows", () => {
@@ -164,17 +169,21 @@ describe("Classic v4 swap construction", () => {
       quotedAmountOut: 2_000n,
       slippageBps: 100,
       now: 10_000n,
-      deadline: 10_600n,
+      deadline: 10_300n,
     };
     const prepared = buildClassicSwapTransaction(base);
 
-    expect(parsedV4Actions(prepared.data).deadline).toBe(10_600n);
+    expect(parsedV4Actions(prepared.data).deadline).toBe(10_300n);
     expect(() =>
       buildClassicSwapTransaction({ ...base, deadline: 10_030n }),
     ).toThrow("at least 60 seconds");
     expect(() =>
-      buildClassicSwapTransaction({ ...base, deadline: 14_001n }),
+      buildClassicSwapTransaction({ ...base, deadline: 13_601n }),
     ).toThrow("within 1 hour");
+    expect(() => assertClassicV4Deadline(10_000n, 10_330n)).not.toThrow();
+    expect(() =>
+      assertClassicV4Deadline(10_000n, 10_331n),
+    ).toThrow("5 minute quote window");
   });
 
   it("rejects a non-canonical hook, pool fee, or tick spacing", () => {
@@ -186,7 +195,7 @@ describe("Classic v4 swap construction", () => {
       quotedAmountOut: 2_000n,
       slippageBps: 100,
       now: 1_000n,
-      deadline: 1_600n,
+      deadline: 1_300n,
     };
 
     expect(() =>
@@ -375,7 +384,7 @@ describe("Classic sell approvals", () => {
         amountIn: 1_000n,
         tokenAllowance: 1_000n,
         permit2Allowance: 1_000n,
-        permit2Expiration: 1_600n,
+        permit2Expiration: 1_300n,
         now: 1_000n,
       }),
     ).toBe("permit2-to-router");
@@ -385,7 +394,7 @@ describe("Classic sell approvals", () => {
         amountIn: 1_000n,
         tokenAllowance: 1_000n,
         permit2Allowance: 1_000n,
-        permit2Expiration: 1_601n,
+        permit2Expiration: 1_301n,
         now: 1_000n,
       }),
     ).toBe("ready");
@@ -415,7 +424,7 @@ describe("Classic sell approvals", () => {
       token: TOKEN,
       amountIn: 1_000n,
       now: 1_000n,
-      deadline: 1_900n,
+      deadline: 1_300n,
     });
     const permit2Call = decodeFunctionData({
       abi: classicPermit2Abi,
@@ -430,6 +439,15 @@ describe("Classic sell approvals", () => {
     expect(permit2Call.args[0]).toBe(TOKEN);
     expect(permit2Call.args[1]).toBe(ROUTER);
     expect(permit2Call.args[2]).toBe(1_000n);
-    expect(permit2Call.args[3]).toBe(1_900);
+    expect(permit2Call.args[3]).toBe(1_600);
+    expect(
+      buildClassicPermit2ApprovalTransaction({
+        deployment,
+        token: TOKEN,
+        amountIn: 1_000n,
+        now: 970n,
+        deadline: 1_300n,
+      }).data,
+    ).toBe(permit2Approval.data);
   });
 });

@@ -145,6 +145,36 @@ describe("Dexscreener Explore adapter", () => {
     });
   });
 
+  it("does not double-count a duplicated exact market identity", async () => {
+    const token = entry(1);
+    const result = available(token);
+    mocks.readDex.mockResolvedValue(snapshot([result, result]));
+
+    await expect(readDexscreenerExploreEntriesV1([token])).resolves
+      .toMatchObject({ marketRead: { qualifiedCount: 1 } });
+  });
+
+  it.each([
+    ["chain", { chainId: "8453" }],
+    ["protocol", { protocol: "uniswap_v3" }],
+  ])("rejects the same token/pool/ETH tuple on the wrong %s", async (
+    _label,
+    mismatch,
+  ) => {
+    const token = entry(1);
+    const result = available(token);
+    mocks.readDex.mockResolvedValue(snapshot([{
+      ...result,
+      identity: { ...result.identity, ...mismatch },
+    }]));
+
+    await expect(readDexscreenerExploreEntriesV1([token])).resolves
+      .toMatchObject({
+        entries: [{ valuation: { status: "unavailable" } }],
+        marketRead: { qualifiedCount: 0 },
+      });
+  });
+
   it("derives freshness from fetchedAt and removes stale FDV qualification", async () => {
     vi.setSystemTime(Date.parse(NOW) + 5 * 60 * 1_000 + 1);
     const token = entry(1);

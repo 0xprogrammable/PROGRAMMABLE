@@ -1938,6 +1938,8 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/alchemy/router-custom-public.server.ts") ?? "";
   const envioClassicV3Catalog =
     source("lib/market-data/envio-classic-v3-catalog.server.ts") ?? "";
+  const envioClassicV4CatalogBinding =
+    source("lib/data-pipeline/envio-classic-v4-catalog-binding.server.ts") ?? "";
   const dexscreenerExplore =
     source("lib/market-data/dexscreener-explore.server.ts") ?? "";
   const dexscreenerShadow =
@@ -2144,10 +2146,13 @@ export function evaluateReadModelOperationsSourceContracts(
   );
   const fastLanePublicProviderContract =
     includesEverySourceFragment(envioClassicV3Catalog, [
-      "getDataPipelineReleaseBinding()",
+      "getEnvioClassicCatalogBinding()",
+      "catalogBinding.releaseBinding",
+      "catalogBinding.classicV4 !== null",
+      "classicV4IsBound !== hasClassicV4ReleaseBinding(release)",
       "createEnvioClient({",
       '{ model: { _eq: "classic" } }',
-      '{ releaseVersion: { _eq: "classic-v3" } }',
+      '{ releaseVersion: { _in: ["classic-v3", "classic-v4"] } }',
       '{ isComplete: { _eq: true } }',
       '{ provenanceValid: { _eq: true } }',
       "assertLaunchEventBinding(launch, event, release)",
@@ -2159,6 +2164,18 @@ export function evaluateReadModelOperationsSourceContracts(
       "entry.tokenAddress !== undefined || entry.markets.length > 0",
       "envioClassicV3IdentityCommitmentV1",
       'canonicalSha256("programmable.envio-classic-v3-identity.v1"',
+    ]) &&
+    includesEverySourceFragment(envioClassicV4CatalogBinding, [
+      "parseEnvioClassicV4CatalogBinding",
+      'input.status !== "inactive"',
+      "if (options.publicReleaseBinding || options.publicRelease) return fail();",
+      'value.status !== "indexer-activated"',
+      "exactSharedBase(releaseBinding, options.baseBinding)",
+      "exactV4Sources(releaseBinding, options.baseBinding, options.publicRelease)",
+      "exactV4Release(releaseBinding, options.baseBinding)",
+      "classicV4IndexerBindingDigest(releaseBinding)",
+      "options.publicRelease.indexerHandoff.indexerBindingDigest",
+      "getDataPipelineReleaseBinding()",
     ]) &&
     !/readDurableExploreModel|productionMainnetRpcPrimary|readPrimaryRpcExploreEntriesV1|readBitquery/iu.test(
       envioClassicV3Catalog,

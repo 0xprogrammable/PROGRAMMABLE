@@ -34,6 +34,21 @@ import {
   validateClassicV3LaunchDraft,
 } from "@/lib/classic-v3";
 import {
+  classicV4HookAbi,
+  classicV4HookFactoryAbi,
+  classicV4LaunchAbi,
+  classicV4PositionPlannerAbi,
+  CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+  CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+  encodeClassicV4Launch,
+  validateClassicV4LaunchDraft,
+} from "@/lib/classic-v4";
+import {
+  getConfiguredClassicV4PublicRelease,
+  isClassicV4PublicActionRelease,
+  type ClassicV4PublicRelease,
+} from "@/lib/classic-v4-release";
+import {
   getConfiguredClassicV3Release,
   isClassicV3ReleaseVerified,
 } from "@/lib/classic-v3-release";
@@ -78,7 +93,10 @@ import {
 } from "@/lib/launch-transaction";
 import {
   createEmptyDraft,
+  CLASSIC_LIQUIDITY_TICK_LOWER,
+  MEME_INITIAL_TICK,
   MEME_MIN_INITIAL_BUY_WEI,
+  MEME_TOKEN_SUPPLY_WEI,
   parseOptionalInitialBuyWei,
   parseInitialBuyWei,
   type LaunchDraft,
@@ -125,6 +143,11 @@ import {
 } from "@/lib/launch-model-gating";
 import { getWebsiteReadOnchainDeployment } from "@/lib/onchain/config";
 import { safeServerErrorSummary } from "@/lib/server/safe-error";
+import {
+  CLASSIC_LAUNCH_AUTHORIZATION_REQUEST_SCHEMA_V1,
+  ClassicLaunchAuthorizationBridgeErrorV1,
+  getProductionClassicLaunchAuthorizationBridgeV1,
+} from "@/lib/server/custom-launch/classic-launch-authorization-bridge-v1";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -439,6 +462,14 @@ function parseDraft(input: unknown): LaunchDraft {
     if (typeof raw[field] === "string") {
       draft[field] = raw[field];
     }
+  }
+  if (
+    raw.classicContractRelease === "classic-v3" ||
+    raw.classicContractRelease === "classic-v4"
+  ) {
+    draft.classicContractRelease = raw.classicContractRelease;
+  } else if (raw.classicContractRelease !== undefined) {
+    throw new LaunchInputError("Refresh the Classic launch setup");
   }
 
   const requestedLaunchModel =
@@ -1507,6 +1538,596 @@ async function prepareClassicV3Launch(
     transaction: { ...launchBase, gasLimit: gasLimit.toString() },
     predictedToken,
     predictedHook: hook,
+    planHash: buildPlanHash(account, launchBase),
+  });
+}
+
+async function assertClassicV4Infrastructure(
+  release: ClassicV4PublicRelease,
+  rpcClient: LaunchRpcClient,
+) {
+  const { addresses, runtimeCodeHashes, officialDependencies } = release;
+  const runtimeBindings = [
+    [
+      CLASSIC_V4_LAUNCH_STAMP_ROUTER,
+      CLASSIC_V4_LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+      "canonical Launch Stamp Router",
+    ] as const,
+    ...Object.entries(officialDependencies).map(
+      ([, dependency]) =>
+        [
+          dependency.address,
+          dependency.runtimeCodeHash,
+          "Uniswap dependency",
+        ] as const,
+    ),
+    ...(
+      [
+        "ctoAuthority",
+        "rewardVaultFactory",
+        "initialBuyVestingWalletFactory",
+        "launchPolicy",
+        "positionForwarderFactory",
+        "hookFactory",
+        "feeHook",
+        "positionPlanner",
+        "launcher",
+      ] as const
+    ).map(
+      (name) =>
+        [addresses[name], runtimeCodeHashes[name], `Classic V4 ${name}`] as const,
+    ),
+  ];
+  await Promise.all(
+    runtimeBindings.map(([address, expected, label]) =>
+      assertRuntimeCodeHash(address, expected, label, rpcClient),
+    ),
+  );
+
+  const launcher = addresses.launcher;
+  const hook = addresses.feeHook;
+  const planner = addresses.positionPlanner;
+  const [
+    launcherPoolManager,
+    launcherPositionManager,
+    launcherTokenFactory,
+    launcherHook,
+    launcherVaultFactory,
+    launcherVestingFactory,
+    launcherPolicy,
+    launcherPositionFactory,
+    launcherPlanner,
+    launcherRouter,
+    minimumInitialBuyWei,
+    maximumLauncherRewardBeneficiaries,
+    launcherRewardShareBasisPoints,
+    launcherTokenSupply,
+    launcherInitialTick,
+    launcherTickSpacing,
+    launcherLpFeePips,
+    hookPoolManager,
+    hookTreasury,
+    hookVaultFactory,
+    launcherFeeBps,
+    minimumFeeBps,
+    maximumFeeBps,
+    feeStepBps,
+    transferTaxBps,
+    hookLpFeePips,
+    hookTickSpacing,
+    factoryRecognizesHook,
+    factoryRequiredFlags,
+    plannerTokenSupply,
+    plannerInitialTick,
+    plannerLiquidityTickLower,
+    plannerTickSpacing,
+    configuredCtoAuthority,
+    configuredCtoAuthorityAccount,
+    minimumCustodyDurationDays,
+    maximumCustodyDurationDays,
+    maximumTokenNameBytes,
+    maximumTokenSymbolBytes,
+    maximumTokenDescriptionBytes,
+    maximumMetadataUrlBytes,
+    maximumSocialExtraDataBytes,
+    maximumPolicyRewardBeneficiaries,
+    policyRewardShareBasisPoints,
+    forwarderPositionManager,
+  ] = await Promise.all([
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "poolManager",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "positionManager",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "tokenFactory",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "feeHook",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "rewardVaultFactory",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "initialBuyVestingWalletFactory",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "launchPolicy",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "positionForwarderFactory",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "positionPlanner",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "ROUTER",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "MIN_INITIAL_BUY_WEI",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "MAX_REWARD_BENEFICIARIES",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "REWARD_SHARE_BASIS_POINTS",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "TOKEN_SUPPLY",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "INITIAL_TICK",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "TICK_SPACING",
+    }),
+    rpcClient.readContract({
+      address: launcher,
+      abi: classicV4LaunchAbi,
+      functionName: "LP_FEE_PIPS",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "poolManager",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "launcherFeeRecipient",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "feeSplitVaultFactory",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "LAUNCHER_FEE_BPS",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "MIN_TOTAL_SWAP_FEE_BPS",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "MAX_TOTAL_SWAP_FEE_BPS",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "TOTAL_SWAP_FEE_STEP_BPS",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "TRANSFER_TAX_BPS",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "LP_FEE_PIPS",
+    }),
+    rpcClient.readContract({
+      address: hook,
+      abi: classicV4HookAbi,
+      functionName: "TICK_SPACING",
+    }),
+    rpcClient.readContract({
+      address: addresses.hookFactory,
+      abi: classicV4HookFactoryAbi,
+      functionName: "isFactoryHook",
+      args: [hook],
+    }),
+    rpcClient.readContract({
+      address: addresses.hookFactory,
+      abi: classicV4HookFactoryAbi,
+      functionName: "REQUIRED_HOOK_FLAGS",
+    }),
+    rpcClient.readContract({
+      address: planner,
+      abi: classicV4PositionPlannerAbi,
+      functionName: "TOKEN_SUPPLY",
+    }),
+    rpcClient.readContract({
+      address: planner,
+      abi: classicV4PositionPlannerAbi,
+      functionName: "INITIAL_TICK",
+    }),
+    rpcClient.readContract({
+      address: planner,
+      abi: classicV4PositionPlannerAbi,
+      functionName: "LIQUIDITY_TICK_LOWER",
+    }),
+    rpcClient.readContract({
+      address: planner,
+      abi: classicV4PositionPlannerAbi,
+      functionName: "TICK_SPACING",
+    }),
+    rpcClient.readContract({
+      address: addresses.rewardVaultFactory,
+      abi: classicRewardVaultFactoryAbi,
+      functionName: "ctoAuthority",
+    }),
+    rpcClient.readContract({
+      address: addresses.ctoAuthority,
+      abi: classicCtoAuthorityAbi,
+      functionName: "authority",
+    }),
+    rpcClient.readContract({
+      address: addresses.initialBuyVestingWalletFactory,
+      abi: classicInitialBuyVestingWalletFactoryAbi,
+      functionName: "MIN_DURATION_DAYS",
+    }),
+    rpcClient.readContract({
+      address: addresses.initialBuyVestingWalletFactory,
+      abi: classicInitialBuyVestingWalletFactoryAbi,
+      functionName: "MAX_DURATION_DAYS",
+    }),
+    rpcClient.readContract({
+      address: addresses.launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_TOKEN_NAME_BYTES",
+    }),
+    rpcClient.readContract({
+      address: addresses.launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_TOKEN_SYMBOL_BYTES",
+    }),
+    rpcClient.readContract({
+      address: addresses.launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_TOKEN_DESCRIPTION_BYTES",
+    }),
+    rpcClient.readContract({
+      address: addresses.launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_METADATA_URL_BYTES",
+    }),
+    rpcClient.readContract({
+      address: addresses.launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_SOCIAL_EXTRA_DATA_BYTES",
+    }),
+    rpcClient.readContract({
+      address: addresses.launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "MAX_REWARD_BENEFICIARIES",
+    }),
+    rpcClient.readContract({
+      address: addresses.launchPolicy,
+      abi: classicLaunchPolicyAbi,
+      functionName: "REWARD_SHARE_BASIS_POINTS",
+    }),
+    rpcClient.readContract({
+      address: addresses.positionForwarderFactory,
+      abi: lockedPositionFeeForwarderFactoryAbi,
+      functionName: "positionManager",
+    }),
+  ]);
+
+  const expectedAddresses = [
+    [launcherPoolManager, officialDependencies.poolManager.address, "PoolManager"],
+    [
+      launcherPositionManager,
+      officialDependencies.positionManager.address,
+      "PositionManager",
+    ],
+    [
+      launcherTokenFactory,
+      officialDependencies.uerc20Factory.address,
+      "UERC20Factory",
+    ],
+    [launcherHook, hook, "fee hook"],
+    [launcherVaultFactory, addresses.rewardVaultFactory, "reward factory"],
+    [
+      launcherVestingFactory,
+      addresses.initialBuyVestingWalletFactory,
+      "Activation Buy custody factory",
+    ],
+    [launcherPolicy, addresses.launchPolicy, "launch policy"],
+    [
+      launcherPositionFactory,
+      addresses.positionForwarderFactory,
+      "position factory",
+    ],
+    [launcherPlanner, planner, "position planner"],
+    [launcherRouter, CLASSIC_V4_LAUNCH_STAMP_ROUTER, "Launch Stamp Router"],
+    [hookPoolManager, officialDependencies.poolManager.address, "hook PoolManager"],
+    [hookTreasury, addresses.launcherFeeRecipient, "treasury"],
+    [hookVaultFactory, addresses.rewardVaultFactory, "hook reward factory"],
+    [configuredCtoAuthority, addresses.ctoAuthority, "CTO authority"],
+    [
+      configuredCtoAuthorityAccount,
+      classicCtoAuthorityAccount,
+      "CTO authority account",
+    ],
+    [
+      forwarderPositionManager,
+      officialDependencies.positionManager.address,
+      "position factory PositionManager",
+    ],
+  ] as const;
+  for (const [actual, expected, label] of expectedAddresses) {
+    if (actual.toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(
+        `The Classic V4 ${label} does not match the public release manifest`,
+      );
+    }
+  }
+
+  if (
+    !factoryRecognizesHook ||
+    factoryRequiredFlags !== REQUIRED_FEE_HOOK_FLAGS ||
+    (BigInt(hook) & HOOK_FLAG_MASK) !== REQUIRED_FEE_HOOK_FLAGS ||
+    launcherFeeBps !== 10 ||
+    minimumFeeBps !== 10 ||
+    maximumFeeBps !== 1_000 ||
+    feeStepBps !== 10 ||
+    transferTaxBps !== 0 ||
+    hookLpFeePips !== 0 ||
+    hookTickSpacing !== 200 ||
+    minimumInitialBuyWei !== MEME_MIN_INITIAL_BUY_WEI ||
+    maximumLauncherRewardBeneficiaries !== 5n ||
+    launcherRewardShareBasisPoints !== 10_000 ||
+    launcherTokenSupply !== MEME_TOKEN_SUPPLY_WEI ||
+    launcherInitialTick !== MEME_INITIAL_TICK ||
+    launcherTickSpacing !== 200 ||
+    launcherLpFeePips !== 0 ||
+    plannerTokenSupply !== MEME_TOKEN_SUPPLY_WEI ||
+    plannerInitialTick !== MEME_INITIAL_TICK ||
+    plannerLiquidityTickLower !== CLASSIC_LIQUIDITY_TICK_LOWER ||
+    plannerTickSpacing !== 200 ||
+    minimumCustodyDurationDays !== 1 ||
+    maximumCustodyDurationDays !== 3_650 ||
+    maximumTokenNameBytes !== BigInt(MAX_TOKEN_NAME_BYTES) ||
+    maximumTokenSymbolBytes !== BigInt(MAX_TOKEN_SYMBOL_BYTES) ||
+    maximumTokenDescriptionBytes !== BigInt(MAX_TOKEN_DESCRIPTION_BYTES) ||
+    maximumMetadataUrlBytes !== BigInt(MAX_METADATA_URL_BYTES) ||
+    maximumSocialExtraDataBytes !== BigInt(MAX_SOCIAL_EXTRA_DATA_BYTES) ||
+    maximumPolicyRewardBeneficiaries !== 5n ||
+    policyRewardShareBasisPoints !== 10_000
+  ) {
+    throw new Error(
+      "The Classic V4 economics do not match the public release manifest",
+    );
+  }
+}
+
+async function prepareClassicV4Launch(
+  request: Request,
+  account: Address,
+  draft: LaunchDraft,
+  connectedWalletCheck: LaunchPreflightCheck,
+  release: ClassicV4PublicRelease | null,
+  rpcClient: LaunchRpcClient,
+) {
+  const configuration = validateClassicV4LaunchDraft(draft, account);
+  const initialBuyWei = parseInitialBuyWei(draft.initialBuyEth);
+  if (initialBuyWei === null) {
+    throw new LaunchInputError("Enter a valid Activation Buy");
+  }
+  validateLaunchSalt(draft.launchSalt);
+  const tokenCheck: LaunchPreflightCheck = {
+    id: "token",
+    label: "Token setup",
+    status: "pass",
+    detail: `Immutable ${(configuration.fees.buySwapFeeBps / 100).toFixed(2)}% buy and ${(configuration.fees.sellSwapFeeBps / 100).toFixed(2)}% sell fees, the canonical deeper locked range, and the Activation Buy are valid`,
+  };
+
+  if (connectedWalletCheck.status !== "pass") {
+    return response({
+      status: "blocked",
+      mode: "classic-v3",
+      title: `Switch the wallet to ${networkName}`,
+      detail: `The launch transaction is fixed to ${networkName}`,
+      checks: [tokenCheck, connectedWalletCheck],
+    });
+  }
+  if (!isClassicV4PublicActionRelease(release)) {
+    return response({
+      status: "blocked",
+      mode: "classic-v3",
+      title: `Classic V4 is not publicly available on ${networkName} yet`,
+      detail:
+        "Wallet transactions stay disabled until the verified, indexer-activated release is promoted to public availability",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Classic V4 contracts",
+          status: "blocked",
+          detail: `No fully verified, publicly available ${networkName} Classic V4 manifest is installed`,
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "pending",
+          detail: "Waiting for the exact public release manifest",
+        },
+      ],
+    });
+  }
+
+  await assertClassicV4Infrastructure(release, rpcClient);
+  const launcher = release.addresses.launcher;
+  const [predictedToken] = await rpcClient.readContract({
+    address: launcher,
+    abi: classicV4LaunchAbi,
+    functionName: "predictTokenAddress",
+    args: [
+      draft.tokenName.trim(),
+      draft.tokenSymbol.trim(),
+      account,
+      draft.launchSalt,
+    ],
+  });
+  const existingCode = await rpcClient.getCode({ address: predictedToken });
+  if (existingCode && existingCode !== "0x") {
+    throw new LaunchInputError(
+      "This deterministic token address is already in use",
+    );
+  }
+
+  const launcherCalldata = encodeClassicV4Launch(
+    draft,
+    draft.launchSalt,
+    account,
+  );
+  let authorization;
+  try {
+    authorization = await getProductionClassicLaunchAuthorizationBridgeV1()
+      .authorize(request, {
+        schemaVersion: CLASSIC_LAUNCH_AUTHORIZATION_REQUEST_SCHEMA_V1,
+        chainId: "1",
+        launchWallet: account,
+        releaseManifestDigest: release.manifestDigest,
+        launcher: release.addresses.launcher,
+        launcherRuntimeCodeHash: release.runtimeCodeHashes.launcher,
+        feeHook: release.addresses.feeHook,
+        feeHookRuntimeCodeHash: release.runtimeCodeHashes.feeHook,
+        valueWei: initialBuyWei.toString(),
+        launcherCalldata,
+      });
+  } catch (error) {
+    if (!(error instanceof ClassicLaunchAuthorizationBridgeErrorV1)) {
+      throw error;
+    }
+    if (error.status === 400) {
+      throw new LaunchInputError(
+        "The Classic setup changed. Review the current values and try again",
+      );
+    }
+    return response({
+      status: "blocked",
+      mode: "classic-v3",
+      title: error.status === 401 || error.status === 403
+        ? "Reconnect the launch wallet"
+        : "Classic V4 authorization is temporarily unavailable",
+      detail: error.status === 401 || error.status === 403
+        ? "The connected wallet session could not be verified"
+        : "No wallet transaction is returned until the exact Router launch passes again",
+      checks: [
+        tokenCheck,
+        connectedWalletCheck,
+        {
+          id: "contracts",
+          label: "Classic V4 contracts",
+          status: "pass",
+          detail:
+            "Release evidence, runtime bytecode, immutable dependencies, fee bounds and the canonical locked liquidity range match",
+        },
+        {
+          id: "simulation",
+          label: "Simulation",
+          status: "blocked",
+          detail: "The signed Router authorization could not be completed",
+        },
+      ],
+    });
+  }
+  if (
+    authorization.predictedToken.toLowerCase() !== predictedToken.toLowerCase()
+    || authorization.predictedHook.toLowerCase()
+      !== release.addresses.feeHook.toLowerCase()
+  ) {
+    throw new Error("Classic V4 authorization prediction mismatch");
+  }
+  const launchBase = {
+    kind: "launch" as const,
+    chainId: 1 as const,
+    to: authorization.transaction.to,
+    data: authorization.transaction.calldata,
+    value: authorization.transaction.valueWei,
+  };
+
+  return response({
+    status: "ready",
+    mode: "classic-v3",
+    title: "Ready for wallet review",
+    detail: "The exact Classic launch passed the signed Router simulation",
+    checks: [
+      tokenCheck,
+      connectedWalletCheck,
+      {
+        id: "contracts",
+        label: "Classic V4 contracts",
+        status: "pass",
+        detail:
+          "Release evidence, runtime bytecode, immutable dependencies, fee bounds and the canonical locked liquidity range match",
+      },
+      {
+        id: "simulation",
+        label: "Simulation",
+        status: "pass",
+        detail: "The permit attached launchAndStampV1 transaction succeeds",
+      },
+    ],
+    transaction: {
+      ...launchBase,
+      gasLimit: authorization.transaction.gasLimit,
+    },
+    predictedToken,
+    predictedHook: release.addresses.feeHook,
+    releaseLauncher: release.addresses.launcher,
+    releaseManifestDigest: release.manifestDigest,
     planHash: buildPlanHash(account, launchBase),
   });
 }
@@ -2835,6 +3456,31 @@ export async function POST(request: NextRequest) {
       );
     }
     if (draft.launchModel === "classic-v3") {
+      if (draft.classicContractRelease === "classic-v4") {
+        const classicV4Release = getConfiguredClassicV4PublicRelease(
+          launchEnvironment,
+        );
+        if (connectedWalletCheck.status !== "pass") {
+          return await prepareClassicV4Launch(
+            request,
+            account,
+            draft,
+            connectedWalletCheck,
+            classicV4Release,
+            client,
+          );
+        }
+        return await withClassicLaunchRpcFailover((rpcClient) =>
+          prepareClassicV4Launch(
+            request,
+            account,
+            draft,
+            connectedWalletCheck,
+            classicV4Release,
+            rpcClient,
+          ),
+        );
+      }
       if (connectedWalletCheck.status !== "pass") {
         return await prepareClassicV3Launch(
           account,

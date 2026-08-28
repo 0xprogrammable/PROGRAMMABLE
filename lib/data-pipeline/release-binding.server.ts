@@ -7,14 +7,26 @@ type HexHash = `0x${string}`;
 
 const ZERO_SOURCE_COMMIT = "0".repeat(40);
 const ZERO_SHA256 = `0x${"00".repeat(32)}`;
+const ZERO_ADDRESS = `0x${"00".repeat(20)}`;
 
-const EXPECTED_MODEL_BY_RELEASE = Object.freeze({
+export const EXPECTED_MODEL_BY_RELEASE = Object.freeze({
   "classic-v2": "classic",
   "classic-v3": "classic",
+  "classic-v4": "classic",
   "stock-paired-v1": "stock-paired",
   "stock-paired-v2": "stock-paired",
   "stock-paired-v3": "stock-paired",
 } as const);
+
+const CLASSIC_V4_SOURCE_CONTRACTS = Object.freeze([
+  "ClassicV3RewardVaultFactory",
+  "ClassicV3VestingWalletFactory",
+  "ClassicV4Hook",
+  "ClassicV4Launcher",
+]);
+const CLASSIC_V4_DYNAMIC_CONTRACTS = Object.freeze([
+  "ClassicV3RewardVault",
+]);
 
 export type DataPipelineSourceBinding = {
   contractName: string;
@@ -114,7 +126,9 @@ function sourceCommit(value: unknown) {
 }
 
 function address(value: unknown): HexAddress {
-  return boundedString(value, /^0x[0-9a-f]{40}$/, 42) as HexAddress;
+  const parsed = boundedString(value, /^0x[0-9a-f]{40}$/, 42) as HexAddress;
+  if (parsed === ZERO_ADDRESS) return invalidBinding();
+  return parsed;
 }
 
 function stringList(value: unknown) {
@@ -124,6 +138,13 @@ function stringList(value: unknown) {
   );
   if (new Set(output).size !== output.length) return invalidBinding();
   return output;
+}
+
+function sameStringSet(actual: readonly string[], expected: readonly string[]) {
+  const sortedActual = [...actual].sort();
+  const sortedExpected = [...expected].sort();
+  return sortedActual.length === sortedExpected.length &&
+    sortedActual.every((value, index) => value === sortedExpected[index]);
 }
 
 export function parseDataPipelineReleaseBinding(
@@ -220,6 +241,7 @@ export function parseDataPipelineReleaseBinding(
       return invalidBinding();
     }
     const sourceContracts = stringList(release.sourceContracts);
+    const dynamicContracts = stringList(release.dynamicContracts);
     if (
       sourceContracts.length === 0 ||
       sourceContracts.some((contractName) => !sourceNames.has(contractName))
@@ -244,6 +266,15 @@ export function parseDataPipelineReleaseBinding(
     ) {
       return invalidBinding();
     }
+    if (
+      releaseVersion === "classic-v4" &&
+      (
+        !sameStringSet(sourceContracts, CLASSIC_V4_SOURCE_CONTRACTS) ||
+        !sameStringSet(dynamicContracts, CLASSIC_V4_DYNAMIC_CONTRACTS)
+      )
+    ) {
+      return invalidBinding();
+    }
     const activationBlock = positiveSafeInteger(release.activationBlock);
     const maximumSourceStart = sourceContracts.reduce((maximum, name) => {
       const source = sources.find((candidate) => candidate.contractName === name);
@@ -257,7 +288,7 @@ export function parseDataPipelineReleaseBinding(
       releaseVersion,
       activationBlock,
       sourceContracts,
-      dynamicContracts: stringList(release.dynamicContracts),
+      dynamicContracts,
     };
   });
   if (

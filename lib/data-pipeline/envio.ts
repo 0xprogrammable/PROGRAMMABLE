@@ -225,6 +225,7 @@ type ReviewedModel = "classic" | "stock-paired";
 type ReviewedReleaseVersion =
   | "classic-v2"
   | "classic-v3"
+  | "classic-v4"
   | "stock-paired-v1"
   | "stock-paired-v2"
   | "stock-paired-v3";
@@ -248,6 +249,7 @@ function reviewedReleaseVersion(value: string): ReviewedReleaseVersion {
     ![
       "classic-v2",
       "classic-v3",
+      "classic-v4",
       "stock-paired-v1",
       "stock-paired-v2",
       "stock-paired-v3",

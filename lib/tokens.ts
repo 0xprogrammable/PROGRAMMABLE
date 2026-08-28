@@ -772,6 +772,7 @@ export type LauncherToken = {
   launchModelVersion?:
     | "classic-v2"
     | "classic-v3"
+    | "classic-v4"
     | "stock-paired-v1"
     | "stock-paired-v2"
     | "stock-paired-v3"

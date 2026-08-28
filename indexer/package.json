@@ -14,11 +14,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "classic-v4:activate": "node scripts/activate-classic-v4.mjs",
     "release:identity": "node scripts/release-candidate.mjs identity",
     "release:snapshot": "node scripts/release-candidate.mjs snapshot",
     "release:audit": "node scripts/release-candidate.mjs audit"
   },
   "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "envio": "3.2.1",
     "viem": "2.55.10"
   },
