@@ -24,6 +24,7 @@ import {
   assertClassicV4SignerRuntimeAtBlock,
   assertClassicV4PreparedArmTime,
   assertClassicV4FreshRpcHead,
+  assertClassicV4ReceiptParentBinding,
   assertClassicV4SwapParentBinding,
   acquireClassicV4ExecutionLock,
   assertClassicV4ExecutionOutputPair,
@@ -50,6 +51,34 @@ import {
 const operator = "0x1111111111111111111111111111111111111111";
 const target = "0x2222222222222222222222222222222222222222";
 const digest = `0x${"11".repeat(32)}`;
+
+test("Classic V4 receipt blocks are explicitly linked to their fetched parent", () => {
+  const parent = {
+    number: 122,
+    hash: `0x${"aa".repeat(32)}`,
+  };
+  assert.equal(
+    assertClassicV4ReceiptParentBinding(
+      { number: 123, parentHash: parent.hash },
+      parent,
+    ),
+    true,
+  );
+  assert.throws(
+    () => assertClassicV4ReceiptParentBinding(
+      { number: 123, parentHash: `0x${"bb".repeat(32)}` },
+      parent,
+    ),
+    /not linked to its fetched parent block/u,
+  );
+  assert.throws(
+    () => assertClassicV4ReceiptParentBinding(
+      { number: 124, parentHash: parent.hash },
+      parent,
+    ),
+    /not linked to its fetched parent block/u,
+  );
+});
 
 test("Classic V4 receipt evidence accepts an equal or stricter parent quote bound", () => {
   const parentBlock = {

@@ -1228,6 +1228,7 @@ export function buildClassicV4SwapPrepared({
   quoteBlockNumber,
   quoteBlockHash,
   quoteBlockTimestamp,
+  enforceHardMaximum = true,
 }) {
   const swap = classicV4SwapIdentity(action);
   const fixture = canaryPlan.swapFixture[action];
@@ -1238,7 +1239,7 @@ export function buildClassicV4SwapPrepared({
     { positive: true },
   );
   const bound = classicV4QuoteBound(swap.exactness, quotedAmount);
-  if (!exactInput) {
+  if (!exactInput && enforceHardMaximum) {
     assert(
       bound <= decimal(fixture.hardMaximumAmountIn, `${action} hard maximum`, {
         positive: true,
