@@ -124,7 +124,7 @@ function validActivationFixture(binding: { sources: FixtureBindingSource[] }) {
             address: name === "feeHook" ? feeHook : launcher,
             deploymentBlock: deploymentBlocks[name],
             deploymentTransaction: deploymentTransactions[name],
-            status: "exact-match",
+            status: "match",
           },
         ]),
       ),

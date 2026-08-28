@@ -455,7 +455,7 @@ export function buildClassicV4ActivationPlan(
         evidence?.deploymentBlock,
         `${name} verified deployment block`,
       ) !== block ||
-      evidence?.status !== "exact-match" ||
+      !["match", "exact-match"].includes(evidence?.status) ||
       exactBytes32(
         evidence?.deploymentTransaction,
         `${name} verified deployment transaction`,
@@ -465,7 +465,7 @@ export function buildClassicV4ActivationPlan(
           `${name} deployment transaction`,
         )
     ) {
-      fail(`Classic V4 ${name} source provenance is not an exact match`);
+      fail(`Classic V4 ${name} source provenance is not a verified match`);
     }
   }
 
