@@ -1252,6 +1252,33 @@ describe("Classic V4 release and launch preflight", () => {
     const parsedIndexerRelease = parseClassicV4PublicRelease(manifest, binding);
     expect(isClassicV4PublicActionRelease(parsedIndexerRelease)).toBe(false);
 
+    const sourcifyMatch = structuredClone(manifest);
+    for (const contract of Object.values(
+      sourcifyMatch.sourceVerification.contracts,
+    )) {
+      contract.status = "match";
+      contract.providers[0].status = "match";
+    }
+    sourcifyMatch.sourceVerification.evidenceDigest = digest(
+      sourcifyMatch.sourceVerification,
+      "evidenceDigest",
+      CLASSIC_V4_DIGEST_DOMAINS.sourceEvidence,
+    );
+    sourcifyMatch.lifecycleEvidence.sourceEvidenceDigest =
+      sourcifyMatch.sourceVerification.evidenceDigest;
+    sourcifyMatch.lifecycleEvidence.evidenceDigest = digest(
+      sourcifyMatch.lifecycleEvidence,
+      "evidenceDigest",
+      CLASSIC_V4_DIGEST_DOMAINS.lifecycleEvidence,
+    );
+    sourcifyMatch.manifestDigest = digest(sourcifyMatch, "manifestDigest");
+    expect(
+      parseClassicV4PublicRelease(
+        sourcifyMatch,
+        trustedBindingFor(sourcifyMatch),
+      ),
+    ).toMatchObject({ releaseStatus: "indexer-activated" });
+
     const directLauncher = structuredClone(manifest);
     Object.assign(directLauncher.lifecycleEvidence.actions.launch, {
       to: launcher,

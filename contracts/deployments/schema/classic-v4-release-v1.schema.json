@@ -368,7 +368,7 @@
       "required": ["name", "status", "url"],
       "properties": {
         "name": { "const": "Sourcify" },
-        "status": { "const": "exact-match" },
+        "status": { "enum": ["match", "exact-match"] },
         "url": { "type": "string", "format": "uri" }
       }
     },
@@ -405,7 +405,7 @@
         },
         "deploymentTransaction": { "$ref": "#/$defs/bytes32" },
         "deploymentBlock": { "$ref": "#/$defs/blockNumber" },
-        "status": { "const": "exact-match" },
+        "status": { "enum": ["match", "exact-match"] },
         "providers": {
           "oneOf": [
             {

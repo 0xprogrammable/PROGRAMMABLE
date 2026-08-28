@@ -9,7 +9,7 @@ Classic V4 is an additive four-contract release:
 
 The existing Classic V3 authority, reward-vault factory, initial-buy custody factory, launch policy and permanently locked position-forwarder factory are reused only at their exact Mainnet addresses, runtime hashes and immutable bindings.
 
-There is intentionally no checked-in `contracts/deployments/mainnet-classic-v4.json` yet. That canonical file may be created only from finalized deployment receipts, exact source verification and a complete lifecycle canary. A local build or simulation is not a deployment or live proof.
+There is intentionally no checked-in `contracts/deployments/mainnet-classic-v4.json` yet. That canonical file may be created only from finalized deployment receipts, provider-backed source verification with exact sealed source closure, and a complete lifecycle canary. A local build or simulation is not a deployment or live proof.
 
 ## Local gate
 
@@ -96,7 +96,7 @@ All four new addresses must have a public source match. Exact local runtime-temp
 - exact address, contract name and fully qualified source name;
 - exact ABI-encoded constructor arguments from the plan;
 - deployment transaction and block; and
-- provider name, exact-match status and public URL.
+- provider name, truthful match tier and public URL.
 
 After an owner has separately published the exact sources, capture the public matches without changing provider state:
 
@@ -106,7 +106,7 @@ npm run contracts:classic-v4:mainnet:sources:verify -- \
   --deployment-evidence </absolute/classic-v4-deployment-evidence.json>
 ```
 
-Sourcify is required and the v2 lookup explicitly requests `fields=sources`; all returned match fields must be `exact_match`. Its exact source-path set and every returned source byte string must hash to the sealed artifact metadata closure. A default/minimal payload without `sources` fails closed. If `ETHERSCAN_API_KEY` is present, Etherscan must return Solidity Standard JSON with the same exact path/content hashes; compiler settings, fully qualified identity and constructor arguments are also checked, and a non-empty `SimilarMatch` is rejected. A provider label or non-empty source body alone is insufficient. The key is never printed. Saving evidence remains an explicit external-path `--write --output ... --wallet ...` operation. The tool does not submit source code.
+Sourcify is required and the v2 lookup explicitly requests `fields=sources`. Each of `match`, `creationMatch` and `runtimeMatch` must be either `match` or `exact_match`; any missing or different value fails closed. The provider and contract status are recorded as `exact-match` only when all three fields are `exact_match`, otherwise as `match`. The release build intentionally uses `--no-metadata`, so Sourcify can truthfully report `match` even though the exact source-path set and every returned source byte string must still hash to the sealed artifact metadata closure. A default/minimal payload without `sources` fails closed. If `ETHERSCAN_API_KEY` is present, Etherscan must return Solidity Standard JSON with the same exact path/content hashes; compiler settings, fully qualified identity and constructor arguments are also checked, and a non-empty `SimilarMatch` is rejected. A provider label or non-empty source body alone is insufficient. The key is never printed. Saving evidence remains an explicit external-path `--write --output ... --wallet ...` operation. The tool does not submit source code.
 
 The required object is `$defs.sourceEvidence` in `contracts/deployments/schema/classic-v4-release-v1.schema.json`. Publishing source to a provider is an external action and is not performed by this repository tooling.
 
@@ -389,7 +389,7 @@ Local completion does not perform or prove:
 
 - wallet approval, signing, gas spend or deployment;
 - Mainnet finality before actual receipts exist;
-- Etherscan/Sourcify publication or exact-match status;
+- Etherscan/Sourcify publication or accepted match status;
 - funded Mainnet lifecycle actions and claims;
 - Uniswap Labs hook routing allowlisting;
 - indexer activation and canary parity; or

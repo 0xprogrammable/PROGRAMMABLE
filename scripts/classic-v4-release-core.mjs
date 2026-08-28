@@ -1400,8 +1400,9 @@ export function validateClassicV4SourceEvidence(plan, deployment, evidence) {
     )
       ? ["Sourcify", "Etherscan"]
       : ["Sourcify"];
+    const acceptedSourceStatuses = ["match", "exact-match"];
     assert(
-      source.status === "exact-match" &&
+      acceptedSourceStatuses.includes(source.status) &&
         Array.isArray(source.providers) &&
         providerNames.length === expectedProviderNames.length &&
         providerNames.every(
@@ -1416,17 +1417,25 @@ export function validateClassicV4SourceEvidence(plan, deployment, evidence) {
               `${name} source provider`,
             );
             return (
-              provider.status === "exact-match" &&
-            (provider.name === "Sourcify" || provider.name === "Etherscan") &&
-            normalizeHex(provider.url) ===
-              normalizeHex(
-                provider.name === "Sourcify"
-                  ? `https://sourcify.dev/server/v2/contract/1/${deployed.address}`
-                  : `https://etherscan.io/address/${deployed.address}#code`,
-              )
+              (provider.name === "Sourcify"
+                ? acceptedSourceStatuses.includes(provider.status)
+                : provider.name === "Etherscan" &&
+                  provider.status === "exact-match") &&
+              normalizeHex(provider.url) ===
+                normalizeHex(
+                  provider.name === "Sourcify"
+                    ? `https://sourcify.dev/server/v2/contract/1/${deployed.address}`
+                    : `https://etherscan.io/address/${deployed.address}#code`,
+                )
             );
           },
-        ),
+        ) &&
+        source.status ===
+          (source.providers.every(
+            (provider) => provider.status === "exact-match",
+          )
+            ? "exact-match"
+            : "match"),
       `${name} source verification is incomplete`,
     );
   }

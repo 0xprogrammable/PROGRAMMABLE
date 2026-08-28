@@ -1449,7 +1449,7 @@ function parseClassicV4Release(
       contract.fqcn.length === 0 ||
       typeof contract.encodedConstructorArguments !== "string" ||
       !/^0x(?:[0-9a-fA-F]{2})*$/.test(contract.encodedConstructorArguments) ||
-      contract.status !== "exact-match" ||
+      !["match", "exact-match"].includes(String(contract.status)) ||
       String(contract.address).toLowerCase() !==
         String(addresses[name]).toLowerCase() ||
       String(contract.deploymentTransaction).toLowerCase() !==
@@ -1457,13 +1457,14 @@ function parseClassicV4Release(
       contract.deploymentBlock !== deploymentBlocks[name] ||
       !Array.isArray(contract.providers) ||
       contract.providers.length < 1 ||
+      contract.status !== record(contract.providers[0])?.status ||
       !contract.providers.every((value) => {
         const provider = exactKeys(value, ["name", "status", "url"]);
         if (
           !provider ||
           typeof provider.name !== "string" ||
           provider.name.length === 0 ||
-          provider.status !== "exact-match" ||
+          !["match", "exact-match"].includes(String(provider.status)) ||
           typeof provider.url !== "string"
         ) {
           return false;

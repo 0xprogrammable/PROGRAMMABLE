@@ -179,23 +179,35 @@ export async function captureSourcify(address, artifact, fetchJsonClient) {
   const lookupUrl = new URL(providerUrl);
   lookupUrl.searchParams.set("fields", "sources");
   const payload = await fetchJsonClient(lookupUrl);
-  assertExactSourcifyMatch(payload, address, artifact);
+  const status = assertSourcifyMatch(payload, address, artifact);
   return {
     name: "Sourcify",
-    status: "exact-match",
+    status,
     url: providerUrl.toString(),
   };
 }
 
-export function assertExactSourcifyMatch(payload, address, artifact) {
+export function assertSourcifyMatch(payload, address, artifact) {
+  const matchFields = [
+    payload?.match,
+    payload?.creationMatch,
+    payload?.runtimeMatch,
+  ];
   if (
-    payload?.match !== "exact_match" ||
-    payload?.creationMatch !== "exact_match" ||
-    payload?.runtimeMatch !== "exact_match"
+    !matchFields.every(
+      (status) => status === "match" || status === "exact_match",
+    )
   ) {
-    fail(`${address} is not a Sourcify exact match`);
+    fail(`${address} is not a complete Sourcify match`);
   }
-  assertExactProviderSourceClosure(payload.sources, artifact, `${address} Sourcify`);
+  assertExactProviderSourceClosure(
+    payload.sources,
+    artifact,
+    `${address} Sourcify`,
+  );
+  return matchFields.every((status) => status === "exact_match")
+    ? "exact-match"
+    : "match";
 }
 
 async function captureEtherscan(
@@ -341,6 +353,11 @@ export async function verifyClassicV4SourceProviders({
         ),
       ])
     ).filter(Boolean);
+    const status = providers.every(
+      (provider) => provider.status === "exact-match",
+    )
+      ? "exact-match"
+      : "match";
     contracts[name] = {
       address: deployed.address,
       contractName: target.contractName,
@@ -348,7 +365,7 @@ export async function verifyClassicV4SourceProviders({
       encodedConstructorArguments: plan.constructorArguments[name],
       deploymentTransaction: deployed.transactionHash,
       deploymentBlock: deployed.blockNumber,
-      status: "exact-match",
+      status,
       providers,
     };
   }
