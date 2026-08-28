@@ -41,6 +41,8 @@ const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
 const contractsRoot = path.join(repositoryRoot, "contracts");
 const SOURCE_EVIDENCE_DOMAIN =
   "programmable.classic-v4-launcher-upgrade.source-evidence.v1";
+const SOURCE_EVIDENCE_REVIEW_DOMAIN =
+  "programmable.classic-v4-launcher-upgrade.source-evidence-review.v1";
 const PUBLICATION_INPUT_DOMAIN =
   "programmable.classic-v4-launcher-upgrade.publication-input.v1";
 const PUBLICATION_BUNDLE_DOMAIN =
@@ -453,6 +455,23 @@ export async function verifyClassicV4LauncherSourceProviders({
   };
 }
 
+export function computeClassicV4LauncherSourceEvidenceReviewDigest(evidence) {
+  const { evidenceDigest, ...unsignedEvidence } = evidence ?? {};
+  assertIsoTimestamp(
+    unsignedEvidence.checkedAt,
+    "source verification checkedAt",
+  );
+  assertBytes32(evidenceDigest, "source verification evidence digest");
+  assert(
+    normalizeHex(evidenceDigest) ===
+      normalizeHex(digestJson(unsignedEvidence, SOURCE_EVIDENCE_DOMAIN)),
+    "Classic V4 launcher source evidence digest differs",
+  );
+  const reviewedEvidence = { ...unsignedEvidence };
+  delete reviewedEvidence.checkedAt;
+  return digestJson(reviewedEvidence, SOURCE_EVIDENCE_REVIEW_DOMAIN);
+}
+
 function parseArguments(argv) {
   const forbidden = argv.find(
     (argument) =>
@@ -476,6 +495,7 @@ function parseArguments(argv) {
     output: null,
     wallet: null,
     acknowledgement: null,
+    reviewAcknowledgement: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -501,6 +521,7 @@ function parseArguments(argv) {
         "--output",
         "--wallet",
         "--acknowledge-evidence-digest",
+        "--acknowledge-review-digest",
       ].includes(key)
     ) {
       fail(`Unknown argument: ${key}`);
@@ -514,6 +535,8 @@ function parseArguments(argv) {
     if (key === "--wallet") options.wallet = value;
     if (key === "--acknowledge-evidence-digest")
       options.acknowledgement = value;
+    if (key === "--acknowledge-review-digest")
+      options.reviewAcknowledgement = value;
   }
   for (const [label, value] of [
     ["plan", options.plan],
@@ -526,6 +549,9 @@ function parseArguments(argv) {
   if (options.mode !== "verify" && options.write) {
     fail("--write is only valid in source verification mode");
   }
+  if (options.acknowledgement && options.reviewAcknowledgement) {
+    fail("Choose one source evidence acknowledgement digest");
+  }
   return options;
 }
 
@@ -537,7 +563,10 @@ async function readJson(file, label) {
   }
 }
 
-async function writeAcknowledgedEvidence(evidence, options) {
+export async function writeAcknowledgedClassicV4LauncherSourceEvidence(
+  evidence,
+  options,
+) {
   if (!options.output || !path.isAbsolute(options.output)) {
     fail("--write requires an absolute --output path");
   }
@@ -548,12 +577,18 @@ async function writeAcknowledgedEvidence(evidence, options) {
   ) {
     fail("--write requires the explicit dev wallet");
   }
-  if (
-    normalizeHex(options.acknowledgement) !==
-    normalizeHex(evidence.evidenceDigest)
-  ) {
+  const reviewDigest =
+    computeClassicV4LauncherSourceEvidenceReviewDigest(evidence);
+  const exactEvidenceAcknowledged =
+    options.acknowledgement &&
+    normalizeHex(options.acknowledgement) ===
+      normalizeHex(evidence.evidenceDigest);
+  const reviewedEvidenceAcknowledged =
+    options.reviewAcknowledgement &&
+    normalizeHex(options.reviewAcknowledgement) === normalizeHex(reviewDigest);
+  if (!exactEvidenceAcknowledged && !reviewedEvidenceAcknowledged) {
     fail(
-      "--write requires --acknowledge-evidence-digest from a fresh verification run",
+      "--write requires the current --acknowledge-evidence-digest or the stable --acknowledge-review-digest from a reviewed verification run",
     );
   }
   const output = path.resolve(options.output);
@@ -797,7 +832,20 @@ export async function main(argv = process.argv.slice(2)) {
     finalityEvidence,
     artifact,
   });
-  if (options.write) await writeAcknowledgedEvidence(evidence, options);
+  const reviewDigest =
+    computeClassicV4LauncherSourceEvidenceReviewDigest(evidence);
+  if (options.write) {
+    await writeAcknowledgedClassicV4LauncherSourceEvidence(evidence, options);
+  }
+  process.stderr.write(
+    options.write
+      ? "Source evidence written after a fresh provider readback; review digest " +
+          reviewDigest +
+          "\n"
+      : "Stable review digest " +
+          reviewDigest +
+          "; use --acknowledge-review-digest only after reviewing this provider evidence. The write run performs another fresh readback.\n",
+  );
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
 }
 

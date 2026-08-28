@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -15,9 +17,11 @@ import {
 import {
   buildClassicV4LauncherPublicationBundle,
   buildClassicV4LauncherStandardJsonInput,
+  computeClassicV4LauncherSourceEvidenceReviewDigest,
   submitSources,
   validateClassicV4LauncherFinalityEvidence,
   verifyClassicV4LauncherSourceProviders,
+  writeAcknowledgedClassicV4LauncherSourceEvidence,
 } from "../verify-classic-v4-launcher-upgrade-sources.mjs";
 import {
   compileClassicV4LauncherUpgradeFreshArtifact,
@@ -234,6 +238,82 @@ test("requires Sourcify and emits deterministic launcher-only evidence", async (
   assert.equal(Object.hasOwn(first, "contracts"), false);
   assert.match(first.evidenceDigest, /^0x[0-9a-f]{64}$/);
   assert(calls.every((url) => url.endsWith("?fields=sources")));
+});
+
+test("review digest survives only checkedAt refresh and writes fresh evidence once", async (t) => {
+  const values = fixture();
+  const calls = [];
+  const verificationInput = {
+    ...values,
+    fetchJsonClient: providerFetch(values, calls),
+    etherscanApiKey: null,
+  };
+  const reviewed = await verifyClassicV4LauncherSourceProviders({
+    ...verificationInput,
+    checkedAt: "2027-01-15T08:00:00.000Z",
+  });
+  const fresh = await verifyClassicV4LauncherSourceProviders({
+    ...verificationInput,
+    checkedAt: "2027-01-15T08:00:01.000Z",
+  });
+  const reviewDigest =
+    computeClassicV4LauncherSourceEvidenceReviewDigest(reviewed);
+
+  assert.notEqual(reviewed.evidenceDigest, fresh.evidenceDigest);
+  assert.equal(
+    computeClassicV4LauncherSourceEvidenceReviewDigest(fresh),
+    reviewDigest,
+  );
+  assert.equal(calls.length, 2, "both captures perform a provider readback");
+
+  const directory = await realpath(
+    await mkdtemp(
+      path.join(tmpdir(), "classic-v4-launcher-source-evidence-"),
+    ),
+  );
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+  const output = path.join(directory, "source-evidence.json");
+  const options = {
+    output,
+    wallet: CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER,
+    acknowledgement: null,
+    reviewAcknowledgement: reviewDigest,
+  };
+  await writeAcknowledgedClassicV4LauncherSourceEvidence(fresh, options);
+
+  assert.deepEqual(JSON.parse(await readFile(output, "utf8")), fresh);
+  assert.equal((await stat(output)).mode & 0o777, 0o600);
+  await assert.rejects(
+    writeAcknowledgedClassicV4LauncherSourceEvidence(fresh, options),
+    /EEXIST/,
+  );
+});
+
+test("review digest rejects material provider drift", async () => {
+  const reviewedValues = fixture();
+  const reviewed = await verifyClassicV4LauncherSourceProviders({
+    ...reviewedValues,
+    checkedAt: "2027-01-15T08:00:00.000Z",
+    fetchJsonClient: providerFetch(reviewedValues, []),
+    etherscanApiKey: null,
+  });
+  const freshValues = fixture();
+  freshValues.sourcify.match = "exact_match";
+  freshValues.sourcify.creationMatch = "exact_match";
+  freshValues.sourcify.runtimeMatch = "exact_match";
+  const fresh = await verifyClassicV4LauncherSourceProviders({
+    ...freshValues,
+    checkedAt: "2027-01-15T08:00:01.000Z",
+    fetchJsonClient: providerFetch(freshValues, []),
+    etherscanApiKey: null,
+  });
+
+  assert.notEqual(
+    computeClassicV4LauncherSourceEvidenceReviewDigest(reviewed),
+    computeClassicV4LauncherSourceEvidenceReviewDigest(fresh),
+  );
 });
 
 test("uses Etherscan only when a key exists and never records it", async () => {
