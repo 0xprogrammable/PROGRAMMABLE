@@ -1175,13 +1175,15 @@ function validRichLifecycleEvidence(input: {
   const observations = record(lifecycle.observations);
   const exclusive = observations && record(observations.exclusiveHookActivity);
   const approvals = observations && record(observations.sellApprovals);
+  const nativeAccrualEvents = exclusive?.nativeAccrualEvents;
   if (
     !exclusive ||
     !approvals ||
     exclusive.fromBlock !== record(actions.launch)?.blockNumber ||
     exclusive.toBlock !== lifecycle.verificationBlock ||
-    !Number.isSafeInteger(exclusive.nativeAccrualEvents) ||
-    exclusive.nativeAccrualEvents < 5 ||
+    typeof nativeAccrualEvents !== "number" ||
+    !Number.isSafeInteger(nativeAccrualEvents) ||
+    nativeAccrualEvents < 5 ||
     exclusive.creatorClaimEvents !== 1 ||
     exclusive.launcherClaimEvents !== 1
   ) {
