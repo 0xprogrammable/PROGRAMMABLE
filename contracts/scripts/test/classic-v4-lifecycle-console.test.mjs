@@ -737,6 +737,21 @@ test("Classic V4 console CLI is dry by default and rejects signing material", ()
   ]);
   assert.equal(parsed.write, false);
   assert.equal(parsed.journalOutput, null);
+  assert.equal(parsed.reviewedReleaseWorktree, null);
+  const reviewed = parseClassicV4LifecycleConsoleArguments([
+    "--plan", "/tmp/plan.json",
+    "--deployment-evidence", "/tmp/deployment.json",
+    "--source-evidence", "/tmp/source.json",
+    "--canary-plan", "/tmp/canary.json",
+    "--reviewed-release-worktree", "/tmp/reviewed-release",
+    "--rpc-a", "https://rpc-a.example",
+    "--rpc-b", "https://rpc-b.example",
+    "--wallet", operator,
+  ]);
+  assert.equal(
+    reviewed.reviewedReleaseWorktree,
+    "/tmp/reviewed-release",
+  );
   assert.throws(
     () => parseClassicV4LifecycleConsoleArguments(["--private-key", hash("1")]),
     /forbidden/u,
@@ -746,5 +761,18 @@ test("Classic V4 console CLI is dry by default and rejects signing material", ()
       "--plan", "relative.json",
     ]),
     /absolute/u,
+  );
+  assert.throws(
+    () => parseClassicV4LifecycleConsoleArguments([
+      "--plan", "/tmp/plan.json",
+      "--deployment-evidence", "/tmp/deployment.json",
+      "--source-evidence", "/tmp/source.json",
+      "--canary-plan", "/tmp/canary.json",
+      "--reviewed-release-worktree", "relative/release",
+      "--rpc-a", "https://rpc-a.example",
+      "--rpc-b", "https://rpc-b.example",
+      "--wallet", operator,
+    ]),
+    /reviewed release worktree path must be absolute/u,
   );
 });

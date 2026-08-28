@@ -88,6 +88,14 @@ const MAXIMUM_CLOCK_LEAD_SECONDS = 15n;
 const MAXIMUM_PREPARATION_ARM_DELAY_SECONDS = 300n;
 const PREPARATION_FINALITY_OFFSET =
   BigInt(CLASSIC_V4_FINALITY_CONFIRMATIONS - 1);
+const EIP_7702_DELEGATION_PREFIX = "0xef0100";
+const EIP_7702_DELEGATION_PATTERN = /^0xef0100[0-9a-f]{40}$/u;
+const EMPTY_ADDRESS = "0x0000000000000000000000000000000000000000";
+export const CLASSIC_V4_REVIEWED_EIP_7702_SIGNER_BINDING = Object.freeze({
+  delegate: "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b",
+  delegateRuntimeHash:
+    "0x0b77e469f5603ed1e9ff0e7ee56238b61a8cf7cb3185b33e53e2eeaad50109ab",
+});
 const classicV4PinnedOutputParents = new Map();
 
 function fail(message) {
@@ -188,6 +196,7 @@ export function parseClassicV4LifecycleConsoleArguments(argv) {
     deploymentEvidence: null,
     sourceEvidence: null,
     canaryPlan: null,
+    reviewedReleaseWorktree: null,
     rpcA: process.env.CLASSIC_V4_CANARY_RPC_A ?? null,
     rpcB: process.env.CLASSIC_V4_CANARY_RPC_B ?? null,
     rpcAFromArgument: false,
@@ -213,6 +222,7 @@ export function parseClassicV4LifecycleConsoleArguments(argv) {
       "--deployment-evidence",
       "--source-evidence",
       "--canary-plan",
+      "--reviewed-release-worktree",
       "--rpc-a",
       "--rpc-b",
       "--wallet",
@@ -228,6 +238,9 @@ export function parseClassicV4LifecycleConsoleArguments(argv) {
     if (key === "--deployment-evidence") parsed.deploymentEvidence = value;
     if (key === "--source-evidence") parsed.sourceEvidence = value;
     if (key === "--canary-plan") parsed.canaryPlan = value;
+    if (key === "--reviewed-release-worktree") {
+      parsed.reviewedReleaseWorktree = value;
+    }
     if (key === "--rpc-a") {
       parsed.rpcA = value;
       parsed.rpcAFromArgument = true;
@@ -246,6 +259,10 @@ export function parseClassicV4LifecycleConsoleArguments(argv) {
     if (!parsed[key]) fail(`${key} is required`);
     if (!path.isAbsolute(parsed[key])) fail(`${key} path must be absolute`);
   }
+  if (
+    parsed.reviewedReleaseWorktree !== null &&
+    !path.isAbsolute(parsed.reviewedReleaseWorktree)
+  ) fail("reviewed release worktree path must be absolute");
   if (!parsed.rpcA || !parsed.rpcB) fail("--rpc-a and --rpc-b are required");
   const rpcA = parseClassicV4RpcOrigin(parsed.rpcA, "rpc-a");
   const rpcB = parseClassicV4RpcOrigin(parsed.rpcB, "rpc-b");
@@ -1284,12 +1301,71 @@ async function readContractBoth(urls, block, address, abi, functionName, args = 
   return decodeFunctionResult({ abi, functionName, data: result });
 }
 
-async function assertEoaAtBlock(urls, account, block, label) {
+export function classifyClassicV4SignerRuntime(code, label = "Required wallet") {
+  if (code === "0x") return Object.freeze({ kind: "eoa", code });
+  if (typeof code !== "string") {
+    fail(`${label} signer runtime is invalid`);
+  }
+  const normalized = code.toLowerCase();
+  if (!EIP_7702_DELEGATION_PATTERN.test(normalized)) {
+    fail(
+      `${label} signer runtime is neither empty nor a canonical EIP-7702 delegation designator`,
+    );
+  }
+  const delegate = `0x${normalized.slice(EIP_7702_DELEGATION_PREFIX.length)}`;
+  if (delegate === EMPTY_ADDRESS) fail(`${label} EIP-7702 delegate is zero`);
+  return Object.freeze({
+    kind: "eip7702",
+    code: normalized,
+    delegate,
+  });
+}
+
+export async function assertClassicV4SignerRuntimeAtBlock(
+  urls,
+  account,
+  block,
+  label,
+  reviewedDelegation = CLASSIC_V4_REVIEWED_EIP_7702_SIGNER_BINDING,
+) {
   const codes = await Promise.all(
     urls.map((endpoint) => rpc(endpoint, "eth_getCode", [account, block.tag])),
   );
   sameRpcValue(codes[0], codes[1], `${label} signer runtime`);
-  if (codes[0] !== "0x") fail(`${label} signer must remain an EOA`);
+  const signer = classifyClassicV4SignerRuntime(codes[0], label);
+  if (signer.kind === "eoa") return signer;
+  if (signer.delegate !== reviewedDelegation.delegate.toLowerCase()) {
+    fail(`${label} EIP-7702 delegate is not the reviewed Classic V4 signer delegate`);
+  }
+
+  const delegateCodes = await Promise.all(
+    urls.map((endpoint) => rpc(
+      endpoint,
+      "eth_getCode",
+      [signer.delegate, block.tag],
+    )),
+  );
+  sameRpcValue(
+    delegateCodes[0],
+    delegateCodes[1],
+    `${label} EIP-7702 delegate runtime`,
+  );
+  if (
+    typeof delegateCodes[0] !== "string" ||
+    !/^0x(?:[0-9a-f]{2})+$/iu.test(delegateCodes[0])
+  ) fail(`${label} EIP-7702 delegate has no valid runtime code`);
+  const delegateRuntime = delegateCodes[0].toLowerCase();
+  if (EIP_7702_DELEGATION_PATTERN.test(delegateRuntime)) {
+    fail(`${label} EIP-7702 delegate cannot itself be delegated`);
+  }
+  const delegateRuntimeHash = keccak256(delegateRuntime);
+  if (
+    delegateRuntimeHash !== reviewedDelegation.delegateRuntimeHash.toLowerCase()
+  ) fail(`${label} EIP-7702 delegate runtime differs from the reviewed hash`);
+  return Object.freeze({
+    ...signer,
+    delegateRuntimeHash,
+  });
 }
 
 async function exactNonce(urls, account, historicalTag) {
@@ -1328,7 +1404,7 @@ async function feeEnvelope(urls, block) {
 }
 
 async function enrichPrepared(canaryPlan, urls, block, prepared) {
-  const [nonce, fees, estimates, balances, accountCodes] = await Promise.all([
+  const [nonce, fees, estimates, balances] = await Promise.all([
     exactNonce(urls, prepared.requiredAccount, block.tag),
     feeEnvelope(urls, block),
     Promise.all(
@@ -1337,8 +1413,11 @@ async function enrichPrepared(canaryPlan, urls, block, prepared) {
     Promise.all(
       urls.map((endpoint) => rpc(endpoint, "eth_getBalance", [prepared.requiredAccount, block.tag])),
     ),
-    Promise.all(
-      urls.map((endpoint) => rpc(endpoint, "eth_getCode", [prepared.requiredAccount, block.tag])),
+    assertClassicV4SignerRuntimeAtBlock(
+      urls,
+      prepared.requiredAccount,
+      block,
+      "required wallet",
     ),
   ]);
   const estimateA = BigInt(estimates[0]);
@@ -1357,10 +1436,6 @@ async function enrichPrepared(canaryPlan, urls, block, prepared) {
   }
   if (BigInt(balances[0]) !== BigInt(balances[1])) {
     fail("Independent RPCs disagree on the required wallet balance");
-  }
-  sameRpcValue(accountCodes[0], accountCodes[1], "required wallet runtime code");
-  if (accountCodes[0] !== "0x") {
-    fail("The lifecycle verifier requires the exact signer to be an EOA");
   }
   const sealed = sealClassicV4PreparedAction(canaryPlan, prepared, {
     nonce,
@@ -1660,7 +1735,7 @@ async function validatePersistedPreparedBinding(
     maxFee !== block.baseFeePerGas * 2n + priority ||
     maxFee > MAX_FEE_WEI
   ) fail(`${prepared.action} persisted gas envelope differs`);
-  await assertEoaAtBlock(
+  await assertClassicV4SignerRuntimeAtBlock(
     urls,
     prepared.requiredAccount,
     block,
@@ -1859,15 +1934,25 @@ async function confirmSubmitted(canaryPlan, identity, journal, action, record, u
     blockNumber - 1n,
     `${action} parent block`,
   );
-  await Promise.all([
-    assertEoaAtBlock(urls, record.prepared.requiredAccount, parent, `${action} parent`),
-    assertEoaAtBlock(
+  const [parentSigner, receiptSigner] = await Promise.all([
+    assertClassicV4SignerRuntimeAtBlock(
+      urls,
+      record.prepared.requiredAccount,
+      parent,
+      `${action} parent`,
+    ),
+    assertClassicV4SignerRuntimeAtBlock(
       urls,
       record.prepared.requiredAccount,
       { tag: blockTag(blockNumber) },
       `${action} receipt`,
     ),
   ]);
+  sameRpcValue(
+    parentSigner,
+    receiptSigner,
+    `${action} signer binding across its receipt`,
+  );
   const launchIdentity = action === "launch"
     ? await realizedLaunchIdentityAtReceipt(
         canaryPlan,
@@ -1985,7 +2070,7 @@ async function validatePersistedJournalBindings(
       record.prepared.request,
       { wait: record.status === "submitted" },
     );
-    await assertEoaAtBlock(
+    const currentSigner = await assertClassicV4SignerRuntimeAtBlock(
       urls,
       record.prepared.requiredAccount,
       freshHead,
@@ -2067,20 +2152,30 @@ async function validatePersistedJournalBindings(
         BigInt(record.blockNumber) - 1n,
         `${record.prepared.action} confirmed parent block`,
       );
-      await Promise.all([
-        assertEoaAtBlock(
+      const [parentSigner, receiptSigner] = await Promise.all([
+        assertClassicV4SignerRuntimeAtBlock(
           urls,
           record.prepared.requiredAccount,
           parent,
           `${record.prepared.action} confirmed parent`,
         ),
-        assertEoaAtBlock(
+        assertClassicV4SignerRuntimeAtBlock(
           urls,
           record.prepared.requiredAccount,
           receiptBlock,
           `${record.prepared.action} confirmed receipt`,
         ),
       ]);
+      sameRpcValue(
+        parentSigner,
+        receiptSigner,
+        `${record.prepared.action} signer binding across its confirmed receipt`,
+      );
+      sameRpcValue(
+        receiptSigner,
+        currentSigner,
+        `${record.prepared.action} signer binding since confirmation`,
+      );
       if (
       record.prepared.requiredAction === record.prepared.action &&
       ["buyExactInput", "buyExactOutput", "sellExactInput", "sellExactOutput"]
@@ -2205,7 +2300,7 @@ async function revalidatePrepared(canaryPlan, identity, journal, urls, digest) {
     currentClassicV4ArmTime(journal, prepared),
     `${prepared.action} revalidation`,
   );
-  await assertEoaAtBlock(
+  await assertClassicV4SignerRuntimeAtBlock(
     urls,
     prepared.requiredAccount,
     block,
@@ -2542,7 +2637,9 @@ async function loadContext(options) {
     readJson(options.sourceEvidence, "source evidence"),
     readJson(options.canaryPlan, "canary plan"),
   ]);
-  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan, {
+    reviewedReleaseWorktree: options.reviewedReleaseWorktree,
+  });
   const { artifacts } = artifactContext;
   const releaseValidation = resolveClassicV4ReleaseValidation(plan);
   releaseValidation.validateArtifacts(plan, artifacts, artifactContext);

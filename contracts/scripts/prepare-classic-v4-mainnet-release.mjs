@@ -187,6 +187,7 @@ export function verifyClassicV4SourcePins({
   localDirectories,
   dependencyRoots,
   dependencyGitStates,
+  contractsDirectory = contractsRoot,
 }) {
   assertExactKeys(sourcePins, ["schemaVersion", "dependencies"], "source pins");
   if (sourcePins.schemaVersion !== 1 || !Array.isArray(sourcePins.dependencies)) {
@@ -247,7 +248,7 @@ export function verifyClassicV4SourcePins({
     );
     const gitState = dependencyGitStates?.[root];
     if (
-      gitState?.topLevel !== path.join(contractsRoot, "lib", root) ||
+      gitState?.topLevel !== path.join(contractsDirectory, "lib", root) ||
       gitState?.head !== pin.commit ||
       gitState?.clean !== true ||
       gitState?.remoteUrl !== pin.repository
