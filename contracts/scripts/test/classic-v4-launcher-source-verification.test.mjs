@@ -41,6 +41,7 @@ import {
   assertExactEtherscanMatch,
   standardJsonCompilerInputSettings,
 } from "../verify-classic-v4-mainnet-sources.mjs";
+import { resolvePinnedSolc } from "../custom-registry-v2-source-verification-core.mjs";
 
 const testPath = fileURLToPath(import.meta.url);
 const contractsRoot = path.resolve(path.dirname(testPath), "..", "..");
@@ -686,22 +687,32 @@ test("frozen publication input compiles with pinned solc 0.8.26", async () => {
     await buildClassicV4LauncherStandardJsonInput({ artifact });
   assert(!Object.hasOwn(standardJsonInput.settings, "compilationTarget"));
   assert(Object.hasOwn(standardJsonInput.settings, "outputSelection"));
-  const version = spawnSync("solc", ["--version"], { encoding: "utf8" });
-  assert.equal(version.status, 0, version.stderr);
-  assert.match(version.stdout, /0\.8\.26\+commit\.8a97fa7a/);
-  const compilation = spawnSync("solc", ["--standard-json"], {
-    encoding: "utf8",
-    input: JSON.stringify(standardJsonInput),
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  assert.equal(compilation.status, 0, compilation.stderr);
-  const output = JSON.parse(compilation.stdout);
-  assert.equal(
-    output.errors?.filter(({ severity }) => severity === "error").length ?? 0,
-    0,
-    JSON.stringify(output.errors),
-  );
-  assert(output.contracts?.[launcherPath]?.MemeLaunchV4);
+  const compiler = await resolvePinnedSolc();
+  try {
+    const version = spawnSync(compiler.path, ["--version"], {
+      encoding: "utf8",
+    });
+    assert.equal(version.status, 0, version.stderr);
+    assert.match(version.stdout, /0\.8\.26\+commit\.8a97fa7a/);
+    const compilation = spawnSync(compiler.path, ["--standard-json"], {
+      encoding: "utf8",
+      input: JSON.stringify(standardJsonInput),
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    assert.equal(compilation.status, 0, compilation.stderr);
+    const output = JSON.parse(compilation.stdout);
+    assert.equal(
+      output.errors?.filter(({ severity }) => severity === "error").length ??
+        0,
+      0,
+      JSON.stringify(output.errors),
+    );
+    assert(output.contracts?.[launcherPath]?.MemeLaunchV4);
+  } finally {
+    if (compiler.cleanupDirectory) {
+      await rm(compiler.cleanupDirectory, { recursive: true, force: true });
+    }
+  }
 });
 
 test("publication child receives frozen source bytes and the key only in env", async () => {
