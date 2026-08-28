@@ -2401,7 +2401,13 @@ export function evaluateReadModelOperationsSourceContracts(
         '"/api/explore?limit=1&page=1&sort=newest"',
         "response.status === 200",
         'body?.catalog?.source === "envio-classic-v3"',
-        'body.catalog.completeness?.classic === "current"',
+        "const classicCurrent =",
+        'body?.catalog?.completeness?.classic === "current"',
+        "const routerOnlyFallback =",
+        'body?.catalog?.launchSource === "canonical-launch-stamp-router"',
+        'body.catalog.completeness?.classic === "unavailable"',
+        "routerStamp.projectedIdentityCount === body.catalog.identityCount",
+        "classicCurrent || routerOnlyFallback",
         'body.catalog.completeness?.stock === "excluded"',
         'body.catalog.evidence?.kind === "envio-indexer-state"',
         "body.total >= 1",
@@ -2411,13 +2417,13 @@ export function evaluateReadModelOperationsSourceContracts(
         "response = undefined",
         "if (attempt === 4) throw error",
         "continue;",
-        "if (exactCatalog) break",
+        "if (exactCatalog) {",
       ]) &&
       !stagedCatalogProbeBlock.includes("body.tokens[0]?.launchModel") &&
       !stagedCatalogProbeBlock.includes("CRON_SECRET") &&
       !stagedCatalogProbeBlock.includes("/api/ops/index-v2") &&
       !stagedCatalogProbeBlock.includes("        if:"),
-    "every exact staged candidate proves a non-empty verified Envio Classic V3 catalog before public Fast-Lane smoke",
+    "every exact staged candidate proves either a non-empty current Envio Classic V3 catalog or an exact bounded Router-only fallback before public Fast-Lane smoke",
   );
   check(
     "ops-protected-public-provider-stage-smoke",
