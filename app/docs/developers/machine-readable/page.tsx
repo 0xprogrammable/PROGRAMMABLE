@@ -361,8 +361,9 @@ export default function MachineReadableDocsPage() {
           </li>
           <li>
             <code>GET /v3/custom-launches</code> returns an exact-launch-principal,
-            cursor-paginated snapshot. Partner roots do not aggregate child
-            history and rotation does not migrate it. It makes a bounded best-effort
+            cursor-paginated snapshot. Partner roots aggregate all partner-attributed
+            launches; each subkey sees only its stable lineage and rotation preserves
+            that lineage history. It makes a bounded best-effort
             reconciliation pass over pending rows and still returns durable
             history when RPC is unavailable. Resource
             <code> lifecycleQueue</code> is bounded worker scheduling guidance,

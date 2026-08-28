@@ -184,16 +184,22 @@
       "mustReviewSignAndBroadcast": true
     },
     "launchHistoryVisibility": {
-      "root": "root-credential-principal-only",
-      "subkey": "subkey-credential-principal-only",
-      "rootAggregatesSubkeys": false,
-      "rotationMigratesHistory": false,
-      "revokedCredentialCanRead": false
+      "root": "all-partner-attributed-root-and-subkey-launches",
+      "subkey": "stable-subkey-lineage-only",
+      "rootAggregatesSubkeys": true,
+      "rotationPreservesLineageHistory": true,
+      "newDistinctSubkeyStartsIsolatedLineage": true,
+      "revokedCredentialCanAuthenticate": false
     },
     "secretDelivery": "issue-and-rotation-response-only",
     "walletSigningAuthority": false,
     "walletBroadcastAuthority": false,
     "gateBypassAuthority": false,
+    "adminProvisioning": {
+      "authentication": "website-bff-assertion-v2",
+      "authorization": "server-configured-privy-user-wallet-pair-allowlist",
+      "clientMaySelfAuthorize": false
+    },
     "attributionResponseField": "partnerAttribution",
     "attributionSchemaVersion": "programmable.launch-partner-attribution.v1",
     "callerSuppliedAttributionAccepted": false,
@@ -592,7 +598,7 @@
       "get": {
         "operationId": "listDirectNativeCustomLaunchesV3",
         "summary": "List V3 resources visible to the authenticated credential",
-        "description": "Version-matched newest-first list for the authenticated launch principal. A wallet key sees its wallet principal. A partner root sees only launches created by that exact root credential, and a subkey sees only launches created by that exact subkey; a root does not aggregate child history. Subkey rotation creates a new launch principal and does not migrate prior history. Pending rows may receive bounded best-effort reconciliation; use single-resource GET for precise polling.",
+        "description": "Version-matched newest-first list for the authenticated lineage. A wallet key sees its wallet principal. A partner root sees every launch attributed to its partner, including current and rotated child launches. A subkey sees only its stable lineage and cannot read root or sibling launches. Rotation preserves that lineage history; a separately issued subkey starts an isolated lineage. Pending rows may receive bounded best-effort reconciliation; use single-resource GET for precise polling.",
         "tags": [
           "V3 general hooks"
         ],
@@ -1057,7 +1063,7 @@
       "post": {
         "operationId": "rotatePartnerSubkeyV1",
         "summary": "Rotate one subkey owned by the authenticated root",
-        "description": "Revokes the selected child and its launch bridges, then creates its replacement atomically for this root. The replacement receives a new isolated launch principal; authenticated launch history is not migrated and the root does not inherit it. The replacement remains bounded by the authenticated root. The first committed response is 201 with the replacement apiKey exactly once; an exact idempotent replay is 200 with apiKey null. No query parameters are accepted. The call consumes the root's partner-subkey-admin request budget.",
+        "description": "Revokes the selected child credential and creates its replacement atomically for this root. The replacement retains the same immutable subkey lineage and can read that lineage's authenticated launch history; it cannot read root or sibling launches. The partner root continues to see every launch attributed to its partner. The replacement remains bounded by the authenticated root. The first committed response is 201 with the replacement apiKey exactly once; an exact idempotent replay is 200 with apiKey null. No query parameters are accepted. The call consumes the root's partner-subkey-admin request budget.",
         "tags": ["Partner subkeys"],
         "x-programmable-public-availability": "live",
         "x-programmable-required-scope": "partner-subkeys:manage",
@@ -1134,7 +1140,7 @@
       "delete": {
         "operationId": "revokePartnerSubkeyV1",
         "summary": "Revoke one subkey owned by the authenticated root",
-        "description": "Revokes a child credential and its launch-principal bridges. The revoked credential can no longer read its authenticated history, and the root does not inherit that history. Repeating deletion of the same owned credential returns 200 with disposition already_revoked. No request body, Idempotency-Key, query parameter, or secret is accepted or returned. The call consumes the root's partner-subkey-admin request budget.",
+        "description": "Permanently revokes a child credential and its active launch bridges. The revoked credential can no longer authenticate. The partner root retains visibility of all partner-attributed launch history. Repeating deletion of the same owned credential returns 200 with disposition already_revoked. No request body, Idempotency-Key, query parameter, or secret is accepted or returned. The call consumes the root's partner-subkey-admin request budget.",
         "tags": ["Partner subkeys"],
         "x-programmable-public-availability": "live",
         "x-programmable-required-scope": "partner-subkeys:manage",
@@ -1582,7 +1588,7 @@
               { "type": "string", "format": "uuid" },
               { "type": "null" }
             ],
-            "description": "The revoked predecessor for a rotation, or null for an original issue. Rotation creates a new launch principal and does not migrate authenticated launch history."
+            "description": "The revoked predecessor for a rotation, or null for an original issue. The replacement retains the predecessor's stable subkey lineage and its authenticated launch history."
           }
         },
         "additionalProperties": false

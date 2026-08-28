@@ -280,9 +280,9 @@ export default function CustomLaunchApiDocsPage() {
             credentials.
           </li>
           <li>
-            Partner root and child launch histories are isolated. A root does not
-            aggregate child launches, and rotation does not migrate private launch
-            history to the replacement credential.
+            A partner root reads every launch attributed to its partner. A subkey
+            reads only its stable lineage, rotation preserves that lineage history,
+            and a separately issued subkey cannot read root or sibling launches.
           </li>
           <li>
             API scopes grant API operations only. No wallet key, partner root or

@@ -379,11 +379,11 @@ Partner credentials follow the same current-profile metadata requirements as wal
 snapshotted by the server from the authenticated credential and cannot be supplied in the create body. It is a
 “Launched via” provenance label only, not verification, safety, endorsement, or an economic category.
 
-Private launch history is isolated by the exact authenticated launch principal. A root sees only launches made by that
-root credential, not launches made by its children; each subkey sees only its own. Rotation revokes the old subkey and
-creates a replacement with a new launch principal. It does not migrate private launch history, and neither the
-replacement nor the root inherits the revoked key's private reads. Finalized public metadata remains available through
-the separate public discovery surfaces.
+Private launch history follows immutable partner lineage. A partner root sees every launch attributed to that partner,
+including launches made by its current and rotated subkeys. A subkey sees only its own lineage and cannot read root or
+sibling launches. Rotation revokes the old credential and gives its replacement the same lineage, so the replacement
+retains that lineage's history. A newly issued distinct subkey starts a separate isolated lineage. Finalized public
+metadata remains available through the separate public discovery surfaces.
 
 The Router V1 permit-reissue disposition route is wallet-key-only and has no successful response. Partner credentials
 recover directly by repacking and submitting a new request. Expired permits require a fresh nonce and Idempotency-Key,

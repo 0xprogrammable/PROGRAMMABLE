@@ -73,14 +73,15 @@ describe("public partner subkey OpenAPI", () => {
       mustReviewSignAndBroadcast: true,
     });
     expect(partnerContract.launchHistoryVisibility).toEqual({
-      root: "root-credential-principal-only",
-      subkey: "subkey-credential-principal-only",
-      rootAggregatesSubkeys: false,
-      rotationMigratesHistory: false,
-      revokedCredentialCanRead: false,
+      root: "all-partner-attributed-root-and-subkey-launches",
+      subkey: "stable-subkey-lineage-only",
+      rootAggregatesSubkeys: true,
+      rotationPreservesLineageHistory: true,
+      newDistinctSubkeyStartsIsolatedLineage: true,
+      revokedCredentialCanAuthenticate: false,
     });
-    expect(rotation.description).toMatch(/new isolated launch principal/i);
-    expect(rotation.description).toMatch(/history is not migrated/i);
+    expect(rotation.description).toMatch(/same immutable subkey lineage/i);
+    expect(rotation.description).toMatch(/read that lineage's authenticated launch history/i);
   });
 
   it("binds POST to an exact idempotency key and closed child limits", () => {

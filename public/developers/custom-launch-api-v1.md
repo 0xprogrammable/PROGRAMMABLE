@@ -226,11 +226,11 @@ may hold `custom-launch:create` and/or `custom-launch:read`, never `partner-subk
 budgets or expiry. Every subkey-admin operation, including list, consumes the root's
 `subkeyAdminRequestsPerHour` budget. Private partner and root administration routes are not public.
 
-Launch reads are credential-principal scoped. A root lists and reads only launches created by that exact root key; it
-does not aggregate launches created by its subkeys. Each subkey sees only its own launches, including launches for the
-different controller wallets it selected. Rotation atomically revokes the old child and its launch bridges, then
-creates a replacement with a new launch principal. Authenticated launch history is not migrated to the replacement or
-inherited by the root. Finalized public metadata remains a separate unauthenticated feed.
+Launch reads follow immutable partner lineage. A root lists and reads every launch attributed to its partner, including
+launches created by current and rotated subkeys. Each subkey sees only its own lineage, including launches for the
+different controller wallets it selected, and cannot read root or sibling launches. Rotation atomically revokes the old
+credential and gives its replacement the same lineage, so its private launch history remains readable. A separately
+issued subkey starts a new isolated lineage. Finalized public metadata remains a separate unauthenticated feed.
 
 ```sh
 curl --fail-with-body \
@@ -250,8 +250,8 @@ The closed `programmable.partner-subkey-request.v1` body contains `displayName`,
 `prepareRequestsPerHour`, `readRequestsPerMinute`, and a millisecond UTC `expiresAt`. The first committed issue or
 rotation returns `201` with `secretState: delivered-once` and the one-time `apiKey`; an exact replay returns `200` with
 `secretState: already-delivered` and `apiKey: null`. Keep the exact body and Idempotency-Key for retry. Rotation is
-`POST /v1/partner/subkeys/{subkeyId}/rotate`; revocation is `DELETE /v1/partner/subkeys/{subkeyId}`. Plan history
-retention before rotation because the replacement credential cannot poll the predecessor's private resources. Honor
+`POST /v1/partner/subkeys/{subkeyId}/rotate`; revocation is `DELETE /v1/partner/subkeys/{subkeyId}`. The replacement
+credential retains access to its stable lineage history; export anything needed before permanent revocation. Honor
 `Retry-After` on `429`. Every error includes a correlation `requestId`, and a bounded `500` never includes secrets.
 
 When the selected token ABI and exact constructor or initializer values expose one unambiguous name or symbol string,

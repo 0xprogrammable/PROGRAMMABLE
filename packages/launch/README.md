@@ -356,10 +356,11 @@ permit-reissue disposition endpoint is the wallet-key-only exception.
 When a partner credential is used, the server may return immutable `partnerAttribution`; callers cannot supply or
 override it. “Launched via” is provenance only, never verification, a safety mark, endorsement, or an economic category.
 
-Partner history is isolated by credential principal. A root cannot list or read child launches, and a child cannot read
-root or sibling launches. Rotating a subkey revokes its launch bridges and creates a replacement principal; private
-launch history is not migrated to the replacement. The root subkey list retains bounded credential metadata, not the
-child's launch resources. Every subkey-admin route consumes the root's `subkeyAdminRequestsPerHour` budget.
+Partner history follows immutable lineage. A root can list and read every launch attributed to its partner, including
+current and rotated child launches. A child can read only its own lineage, never root or sibling launches. Rotating a
+subkey revokes the old credential and gives the replacement the same lineage, preserving that lineage's private launch
+history; a separately issued child starts a new isolated lineage. Every subkey-admin route consumes the root's
+`subkeyAdminRequestsPerHour` budget.
 
 For a failed, unconsumed wallet-key `PERMIT_EXPIRED` launch, the Router V1 permit-reissue endpoint returns a typed `409`;
 this release defines no `2xx` reissue response and reserves no replacement nonce or permit. Partner credentials are not
