@@ -206,7 +206,7 @@ export function assertClassicV4PositionTokenEvidence({
   }
 }
 
-function parseArguments(argv) {
+export function parseClassicV4LifecycleVerifierArguments(argv) {
   const forbidden = argv.find((argument) => {
     const value = argument.toLowerCase();
     return ["--broadcast", "--send", "--sign", "--private-key", "--mnemonic"].some(
@@ -224,6 +224,7 @@ function parseArguments(argv) {
     sourceEvidence: null,
     canaryPlan: null,
     transactions: null,
+    reviewedReleaseWorktree: null,
     verificationBlock: null,
     rpcA: null,
     rpcB: null,
@@ -238,6 +239,7 @@ function parseArguments(argv) {
     "--source-evidence": "sourceEvidence",
     "--canary-plan": "canaryPlan",
     "--transactions": "transactions",
+    "--reviewed-release-worktree": "reviewedReleaseWorktree",
     "--rpc-a": "rpcA",
     "--rpc-b": "rpcB",
     "--output": "output",
@@ -273,6 +275,12 @@ function parseArguments(argv) {
     if (!result[field] || !path.isAbsolute(result[field])) {
       fail(`${flag} must be an absolute path`);
     }
+  }
+  if (
+    result.reviewedReleaseWorktree !== null &&
+    !path.isAbsolute(result.reviewedReleaseWorktree)
+  ) {
+    fail("--reviewed-release-worktree must be an absolute path");
   }
   if (
     !Number.isSafeInteger(result.verificationBlock) ||
@@ -2825,7 +2833,7 @@ export async function verifyClassicV4LifecycleCanary({
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const options = parseArguments(argv);
+  const options = parseClassicV4LifecycleVerifierArguments(argv);
   if (
     !options.write &&
     (options.output || options.wallet || options.acknowledgement)
@@ -2845,7 +2853,9 @@ export async function main(argv = process.argv.slice(2)) {
     readJson(options.canaryPlan, "canary plan"),
     readJson(options.transactions, "lifecycle transactions"),
   ]);
-  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan);
+  const artifactContext = await loadClassicV4ReleaseArtifactContext(plan, {
+    reviewedReleaseWorktree: options.reviewedReleaseWorktree,
+  });
   const { artifacts } = artifactContext;
   const evidence = await verifyClassicV4LifecycleCanary({
     endpoints: [options.rpcA, options.rpcB],

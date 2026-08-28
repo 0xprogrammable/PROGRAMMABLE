@@ -66,16 +66,64 @@ import {
 import {
   assertClassicV4PositionTokenEvidence,
   loadClassicV4BlockAtExactNumber,
+  parseClassicV4LifecycleVerifierArguments,
 } from "../verify-classic-v4-lifecycle-canary.mjs";
 import { verifyClassicV4ReleasePrerequisites } from "../verify-classic-v4-release-prerequisites.mjs";
 import {
   assertFreshDeploymentEvidence,
   assertFreshLifecycleEvidence,
   assertFreshSourceEvidence,
+  parseClassicV4CaptureArguments,
 } from "../capture-classic-v4-mainnet-release.mjs";
 
 const testPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(testPath), "..", "..", "..");
+
+test("final Classic V4 tools load artifacts from only an absolute reviewed release worktree", () => {
+  const common = [
+    "--plan", "/tmp/plan.json",
+    "--deployment-evidence", "/tmp/deployment.json",
+    "--source-evidence", "/tmp/source.json",
+    "--canary-plan", "/tmp/canary.json",
+    "--transactions", "/tmp/transactions.json",
+    "--verification-block", "25855200",
+    "--rpc-a", "https://rpc-a.example",
+    "--rpc-b", "https://rpc-b.example",
+  ];
+  assert.equal(
+    parseClassicV4LifecycleVerifierArguments([
+      ...common,
+      "--reviewed-release-worktree", "/tmp/reviewed-release",
+    ]).reviewedReleaseWorktree,
+    "/tmp/reviewed-release",
+  );
+  assert.throws(
+    () => parseClassicV4LifecycleVerifierArguments([
+      ...common,
+      "--reviewed-release-worktree", "relative/release",
+    ]),
+    /reviewed-release-worktree must be an absolute path/u,
+  );
+
+  const capture = [
+    ...common,
+    "--lifecycle-evidence", "/tmp/lifecycle.json",
+  ];
+  assert.equal(
+    parseClassicV4CaptureArguments([
+      ...capture,
+      "--reviewed-release-worktree", "/tmp/reviewed-release",
+    ]).reviewedReleaseWorktree,
+    "/tmp/reviewed-release",
+  );
+  assert.throws(
+    () => parseClassicV4CaptureArguments([
+      ...capture,
+      "--reviewed-release-worktree", "relative/release",
+    ]),
+    /reviewed release worktree path must be absolute/u,
+  );
+});
 
 test("Classic V4 accepts only equal or stricter quote bounds", () => {
   assert.equal(classicV4SwapBoundIsEqualOrStricter("exact-input", 100n, 100n), true);
@@ -1306,6 +1354,10 @@ test("downstream sealed builds reject forged fixed-out artifacts and arbitrary s
 });
 
 test("every downstream release entry point consumes a sealed tracked-source build", async () => {
+  const reviewedWorktreeEntryPoints = new Set([
+    "verify-classic-v4-lifecycle-canary.mjs",
+    "capture-classic-v4-mainnet-release.mjs",
+  ]);
   for (const operator of [
     "verify-classic-v4-mainnet-deployment.mjs",
     "verify-classic-v4-mainnet-sources.mjs",
@@ -1322,11 +1374,19 @@ test("every downstream release entry point consumes a sealed tracked-source buil
       /loadClassicV4ReleaseArtifactContext/,
       `${operator} must import the release-kind tracked-source build seal`,
     );
-    assert.match(
-      source,
-      /const artifactContext = await loadClassicV4ReleaseArtifactContext\(plan\);/,
-      `${operator} must rebuild and verify the reviewed plan before use`,
-    );
+    if (reviewedWorktreeEntryPoints.has(operator)) {
+      assert.match(
+        source,
+        /const artifactContext = await loadClassicV4ReleaseArtifactContext\(plan, \{\s*reviewedReleaseWorktree: options\.reviewedReleaseWorktree,\s*\}\);/u,
+        `${operator} must rebuild from the explicit reviewed release worktree`,
+      );
+    } else {
+      assert.match(
+        source,
+        /const artifactContext = await loadClassicV4ReleaseArtifactContext\(plan\);/,
+        `${operator} must rebuild and verify the reviewed plan before use`,
+      );
+    }
     assert.doesNotMatch(
       source,
       /loadClassicV4ArtifactsFromOutput/,
