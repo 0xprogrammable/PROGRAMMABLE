@@ -1746,15 +1746,8 @@ async function prepareNextAction(canaryPlan, identity, journal, urls) {
     }
   } else if (next.action === "creatorClaim") {
     executionBlock = freshHead;
-    const claimable = await readContractBoth(
-      urls,
-      executionBlock,
-      identity.rewardVault,
-      classicV4ExecutionRewardVaultAbi,
-      "claimable",
-      [canaryPlan.operatorWallet],
-    );
-    if (BigInt(claimable) <= 0n) fail("The creator reward is not claimable yet");
+    // claim() checkpoints hook accrual before paying; claimable() can be zero
+    // until that same call. The exact dual-RPC simulation below is the guard.
     prepared = buildClassicV4CreatorClaimPrepared(canaryPlan, identity);
   } else if (next.action === "launcherClaim") {
     executionBlock = freshHead;
@@ -2626,17 +2619,6 @@ async function revalidatePrepared(canaryPlan, identity, journal, urls, digest) {
       state.permitAmount >= BigInt(prepared.allowance.requiredAmount) &&
       state.permitExpiration >= BigInt(prepared.allowance.expiration)
     ) fail("The Permit2 allowance is already sufficient; refresh the next action");
-  }
-  if (prepared.requiredAction === "creatorClaim") {
-    const claimable = await readContractBoth(
-      urls,
-      block,
-      identity.rewardVault,
-      classicV4ExecutionRewardVaultAbi,
-      "claimable",
-      [canaryPlan.operatorWallet],
-    );
-    if (BigInt(claimable) <= 0n) fail("The creator reward is no longer claimable");
   }
   if (prepared.requiredAction === "launcherClaim") {
     const accrued = await readContractBoth(
