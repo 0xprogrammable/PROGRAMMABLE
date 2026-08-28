@@ -80,6 +80,10 @@ function expandedReleaseBinding() {
 }
 
 const expandedRelease = expandedReleaseBinding();
+const inactiveCatalogBinding: EnvioClassicCatalogBinding = Object.freeze({
+  releaseBinding: release,
+  classicV4: null,
+});
 const activeCatalogBinding: EnvioClassicCatalogBinding = Object.freeze({
   releaseBinding: expandedRelease,
   classicV4: Object.freeze({
@@ -401,8 +405,8 @@ function harness(input: {
     events: Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>,
   ) => Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>;
 } = {}) {
-  const catalogBinding = input.catalogBinding;
-  const selectedRelease = catalogBinding?.releaseBinding ?? release;
+  const catalogBinding = input.catalogBinding ?? inactiveCatalogBinding;
+  const selectedRelease = catalogBinding.releaseBinding;
   const launches = [...(input.launches ?? [launchFixture(1)])]
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
   const requests: Array<{ query: string; variables: Record<string, unknown> }> = [];
@@ -478,7 +482,7 @@ function harness(input: {
     launches,
     readRpcSnapshot,
     requests,
-    ...(catalogBinding ? { catalogBinding } : {}),
+    catalogBinding,
   };
 }
 
@@ -689,6 +693,7 @@ describe("Envio Classic V3 public catalog", () => {
     const read = createEnvioClassicV3CatalogReaderV1({
       fetcher,
       readRpcSnapshot: test.readRpcSnapshot,
+      catalogBinding: test.catalogBinding,
       now: () => now,
     });
 

@@ -20,6 +20,15 @@ import {
 } from "../../lib/data-pipeline/event-manifest";
 import { canonicalPayloadJson } from "../../indexer/src/lib/payload-hash";
 
+const INTERNAL_CUSTOM_REGISTRY_V1_COMPATIBILITY_CONTRACTS = Object.freeze([
+  "CustomRegistryV1",
+  "CustomPartnerFactoryRegistryV1",
+  "CustomAtomicRegistrarV1",
+]);
+const INTERNAL_CUSTOM_REGISTRY_V1_COMPATIBILITY_SET = new Set<string>(
+  INTERNAL_CUSTOM_REGISTRY_V1_COMPATIBILITY_CONTRACTS,
+);
+
 function configuredEventSignatures() {
   const yaml = readFileSync(
     resolve(process.cwd(), "indexer/config.yaml"),
@@ -88,9 +97,23 @@ const LAUNCH_PROVIDER_PAYLOAD = JSON.parse(
 ) as Record<string, unknown>;
 
 describe("Programmable runtime event manifest", () => {
-  it("exactly covers every contract/event pair configured by the indexer", () => {
+  it("exactly covers public/query events while preserving internal Custom V1 compatibility", () => {
+    const configured = configuredEventSignatures();
+    for (const contractName of
+      INTERNAL_CUSTOM_REGISTRY_V1_COMPATIBILITY_CONTRACTS) {
+      expect(configured[contractName]?.length).toBeGreaterThan(0);
+      expect(contractName in PROGRAMMABLE_EVENT_SIGNATURES).toBe(false);
+    }
+
+    const publicQuerySignatures = Object.fromEntries(
+      Object.entries(configured).filter(
+        ([contractName]) =>
+          !INTERNAL_CUSTOM_REGISTRY_V1_COMPATIBILITY_SET.has(contractName),
+      ),
+    );
+
     expect(PROGRAMMABLE_EVENT_SIGNATURES).toEqual(
-      configuredEventSignatures(),
+      publicQuerySignatures,
     );
   });
 

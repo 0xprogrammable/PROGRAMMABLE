@@ -1616,7 +1616,38 @@ describe("Classic V4 release and launch preflight", () => {
         null,
       ),
     ).toBeNull();
-    expect(getConfiguredClassicV4PublicRelease("production")).toBeNull();
+    expect(CLASSIC_V4_PUBLIC_RELEASE_BINDING).toEqual({
+      chainId: 1,
+      launcher: "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+      manifestDigest:
+        "0xb08e7032c801ddc3d5ba958eb389d2728bb439e4105aef4e7706969f7426ee00",
+      releaseStatus: "publicly-available",
+      publicAvailable: true,
+      transactionHash:
+        "0xbb6b4c9fc70600e4d5dd394314a49630bf9f837a82065013c397ebebd978aa7c",
+      blockHash:
+        "0x66d7201c8274251f7e94960edad2570e9121f7a0209f4528c09c41c5ea9cdb7c",
+      blockNumber: 25_854_486,
+      inputHash:
+        "0xeb0f441e72f5c1dbcb99a46bae5fdeeac1de5d8b474aed9002b36b4d9199a3a3",
+      launchId:
+        "0x75503436c39192ea7f165d1c0140724fed5dbd73c9b4816de713e34fe5a3fc87",
+      stampHash:
+        "0xd173468420cfa5159890896d34746c9c2fc9bb5e3960a1062aa82d1c3ffb5941",
+      permitDigest:
+        "0xfe2e718590739692dfe500000a18d62c07cb11d44cf5035febb12cac6c4466df",
+    });
+    const configuredRelease = getConfiguredClassicV4PublicRelease("production");
+    expect(configuredRelease).toMatchObject({
+      chainId: 1,
+      releaseStatus: "publicly-available",
+      manifestDigest: CLASSIC_V4_PUBLIC_RELEASE_BINDING?.manifestDigest,
+      addresses: {
+        launcher: CLASSIC_V4_PUBLIC_RELEASE_BINDING?.launcher,
+      },
+      verification: { indexerActivated: true, publicAvailable: true },
+    });
+    expect(getConfiguredClassicV4PublicRelease("rehearsal")).toBeNull();
   });
 
   it("accepts only the exact signed Router handoff for the public release", () => {
@@ -1706,10 +1737,34 @@ describe("Classic V4 release and launch preflight", () => {
         browserBinding,
       ),
     ).toThrow("connected wallet");
-    expect(CLASSIC_V4_PUBLIC_RELEASE_BINDING).toBeNull();
-    expect(() => validatePreparedClassicV4LaunchTransaction(input)).toThrow(
-      "browser release binding",
+    expect(CLASSIC_V4_PUBLIC_RELEASE_BINDING).not.toBeNull();
+    expect(() =>
+      validatePreparedClassicV4LaunchTransaction(routerInput),
+    ).toThrow("browser V4 release binding");
+
+    const configuredManifest = getConfiguredClassicV4PublicRelease("production");
+    if (!configuredManifest) throw new Error("Classic V4 production fixture");
+    const configuredPrepared = preparedV4RouterTransaction(
+      draft,
+      configuredManifest,
     );
+    const configuredInput = {
+      transaction: configuredPrepared.transaction,
+      draft,
+      account,
+      planHash: configuredPrepared.planHash,
+      releaseLauncher: configuredManifest.addresses.launcher,
+      releaseManifestDigest: configuredManifest.manifestDigest,
+    };
+    expect(validatePreparedClassicV4LaunchTransaction(configuredInput)).toEqual(
+      configuredPrepared.transaction,
+    );
+    expect(() =>
+      validatePreparedClassicV4LaunchTransaction({
+        ...configuredInput,
+        releaseManifestDigest: hash("tampered production manifest"),
+      }),
+    ).toThrow("browser V4 release binding");
     expect(() =>
       validatePreparedClassicV4LaunchTransactionAgainstPublicRelease(
         {

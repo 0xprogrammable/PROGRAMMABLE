@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 
 import mainnetDeployments from "../contracts/dependencies/ethereum-mainnet.json";
+import { CLASSIC_V4_PUBLIC_RELEASE_BINDING } from "../lib/classic-v4-public-release";
 import {
   amountOutMinimum,
   buildClassicPermit2ApprovalTransaction,
@@ -162,28 +163,28 @@ describe("prepared trade client boundary", () => {
     }
   });
 
-  it("requires a publicly available browser binding for Classic V4", () => {
+  it("uses the active public binding for Classic V4 and fails closed without it", () => {
     const v4Context = {
       ...context,
       launchModelVersion: "classic-v4",
     };
-    const publicBinding = {
-      chainId: 1 as const,
-      launcher: OTHER,
-      manifestDigest: `0x${"11".repeat(32)}` as Hex,
-      releaseStatus: "publicly-available" as const,
-      publicAvailable: true as const,
-      transactionHash: `0x${"12".repeat(32)}` as Hex,
-      blockHash: `0x${"13".repeat(32)}` as Hex,
-      blockNumber: 25_700_200,
-      inputHash: `0x${"14".repeat(32)}` as Hex,
-      launchId: `0x${"15".repeat(32)}` as Hex,
-      stampHash: `0x${"16".repeat(32)}` as Hex,
-      permitDigest: `0x${"17".repeat(32)}` as Hex,
-    };
+    const publicBinding = CLASSIC_V4_PUBLIC_RELEASE_BINDING;
+    expect(publicBinding).toMatchObject({
+      chainId: 1,
+      launcher: "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+      manifestDigest:
+        "0xb08e7032c801ddc3d5ba958eb389d2728bb439e4105aef4e7706969f7426ee00",
+      releaseStatus: "publicly-available",
+      publicAvailable: true,
+    });
+    if (!publicBinding) throw new Error("Classic V4 public binding fixture");
 
+    expect(
+      validatePreparedTradeResponse(swapResponse(), v4Context).transaction
+        .kind,
+    ).toBe("swap");
     expect(() =>
-      validatePreparedTradeResponse(swapResponse(), v4Context),
+      validatePreparedTradeResponse(swapResponse(), v4Context, null),
     ).toThrow("browser release binding");
     expect(() =>
       validatePreparedTradeResponse(swapResponse(), v4Context, {
@@ -192,10 +193,12 @@ describe("prepared trade client boundary", () => {
         publicAvailable: false,
       }),
     ).toThrow("browser release binding");
-    expect(
-      validatePreparedTradeResponse(swapResponse(), v4Context, publicBinding)
-        .transaction.kind,
-    ).toBe("swap");
+    expect(() =>
+      validatePreparedTradeResponse(swapResponse(), v4Context, {
+        ...publicBinding,
+        blockNumber: 0,
+      }),
+    ).toThrow("browser release binding");
   });
 
   it("rejects a wrong router, selector or ETH value", () => {
