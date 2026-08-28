@@ -31,7 +31,7 @@ const customLaunchPreflightUrl =
 const customLaunchFinalizedMetadataUrl =
   "https://api.programmable.market/v3/finalized-custom-launches";
 const customLaunchCliReleaseUrl =
-  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz";
+  "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz";
 
 const manifest = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST;
 const router = manifest.launchStampRouter;
@@ -81,9 +81,10 @@ export function buildDeveloperDocsMarkdown(): string {
     "## Custom Launch API availability",
     "",
     `Public V3.3 creation, preflight, list and single-resource reads are live for wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet at ${customLaunchApiOrigin}/v3/custom-launches. V2 and V1 history and schemas remain readable; fresh creation returns non-retryable \`409 CUSTOM_LAUNCH_V2_READ_ONLY\` and \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.`,
-    `The exact public request, lifecycle, idempotency and wallet-handoff contract is ${customLaunchApiV3OpenApiUrl}.`,
+    `The source-tree V3 OpenAPI at ${customLaunchApiV3OpenApiUrl} contains a preparatory profile 3.4 candidate. It is not backend-activation evidence; live discovery and GET /v3/capabilities remain authoritative for the accepted profile, routes and wallet-handoff contract.`,
     "V2 detail reads are observation-only while an existing request is prepared or simulating: GET does not advance simulation or authorization and cannot expose a new walletTransaction. Existing authorized and submitted reconciliation and finalized reads remain available.",
     "The default profile uses `schemaVersion: programmable.direct-native-hook-graph-profile.v3`, `profileRevision: 3` and `profileVersion: 3.3.0`; its selection binding uses `programmable.direct-native-hook-graph-profile-selection-binding.v3`. It requires canonical project name, symbol, meaningful description, an exact non-empty source-bound image, one website and one X profile; other public links are optional. The CLI binds their digest into the graph and launch intent. Exact `3.2.0`, `3.1.0` and `3.0.0` requests remain readable and byte-identical retryable under their original immutable policies; revision 2 also remains compatible. Profile 3.2.0 keeps its original nullable-image metadata semantics. The current profile accepts a project-owned token, a project-owned hook, native or ERC-20 quote currency, all fourteen structurally valid Uniswap v4 permission bits and an exact 3-16 target graph. Structural support is not universal compatibility or a safety promise.",
+    "CLI `3.3.8` is the current installable release and defaults fresh packs to live profile `3.3.0`. Explicit profile `3.4.0` output remains preparatory and is rejected by live capabilities until the backend and `.well-known` document independently activate that pending profile. Pending `3.4.0` adds declarative `behaviorScenarioInputs` and stronger server-owned behavior and exact fee-path gates; those source-tree fields are not current acceptance or execution evidence.",
     "Profile 3.3.0 uses role-aware exact-source static admission with exactly seven objective hard-block rules: runtime CALLCODE, source or runtime SELFDESTRUCT, definitively missing or invalid callback authentication, a literal wrong PoolManager, and a missing enabled callback implementation. Proxy/delegatecall, mint/tax/pause/transfer controls, liquidity custody or locking, external dependencies and return-delta custom accounting remain evidence duties rather than categorical deployment blocks. Every finding remains bound and visible. A hard-block code-and-role match returns `action_required`; other findings populate needs-evidence or warning codes. There is no manual project allowlist. A final Router simulation is mandatory and must pass before wallet handoff. Missing behavior execution leaves behavior, fee, liquidity and routability claims unverified; an authenticated executed failure blocks the handoff. Local checks, preflight and simulation are not an audit or a guarantee of safety, honeypot resistance, liquidity, tradeability or fee behavior.",
     "With no hard-blocking match, server-authored `platformAdmission` binds the report SHA-256, needs-evidence and warning codes with `disposition: no_blocking_static_finding`, requires Router simulation and carries `safetyClaim: false` and `feeBehaviorClaim: false`. A hard-blocking match instead exposes the exact static report through `action_required`.",
     "A 10 bps Programmable share applies only to a fee-certified profile or adapter and its exact stamped PoolKey after server-authored per-launch fee-behavior evidence is verified. Arbitrary custom hooks are not automatically fee-enforced, and the open arbitrary-hook lane carries no Programmable fee claim. Funding may be absent, use exact native Router transaction value, or use a separate unsigned EIP-3009 descriptor. Funding signing and Router sending remain separate explicit wallet actions; neither is automatic.",
@@ -92,13 +93,13 @@ export function buildDeveloperDocsMarkdown(): string {
     "Verify the pinned public CLI checksum before installation:",
     "```sh",
     'programmable_cli_dir="$(mktemp -d)"',
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" ${customLaunchCliReleaseUrl}`,
-    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)',
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"',
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" ${customLaunchCliReleaseUrl}`,
+    `curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" ${customLaunchCliReleaseUrl}.sha256`,
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"',
     "programmable-launch --version",
     "```",
-    "Continue only after the checksum reports `OK` and the version is `3.3.7`. The package is `@programmable/launch` and the binary is `programmable-launch`.",
+    "Continue only after the checksum reports `OK` and the version is `3.3.8`. The package is `@programmable/launch` and the binary is `programmable-launch`. Omit `profileVersion` for the live `3.3.0` default; explicit `3.4.0` output remains preparatory and is rejected until backend activation.",
     "",
     "Use `pack -> validate --remote -> submit -> server decision -> status --watch --until authorized -> wallet -> status --watch --until finalized`. Remote validation repeats local byte-identical validation, fails closed on profile, revision, version, route or authentication drift, and preflights those exact bytes without consuming launch-creation quota, allocating a nonce or persisting a launch. The authenticated preflight still consumes its ordinary route rate budget. CLI and preflight results are preparation, not the launch decision. The API server exposes a wallet handoff only after objective static hard blocks and exact Router simulation pass. Missing behavior execution leaves related claims unverified; an authenticated executed failure blocks. Authenticated CLI traffic is fixed to exact origin `https://api.programmable.market`. Wallet is a separate connected-controller action, not a CLI command. The pack command derives the sorted manifest, SourceDescriptor, graph, locators, CREATE2 predictions, canonical hashes and exact-source bundle from real source, Standard JSON, compiler artifacts and evidence files. The CLI never signs or broadcasts.",
     "",
@@ -423,13 +424,14 @@ export function buildProgrammableLlmsIndex(): string {
     "## Public machine-readable resources",
     "",
     "- OpenAPI: https://programmable.market/openapi.json",
-    `- Custom Launch OpenAPI: ${customLaunchApiOpenApiUrl}`,
+    `- Custom Launch OpenAPI, profile 3.4 preparatory document: ${customLaunchApiOpenApiUrl}`,
     `- Public V2 OpenAPI: ${customLaunchApiV2OpenApiUrl}`,
-    `- Public V3 OpenAPI: ${customLaunchApiV3OpenApiUrl}`,
+    `- Public V3 OpenAPI, profile 3.4 preparatory document: ${customLaunchApiV3OpenApiUrl}`,
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Custom Launch API guide: ${customLaunchHumanGuideUrl}`,
     `- Custom Launch API readiness: ${customLaunchReadyzUrl}`,
-    `- Programmable Launch CLI 3.3.7: ${customLaunchCliReleaseUrl}`,
+    `- Current Programmable Launch CLI 3.3.8, defaulting to live profile 3.3.0: ${customLaunchCliReleaseUrl}`,
+    "- Preparatory only: explicit profile 3.4.0 output is rejected until backend and .well-known activation",
     `- V2 write fence: POST ${customLaunchApiOrigin}/v2/custom-launches returns 409 CUSTOM_LAUNCH_V2_READ_ONLY`,
     `- V1 write fence: POST ${customLaunchApiOrigin}/v1/custom-launches returns 409 CUSTOM_LAUNCH_V1_READ_ONLY`,
     `- Create or list credential-principal Custom launches: POST or GET ${customLaunchApiOrigin}/v3/custom-launches`,

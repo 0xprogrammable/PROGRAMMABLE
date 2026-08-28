@@ -88,8 +88,8 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v3.json</code>
             </a>
             <span>
-              Live V3 capabilities, side-effect-free preflight, general-hook
-              request, lifecycle and separate Router-transaction schemas.
+              Preparatory profile 3.4 request and evidence contract. It does not
+              activate profile 3.4 or replace live/default profile 3.3.0.
             </span>
           </li>
           <li>
@@ -107,9 +107,9 @@ export default function MachineReadableDocsPage() {
               <code>/schemas/custom-launch/v3/pack-config.json</code>
             </a>
             <span>
-              Canonical JSON Schema for{" "}
-              <code>programmable.launch-pack-config.v3</code>, including current
-              EIP-3009 authorization-patch argument paths.
+              Source-tree JSON Schema for{" "}
+              <code>programmable.launch-pack-config.v3</code>, including pending
+              profile 3.4 inputs. Check live discovery before submission.
             </span>
           </li>
           <li>
@@ -121,8 +121,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz">
-              <code>@programmable/launch 3.3.7</code>
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz">
+              <code>@programmable/launch 3.3.8</code>
             </a>
             <span>
               Immutable CLI asset with exactly pack, validate, submit and
@@ -302,6 +302,12 @@ export default function MachineReadableDocsPage() {
             <code>409 CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
             <code>409 CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new
             submissions.
+          </li>
+          <li>
+            CLI <code>3.3.8</code> is the current installable release and
+            defaults to live profile <code>3.3.0</code>. Explicit profile{" "}
+            <code>3.4.0</code> output remains preparatory and is rejected by live
+            capabilities until backend and <code>.well-known</code> activation.
           </li>
           <li>
             The default V3 profile uses{" "}

@@ -12,6 +12,8 @@ const openApi = JSON.parse(readFileSync(
 const collection = openApi.paths["/v1/partner/subkeys"];
 const rotation = openApi.paths["/v1/partner/subkeys/{subkeyId}/rotate"].post;
 const revocation = openApi.paths["/v1/partner/subkeys/{subkeyId}"].delete;
+const launchCollection = openApi.paths["/v3/custom-launches"].get;
+const launchStatus = openApi.paths["/v3/custom-launches/{launchId}"].get;
 
 describe("public partner subkey OpenAPI", () => {
   it("publishes only the root-owned public subkey routes", () => {
@@ -82,6 +84,23 @@ describe("public partner subkey OpenAPI", () => {
     });
     expect(rotation.description).toMatch(/same immutable subkey lineage/i);
     expect(rotation.description).toMatch(/read that lineage's authenticated launch history/i);
+  });
+
+  it("keeps list and single-resource partner history visibility identical", () => {
+    for (const operation of [launchCollection, launchStatus]) {
+      expect(operation.description).toMatch(
+        /partner root (?:sees|reads) every launch attributed to its partner/i,
+      );
+      expect(operation.description).toMatch(/subkey reads only its stable lineage/i);
+      expect(operation.description).toMatch(/cannot read root or sibling launches/i);
+      expect(operation.description).toMatch(/rotat(?:ion|ed)[\s\S]{0,120}(?:preserv|lineage)/i);
+    }
+    expect(launchStatus.description).toMatch(/revoked predecessor cannot authenticate/i);
+    expect(launchStatus.description).not.toMatch(/root cannot read a child's launch/i);
+    expect(launchStatus.description).not.toMatch(/replacement cannot inherit/i);
+    expect(launchStatus.responses["404"].description).toMatch(
+      /partner root aggregate.*stable subkey lineage/i,
+    );
   });
 
   it("binds POST to an exact idempotency key and closed child limits", () => {

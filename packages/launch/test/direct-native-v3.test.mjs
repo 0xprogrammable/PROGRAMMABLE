@@ -4,12 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { encodeFunctionData } from "viem";
+import {
+  encodeAbiParameters,
+  encodeFunctionData,
+  parseAbiParameters,
+} from "viem";
+
+import canonicalSettlementFeeVaultArtifact from "./fixtures/programmable-settlement-fee-vault-v1.json" with { type: "json" };
 
 import { statusLaunch, submitLaunch } from "../src/api-client.mjs";
 import { loadTargetArtifact, validateStandardJsonInput } from "../src/build.mjs";
 import {
   DIRECT_NATIVE_REQUIRED_SOLC_VERSION,
+  GRAPH_FACTORY,
   MAX_STANDARD_JSON_SOURCES,
 } from "../src/constants.mjs";
 import { sha256Digest } from "../src/io.mjs";
@@ -62,7 +69,7 @@ const SELECTION = {
     tokenTargetId: "token",
     hookTargetId: "hook",
     initializerTargetId: "initializer",
-    platformFeeBindingTargetId: "hook",
+    platformFeeBindingTargetId: "settlement-fee-vault",
   },
   fundingMode: "eip-3009-receive-with-authorization",
   accountingMode: "inclusive-selected-total",
@@ -160,14 +167,38 @@ function graphBundle() {
     sourceBundleSha256: SHA,
     targets: [
       target("token", "token", null),
-      target("hook", "hook", [
-        "beforeInitialize",
-        "beforeSwap",
-        "afterSwap",
-        "beforeSwapReturnDelta",
-        "afterSwapReturnDelta",
-      ]),
+      {
+        ...target("hook", "hook", [
+          "beforeInitialize",
+          "beforeSwap",
+          "afterSwap",
+          "beforeSwapReturnDelta",
+          "afterSwapReturnDelta",
+        ]),
+        constructorArguments: `0x${"00".repeat(32)}`,
+        constructorAddressLocators: [{
+          targetId: "settlement-fee-vault",
+          byteOffset: 0,
+          encoding: "abi-address-word",
+        }],
+      },
       { ...target("initializer", "other", null), initializerCalldata: unsignedInitializerCalldata() },
+      {
+        ...target("settlement-fee-vault", "other", null),
+        creationBytecode: canonicalSettlementFeeVaultArtifact.creationBytecode,
+        constructorArguments: encodeAbiParameters(
+          parseAbiParameters("address"),
+          [GRAPH_FACTORY],
+        ),
+        initializerCalldata: `0x8ce2a828${"00".repeat(32)}`,
+        initializerAddressLocators: [{
+          targetId: "hook",
+          byteOffset: 4,
+          encoding: "abi-address-word",
+        }],
+        expectedRuntimeCodeHash:
+          canonicalSettlementFeeVaultArtifact.runtimeBytecodeKeccak256,
+      },
     ],
     pool: { tokenTargetId: "token", hookTargetId: "hook", fee: 3000, tickSpacing: 60 },
   };
@@ -285,7 +316,7 @@ test("V3 selection closes funding, accounting, claim, and applicant-selected rat
   );
 });
 
-test("V3 profile binds static admission without claiming safety or fee behavior", () => {
+test("live V3.3 profile binds static admission without claiming safety or fee behavior", () => {
   const profile = resolveDirectNativeProfile(SELECTION);
   assert.equal(profile.profileVersion, "3.3.0");
   assert.deepEqual(profile.projectMetadataPolicy, {
@@ -361,21 +392,33 @@ test("V3 profile binds static admission without claiming safety or fee behavior"
   assert.equal(additive.platformFeePolicy.accountingMode, "additive-platform-share");
 });
 
-test("V3.3 preserves exact V3.2, V3.1 and V3.0 embedded-profile validation for retries", () => {
+test("default V3.3 and explicit V3.4 preserve exact embedded-profile validation for retries", () => {
   const current = resolveDirectNativeProfile(SELECTION);
+  const preparatory = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.4.0" });
+  const completeMetadataLegacy = resolveDirectNativeProfile(SELECTION, {
+    profileVersion: "3.3.0",
+  });
   const legacyMetadata = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.2.0" });
   const preMetadata = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.1.0" });
   const legacy = resolveDirectNativeProfile(SELECTION, { profileVersion: "3.0.0" });
 
   assert.equal(current.profileVersion, "3.3.0");
+  assert.equal(preparatory.profileVersion, "3.4.0");
+  assert.equal(completeMetadataLegacy.profileVersion, "3.3.0");
   assert.equal(legacyMetadata.profileVersion, "3.2.0");
   assert.equal(preMetadata.profileVersion, "3.1.0");
   assert.equal(legacy.profileVersion, "3.0.0");
   assert.deepEqual(validateEmbeddedDirectNativeProfile(current), current);
+  assert.deepEqual(validateEmbeddedDirectNativeProfile(preparatory), preparatory);
+  assert.deepEqual(
+    validateEmbeddedDirectNativeProfile(completeMetadataLegacy),
+    completeMetadataLegacy,
+  );
   assert.deepEqual(validateEmbeddedDirectNativeProfile(legacyMetadata), legacyMetadata);
   assert.deepEqual(validateEmbeddedDirectNativeProfile(preMetadata), preMetadata);
   assert.deepEqual(validateEmbeddedDirectNativeProfile(legacy), legacy);
   assert.deepEqual(preMetadata.platformAdmissionPolicy, current.platformAdmissionPolicy);
+  assert.deepEqual(completeMetadataLegacy.projectMetadataPolicy, current.projectMetadataPolicy);
   assert.equal(Object.hasOwn(legacyMetadata, "projectMetadataPolicy"), false);
   assert.deepEqual(
     legacy.platformAdmissionPolicy.blockingFindingRules.map(({ code }) => code),
@@ -402,9 +445,9 @@ test("V3.3 preserves exact V3.2, V3.1 and V3.0 embedded-profile validation for r
     }),
     /closed embedded launchProfile/u,
   );
-  assert.throws(
-    () => resolveDirectNativeProfile(SELECTION, { profileVersion: "3.4.0" }),
-    /version is not supported/u,
+  assert.deepEqual(
+    resolveDirectNativeProfile(SELECTION, { profileVersion: "3.4.0" }),
+    preparatory,
   );
 });
 

@@ -157,7 +157,8 @@ export type DeveloperCustomLaunchV3 = Readonly<{
     | "3.0.0"
     | "3.1.0"
     | "3.2.0"
-    | "3.3.0";
+    | "3.3.0"
+    | "3.4.0";
   launchProfileHash: `sha256:${string}`;
   launchIntentHash: `sha256:${string}`;
   projectMetadata: DeveloperCustomLaunchProjectMetadataV1 | null;
@@ -1169,7 +1170,8 @@ function parseV3ProjectMetadataPair(
     | "3.0.0"
     | "3.1.0"
     | "3.2.0"
-    | "3.3.0",
+    | "3.3.0"
+    | "3.4.0",
   requireAuthorizedArtifactBinding: boolean,
 ) {
   if (
@@ -1193,6 +1195,7 @@ function parseV3ProjectMetadataPair(
   if (
     launchProfileVersion !== "3.2.0"
     && launchProfileVersion !== "3.3.0"
+    && launchProfileVersion !== "3.4.0"
   ) {
     if (
       record.projectMetadata !== null
@@ -1306,6 +1309,7 @@ function parseLaunch(
       || record.launchProfileVersion === "3.1.0"
       || record.launchProfileVersion === "3.2.0"
       || record.launchProfileVersion === "3.3.0"
+      || record.launchProfileVersion === "3.4.0"
     )
     ? record.launchProfileVersion
     : null;

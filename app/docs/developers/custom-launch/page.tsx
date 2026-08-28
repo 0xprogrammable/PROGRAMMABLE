@@ -96,19 +96,19 @@ const cliInstallCommands = [
     "Create an isolated download directory.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz',
     "Download the pinned release asset.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256',
     "Download its checksum sidecar.",
   ],
   [
-    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)',
+    '(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)',
     "Continue only after this reports OK.",
   ],
   [
-    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"',
+    'npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"',
     "Install the verified local bytes.",
   ],
 ] as const;
@@ -176,11 +176,13 @@ export default function CustomLaunchApiDocsPage() {
           <p>
             Public V3.3 launch creation is live on Ethereum Mainnet. V2 and V1
             history and schemas remain available, while their fresh POSTs stay read-only. Legacy
-            Registry and GitHub submission intake is closed. Use the{" "}
+            Registry and GitHub submission intake is closed. The source-tree{" "}
             <a href="/openapi/custom-launch-v3.json">
-              public V3 machine contract
+              profile 3.4 machine contract
             </a>{" "}
-            for the exact request, response and retry contract.
+            is preparatory and does not activate a backend profile. CLI 3.3.8
+            is the current installable release and defaults to live profile
+            3.3.0; live capabilities reject explicit profile 3.4.0 output.
           </p>
         </div>
 
@@ -190,8 +192,8 @@ export default function CustomLaunchApiDocsPage() {
             source revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> 3.3.7 from the{" "}
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz">
+            Install <code>@programmable/launch</code> 3.3.8 from the{" "}
+            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz">
               immutable GitHub Release asset
             </a>
             . The binary is{" "}
@@ -401,11 +403,12 @@ export default function CustomLaunchApiDocsPage() {
         </ul>
 
         <aside className={styles.callout}>
-          <strong>One public contract for every project</strong>
+          <strong>Follow the live discovery contract</strong>
           <p>
-            Discovery, the remediation catalog, this guide, OpenAPI and the
-            pinned CLI release provide the complete public handoff. Only the
-            two controller-wallet signatures remain outside the agent flow.
+            Discovery, capabilities, the remediation catalog, this guide and
+            the pinned CLI release provide the current public handoff. A
+            preparatory OpenAPI addition does not activate a profile. The two
+            controller-wallet signatures remain outside the agent flow.
           </p>
         </aside>
       </section>
@@ -418,8 +421,10 @@ export default function CustomLaunchApiDocsPage() {
             <a href="/openapi/custom-launch-v3.json">
               direct-native V3 OpenAPI document
             </a>{" "}
-            is the production contract for project-owned tokens, hooks and
-            multi-contract launch graphs. The default profile uses{" "}
+            includes a preparatory profile 3.4 candidate; it is not evidence of
+            backend activation or a CLI release. The live/default production
+            profile for project-owned tokens, hooks and multi-contract launch
+            graphs uses{" "}
             <code>programmable.direct-native-hook-graph-profile.v3</code>,{" "}
             <code>profileRevision: 3</code> and{" "}
             <code>profileVersion: 3.3.0</code>. It requires and binds canonical
@@ -457,7 +462,7 @@ export default function CustomLaunchApiDocsPage() {
             Funding can be absent, carried as the exact native value of the
             separately reviewed Router transaction, or use an unsigned USDC
             EIP-3009 descriptor. Only the EIP-3009 mode contains a funding
-            challenge and authorization patch. CLI 3.3.7 uses{" "}
+            challenge and authorization patch. CLI 3.3.8 uses{" "}
             <code>programmable.eip3009-authorization-patch.v2</code> to bind
             the zero nonce, r, s and v ABI leaves before any wallet signature.
           </li>
@@ -567,7 +572,9 @@ export default function CustomLaunchApiDocsPage() {
           per-target init code is limited to 49,152 bytes and initializer
           calldata to 131,072 bytes. Use the{" "}
           <a href="/openapi/custom-launch-v3.json">V3 OpenAPI contract</a> for every
-          nested field, enum and bound. The retained{" "}
+          nested field, enum and bound in the preparatory profile 3.4 candidate.
+          Do not submit those pending fields unless live discovery and
+          capabilities advertise profile 3.4.0. The retained{" "}
           <a href="/openapi/custom-launch-v1.json">V1 contract</a> documents
           compatibility reads and its read-only creation route.
         </p>
@@ -845,9 +852,10 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Treat future capabilities as separate contracts</h2>
           <p>
-            Only operations and scopes in the current OpenAPI contract are
-            active. New scopes or endpoints require an explicit contract update,
-            and existing keys do not gain a newly enabled scope automatically.
+            Only operations, scopes and profile versions advertised by live
+            discovery and capabilities are active. A preparatory OpenAPI update
+            is not activation, and existing keys do not gain a newly enabled
+            scope automatically.
           </p>
         </div>
 
@@ -877,7 +885,7 @@ export default function CustomLaunchApiDocsPage() {
           </li>
           <li>
             <a href="/openapi/custom-launch-v3.json">
-              Open the live V3 contract
+              Review the preparatory profile 3.4 contract
             </a>
           </li>
           <li>

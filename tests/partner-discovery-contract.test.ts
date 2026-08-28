@@ -7,6 +7,8 @@ vi.mock("server-only", () => ({}));
 
 import { PARTNER_CREDENTIALS_PUBLIC_CONTRACT_V1 } from
   "../lib/custom-launch/partner-credentials-v1";
+import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
+  "../lib/custom-launch/agent-setup-v1";
 import { PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1 } from
   "../lib/custom-launch/registry-public-manifest-v1";
 import {
@@ -176,5 +178,24 @@ describe("partner credential discovery", () => {
     );
     expect(sources.join("\n")).toMatch(/(?:cannot|no credential can).*broadcast/iu);
     expect(sources.join("\n")).toMatch(/(?:cannot|no credential can).*bypass/iu);
+  });
+
+  it("keeps agent setup and guides on the same immutable lineage contract", () => {
+    const sources = [
+      PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
+      read("docs/public/developers/custom-launch.md"),
+      read("public/developers/custom-launch-api-v1.md"),
+      read("packages/launch/README.md"),
+    ];
+
+    for (const source of sources) {
+      expect(source).toMatch(/partner root (?:reads|sees|can (?:list and )?read) every launch/iu);
+      expect(source).toMatch(/subkey|child/iu);
+      expect(source).toMatch(/stable lineage|same lineage/iu);
+      expect(source).toMatch(/rotation|rotating/iu);
+    }
+    expect(sources.join("\n")).not.toMatch(
+      /rotation does not transfer the old subkey's private launch history/iu,
+    );
   });
 });

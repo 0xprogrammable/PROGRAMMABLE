@@ -21,6 +21,11 @@ Human guide: <https://programmable.market/docs/developers/custom-launch>
 
 Readiness: <https://api.programmable.market/readyz>
 
+The live unauthenticated `GET /v3/finalized-custom-launches` response uses top-level `launches` and required top-level
+`quality`. Quality contains `status` (`complete` or `partial`), `sourceRowCount`, `publishedRowCount`,
+`quarantinedRowCount`, and row-indexed `FINALIZED_ROW_QUARANTINED` diagnostics. A partial page is not a complete
+inventory.
+
 ## Existing-project integration
 
 The API key is scoped API authorization, not an instruction bundle or wallet authority. Start every cold-agent run at
@@ -88,6 +93,18 @@ a project-owned hook, native or ERC-20 quote currency, all fourteen Uniswap v4 p
 `16383`, and an exact multi-contract graph. It does not substitute a Programmable-owned hook. Every enabled v4
 permission must resolve to a concrete reachable callback implementation;
 an interface declaration or fallback-only route does not qualify.
+
+CLI `3.3.8` is the current installable release and defaults fresh packs to live profile `3.3.0`. Explicit profile
+`3.4.0` output remains preparatory and is rejected by live capabilities until backend and `.well-known` activation.
+Pending `3.4.0` requires 4-16 targets inclusive of the exact
+`programmable:settlement-fee-vault:v1`; applicants cannot select another platform fee target. Its release binding is
+`sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9`, source SHA-256 is
+`sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b`, and creation/runtime Keccak-256 are
+`0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e` and
+`0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554`. The vault uses solc 0.8.26, EVM Paris,
+optimizer 1000 and no CBOR; its constructor binds the GraphFactory and `bindRoute(address)` locates one distinct route.
+Exactly one constructor or initializer locator on that project-owned route points back to the vault. The route may be
+the hook or a custom AMM, while `settlementFeeVault()` and full fee-path behavior remain server-evidence requirements.
 
 The open arbitrary-custom-hook lane does not carry a Programmable fee claim. A 10 bps share applies only when the
 request selects a fee-certified profile or adapter and the API server verifies its per-launch behavior for the exact
@@ -172,17 +189,18 @@ Install only the immutable GitHub Release asset:
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
 programmable-launch --version
 ```
 
-Continue only after the checksum command reports `OK` and the version command prints `3.3.7`. The package name is
-`@programmable/launch`; the binary is `programmable-launch`. Do not substitute an unverified npm registry package.
+Continue only after the checksum command reports `OK` and the version command prints `3.3.8`. The package name is
+`@programmable/launch`; the binary is `programmable-launch`. Omit `profileVersion` for live `3.3.0`; explicit `3.4.0`
+output is rejected until backend activation. Do not substitute an unverified npm registry package.
 
 The CLI has exactly four commands:
 
@@ -227,7 +245,7 @@ may hold `custom-launch:create` and/or `custom-launch:read`, never `partner-subk
 budgets or expiry. Every subkey-admin operation, including list, consumes the root's
 `subkeyAdminRequestsPerHour` budget. Private partner and root administration routes are not public.
 
-Launch reads follow immutable partner lineage. A root lists and reads every launch attributed to its partner, including
+Launch reads follow immutable partner lineage. A partner root reads every launch attributed to its partner, including
 launches created by current and rotated subkeys. Each subkey sees only its own lineage, including launches for the
 different controller wallets it selected, and cannot read root or sibling launches. Rotation atomically revokes the old
 credential and gives its replacement the same lineage, so its private launch history remains readable. A separately

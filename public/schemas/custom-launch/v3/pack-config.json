@@ -2,7 +2,30 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://programmable.market/schemas/custom-launch/v3/pack-config.json",
   "title": "Programmable Custom Launch V3 pack config",
-  "description": "Closed public input contract for @programmable/launch 3.3.7. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
+  "description": "Public @programmable/launch 3.3.8 input contract. Omitted profileVersion defaults to live profile 3.3.0. Explicit profile 3.4.0 remains preparatory and is rejected by live capability validation until independently activated. Derived hashes, CREATE2 predictions, byte offsets, signatures, attribution, and wallet transactions are not applicant inputs.",
+  "x-programmable-status": "live-with-preparatory-profile",
+  "x-programmable-live-contract": {
+    "cliReleaseVersion": "3.3.8",
+    "profileVersion": "3.3.0"
+  },
+  "x-programmable-profile-3-4-contract": {
+    "minimumTargets": 4,
+    "maximumTargets": 16,
+    "legacyProfile3_3MinimumTargets": 3,
+    "canonicalSettlementFeeModule": {
+      "moduleId": "programmable:settlement-fee-vault:v1",
+      "releaseBindingSha256": "sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9",
+      "sourceSha256": "sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b",
+      "creationBytecodeSha256": "sha256:7b0d51612be90023839f36cf28ae56963d8146d28ff441dd2a20195d56238b81",
+      "creationBytecodeKeccak256": "0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e",
+      "runtimeBytecodeSha256": "sha256:980c0eec1017a7dbbd9010935107440125070a0b1fa4688bca92754e2bf1e649",
+      "runtimeBytecodeKeccak256": "0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554",
+      "compiler": "solc 0.8.26, EVM paris, optimizer 1000, viaIR false, metadata bytecodeHash none, appendCBOR false",
+      "constructor": "graphFactory",
+      "initializer": "bindRoute(address) with one exact route-target locator",
+      "reciprocalRoute": "exactly one constructor or initializer locator from that route target back to the vault; settlementFeeVault() behavior remains server-evidence authority"
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,6 +44,11 @@
   ],
   "properties": {
     "schemaVersion": { "const": "programmable.launch-pack-config.v3" },
+    "profileVersion": {
+      "enum": ["3.3.0", "3.4.0"],
+      "default": "3.3.0",
+      "description": "Omit or select 3.3.0 for the live fresh-write profile. Profile 3.4.0 is explicit preparatory material and fails closed against live 3.3 capabilities."
+    },
     "launchWallet": { "$ref": "#/$defs/address" },
     "chainId": { "const": "1" },
     "nonce": { "$ref": "#/$defs/nonzeroBytes32" },
@@ -35,10 +63,12 @@
       "type": "array",
       "minItems": 3,
       "maxItems": 16,
+      "description": "Live profile 3.3.0 accepts three through sixteen direct targets. Explicit preparatory profile 3.4.0 requires four through sixteen targets inclusive of the canonical settlement fee vault.",
       "items": { "$ref": "#/$defs/target" }
     },
     "pool": { "$ref": "#/$defs/pool" },
     "projectMetadata": { "$ref": "#/$defs/projectMetadata" },
+    "behaviorScenarioInputs": { "$ref": "#/$defs/behaviorScenarioInputs" },
     "launchProfile": { "$ref": "#/$defs/launchProfile" },
     "permitWindow": { "$ref": "#/$defs/permitWindow" },
     "fundingAuthorization": { "$ref": "#/$defs/fundingAuthorization" },
@@ -46,6 +76,22 @@
     "agentAttestation": { "$ref": "#/$defs/agentAttestation" }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": { "profileVersion": { "const": "3.4.0" } },
+        "required": ["profileVersion"]
+      },
+      "then": {
+        "properties": { "targets": { "type": "array", "minItems": 4 } },
+        "required": ["behaviorScenarioInputs"]
+      },
+      "else": {
+        "not": {
+          "properties": { "behaviorScenarioInputs": {} },
+          "required": ["behaviorScenarioInputs"]
+        }
+      }
+    },
     {
       "if": {
         "properties": {
@@ -232,6 +278,87 @@
         }
       }
     },
+    "behaviorScenarioInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "steps"],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-behavior-scenario-inputs.v1"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "x-programmable-order": "caller-declared-and-hash-bound",
+          "x-programmable-aggregateCalldataAndHookDataMaximumBytes": 1048576,
+          "items": { "$ref": "#/$defs/behaviorScenarioStep" }
+        }
+      },
+      "description": "Declarative server-runner inputs only. Scripts, URLs, assertions, expected results, statuses and runner parameters are not accepted. The packer validates exact prepared-target references and derives the hash-bound request object."
+    },
+    "behaviorScenarioStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stepId", "phase", "actor", "target", "valueWei", "calldata", "hookData"],
+      "properties": {
+        "stepId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "phase": {
+          "enum": ["seed", "swap", "liquidity", "claim", "custom-accounting"]
+        },
+        "actor": {
+          "enum": ["launch-wallet", "secondary-user", "unauthorized-claimer"]
+        },
+        "target": { "$ref": "#/$defs/behaviorScenarioTarget" },
+        "valueWei": { "$ref": "#/$defs/uintString" },
+        "calldata": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-f]{2})*$",
+          "maxLength": 131074,
+          "x-programmable-maximumBytes": 65536
+        },
+        "hookData": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-f]{2})*$",
+          "maxLength": 32770,
+          "x-programmable-maximumBytes": 16384
+        }
+      }
+    },
+    "behaviorScenarioTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "targetId"],
+          "properties": {
+            "kind": { "const": "prepared-target" },
+            "targetId": { "$ref": "#/$defs/identifier" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "binding"],
+          "properties": {
+            "kind": { "const": "chain-binding" },
+            "binding": { "const": "poolManager" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "harness"],
+          "properties": {
+            "kind": { "const": "runner-harness" },
+            "harness": { "const": "v4-actions-v1" }
+          }
+        }
+      ]
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
@@ -393,8 +520,12 @@
         "tokenTargetId": { "$ref": "#/$defs/identifier" },
         "hookTargetId": { "$ref": "#/$defs/identifier" },
         "initializerTargetId": { "$ref": "#/$defs/identifier" },
-        "platformFeeBindingTargetId": { "$ref": "#/$defs/identifier" }
-      }
+        "platformFeeBindingTargetId": {
+          "$ref": "#/$defs/identifier",
+          "description": "Must name the exact canonical programmable:settlement-fee-vault:v1 target. The applicant cannot substitute a hook or another fee recipient."
+        }
+      },
+      "description": "All four fresh profile 3.4.0 role IDs are distinct. The project-owned token, hook and initializer remain arbitrary exact-source targets; only the platform fee target is the frozen release module."
     },
     "liquidityAssessment": {
       "type": "object",

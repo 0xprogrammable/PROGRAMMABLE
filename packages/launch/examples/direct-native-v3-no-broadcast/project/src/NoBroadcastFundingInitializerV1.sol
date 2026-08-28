@@ -20,6 +20,7 @@ interface INoBroadcastEip3009Usdc {
 ///      example can never retain or move wallet funds even if someone ignores the no-broadcast instructions.
 contract NoBroadcastFundingInitializerV1 {
     address private constant MAINNET_USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address public immutable settlementFeeVault;
 
     struct AuthorizationSignature {
         bytes32 r;
@@ -37,6 +38,10 @@ contract NoBroadcastFundingInitializerV1 {
     }
 
     error NoBroadcastFixture();
+
+    constructor(address settlementFeeVault_) {
+        settlementFeeVault = settlementFeeVault_;
+    }
 
     function initialize(FundingAuthorization calldata authorization) external {
         INoBroadcastEip3009Usdc(MAINNET_USDC).receiveWithAuthorization(

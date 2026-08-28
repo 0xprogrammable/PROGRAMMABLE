@@ -8,17 +8,20 @@ transaction.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz
-curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.7.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.7/programmable-launch-3.3.7.tgz.sha256
-(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.7.tgz.sha256)
-npm install --global "$programmable_cli_dir/programmable-launch-3.3.7.tgz"
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz
+curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.8.tgz.sha256" \
+  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.8/programmable-launch-3.3.8.tgz.sha256
+(cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.8.tgz.sha256)
+npm install --global "$programmable_cli_dir/programmable-launch-3.3.8.tgz"
 programmable-launch --version
 ```
 
-The checksum command must report `OK`, and the version command must print `3.3.7`. Install this verified GitHub
+The checksum command must report `OK`, and the version command must print `3.3.8`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
+
+CLI `3.3.8` defaults fresh packs to the live profile `3.3.0`. It can materialize profile `3.4.0` only when that version
+is selected explicitly; live remote validation rejects the preparatory profile until capabilities activate it.
 
 The release includes `npm-shrinkwrap.json` so the runtime dependency closure is integrity-pinned. Release operators
 generate the CycloneDX inventory with `npm run sbom`; that inventory and the tarball checksum are evidence for exact
@@ -42,16 +45,18 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## V3 general hook profile
 
-Package `3.3.7` supports production general profile
-`programmable.direct-native-hook-graph.v1` version `3.3.0`. New packs use complete-metadata `3.3.0`; exact `3.2.0`
-requests retain their original permissive metadata semantics, while metadata-absent `3.1.0`, `3.0.0`, and `2.0.0`
+The released package `3.3.8` uses live/default general profile
+`programmable.direct-native-hook-graph.v1` version `3.3.0`. The same package contains explicit preparatory support for
+profile `3.4.0`; it is not accepted or authorized merely because those materials exist. Exact nullable-image `3.2.0`
+requests retain their original immutable semantics, while metadata-absent `3.1.0`, `3.0.0`, and `2.0.0`
 requests remain reproducible for validation and retry compatibility. The [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json)
 is the normative request and lifecycle contract. Existing V2 and V1 resources remain readable, but their create
 routes are closed. The CLI rejects legacy submit attempts locally before reading request bytes, credentials, state,
 or network.
 
-The Router primitive supports 2–16 targets. This V3 profile requires 3–16 direct CREATE2 targets because token, hook
-and initializer roles are distinct. The token, hook and all other targets are project-owned exact artifacts. All valid
+The Router primitive supports 2–16 targets. Live profile `3.3.0` retains its three-target minimum. Pending profile
+`3.4.0` requires 4–16 direct CREATE2 targets inclusive of the exact canonical settlement-fee vault; token, hook and
+initializer roles remain distinct and project-owned. All valid
 Uniswap v4 permission masks are supported when the source declaration, compiled permissions and hook-address low bits
 match. Every enabled permission must have a concrete reachable callback implementation; an interface declaration or
 fallback-only route does not qualify. The 10 bps Programmable share may be additive or included in the selected total; pack derives the effective
@@ -59,9 +64,11 @@ and project values. Static pool fees and the `0x800000` dynamic-fee sentinel are
 
 Funding can be absent, carried as exact native value on the separately reviewed Router transaction, or use an unsigned
 USDC EIP-3009 descriptor with an exact v2 nonce+r+s+v ABI-path patch. The connected wallet separately signs EIP-3009 data when that
-mode is selected. The website presents the Router transaction only after the API server has enforced objective static
-hard blocks and exact Router simulation. Missing or unavailable behavior execution leaves behavior, platform-fee,
-liquidity and routability claims unverified; an authenticated executed failure blocks the handoff. The CLI never accepts an API
+mode is selected. When pending profile `3.4.0` is activated, the website may present the Router transaction only after exact source,
+compiler and graph binding, objective static hard blocks, the platform admission receipt, exact Router simulation,
+verified behavior evidence and verified exact 10 bps fee-path evidence all pass. Missing, not-configured or unavailable
+execution remains retryable and cannot authorize; an authenticated executed failure or mutable fee path blocks the
+handoff terminally. Legacy resources retain their stored evidence state. The CLI never accepts an API
 key argument, decides authorization, signs, requests approval, or broadcasts either wallet action.
 
 Revision 3 preparation binds exact source, compiler output, the complete graph and a role-aware static report. Local
@@ -71,17 +78,24 @@ audit or guarantee of safety, honeypot absence, liquidity, tradeability, or fee 
 
 ## Platform fee policy
 
-The general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`) and has
-`productionLaunchAuthorized: true`.
+The live general V3 profile is public on Ethereum Mainnet only (`chainId: "1"`). Pending `3.4.0` remains
+preparatory even though the immutable profile payload contains `productionLaunchAuthorized: true`; discovery and the
+backend are the activation authorities.
 
-Every V3 request must bind and disclose a declared Programmable share of 1,000 parts per 1,000,000 of its assessment
-basis: `1,000 ppm = 0.10% = 10 bps`. The accounting mode is additive or inclusive, and the server recomputes the
-declared buy and sell economics. Its exact claim binding is controlled by
-`0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. That binding is a request commitment, not proof of runtime enforcement:
-the revision 3 admission receipt carries `feeBehaviorClaim: false`. Ten bps is enforced only for fee-certified profiles
-or adapters and only for the stamped PoolKey after launch-specific server evidence verifies the fee path. Arbitrary
-custom hooks are not automatically fee-enforced. Projects and users must inspect the exact implementation and
-launch-specific server evidence.
+Pending profile `3.4.0` always binds the frozen `programmable:settlement-fee-vault:v1`; the applicant cannot select a
+different fee target. Its source SHA-256 is
+`sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b` and release binding is
+`sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9`. It is built with solc 0.8.26 for Paris,
+optimizer 1000, `viaIR: false`, metadata hash `none`, and no CBOR. Creation/runtime Keccak-256 are respectively
+`0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e` and
+`0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554`.
+
+The vault constructor binds the GraphFactory and `bindRoute(address)` locates exactly one distinct project-owned route
+target. That route may be the hook or a custom AMM, but it must contain the single reciprocal constructor or initializer
+locator back to the vault and expose matching `settlementFeeVault()` behavior. Locators establish graph identity, not
+fee-path execution: server static and runtime evidence remains authoritative. Project token, hook and every unrelated
+multi-contract target remain applicant-owned and arbitrary within the general admission contract. The exact claim
+recipient remains `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c` and the share remains 0.10% (10 bps), subject to per-launch server evidence.
 
 The pool's LP fee is separate from this platform charge and must be disclosed separately. Generic fee claiming and
 buyback management for arbitrary hooks are not live. The reserved `fees:claim` and `buybacks:manage` scopes remain
@@ -185,7 +199,7 @@ The top-level fields are:
 - `source`: relative `root`, non-empty exact `paths`, decimal `sourceLineageNonce`, and `publicOrigin` containing a
   public HTTPS `url` plus the exact lowercase 40-character Git commit containing the submitted source bytes
 - `compilationUnits`: unique `{ compilationUnitId, standardJson }` entries
-- `targets`: 3–16 target definitions
+- `targets`: 4–16 pending profile `3.4.0` definitions inclusive of the canonical vault; exact `3.3.0` retries retain 3–16
 - `pool`: exact token/hook target IDs, fee, tick spacing, and `quoteCurrency` address; use
   `0x0000000000000000000000000000000000000000` for native ETH or the exact ERC-20 address for a token quote
 - `projectMetadata`: the required public token declaration and presentation input described below
@@ -193,7 +207,7 @@ The top-level fields are:
 - `launchProfile`: target roles, liquidity model, funding mode, fee accounting and claim binding
 - `agentAttestation`: stable agent ID, explicit millisecond UTC `checkedAt`, and checks that point to exact evidence files
 
-Current profile `3.3.0` requires this exact public metadata input. Ask the project owner for these values; do not invent
+Pending profile `3.4.0` requires this exact public metadata input. Ask the project owner for these values; do not invent
 them and do not hand-write either derived hash:
 
 ```json
@@ -216,6 +230,31 @@ them and do not hand-write either derived hash:
   }
 }
 ```
+
+Profile `3.4.0` also requires `behaviorScenarioInputs`. These are declarative, hash-bound runner inputs, not client
+assertions or an approval. Supply 1–128 ordered steps with unique `stepId`, a fixed phase and actor, an exact prepared
+target, `poolManager` chain binding or `v4-actions-v1` harness, canonical `valueWei`, and bounded lowercase calldata
+and hook data. The CLI derives `behaviorScenarioInputsHash`, binds it into `launchIntentHash`, and rejects scripts,
+URLs, expected results, statuses, runner parameters and unknown target IDs. The network-disabled fork runner and all
+vector verdicts remain server-owned. A minimal shape is:
+
+```json
+{
+  "schemaVersion": "programmable.custom-launch-behavior-scenario-inputs.v1",
+  "steps": [{
+    "stepId": "swap-buy-small",
+    "phase": "swap",
+    "actor": "secondary-user",
+    "target": { "kind": "runner-harness", "harness": "v4-actions-v1" },
+    "valueWei": "0",
+    "calldata": "0x",
+    "hookData": "0x"
+  }]
+}
+```
+
+The project must provide enough exact scenario inputs for its required vectors. Passing local validation does not mean
+the server-run vectors passed and does not create a fee, routability, liquidity or safety claim.
 
 `token.name` is 1–64 UTF-8 bytes and `token.symbol` is 1–16 UTF-8 bytes. Both are NFC, already trimmed public
 text; the symbol contains no whitespace. `presentation.description` must contain 20–4,096 UTF-8 bytes and at least
@@ -275,7 +314,7 @@ For new requests the patch input contains exactly `targetId`, `nonceArgumentPath
 and `vArgumentPath`. Each path is a non-empty array of zero-based ABI indices: its first index selects a top-level
 initializer input and later indices descend only static tuples or fixed-size static arrays. The four distinct zero
 leaves must resolve to `bytes32`, `bytes32`, `bytes32`, and `uint8`. The CLI derives and proves them from the compiled
-ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the public 3.3.7
+ABI and emits `programmable.eip3009-authorization-patch.v2`; applicant byte offsets are absent from the profile 3.4
 schema. Legacy r/s/v-only v1 descriptors remain readable for exact retries and emit
 `FUNDING_SIGNATURE_PATCH_V1_LEGACY`, but new integrations must use v2.
 `none` requires zero native deployment and initializer value, `wallet-transaction-value` requires a nonzero exact
@@ -356,10 +395,11 @@ permit-reissue disposition endpoint is the wallet-key-only exception.
 When a partner credential is used, the server may return immutable `partnerAttribution`; callers cannot supply or
 override it. “Launched via” is provenance only, never verification, a safety mark, endorsement, or an economic category.
 
-Partner history follows immutable lineage. A root can list and read every launch attributed to its partner, including
-current and rotated child launches. A child can read only its own lineage, never root or sibling launches. Rotating a
-subkey revokes the old credential and gives the replacement the same lineage, preserving that lineage's private launch
-history; a separately issued child starts a new isolated lineage. Every subkey-admin route consumes the root's
+Partner history follows immutable lineage. On both list and single-resource status reads, a partner root reads every launch
+attributed to its partner, including current and rotated child launches. A child can read only its own lineage, never
+root or sibling launches. Rotating a subkey revokes the old credential and gives the replacement the same lineage,
+preserving that lineage's private launch history while the revoked predecessor can no longer authenticate; a separately
+issued child starts a new isolated lineage. Every subkey-admin route consumes the root's
 `subkeyAdminRequestsPerHour` budget.
 
 For a failed, unconsumed wallet-key `PERMIT_EXPIRED` launch, the Router V1 permit-reissue endpoint returns a typed `409`;

@@ -12,6 +12,19 @@ const EXPECTED_FACTORY_SHA256 =
   "sha256:aa2673f4635543b5c24b140030461fe3161138d2d02d24c1c8c1830c13d60145";
 const EXPECTED_LOCK_SHA256 =
   "sha256:5c9d041849aab4d1ec61249f7dab773058ee374c5282bb38145d4b67554498dc";
+const EXPECTED_VAULT_DESCRIPTOR_SHA256 =
+  "sha256:b3bc25d1471953ab2afd5eb5bb2261bfe39d194e4e597eeabd6bea8d445ae56a";
+const EXPECTED_VAULT_STANDARD_JSON_SHA256 =
+  "sha256:840f0827714818dd9cf28ce15b684eb907d58b3701d3b3a9f28d0f3be137c7d9";
+const EXPECTED_VAULT_CREATION_SHA256 =
+  "sha256:7b0d51612be90023839f36cf28ae56963d8146d28ff441dd2a20195d56238b81";
+const EXPECTED_VAULT_RUNTIME_SHA256 =
+  "sha256:980c0eec1017a7dbbd9010935107440125070a0b1fa4688bca92754e2bf1e649";
+const VAULT_RELEASE_BINDING_SHA256 =
+  "sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9";
+const VAULT_SOURCE = "src/ProgrammableSettlementFeeVaultV1.sol";
+const VAULT_CONTRACT = "ProgrammableSettlementFeeVaultV1";
+const GRAPH_FACTORY = "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887";
 const POOL_MANAGER = "0x000000000004444c5dc75cB358380D2e3dE08A90";
 const NATIVE_CURRENCY = "0x0000000000000000000000000000000000000000";
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
@@ -145,6 +158,34 @@ assertDigest(canonicalHookBytes, EXPECTED_HOOK_SHA256, "canonical hook source");
 assertDigest(canonicalFactoryBytes, EXPECTED_FACTORY_SHA256, "canonical factory source");
 assertDigest(dependencyLockBytes, EXPECTED_LOCK_SHA256, "canonical dependency lock");
 
+const vaultDescriptorBytes = await readFile(
+  path.join(root, "release-modules/programmable-settlement-fee-vault-v1.json"),
+);
+const vaultStandardJsonSourceBytes = await readFile(
+  path.join(root, "release-modules/programmable-settlement-fee-vault-v1.standard-json.json"),
+);
+assertDigest(vaultDescriptorBytes, EXPECTED_VAULT_DESCRIPTOR_SHA256, "canonical vault descriptor");
+const vaultDescriptor = JSON.parse(vaultDescriptorBytes);
+if (vaultDescriptor.moduleId !== "programmable:settlement-fee-vault:v1"
+  || vaultDescriptor.sourceUnits?.at(-1)?.sha256
+    !== "sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b"
+  || vaultDescriptor.creationBytecodeKeccak256
+    !== "0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e"
+  || vaultDescriptor.runtimeBytecodeKeccak256
+    !== "0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554") {
+  throw new TypeError("canonical settlement fee vault release descriptor differs");
+}
+const vaultStandardJson = JSON.parse(vaultStandardJsonSourceBytes);
+const vaultStandardJsonBytes = Buffer.from(JSON.stringify(vaultStandardJson), "utf8");
+if (vaultStandardJsonBytes.byteLength !== 119_921) {
+  throw new TypeError("canonical settlement fee vault Standard JSON length differs");
+}
+assertDigest(
+  vaultStandardJsonBytes,
+  EXPECTED_VAULT_STANDARD_JSON_SHA256,
+  "canonical settlement fee vault Standard JSON",
+);
+
 const sources = await collectSoliditySources(ENTRYPOINTS);
 const standardJson = {
   language: "Solidity",
@@ -191,6 +232,42 @@ if (compilationErrors.length !== 0) {
   );
 }
 
+const vaultStandardJsonPath = path.join(
+  root,
+  "standard-json/programmable-settlement-fee-vault-v1.json",
+);
+const vaultCompilerOutputPath = path.join(
+  root,
+  "standard-json/.programmable-settlement-fee-vault-v1-output.json",
+);
+await writeFile(vaultStandardJsonPath, vaultStandardJsonBytes);
+await runSolc(["--standard-json"], vaultStandardJsonPath, vaultCompilerOutputPath);
+const vaultCompilerOutputText = await readFile(vaultCompilerOutputPath, "utf8");
+const vaultJsonStart = vaultCompilerOutputText.indexOf("{");
+if (vaultJsonStart === -1) throw new TypeError("locked solc returned no vault Standard JSON output");
+const vaultOutput = JSON.parse(vaultCompilerOutputText.slice(vaultJsonStart));
+const vaultCompilationErrors = (vaultOutput.errors ?? []).filter(({ severity }) => severity === "error");
+if (vaultCompilationErrors.length !== 0) {
+  throw new TypeError(
+    `vault solc failed:\n${vaultCompilationErrors.map(({ formattedMessage }) => formattedMessage).join("\n")}`,
+  );
+}
+const vaultCompiled = vaultOutput.contracts?.[VAULT_SOURCE]?.[VAULT_CONTRACT];
+if (!vaultCompiled?.abi || !vaultCompiled?.evm?.bytecode?.object
+  || !vaultCompiled?.evm?.deployedBytecode?.object) {
+  throw new TypeError("canonical settlement fee vault compiler output is incomplete");
+}
+assertDigest(
+  Buffer.from(vaultCompiled.evm.bytecode.object, "hex"),
+  EXPECTED_VAULT_CREATION_SHA256,
+  "canonical settlement fee vault creation bytecode",
+);
+assertDigest(
+  Buffer.from(vaultCompiled.evm.deployedBytecode.object, "hex"),
+  EXPECTED_VAULT_RUNTIME_SHA256,
+  "canonical settlement fee vault runtime bytecode",
+);
+
 const selectedArtifacts = [
   artifact(output, "src/NoBroadcastLaunchTokenV1.sol", "NoBroadcastLaunchTokenV1", "token"),
   artifact(
@@ -201,6 +278,30 @@ const selectedArtifacts = [
   ),
   artifact(output, "src/ProgrammableVolumeFeeHookV2.sol", "ProgrammableVolumeFeeHookV2", "hook"),
 ];
+selectedArtifacts.push({
+  targetId: "settlement-fee-vault",
+  compiled: vaultCompiled,
+  value: {
+    abi: vaultCompiled.abi,
+    bytecode: {
+      object: vaultCompiled.evm.bytecode.object,
+      linkReferences: {},
+    },
+    deployedBytecode: {
+      object: vaultCompiled.evm.deployedBytecode.object,
+      linkReferences: {},
+      immutableReferences: {},
+    },
+    metadata: {
+      compiler: { version: "0.8.26+commit.8a97fa7a" },
+      language: "Solidity",
+      settings: {
+        ...vaultStandardJson.settings,
+        compilationTarget: { [VAULT_SOURCE]: VAULT_CONTRACT },
+      },
+    },
+  },
+});
 const artifactBytes = new Map(selectedArtifacts.map(({ targetId, value }) => [
   targetId,
   Buffer.from(`${JSON.stringify(value)}\n`, "utf8"),
@@ -245,8 +346,17 @@ const evidence = {
   canonicalFactorySourceSha256: sha256(canonicalFactoryBytes),
   dependencyLockSha256: sha256(dependencyLockBytes),
   standardJsonSha256: sha256(standardJsonBytes),
+  canonicalSettlementFeeModule: {
+    moduleId: "programmable:settlement-fee-vault:v1",
+    releaseBindingSha256: VAULT_RELEASE_BINDING_SHA256,
+    standardJsonSha256: sha256(vaultStandardJsonBytes),
+    creationBytecodeSha256: EXPECTED_VAULT_CREATION_SHA256,
+    runtimeBytecodeSha256: EXPECTED_VAULT_RUNTIME_SHA256,
+    routeTargetId: "initializer",
+    reciprocalLocatorPhase: "constructor",
+  },
   artifacts: Object.fromEntries([...artifactBytes].map(([targetId, bytes]) => [targetId, sha256(bytes)])),
-  targetCount: 3,
+  targetCount: 4,
   declaredHookPermissionMask: "0x20cc",
   fundingSignaturePatch: {
     targetId: "initializer",
@@ -262,6 +372,10 @@ const evidence = {
 const evidenceBytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`, "utf8");
 await writeFile(path.join(root, "evidence/rehearsal.json"), evidenceBytes, { mode: 0o600 });
 
+const initializerRuntimeImmutables = runtimeImmutablesForInitializer(
+  output,
+  selectedArtifacts[1].compiled,
+);
 const hookRuntimeImmutables = runtimeImmutablesForHook(output, selectedArtifacts[2].compiled, quoteCurrency);
 const config = {
   schemaVersion: "programmable.launch-pack-config.v3",
@@ -270,11 +384,15 @@ const config = {
   nonce,
   source: {
     root: ".",
-    paths: ["package-lock.json", "src"],
+    paths: ["package-lock.json", "release-modules", "src"],
     sourceLineageNonce,
     publicOrigin: { url: publicOriginUrl.toString(), revision },
   },
   compilationUnits: [
+    {
+      compilationUnitId: "canonical-settlement-fee-vault-v1",
+      standardJson: "standard-json/programmable-settlement-fee-vault-v1.json",
+    },
     { compilationUnitId: "direct-native-v3-solc", standardJson: "standard-json/direct-native-v3.json" },
   ],
   targets: [
@@ -283,7 +401,7 @@ const config = {
       compilationUnitId: "direct-native-v3-solc",
       artifact: "artifacts/initializer.json",
       applicantSalt: `0x${"01".repeat(32)}`,
-      constructorArguments: [],
+      constructorArguments: [{ target: "settlement-fee-vault" }],
       initializer: {
         function: "initialize",
         arguments: [[
@@ -299,7 +417,7 @@ const config = {
       initializerValueWei: "0",
       componentKind: "other",
       declaredHookPermissions: null,
-      runtimeImmutables: [],
+      runtimeImmutables: initializerRuntimeImmutables,
     },
     {
       targetId: "token",
@@ -337,6 +455,22 @@ const config = {
       ],
       runtimeImmutables: hookRuntimeImmutables,
     },
+    {
+      targetId: "settlement-fee-vault",
+      compilationUnitId: "canonical-settlement-fee-vault-v1",
+      artifact: "artifacts/settlement-fee-vault.json",
+      applicantSalt: `0x${"04".repeat(32)}`,
+      constructorArguments: [GRAPH_FACTORY],
+      initializer: {
+        function: "bindRoute",
+        arguments: [{ target: "initializer" }],
+      },
+      deploymentValueWei: "0",
+      initializerValueWei: "0",
+      componentKind: "other",
+      declaredHookPermissions: null,
+      runtimeImmutables: [],
+    },
   ],
   pool: {
     tokenTargetId: "token",
@@ -362,7 +496,7 @@ const config = {
       tokenTargetId: "token",
       hookTargetId: "hook",
       initializerTargetId: "initializer",
-      platformFeeBindingTargetId: "hook",
+      platformFeeBindingTargetId: "settlement-fee-vault",
     },
     liquidityModel: {
       schemaVersion: "programmable.direct-native-liquidity-model-intent.v1",
@@ -516,6 +650,23 @@ function runtimeImmutablesForHook(compilerOutput, compiledHook, quoteCurrencyAdd
       }
       throw new TypeError(
         `unmapped hook immutable ${immutableId} (${declaration.name}); do not guess runtime materialization`,
+      );
+    });
+}
+
+function runtimeImmutablesForInitializer(compilerOutput, compiledInitializer) {
+  const declarations = new Map();
+  for (const source of Object.values(compilerOutput.sources ?? {})) walkAst(source.ast, declarations);
+  const references = compiledInitializer.evm.deployedBytecode.immutableReferences ?? {};
+  return Object.keys(references).sort((left, right) => BigInt(left) < BigInt(right) ? -1 : 1)
+    .map((immutableId) => {
+      const declaration = declarations.get(immutableId);
+      if (!declaration) throw new TypeError(`compiler immutable ${immutableId} has no AST declaration`);
+      if (declaration.name === "settlementFeeVault") {
+        return { immutableId, abiType: "address", target: "settlement-fee-vault" };
+      }
+      throw new TypeError(
+        `unmapped initializer immutable ${immutableId} (${declaration.name}); do not guess runtime materialization`,
       );
     });
 }
