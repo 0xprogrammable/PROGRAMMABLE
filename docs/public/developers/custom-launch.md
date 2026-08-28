@@ -1,10 +1,11 @@
 ---
-description: Package, submit and track deterministic wallet-bound Custom launches
+description: Package, submit and track deterministic Custom launches with scoped API credentials
 ---
 
 # Custom Launch API
 
-Public V3 general-hook creation, list and single-resource reads are live for wallet-bound requests on Ethereum Mainnet. V2 and V1 history
+Public V3 general-hook creation, list and single-resource reads accept wallet keys, partner roots and bounded partner
+subkeys on Ethereum Mainnet. V2 and V1 history
 reads remain available, while authenticated `POST /v1/custom-launches` stays permanently read only with
 `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Legacy Registry and GitHub submission intake is closed.
 
@@ -19,8 +20,10 @@ executable by a cold external agent.
 
 ## Existing-project integration
 
-An API key authorizes API operations for its bound wallet; it does not contain integration instructions. A cold agent
-must start at [`/.well-known/programmable.json`](https://programmable.market/.well-known/programmable.json), select
+An API key authorizes only its scoped API operations; it does not contain integration instructions or wallet authority.
+A cold agent must start at
+[`/.well-known/programmable.json`](https://programmable.market/.well-known/programmable.json), read
+`customLaunchApi.partnerCredentials` to distinguish partner roots and bounded subkeys from wallet keys, select
 `customLaunchApi.agentIntegration`, then fetch the advertised
 [`programmable.custom-launch-agent-remediation-catalog.v1`](https://programmable.market/policies/custom-launch-agent-remediation-v1.json),
 this guide, the V3 OpenAPI contract and the pinned CLI release. That public chain is the integration contract for every
