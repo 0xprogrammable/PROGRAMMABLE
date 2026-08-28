@@ -245,6 +245,30 @@ export function launchDraftIsLocked(
   );
 }
 
+export async function createClassicLaunchPreflightHeaders(
+  input: Readonly<{
+    getAccessToken: () => Promise<string | null>;
+    getIdentityToken: () => Promise<string | null>;
+  }>,
+) {
+  // Identity-token lookup can refresh Privy's current session. Acquire the
+  // authoritative access token afterwards so the two credentials cannot race
+  // and represent different session revisions.
+  const identityToken = await input.getIdentityToken().catch(() => null);
+  const accessToken = await input.getAccessToken();
+  if (!accessToken) {
+    throw new Error("Reconnect the launch wallet and try again");
+  }
+
+  return new Headers({
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+    ...(identityToken
+      ? { "X-Privy-Identity-Token": identityToken }
+      : {}),
+  });
+}
+
 export function launchDraftForSuccessDisplay(
   draft: LaunchDraft,
   submittedFromCurrentDraft: boolean,
@@ -1709,23 +1733,18 @@ function LaunchBuilderFormView({
     const timeout = window.setTimeout(() => controller.abort(), 65_000);
 
     try {
-      const headers = new Headers({ "Content-Type": "application/json" });
+      let headers = new Headers({ "Content-Type": "application/json" });
       if (
         classicV4UiReleaseEnabled
         && checkedDraft.launchModel === "classic-v3"
         && checkedDraft.classicContractRelease === "classic-v4"
       ) {
-        const [accessToken, identityToken] = await Promise.all([
-          getAccessToken(),
-          getIdentityToken().catch(() => null),
-        ]);
-        if (!accessToken) {
-          throw new Error("Reconnect the launch wallet and try again");
-        }
-        headers.set("Authorization", `Bearer ${accessToken}`);
-        if (identityToken) {
-          headers.set("X-Privy-Identity-Token", identityToken);
-        }
+        // Privy's identity lookup can refresh the session. Fetch it before the
+        // access token instead of racing both credentials in parallel.
+        headers = await createClassicLaunchPreflightHeaders({
+          getAccessToken,
+          getIdentityToken,
+        });
       }
       const response = await fetch("/api/launch/preflight", {
         method: "POST",

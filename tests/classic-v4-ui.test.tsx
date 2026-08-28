@@ -1,10 +1,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   classicMaximumCheckDraft,
   classicV4TransactionBlockReason,
+  createClassicLaunchPreflightHeaders,
   EnhancedClassicFeeStep,
   normalizeClassicV3Draft,
 } from "../components/launch-builder";
@@ -24,6 +25,51 @@ function renderFeeStep(draft: LaunchDraft, enableV4 = true) {
 }
 
 describe("Classic V4 launch controls", () => {
+  it("gets identity before access so Privy cannot return two racing session revisions", async () => {
+    const events: string[] = [];
+    const getIdentityToken = vi.fn(async () => {
+      events.push("identity-start");
+      await Promise.resolve();
+      events.push("identity-settled");
+      return "fresh-identity-token";
+    });
+    const getAccessToken = vi.fn(async () => {
+      events.push("access");
+      return "fresh-access-token";
+    });
+
+    const headers = await createClassicLaunchPreflightHeaders({
+      getAccessToken,
+      getIdentityToken,
+    });
+
+    expect(events).toEqual(["identity-start", "identity-settled", "access"]);
+    expect(getAccessToken).toHaveBeenCalledTimes(1);
+    expect(getIdentityToken).toHaveBeenCalledTimes(1);
+    expect(headers.get("authorization")).toBe("Bearer fresh-access-token");
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.get("x-privy-identity-token")).toBe(
+      "fresh-identity-token",
+    );
+  });
+
+  it("keeps the verified access session usable when Privy omits its optional identity token", async () => {
+    const headers = await createClassicLaunchPreflightHeaders({
+      getIdentityToken: async () => null,
+      getAccessToken: async () => "fresh-access-token",
+    });
+
+    expect(headers.get("authorization")).toBe("Bearer fresh-access-token");
+    expect(headers.has("x-privy-identity-token")).toBe(false);
+  });
+
+  it("fails closed before preflight when no verified access session is available", async () => {
+    await expect(createClassicLaunchPreflightHeaders({
+      getIdentityToken: async () => "identity-token",
+      getAccessToken: async () => null,
+    })).rejects.toThrow("Reconnect the launch wallet and try again");
+  });
+
   it("lets Max repair an invalid or over-capacity Activation Buy", () => {
     const overCapacity = {
       ...createClassicV3Draft(),
