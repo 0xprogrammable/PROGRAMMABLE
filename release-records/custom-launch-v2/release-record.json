@@ -11,19 +11,19 @@
   "subject": {
     "website": {
       "repository": "0xprogrammable/programmable",
-      "commitSha": "ff51e713feb52e4e13f3c553d1c726f3c8f2858c",
-      "treeSha": "53a8ce252d98703008ba17408f6c24555b8be45e",
+      "commitSha": "191e618225f35c476a9ebeebc864cea797a42d7c",
+      "treeSha": "7a09dd538dc617b8fd8b72bc37626967f626629a",
       "reviewedDiffBaseSha": "3693c7cdc28b8fdba98001158f23ad45013f1f17",
-      "reviewedDiffSha256": "sha256:213717b96113d9167741b7121e93f7397593ed77bfeaf4471f3a91dd27efc657",
+      "reviewedDiffSha256": "sha256:8f608430d0d3561567c2657df3c7d87d1365f0d0e102d0c5118787cbba2c0ffc",
       "publicOpenApiSha256": "sha256:8c7f90255f62bb8c27083c868dfdef5a7cc15d9ed0815248c55b67b7b9302b6a",
       "launchPackageManifestSha256": "sha256:e93a6536fd1bbeff2d7e98ee4bfc5e2f426268181cc5a610460be8501fddfa61"
     },
     "apiService": {
       "repository": "0xprogrammable/programmable-open-hook-v2-internal",
       "servicePath": "services/custom-launch-api-v1",
-      "bindingAttestationCommitSha": "7a317a20ad583a852d54e15aeb9b654b1bb01c09",
+      "bindingAttestationCommitSha": "6aa1f3d544194d501d20383bf09c7f55e87e788a",
       "bindingDocumentPath": "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json",
-      "bindingDocumentSha256": "sha256:59b294c91ab37e26903e82090e41d814d1591be56efa7aaeb5bee6625363c579",
+      "bindingDocumentSha256": "sha256:87fc576a36aa637affb7126a5fa49256781d77b89d1e126c3a9aaba17acb38f3",
       "candidateCommitSha": "20afa26d4f97ce4f4990e03f4632ce99c75a164b",
       "candidateTreeSha": "219c72f7b8a03e05cd3f48f2154f9f99d2199a9c",
       "imageDigest": "sha256:29c7a320092b8985128169876fc4af1c932e5bc43b664191d929a14d8fdced33",
@@ -43,7 +43,7 @@
       "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
       "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
     },
-    "releaseSubjectSha256": "sha256:2bd283557856d59aed2216f3ccd25853033402223f56d03de4a9bdf3dfa8662d"
+    "releaseSubjectSha256": "sha256:1a8dc18d09eb29bf0d2563d79a0aef0717532048b72263f10bc11613b2853fe0"
   },
   "releaseApproval": {
     "authority": "release_owner",
@@ -52,72 +52,72 @@
     "immutableReference": "codex-task://01a049b7-27ea-7540-af46-e3c2f61abb6e",
     "decidedAt": "2026-08-28T19:44:52Z",
     "statementSha256": "sha256:6f4212d1f05aa3e95749e3c4842f57ea5c202d9c23befaa4274e2258fd554199",
-    "releaseSubjectSha256": "sha256:2bd283557856d59aed2216f3ccd25853033402223f56d03de4a9bdf3dfa8662d"
+    "releaseSubjectSha256": "sha256:1a8dc18d09eb29bf0d2563d79a0aef0717532048b72263f10bc11613b2853fe0"
   },
   "validation": {
     "gates": [
       {
         "id": "website_release",
         "result": "passed",
-        "evidenceSha256": "sha256:c095a78369223164d0ecf0129bad7efbd3e9834dc2bac650cc9c196099bfbf93",
-        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "evidenceSha256": "sha256:ac7afd4ca498597488a787b73619ddcfbd423eda7523faf4454b4a068aa7b4ef",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33206344728",
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "custom_launch_api_release",
         "result": "passed",
-        "evidenceSha256": "sha256:dc0bef3d94dc7a5939ae9eb7a650dc0afb9cf8a75c9723204a59c64401b48f65",
-        "evidenceLocator": "https://github.com/0xprogrammable/programmable-open-hook-v2-internal/commit/7a317a20ad583a852d54e15aeb9b654b1bb01c09",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "evidenceSha256": "sha256:d7d9e4b163ab073029b2c049cd865afde9c9725e34f92d01b04e71423ef5d12d",
+        "evidenceLocator": "https://github.com/0xprogrammable/programmable-open-hook-v2-internal/commit/6aa1f3d544194d501d20383bf09c7f55e87e788a",
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "database_migrations",
         "result": "passed",
-        "evidenceSha256": "sha256:123b41e091208d60687e117934a4b302b84ef254ff2c9ecb4496c491afbac161",
+        "evidenceSha256": "sha256:eeb578e2d130a784dc9e6d884279cd1b74a881c6854e67c3c3991648e044c74a",
         "evidenceLocator": "https://github.com/0xprogrammable/programmable-open-hook-v2-internal/commit/20afa26d4f97ce4f4990e03f4632ce99c75a164b",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "security",
         "result": "passed",
-        "evidenceSha256": "sha256:31b72339a34572b827c432392ca4ea53ae56bc12777d1c8a9bd42fdd1b5c566b",
-        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371/job/98960611190",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "evidenceSha256": "sha256:cf11fc86e1e92c0c8452ef32578016e347d62372020145e18457220ddd28e511",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33206344728",
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "public_contract",
         "result": "passed",
-        "evidenceSha256": "sha256:cee02e707c66d25de65d6d689abf0e706d1ff0c7130a646ef66a5cfbabb2ed3a",
+        "evidenceSha256": "sha256:c484bd50262b73d702e66eb12149ad7d5178a97b0a316dcb39944c119dc84195",
         "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "source_verification_pipeline",
         "result": "passed",
-        "evidenceSha256": "sha256:3f7ccc8b99872693102cd843fb59ec64d655965c8c2ba04060af0ea3c562c0bb",
-        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371/job/98960611131",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "evidenceSha256": "sha256:119c544d9302094d422f86e761f2abba29933bdcaeff95895b6e98213c9f66e9",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371",
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "browser_qa",
         "result": "passed",
-        "evidenceSha256": "sha256:c170f8c103b9ea4df03cdf9c9bc8d450376b05efefbf973b5062e05b8116e0c1",
-        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33203875371/job/98960611104",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "evidenceSha256": "sha256:82df50a1bab45cf9d8412df12599463e61e71075b7e155f1c4dad313b7b23f2a",
+        "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/actions/runs/33206344728/job/98968312034",
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "rollback_snapshot",
         "result": "passed",
-        "evidenceSha256": "sha256:e3eebbc9ffbb8a804227c1be370440f6dcb10cfd5f33fd79f022ec93883a1823",
-        "evidenceLocator": "codex-task://01a049b7-27ea-7540-af46-e3c2f61abb6e/release-evidence/rollback_snapshot.json",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "evidenceSha256": "sha256:6ecffbf6954e59fb9c3d10e0352bd25f4c87d8760b4b9eed9e8938a0f980561d",
+        "evidenceLocator": "codex-task://01a049b7-27ea-7540-af46-e3c2f61abb6e/release-evidence/rollback_snapshot-pr533.json",
+        "completedAt": "2026-08-28T20:09:18Z"
       },
       {
         "id": "clean_room_no_broadcast",
         "result": "passed",
-        "evidenceSha256": "sha256:2c7bd0a9ab2d599631175378f566692242a7bdd2a1b6cc12bcfa6bac643102f8",
+        "evidenceSha256": "sha256:d82a3a09299bc2029300ffb3b5bf8a5870809d5e9405391a9e2ba343c87bf9d9",
         "evidenceLocator": "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
-        "completedAt": "2026-08-28T19:44:37Z"
+        "completedAt": "2026-08-28T20:09:18Z"
       }
     ]
   },
@@ -127,13 +127,13 @@
       "immutableDeploymentUrl": "https://launcher-v4-ksppaf9qf-aficialais-projects.vercel.app",
       "commitSha": "3693c7cdc28b8fdba98001158f23ad45013f1f17",
       "configurationSnapshotSha256": "sha256:c162daa130eb94e90dffa1c6cdbd753ba0f117fb5c1c0aa78752959fa9593c5c",
-      "capturedAt": "2026-08-28T19:43:23Z"
+      "capturedAt": "2026-08-28T20:09:18Z"
     },
     "apiService": {
       "flyReleaseVersion": 36,
       "imageDigest": "sha256:29c7a320092b8985128169876fc4af1c932e5bc43b664191d929a14d8fdced33",
       "candidateCommitSha": "20afa26d4f97ce4f4990e03f4632ce99c75a164b",
-      "capturedAt": "2026-08-28T19:43:23Z"
+      "capturedAt": "2026-08-28T20:09:18Z"
     }
   },
   "candidate": {
