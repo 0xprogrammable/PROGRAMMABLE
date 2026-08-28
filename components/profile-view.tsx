@@ -25,10 +25,6 @@ import {
   type CreatorProjectMarketCapV1,
   type CreatorProjectSummaryV1,
 } from "@/components/profile-projects";
-import {
-  PredictionMarketPortfolio,
-  predictionPortfolioLoadingPlaceholderCount,
-} from "@/components/prediction-market-portfolio";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { formatMarketCapMetric } from "@/components/animated-market-cap";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
@@ -3768,8 +3764,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         onRefresh={retryProfileData}
         refreshing={profileRefreshing}
       />
-      <PredictionMarketPortfolio />
-
       <ProfileAccountWorkspace
         key={account.toLowerCase()}
         connected={Boolean(account)}
@@ -4548,18 +4542,6 @@ function ProfileLoadingSkeleton({
           >
             <span className={styles.profileSkeletonSectionHeader}>
               <span className={styles.profileSkeletonHeading} />
-            </span>
-            <span className={styles.profileSkeletonTabs} />
-            <span className={styles.profileSkeletonPredictionRows}>
-              {Array.from(
-                { length: predictionPortfolioLoadingPlaceholderCount },
-                (_, item) => (
-                  <span
-                    className={styles.profileSkeletonPredictionRow}
-                    key={item}
-                  />
-                ),
-              )}
             </span>
           </div>
         </>

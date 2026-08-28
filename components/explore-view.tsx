@@ -24,7 +24,6 @@ import {
   type MarketCapMetric,
 } from "@/components/animated-market-cap";
 import { XBrandIcon } from "@/components/brand-icons";
-import { ExploreModeSwitch } from "@/components/explore-mode-switch";
 import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
 import {
   isInterfacePreviewHost,
@@ -3121,7 +3120,6 @@ export function ExploreView({
     <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
           <Heading data-explore-heading>Explore</Heading>
-          <ExploreModeSwitch active="token" />
         </header>
 
         <section

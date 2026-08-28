@@ -531,16 +531,10 @@ describe("profile workspace loading state", () => {
       "Array.from({ length: creatorProjectPageSize }, (_, item)",
     );
     expect(profileViewSource).toContain(
-      "length: predictionPortfolioLoadingPlaceholderCount",
-    );
-    expect(profileViewSource).toContain(
       "Array.from({ length: profileClaimPageSize }, (_, item)",
     );
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonLaunch\s*\{[^}]*min-height:\s*463px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
-      /\.profileSkeletonPrediction\s*\{[^}]*min-height:\s*422px;/s,
     );
     expect(profileExperienceCss).toMatch(
       /@media \(max-width:\s*820px\)[\s\S]*?\.profileSkeletonSummary,[\s\S]*?\.profileSkeletonClaims\s*\{[^}]*min-height:\s*340px;/s,
@@ -550,12 +544,6 @@ describe("profile workspace loading state", () => {
     );
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonWorkspace\s*\{[^}]*min-height:\s*398px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
-      /\.profileSkeletonPredictionRow\s*\{[^}]*min-height:\s*322px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
-      /\.profileSkeletonPredictionRow:nth-child\(n \+ 3\)\s*\{[^}]*display:\s*none;/s,
     );
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonHero\s*\{[^}]*min-height:\s*350px;/s,

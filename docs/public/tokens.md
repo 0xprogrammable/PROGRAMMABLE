@@ -4,13 +4,12 @@ description: Compare Programmable launch models and understand how their token, 
 
 # Launch models
 
-Programmable separates direct public models from deterministic Custom graph launches. Prediction Markets is a separately versioned launch model. Choose the model by the behavior the product needs, not by how unusual its name or branding is.
+Programmable separates direct public models from deterministic Custom graph launches. Choose the model by the behavior the product needs, not by how unusual its name or branding is.
 
 | Model              | What it creates                                                            | Market                                        | Access                                |
 | ------------------ | -------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------- |
 | Classic            | Fixed supply tokens with configurable buy and sell transaction fees        | ETH on Uniswap v4                             | Open through Create                   |
 | Custom             | Tokens or applications that need their own deterministic hook graph         | The pool and route in the authorized transaction | Wallet-bound Custom Launch API       |
-| Prediction Markets | Onchain outcome markets                                                    | A separately versioned Uniswap v4 release     | Open through Create                   |
 
 ## What is a hook
 
@@ -32,12 +31,4 @@ Custom releases are for products whose behavior cannot be represented by the Cla
 
 {% content-ref url="models/custom.md" %}
 [custom.md](models/custom.md)
-{% endcontent-ref %}
-
-## Prediction Markets
-
-Prediction Markets lets a creator configure an available onchain outcome market. The [canonical Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets) defines the current networks, market types, collateral and activation rules, fees and creator rewards, resolution rules, contract addresses and release evidence.
-
-{% content-ref url="models/prediction-markets.md" %}
-[prediction-markets.md](models/prediction-markets.md)
 {% endcontent-ref %}

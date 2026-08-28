@@ -115,9 +115,7 @@ function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
   if (activePath === "/explore") {
     return (
       pathname === "/explore" ||
-      pathname.startsWith("/explore/") ||
-      pathname === "/markets" ||
-      pathname.startsWith("/markets/")
+      pathname.startsWith("/explore/")
     );
   }
   if (activePath === "/docs") {

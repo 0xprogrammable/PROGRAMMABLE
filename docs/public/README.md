@@ -6,9 +6,9 @@ coverY: 0
 
 # Programmable
 
-Programmable is a launch platform for Uniswap v4 products. Classic turns a focused set of choices into a fixed supply token, a permanently locked ETH pool and creator rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or execution graph. Prediction Markets is the separately versioned launch model for onchain outcome markets.
+Programmable is a launch platform for Uniswap v4 products. Classic turns a focused set of choices into a fixed supply token, a permanently locked ETH pool and creator rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or execution graph.
 
-Classic and Prediction Markets are available from Create. Public V3.3 general-hook creation and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the controller wallet reviews and signs its own transaction on the required network.
+Classic is available from Create. Public V3.3 general-hook creation and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the controller wallet reviews and signs its own transaction on the required network.
 
 {% hint style="info" %}
 These docs describe current public products and the evidence available for them. A successful check, prepared artifact, authorized transaction or visible token page is not a guarantee of safety, liquidity or future value.
@@ -19,7 +19,6 @@ These docs describe current public products and the evidence available for them.
 | I want to                    | Start here                                                                               | What happens next                                                                                                            |
 | ---------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | Launch a standard token      | [Create Classic](https://programmable.market/launch)                                     | Configure the token, fees, reward recipients and Initial Buy before signing one Ethereum transaction                         |
-| Create a prediction market   | [Create Prediction Market](https://programmable.market/launch)                           | Choose an available market and review the current release requirements before signing                                        |
 | Build with a custom hook     | [Custom Launch API guide](developers/custom-launch.md)                                  | Build, package, validate, submit and track the exact V3 request; stop for separate wallet review and signing                    |
 | Verify or integrate launches | [Developer reference](developers/README.md)                                              | Resolve current deployments from the manifest and reproduce provenance from Ethereum                                         |
 
@@ -42,14 +41,14 @@ To inspect an existing token, begin with [Explore](https://programmable.market/e
 1. The creator configures a supported launch or prepares and submits one exact Custom API bundle. CLI and preflight results are preparation, not the server's launch decision.
 2. For Custom, the API server enforces objective static hard blocks and exact Router simulation before it exposes a wallet handoff. Missing behavior evidence keeps related product claims unverified; an authenticated executed failure blocks. The creator wallet then checks the network, destination, calldata and value and signs the transaction.
 3. The required network confirms the transaction and the launch reaches the required finality.
-4. The appropriate website surface publishes the canonical token, pool or prediction market identity. The developer feeds currently cover the Ethereum launch records. Optional price, chart and liquidity data remain separate.
+4. The appropriate website surface publishes the canonical token and pool identity. The developer feeds currently cover the Ethereum launch records. Optional price, chart and liquidity data remain separate.
 
 ## What Programmable proves
 
-Each supported launch has one or more tokens, a pool identity and a launch model. Router based Ethereum launches can also carry a launch stamp that binds the token, hook, PoolManager and pool to one canonical execution record. Historical Ethereum launches remain discoverable through the public data service even when they predate the Router. Prediction Markets has its own versioned identity and release records.
+Each supported launch has one or more tokens, a pool identity and a launch model. Router based Ethereum launches can also carry a launch stamp that binds the token, hook, PoolManager and pool to one canonical execution record. Historical Ethereum launches remain discoverable through the public data service even when they predate the Router.
 
 Programmable keeps agent evidence, exact-source provider status, API preparation, wallet execution, chain finality and public indexing separate. That separation is deliberate: it makes it possible to say exactly what has been proven without turning one green check into a broader claim.
 
 ## Official sources
 
-The website is [programmable.market](https://programmable.market), the authenticated Custom write API is [api.programmable.market](https://api.programmable.market), and the read only Ethereum developer service is [developers.programmable.family](https://developers.programmable.family). The public organization is [0xprogrammable](https://github.com/0xprogrammable). Prediction Markets source and current release details live in the [public Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets). Contract addresses and integration data should come from canonical release evidence rather than copied screenshots or third party token metadata.
+The website is [programmable.market](https://programmable.market), the authenticated Custom write API is [api.programmable.market](https://api.programmable.market), and the read only Ethereum developer service is [developers.programmable.family](https://developers.programmable.family). The public organization is [0xprogrammable](https://github.com/0xprogrammable). Contract addresses and integration data should come from canonical release evidence rather than copied screenshots or third party token metadata.

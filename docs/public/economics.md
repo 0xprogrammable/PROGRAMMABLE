@@ -10,7 +10,6 @@ Costs and fee paths depend on the transaction that actually executes. A launch m
 | ------------------ | -------------------------------------------------------- | ---------------------------------------------------------------- |
 | Classic            | 0.1% of the gross ETH amount exchanged                   | Included in the selected buy or sell transaction fee             |
 | Standard Custom    | 0.1% of the gross amount exchanged on the supported route | Defined by the exact release used by the graph                   |
-| Prediction Markets | Defined by the active protocol release                   | Current rates, recipients and creator rewards live in its source |
 | Public template    | Intended 0.1% share inside a 0.2% total transaction fee  | Not active while public template intake remains closed           |
 
 In these docs, transaction fee means the percentage charged when a token is bought or sold. It is separate from network gas and from the Uniswap pool fee. The active contract and release determine the exact rate and recipient.
@@ -22,10 +21,6 @@ Classic creators select buy and sell transaction fees from 1% through 10%. Progr
 ## Custom releases
 
 Custom fees are specific to each release. The published standard production policy assigns 0.1% of the gross amount exchanged on the verified supported market path to Programmable. A release without a qualifying market has no fee legs. Every other Custom fee mode fails closed.
-
-## Prediction Markets
-
-Prediction Markets economics are separately versioned. Use the [canonical Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets) for current activation costs, trading and pool fees, fee recipients, creator rewards and the treatment of protocol or liquidity-provider fees. Do not infer those terms from Classic or an older Prediction Markets release.
 
 ## Protocol revenue
 

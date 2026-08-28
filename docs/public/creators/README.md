@@ -1,18 +1,14 @@
 ---
-description: Start a Classic token or prediction market, or package one exact Custom project locally
+description: Start a Classic token or package one exact Custom project locally
 ---
 
 # Create
 
-Choose Classic when the product fits the standard token launch settings. Choose Prediction Markets for an onchain outcome market. Choose Custom when behavior depends on project specific hook code or a wider execution graph. The paths share one public product, but their transaction and release requirements differ.
+Choose Classic when the product fits the standard token launch settings. Choose Custom when behavior depends on project specific hook code or a wider execution graph. The paths share one public product, but their transaction and release requirements differ.
 
 ## Launch Classic
 
 Classic is available from [Create](https://programmable.market/launch). The launch wallet supplies token metadata, selects buy and sell transaction fees, chooses reward recipients and Initial Buy custody, then reviews one Ethereum transaction. The standard model does not require a source bundle or Custom Launch API key.
-
-## Create a Prediction Market
-
-Prediction Markets is available from [Create](https://programmable.market/launch). The creator configures an available market and reviews the transaction required by the active release. Check the [canonical Prediction Markets repository](https://github.com/0xprogrammable/Prediction-Markets) for current networks, market types, costs, fees, creator rewards and resolution rules.
 
 ## Build a Custom project
 

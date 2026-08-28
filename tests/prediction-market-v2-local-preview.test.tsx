@@ -29,27 +29,19 @@ function preview(
 }
 
 describe("Prediction V2 development-only local preview", () => {
-  it("keeps the non-development launch runtime on the existing BTC V1 path", () => {
+  it("keeps the internal fixture out of the public launch runtime", () => {
     expect(process.env.NODE_ENV).not.toBe("development");
     const html = renderToStaticMarkup(<LaunchExperience />);
 
-    expect(html).toContain('data-launch-model-option="prediction"');
-    expect(html).toContain("Create a BTC prediction with YES and NO.");
+    expect(html).not.toContain('data-launch-model-option="prediction"');
     expect(html).not.toContain("programmable-prediction-v2-local-preview-v1");
 
     const source = readFileSync(
       join(root, "components/launch-entry.tsx"),
       "utf8",
     );
-    expect(source).toContain(
-      'if (process.env.NODE_ENV !== "development") {',
-    );
-    expect(source).toMatch(
-      /const LazyDevelopmentPredictionV2Preview = process\.env\.NODE_ENV === "development"[\s\S]*?prediction-market-v2-local-preview[\s\S]*?: null;/u,
-    );
-    expect(source).toContain('previewCandidate === "prediction-v2"');
-    expect(source).toContain('searchParams.get("predictionState")');
-    expect(source).toContain('searchParams.get("fixture")');
+    expect(source).not.toContain("prediction-market-v2-local-preview");
+    expect(source).not.toContain('previewCandidate === "prediction-v2"');
     expect(source).not.toContain("custom-launch-experience");
     expect(source).not.toContain("custom-launch-local-preview");
   });

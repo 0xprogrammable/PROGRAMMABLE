@@ -72,11 +72,6 @@ describe("Docs information architecture", () => {
           { depth: 1, href: "/docs/models/custom", label: "Custom hooks" },
           {
             depth: 1,
-            href: "/docs/tokens/prediction-markets",
-            label: "Prediction Markets",
-          },
-          {
-            depth: 1,
             href: "/docs/models/stock-paired",
             label: "Stock-Paired",
           },
@@ -171,7 +166,6 @@ describe("Docs information architecture", () => {
           "/docs/launch-stamps",
           "/docs/models/classic",
           "/docs/models/custom",
-          "/docs/tokens/prediction-markets",
           "/docs/models/stock-paired",
         ].map((route) => `https://programmable.market${route}`),
       ),

@@ -61,12 +61,6 @@ const launchTypes = [
   },
   {
     description:
-      "Create and trade onchain outcome markets through a separately versioned Uniswap v4 release.",
-    href: "/docs/tokens/prediction-markets",
-    label: "Prediction Markets",
-  },
-  {
-    description:
       "Existing records use supported Ondo Global Markets quote assets; see the reference for its market and integration details.",
     href: "/docs/models/stock-paired",
     label: "Stock-Paired",
@@ -202,11 +196,6 @@ export default function DocsIndexPage() {
           public provenance record. That record can identify a Programmable
           Classic or Programmable Custom launch. It does not promise safety,
           liquidity, price or support in another application.
-        </p>
-        <p>
-          Prediction Markets has its own versioned protocol release. Use the
-          canonical Prediction Markets repository for current networks, market
-          types, economics, resolution rules and contract identity.
         </p>
       </section>
 

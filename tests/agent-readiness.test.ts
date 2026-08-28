@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { GET as getApiIndex } from "../app/api/route";
 import { GET as getUnknownApi } from "../app/api/[...path]/route";
+import {
+  GET as getRetiredPredictionApi,
+  POST as postRetiredPredictionApi,
+} from "../app/api/retired-prediction/route";
 import { GET as getDeveloperMarkdown } from "../app/docs/developers.md/route";
 import { GET as getHomeMarkdown } from "../app/index.md/route";
 import { GET as getOpenApi } from "../app/openapi.json/route";
@@ -307,6 +311,52 @@ describe("agent-readable public surface", () => {
     );
     expect(unacceptableResponse.status).toBe(406);
     expect(unacceptableResponse.headers.get("vary")).toBe("Accept");
+  });
+
+  it("removes the retired prediction product from public pages and APIs", async () => {
+    const deploymentConfig = JSON.parse(
+      readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
+    ) as {
+      redirects: Array<{
+        source: string;
+        destination: string;
+        permanent: boolean;
+      }>;
+      rewrites: Array<{ source: string; destination: string }>;
+    };
+    expect(deploymentConfig.redirects).toEqual(
+      expect.arrayContaining([
+        { source: "/markets", destination: "/explore", permanent: false },
+        {
+          source: "/markets/:match*",
+          destination: "/explore",
+          permanent: false,
+        },
+      ]),
+    );
+    expect(deploymentConfig.rewrites).toContainEqual({
+      source: "/api/prediction/:match*",
+      destination: "/api/retired-prediction",
+    });
+
+    for (const response of [
+      getRetiredPredictionApi(),
+      postRetiredPredictionApi(),
+    ]) {
+      expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("x-robots-tag")).toBe(
+        "noindex, nofollow",
+      );
+      await expect(response.json()).resolves.toMatchObject({
+        schemaVersion: "programmable.api-error.v1",
+        status: "error",
+        error: { code: "api_route_not_found" },
+      });
+    }
+
+    expect(programmableHomeMarkdown).not.toMatch(/prediction markets?/iu);
+    expect(programmableLlmsIndex).not.toMatch(/prediction markets?/iu);
   });
 
   it("keeps Accept and the Next RSC keys in the public CDN variation", () => {

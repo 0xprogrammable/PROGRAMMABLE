@@ -2,16 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight } from "lucide-react";
 
 import launchExperience from "@/components/launch-experience.module.css";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
@@ -24,136 +16,16 @@ const launchEnvironment =
     : "production";
 const classicV3LaunchAvailable =
   isConfiguredClassicV3ReleaseReady(launchEnvironment);
-const PREDICTION_V2_LOCAL_PREVIEW_STATES = new Set([
-  "address",
-  "asset",
-  "prediction",
-  "review",
-  "ambiguous",
-  "error",
-] as const);
-const PREDICTION_V2_LOCAL_PREVIEW_FIXTURES = new Set([
-  "base",
-  "solana",
-] as const);
-
-type PredictionV2LocalPreviewState =
-  | "address"
-  | "asset"
-  | "prediction"
-  | "review"
-  | "ambiguous"
-  | "error";
-type PredictionV2LocalPreviewFixture = "base" | "solana";
 
 function loadLaunchForm() {
   return import("@/components/launch-builder");
 }
 
-function loadPredictionMarket() {
-  return import("@/components/prediction-market-launch");
-}
-
-const LazyPredictionMarketLaunch = lazy(async () => {
-  const predictionModule = await loadPredictionMarket();
-  return { default: predictionModule.PredictionMarketLaunch };
-});
-
-const LazyDevelopmentPredictionV2Preview = process.env.NODE_ENV === "development"
-  ? lazy(async () => {
-      const previewModule = await import(
-        "@/components/prediction-market-v2-local-preview"
-      );
-      return { default: previewModule.PredictionMarketV2LocalPreview };
-    })
-  : null;
-
 type LaunchBuilderComponent =
   (typeof import("@/components/launch-builder"))["LaunchBuilderForm"];
-type LaunchPickerChoice = LaunchModel | "prediction";
-
-function LaunchFormLoading({
-  onBack,
-  title = "Create Classic Token",
-}: {
-  onBack: () => void;
-  title?: string;
-}) {
-  return (
-    <div
-      className={`launch-page page-width ${launchExperience.formPage} ${launchExperience.formLoadingPage}`}
-      aria-busy="true"
-    >
-      <header className="launch-page-heading">
-        <button
-          className="launch-model-back"
-          type="button"
-          onClick={onBack}
-        >
-          <ArrowLeft aria-hidden="true" size={15} />
-          Back
-        </button>
-        <div className={`launch-page-title ${launchExperience.formPageTitle}`}>
-          <h1>{title}</h1>
-        </div>
-      </header>
-      <div
-        className={`${launchExperience.formLoadingSheet} liquid-glass-surface`}
-        role="status"
-        aria-label="Loading launch form"
-      >
-        <span className={launchExperience.formLoadingTitle} />
-        <span className={launchExperience.formLoadingBlock} />
-        <span className={launchExperience.formLoadingRow} />
-      </div>
-    </div>
-  );
-}
+type LaunchPickerChoice = LaunchModel;
 
 export function LaunchExperience() {
-  if (process.env.NODE_ENV !== "development") {
-    return <LaunchExperienceRuntime />;
-  }
-
-  return (
-    <Suspense fallback={<LaunchExperienceRuntime />}>
-      <DevelopmentLaunchPreviewRoute />
-    </Suspense>
-  );
-}
-
-function DevelopmentLaunchPreviewRoute() {
-  const searchParams = useSearchParams();
-  const previewCandidate = searchParams.get("localPreview");
-  if (
-    previewCandidate === "prediction-v2" &&
-    LazyDevelopmentPredictionV2Preview !== null
-  ) {
-    const stateCandidate = searchParams.get("predictionState");
-    const fixtureCandidate = searchParams.get("fixture");
-    const initialState = stateCandidate &&
-      PREDICTION_V2_LOCAL_PREVIEW_STATES.has(
-        stateCandidate as PredictionV2LocalPreviewState,
-      )
-      ? stateCandidate as PredictionV2LocalPreviewState
-      : "address";
-    const fixture = fixtureCandidate &&
-      PREDICTION_V2_LOCAL_PREVIEW_FIXTURES.has(
-        fixtureCandidate as PredictionV2LocalPreviewFixture,
-      )
-      ? fixtureCandidate as PredictionV2LocalPreviewFixture
-      : "base";
-
-    return (
-      <Suspense fallback={<LaunchFormLoading title="Create a prediction" onBack={() => undefined} />}>
-        <LazyDevelopmentPredictionV2Preview
-          fixture={fixture}
-          initialState={initialState}
-          onBack={() => window.location.assign("/launch")}
-        />
-      </Suspense>
-    );
-  }
   return <LaunchExperienceRuntime />;
 }
 
@@ -163,25 +35,12 @@ function LaunchExperienceRuntime() {
     useState<LaunchBuilderComponent | null>(null);
   const [preparingModel, setPreparingModel] = useState<LaunchModel | null>(null);
   const [modelLoadError, setModelLoadError] = useState("");
-  const predictionButtonRef = useRef<HTMLButtonElement>(null);
-  const restorePickerFocusRef = useRef<"prediction" | null>(null);
-
-  useEffect(() => {
-    if (selectedModel !== null || restorePickerFocusRef.current === null) return;
-    restorePickerFocusRef.current = null;
-    predictionButtonRef.current?.focus();
-  }, [selectedModel]);
 
   useEffect(() => {
     void loadLaunchForm().catch(() => undefined);
   }, []);
 
   async function chooseModel(candidate: LaunchPickerChoice) {
-    if (candidate === "prediction") {
-      window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-      setSelectedModel("prediction");
-      return;
-    }
     const model = resolveImplementedLaunchModel(candidate);
     if (
       !model ||
@@ -208,9 +67,6 @@ function LaunchExperienceRuntime() {
   }
 
   function returnToModels() {
-    restorePickerFocusRef.current = selectedModel === "prediction"
-      ? "prediction"
-      : null;
     window.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSelectedModel(null);
   }
@@ -218,19 +74,10 @@ function LaunchExperienceRuntime() {
   if (!selectedModel) {
     return (
       <LaunchModelPicker
-        predictionButtonRef={predictionButtonRef}
         modelLoadError={modelLoadError}
         onChoose={chooseModel}
         preparingModel={preparingModel}
       />
-    );
-  }
-
-  if (selectedModel === "prediction") {
-    return (
-      <Suspense fallback={<LaunchFormLoading title="Create a prediction" onBack={returnToModels} />}>
-        <LazyPredictionMarketLaunch onBack={returnToModels} />
-      </Suspense>
     );
   }
 
@@ -247,21 +94,16 @@ function LaunchExperienceRuntime() {
 }
 
 export function LaunchModelPicker({
-  predictionButtonRef,
   modelLoadError = "",
   onChoose,
   preparingModel = null,
 }: {
-  predictionButtonRef?: RefObject<HTMLButtonElement | null>;
   modelLoadError?: string;
   onChoose: (model: LaunchPickerChoice) => void | Promise<void>;
   preparingModel?: LaunchModel | null;
 }) {
   const preloadAvailableForm = () => {
     void loadLaunchForm();
-  };
-  const preloadPredictionMarket = () => {
-    void loadPredictionMarket().catch(() => undefined);
   };
 
   const customCardContent = (
@@ -410,68 +252,6 @@ export function LaunchModelPicker({
         >
           {customCardContent}
         </Link>
-
-        <button
-          ref={predictionButtonRef}
-          className={`launch-model-card ${launchExperience.modelCard} ${launchExperience.predictionCard} liquid-glass-surface`}
-          data-launch-model-option="prediction"
-          data-launch-model-available="true"
-          data-launch-model-launchable="false"
-          data-launch-model-preview="true"
-          type="button"
-          aria-labelledby="launch-model-prediction-title"
-          aria-describedby="launch-model-prediction-description"
-          onPointerEnter={preloadPredictionMarket}
-          onPointerDown={preloadPredictionMarket}
-          onFocus={preloadPredictionMarket}
-          onClick={() => void onChoose("prediction")}
-        >
-          <span
-            className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.predictionArt}`}
-            aria-hidden="true"
-          >
-            <span className={launchExperience.predictionRail}>
-              <span
-                className={`${launchExperience.predictionSide} ${launchExperience.predictionYes}`}
-              >
-                <span>YES</span>
-                <strong>50¢</strong>
-              </span>
-              <span className={launchExperience.predictionCondition}>
-                <span>BTC</span>
-                <strong>&ge; $60K</strong>
-              </span>
-              <span
-                className={`${launchExperience.predictionSide} ${launchExperience.predictionNo}`}
-              >
-                <span>NO</span>
-                <strong>50¢</strong>
-              </span>
-            </span>
-          </span>
-          <span
-            className={`launch-model-card-body ${launchExperience.modelBody}`}
-          >
-            <span
-              className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-            >
-              <strong id="launch-model-prediction-title">Prediction</strong>
-              <small data-status="preview">Beta</small>
-            </span>
-            <span
-              className={`launch-model-description ${launchExperience.modelDescription}`}
-              id="launch-model-prediction-description"
-            >
-              Create a BTC prediction with YES and NO.
-            </span>
-            <span
-              className={`launch-model-action ${launchExperience.modelAction}`}
-            >
-              Create a prediction
-              <ArrowRight aria-hidden="true" size={16} />
-            </span>
-          </span>
-        </button>
 
       </div>
       {modelLoadError ? (

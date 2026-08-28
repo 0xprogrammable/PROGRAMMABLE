@@ -39,7 +39,7 @@ type WalletProviderContract = {
     wallets: readonly T[],
     primaryAddress?: string,
   ) => T | undefined;
-  selectPartnerAdminWallet: <T extends {
+  selectLinkedWallet: <T extends {
     address: string;
     connectedAt: number;
     linked: boolean;
@@ -48,7 +48,7 @@ type WalletProviderContract = {
     wallets: readonly T[],
     primaryAddress?: string,
   ) => T | undefined;
-  requiresPartnerAdminLinkedWallet: (pathname: string) => boolean;
+  requiresLinkedWallet: (pathname: string) => boolean;
   getWalletProfileStorageKey: (account: string) => string;
   readUsernameFromProfileValue: (value: string | null) => string;
   getWalletLoginErrorMessage: (errorCode: string) => string;
@@ -842,7 +842,7 @@ describe("wallet recovery state", () => {
     expect(subject.selectConnectedWallet([older, newer])).toBe(newer);
   });
 
-  it("uses only a linked wallet for partner admin and prefers the exact primary", () => {
+  it("uses only a linked wallet on privileged routes and prefers the exact primary", () => {
     const unlinkedExternal = {
       address: "0x1111111111111111111111111111111111111111",
       connectedAt: 30,
@@ -862,21 +862,23 @@ describe("wallet recovery state", () => {
       walletClientType: "privy",
     };
 
-    expect(subject.selectPartnerAdminWallet(
+    expect(subject.selectLinkedWallet(
       [unlinkedExternal, linkedExternal, linkedPrimary],
       linkedPrimary.address,
     )).toBe(linkedPrimary);
-    expect(subject.selectPartnerAdminWallet(
+    expect(subject.selectLinkedWallet(
       [unlinkedExternal, linkedExternal],
       unlinkedExternal.address,
     )).toBe(linkedExternal);
-    expect(subject.selectPartnerAdminWallet([unlinkedExternal])).toBeUndefined();
+    expect(subject.selectLinkedWallet([unlinkedExternal])).toBeUndefined();
   });
 
-  it("limits linked-wallet selection to the partner admin route tree", () => {
-    expect(subject.requiresPartnerAdminLinkedWallet("/admin/partners")).toBe(true);
-    expect(subject.requiresPartnerAdminLinkedWallet("/admin/partners/example")).toBe(true);
-    expect(subject.requiresPartnerAdminLinkedWallet("/developers/api-keys")).toBe(false);
-    expect(subject.requiresPartnerAdminLinkedWallet("/admin/partnerships")).toBe(false);
+  it("requires linked-wallet selection for partner admin and API key routes", () => {
+    expect(subject.requiresLinkedWallet("/admin/partners")).toBe(true);
+    expect(subject.requiresLinkedWallet("/admin/partners/example")).toBe(true);
+    expect(subject.requiresLinkedWallet("/developers/api-keys")).toBe(true);
+    expect(subject.requiresLinkedWallet("/developers/api-keys/example")).toBe(true);
+    expect(subject.requiresLinkedWallet("/admin/partnerships")).toBe(false);
+    expect(subject.requiresLinkedWallet("/developers/api-key")).toBe(false);
   });
 });

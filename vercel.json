@@ -14,8 +14,23 @@
   ],
   "redirects": [
     {
+      "source": "/markets",
+      "destination": "/explore",
+      "permanent": false
+    },
+    {
+      "source": "/markets/:match*",
+      "destination": "/explore",
+      "permanent": false
+    },
+    {
       "source": "/docs/models/prediction-markets",
-      "destination": "/docs/tokens/prediction-markets",
+      "destination": "/docs/tokens",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tokens/prediction-markets",
+      "destination": "/docs/tokens",
       "permanent": true
     },
     {
@@ -30,6 +45,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/prediction/:match*",
+      "destination": "/api/retired-prediction"
+    },
     {
       "source": "/docs",
       "destination": "https://proxy.gitbook.site/sites/site_V93gQ"
