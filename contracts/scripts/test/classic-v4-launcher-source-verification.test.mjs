@@ -10,6 +10,8 @@ import {
   buildClassicV4LauncherUpgradeVerificationEvidence,
 } from "../../../scripts/classic-v4-launcher-upgrade-core.mjs";
 import {
+  buildClassicV4LauncherPublicationBundle,
+  submitSources,
   validateClassicV4LauncherFinalityEvidence,
   verifyClassicV4LauncherSourceProviders,
 } from "../verify-classic-v4-launcher-upgrade-sources.mjs";
@@ -157,7 +159,11 @@ function fixture() {
           Implementation: "",
           SimilarMatch: "",
           ConstructorArguments: plan.constructorArguments.slice(2),
-          SourceCode: JSON.stringify({ language: "Solidity", sources }),
+          SourceCode: JSON.stringify({
+            language: "Solidity",
+            sources,
+            settings: artifact.metadata.settings,
+          }),
         },
       ],
     },
@@ -259,4 +265,77 @@ test("rejects an Etherscan SimilarMatch", async () => {
     }),
     /Etherscan metadata differs/,
   );
+});
+
+test("rejects missing or contradictory Etherscan Standard JSON settings", async () => {
+  for (const mutate of [
+    (input) => {
+      delete input.settings;
+    },
+    (input) => {
+      input.settings = {
+        ...input.settings,
+        viaIR: true,
+        remappings: ["forged/=lib/forged/"],
+      };
+    },
+  ]) {
+    const values = fixture();
+    const input = JSON.parse(values.etherscan.result[0].SourceCode);
+    mutate(input);
+    values.etherscan.result[0].SourceCode = JSON.stringify(input);
+    await assert.rejects(
+      verifyClassicV4LauncherSourceProviders({
+        ...values,
+        checkedAt: "2027-01-15T08:00:00.000Z",
+        fetchJsonClient: providerFetch(values, []),
+        etherscanApiKey: "test-only-key",
+      }),
+      /Etherscan metadata differs/,
+    );
+  }
+});
+
+test("publication child receives frozen source bytes and the key only in env", async () => {
+  const values = fixture();
+  const liveSources = {
+    [launcherPath]: launcherSource,
+    [dependencyPath]: dependencySource,
+  };
+  const bundle = await buildClassicV4LauncherPublicationBundle({
+    ...values,
+    sourceReader: async (sourcePath) => liveSources[sourcePath],
+  });
+  liveSources[launcherPath] = `${launcherSource}// post-validation drift\n`;
+  let writtenBundle;
+  let child;
+  let removed;
+  await submitSources({
+    verifier: "etherscan",
+    bundle,
+    environment: { ETHERSCAN_API_KEY: "test-only-secret" },
+    temporaryParent: "/tmp",
+    createTemporaryDirectory: async () => "/tmp/frozen-launcher-publication",
+    writeBundle: async (_file, bytes) => {
+      writtenBundle = JSON.parse(bytes);
+    },
+    execute: (command, args, options) => {
+      child = { command, args, options };
+      return { status: 0 };
+    },
+    removeTemporaryDirectory: async (directory) => {
+      removed = directory;
+    },
+  });
+
+  assert.equal(
+    writtenBundle.standardJsonInput.sources[launcherPath].content,
+    launcherSource,
+  );
+  assert(!JSON.stringify(writtenBundle).includes("post-validation drift"));
+  assert(!JSON.stringify(child.args).includes("test-only-secret"));
+  assert(!child.args.includes("--etherscan-api-key"));
+  assert(child.args.includes(bundle.bundleDigest));
+  assert.equal(child.options.env.ETHERSCAN_API_KEY, "test-only-secret");
+  assert.equal(removed, "/tmp/frozen-launcher-publication");
 });

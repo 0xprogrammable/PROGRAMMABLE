@@ -1,9 +1,19 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { readFile, realpath, stat, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { keccak256, stringToHex } from "viem";
 
 import {
   CLASSIC_V4_LAUNCHER_UPGRADE_DEPLOYER,
@@ -30,6 +40,10 @@ const repositoryRoot = path.resolve(path.dirname(scriptPath), "..", "..");
 const contractsRoot = path.join(repositoryRoot, "contracts");
 const SOURCE_EVIDENCE_DOMAIN =
   "programmable.classic-v4-launcher-upgrade.source-evidence.v1";
+const PUBLICATION_INPUT_DOMAIN =
+  "programmable.classic-v4-launcher-upgrade.publication-input.v1";
+const PUBLICATION_BUNDLE_DOMAIN =
+  "programmable.classic-v4-launcher-upgrade.publication-bundle.v1";
 
 function fail(message) {
   throw new Error(message);
@@ -154,6 +168,183 @@ async function fetchJson(url) {
     fail(`${url.origin}${url.pathname} returned HTTP ${response.status}`);
   }
   return response.json();
+}
+
+function artifactMetadata(artifact) {
+  try {
+    return typeof artifact?.metadata === "string"
+      ? JSON.parse(artifact.metadata)
+      : artifact?.metadata;
+  } catch {
+    fail("MemeLaunchV4 artifact metadata is invalid");
+  }
+}
+
+async function readLocalSource(sourcePath) {
+  const absolute = path.resolve(contractsRoot, sourcePath);
+  const relative = path.relative(contractsRoot, absolute);
+  assert(
+    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative),
+    `Invalid artifact source path ${sourcePath}`,
+  );
+  return readFile(absolute, "utf8");
+}
+
+export async function buildClassicV4LauncherPublicationBundle({
+  plan,
+  receiptEvidence,
+  finalityEvidence,
+  artifact,
+  sourceReader = readLocalSource,
+}) {
+  validateClassicV4LauncherUpgradePlan(plan, artifact);
+  validateClassicV4LauncherFinalityEvidence({
+    plan,
+    receiptEvidence,
+    finalityEvidence,
+  });
+  const metadata = artifactMetadata(artifact);
+  const build = computeClassicV4LauncherUpgradeBuildCommitments(artifact);
+  const sourceClosure = await Promise.all(
+    Object.entries(metadata.sources).map(async ([sourcePath, descriptor]) => {
+      const content = await sourceReader(sourcePath);
+      const sourceHash = keccak256(stringToHex(content));
+      assert(
+        sourceHash === String(descriptor?.keccak256).toLowerCase(),
+        `Publication source differs from the sealed artifact at ${sourcePath}`,
+      );
+      return { sourcePath, sourceHash, content };
+    }),
+  );
+  sourceClosure.sort((left, right) =>
+    left.sourcePath.localeCompare(right.sourcePath),
+  );
+  const standardJsonInput = {
+    language: metadata.language,
+    sources: Object.fromEntries(
+      sourceClosure.map(({ sourcePath, content }) => [sourcePath, { content }]),
+    ),
+    settings: metadata.settings,
+  };
+  const unsignedBundle = {
+    schemaVersion: 1,
+    chainId: 1,
+    address: canonicalAddress(plan.predictedAddress),
+    transactionHash: receiptEvidence.transactionHash,
+    fqcn: CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET.fqcn,
+    compilerVersion: metadata.compiler.version,
+    constructorArguments: plan.constructorArguments,
+    planDigest: plan.planDigest,
+    finalityEvidenceDigest: finalityEvidence.evidenceDigest,
+    sourceCommitment: plan.sourceCommitment,
+    sourceClosureDigest: build.sourceClosureDigest,
+    sourceClosure: sourceClosure.map(({ sourcePath, sourceHash }) => ({
+      sourcePath,
+      sourceHash,
+    })),
+    standardJsonInput,
+    standardJsonInputDigest: digestJson(
+      standardJsonInput,
+      PUBLICATION_INPUT_DOMAIN,
+    ),
+  };
+  return {
+    ...unsignedBundle,
+    bundleDigest: digestJson(unsignedBundle, PUBLICATION_BUNDLE_DOMAIN),
+  };
+}
+
+export function validateClassicV4LauncherPublicationBundle(bundle) {
+  assertExactKeys(
+    bundle,
+    [
+      "schemaVersion",
+      "chainId",
+      "address",
+      "transactionHash",
+      "fqcn",
+      "compilerVersion",
+      "constructorArguments",
+      "planDigest",
+      "finalityEvidenceDigest",
+      "sourceCommitment",
+      "sourceClosureDigest",
+      "sourceClosure",
+      "standardJsonInput",
+      "standardJsonInputDigest",
+      "bundleDigest",
+    ],
+    "Classic V4 launcher publication bundle",
+  );
+  assert(
+    bundle.schemaVersion === 1 &&
+      bundle.chainId === 1 &&
+      canonicalAddress(bundle.address) === bundle.address &&
+      bundle.fqcn === CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET.fqcn &&
+      bundle.compilerVersion === "0.8.26+commit.8a97fa7a" &&
+      /^0x[0-9a-f]+$/i.test(bundle.constructorArguments) &&
+      Array.isArray(bundle.sourceClosure) &&
+      bundle.sourceClosure.length > 0 &&
+      bundle.standardJsonInput?.language === "Solidity",
+    "Classic V4 launcher publication bundle identity differs",
+  );
+  for (const [value, label] of [
+    [bundle.transactionHash, "publication transaction hash"],
+    [bundle.planDigest, "publication plan digest"],
+    [bundle.finalityEvidenceDigest, "publication finality evidence digest"],
+    [bundle.sourceCommitment, "publication source commitment"],
+    [bundle.sourceClosureDigest, "publication source closure digest"],
+    [bundle.standardJsonInputDigest, "publication input digest"],
+    [bundle.bundleDigest, "publication bundle digest"],
+  ]) {
+    assertBytes32(value, label);
+  }
+  const sourcePaths = bundle.sourceClosure
+    .map(({ sourcePath }) => sourcePath)
+    .sort();
+  const inputSourcePaths = Object.keys(
+    bundle.standardJsonInput.sources ?? {},
+  ).sort();
+  assert(
+    sourcePaths.length === inputSourcePaths.length &&
+      sourcePaths.every(
+        (sourcePath, index) => sourcePath === inputSourcePaths[index],
+      ),
+    "Classic V4 launcher publication source closure differs",
+  );
+  for (const { sourcePath, sourceHash } of bundle.sourceClosure) {
+    const content = bundle.standardJsonInput.sources?.[sourcePath]?.content;
+    assert(
+      typeof content === "string" &&
+        keccak256(stringToHex(content)) === sourceHash,
+      `Publication bundle source differs at ${sourcePath}`,
+    );
+  }
+  const closure = bundle.sourceClosure.map(({ sourcePath, sourceHash }) => ({
+    sourcePath,
+    sourceHash,
+  }));
+  assert(
+    normalizeHex(bundle.sourceClosureDigest) ===
+      normalizeHex(
+        digestJson(
+          closure,
+          CLASSIC_V4_LAUNCHER_UPGRADE_DIGEST_DOMAINS.sourceClosure,
+        ),
+      ) &&
+      normalizeHex(bundle.standardJsonInputDigest) ===
+        normalizeHex(
+          digestJson(bundle.standardJsonInput, PUBLICATION_INPUT_DOMAIN),
+        ),
+    "Classic V4 launcher publication source digest differs",
+  );
+  const { bundleDigest, ...unsignedBundle } = bundle;
+  assert(
+    normalizeHex(bundleDigest) ===
+      normalizeHex(digestJson(unsignedBundle, PUBLICATION_BUNDLE_DOMAIN)),
+    "Classic V4 launcher publication bundle digest differs",
+  );
+  return bundle;
 }
 
 export async function verifyClassicV4LauncherSourceProviders({
@@ -376,42 +567,159 @@ async function writeAcknowledgedEvidence(evidence, options) {
   });
 }
 
-function submitSources({ verifier, plan }) {
-  const argumentsList = [
-    "verify-contract",
-    "--watch",
-    "--chain",
-    "1",
-    "--compiler-version",
-    "0.8.26",
-    "--num-of-optimizations",
-    "1000",
-    "--evm-version",
-    "cancun",
-    "--verifier",
-    verifier,
-    "--constructor-args",
-    plan.constructorArguments,
-  ];
-  const environment = { ...process.env };
-  if (verifier === "etherscan") {
-    const key = environment.ETHERSCAN_API_KEY?.trim();
-    assert(key, "ETHERSCAN_API_KEY is required for Etherscan submission");
-    argumentsList.push("--etherscan-api-key", key);
+async function submitPublicationBundleToProvider({
+  verifier,
+  bundle,
+  environment = process.env,
+  fetchClient = fetch,
+}) {
+  validateClassicV4LauncherPublicationBundle(bundle);
+  let url;
+  let body;
+  let headers;
+  if (verifier === "sourcify") {
+    url = `https://sourcify.dev/server/v2/verify/1/${bundle.address}`;
+    headers = {
+      "content-type": "application/json",
+      accept: "application/json",
+    };
+    body = JSON.stringify({
+      stdJsonInput: bundle.standardJsonInput,
+      compilerVersion: bundle.compilerVersion,
+      contractIdentifier: bundle.fqcn,
+      creationTransactionHash: bundle.transactionHash,
+    });
   } else {
-    delete environment.ETHERSCAN_API_KEY;
+    assert(verifier === "etherscan", "Unknown source publication provider");
+    const apiKey = environment.ETHERSCAN_API_KEY?.trim();
+    assert(apiKey, "ETHERSCAN_API_KEY is required for Etherscan submission");
+    url = "https://api.etherscan.io/v2/api";
+    headers = {
+      "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+      accept: "application/json",
+    };
+    body = new URLSearchParams({
+      chainid: "1",
+      module: "contract",
+      action: "verifysourcecode",
+      contractaddress: bundle.address,
+      sourceCode: JSON.stringify(bundle.standardJsonInput),
+      codeformat: "solidity-standard-json-input",
+      contractname: bundle.fqcn,
+      compilerversion: `v${bundle.compilerVersion}`,
+      optimizationUsed: "1",
+      runs: "1000",
+      constructorArguements: bundle.constructorArguments.slice(2),
+      evmversion: "cancun",
+      apikey: apiKey,
+    });
   }
-  argumentsList.push(
-    plan.predictedAddress,
-    CLASSIC_V4_LAUNCHER_UPGRADE_SOURCE_TARGET.fqcn,
-  );
-  const result = spawnSync("forge", argumentsList, {
-    cwd: contractsRoot,
-    env: environment,
-    encoding: "utf8",
-    stdio: "inherit",
+  const response = await fetchClient(url, {
+    method: "POST",
+    headers,
+    body,
+    redirect: "error",
+    signal: AbortSignal.timeout(20_000),
   });
-  assert(result.status === 0, `MemeLaunchV4 ${verifier} submission failed`);
+  const payload = await response.json();
+  if (verifier === "sourcify") {
+    assert(
+      response.status === 202 || response.status === 409,
+      `Sourcify submission returned HTTP ${response.status}`,
+    );
+  } else {
+    assert(
+      response.ok &&
+        payload?.status === "1" &&
+        typeof payload.result === "string",
+      `Etherscan submission returned HTTP ${response.status}`,
+    );
+  }
+  process.stdout.write(
+    `${JSON.stringify({
+      mode: `${verifier}-submitted`,
+      address: bundle.address,
+      bundleDigest: bundle.bundleDigest,
+      externalAction: true,
+    })}\n`,
+  );
+}
+
+export async function submitSources({
+  verifier,
+  bundle,
+  environment = process.env,
+  execute = spawnSync,
+  createTemporaryDirectory = mkdtemp,
+  writeBundle = writeFile,
+  removeTemporaryDirectory = rm,
+  temporaryParent = tmpdir(),
+}) {
+  validateClassicV4LauncherPublicationBundle(bundle);
+  const childEnvironment = { ...environment };
+  if (verifier === "etherscan") {
+    assert(
+      childEnvironment.ETHERSCAN_API_KEY?.trim(),
+      "ETHERSCAN_API_KEY is required for Etherscan submission",
+    );
+  } else {
+    assert(verifier === "sourcify", "Unknown source publication provider");
+    delete childEnvironment.ETHERSCAN_API_KEY;
+  }
+  const temporaryDirectory = await createTemporaryDirectory(
+    path.join(temporaryParent, "classic-v4-launcher-source-publication-"),
+  );
+  const bundlePath = path.join(temporaryDirectory, "publication-bundle.json");
+  try {
+    await writeBundle(bundlePath, `${JSON.stringify(bundle)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
+    const childArguments = [
+      scriptPath,
+      "--internal-submit-bundle",
+      bundlePath,
+      "--expected-bundle-digest",
+      bundle.bundleDigest,
+      "--verifier",
+      verifier,
+    ];
+    const result = execute(process.execPath, childArguments, {
+      cwd: temporaryDirectory,
+      env: childEnvironment,
+      encoding: "utf8",
+      stdio: "inherit",
+    });
+    assert(
+      !result.error && result.status === 0,
+      `MemeLaunchV4 ${verifier} submission failed`,
+    );
+  } finally {
+    await removeTemporaryDirectory(temporaryDirectory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+async function runInternalSubmission(argv) {
+  assert(
+    argv.length === 6 &&
+      argv[0] === "--internal-submit-bundle" &&
+      path.isAbsolute(argv[1]) &&
+      argv[2] === "--expected-bundle-digest" &&
+      /^0x[0-9a-f]{64}$/i.test(argv[3]) &&
+      argv[4] === "--verifier" &&
+      ["sourcify", "etherscan"].includes(argv[5]),
+    "Invalid internal source publication arguments",
+  );
+  const bundle = await readJson(argv[1], "frozen publication bundle");
+  assert(
+    normalizeHex(bundle.bundleDigest) === normalizeHex(argv[3]),
+    "Frozen publication bundle digest differs",
+  );
+  await submitPublicationBundleToProvider({ verifier: argv[5], bundle });
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -428,6 +736,15 @@ export async function main(argv = process.argv.slice(2)) {
     finalityEvidence,
   });
   const build = computeClassicV4LauncherUpgradeBuildCommitments(artifact);
+  const publicationBundle =
+    options.mode === "verify"
+      ? null
+      : await buildClassicV4LauncherPublicationBundle({
+          plan,
+          receiptEvidence,
+          finalityEvidence,
+          artifact,
+        });
   if (options.mode === "review") {
     process.stdout.write(
       `${JSON.stringify(
@@ -443,6 +760,7 @@ export async function main(argv = process.argv.slice(2)) {
           sourceCommitment: plan.sourceCommitment,
           sourceClosureDigest: build.sourceClosureDigest,
           sourceCount: build.sourceCount,
+          publicationBundleDigest: publicationBundle.bundleDigest,
           next: ["--submit-sourcify", "--submit-etherscan", "verify"],
         },
         null,
@@ -455,9 +773,9 @@ export async function main(argv = process.argv.slice(2)) {
     options.mode === "submit-sourcify" ||
     options.mode === "submit-etherscan"
   ) {
-    submitSources({
+    await submitSources({
       verifier: options.mode === "submit-sourcify" ? "sourcify" : "etherscan",
-      plan,
+      bundle: publicationBundle,
     });
     return;
   }
@@ -472,7 +790,10 @@ export async function main(argv = process.argv.slice(2)) {
 }
 
 if (process.argv[1] === scriptPath) {
-  main().catch((error) => {
+  const operation = process.argv.includes("--internal-submit-bundle")
+    ? runInternalSubmission(process.argv.slice(2))
+    : main();
+  operation.catch((error) => {
     process.stderr.write(
       `Classic V4 launcher source verification failed: ${error.message}\n`,
     );

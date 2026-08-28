@@ -2533,7 +2533,7 @@ test("source providers require accepted matches, exact source closure and no Eth
     SourceCode: JSON.stringify({
       language: "Solidity",
       sources: providerSources,
-      settings: {},
+      settings: providerArtifact.metadata.settings,
     }),
   };
   assert.doesNotThrow(() =>
@@ -2573,6 +2573,7 @@ test("source providers require accepted matches, exact source closure and no Eth
               ...providerSources,
               "src/launcher.sol": { content: "forged source bytes" },
             },
+            settings: providerArtifact.metadata.settings,
           }),
         },
         target,

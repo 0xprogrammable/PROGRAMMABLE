@@ -107,7 +107,32 @@ function artifactCompilerSettings(artifact, field) {
     optimizationUsed: metadata.settings.optimizer.enabled ? "1" : "0",
     optimizerRuns: String(metadata.settings.optimizer.runs),
     evmVersion: metadata.settings.evmVersion,
+    materialSettings: materialCompilerSettings(metadata.settings),
   };
+}
+
+export function materialCompilerSettings(settings) {
+  return {
+    remappings: settings?.remappings ?? [],
+    optimizer: settings?.optimizer,
+    evmVersion: settings?.evmVersion,
+    viaIR: settings?.viaIR ?? false,
+    metadata: settings?.metadata,
+    libraries: settings?.libraries ?? {},
+    debug: settings?.debug ?? {},
+    compilationTarget: settings?.compilationTarget ?? {},
+  };
+}
+
+function canonicalJson(value) {
+  return JSON.stringify(value, (_, item) => {
+    if (item === null || Array.isArray(item) || typeof item !== "object") {
+      return item;
+    }
+    return Object.fromEntries(
+      Object.entries(item).sort(([left], [right]) => left.localeCompare(right)),
+    );
+  });
 }
 
 function artifactSourceClosure(artifact, label) {
@@ -148,7 +173,7 @@ function assertExactProviderSourceClosure(remoteSources, artifact, label) {
   }
 }
 
-function etherscanStandardJsonSources(sourceCode, label) {
+function etherscanStandardJsonInput(sourceCode, label) {
   if (typeof sourceCode !== "string" || sourceCode.trim() === "") {
     fail(`${label} Etherscan source is unavailable`);
   }
@@ -169,7 +194,7 @@ function etherscanStandardJsonSources(sourceCode, label) {
   ) {
     fail(`${label} Etherscan Standard JSON is invalid`);
   }
-  return input.sources;
+  return input;
 }
 
 export async function captureSourcify(address, artifact, fetchJsonClient) {
@@ -265,6 +290,16 @@ export function assertExactEtherscanMatch(
   artifact,
 ) {
   const [contractFileName] = target.fqcn.split(":", 1);
+  const standardJsonInput = etherscanStandardJsonInput(
+    source?.SourceCode,
+    target.contractName,
+  );
+  const metadata =
+    typeof artifact.metadata === "string"
+      ? JSON.parse(artifact.metadata)
+      : artifact.metadata;
+  const expectedMaterialSettings =
+    settings.materialSettings ?? materialCompilerSettings(metadata?.settings);
   if (
     payload?.status !== "1" ||
     source?.ContractName !== target.contractName ||
@@ -280,12 +315,14 @@ export function assertExactEtherscanMatch(
     (source?.ConstructorArguments ?? "").toLowerCase() !==
       constructorArguments.slice(2).toLowerCase() ||
     typeof source?.SourceCode !== "string" ||
-    source.SourceCode.length === 0
+    source.SourceCode.length === 0 ||
+    canonicalJson(materialCompilerSettings(standardJsonInput.settings)) !==
+      canonicalJson(expectedMaterialSettings)
   ) {
     fail(`${target.contractName} Etherscan metadata differs`);
   }
   assertExactProviderSourceClosure(
-    etherscanStandardJsonSources(source.SourceCode, target.contractName),
+    standardJsonInput.sources,
     artifact,
     `${target.contractName} Etherscan`,
   );
