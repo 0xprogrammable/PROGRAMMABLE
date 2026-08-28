@@ -78,6 +78,7 @@ const repositoryRoot = path.resolve(path.dirname(scriptPath), "..");
 const HOST = "127.0.0.1";
 const DEFAULT_PORT = 4184;
 const REQUEST_TIMEOUT_MS = 15_000;
+const RPC_RATE_LIMIT_RETRY_DELAYS_MS = Object.freeze([0, 1_500, 4_000]);
 const MAX_REQUEST_BYTES = 4_096;
 const MAX_PRIORITY_FEE_WEI = 5_000_000_000n;
 const MAX_FEE_WEI = 200_000_000_000n;
@@ -1049,17 +1050,35 @@ export async function writeClassicV4FinalTransactionsOutput(file, output) {
 }
 
 async function rpc(endpoint, method, params) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    redirect: "error",
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!response.ok) fail(`${method} returned HTTP ${response.status}`);
-  const payload = await response.json();
-  if (payload?.error || payload?.result === undefined) fail(`${method} failed`);
-  return payload.result;
+  for (
+    let attempt = 0;
+    attempt < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length;
+    attempt += 1
+  ) {
+    const delay = RPC_RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      redirect: "error",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (
+      response.status === 429 &&
+      attempt + 1 < RPC_RATE_LIMIT_RETRY_DELAYS_MS.length
+    ) {
+      await response.body?.cancel();
+      continue;
+    }
+    if (!response.ok) fail(`${method} returned HTTP ${response.status}`);
+    const payload = await response.json();
+    if (payload?.error || payload?.result === undefined) fail(`${method} failed`);
+    return payload.result;
+  }
+  fail(`${method} remained rate limited`);
 }
 
 function blockTag(value) {
