@@ -280,6 +280,28 @@ test("Classic V4 console binds all four dynamic quote quadrants", () => {
     assert.equal(decoded.args[0], commands);
     assert.equal(decoded.args[2], 2_000_000_300n);
   }
+
+  const oversizedExactOutput = {
+    canaryPlan: plan,
+    identity,
+    action: "buyExactOutput",
+    quotedAmount: 100_000n,
+    quoteGasEstimate: 123_456n,
+    quoteBlockNumber: 123,
+    quoteBlockHash: hash("a"),
+    quoteBlockTimestamp: 2_000_000_000n,
+  };
+  assert.throws(
+    () => buildClassicV4SwapPrepared(oversizedExactOutput),
+    /exceeds its hard maximum input/u,
+  );
+  assert.equal(
+    buildClassicV4SwapPrepared({
+      ...oversizedExactOutput,
+      enforceHardMaximum: false,
+    }).swap.inputBound,
+    "101000",
+  );
 });
 
 test("Classic V4 revalidation sanitizes only the eth_call request", () => {

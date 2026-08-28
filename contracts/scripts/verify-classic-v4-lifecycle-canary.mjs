@@ -26,6 +26,7 @@ import {
   buildClassicV4LifecycleReleaseCandidate,
   canonicalAddress,
   canonicalNonzeroAddress,
+  classicV4SwapBoundIsEqualOrStricter,
   digestJson,
   normalizeHex,
   validateClassicV4LaunchAuthorization,
@@ -1582,18 +1583,32 @@ async function verifySwapQuote(endpoint, action, expected, swap, launch, canary)
       },
     ],
   );
+  const quoteBlockAfterRead = await loadClassicV4BlockAtExactNumber(
+    endpoint,
+    quoteBlockNumber,
+    `${expected.key} quote post-read`,
+  );
+  sameHex(
+    quoteBlockAfterRead.hash,
+    quoteBlock.hash,
+    `${expected.key} quote block changed during the read`,
+  );
   assert(quotedAmount > 0n && gasEstimate > 0n, `${expected.key} quote is zero`);
   const bound = exactInput
     ? (quotedAmount * 9_900n) / 10_000n
     : (quotedAmount * 10_100n + 9_999n) / 10_000n;
   assert(bound > 0n, `${expected.key} slippage bound is zero`);
   assert(
-    BigInt(exactInput ? swap.outputBound : swap.inputBound) === bound,
-    `${expected.key} calldata bound differs from its parent-block quote`,
+    classicV4SwapBoundIsEqualOrStricter(
+      expected.exactness,
+      BigInt(exactInput ? swap.outputBound : swap.inputBound),
+      bound,
+    ),
+    `${expected.key} calldata bound is weaker than its parent-block quote`,
   );
   if (!exactInput) {
     assert(
-      bound <= BigInt(fixture.hardMaximumAmountIn),
+      BigInt(swap.inputBound) <= BigInt(fixture.hardMaximumAmountIn),
       `${expected.key} exceeds its hard maximum input`,
     );
   }

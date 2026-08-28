@@ -30,6 +30,7 @@ import {
   CLASSIC_V4_LIFECYCLE_ACTIONS,
   buildClassicV4LifecycleCanaryPlan,
   buildClassicV4LifecycleReleaseCandidate,
+  classicV4SwapBoundIsEqualOrStricter,
   digestJson,
   normalizeHex,
 } from "./classic-v4-release-core.mjs";
@@ -1226,11 +1227,13 @@ async function exactBlockAt(urls, number, label) {
     !values[0] ||
     BigInt(values[0].number) !== BigInt(number) ||
     !values[0].hash ||
+    !values[0].parentHash ||
     !values[0].baseFeePerGas
   ) fail(`${label} is unavailable`);
   return {
     number: Number(number),
     hash: values[0].hash.toLowerCase(),
+    parentHash: values[0].parentHash.toLowerCase(),
     timestamp: BigInt(values[0].timestamp),
     baseFeePerGas: BigInt(values[0].baseFeePerGas),
     gasLimit: BigInt(values[0].gasLimit),
@@ -1480,7 +1483,14 @@ async function enrichPrepared(canaryPlan, urls, block, prepared) {
   return sealed;
 }
 
-async function quoteSwap(canaryPlan, identity, action, urls, block) {
+async function quoteSwap(
+  canaryPlan,
+  identity,
+  action,
+  urls,
+  block,
+  { enforceHardMaximum = true } = {},
+) {
   const call = buildClassicV4QuoteCall(canaryPlan, identity, action);
   const result = await callBoth(
     urls,
@@ -1488,6 +1498,14 @@ async function quoteSwap(canaryPlan, identity, action, urls, block) {
     block.tag,
     `${action} V4 quote`,
   );
+  const recheckedBlock = await exactBlockAt(
+    urls,
+    block.number,
+    `${action} V4 quote canonical block`,
+  );
+  if (normalizeHex(recheckedBlock.hash) !== normalizeHex(block.hash)) {
+    fail(`${action} V4 quote block changed during the read`);
+  }
   const decoded = decodeClassicV4Quote(call.functionName, result);
   return buildClassicV4SwapPrepared({
     canaryPlan,
@@ -1498,6 +1516,7 @@ async function quoteSwap(canaryPlan, identity, action, urls, block) {
     quoteBlockNumber: block.number,
     quoteBlockHash: block.hash,
     quoteBlockTimestamp: block.timestamp,
+    enforceHardMaximum,
   });
 }
 
@@ -1543,7 +1562,11 @@ export function assertClassicV4SwapParentBinding(
   );
   if (
     preparedExact !== parentExact ||
-    (exactInput ? preparedBound < parentBound : preparedBound > parentBound)
+    !classicV4SwapBoundIsEqualOrStricter(
+      prepared.swap.exactness,
+      preparedBound,
+      parentBound,
+    )
   ) fail("Classic V4 transaction is weaker than its parent-block quote bound");
 
   const preparedValue = BigInt(prepared.request.value);
@@ -1559,6 +1582,20 @@ export function assertClassicV4SwapParentBinding(
     BigInt(prepared.swap.routerDeadline) <
       parentBlock.timestamp + MINIMUM_SWAP_DEADLINE_BUFFER_SECONDS
   ) fail("Classic V4 transaction deadline was stale at its parent block");
+  return true;
+}
+
+export function assertClassicV4ReceiptParentBinding(
+  receiptBlock,
+  parentBlock,
+  label = "Classic V4 receipt",
+) {
+  if (
+    !receiptBlock ||
+    !parentBlock ||
+    BigInt(receiptBlock.number) !== BigInt(parentBlock.number) + 1n ||
+    normalizeHex(receiptBlock.parentHash) !== normalizeHex(parentBlock.hash)
+  ) fail(`${label} is not linked to its fetched parent block`);
   return true;
 }
 
@@ -2025,6 +2062,11 @@ async function confirmSubmitted(canaryPlan, identity, journal, action, record, u
     blockNumber - 1n,
     `${action} parent block`,
   );
+  assertClassicV4ReceiptParentBinding(
+    blocks[0],
+    parent,
+    `${action} receipt block`,
+  );
   const [parentSigner, receiptSigner] = await Promise.all([
     assertClassicV4SignerRuntimeAtBlock(
       urls,
@@ -2058,7 +2100,14 @@ async function confirmSubmitted(canaryPlan, identity, journal, action, record, u
     ["buyExactInput", "buyExactOutput", "sellExactInput", "sellExactOutput"]
       .includes(action)
   ) {
-    const parentQuote = await quoteSwap(canaryPlan, identity, action, urls, parent);
+    const parentQuote = await quoteSwap(
+      canaryPlan,
+      identity,
+      action,
+      urls,
+      parent,
+      { enforceHardMaximum: false },
+    );
     try {
       assertClassicV4SwapParentBinding(record.prepared, parentQuote, parent);
     } catch {
@@ -2240,6 +2289,11 @@ async function validatePersistedJournalBindings(
         BigInt(record.blockNumber) - 1n,
         `${record.prepared.action} confirmed parent block`,
       );
+      assertClassicV4ReceiptParentBinding(
+        receiptBlock,
+        parent,
+        `${record.prepared.action} confirmed receipt block`,
+      );
       const [parentSigner, receiptSigner] = await Promise.all([
         assertClassicV4SignerRuntimeAtBlock(
           urls,
@@ -2275,6 +2329,7 @@ async function validatePersistedJournalBindings(
           record.prepared.action,
           urls,
           parent,
+          { enforceHardMaximum: false },
         );
         assertClassicV4SwapParentBinding(
           record.prepared,
@@ -2421,6 +2476,14 @@ async function revalidatePrepared(canaryPlan, identity, journal, urls, digest) {
       block.tag,
       `${prepared.requiredAction} revalidation quote`,
     );
+    const quoteBlockAfterRead = await exactBlockAt(
+      urls,
+      block.number,
+      `${prepared.requiredAction} revalidation quote canonical block`,
+    );
+    if (normalizeHex(quoteBlockAfterRead.hash) !== normalizeHex(block.hash)) {
+      fail(`${prepared.requiredAction} revalidation quote block changed during the read`);
+    }
     const decoded = decodeClassicV4Quote(quote.functionName, result);
     const bound = classicV4QuoteBound(prepared.swap.exactness, decoded.quotedAmount);
     const preparedBound = BigInt(
@@ -2428,7 +2491,11 @@ async function revalidatePrepared(canaryPlan, identity, journal, urls, digest) {
         ? prepared.swap.outputBound
         : prepared.swap.inputBound,
     );
-    if (bound !== preparedBound) fail("The Classic V4 quote changed before wallet review");
+    if (!classicV4SwapBoundIsEqualOrStricter(
+      prepared.swap.exactness,
+      preparedBound,
+      bound,
+    )) fail("The Classic V4 quote moved beyond the reviewed slippage bound");
     if (
       BigInt(prepared.swap.routerDeadline) <
       block.timestamp + MINIMUM_SWAP_DEADLINE_BUFFER_SECONDS

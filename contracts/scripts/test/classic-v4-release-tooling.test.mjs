@@ -27,6 +27,7 @@ import {
   buildClassicV4LifecycleReleaseCandidate,
   buildClassicV4PreparationPlan,
   classicV4ReleaseBindingDigest,
+  classicV4SwapBoundIsEqualOrStricter,
   computeClassicV4BuildCommitments,
   computeClassicV4SourceCommitment,
   createClassicV4ReleaseManifest,
@@ -75,6 +76,20 @@ import {
 
 const testPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(testPath), "..", "..", "..");
+
+test("Classic V4 accepts only equal or stricter quote bounds", () => {
+  assert.equal(classicV4SwapBoundIsEqualOrStricter("exact-input", 100n, 100n), true);
+  assert.equal(classicV4SwapBoundIsEqualOrStricter("exact-input", 101n, 100n), true);
+  assert.equal(classicV4SwapBoundIsEqualOrStricter("exact-input", 99n, 100n), false);
+  assert.equal(classicV4SwapBoundIsEqualOrStricter("exact-output", 100n, 100n), true);
+  assert.equal(classicV4SwapBoundIsEqualOrStricter("exact-output", 99n, 100n), true);
+  assert.equal(classicV4SwapBoundIsEqualOrStricter("exact-output", 101n, 100n), false);
+  assert.throws(
+    () => classicV4SwapBoundIsEqualOrStricter("unknown", 1n, 1n),
+    /exactness is invalid/u,
+  );
+});
+
 function artifactFixture(label, immutableReferences = {}) {
   const seed = keccak256(stringToHex(`classic-v4-artifact:${label}`)).slice(2);
   const object = `0x60006000${seed}`;
