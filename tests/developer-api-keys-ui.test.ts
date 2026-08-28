@@ -549,6 +549,13 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('aria-live="polite"');
     expect(historySource).toContain("state === \"loading\" || loadingMore || refreshing");
     expect(historySource).toContain("Prepared transaction");
+    expect(historySource).toContain("Programmable fee");
+    expect(historySource).toContain(
+      "No automatic Programmable fee claim",
+    );
+    expect(historySource).toContain(
+      "10 bps · exact fee-path verification required",
+    );
     expect(historySource).toContain("Admission checks running");
     expect(historySource).toContain("Changes required");
     expect(historySource).toContain("Fix source or configuration");

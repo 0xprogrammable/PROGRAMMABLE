@@ -950,6 +950,18 @@ function routerTransactionReview(launch: LaunchResource) {
   }
 }
 
+export function walletPlatformFeeDisclosureV3(
+  launchProfileVersion: LaunchResource["launchProfileVersion"],
+) {
+  if (launchProfileVersion === "3.3.0") {
+    return "No automatic Programmable fee claim";
+  }
+  if (launchProfileVersion === "3.4.0") {
+    return "10 bps · exact fee-path verification required";
+  }
+  return "Defined by the bound launch profile";
+}
+
 function sameFundingAuthorization(
   left: CustomLaunchFundingAuthorizationV3,
   right: CustomLaunchFundingAuthorizationV3,
@@ -3261,6 +3273,14 @@ export function DeveloperLaunchHistory({
                       <div>
                         <dt>Native value</dt>
                         <dd>{routerReview.walletAction.valueWei} wei</dd>
+                      </div>
+                      <div>
+                        <dt>Programmable fee</dt>
+                        <dd>
+                          {walletPlatformFeeDisclosureV3(
+                            reviewLaunch.launchProfileVersion,
+                          )}
+                        </dd>
                       </div>
                       <div>
                         <dt>Router</dt>
