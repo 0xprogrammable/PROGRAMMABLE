@@ -648,8 +648,13 @@ function metadataMatchesRouterEntryV1(
 }
 
 function parseFeedPageV1(value: JsonValue, now: number): FeedPageV1 {
+  const hasQuality = value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.hasOwn(value, "quality");
   const record = exactRecord(value, [
     "schemaVersion", "generatedAt", "launches", "nextCursor",
+    ...(hasQuality ? ["quality"] : []),
   ], "Finalized Custom metadata list");
   if (
     record.schemaVersion !== FINALIZED_CUSTOM_LAUNCH_METADATA_LIST_SCHEMA_V1
@@ -665,12 +670,67 @@ function parseFeedPageV1(value: JsonValue, now: number): FeedPageV1 {
     generatedAtMs > now + MAXIMUM_FUTURE_SKEW_MS
     || now - generatedAtMs > MAXIMUM_GENERATED_AGE_MS
   ) throw new Error("Finalized Custom metadata list is stale");
+  if (hasQuality) parseFeedQualityV1(record.quality, record.launches.length);
   return deepFreeze({
     schemaVersion: FINALIZED_CUSTOM_LAUNCH_METADATA_LIST_SCHEMA_V1,
     generatedAt,
     launches: record.launches.map(parseLaunchV1),
     nextCursor: record.nextCursor as string | null,
   });
+}
+
+function parseFeedQualityV1(
+  value: JsonValue | undefined,
+  publishedLaunchCount: number,
+) {
+  const record = exactRecord(value, [
+    "status", "sourceRowCount", "publishedRowCount",
+    "quarantinedRowCount", "diagnostics",
+  ], "Finalized Custom metadata quality");
+  if (
+    (record.status !== "complete" && record.status !== "partial")
+    || !boundedInteger(
+      record.sourceRowCount,
+      0,
+      FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT,
+    )
+    || !boundedInteger(
+      record.publishedRowCount,
+      0,
+      FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT,
+    )
+    || !boundedInteger(
+      record.quarantinedRowCount,
+      0,
+      FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT,
+    )
+    || !Array.isArray(record.diagnostics)
+    || record.diagnostics.length > FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT
+    || record.publishedRowCount !== publishedLaunchCount
+    || record.publishedRowCount + record.quarantinedRowCount
+      !== record.sourceRowCount
+    || record.diagnostics.length !== record.quarantinedRowCount
+    || (record.status === "complete" && record.quarantinedRowCount !== 0)
+    || (record.status === "partial" && record.quarantinedRowCount === 0)
+  ) throw new Error("Finalized Custom metadata quality is invalid");
+
+  const rowIndexes = new Set<number>();
+  for (const value of record.diagnostics) {
+    const diagnostic = exactRecord(value, [
+      "rowIndex", "code",
+    ], "Finalized Custom metadata quality diagnostic");
+    if (
+      !boundedInteger(
+        diagnostic.rowIndex,
+        0,
+        FINALIZED_CUSTOM_LAUNCH_METADATA_PAGE_LIMIT - 1,
+      )
+      || diagnostic.rowIndex >= record.sourceRowCount
+      || diagnostic.code !== "FINALIZED_ROW_QUARANTINED"
+      || rowIndexes.has(diagnostic.rowIndex)
+    ) throw new Error("Finalized Custom metadata quality diagnostic is invalid");
+    rowIndexes.add(diagnostic.rowIndex);
+  }
 }
 
 function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
