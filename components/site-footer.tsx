@@ -16,7 +16,7 @@ const resourceLinks = [
     label: "Analytics",
   },
   {
-    href: "https://github.com/0xprogrammable",
+    href: "https://github.com/programmablehq",
     label: "GitHub",
     external: true,
   },

@@ -21,11 +21,23 @@ describe("public shell polish", () => {
     expect(source).toContain("<span>Programmable</span>");
     expect(source).toContain("© 2026 Programmable");
     expect(source).toContain('label: "GitHub"');
+    expect(source).toContain('href: "https://github.com/programmablehq"');
+    expect(source).not.toContain('href: "https://github.com/0xprogrammable"');
     expect(source).toContain('label: "Discord"');
     expect(source).toContain('label: "X"');
     expect(source).toContain('label: "Token"');
     expect(source).not.toContain("XBrandIcon");
     expect(source).not.toContain("GitHubBrandIcon");
+  });
+
+  it("links the public shell and structured identity to the canonical GitHub organization", () => {
+    const navigation = read("components/site-navigation.tsx");
+    const structuredData = read("lib/site-structured-data.ts");
+
+    expect(navigation).toContain('href="https://github.com/programmablehq"');
+    expect(navigation).not.toContain('href="https://github.com/0xprogrammable"');
+    expect(structuredData).toContain('"https://github.com/programmablehq"');
+    expect(structuredData).not.toContain('"https://github.com/0xprogrammable"');
   });
 
   it("keeps route motion measured, interruptible and compositor-friendly", () => {
