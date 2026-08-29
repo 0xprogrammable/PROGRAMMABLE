@@ -6,6 +6,20 @@ description: Read only contracts and verification rules for detecting Programmab
 
 Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated public V3.3 general-hook creation and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys. V2 and V1 history and schemas remain readable, while fresh POSTs return non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 accepts new submissions. CLI and preflight checks prepare and classify exact bytes, while the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified; an authenticated executed failure blocks wallet handoff.
 
+Discovery also publishes a stable V4 contract for Robinhood Chain Mainnet (`eip155:4663`), but its status is
+`planned` and `planned-not-deployed`: public writes and authorization remain false until the deployment, simulation,
+wallet-binding, finalized-Router, source-verification and indexing gates pass. Integrations may prepare against the
+[V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json) and
+[pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json), using only
+`$PROGRAMMABLE_API_KEY`. The server selects the chain-bound policy profile; clients cannot select or bypass it.
+External contract references gain trust only from protected server evidence binding their exact `eip155:4663`
+address, runtime hash, source-verification evidence, declared role and checkpoint. Arbitrary or unbound references do
+not gain trust. External indexing availability is not guaranteed.
+The foundation source closure is pinned to
+`0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`, which is source identity rather than
+deployment evidence. Sourcify v2 exact match is required. Robinhood Blockscout remains optional, unproven and
+degraded; it cannot support an exact-source claim or block or revise finality.
+
 ## Package locally and read existing launches
 
 Start at [Programmable discovery](https://programmable.market/.well-known/programmable.json), read

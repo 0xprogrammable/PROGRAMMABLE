@@ -49,6 +49,10 @@ submissions. CLI `3.3.9` is the current installable release and defaults to live
 Each release defines its funding and signing path. User-funded flows keep the connected wallet in control of its own
 transaction.
 
+Robinhood Chain V4 is published as a planned, not-deployed integration contract. Public writes and authorization are
+disabled until chain deployment, server simulation, wallet binding, finalized Router evidence, source verification
+and indexing readiness are independently proven. Stable V4 route and schema pointers do not make the network live.
+
 ## Launch models
 
 | Model                  | What it creates                                                       | Access                                                    |
@@ -135,11 +139,13 @@ provider availability or onchain lifecycle completion.
 | Custom Launch API keys       | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)               |
 | Wallet-owned V1 launch reads | [api.programmable.market/v1/custom-launches](https://api.programmable.market/v1/custom-launches)          |
 | Custom Launch API readiness  | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                  |
-| Custom Launch CLI 3.3.9      | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz) |
-| Custom Launch CLI 1.0.1      | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
+| Custom Launch CLI 3.3.9      | [public V3 GitHub Release asset](https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz) |
+| Custom Launch CLI 1.0.1      | [V1 compatibility asset](https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Custom Launch V1 OpenAPI     | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
 | Custom Launch V2 OpenAPI     | [V2 reads, schemas and write fence](https://programmable.market/openapi/custom-launch-v2.json)             |
 | Custom Launch V3 OpenAPI     | [preparatory profile 3.4 contract; live/default remains discovery-bound profile 3.3](https://programmable.market/openapi/custom-launch-v3.json) |
+| Custom Launch V4 OpenAPI     | [planned Robinhood Chain contract; public writes disabled](https://programmable.market/openapi/custom-launch-v4.json) |
+| Custom Launch V4 schema      | [planned Robinhood Chain pack config](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
