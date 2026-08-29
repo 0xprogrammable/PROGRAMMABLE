@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "programmable.dex-evm.revision-bound-foundations-test-report/v1",
+  "releaseId": "dex-evm/0.1.0-foundations-evidence.1",
+  "classification": "NON_PRODUCTION_REVISION_BOUND_FOUNDATIONS_EVIDENCE",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "testScope": "BINDING_LOCAL_FOUNDATIONS_ONLY",
+  "implementationRevision": {
+    "commit": "783abb45ff94d9f7920b29ec573483a763cebbd9",
+    "tree": "24db9698e98329a0564955e8456de0d76a5e3f5d"
+  },
+  "protocolLock": {
+    "path": "packages/dex-evm/binding/protocol-lock.json",
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "tree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "portableVectorSetDigest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "toolchain": {
+    "node": "v24.14.0",
+    "foundry": "forge 1.7.1 commit 4072e48705af9d93e3c0f6e29e93b5e9a40caed8",
+    "solc": "0.8.26+commit.8a97fa7a",
+    "slither": "0.11.5",
+    "echidna": "2.3.3"
+  },
+  "metrics": {
+    "echidnaTestLimit": 50000,
+    "portableVectorCases": 221,
+    "protocolRequirements": 175,
+    "echidnaPropertiesPassed": 3,
+    "foundryTestsPassed": 77,
+    "sdkTestsPassed": 73,
+    "echidnaCalls": 50053,
+    "slitherFindingsTriaged": 27
+  },
+  "checks": [
+    {
+      "id": "protocol-repository-check",
+      "command": "make check",
+      "workingDirectory": "locked Protocol repository at commit 334bb26703a4dab18ce0fca8485c6275a879933a",
+      "result": "PASS",
+      "scope": "Locked Protocol repository integrity, schema, example, vector and internal consistency checks at the exact referenced Draft revision.",
+      "doesNotProve": "A Binding Release, Conformance Report, native implementation pass, production eligibility, deployment or independent audit."
+    },
+    {
+      "id": "dex-foundations-verification",
+      "command": "PROGRAMMABLE_DEX_REQUIRE_EXACT_TOOLCHAIN=1 FOUNDRY_PROFILE=ci bash scripts/verify-dex-evm.sh",
+      "workingDirectory": "repository root",
+      "result": "PASS",
+      "scope": "Committed binding-local DEX EVM foundations: package and import checks, generated-artifact reproducibility, Forge unit, fuzz and invariant tests, coverage, gas and size gates, SDK tests, and Slither triage.",
+      "doesNotProve": "Portable conformance, protected execution, canonical-network deployment or behavior, source verification, production eligibility, or an independent audit."
+    },
+    {
+      "id": "echidna-foundations-campaign",
+      "command": "PROGRAMMABLE_DEX_ECHIDNA_TEST_LIMIT=50000 PROGRAMMABLE_DEX_ECHIDNA_SEQUENCE_LENGTH=100 PROGRAMMABLE_DEX_ECHIDNA_TIMEOUT_SECONDS=300 PROGRAMMABLE_DEX_ECHIDNA_WORKERS=1 bash scripts/verify-dex-evm-echidna.sh",
+      "workingDirectory": "repository root with ECHIDNA_BIN resolving the exact Echidna 2.3.3 binary",
+      "result": "PASS",
+      "scope": "Deterministic local Echidna campaign for the three declared DexFoundationsHarness properties with test limit 50000 and seed 46630.",
+      "doesNotProve": "Exhaustive verification, absence of vulnerabilities, portable conformance, canonical-network behavior, deployment, or an independent audit."
+    },
+    {
+      "id": "robinhood-recorded-chain-context-integration",
+      "command": "PROGRAMMABLE_DEX_EXPECTED_FORK_BLOCK=109367897 FOUNDRY_PROFILE=ci forge test --root packages/dex-evm --match-path test/integration/RobinhoodTestnetForkFoundations.t.sol -vvv",
+      "workingDirectory": "repository root",
+      "result": "PASS",
+      "scope": "Offline local chain-context simulation at recorded chain ID 46630 and block number 109367897; two Forge integration tests.",
+      "doesNotProve": "No live RPC observation, network fork, canonical-network state, finality, deployment, source verification or conformance."
+    }
+  ],
+  "claims": {
+    "assetProfileConformance": false,
+    "bindingRelease": false,
+    "conformanceReport": false,
+    "deployment": false,
+    "independentAudit": false,
+    "portableProfiles": false,
+    "production": false,
+    "protectedExecution": false,
+    "securityContest": false,
+    "sourceVerification": false
+  },
+  "safetyBoundaries": {
+    "coreControlledVaultReleasePath": false,
+    "localForkIsCanonicalDeployment": false
+  }
+}

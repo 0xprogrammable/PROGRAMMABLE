@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "programmable.dex-evm.revision-bound-foundations-evidence-release/v1",
+  "releaseId": "dex-evm/0.1.0-foundations-evidence.1",
+  "classification": "NON_PRODUCTION_REVISION_BOUND_FOUNDATIONS_EVIDENCE",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "productionEligible": false,
+  "implementationRevision": {
+    "commit": "783abb45ff94d9f7920b29ec573483a763cebbd9",
+    "tree": "24db9698e98329a0564955e8456de0d76a5e3f5d",
+    "relationToEvidenceRevision": "STRICT_ANCESTOR",
+    "evidenceSeparation": "DATA_ONLY_EVIDENCE_COMMIT_WITH_UNCHANGED_BOUND_PATHS",
+    "boundPathRoots": [
+      ".github/workflows/dex-evm.yml",
+      ".github/workflows/robinhood-dex-evidence.yml",
+      "README.md",
+      "config/networks/robinhood-chain",
+      "contracts/scripts/bootstrap-deps.sh",
+      "deployments/dex/robinhood",
+      "docs/PROJECT-STRUCTURE.md",
+      "docs/dex-evm",
+      "docs/security/DEX_EVM_PROPERTIES.md",
+      "packages/dex-evm",
+      "releases/dex-evm/0.1.0-architecture-baseline.1",
+      "scripts/bootstrap-dex-evm-deps.sh",
+      "scripts/generate-dex-evm-build-artifacts.mjs",
+      "scripts/verify-dex-evm-coverage.sh",
+      "scripts/verify-dex-evm-echidna.sh",
+      "scripts/verify-dex-evm-import-boundary.mjs",
+      "scripts/verify-dex-evm-network-records.mjs",
+      "scripts/verify-dex-evm-package.mjs",
+      "scripts/verify-dex-evm-release-evidence.mjs",
+      "scripts/verify-dex-evm-slither-findings.mjs",
+      "scripts/verify-dex-evm-slither.sh",
+      "scripts/verify-dex-evm.sh",
+      "scripts/verify-robinhood-dex-readonly.sh"
+    ]
+  },
+  "protocolLock": {
+    "path": "packages/dex-evm/binding/protocol-lock.json",
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "tree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "portableVectorSetDigest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "evidenceArtifacts": {
+    "checksumManifest": "releases/dex-evm/0.1.0-foundations-evidence.1/SHA256SUMS",
+    "evidenceCatalog": "releases/dex-evm/0.1.0-foundations-evidence.1/evidence-catalog.json",
+    "releaseNotes": "releases/dex-evm/0.1.0-foundations-evidence.1/RELEASE.md",
+    "testReport": "packages/dex-evm/binding/reports/native-foundations-test-report.json"
+  },
+  "claims": {
+    "assetProfileConformance": false,
+    "bindingRelease": false,
+    "conformanceReport": false,
+    "deployment": false,
+    "independentAudit": false,
+    "portableProfiles": false,
+    "production": false,
+    "protectedExecution": false,
+    "securityContest": false,
+    "sourceVerification": false
+  },
+  "safetyBoundaries": {
+    "coreControlledVaultReleasePath": false,
+    "localForkIsCanonicalDeployment": false
+  }
+}

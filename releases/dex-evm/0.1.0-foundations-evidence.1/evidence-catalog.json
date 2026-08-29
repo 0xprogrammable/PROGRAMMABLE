@@ -1,0 +1,904 @@
+{
+  "schemaVersion": "programmable.dex-evm.revision-bound-foundations-evidence-catalog/v1",
+  "releaseId": "dex-evm/0.1.0-foundations-evidence.1",
+  "classification": "NON_PRODUCTION_REVISION_BOUND_FOUNDATIONS_EVIDENCE",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "implementationRevision": {
+    "commit": "783abb45ff94d9f7920b29ec573483a763cebbd9",
+    "tree": "24db9698e98329a0564955e8456de0d76a5e3f5d"
+  },
+  "boundPathRoots": [
+    ".github/workflows/dex-evm.yml",
+    ".github/workflows/robinhood-dex-evidence.yml",
+    "README.md",
+    "config/networks/robinhood-chain",
+    "contracts/scripts/bootstrap-deps.sh",
+    "deployments/dex/robinhood",
+    "docs/PROJECT-STRUCTURE.md",
+    "docs/dex-evm",
+    "docs/security/DEX_EVM_PROPERTIES.md",
+    "packages/dex-evm",
+    "releases/dex-evm/0.1.0-architecture-baseline.1",
+    "scripts/bootstrap-dex-evm-deps.sh",
+    "scripts/generate-dex-evm-build-artifacts.mjs",
+    "scripts/verify-dex-evm-coverage.sh",
+    "scripts/verify-dex-evm-echidna.sh",
+    "scripts/verify-dex-evm-import-boundary.mjs",
+    "scripts/verify-dex-evm-network-records.mjs",
+    "scripts/verify-dex-evm-package.mjs",
+    "scripts/verify-dex-evm-release-evidence.mjs",
+    "scripts/verify-dex-evm-slither-findings.mjs",
+    "scripts/verify-dex-evm-slither.sh",
+    "scripts/verify-dex-evm.sh",
+    "scripts/verify-robinhood-dex-readonly.sh"
+  ],
+  "implementationArtifacts": [
+    {
+      "path": ".github/workflows/dex-evm.yml",
+      "gitMode": "100644",
+      "gitBlob": "16d5f9e645c3dd9bb2f532c4318152ebc5382673",
+      "sha256": "sha256:036e1ff13bff345eab7fc3693de415a5730772cfe4caf933e3ff91c3f3bec4f0"
+    },
+    {
+      "path": ".github/workflows/robinhood-dex-evidence.yml",
+      "gitMode": "100644",
+      "gitBlob": "55e272819208860547a0b6183b4d3645ad34eb9c",
+      "sha256": "sha256:57777d1af0a2b3489b5a23f5bb6cb7166b16dc5b5f3af3eeb82fbeb9c6319b54"
+    },
+    {
+      "path": "config/networks/robinhood-chain/4663.json",
+      "gitMode": "100644",
+      "gitBlob": "0c4c8fabbd08b6b7bd2f659e50455e6fb167f215",
+      "sha256": "sha256:a47ab9fc187b3e6c16c9c6e36c9a9925ffbe84ac07dffe3c3c9c1170061ed1ad"
+    },
+    {
+      "path": "config/networks/robinhood-chain/46630.json",
+      "gitMode": "100644",
+      "gitBlob": "0c40f04f50940a34361754b450b9f00429aab684",
+      "sha256": "sha256:125c543a12e20e95e0d338d10cae3afef7653e1836f94a08a6e550e837ff3e80"
+    },
+    {
+      "path": "config/networks/robinhood-chain/network.schema.json",
+      "gitMode": "100644",
+      "gitBlob": "579e548d0caeaa5714c00b4bbdd973be000fc3f0",
+      "sha256": "sha256:33961e3629b879bc6bbf4abda97a0a88fd85a0a1fddb8a2863cb5bc06d55fe50"
+    },
+    {
+      "path": "contracts/scripts/bootstrap-deps.sh",
+      "gitMode": "100755",
+      "gitBlob": "952347595c3be4b3499e1801412a2e2f70abdb8b",
+      "sha256": "sha256:b7a7c4d88f2e52de238078db9b262d7a7298702f0a16e05c5eca8e174ea8b4bb"
+    },
+    {
+      "path": "deployments/dex/robinhood/4663/deployment-status.json",
+      "gitMode": "100644",
+      "gitBlob": "3522c0523c590f0d71eb9c9115b918d7191ff6ba",
+      "sha256": "sha256:90cb36b4ba89d396f23d982b9b5dbfb17a5ff0d923ddfb698d8b7da1e69eca6e"
+    },
+    {
+      "path": "deployments/dex/robinhood/46630/preparation-status.json",
+      "gitMode": "100644",
+      "gitBlob": "15652335ae9506e2b355081bb77a051cb8af6a40",
+      "sha256": "sha256:3adcbe49da95559684a43e98b4bb1152e68b27f6a25aa3511e2579e746085b8b"
+    },
+    {
+      "path": "docs/dex-evm/ARCHITECTURE_BOUNDARY.md",
+      "gitMode": "100644",
+      "gitBlob": "76f27269c73a937a6a8301b0210aa68c47a65002",
+      "sha256": "sha256:d901940476660f867f9c6ad7b82f1d0c3382696dd4b2218ba0196b79b9f87c78"
+    },
+    {
+      "path": "docs/dex-evm/ASSET_PROFILES.md",
+      "gitMode": "100644",
+      "gitBlob": "4efaaf65f2615b6abe23bd589eac88fdd80f3717",
+      "sha256": "sha256:d04a2c719a277f846dc58283cb41250811bfb88e9617a1cf90b166b340c3185f"
+    },
+    {
+      "path": "docs/dex-evm/DEPLOYMENT_AND_VERIFICATION.md",
+      "gitMode": "100644",
+      "gitBlob": "d6ccc296e8bfb1168452b3c7ec8e63f3d9f344b8",
+      "sha256": "sha256:9a314db8d3b2d81f56dc98e1409443996c5c3464b21f7480127f8574dfa24338"
+    },
+    {
+      "path": "docs/dex-evm/ENGINE_AUTHORING.md",
+      "gitMode": "100644",
+      "gitBlob": "464e392306ada3a91d305c62ed3095cd0d9bee47",
+      "sha256": "sha256:6434d485aeda4e36d1b7ef89965efbe4b3a0afc53318555b31b402d834137025"
+    },
+    {
+      "path": "docs/dex-evm/MARKETS_AND_DOMAINS.md",
+      "gitMode": "100644",
+      "gitBlob": "70418f5ba40c78ce30bc88c30c5f46ebfa35e5ef",
+      "sha256": "sha256:320daa96fe29d4642a23d2536ed588fea1eb0d23f37ef0b10cf20ebf6e7bdbf0"
+    },
+    {
+      "path": "docs/dex-evm/OWNER_GATE_LEDGER.md",
+      "gitMode": "100644",
+      "gitBlob": "fd2b680a929233b3d3aeabef3f1cffaa3f040a7c",
+      "sha256": "sha256:92571d3ca7b4fd51724fda6ae3f2813b7a97e8c9cfcb4877b5a38db1d567ecdb"
+    },
+    {
+      "path": "docs/dex-evm/PROTOCOL_ASSESSMENT.md",
+      "gitMode": "100644",
+      "gitBlob": "65e1941a95c2b683d52cec6b7fb0da6e9207c7a2",
+      "sha256": "sha256:66a8cc454bbe80adfa72a2ecb1e3004011f4bc69d4f95e4b1eb4b967a8de60e7"
+    },
+    {
+      "path": "docs/dex-evm/PROTOCOL_LOCK_AND_CONFORMANCE.md",
+      "gitMode": "100644",
+      "gitBlob": "c69f85a7e68c1054f8b16389635f70185e275bfe",
+      "sha256": "sha256:87e079c48c1e1566d89e0173b46a0672daba04e1728b759e23ee412ee75c4452"
+    },
+    {
+      "path": "docs/dex-evm/README.md",
+      "gitMode": "100644",
+      "gitBlob": "480c6da7f15f9560c732fed078fda84036be141f",
+      "sha256": "sha256:bbd7804b41d83facc1a0e5137e3bc2c9312f387f1b3310bd0890480b13913a24"
+    },
+    {
+      "path": "docs/dex-evm/RECEIPTS_AND_INDEXING.md",
+      "gitMode": "100644",
+      "gitBlob": "7aa6d9d3d9b269e0301dc91d163c376693f55101",
+      "sha256": "sha256:e3f0828c5c94994a7aabfaddb8cdc643a7b31ca2c51ff921d57871e2378e128a"
+    },
+    {
+      "path": "docs/PROJECT-STRUCTURE.md",
+      "gitMode": "100644",
+      "gitBlob": "fc7be6846a47dee020121dc55340d85f1496872c",
+      "sha256": "sha256:b06634c2dbba0743cf585082cf25fa9b42df0b60a8cf59449d9bad7e63e3f631"
+    },
+    {
+      "path": "docs/security/DEX_EVM_PROPERTIES.md",
+      "gitMode": "100644",
+      "gitBlob": "3ea1fccaac26d5d3462c810611525cf27a5388ad",
+      "sha256": "sha256:6106557186a1162229fafc0711bf84d0d74465be03970753fd0a1fbc5221be88"
+    },
+    {
+      "path": "packages/dex-evm/.gas-snapshot",
+      "gitMode": "100644",
+      "gitBlob": "9ca6d2d547f9d15038e32365e553ee61d4580716",
+      "sha256": "sha256:767724062bf5ba28a125df20d1689a548067cb54b006a1103673a1e22d123580"
+    },
+    {
+      "path": "packages/dex-evm/.gitignore",
+      "gitMode": "100644",
+      "gitBlob": "d9f2f8f701cb91ad693e56af44ca4e8b4b468942",
+      "sha256": "sha256:ed7b7ab9d1c89f44244c2e9b37f9444e5af6296db663d959c53d048a54aa97a0"
+    },
+    {
+      "path": "packages/dex-evm/ARCHITECTURE.md",
+      "gitMode": "100644",
+      "gitBlob": "9501b166868721c4bee7081331bb280a38b6239a",
+      "sha256": "sha256:f1646cbce9c9283162810f092ef480f4038fc3d3d36062e8d7714e5a32647163"
+    },
+    {
+      "path": "packages/dex-evm/binding/abi/foundations.generated.json",
+      "gitMode": "100644",
+      "gitBlob": "db122a5a1e6a296938ec12f3ede284def2cdbf39",
+      "sha256": "sha256:1c0ecb2958e7a9a2033df832337e79756ab46b7edb1a6c05597a8ce066718a2c"
+    },
+    {
+      "path": "packages/dex-evm/binding/profiles/asset.erc20-strict-measured.v1.json",
+      "gitMode": "100644",
+      "gitBlob": "ed277f6b8d1fb514e69536162f5fe3e4777a9400",
+      "sha256": "sha256:ccc08b0666cb8496502cf0970f3b08bbb75ae03dddfa7f9451f61a256d991f0b"
+    },
+    {
+      "path": "packages/dex-evm/binding/profiles/asset.native-eth-strict.v1.json",
+      "gitMode": "100644",
+      "gitBlob": "e53853f8b360c6f7a96727930c1e93798f396877",
+      "sha256": "sha256:a689193a94c9595bea83c207b28e2b30852132d4b360f2cd6425968ef784e134"
+    },
+    {
+      "path": "packages/dex-evm/binding/profiles/asset.unsupported.v1.json",
+      "gitMode": "100644",
+      "gitBlob": "f4cb41a01035890ad8a58b6e2a14ee5ad953d444",
+      "sha256": "sha256:5a084155036194b61ca2b75108245719e4e218b660e733c1d8822d687b7ef208"
+    },
+    {
+      "path": "packages/dex-evm/binding/profiles/engine-code.entry-runtime-codehash-only.v1.json",
+      "gitMode": "100644",
+      "gitBlob": "ad5e414eaa2f6a539dea12dae2f1eda5d79074b7",
+      "sha256": "sha256:860023ec2ef0626a10265282c27f08ab7e56267b2e38af1feaf2e08f57fe57c0"
+    },
+    {
+      "path": "packages/dex-evm/binding/profiles/engine-interface.return-only-opaque.v1.json",
+      "gitMode": "100644",
+      "gitBlob": "a29a84936a8430dc49ac846c315af45be0433b7f",
+      "sha256": "sha256:36f9d471c61f4886c77da19ba956c8ed0aac567b81357360cab5f5bb87970fa3"
+    },
+    {
+      "path": "packages/dex-evm/binding/profiles/README.md",
+      "gitMode": "100644",
+      "gitBlob": "50248d4be501eed2a2c81afce3bffeead14ded43",
+      "sha256": "sha256:02f54fd00ca3920015334030e87f48f519e7ddd3e42949584ccdf96f933fcf85"
+    },
+    {
+      "path": "packages/dex-evm/binding/protocol-lock.json",
+      "gitMode": "100644",
+      "gitBlob": "eb8a3fa49ec6fee0b7e0758e7ec325dec055b6c5",
+      "sha256": "sha256:6f07a87e82af026daa7baf5a351dc11a89a217b1c5c7d9a6eefae37d4cb7b29e"
+    },
+    {
+      "path": "packages/dex-evm/binding/reports/build-artifacts.generated.json",
+      "gitMode": "100644",
+      "gitBlob": "d2750447240f1790b3c75edabe108b9da3cab1e3",
+      "sha256": "sha256:297edc5afab63433f35831a52d0fddd4fe847e6f6abe2651548e49ad18a7bc93"
+    },
+    {
+      "path": "packages/dex-evm/binding/reports/conformance-status.json",
+      "gitMode": "100644",
+      "gitBlob": "3f00feea426bb6f7a91289b6ce903880aa4e5a9a",
+      "sha256": "sha256:3f08f241c5687d34ba07abd9455c265dc264353647e60bd529d998140ed7acb6"
+    },
+    {
+      "path": "packages/dex-evm/binding/reports/protocol-gap-report.json",
+      "gitMode": "100644",
+      "gitBlob": "65ef062849b84182938093b736107a69a1e6bd7f",
+      "sha256": "sha256:3769dd55465a92055c12a8d1969ef54162c04decc079e1490a8d6c03b691c7ca"
+    },
+    {
+      "path": "packages/dex-evm/binding/reports/protocol-lock-verification.json",
+      "gitMode": "100644",
+      "gitBlob": "2c6186962830418deac955d9b78d1de6edae966b",
+      "sha256": "sha256:15beb3f720c99812e8fad94c6ad1bc755b54a33e493343da8981ac9e870cf801"
+    },
+    {
+      "path": "packages/dex-evm/binding/reports/requirement-traceability.json",
+      "gitMode": "100644",
+      "gitBlob": "2518a5eda48edfad2bf6fe7e58604bb6e5d7ffc2",
+      "sha256": "sha256:ec666734ba3cfd6de3e7c1c1be071b8a23a6aedfc9baa6cd8add2978e5e6db01"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/asset-foundations-v1.json",
+      "gitMode": "100644",
+      "gitBlob": "e05c45177e07b1bd737f036b524977a431eefd51",
+      "sha256": "sha256:51dc067cace677d36b2ea434510f2574bc5f48fa626d18a6e92def2cfa1c80da"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/domain-vault-v1.creation-code.hex",
+      "gitMode": "100644",
+      "gitBlob": "2e9e8c2db624fb385174d6b6f9a47e227a5edb06",
+      "sha256": "sha256:acbe5e8fbd5ddca07c3cc969aa0b63f48ea302d499e28609782d8690d20194d0"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/foundations-v1.json",
+      "gitMode": "100644",
+      "gitBlob": "753c2732ebd390e49c98acb75121e4855ec6ed90",
+      "sha256": "sha256:97ad7716957117b4dbf358fe32877fdb71cee897b9efec4358a52467bfe17144"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable-snapshot-lock.json",
+      "gitMode": "100644",
+      "gitBlob": "021a1a9c48d6a087217ec2aa3f5ad5df57fbff63",
+      "sha256": "sha256:d0b3a1dace260a56d37d44b7c2fe03758e7ecdcf6072d2e24c3cb8f9f211b1bf"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/batch-auction.json",
+      "gitMode": "100644",
+      "gitBlob": "ebc0f4f96c920690a0e9db089a2dfba735e9bbb3",
+      "sha256": "sha256:2b1e40437b31274ac7da592a136da6a82cdd9882ef7f15563414378f260821e2"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/bonding-curve-lifecycle.json",
+      "gitMode": "100644",
+      "gitBlob": "ae1edc757dd61c08cf9390de63975ce21ac685f8",
+      "sha256": "sha256:820cdb4647798cf0d412d3c8cd426ad1eed6a1524743fb7161e2a463643cf116"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/conditional-outcome-market.json",
+      "gitMode": "100644",
+      "gitBlob": "d1407e4d7a9e27028cd9e73ebfe23845bc7606b8",
+      "sha256": "sha256:2b4d6f61409720e41b3502ccafcf392d97176c84e3b3da12756ee643745a2fa6"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/constant-product-market.json",
+      "gitMode": "100644",
+      "gitBlob": "7278000688bb1f8eb3c0c054431678280666269e",
+      "sha256": "sha256:954e3245aebf9e337f5a88fd1f3c811d4f65d75e32c8b8dd1b1ed8b91bcfc8d9"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/multi-asset-basket.json",
+      "gitMode": "100644",
+      "gitBlob": "60de4a9b1dbee2ce173ec84eca391fbfe223f8e7",
+      "sha256": "sha256:59a990ddb4bd0c2f4c19feb2b4829ae3ba2ff198dd8d54125443de950b2671ad"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/nft-bid-pool.json",
+      "gitMode": "100644",
+      "gitBlob": "dfda8f61bba0411bdd7f099d796270ab28e810b1",
+      "sha256": "sha256:c6aab5576e382815583cae0f1e0b5b358af815012b2099e78ff4388353187f5e"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/shared-domain-composition.json",
+      "gitMode": "100644",
+      "gitBlob": "7a2036c6c4adfca3205ba04fac9631eb403dd288",
+      "sha256": "sha256:720edcb90c81ffec78e53d4f18175ef33e85e891f068685a179a34265fb6726c"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/examples/signed-rfq-jit.json",
+      "gitMode": "100644",
+      "gitBlob": "5a3b54e8b5600779e7f0915af840db97280663dd",
+      "sha256": "sha256:6e2c8c84ca86243202430aa5dc2e07393e1e4adf115c124ba62f2c1efede8ee1"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/vectors/canonical-identifiers-v1.json",
+      "gitMode": "100644",
+      "gitBlob": "d03a67d6c55cc1daf76dcd2b902ff6506409ed16",
+      "sha256": "sha256:650d3bfaa2935328a959b8a6ff620708d7297cf8813d0cc665e47fe342e8aa89"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/vectors/identifiers-v1.json",
+      "gitMode": "100644",
+      "gitBlob": "3fc99a78f94edd7a633dc850eaf8c2275f997302",
+      "sha256": "sha256:e2193dbb48d44e8e8de54eadf5e49b80595db595ef1272d7930842b753573044"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/portable/334bb26703a4dab18ce0fca8485c6275a879933a/vectors/protocol-assessment-v1.json",
+      "gitMode": "100644",
+      "gitBlob": "63f96cbc7efcab9e161fb7dc353f8742809888d3",
+      "sha256": "sha256:3a9e28ed4fdf859406a009b0e5d1f2eb88d44103001015b7ec7c4161561c2d1e"
+    },
+    {
+      "path": "packages/dex-evm/binding/vectors/README.md",
+      "gitMode": "100644",
+      "gitBlob": "aca8b69d51311b4e80700a0f4568fa6c223c06ad",
+      "sha256": "sha256:d05a1e399c695adce60deeb567c1cbece4159f174abb1488cb62c9b0d2e441cf"
+    },
+    {
+      "path": "packages/dex-evm/foundry.toml",
+      "gitMode": "100644",
+      "gitBlob": "82897003a9f27cd11690429b4df38ac7dcd04e88",
+      "sha256": "sha256:336330c42cd5e2a8855f7c431920ce630633bd8f2d9dbcbd704906166215ad8f"
+    },
+    {
+      "path": "packages/dex-evm/README.md",
+      "gitMode": "100644",
+      "gitBlob": "1b9934480c0a7306814c40eaf1c739b77f7d0b1a",
+      "sha256": "sha256:bd7757149ec8e59c7039437e1ebf49edd916931bed0df6f59d055431c5644d7a"
+    },
+    {
+      "path": "packages/dex-evm/remappings.txt",
+      "gitMode": "100644",
+      "gitBlob": "11106eb8fc83bf995d1f52d51b743228ab0b7509",
+      "sha256": "sha256:c415d53fbbe771c451cdb2ed7ac7300c79fa84815367cdc02f8151e8c4197616"
+    },
+    {
+      "path": "packages/dex-evm/script/PrepareCoreV1Initcode.s.sol",
+      "gitMode": "100644",
+      "gitBlob": "88ff70ea6086a3b93ab16b37a356200014723ce2",
+      "sha256": "sha256:f7bc8c09c1a232804031a58ba78a1ecb5e9abfd993b30ec4bf5b0d533b9b23f9"
+    },
+    {
+      "path": "packages/dex-evm/sdk/package-lock.json",
+      "gitMode": "100644",
+      "gitBlob": "9e085b695f2b1d1bd74c0697c90ff280415caf70",
+      "sha256": "sha256:64171c912fb409d15ca9eb5e69b5a9dae0eb355d53b964aaf8e7bd2de9f3e53b"
+    },
+    {
+      "path": "packages/dex-evm/sdk/package.json",
+      "gitMode": "100644",
+      "gitBlob": "7782af140daf7bf5b52b8722f7b658c6337cf746",
+      "sha256": "sha256:21ccc1e57ce2527bb91b6d971b482bd1d145dd585f6700d31f7d1376beac83d3"
+    },
+    {
+      "path": "packages/dex-evm/sdk/README.md",
+      "gitMode": "100644",
+      "gitBlob": "7434c0c3cda3874baeabd1fa593254a401ce7cff",
+      "sha256": "sha256:ad97255ac3223c712d09d7c3ccb8b3412a2222348d7bc46b981720c85a373b29"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/assessment.ts",
+      "gitMode": "100644",
+      "gitBlob": "fe0848f3286f046bf0dff7008775c93926c2b3f9",
+      "sha256": "sha256:98c60b53bd0b94e75a8851d25df612073374c67f5cbf50736883f7f404df8374"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/constants.ts",
+      "gitMode": "100644",
+      "gitBlob": "9f3c3fa8c466ee8089841929897c59704fae01bf",
+      "sha256": "sha256:2adadc0d26f172069c66cc863ae9fae6a2a55fed8b4d02badf1330ff24b50a88"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/eip712-candidate.ts",
+      "gitMode": "100644",
+      "gitBlob": "aed20dd75fd883d9fc9d5f168030e7dbda95ec02",
+      "sha256": "sha256:6c8bb70f439d6a2406532afc6b6543c03fed128207604c22577d09a044ba2af2"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/errors.ts",
+      "gitMode": "100644",
+      "gitBlob": "462d0a1fa1e845a27df75d91e1a7e2e218b94bc6",
+      "sha256": "sha256:ce88ad7464bcafcffb6efdb0f1dad5e152b02e262f1aec246972a8bc0164e88f"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/event-indexer.ts",
+      "gitMode": "100644",
+      "gitBlob": "78074bc2fe51fdccc6d42c2221c60e8c4f6f404d",
+      "sha256": "sha256:93714b443606fe764991e86cb22636cfa1ea7bba3df81842b125ee3edfe40569"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/index.ts",
+      "gitMode": "100644",
+      "gitBlob": "272cf06b5e9cd350925538ba464cd8ae93b5a904",
+      "sha256": "sha256:8ddab2f8e6efcaba0e7ba482890abd204ddfcc8141a2415c49d8d74d19e8bc8d"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/input-snapshot.ts",
+      "gitMode": "100644",
+      "gitBlob": "cd016d68064da174574c55f779d182fcfa8752bc",
+      "sha256": "sha256:8ed9ac7789e5e80a2e0f616cbfede348c932c36bb8ab541034bb6fd3fe374b39"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/native-identities.ts",
+      "gitMode": "100644",
+      "gitBlob": "64c4c0eaaec12ba006bd47c72c56330e079d342f",
+      "sha256": "sha256:439e19057bf797d3835025d81e819b8accb515120eb614f76d73475d68376876"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/portable-identifiers.ts",
+      "gitMode": "100644",
+      "gitBlob": "3cecd04e7c92d043a6beba2adfaf1c551ebffd95",
+      "sha256": "sha256:09d3f54df3a78a6e745d47cbf4ae8e7653243b1ebdc4c50203ad6401fd06c59b"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/portable-json.ts",
+      "gitMode": "100644",
+      "gitBlob": "d21f4e7c2bcac2d17c2db6b6fff1e9aa7fc3c5d7",
+      "sha256": "sha256:5b85b74a67dec20a7b67537b6bed015a962f480eefda449e6ff75ec762ef0336"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/receipt-decoder.ts",
+      "gitMode": "100644",
+      "gitBlob": "c74538e70c45483917cdd702cdf90853e0c24c01",
+      "sha256": "sha256:b6838913487597f1826b5c6703ea0c49ddf70f9c14d93ffe9265fdfff6cc0e00"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/transaction-review.ts",
+      "gitMode": "100644",
+      "gitBlob": "68e0d1ecb1125e2e607ff1dbf950a0594dd11bf3",
+      "sha256": "sha256:8dbbba5d3ce84710d053f2b87b6f857c07820f89d5b305d451de9d7797abb805"
+    },
+    {
+      "path": "packages/dex-evm/sdk/src/uint.ts",
+      "gitMode": "100644",
+      "gitBlob": "da78bd2f7b96e2a8e7e66bb7ebb152f67d6dbc80",
+      "sha256": "sha256:e54c6b0cabc502ede8aad689f03b582926d1a00005d015707c4bc9cf68410138"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/assessment.test.ts",
+      "gitMode": "100644",
+      "gitBlob": "9a7d02417d4cc8ce860c3f54fe14f58833c11044",
+      "sha256": "sha256:b8dddab5129e9b29b73f194faa9dfdd1f538afaa165667be3216f8737945288a"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/eip712-candidate.test.ts",
+      "gitMode": "100644",
+      "gitBlob": "ced4c2b711bf307188ce1a94ab3157a6acb7e24d",
+      "sha256": "sha256:00d0c36d3fa9117c0951e85fc38fe864fe046dcd46cc8e117293de9ffdce24a4"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/event-indexer.test.ts",
+      "gitMode": "100644",
+      "gitBlob": "c8ea8cdf74e9db065c27e9f263a9ed4e8b2b6cd6",
+      "sha256": "sha256:d00cf0059df27e5c48a2df4527defe8f71eb6eb268484c08c439ddeb46c6914c"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/helpers.ts",
+      "gitMode": "100644",
+      "gitBlob": "b15234457ec7c7091e29fba74d94a7c3a81ae7aa",
+      "sha256": "sha256:5cf167eafe8deb6c3a3328ce4b5c12486c684e857a5664ed7fbdec191bdbfb52"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/native-identities.test.ts",
+      "gitMode": "100644",
+      "gitBlob": "322d802f72c5a02f8882e50b6050d82a33f5bb00",
+      "sha256": "sha256:6da5f3f6c8c7743ee4bfdd54faff0ce0489110c69ca60740f0cbbef2ade765f7"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/portable-identifiers.test.ts",
+      "gitMode": "100644",
+      "gitBlob": "61ac68f6c4b571c1d720c19b1e54d8061d326413",
+      "sha256": "sha256:5bb109146ed4efcd93575a2d0b53c5e7eea3c7458dff77e416fe93e90815cfdd"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/receipt-transaction.test.ts",
+      "gitMode": "100644",
+      "gitBlob": "ff59ea68145b65880a78a6f2ae213fbc51e7626a",
+      "sha256": "sha256:06292e4d8c7ab0bc90f41726c1707a47e9f53731385f03346e3e5ac5fcf5c859"
+    },
+    {
+      "path": "packages/dex-evm/sdk/test/vector-lock.test.ts",
+      "gitMode": "100644",
+      "gitBlob": "f7762fe07c1fc7c8d3d58c9f07a43252493cd13f",
+      "sha256": "sha256:305298ce63b642fab50577cae0bf987882ee29ca4f9799fc1e4104125812e2ce"
+    },
+    {
+      "path": "packages/dex-evm/sdk/tsconfig.json",
+      "gitMode": "100644",
+      "gitBlob": "b0b6f8a112c154ae70c565e735345f5afe22877f",
+      "sha256": "sha256:bf25a42693f847e25bf458baee2e1ade20c40d894b44c21d661003fae447b7ba"
+    },
+    {
+      "path": "packages/dex-evm/SECURITY.md",
+      "gitMode": "100644",
+      "gitBlob": "6a05a2b77c6419d7ef5e1274459c555a868267f9",
+      "sha256": "sha256:93df255c6af6d39d4f905e01b9f76830f3a9b804129885e4df81ffc9de793b64"
+    },
+    {
+      "path": "packages/dex-evm/slither.config.json",
+      "gitMode": "100644",
+      "gitBlob": "29b2314b2b4a678cdda4e868a34a42fc56dc8f16",
+      "sha256": "sha256:141872de05813addd1cb8a3aa1b1f99dc25e9e4e16849b8bbec223662a88e3ff"
+    },
+    {
+      "path": "packages/dex-evm/src/core/CoreV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "fbb57d6ff074baf55eb004ea6db3256a22484792",
+      "sha256": "sha256:697e1b8015e6124bbdeb8941b0a46a0eacc4c99277e40fceaa0182f341145f4d"
+    },
+    {
+      "path": "packages/dex-evm/src/core/DomainVaultV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "4c0d9588cebf25a635556d4a8e92f4e87cd31f83",
+      "sha256": "sha256:632a265c2545f3f6aa2e1c2f3ff8b3ea99de06d4e6c342859b9e4412f24e57ab"
+    },
+    {
+      "path": "packages/dex-evm/src/core/ExecutionLockV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "5d15e4b8431c280a7f3785ae5dbae4f17cba7fd0",
+      "sha256": "sha256:191772794d59a2c42606f645eb073cce936809ac2195fa72834b0d0c6988b2d0"
+    },
+    {
+      "path": "packages/dex-evm/src/core/NativeIdentityV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "4b5143fc45bab2372be6799763c96d69de03e309",
+      "sha256": "sha256:b8aabcb8498d737751959e0ebca2360ff905e98c6e04825fcc9b362598f5e7a4"
+    },
+    {
+      "path": "packages/dex-evm/src/core/ProtocolAssessmentV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "b45a2c2bf313a9248bf302c0633d7a2060bc1642",
+      "sha256": "sha256:cf4f5c6d6deccdb19d9e74dadc21b497a04605ec79d8e7cb9be376a3d5798f3c"
+    },
+    {
+      "path": "packages/dex-evm/src/interfaces/IDomainVaultV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "b32f1a3e19107da42737921ce18230a68f6d889d",
+      "sha256": "sha256:0019d01f225c4fca61a02ef0cb485823c0cf51c6b3f4c49e14821b327cdc3c86"
+    },
+    {
+      "path": "packages/dex-evm/src/interfaces/IERC1271V1.sol",
+      "gitMode": "100644",
+      "gitBlob": "3680bfac20f1cc1d5d23ae964362730dcdf49f5a",
+      "sha256": "sha256:7f0537f1b1835ccce200a72bbc52a5d5f553fa2bee1ae335383103188151c327"
+    },
+    {
+      "path": "packages/dex-evm/src/interfaces/IReturnOnlyEngineV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "ebdbce81f348b7b54ae8ddcb8149028dcfa92a39",
+      "sha256": "sha256:2f4e454799bbce2e2b601a4b1ea12df494270a0e7177864df0b8501ed358fbde"
+    },
+    {
+      "path": "packages/dex-evm/src/profiles/CanonicalEOASignatureV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "80f0477edf7c95a499e46055b501e9eeb988d670",
+      "sha256": "sha256:c7b59ed2f6dca6463246b4e52bb4436923bd97062dd46bee3cafe582bba63bab"
+    },
+    {
+      "path": "packages/dex-evm/src/profiles/EIP712HashingV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "92c61127e629a1e5858543b7dd00bd4107ffcf76",
+      "sha256": "sha256:7fd51b4dbcd7dbbf616bde013e537d3304c2b1591432ffd1a8277b78142887b3"
+    },
+    {
+      "path": "packages/dex-evm/src/profiles/ERC1271VerifierV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "2c9d8b15cd53ca094e1e6d59f597605ba5ca435e",
+      "sha256": "sha256:2881c874a859518557c005c275586c9765064c5b1a66a638204a029143485e74"
+    },
+    {
+      "path": "packages/dex-evm/src/profiles/NativeETHProfileV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "d0ce98973a1641eeeb965ad9e9c30b7acd5eda84",
+      "sha256": "sha256:76bb0e3d7531003a72c76fb037566202b60ebf0126d0c223db34e97a23dfe4c0"
+    },
+    {
+      "path": "packages/dex-evm/src/profiles/StrictMeasuredERC20ProfileV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "3244ed98ff6150cad0ae49aa43f720080ca48b8d",
+      "sha256": "sha256:5629cb450f43b80bc4576e03072f3aa449968fb92aaf0253a655fd3fa6605ec7"
+    },
+    {
+      "path": "packages/dex-evm/src/reference-engines/OpaqueBatchAccumulatorEngineFixture.sol",
+      "gitMode": "100644",
+      "gitBlob": "abe465ec7785619b096c7e1ea8731e600d8662a8",
+      "sha256": "sha256:dc96a794ad4556d646660305666bcf87f573b20dc81a1c0a8c7f12f1e353d921"
+    },
+    {
+      "path": "packages/dex-evm/src/reference-engines/OpaqueLifecycleEngineFixture.sol",
+      "gitMode": "100644",
+      "gitBlob": "3195f260005fbbd8c6efea84f64ed2d6923bc2f6",
+      "sha256": "sha256:9e4deca555c5ab698b323cfdb0ce8b264cb5f0db66949bb3d3fa900e6637b3c1"
+    },
+    {
+      "path": "packages/dex-evm/src/reference-engines/OpaqueStateEngineV1.sol",
+      "gitMode": "100644",
+      "gitBlob": "80be3e4c20a0aebfe7dbe5eb0a33243037741bb7",
+      "sha256": "sha256:91f41fd1fa76d8574da869e149060e3a9af83c348f71fe56471ff509d76a918c"
+    },
+    {
+      "path": "packages/dex-evm/test/adversarial/ExecutionLockAdversarial.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "653b1f3de8a58c55ae0ce3478357d875624991d1",
+      "sha256": "sha256:05173d0240ddadfdf467a69b789b6cdc23773c67a897d236cbe441a072b74957"
+    },
+    {
+      "path": "packages/dex-evm/test/adversarial/HostileBoundaries.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "60082d115e58ba08fcc1ad011c76376bcff261a8",
+      "sha256": "sha256:72da04f6a5c3032aff6e6adcd2c43211de78cac2df37327b3a22ff82ff67153e"
+    },
+    {
+      "path": "packages/dex-evm/test/adversarial/SECURITY_TEST_CATALOG.md",
+      "gitMode": "100644",
+      "gitBlob": "8703b619f3cd5f4e0e76f4ec50cec8932e4191df",
+      "sha256": "sha256:29adf28fb2b0758affee9b1bae294fafe009f32ce77d4e34e702fe9c96a69ea5"
+    },
+    {
+      "path": "packages/dex-evm/test/conformance/AuthorityFieldMutation.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "ac29e07c2eb89026cf492cbfd8f18f1743eb8fe6",
+      "sha256": "sha256:0b9f5b7e74a5c110011a6493dd29f4c8b2f62cbc4436447ec69a6144d5961df7"
+    },
+    {
+      "path": "packages/dex-evm/test/conformance/FoundationsOnlyConformance.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "68b931c991d91788680a6e827b3ef5ba885e752b",
+      "sha256": "sha256:6c54a34d95900b686c7a55a86beb8bec2db1769c958af2f544d0991c9f468b20"
+    },
+    {
+      "path": "packages/dex-evm/test/fuzz/IdentityAndAssessmentFuzz.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "d2b6bef16f5b6799c5c252d4decbbc0f51f194ff",
+      "sha256": "sha256:30162c83c9bdb24419a61f6c42eb67b6efc1b5d15e42f93966e62494de4eecf3"
+    },
+    {
+      "path": "packages/dex-evm/test/helpers/AssessmentHarness.sol",
+      "gitMode": "100644",
+      "gitBlob": "f5b9ca9ab7b7f2aee115bada325d78d1ddd7287e",
+      "sha256": "sha256:5e4c6c78b39d843f4703762a697b685e3272eda9cc648e43bec54bddf20f53af"
+    },
+    {
+      "path": "packages/dex-evm/test/helpers/CoreTestFixtures.sol",
+      "gitMode": "100644",
+      "gitBlob": "7fd199e2351b7160d26522cc424d10f812394731",
+      "sha256": "sha256:e6556adebbd2b207652683d364dd22a84cbbc87e76bda27fd0fff6cff6c001d7"
+    },
+    {
+      "path": "packages/dex-evm/test/helpers/IdentityHarness.sol",
+      "gitMode": "100644",
+      "gitBlob": "12400fb476aa2f59f0b38716a33583e950f86801",
+      "sha256": "sha256:611f2002469045c554e855d41364930d1bc4b0f5b809fd2e1891d51cce0f949f"
+    },
+    {
+      "path": "packages/dex-evm/test/helpers/SignatureHarness.sol",
+      "gitMode": "100644",
+      "gitBlob": "4e696144c59b1d59b07b41834d3851c3ecaa7ca5",
+      "sha256": "sha256:4b4970be90084bd359e5795a859a18696255055abf9d901e860cf47cf4230e63"
+    },
+    {
+      "path": "packages/dex-evm/test/integration/RobinhoodTestnetForkFoundations.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "078d9adc6bbfe7201a4c5f2549d9a4d48d264886",
+      "sha256": "sha256:b4037e1023eb2174e15ea95d002a3e5b7f67725906679733decdfe73adfbaa73"
+    },
+    {
+      "path": "packages/dex-evm/test/invariant/DomainVaultInvariant.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "18b9f059f082bf7dfe46e5b76a56f6f5991dc146",
+      "sha256": "sha256:9ad1bb71ae1e8f2650d7d92472b66c88c410b996a6a93b638ffd4f8bfb72f3e1"
+    },
+    {
+      "path": "packages/dex-evm/test/invariant/ProtocolAssessmentEchidna.sol",
+      "gitMode": "100644",
+      "gitBlob": "8e5ed1e5389db4710a4b6ea60f0373bb89225f84",
+      "sha256": "sha256:e6dee4293de2c0291005060a734df782948936acf6151006808476703d5ad608"
+    },
+    {
+      "path": "packages/dex-evm/test/mocks/EngineCodePolicyMocks.sol",
+      "gitMode": "100644",
+      "gitBlob": "f2d596bf12d3689751f8c5ec518be390e3f258d1",
+      "sha256": "sha256:da9cee41016da9f28b4d65b370fe6b9e2414c9ffba20266dcd80ef632194a266"
+    },
+    {
+      "path": "packages/dex-evm/test/mocks/ExecutionLockActors.sol",
+      "gitMode": "100644",
+      "gitBlob": "766dbdcadceaa688045f01a3804425f6d8045614",
+      "sha256": "sha256:bf2bf5f89198167266f2ec4eb4318725891d31c3091efec8b549b68dfe15948d"
+    },
+    {
+      "path": "packages/dex-evm/test/mocks/MockERC1271Wallets.sol",
+      "gitMode": "100644",
+      "gitBlob": "3d58c44b93cf2dffb1c51bcafd13b6ac0a7de123",
+      "sha256": "sha256:4f06e98103b649d6dd23753d1f019bf765127866f54801b782570d10ffca5e40"
+    },
+    {
+      "path": "packages/dex-evm/test/mocks/MockERC20s.sol",
+      "gitMode": "100644",
+      "gitBlob": "2276b46ba3cc27a75f0e9688e4c2b4c19207bfa3",
+      "sha256": "sha256:1ab86cc032723336ae4550043589c7c4360760ae464cb8dbf14adb0f64712088"
+    },
+    {
+      "path": "packages/dex-evm/test/mocks/NativeRecipients.sol",
+      "gitMode": "100644",
+      "gitBlob": "472c8d3aa73f843b37c8ba372cd1889330fb4881",
+      "sha256": "sha256:5ee09161c3be474efba9307501ca2aab6f8b293ab43e45a69592fcfe4c2c085a"
+    },
+    {
+      "path": "packages/dex-evm/test/mocks/VaultControllerHarness.sol",
+      "gitMode": "100644",
+      "gitBlob": "65f35a51e725762ab328126ef2136f9c42a2e48d",
+      "sha256": "sha256:1866e023ec8451a836727e50b517be91fcae63f0e5fcbb5f7d0b42f95feae396"
+    },
+    {
+      "path": "packages/dex-evm/test/unit/AssetFoundationVectors.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "71a9a46f218e752fb2b076fa0f9bb8a5254fe49b",
+      "sha256": "sha256:7c372addeb4927e9842a2c456d0f03bea312b8912edaa0542ae5f50e1590a50e"
+    },
+    {
+      "path": "packages/dex-evm/test/unit/CoreIdentity.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "8eb29c324191a44c5a0230f51c146addbad7fc2c",
+      "sha256": "sha256:e5505fe990cf61a131102895019051050af5dc4d52faed1817a6abd24a313d41"
+    },
+    {
+      "path": "packages/dex-evm/test/unit/DomainVaultV1.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "408f1b2c41a4cc3abbe862d9e6e79409cc45b8a5",
+      "sha256": "sha256:6395cbb472cecfb44508b4fce420453e71f8a71c9eed9333cde0009f36563d8d"
+    },
+    {
+      "path": "packages/dex-evm/test/unit/PrepareCoreV1Initcode.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "02d45d306e6d187a1f3255d5e82d97b2f6ccfa14",
+      "sha256": "sha256:79d1155ec81652db9b78393a7399bd776b42ae6f03c6cce2c5fdc68d7e26d6d2"
+    },
+    {
+      "path": "packages/dex-evm/test/unit/ProtocolAssessmentV1.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "10dda5920cb82faa6b6cc452c9d37b2cd758f1ee",
+      "sha256": "sha256:8a293c264e453d7e2c96bd5b93e0d9c4a3cf595d79beb7d1c5acd8cbb2dc39e8"
+    },
+    {
+      "path": "packages/dex-evm/test/unit/ReferenceEngineGenerality.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "16ee480d0ef634feb6f82c69dfeed29dc9df44a3",
+      "sha256": "sha256:a6aaa467b40ecbc8f81214d7518584ef68ea2c0c1d51d70b12048c58d4500db8"
+    },
+    {
+      "path": "packages/dex-evm/test/unit/SignatureUtilitiesV1.t.sol",
+      "gitMode": "100644",
+      "gitBlob": "92023f4ea50deaebe6c25fbaa8caa5aa5ffd8d20",
+      "sha256": "sha256:e396b6177f5847e60ac715dfbfbf440ba6cd03e17dd34cafc25f34e33a62e979"
+    },
+    {
+      "path": "README.md",
+      "gitMode": "100644",
+      "gitBlob": "c9419944b2c651566ef214923784fa304f7af85f",
+      "sha256": "sha256:d2ee2560678ebb644cffc9cde52e592e303b2af00c77531ab8670163f6d6059e"
+    },
+    {
+      "path": "releases/dex-evm/0.1.0-architecture-baseline.1/evidence-catalog.json",
+      "gitMode": "100644",
+      "gitBlob": "8c397c2f8accbf73f519aa2e8cceee8a121137f2",
+      "sha256": "sha256:94328c05a1dae6a5d119ef4687f6462a6da849f116c3c06e16fb904ba0345b3e"
+    },
+    {
+      "path": "releases/dex-evm/0.1.0-architecture-baseline.1/release-record.json",
+      "gitMode": "100644",
+      "gitBlob": "09e637bcc9a38460e68fb770b3e80240edff2233",
+      "sha256": "sha256:89b1bebeacd0d4bd3202ea9be3bcd5b5df90057ec56fa804cdb2bfa6b7360b96"
+    },
+    {
+      "path": "releases/dex-evm/0.1.0-architecture-baseline.1/RELEASE.md",
+      "gitMode": "100644",
+      "gitBlob": "2187cf092312a02dbc1caa7eaf2dcf6e8c398810",
+      "sha256": "sha256:f3ffc6973b87f7572afa25e2c0681609c4b631cac2f4ed474123abf1cb460f98"
+    },
+    {
+      "path": "scripts/bootstrap-dex-evm-deps.sh",
+      "gitMode": "100644",
+      "gitBlob": "748103dd953e47300288bb6a610c19559b6dc50b",
+      "sha256": "sha256:5cdb88e4ae868faaa382d5e3581d54835aa85282c4e5a6a1d0990ba7d253f629"
+    },
+    {
+      "path": "scripts/generate-dex-evm-build-artifacts.mjs",
+      "gitMode": "100644",
+      "gitBlob": "4796c216484caeb951fe129be738510f12f62091",
+      "sha256": "sha256:502392634ff03c6d71b39911fe817c11246a7bd630913678796da13cb89cf8fa"
+    },
+    {
+      "path": "scripts/verify-dex-evm-coverage.sh",
+      "gitMode": "100644",
+      "gitBlob": "88a95f4efc0c2cf1793c780778b82b5e9ec7b831",
+      "sha256": "sha256:d3ab564ff284a30a2905f94844ad4e100c85b77269bec8a71a75055dd6cf796a"
+    },
+    {
+      "path": "scripts/verify-dex-evm-echidna.sh",
+      "gitMode": "100644",
+      "gitBlob": "0a5e38457e320f6fca2740d7bb0a6d836fcb7d76",
+      "sha256": "sha256:8e195ad5f33c65ee79d5f5a44fee00c90d8d6c09d9a8ecd9b79755f205383093"
+    },
+    {
+      "path": "scripts/verify-dex-evm-import-boundary.mjs",
+      "gitMode": "100644",
+      "gitBlob": "bdf64961f3b366e360e77543b7d853d0b1923bf6",
+      "sha256": "sha256:7a97fdecef66aa2df05123726872c77054f8b89172298f82dbb4d5875ce3581a"
+    },
+    {
+      "path": "scripts/verify-dex-evm-network-records.mjs",
+      "gitMode": "100644",
+      "gitBlob": "2891bde88452a229357565e6e25d5d72874a1b64",
+      "sha256": "sha256:e041d13f3735c5329f47893772b0a493f3c610ee143885d4f9d5dcda6f8fac31"
+    },
+    {
+      "path": "scripts/verify-dex-evm-package.mjs",
+      "gitMode": "100644",
+      "gitBlob": "30d716c0fca9b10bac9ead55be74005fed176f8a",
+      "sha256": "sha256:739897692179196540865eac1b94a4d1f523609e4a38fbf2a2c4acc1799fe1c6"
+    },
+    {
+      "path": "scripts/verify-dex-evm-release-evidence.mjs",
+      "gitMode": "100644",
+      "gitBlob": "ac388fc23958d2298fb8f25d32ddccb6b0125c84",
+      "sha256": "sha256:60095a4a659851359f87e74900d667ac70752aa482805e59a75fb19eebb56c27"
+    },
+    {
+      "path": "scripts/verify-dex-evm-slither-findings.mjs",
+      "gitMode": "100644",
+      "gitBlob": "bbb39f7bb3f6c137d2473803704eb99f8e19811d",
+      "sha256": "sha256:b3515d8d322bff81ae300ded107d397a2c34a7ad4cd3f934a23077ecdb941646"
+    },
+    {
+      "path": "scripts/verify-dex-evm-slither.sh",
+      "gitMode": "100644",
+      "gitBlob": "a9d4d4b93a3e387c05f14a7e1ddbec57512578cf",
+      "sha256": "sha256:b0b2595705e5ffb7937b85e2f5233ed81df2d53271aa208947bf4b4d597cdb35"
+    },
+    {
+      "path": "scripts/verify-dex-evm.sh",
+      "gitMode": "100644",
+      "gitBlob": "e6c2b6be4a7767049df1816fb8842277e05cd8da",
+      "sha256": "sha256:3254fffbcd54701efe077b4261457e7892d787d3da1aecd821bf5ff975ac67fc"
+    },
+    {
+      "path": "scripts/verify-robinhood-dex-readonly.sh",
+      "gitMode": "100644",
+      "gitBlob": "a94c687699f4e6d16407bf46d56fdb54a502575b",
+      "sha256": "sha256:9cd77f8e8775daad9f20cba84fff630cb92ab430cd60a0ac0135bddcdffb2759"
+    }
+  ],
+  "testReport": {
+    "path": "packages/dex-evm/binding/reports/native-foundations-test-report.json",
+    "sha256": "sha256:84545be2bd539cf32c8fee42ba63128274850fedc618b81dc905cb406a82d194",
+    "status": "PRESENT_REVISION_BOUND_FOUNDATIONS_TEST_EVIDENCE"
+  },
+  "claims": {
+    "assetProfileConformance": false,
+    "bindingRelease": false,
+    "conformanceReport": false,
+    "deployment": false,
+    "independentAudit": false,
+    "portableProfiles": false,
+    "production": false,
+    "protectedExecution": false,
+    "securityContest": false,
+    "sourceVerification": false
+  },
+  "safetyBoundaries": {
+    "coreControlledVaultReleasePath": false,
+    "localForkIsCanonicalDeployment": false
+  }
+}
