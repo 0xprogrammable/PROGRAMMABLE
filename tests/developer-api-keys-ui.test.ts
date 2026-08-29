@@ -291,7 +291,15 @@ describe("developer API key interface", () => {
       /\.workspace\s*\{[^}]*align-items:\s*start;/su,
     );
     expect(apiKeysStyles).toMatch(
-      /\.workspace\s*\{[^}]*grid-template-columns:\s*repeat\(2,/su,
+      /\.workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.72fr\)\s+minmax\(0,\s*1\.28fr\);/su,
+    );
+    expect(apiKeysStyles).toMatch(
+      /\.listToolbar\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end;/su,
+    );
+    expect(apiKeysStyles).toContain("--api-key-row-min-height");
+    expect(apiKeysStyles).toContain("grid-template-rows: repeat(");
+    expect(apiKeysSource.indexOf('aria-label="API key pages"')).toBeLessThan(
+      apiKeysSource.indexOf('className={styles.keyList}'),
     );
     expect(apiKeysStyles).not.toContain("height: clamp(");
     expect(apiKeysStyles).not.toMatch(
