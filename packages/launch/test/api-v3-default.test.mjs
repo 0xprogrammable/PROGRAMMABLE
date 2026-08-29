@@ -31,13 +31,13 @@ import {
 
 const REQUEST_ID = "60000000-0000-4000-8000-000000000006";
 
-test("package 3 generic aliases select the public V3 contracts", () => {
+test("package 4 retains generic V3 aliases for unchanged default behavior", () => {
   assert.equal(PACK_CONFIG_SCHEMA, PACK_CONFIG_SCHEMA_V3);
   assert.equal(CREATE_REQUEST_SCHEMA, CREATE_REQUEST_SCHEMA_V3);
   assert.equal(AGENT_ATTESTATION_SCHEMA, AGENT_ATTESTATION_SCHEMA_V2);
   assert.equal(CREATE_PATH, CREATE_PATH_V3);
   assert.equal(OPENAPI_URL, OPENAPI_URL_V3);
-  assert.equal(PACKAGE_VERSION, "3.3.9");
+  assert.equal(PACKAGE_VERSION, "4.0.0");
   assert.equal(DIRECT_NATIVE_PROFILE_REVISION, DIRECT_NATIVE_PROFILE_REVISION_V3);
   assert.equal(DIRECT_NATIVE_PROFILE_REVISION, 3);
   assert.equal(

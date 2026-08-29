@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   RELEASE_ASSET_SCHEMA,
+  RELEASE_ASSET_SCHEMA_V2,
   RELEASE_REPOSITORY,
   buildReleaseManifest,
   canonicalJson,
@@ -99,5 +100,71 @@ test("manifest rejects omissions, substitutions, and duplicate payload names", (
       ],
     }),
     /asset names are not exact/u,
+  );
+});
+
+test("V4 release manifest additively binds the committed machine-contract record", () => {
+  const names = releaseNames("4.0.0");
+  const base = {
+    version: "4.0.0",
+    ref: "refs/heads/production",
+    commitSha: COMMIT,
+    treeSha: TREE,
+    assets: [
+      { name: names.tarball, mediaType: "application/gzip", bytes: 10, sha256: DIGESTS[0] },
+      { name: names.checksum, mediaType: "text/plain", bytes: 20, sha256: DIGESTS[1] },
+      { name: names.sbom, mediaType: "application/vnd.cyclonedx+json", bytes: 30, sha256: DIGESTS[2] },
+    ],
+  };
+  assert.throws(
+    () => buildReleaseManifest(base),
+    /requires the exact machine-contract binding/u,
+  );
+  const manifest = buildReleaseManifest({
+    ...base,
+    machineContractBinding: {
+      schemaVersion: "programmable.launch-cli-v4-release-binding.v1",
+      path: "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+      sha256: `sha256:${"d".repeat(64)}`,
+    },
+  });
+  assert.equal(manifest.schemaVersion, RELEASE_ASSET_SCHEMA_V2);
+  assert.deepEqual(manifest.machineContractBinding, {
+    schemaVersion: "programmable.launch-cli-v4-release-binding.v1",
+    path: "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+    sha256: `sha256:${"d".repeat(64)}`,
+  });
+  assert.throws(
+    () => buildReleaseManifest({
+      ...base,
+      machineContractBinding: {
+        ...manifest.machineContractBinding,
+        path: "docs/operations/releases/custom-launch-v3/binding.json",
+      },
+    }),
+    /exact machine-contract binding/u,
+  );
+});
+
+test("pre-V4 release manifest remains byte-shape compatible and rejects additive binding", () => {
+  const names = releaseNames("3.4.0");
+  assert.throws(
+    () => buildReleaseManifest({
+      version: "3.4.0",
+      ref: "refs/heads/production",
+      commitSha: COMMIT,
+      treeSha: TREE,
+      machineContractBinding: {
+        schemaVersion: "programmable.launch-cli-v4-release-binding.v1",
+        path: "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+        sha256: `sha256:${"d".repeat(64)}`,
+      },
+      assets: [
+        { name: names.tarball, mediaType: "application/gzip", bytes: 10, sha256: DIGESTS[0] },
+        { name: names.checksum, mediaType: "text/plain", bytes: 20, sha256: DIGESTS[1] },
+        { name: names.sbom, mediaType: "application/vnd.cyclonedx+json", bytes: 30, sha256: DIGESTS[2] },
+      ],
+    }),
+    /must not change their immutable binding/u,
   );
 });

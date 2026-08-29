@@ -1,0 +1,127 @@
+{
+  "$schema": "./cli-release-binding.schema.json",
+  "schemaVersion": "programmable.launch-cli-v4-release-binding.v1",
+  "releaseReady": false,
+  "releaseIdentity": {
+    "package": {
+      "name": "@programmable/launch",
+      "version": "4.0.0",
+      "tag": "programmable-launch-v4.0.0",
+      "repository": "programmablehq/PROGRAMMABLE"
+    },
+    "profile": {
+      "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+      "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+      "businessProfileId": "robinhood-production-launch",
+      "admissionDescriptorDigest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948",
+      "admissionPolicyDigest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216",
+      "admissionBindingDigest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2",
+      "admissionSchemaDigest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7",
+      "profileRevision": 1,
+      "profileVersion": "4.0.0",
+      "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+    },
+    "finalityPolicy": {
+      "schemaVersion": "programmable.custom-launch-finality-policy-ref.v1",
+      "policyId": "robinhood-stage-finality-v1",
+      "policyRevision": 1,
+      "policyDigest": "sha256:537d531423d1285a3808556a57303ec68f1e6bdeea3c9aaf6320f9e5a0e47153"
+    },
+    "policySource": {
+      "schemaVersion": "programmable.custom-launch-policy-source.v1",
+      "repository": "programmablehq/Launch-Policy",
+      "repositoryId": 1320171831,
+      "protectedBranch": "main",
+      "verifiedMergeCommit": "987215867472229690e30e11000c626d58f46e16",
+      "verifiedTree": "284fb19f05cdf9b5b60b8bacfbd480f6b98decd3",
+      "artifacts": {
+        "descriptor": {
+          "path": "policy/custom-launch-admission-v4.json",
+          "digest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948"
+        },
+        "businessPolicy": {
+          "path": "policy/launch-policy.v1.json",
+          "digest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216"
+        },
+        "generatedBinding": {
+          "path": ".programmable/custom-launch-admission.v4.json",
+          "digest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2"
+        },
+        "schema": {
+          "path": "policy/schemas/custom-launch-admission-v4.schema.json",
+          "digest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7"
+        }
+      }
+    }
+  },
+  "chain": {
+    "chainId": "4663",
+    "caip2": "eip155:4663",
+    "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
+    "chainDeploymentDescriptorDigest": null
+  },
+  "machineContracts": [
+    {
+      "name": "openapi",
+      "path": "public/openapi/custom-launch-v4.json",
+      "url": "https://programmable.market/openapi/custom-launch-v4.json",
+      "sha256": "sha256:f244d05179424f1806c3cb1b23b798dbbb2f67077586ece17210b914c96869c3"
+    },
+    {
+      "name": "packConfig",
+      "path": "public/schemas/custom-launch/v4/pack-config.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
+      "sha256": "sha256:661302abc811af2d605e65db10aff5f7e868f838732013d18445e6f82ff81366"
+    },
+    {
+      "name": "createRequest",
+      "path": "public/schemas/custom-launch/v4/custom-launch-create-request.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch-create-request.json",
+      "sha256": "sha256:89fe3d3fff180ad187a6caa5dc33bd96ffe866a05a8587faffa0f24cb0d4b8b9"
+    },
+    {
+      "name": "resource",
+      "path": "public/schemas/custom-launch/v4/custom-launch.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch.json",
+      "sha256": "sha256:69a565eabf12a3b153dedd3027cc79e2f9c9fab531c941ddb05aaf61b24fe57e"
+    },
+    {
+      "name": "capabilities",
+      "path": "public/schemas/custom-launch/v4/capabilities.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/capabilities.json",
+      "sha256": "sha256:a7b64de399689714c83692c26644b7ce5f48f726817e877f27671c5fe7f18854"
+    },
+    {
+      "name": "preflight",
+      "path": "public/schemas/custom-launch/v4/preflight.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/preflight.json",
+      "sha256": "sha256:58075dde83c658fd85996b4e3f073fa6cfd5f80c472fd162aad7fede77530ffa"
+    },
+    {
+      "name": "onchainEvidence",
+      "path": "public/schemas/custom-launch/v4/onchain-evidence.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/onchain-evidence.json",
+      "sha256": "sha256:d0336167a50ecf6d16f2c0da6cf23d063cc968abafdfe5e9707044a6c2d51029"
+    },
+    {
+      "name": "exactWalletTransaction",
+      "path": "public/schemas/custom-launch/v4/exact-wallet-transaction.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/exact-wallet-transaction.json",
+      "sha256": "sha256:e3ba4e5408d7e3042bc99a6f27c4d4561817dccf285854e7935ae78b252758a4"
+    }
+  ],
+  "evidence": {
+    "chainDeployment": null,
+    "profile": null,
+    "manifest": null,
+    "source": null,
+    "finality": null
+  },
+  "blockers": [
+    "chainDeploymentEvidence",
+    "profileEvidence",
+    "releaseManifestEvidence",
+    "sourceClosureEvidence",
+    "finalityEvidence"
+  ]
+}

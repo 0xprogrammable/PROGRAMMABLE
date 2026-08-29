@@ -11,6 +11,7 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  CREATE_REQUEST_SCHEMA_V4,
   DIRECT_NATIVE_PROFILE_VERSION,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
@@ -26,6 +27,7 @@ import {
   PACK_CONFIG_SCHEMA_V1,
   PACK_CONFIG_SCHEMA_V2,
   PACK_CONFIG_SCHEMA_V3,
+  PACK_CONFIG_SCHEMA_V4,
   PACK_CONFIG_V3_CONTRACT_URL,
   PACK_CONFIG_V3_EXAMPLE_URL,
   PACKAGE_VERSION,
@@ -53,6 +55,7 @@ import {
   validateBehaviorScenarioInputs,
 } from "./behavior-scenario-inputs.mjs";
 import { buildVerificationBundle } from "./verification.mjs";
+import { buildV4Launch, validateV4PackConfig } from "./pack-v4.mjs";
 import {
   buildLaunchProfileBinding,
   buildLaunchIntentHash,
@@ -82,6 +85,12 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const absoluteConfig = path.resolve(configPath);
   const { config, apiVersion } = await readPackConfig(absoluteConfig);
+  if (apiVersion === "v4") {
+    if (directNativeProfileVersion !== undefined) {
+      throw new TypeError("directNativeProfileVersion is available only for V3 exact retries");
+    }
+    return buildV4Launch({ config, configPath: absoluteConfig });
+  }
   const configuredDirectNativeProfileVersion = apiVersion === "v3"
     ? config.profileVersion ?? DIRECT_NATIVE_PROFILE_VERSION
     : undefined;
@@ -523,7 +532,8 @@ export async function packLaunch({ configPath, outputPath, receiptPath }) {
     result.behaviorScenarioInputsHash = built.behaviorScenarioInputsHash;
   }
   if (built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V2
-    || built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
+    || built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V3
+    || built.request.schemaVersion === CREATE_REQUEST_SCHEMA_V4) {
     result.launchProfileHash = built.launchProfileHash;
     result.launchIntentHash = built.launchIntentHash;
   }
@@ -540,26 +550,33 @@ async function readPackConfig(absoluteConfig) {
   try {
     config = (await readStrictJsonFile(absoluteConfig, 2_097_152)).value;
   } catch (error) {
-    throw invalidV3PackConfig(error, undefined);
+    throw invalidPackConfig(error, undefined);
   }
   try {
     return { config, apiVersion: assertPackConfig(config) };
   } catch (error) {
     if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V1
       || config?.schemaVersion === PACK_CONFIG_SCHEMA_V2) throw error;
-    throw invalidV3PackConfig(error, config?.schemaVersion);
+    throw invalidPackConfig(error, config?.schemaVersion);
   }
 }
 
-function invalidV3PackConfig(error, schemaVersion) {
+function invalidPackConfig(error, schemaVersion) {
+  const isV4 = schemaVersion === PACK_CONFIG_SCHEMA_V4;
   return createCliDiagnosticError({
-    code: "PACK_CONFIG_V3_INVALID",
+    code: isV4 ? "PACK_CONFIG_V4_INVALID" : "PACK_CONFIG_V3_INVALID",
     stage: "pack-config",
-    summary: "The supplied pack config does not satisfy the public V3 config contract.",
+    summary: isV4
+      ? "The supplied pack config does not satisfy the public Robinhood V4 config contract."
+      : "The supplied pack config does not satisfy the public Ethereum V3 config contract.",
     expected: {
-      schemaVersion: PACK_CONFIG_SCHEMA_V3,
-      configContract: PACK_CONFIG_V3_CONTRACT_URL,
-      executableExample: PACK_CONFIG_V3_EXAMPLE_URL,
+      schemaVersion: isV4 ? PACK_CONFIG_SCHEMA_V4 : PACK_CONFIG_SCHEMA_V3,
+      configContract: isV4
+        ? "https://programmable.market/schemas/custom-launch/v4/pack-config.json"
+        : PACK_CONFIG_V3_CONTRACT_URL,
+      executableExample: isV4
+        ? "https://github.com/programmablehq/PROGRAMMABLE/tree/programmable-launch-v4.0.0/packages/launch/examples/robinhood-v4-no-broadcast"
+        : PACK_CONFIG_V3_EXAMPLE_URL,
     },
     observed: {
       schemaVersion: typeof schemaVersion === "string" ? schemaVersion : null,
@@ -611,9 +628,11 @@ function assertPackConfig(config) {
         ? ["fundingAuthorization", "fundingSignaturePatch"]
         : []),
     ], "pack config");
+  } else if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V4) {
+    return validateV4PackConfig(config);
   } else {
     throw new TypeError(
-      `pack config schemaVersion must be ${PACK_CONFIG_SCHEMA_V1}, ${PACK_CONFIG_SCHEMA_V2}, or ${PACK_CONFIG_SCHEMA_V3}`,
+      `pack config schemaVersion must be ${PACK_CONFIG_SCHEMA_V1}, ${PACK_CONFIG_SCHEMA_V2}, ${PACK_CONFIG_SCHEMA_V3}, or ${PACK_CONFIG_SCHEMA_V4}`,
     );
   }
   if (config.chainId !== MAINNET_CHAIN_ID) throw new TypeError("pack config chainId must be string 1");

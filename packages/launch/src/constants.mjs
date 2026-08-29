@@ -1,11 +1,13 @@
-export const PACKAGE_VERSION = "3.3.9";
+export const PACKAGE_VERSION = "4.0.0";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
+export const PACK_CONFIG_SCHEMA_V4 = "programmable.launch-pack-config.v4";
 export const PACK_CONFIG_SCHEMA = PACK_CONFIG_SCHEMA_V3;
 export const CREATE_REQUEST_SCHEMA_V1 = "programmable.custom-launch-create-request.v1";
 export const CREATE_REQUEST_SCHEMA_V2 = "programmable.custom-launch-create-request.v2";
 export const CREATE_REQUEST_SCHEMA_V3 = "programmable.custom-launch-create-request.v3";
+export const CREATE_REQUEST_SCHEMA_V4 = "programmable.custom-launch-create-request.v4";
 export const CREATE_REQUEST_SCHEMA = CREATE_REQUEST_SCHEMA_V3;
 export const SOURCE_DESCRIPTOR_SCHEMA = "2.0.0";
 export const SOURCE_MANIFEST_SCHEMA = "2.0.0";
@@ -127,6 +129,66 @@ export const CREATE_PATH = CREATE_PATH_V3;
 export const CAPABILITIES_PATH_V3 = "/v3/capabilities";
 export const PREFLIGHT_PATH_V3 = "/v3/custom-launches/preflight";
 export const PREFLIGHT_SCHEMA_V1 = "programmable.custom-launch-preflight.v1";
+export const CUSTOM_LAUNCH_RESOURCE_SCHEMA_V4 = "programmable.custom-launch.v4";
+export const CAPABILITIES_SCHEMA_V2 = "programmable.custom-launch-capabilities.v2";
+export const PREFLIGHT_SCHEMA_V2 = "programmable.custom-launch-preflight.v2";
+export const ONCHAIN_EVIDENCE_SCHEMA_V2 = "programmable.custom-launch-onchain-evidence.v2";
+export const EXACT_WALLET_TRANSACTION_SCHEMA_V4 = "programmable.exact-wallet-transaction.v4";
+export const CHAIN_DEPLOYMENT_SCHEMA_V1 =
+  "programmable.custom-launch-chain-deployment.v1";
+export const V4_FOUNDATION_SOURCE_COMMITMENT =
+  "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730";
+export const V4_DEPLOYMENT_EVIDENCE_SCHEMA =
+  "programmable.custom-launch-deployment-evidence.v1";
+export const V4_ATOMIC_ROOT_DEPLOYMENT_EVIDENCE_SCHEMA =
+  "programmable.robinhood-atomic-root-deployment-evidence.v1";
+export const V4_L2_CHECKPOINT_ETHEREUM_FINALITY_SCHEMA =
+  "programmable.robinhood-l2-checkpoint-ethereum-finality.v1";
+export const V4_GENESIS_PROVENANCE_SCHEMA =
+  "programmable.custom-launch-genesis-provenance.v1";
+export const V4_GENESIS_PROVIDER_READBACK_SCHEMA =
+  "programmable.custom-launch-genesis-provider-readback.v1";
+export const FINALITY_POLICY_REF_SCHEMA_V1 =
+  "programmable.custom-launch-finality-policy-ref.v1";
+export const V4_PROFILE_REF_SCHEMA = "programmable.custom-launch-profile-ref.v4";
+export const V4_STRUCTURAL_PROFILE_ID =
+  "programmable.custom-launch.robinhood-mainnet.v1";
+export const V4_BUSINESS_PROFILE_ID = "robinhood-production-launch";
+// Retained as a source-compatible alias for callers that only display the
+// business profile identifier. V4 profile objects use businessProfileId.
+export const V4_PROFILE_ID = V4_BUSINESS_PROFILE_ID;
+export const V4_PROFILE_VERSION = "4.0.0";
+export const V4_ADMISSION_DESCRIPTOR_DIGEST =
+  "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948";
+export const V4_ADMISSION_POLICY_DIGEST =
+  "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216";
+export const V4_ADMISSION_BINDING_DIGEST =
+  "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2";
+export const V4_ADMISSION_SCHEMA_DIGEST =
+  "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7";
+export const V4_PROFILE_DIGEST =
+  "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0";
+export const V4_FUNDING_INTENT_SCHEMA = "programmable.custom-launch-funding-intent.v2";
+export const V4_LIQUIDITY_MODEL_SCHEMA = "programmable.custom-launch-liquidity-model.v1";
+export const V4_EXTERNAL_CONTRACT_SCHEMA =
+  "programmable.custom-launch-external-contract.v1";
+export const V4_PROJECT_METADATA_IMAGE_ARTIFACT_SCHEMA =
+  "programmable.project-metadata-image-artifact.v1";
+export const V4_LAUNCH_INTENT_HASH_DOMAIN = "programmable.custom-launch-intent.v4";
+export const V4_REQUEST_HASH_DOMAIN = "programmable.custom-launch-request.v4";
+export const V4_SOURCE_BUILD_COMMITMENT_DOMAIN =
+  "programmable.custom-launch-source-build.v4";
+export const V4_CHAIN_DEPLOYMENT_DIGEST_DOMAIN =
+  "programmable.custom-launch-chain-deployment.v1";
+export const V4_SUBMIT_JOURNAL_SCHEMA = "programmable.launch-submit-journal.v2";
+export const V4_IDEMPOTENCY_DOMAIN = "programmable-v4";
+export const V4_ROUTE_TEMPLATE = "/v4/chains/{chainId}";
+export const CAPABILITIES_PATH_TEMPLATE_V4 = `${V4_ROUTE_TEMPLATE}/capabilities`;
+export const PREFLIGHT_PATH_TEMPLATE_V4 =
+  `${V4_ROUTE_TEMPLATE}/custom-launches/preflight`;
+export const CREATE_PATH_TEMPLATE_V4 = `${V4_ROUTE_TEMPLATE}/custom-launches`;
+export const FINALIZED_PATH_TEMPLATE_V4 =
+  `${V4_ROUTE_TEMPLATE}/finalized-custom-launches`;
 export const PERMIT_REISSUE_PATH_TEMPLATE_V3 =
   "/v3/custom-launches/{launchId}/permit-reissues";
 export const PERMIT_REISSUE_REQUEST_SCHEMA_V1 =
@@ -139,6 +201,7 @@ export const READY_PATH = "/readyz";
 export const OPENAPI_URL_V1 = "https://programmable.market/openapi/custom-launch-v1.json";
 export const OPENAPI_URL_V2 = "https://programmable.market/openapi/custom-launch-v2.json";
 export const OPENAPI_URL_V3 = "https://programmable.market/openapi/custom-launch-v3.json";
+export const OPENAPI_URL_V4 = "https://programmable.market/openapi/custom-launch-v4.json";
 export const OPENAPI_URL = OPENAPI_URL_V3;
 export const GUIDE_URL = "https://programmable.market/docs/developers/custom-launch";
 export const WALLET_HANDOFF_BASE_URL = "https://programmable.market/developers/api-keys";
@@ -151,17 +214,28 @@ export const API_KEYS_URL = "https://programmable.market/developers/api-keys";
 export const RELEASE_TAG_V1 = "programmable-launch-v1.0.1";
 export const RELEASE_TARBALL_V1 = "programmable-launch-1.0.1.tgz";
 export const RELEASE_URL_V1 =
-  `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
-export const RELEASE_TAG = "programmable-launch-v3.3.9";
-export const RELEASE_TARBALL = "programmable-launch-3.3.9.tgz";
+  `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG_V1}/${RELEASE_TARBALL_V1}`;
+export const RELEASE_TAG_V3 = "programmable-launch-v3.3.9";
+export const RELEASE_TARBALL_V3 = "programmable-launch-3.3.9.tgz";
+export const RELEASE_URL_V3 =
+  `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG_V3}/${RELEASE_TARBALL_V3}`;
+export const RELEASE_TAG = "programmable-launch-v4.0.0";
+export const RELEASE_TARBALL = "programmable-launch-4.0.0.tgz";
 export const RELEASE_URL =
-  `https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
+  `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =
   "https://programmable.market/schemas/custom-launch/v3/pack-config.json";
 export const PACK_CONFIG_V3_EXAMPLE_URL =
-  `https://github.com/0xprogrammable/PROGRAMMABLE/blob/${RELEASE_TAG}/packages/launch/examples/direct-native-v3-no-broadcast/README.md`;
+  `https://github.com/programmablehq/PROGRAMMABLE/blob/${RELEASE_TAG_V3}/packages/launch/examples/direct-native-v3-no-broadcast/README.md`;
+export const PACK_CONFIG_V4_CONTRACT_URL =
+  "https://programmable.market/schemas/custom-launch/v4/pack-config.json";
+export const PACK_CONFIG_V4_EXAMPLE_URL =
+  `https://github.com/programmablehq/PROGRAMMABLE/blob/${RELEASE_TAG}/packages/launch/examples/robinhood-v4-no-broadcast/README.md`;
 
 export const MAINNET_CHAIN_ID = "1";
+export const ROBINHOOD_CHAIN_ID = "4663";
+export const ROBINHOOD_CAIP2 = "eip155:4663";
+export const ROBINHOOD_CHAIN_DEPLOYMENT_ID = "robinhood-mainnet-custom-launch-v1";
 export const ROUTER = "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56";
 export const PERMIT_AUTHORITY = "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b";
 export const GRAPH_FACTORY = "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887";
@@ -195,6 +269,8 @@ export const API_ROUTE_NAMESPACE_TYPE =
   "ProgrammableApiCustomGraphRouteNamespaceV1(bytes32 sourceBundleSha256,address launchWallet,address router,address graphFactory)";
 
 export const MAX_REQUEST_BYTES = 8_388_608;
+export const MAX_REQUEST_BYTES_V4 = 16_777_216;
+export const MAX_PROJECT_METADATA_IMAGE_BYTES_V4 = 5 * 1_024 * 1_024;
 export const MAX_STANDARD_JSON_INPUT_BYTES = 5_242_880;
 export const MAX_TOTAL_STANDARD_JSON_INPUT_BYTES = 5_242_880;
 export const MAX_STANDARD_JSON_SOURCES = 2_048;

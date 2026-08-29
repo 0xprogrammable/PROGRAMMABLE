@@ -15,6 +15,7 @@ import {
   CREATE_REQUEST_SCHEMA_V1,
   CREATE_REQUEST_SCHEMA_V2,
   CREATE_REQUEST_SCHEMA_V3,
+  CREATE_REQUEST_SCHEMA_V4,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
@@ -23,10 +24,15 @@ import {
   GRAPH_BUNDLE_SCHEMA,
   MAINNET_CHAIN_ID,
   MAX_REQUEST_BYTES,
+  MAX_REQUEST_BYTES_V4,
   MAX_STANDARD_JSON_INPUT_BYTES,
   MAX_STANDARD_JSON_SOURCES,
   MAX_TOTAL_STANDARD_JSON_INPUT_BYTES,
   PACK_CONFIG_SCHEMA_V3,
+  PACK_CONFIG_SCHEMA_V4,
+  PACK_CONFIG_V4_CONTRACT_URL,
+  PACK_CONFIG_V4_EXAMPLE_URL,
+  ROBINHOOD_CHAIN_ID,
   PACK_CONFIG_V3_CONTRACT_URL,
   PACK_CONFIG_V3_EXAMPLE_URL,
   SOURCE_DESCRIPTOR_SCHEMA,
@@ -43,7 +49,11 @@ import {
   sha256Digest,
 } from "./io.mjs";
 import { buildLaunch } from "./pack.mjs";
-import { hashProjectMetadata, validateProjectMetadata } from "./project-metadata.mjs";
+import {
+  hashProjectMetadata,
+  validateProjectMetadata,
+  validateProjectMetadataImageArtifactV4,
+} from "./project-metadata.mjs";
 import {
   hashBehaviorScenarioInputs,
   validateBehaviorScenarioInputs,
@@ -73,6 +83,19 @@ import {
   validateFundingAuthorization,
 } from "./profile-direct-native-v1.mjs";
 import {
+  assertV4ExternalContractLocators,
+  assertV4FundingValueMatchesGraph,
+  assertV4DeploymentDescriptorDigest,
+  buildV4LaunchIntentHash,
+  buildV4SourceBuildCommitment,
+  normalizeV4ChainDeployment,
+  normalizeV4ExternalContracts,
+  normalizeV4FundingIntent,
+  normalizeV4LiquidityModel,
+  normalizeV4ProfileRef,
+  v4GraphChainContext,
+} from "./v4-contract.mjs";
+import {
   VERIFICATION_BUNDLE_SCHEMA_V1,
   VERIFICATION_BUNDLE_SCHEMA_V2,
 } from "./verification.mjs";
@@ -87,14 +110,23 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 export async function validateLaunchFile({ launchPath, configPath }) {
   const absolute = path.resolve(launchPath);
   const bytes = await readFile(absolute);
-  if (bytes.byteLength > MAX_REQUEST_BYTES) {
-    throw new TypeError(`launch request exceeds the ${MAX_REQUEST_BYTES}-byte limit`);
+  if (bytes.byteLength > MAX_REQUEST_BYTES_V4) {
+    throw new TypeError(`launch request exceeds the ${MAX_REQUEST_BYTES_V4}-byte limit`);
   }
   const source = decodeExactUtf8(bytes, absolute);
-  const request = parseStrictJson(source, { maximumBytes: MAX_REQUEST_BYTES });
+  const request = parseStrictJson(source, { maximumBytes: MAX_REQUEST_BYTES_V4 });
   const isV3 = request?.schemaVersion === CREATE_REQUEST_SCHEMA_V3;
+  const isV4 = request?.schemaVersion === CREATE_REQUEST_SCHEMA_V4;
+  if (!isV4 && bytes.byteLength > MAX_REQUEST_BYTES) {
+    throw new TypeError(`launch request exceeds the ${MAX_REQUEST_BYTES}-byte limit`);
+  }
   if (isV3 && configPath === undefined) throw v3ArtifactConfigRequired();
-  const result = isV3 ? validateV3LaunchRequest(request) : validateLaunchRequest(request);
+  if (isV4 && configPath === undefined) throw v4ArtifactConfigRequired();
+  const result = isV3
+    ? validateV3LaunchRequest(request)
+    : isV4
+      ? validateV4LaunchRequest(request)
+      : validateLaunchRequest(request);
   let diagnostics = [];
   if (configPath !== undefined) {
     const rebuilt = await buildLaunch({
@@ -129,8 +161,11 @@ export function validateLaunchRequest(request) {
   if (request?.schemaVersion === CREATE_REQUEST_SCHEMA_V3) {
     throw v3ArtifactConfigRequired();
   }
+  if (request?.schemaVersion === CREATE_REQUEST_SCHEMA_V4) {
+    throw v4ArtifactConfigRequired();
+  }
   throw new TypeError(
-    `schemaVersion must be ${CREATE_REQUEST_SCHEMA_V1}, ${CREATE_REQUEST_SCHEMA_V2}, or ${CREATE_REQUEST_SCHEMA_V3}`,
+    `schemaVersion must be ${CREATE_REQUEST_SCHEMA_V1}, ${CREATE_REQUEST_SCHEMA_V2}, ${CREATE_REQUEST_SCHEMA_V3}, or ${CREATE_REQUEST_SCHEMA_V4}`,
   );
 }
 
@@ -149,6 +184,24 @@ function v3ArtifactConfigRequired() {
       flag: null,
       requestSchemaVersion: CREATE_REQUEST_SCHEMA_V3,
       legacyCode: "V3_ARTIFACT_CONFIG_REQUIRED",
+    },
+  });
+}
+
+function v4ArtifactConfigRequired() {
+  return createCliDiagnosticError({
+    code: "PACK_CONFIG_V4_MISSING",
+    stage: "pack-config",
+    summary: "V4 validation requires the exact Robinhood pack config and build artifacts.",
+    expected: {
+      flag: "--config programmable-launch.config.json",
+      schemaVersion: PACK_CONFIG_SCHEMA_V4,
+      configContract: PACK_CONFIG_V4_CONTRACT_URL,
+      executableExample: PACK_CONFIG_V4_EXAMPLE_URL,
+    },
+    observed: {
+      flag: null,
+      requestSchemaVersion: CREATE_REQUEST_SCHEMA_V4,
     },
   });
 }
@@ -474,6 +527,164 @@ function validateV3LaunchRequest(request) {
   };
 }
 
+function validateV4LaunchRequest(request) {
+  const behaviorScenarioPresent = Object.hasOwn(request ?? {}, "behaviorScenarioInputs")
+    || Object.hasOwn(request ?? {}, "behaviorScenarioInputsHash");
+  assertExactKeys(request, [
+    "schemaVersion",
+    "chainId",
+    "caip2",
+    "chainDeployment",
+    "chainDeploymentDescriptorDigest",
+    "profile",
+    "launchWallet",
+    "nonce",
+    "permitWindow",
+    "sourceDescriptor",
+    "sourceBundleManifest",
+    "externalContracts",
+    "graphBundle",
+    "projectMetadata",
+    "projectMetadataHash",
+    "projectMetadataImageArtifact",
+    ...(behaviorScenarioPresent
+      ? ["behaviorScenarioInputs", "behaviorScenarioInputsHash"]
+      : []),
+    "verificationBundle",
+    "funding",
+    "liquidityModel",
+    "launchIntentHash",
+    "agentAttestation",
+  ], "V4 launch request");
+  if (request.schemaVersion !== CREATE_REQUEST_SCHEMA_V4
+    || request.chainId !== ROBINHOOD_CHAIN_ID
+    || request.caip2 !== `eip155:${ROBINHOOD_CHAIN_ID}`) {
+    throw new TypeError("V4 request must bind Robinhood Chain mainnet eip155:4663");
+  }
+  const chainDeployment = normalizeV4ChainDeployment(request.chainDeployment);
+  const chainDeploymentDescriptorDigest = assertV4DeploymentDescriptorDigest(
+    request.chainDeploymentDescriptorDigest,
+    chainDeployment,
+  );
+  const profile = normalizeV4ProfileRef(request.profile);
+  const externalContracts = normalizeV4ExternalContracts(request.externalContracts);
+  const funding = normalizeV4FundingIntent(request.funding);
+  const liquidityModel = normalizeV4LiquidityModel(request.liquidityModel);
+  const permitWindow = validateDirectNativePermitWindow(request.permitWindow);
+  const projectMetadata = validateProjectMetadata(request.projectMetadata, {
+    requireComplete: true,
+  });
+  const projectMetadataHash = hashProjectMetadata(projectMetadata, {
+    requireComplete: true,
+  });
+  if (request.projectMetadataHash !== projectMetadataHash) {
+    throw new TypeError("projectMetadataHash does not match canonical projectMetadata");
+  }
+  const projectMetadataImageArtifact = validateProjectMetadataImageArtifactV4(
+    request.projectMetadataImageArtifact,
+    projectMetadata,
+  );
+  const chainContext = v4GraphChainContext(chainDeployment);
+  const common = validateCommonRequest(request, {
+    projectMetadataHash,
+    expectedChainId: ROBINHOOD_CHAIN_ID,
+    chainContext,
+  });
+  if (common.graph.graphBundle.targets.length < 3
+    || common.graph.graphBundle.targets.length > 16) {
+    throw new TypeError("V4 graphBundle must contain between 3 and 16 targets");
+  }
+  if (canonicalizeJson(request.graphBundle) !== canonicalizeJson(common.graph.graphBundle)) {
+    throw new TypeError("V4 graphBundle must use the exact canonical target order and encoding");
+  }
+  assertV4FundingValueMatchesGraph(funding, common.graph.graphBundle);
+  assertV4ExternalContractLocators(externalContracts, common.graph.graphBundle);
+  if (projectMetadata.presentation.image !== null) {
+    const image = projectMetadata.presentation.image;
+    if (!common.manifest.entries.some((entry) => entry.kind === "file"
+      && entry.contentSha256 === image.contentSha256
+      && entry.byteLength === String(image.byteLength))) {
+      throw new TypeError("projectMetadata presentation image bytes are absent from sourceBundleManifest");
+    }
+  }
+  const behaviorScenarioInputs = behaviorScenarioPresent
+    ? validateBehaviorScenarioInputs(
+        request.behaviorScenarioInputs,
+        common.graph.graphBundle.targets,
+      )
+    : null;
+  const behaviorScenarioInputsHash = behaviorScenarioInputs === null
+    ? null
+    : hashBehaviorScenarioInputs(behaviorScenarioInputs);
+  if (behaviorScenarioInputsHash !== null
+    && request.behaviorScenarioInputsHash !== behaviorScenarioInputsHash) {
+    throw new TypeError(
+      "behaviorScenarioInputsHash does not match canonical behaviorScenarioInputs",
+    );
+  }
+  const verification = validateVerificationBundle(
+    request.verificationBundle,
+    common.graph.graphBundle,
+    common.graph.predictions,
+    "v2",
+    { maximumSources: MAX_STANDARD_JSON_SOURCES },
+  );
+  const sourceBuildCommitment = buildV4SourceBuildCommitment({
+    sourceDescriptor: common.sourceDescriptor,
+    sourceBundleManifest: common.manifest,
+    externalContracts,
+    projectMetadataImageArtifact,
+    verificationBundleHash: verification.verificationBundleHash,
+  });
+  for (const targetId of liquidityModel.targetIds) {
+    if (!common.graph.graphBundle.targets.some((target) => target.targetId === targetId)) {
+      throw new TypeError(`liquidityModel references unknown graph target ${targetId}`);
+    }
+  }
+  const launchIntentHash = buildV4LaunchIntentHash({
+    schemaVersion: CREATE_REQUEST_SCHEMA_V4,
+    chainId: request.chainId,
+    caip2: request.caip2,
+    chainDeploymentId: chainDeployment.chainDeploymentId,
+    chainDeploymentDescriptorDigest,
+    profile,
+    launchWallet: common.launchWallet,
+    nonce: request.nonce,
+    permitWindow,
+    sourceDescriptor: common.sourceDescriptor,
+    sourceBundleManifest: common.manifest,
+    externalContracts,
+    graphBundleHash: common.graph.graphBundleHash,
+    projectMetadataHash,
+    projectMetadataImageArtifact,
+    ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
+    verificationBundleHash: verification.verificationBundleHash,
+    funding,
+    liquidityModel,
+  });
+  if (request.launchIntentHash !== launchIntentHash) {
+    throw new TypeError("launchIntentHash does not match the normalized V4 launch intent");
+  }
+  validateAttestationV2(request.agentAttestation, launchIntentHash);
+  return {
+    schemaVersion: request.schemaVersion,
+    chainId: request.chainId,
+    caip2: request.caip2,
+    chainDeploymentId: chainDeployment.chainDeploymentId,
+    chainDeploymentDescriptorDigest,
+    profile,
+    graphBundleHash: common.graph.graphBundleHash,
+    unboundGraphBundleHash: common.graph.unboundGraphBundleHash,
+    projectMetadataHash,
+    ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
+    verificationBundleHash: verification.verificationBundleHash,
+    sourceBuildCommitment,
+    launchIntentHash,
+    exactSourceIncluded: true,
+    predictions: common.graph.predictions,
+  };
+}
+
 function directNativeQuoteCurrency(binding, predictions) {
   const token = predictions.find(
     ({ targetId }) => targetId === binding?.targetRoles?.tokenTargetId,
@@ -493,9 +704,18 @@ function directNativeQuoteCurrency(binding, predictions) {
   return normalizedCurrencies[tokenIndex === 0 ? 1 : 0];
 }
 
-function validateCommonRequest(request, { projectMetadataHash } = {}) {
+function validateCommonRequest(
+  request,
+  {
+    projectMetadataHash,
+    expectedChainId = MAINNET_CHAIN_ID,
+    chainContext,
+  } = {},
+) {
   const launchWallet = getAddress(request.launchWallet);
-  if (request.chainId !== MAINNET_CHAIN_ID) throw new TypeError("chainId must be string 1");
+  if (request.chainId !== expectedChainId) {
+    throw new TypeError(`chainId must be string ${expectedChainId}`);
+  }
   if (typeof request.nonce !== "string" || !NONZERO_HEX32.test(request.nonce)) {
     throw new TypeError("nonce must be nonzero lowercase bytes32");
   }
@@ -520,8 +740,10 @@ function validateCommonRequest(request, { projectMetadataHash } = {}) {
     launchWallet,
     request.nonce,
     {
-      enforceV4PermissionDependencies: request.schemaVersion === CREATE_REQUEST_SCHEMA_V3,
+      enforceV4PermissionDependencies: request.schemaVersion === CREATE_REQUEST_SCHEMA_V3
+        || request.schemaVersion === CREATE_REQUEST_SCHEMA_V4,
       ...(projectMetadataHash === undefined ? {} : { projectMetadataHash }),
+      ...(chainContext === undefined ? {} : { chainContext }),
     },
   );
   return {

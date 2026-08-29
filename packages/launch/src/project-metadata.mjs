@@ -7,6 +7,8 @@ import {
   PROJECT_METADATA_INPUT_SCHEMA,
   PROJECT_METADATA_SCHEMA,
   PROJECT_TOKEN_METADATA_BINDING_SCHEMA,
+  MAX_PROJECT_METADATA_IMAGE_BYTES_V4,
+  V4_PROJECT_METADATA_IMAGE_ARTIFACT_SCHEMA,
 } from "./constants.mjs";
 import {
   assertExactKeys,
@@ -15,6 +17,7 @@ import {
   resolveInside,
   sha256Digest,
 } from "./io.mjs";
+import { decodeExactProjectImageV4 } from "./image-validation-v4.mjs";
 
 const PROJECT_NAME_MAX_CHARACTERS = 64;
 const PROJECT_NAME_MAX_BYTES = 64;
@@ -143,6 +146,94 @@ export function hashProjectMetadata(value, { requireComplete = false } = {}) {
     Buffer.from([0]),
     Buffer.from(canonicalizeJson(normalized), "utf8"),
   ]));
+}
+
+export async function buildProjectMetadataImageArtifactV4({
+  sourceRoot,
+  sourcePath,
+  projectMetadata,
+}) {
+  const relativePath = canonicalRelativePath(
+    sourcePath,
+    "projectMetadata image artifact sourcePath",
+  );
+  const absolutePath = resolveInside(
+    sourceRoot,
+    relativePath,
+    "projectMetadata image artifact sourcePath",
+  );
+  const info = await lstat(absolutePath);
+  if (!info.isFile() || info.isSymbolicLink()
+    || !Number.isSafeInteger(info.size)
+    || info.size < 1
+    || info.size > MAX_PROJECT_METADATA_IMAGE_BYTES_V4) {
+    throw new TypeError(
+      `V4 project metadata image must contain 1..${MAX_PROJECT_METADATA_IMAGE_BYTES_V4} bytes`,
+    );
+  }
+  const bytes = await readFile(absolutePath);
+  const image = projectMetadata?.presentation?.image;
+  return validateProjectMetadataImageArtifactV4({
+    schemaVersion: V4_PROJECT_METADATA_IMAGE_ARTIFACT_SCHEMA,
+    mediaType: image?.mediaType,
+    byteLength: String(bytes.byteLength),
+    contentSha256: sha256Digest(bytes),
+    base64: bytes.toString("base64"),
+  }, projectMetadata);
+}
+
+export function validateProjectMetadataImageArtifactV4(value, projectMetadata) {
+  assertExactKeys(value, [
+    "schemaVersion",
+    "mediaType",
+    "byteLength",
+    "contentSha256",
+    "base64",
+  ], "projectMetadataImageArtifact");
+  if (value.schemaVersion !== V4_PROJECT_METADATA_IMAGE_ARTIFACT_SCHEMA
+    || typeof value.mediaType !== "string"
+    || !new Set(["image/png", "image/gif"])
+      .has(value.mediaType)
+    || typeof value.byteLength !== "string"
+    || !/^[1-9][0-9]*$/u.test(value.byteLength)
+    || BigInt(value.byteLength) > BigInt(MAX_PROJECT_METADATA_IMAGE_BYTES_V4)
+    || typeof value.contentSha256 !== "string"
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.contentSha256)
+    || typeof value.base64 !== "string"
+    || value.base64.length === 0
+    || value.base64.length > Math.ceil(MAX_PROJECT_METADATA_IMAGE_BYTES_V4 / 3) * 4
+    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u
+      .test(value.base64)) {
+    throw new TypeError("projectMetadataImageArtifact is not canonical bounded image data");
+  }
+  const bytes = Buffer.from(value.base64, "base64");
+  if (bytes.toString("base64") !== value.base64
+    || bytes.byteLength !== Number(value.byteLength)
+    || bytes.byteLength < 1
+    || bytes.byteLength > MAX_PROJECT_METADATA_IMAGE_BYTES_V4
+    || sha256Digest(bytes) !== value.contentSha256) {
+    throw new TypeError("projectMetadataImageArtifact byte commitment does not match");
+  }
+  const dimensions = decodeExactProjectImageV4(bytes);
+  const image = projectMetadata?.presentation?.image;
+  if (image === null || typeof image !== "object"
+    || value.mediaType !== dimensions.mediaType
+    || value.mediaType !== image.mediaType
+    || value.contentSha256 !== image.contentSha256
+    || bytes.byteLength !== image.byteLength
+    || dimensions.width !== image.width
+    || dimensions.height !== image.height) {
+    throw new TypeError(
+      "projectMetadataImageArtifact does not match the declared metadata image",
+    );
+  }
+  return {
+    schemaVersion: V4_PROJECT_METADATA_IMAGE_ARTIFACT_SCHEMA,
+    mediaType: value.mediaType,
+    byteLength: value.byteLength,
+    contentSha256: value.contentSha256,
+    base64: value.base64,
+  };
 }
 
 async function buildPresentation(value, sourceRoot, { requireComplete }) {

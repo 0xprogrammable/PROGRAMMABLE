@@ -1,0 +1,8 @@
+node_modules/
+out/
+evidence/
+standard-json.json
+programmable-launch.config.json
+launch.json
+launch.receipt.json
+.programmable-launch/

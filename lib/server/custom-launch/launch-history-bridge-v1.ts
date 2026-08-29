@@ -36,14 +36,21 @@ export const CUSTOM_LAUNCH_LIST_SCHEMA_V2 =
   "programmable.custom-launch-list.v2" as const;
 export const CUSTOM_LAUNCH_LIST_SCHEMA_V3 =
   "programmable.custom-launch-list.v3" as const;
+export const CUSTOM_LAUNCH_LIST_SCHEMA_V4 =
+  "programmable.custom-launch-list.v4" as const;
 export const CUSTOM_LAUNCH_HISTORY_SCHEMA_V1 =
   "programmable.custom-launch-history.v1" as const;
+export const CUSTOM_LAUNCH_SUMMARY_SCHEMA_V4 =
+  "programmable.custom-launch-summary.v4" as const;
+export const CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1 =
+  "programmable.custom-launch-submission-hint.v1" as const;
 
 // Wallet-admin lists are deliberately compact (`output: null`). A single
 // authorized resource carries the exact graph transaction and can exceed
 // 128 KiB because initcode is bound in both the artifact and calldata.
 const MAXIMUM_BACKEND_LIST_BODY_BYTES = 262_144;
 const MAXIMUM_BACKEND_RESOURCE_BODY_BYTES = 8_388_608;
+const MAXIMUM_BACKEND_V4_BODY_BYTES = 16_777_216;
 const MAXIMUM_BROWSER_FUNDING_BODY_BYTES = 1_024;
 const DEFAULT_BACKEND_TIMEOUT_MS = 5_000;
 const DEFAULT_PAGE_SIZE = 5;
@@ -175,6 +182,40 @@ export type DeveloperCustomLaunchV3 = Readonly<{
   sourceVerification?: SourceVerificationStatusV1;
 }>;
 
+export type DeveloperCustomLaunchV4 = Readonly<{
+  schemaVersion: "programmable.custom-launch.v4";
+  apiVersion: "v4";
+  launchId: string;
+  requestId: string;
+  routeId: "custom-launch:create:v4";
+  chainId: "4663";
+  caip2: "eip155:4663";
+  controller: Readonly<{ namespace: "eip155:4663"; address: `0x${string}` }>;
+  status: string;
+  requestHash: string;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: JsonValue;
+}>;
+
+export type DeveloperCustomLaunchSummaryV4 = Readonly<{
+  schemaVersion: typeof CUSTOM_LAUNCH_SUMMARY_SCHEMA_V4;
+  apiVersion: "v4";
+  launchId: string;
+  requestId: string;
+  routeId: "custom-launch:create:v4";
+  chainId: "4663";
+  caip2: "eip155:4663";
+  chainDeploymentId: "robinhood-mainnet-custom-launch-v1";
+  chainDeploymentDescriptorDigest: `0x${string}`;
+  controller: Readonly<{ namespace: "eip155:4663"; address: `0x${string}` }>;
+  status: string;
+  walletHandoffUrl: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
 export type DeveloperCustomLaunchProjectMetadataV1 = Readonly<{
   schemaVersion: "programmable.project-metadata.v1";
   token: Readonly<{ name: string; symbol: string }>;
@@ -216,8 +257,10 @@ type DeveloperProjectTokenMetadataFieldBindingV1 = Readonly<{
 
 type DeveloperCustomLaunch = DeveloperCustomLaunchV1
   | DeveloperCustomLaunchV2
-  | DeveloperCustomLaunchV3;
-type BackendHistoryVersion = "v1" | "v2" | "v3";
+  | DeveloperCustomLaunchV3
+  | DeveloperCustomLaunchV4
+  | DeveloperCustomLaunchSummaryV4;
+type BackendHistoryVersion = "v1" | "v2" | "v3" | "v4";
 
 export interface DeveloperLaunchHistoryBridgeV1 {
   list(request: Request): Promise<Response>;
@@ -226,6 +269,11 @@ export interface DeveloperLaunchHistoryBridgeV1 {
     request: Request,
     launchId: string,
   ): Promise<Response>;
+  submitV4SubmissionHint(
+    request: Request,
+    launchId: string,
+  ): Promise<Response>;
+  getV4Capabilities(request: Request): Promise<Response>;
 }
 
 export type DeveloperLaunchHistoryBackendFetchV1 = (
@@ -314,7 +362,9 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
             });
           }
           const backendUrl = new URL(
-            `/${version}/wallet-admin/custom-launches`,
+            version === "v4"
+              ? "/v4/chains/4663/wallet-admin/custom-launches"
+              : `/${version}/wallet-admin/custom-launches`,
             backendBaseUrl,
           );
           backendUrl.searchParams.set("limit", String(query.limit));
@@ -366,22 +416,39 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           if (!backend.ok) throw await mappedBackendError(backend);
           const record = jsonRecord(await readBoundedBackendJson(
             backend,
-            MAXIMUM_BACKEND_LIST_BODY_BYTES,
+            version === "v4"
+              ? MAXIMUM_BACKEND_V4_BODY_BYTES
+              : MAXIMUM_BACKEND_LIST_BODY_BYTES,
           ));
           const expectedSchema = version === "v1"
             ? CUSTOM_LAUNCH_LIST_SCHEMA_V1
             : version === "v2"
               ? CUSTOM_LAUNCH_LIST_SCHEMA_V2
-              : CUSTOM_LAUNCH_LIST_SCHEMA_V3;
+              : version === "v3"
+                ? CUSTOM_LAUNCH_LIST_SCHEMA_V3
+                : CUSTOM_LAUNCH_LIST_SCHEMA_V4;
+          if (version === "v4") {
+            exactProjectKeys(record, [
+              "schemaVersion", "apiVersion", "chainId", "chainDeploymentId",
+              "launches", "nextCursor",
+            ]);
+          }
           if (
             record.schemaVersion !== expectedSchema ||
+            (version === "v4" && (
+              record.apiVersion !== "v4"
+              || record.chainId !== "4663"
+              || record.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
+            )) ||
             !Array.isArray(record.launches) ||
             record.launches.length > query.limit
           ) throw new BackendContractErrorV1();
           const launches = Object.freeze(record.launches.map((launch) =>
-            parseLaunch(launch, expectedWallet, version, {
-              requireAuthorizedArtifactBinding: false,
-            })
+            version === "v4"
+              ? parseLaunchSummaryV4(launch, expectedWallet)
+              : parseLaunch(launch, expectedWallet, version, {
+                  requireAuthorizedArtifactBinding: false,
+                })
           ));
           const nextCursor = record.nextCursor === null
             ? null
@@ -393,20 +460,22 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
             done: nextCursor === null,
           });
         };
-        const [v1, v2, v3] = await Promise.all([
+        const [v1, v2, v3, v4] = await Promise.all([
           readVersion("v1"),
           readVersion("v2"),
           readVersion("v3"),
+          readVersion("v4"),
         ]);
         const launches = Object.freeze([
           ...v1.launches,
           ...v2.launches,
           ...v3.launches,
+          ...v4.launches,
         ]
           .sort(compareLaunchHistoryEntries));
-        const nextCursor = v1.done && v2.done && v3.done
+        const nextCursor = v1.done && v2.done && v3.done && v4.done
           ? null
-          : encodeCombinedHistoryCursor({ v1, v2, v3 });
+          : encodeCombinedHistoryCursor({ v1, v2, v3, v4 });
         return jsonResponse(200, {
           schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
           launches,
@@ -434,9 +503,13 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
         );
         const readVersion = async (version: BackendHistoryVersion) => {
           const backendUrl = new URL(
-            `/${version}/wallet-admin/custom-launches/${
-              encodeURIComponent(launchId.toLowerCase())
-            }`,
+            version === "v4"
+              ? `/v4/chains/4663/wallet-admin/custom-launches/${
+                  encodeURIComponent(launchId.toLowerCase())
+                }`
+              : `/${version}/wallet-admin/custom-launches/${
+                  encodeURIComponent(launchId.toLowerCase())
+                }`,
             backendBaseUrl,
           );
           const backend = await input.fetchBackend(backendUrl, {
@@ -457,15 +530,20 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
           });
           if (backend.status === 404) return null;
           if (!backend.ok) throw await mappedBackendError(backend);
-          return parseLaunch(
-            await readBoundedBackendJson(
-              backend,
-              MAXIMUM_BACKEND_RESOURCE_BODY_BYTES,
-            ),
-            walletAddress.toLowerCase(),
-            version,
-            { requireAuthorizedArtifactBinding: true },
+          const resource = await readBoundedBackendJson(
+            backend,
+            version === "v4"
+              ? MAXIMUM_BACKEND_V4_BODY_BYTES
+              : MAXIMUM_BACKEND_RESOURCE_BODY_BYTES,
           );
+          return version === "v4"
+            ? parseLaunchV4(resource, walletAddress.toLowerCase())
+            : parseLaunch(
+                resource,
+                walletAddress.toLowerCase(),
+                version,
+                { requireAuthorizedArtifactBinding: true },
+              );
         };
         let launch: DeveloperCustomLaunch | null = null;
         if (walletInput.version) {
@@ -473,7 +551,8 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
         } else {
           launch = await readVersion("v1")
             ?? await readVersion("v2")
-            ?? await readVersion("v3");
+            ?? await readVersion("v3")
+            ?? await readVersion("v4");
         }
         if (!launch) throw new BrowserRequestErrorV1(404, "launch_not_found");
         if (launch.requestId !== launchId.toLowerCase()) {
@@ -556,6 +635,100 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
         return mappedError(error);
       }
     },
+
+    async submitV4SubmissionHint(request: Request, launchId: string) {
+      if (request.method !== "POST") {
+        return errorResponse(405, "method_not_allowed", "POST");
+      }
+      try {
+        requireJsonRequest(request);
+        if (!UUID.test(launchId)) {
+          throw new BrowserRequestErrorV1(404, "launch_not_found");
+        }
+        const walletInput = exactWalletQuery(request);
+        if (walletInput.version !== "v4") {
+          throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+        }
+        const body = parseV4SubmissionHint(await readBoundedBrowserJson(request));
+        const principal = await input.authenticator.authenticate(request);
+        const walletAddress = requireLinkedWallet(
+          principal,
+          walletInput.walletAddress,
+        );
+        const backendUrl = new URL(
+          `/v4/chains/4663/wallet-admin/custom-launches/${
+            encodeURIComponent(launchId.toLowerCase())
+          }/submission-hint`,
+          backendBaseUrl,
+        );
+        const bodyBytes = Buffer.from(JSON.stringify(body), "utf8");
+        const backend = await input.fetchBackend(backendUrl, {
+          method: "POST",
+          headers: walletAdminHeaders(
+            principal,
+            walletAddress,
+            "POST",
+            backendUrl,
+            bodyBytes,
+          ),
+          body: bodyBytes,
+          cache: "no-store",
+          redirect: "error",
+          signal: AbortSignal.any([
+            request.signal,
+            AbortSignal.timeout(timeoutMs),
+          ]),
+        });
+        if (!backend.ok) throw await mappedBackendError(backend);
+        if (backend.status !== 202) throw new BackendContractErrorV1();
+        const response = parseV4SubmissionHintResponse(
+          await readBoundedBackendJson(backend, 4_096),
+          launchId.toLowerCase(),
+          body.transactionHash,
+        );
+        return jsonResponse(202, response);
+      } catch (error) {
+        return mappedError(error);
+      }
+    },
+
+    async getV4Capabilities(request: Request) {
+      if (request.method !== "GET") {
+        return errorResponse(405, "method_not_allowed", "GET");
+      }
+      try {
+        requireJsonResponse(request);
+        const backendUrl = new URL(
+          "/v4/chains/4663/capabilities",
+          backendBaseUrl,
+        );
+        const backend = await input.fetchBackend(backendUrl, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+          redirect: "error",
+          signal: AbortSignal.any([
+            request.signal,
+            AbortSignal.timeout(timeoutMs),
+          ]),
+        });
+        if (!backend.ok) throw await mappedBackendError(backend);
+        const capabilities = jsonRecord(await readBoundedBackendJson(
+          backend,
+          2_097_152,
+        ));
+        if (capabilities.schemaVersion
+            !== "programmable.custom-launch-capabilities.v2"
+          || capabilities.apiVersion !== "v4"
+          || jsonRecord(capabilities.chain).id !== "4663"
+          || jsonRecord(capabilities.chain).caip2 !== "eip155:4663") {
+          throw new BackendContractErrorV1();
+        }
+        return jsonResponse(200, capabilities);
+      } catch (error) {
+        return mappedError(error);
+      }
+    },
   });
 }
 
@@ -623,7 +796,8 @@ function exactWalletQuery(request: Request) {
     (versionValue !== null
       && versionValue !== "v1"
       && versionValue !== "v2"
-      && versionValue !== "v3")
+      && versionValue !== "v3"
+      && versionValue !== "v4")
   ) throw new BrowserRequestErrorV1(400, "request_schema_invalid");
   return Object.freeze({
     walletAddress,
@@ -651,6 +825,7 @@ type CombinedHistoryCursor = Readonly<{
   v1: CombinedHistoryCursorLane;
   v2: CombinedHistoryCursorLane;
   v3: CombinedHistoryCursorLane;
+  v4: CombinedHistoryCursorLane;
 }>;
 
 function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
@@ -680,6 +855,7 @@ function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
         v1: Object.freeze({ cursor: legacy, done: false }),
         v2: Object.freeze({ cursor: null, done: false }),
         v3: Object.freeze({ cursor: null, done: false }),
+        v4: Object.freeze({ cursor: null, done: false }),
       });
     }
     const decodedKeys = Object.keys(decoded);
@@ -690,7 +866,12 @@ function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
       && "v1" in decoded
       && "v2" in decoded
       && "v3" in decoded;
-    if (!twoLaneCursor && !threeLaneCursor) return invalid();
+    const fourLaneCursor = decodedKeys.length === 4
+      && "v1" in decoded
+      && "v2" in decoded
+      && "v3" in decoded
+      && "v4" in decoded;
+    if (!twoLaneCursor && !threeLaneCursor && !fourLaneCursor) return invalid();
     const lane = (candidate: JsonValue | undefined) => {
       if (
         candidate === null ||
@@ -714,13 +895,21 @@ function parseCombinedHistoryCursor(value: string): CombinedHistoryCursor {
       v1: lane(decoded.v1),
       v2: lane(decoded.v2),
       v3: threeLaneCursor
+        || fourLaneCursor
         ? lane(decoded.v3)
         : Object.freeze({ cursor: null, done: false }),
+      v4: fourLaneCursor
+        ? lane(decoded.v4)
+        : Object.freeze({ cursor: null, done: false }),
     });
-    if (result.v1.done && result.v2.done && result.v3.done) return invalid();
+    if (result.v1.done && result.v2.done && result.v3.done && result.v4.done) {
+      return invalid();
+    }
     const canonicalValue = twoLaneCursor
       ? Object.freeze({ v1: result.v1, v2: result.v2 })
-      : result;
+      : threeLaneCursor
+        ? Object.freeze({ v1: result.v1, v2: result.v2, v3: result.v3 })
+        : result;
     const canonical = Buffer.from(JSON.stringify(canonicalValue), "utf8")
       .toString("base64url");
     if (canonical !== value) return invalid();
@@ -735,6 +924,7 @@ function encodeCombinedHistoryCursor(input: Readonly<{
   v1: Readonly<{ done: boolean; nextCursor: string | null }>;
   v2: Readonly<{ done: boolean; nextCursor: string | null }>;
   v3: Readonly<{ done: boolean; nextCursor: string | null }>;
+  v4: Readonly<{ done: boolean; nextCursor: string | null }>;
 }>) {
   const lane = (value: Readonly<{ done: boolean; nextCursor: string | null }>) =>
     Object.freeze({
@@ -747,6 +937,7 @@ function encodeCombinedHistoryCursor(input: Readonly<{
     v1: lane(input.v1),
     v2: lane(input.v2),
     v3: lane(input.v3),
+    v4: lane(input.v4),
   })), "utf8").toString("base64url");
 }
 
@@ -1247,6 +1438,175 @@ function parseV3ProjectMetadataPair(
   return Object.freeze({ projectMetadata, projectMetadataHash });
 }
 
+const STATUSES_V4 = new Set([
+  "received",
+  "validating",
+  "action_required",
+  "authorized",
+  "awaiting_wallet_signature",
+  "wallet_action_required",
+  "submitted",
+  "sequencer_soft_confirmed",
+  "ethereum_posted",
+  "finalized",
+  "failed",
+]);
+
+function parseLaunchSummaryV4(
+  value: JsonValue,
+  expectedWallet: string,
+): DeveloperCustomLaunchSummaryV4 {
+  const record = jsonRecord(value);
+  exactProjectKeys(record, [
+    "launchId", "chainId", "caip2", "chainDeploymentId",
+    "chainDeploymentDescriptorDigest", "controller", "status",
+    "walletHandoffUrl", "expiresAt", "createdAt", "updatedAt",
+  ]);
+  const controller = jsonRecord(record.controller);
+  exactProjectKeys(controller, ["namespace", "address"]);
+  if (typeof record.launchId !== "string"
+    || !UUID.test(record.launchId)
+    || record.chainId !== "4663"
+    || record.caip2 !== "eip155:4663"
+    || record.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
+    || typeof record.chainDeploymentDescriptorDigest !== "string"
+    || !LOWER_BYTES32.test(record.chainDeploymentDescriptorDigest)
+    || controller.namespace !== "eip155:4663"
+    || typeof controller.address !== "string"
+    || !isAddress(controller.address)
+    || controller.address.toLowerCase() !== expectedWallet
+    || typeof record.status !== "string"
+    || !STATUSES_V4.has(record.status)
+    || requiredTimestamp(record.createdAt) !== record.createdAt
+    || requiredTimestamp(record.updatedAt) !== record.updatedAt
+    || (record.walletHandoffUrl === null) !== (record.expiresAt === null)) {
+    throw new BackendContractErrorV1();
+  }
+  const launchId = record.launchId.toLowerCase();
+  const walletHandoffUrl = record.walletHandoffUrl === null
+    ? null
+    : exactV4WalletHandoffUrl(record.walletHandoffUrl, launchId);
+  const expiresAt = record.expiresAt === null
+    ? null
+    : requiredTimestamp(record.expiresAt);
+  return Object.freeze({
+    schemaVersion: CUSTOM_LAUNCH_SUMMARY_SCHEMA_V4,
+    apiVersion: "v4" as const,
+    launchId,
+    requestId: launchId,
+    routeId: "custom-launch:create:v4" as const,
+    chainId: "4663" as const,
+    caip2: "eip155:4663" as const,
+    chainDeploymentId: "robinhood-mainnet-custom-launch-v1" as const,
+    chainDeploymentDescriptorDigest:
+      record.chainDeploymentDescriptorDigest as `0x${string}`,
+    controller: Object.freeze({
+      namespace: "eip155:4663" as const,
+      address: getAddress(controller.address) as `0x${string}`,
+    }),
+    status: record.status,
+    walletHandoffUrl,
+    expiresAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  });
+}
+
+function exactV4WalletHandoffUrl(value: JsonValue | undefined, launchId: string) {
+  const expected = `https://programmable.market/developers/api-keys?launchId=${
+    encodeURIComponent(launchId)
+  }&chainId=4663`;
+  if (value !== expected) throw new BackendContractErrorV1();
+  return expected;
+}
+
+function parseLaunchV4(
+  value: JsonValue,
+  expectedWallet: string,
+): DeveloperCustomLaunchV4 {
+  const record = jsonRecord(value);
+  const optionalKeys = [
+    "actionRequired",
+    "walletHandoffUrl",
+    "expiresAt",
+    "secondsRemaining",
+    "partnerAttribution",
+  ].filter((key) => Object.hasOwn(record, key));
+  exactProjectKeys(record, [
+    "schemaVersion", "apiVersion", "launchId", "requestId", "routeId",
+    "chainId", "caip2", "chainDeploymentId", "chainDeploymentDescriptorDigest",
+    "chainDeployment", "profile", "controller", "status", "requestHash",
+    "rawRequestSha256", "sourceBuildCommitment", "graphCommitment",
+    "metadataCommitment", "walletTransactionPreimageHash", "commitments",
+    "projectMetadata", "funding", "liquidityModel", "walletTransaction",
+    "preparedArtifact", "admissionReceipt", "simulationReceipt",
+    "externalContractEvidenceReceipt", ...optionalKeys, "onchain", "failure",
+    "createdAt", "updatedAt",
+  ]);
+  const controller = jsonRecord(record.controller);
+  exactProjectKeys(controller, ["namespace", "address"]);
+  if (record.schemaVersion !== "programmable.custom-launch.v4"
+    || record.apiVersion !== "v4"
+    || typeof record.launchId !== "string"
+    || !UUID.test(record.launchId)
+    || typeof record.requestId !== "string"
+    || !UUID.test(record.requestId)
+    || record.launchId.toLowerCase() !== record.requestId.toLowerCase()
+    || record.routeId !== "custom-launch:create:v4"
+    || record.chainId !== "4663"
+    || record.caip2 !== "eip155:4663"
+    || record.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
+    || typeof record.chainDeploymentDescriptorDigest !== "string"
+    || !LOWER_BYTES32.test(record.chainDeploymentDescriptorDigest)
+    || controller.namespace !== "eip155:4663"
+    || typeof controller.address !== "string"
+    || !isAddress(controller.address)
+    || controller.address.toLowerCase() !== expectedWallet
+    || typeof record.status !== "string"
+    || !STATUSES_V4.has(record.status)
+    || typeof record.requestHash !== "string"
+    || !REQUEST_HASH.test(record.requestHash)
+    || typeof record.rawRequestSha256 !== "string"
+    || !REQUEST_HASH.test(record.rawRequestSha256)
+    || typeof record.sourceBuildCommitment !== "string"
+    || !REQUEST_HASH.test(record.sourceBuildCommitment)
+    || typeof record.graphCommitment !== "string"
+    || !REQUEST_HASH.test(record.graphCommitment)
+    || typeof record.metadataCommitment !== "string"
+    || !REQUEST_HASH.test(record.metadataCommitment)
+    || (record.walletTransactionPreimageHash !== null
+      && (typeof record.walletTransactionPreimageHash !== "string"
+        || !REQUEST_HASH.test(record.walletTransactionPreimageHash)))
+    || parseProjectMetadataV1(record.projectMetadata) === null
+    || requiredTimestamp(record.createdAt) !== record.createdAt
+    || requiredTimestamp(record.updatedAt) !== record.updatedAt) {
+    throw new BackendContractErrorV1();
+  }
+  const unevaluated = record.status === "received" || record.status === "validating";
+  const receiptValues = [
+    record.admissionReceipt,
+    record.simulationReceipt,
+    record.externalContractEvidenceReceipt,
+  ];
+  if (receiptValues.some((receipt) => (receipt === null) !== unevaluated)
+    || receiptValues.some((receipt) => receipt !== null && (
+      Array.isArray(receipt) || typeof receipt !== "object"
+    ))) throw new BackendContractErrorV1();
+  const walletPrepared = new Set([
+    "wallet_action_required", "awaiting_wallet_signature", "authorized",
+    "submitted", "sequencer_soft_confirmed", "ethereum_posted", "finalized",
+  ]).has(record.status);
+  if ((record.walletTransaction === null) !== !walletPrepared
+    || (record.preparedArtifact === null) !== !walletPrepared
+    || (record.walletTransaction !== null && (
+      Array.isArray(record.walletTransaction) || typeof record.walletTransaction !== "object"
+    ))
+    || (record.preparedArtifact !== null && (
+      Array.isArray(record.preparedArtifact) || typeof record.preparedArtifact !== "object"
+    ))) throw new BackendContractErrorV1();
+  return Object.freeze(record) as unknown as DeveloperCustomLaunchV4;
+}
+
 function parseLaunch(
   value: JsonValue,
   expectedWallet: string,
@@ -1509,6 +1869,59 @@ function parseFailure(value: JsonValue, version: BackendHistoryVersion) {
     message: record.message,
     retryable: record.retryable,
     ...(version === "v3" ? { remediations: Object.freeze(remediations) } : {}),
+  });
+}
+
+function parseV4SubmissionHint(value: JsonValue) {
+  const record = jsonRecord(value);
+  exactProjectKeys(record, ["schemaVersion", "transactionHash"]);
+  if (record.schemaVersion !== CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1
+    || typeof record.transactionHash !== "string"
+    || !LOWER_BYTES32.test(record.transactionHash)) {
+    throw new BrowserRequestErrorV1(400, "request_schema_invalid");
+  }
+  return Object.freeze({
+    schemaVersion: CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1,
+    transactionHash: record.transactionHash as `0x${string}`,
+  });
+}
+
+function parseV4SubmissionHintResponse(
+  value: JsonValue,
+  launchId: string,
+  transactionHash: `0x${string}`,
+) {
+  const record = jsonRecord(value);
+  exactProjectKeys(record, [
+    "schemaVersion", "apiVersion", "launchId", "chainId", "chainDeploymentId",
+    "transactionHash", "accepted", "authoritative", "acceptedAt", "statusPath",
+  ]);
+  const expectedStatusPath = `/v4/chains/4663/wallet-admin/custom-launches/${
+    encodeURIComponent(launchId)
+  }`;
+  if (record.schemaVersion !== CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1
+    || record.apiVersion !== "v4"
+    || record.launchId !== launchId
+    || record.chainId !== "4663"
+    || record.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
+    || record.transactionHash !== transactionHash
+    || record.accepted !== true
+    || record.authoritative !== false
+    || requiredTimestamp(record.acceptedAt) !== record.acceptedAt
+    || record.statusPath !== expectedStatusPath) {
+    throw new BackendContractErrorV1();
+  }
+  return Object.freeze({
+    schemaVersion: CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1,
+    apiVersion: "v4" as const,
+    launchId,
+    chainId: "4663" as const,
+    chainDeploymentId: "robinhood-mainnet-custom-launch-v1" as const,
+    transactionHash,
+    accepted: true as const,
+    authoritative: false as const,
+    acceptedAt: record.acceptedAt,
+    statusPath: expectedStatusPath,
   });
 }
 
