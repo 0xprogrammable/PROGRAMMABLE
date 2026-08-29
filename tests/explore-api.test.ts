@@ -12,8 +12,10 @@ import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const mocks = vi.hoisted(() => ({
   readCatalog: vi.fn(),
+  readLastGoodCatalog: vi.fn(),
   readDex: vi.fn(),
   identityCommitment: vi.fn(() => `sha256:${"ef".repeat(32)}`),
+  lastGoodIdentityCommitment: vi.fn(() => `sha256:${"de".repeat(32)}`),
   mergeEntries: vi.fn((canonical: readonly unknown[], custom: readonly unknown[]) => [
     ...canonical,
     ...custom,
@@ -28,6 +30,10 @@ vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
   readEnvioClassicV3CatalogV1: mocks.readCatalog,
   envioClassicV3IdentityCommitmentV1: mocks.identityCommitment,
   mergeEnvioClassicV3CatalogEntriesV1: mocks.mergeEntries,
+}));
+vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
+  readLastGoodLaunchCatalogV1: mocks.readLastGoodCatalog,
+  lastGoodLaunchIdentityCommitmentV1: mocks.lastGoodIdentityCommitment,
 }));
 vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
   readDexscreenerExploreEntriesV1: mocks.readDex,
@@ -174,6 +180,27 @@ function catalog(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function durableCatalog(overrides: Record<string, unknown> = {}) {
+  return {
+    source: "durable-blob",
+    status: "last-known-good",
+    generatedAt: NOW,
+    asOfBlock: "25740000",
+    asOfBlockHash: `0x${"ab".repeat(32)}`,
+    entries,
+    completeness: {
+      classic: "last-known-good",
+      stock: "last-known-good",
+      custom: "unavailable",
+    },
+    evidence: {
+      kind: "durable-envelope",
+      commitment: `0x${"cd".repeat(32)}`,
+    },
+    ...overrides,
+  };
+}
+
 function marketRead(input: Readonly<{
   requested: number;
   qualified: number;
@@ -240,6 +267,9 @@ describe("Explore static identity and Dexscreener market contract", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.readCatalog.mockResolvedValue(catalog());
+    mocks.readLastGoodCatalog.mockRejectedValue(
+      new Error("durable fallback unavailable"),
+    );
     mocks.customEnabled.mockReturnValue(false);
     mocks.readCustom.mockResolvedValue([]);
     mocks.readRouter.mockResolvedValue([]);
@@ -465,6 +495,39 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(body.dataQuality.launchIdentity.canonical).toBe("unavailable");
     expect(response.headers.get("x-programmable-canonical-read-status")).toBe(
       "unavailable",
+    );
+  });
+
+  it("uses the durable catalog when a cold Envio read is unavailable", async () => {
+    mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
+    mocks.readLastGoodCatalog.mockResolvedValue(durableCatalog());
+    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+
+    const response = await GET(request("sort=newest&page=1&limit=100"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(TOKEN_COUNT + 1);
+    expect(body.catalog).toMatchObject({
+      source: "durable-blob",
+      launchSource: "durable-blob+canonical-launch-stamp-router",
+      status: "last-known-good",
+      completeness: {
+        classic: "last-known-good",
+        routerCustom: "current",
+      },
+      evidence: {
+        kind: "durable-envelope",
+        commitment: `0x${"cd".repeat(32)}`,
+      },
+    });
+    expect(body.catalog).not.toHaveProperty("scope");
+    expect(body.dataQuality.launchIdentity.canonical).toBe("last-known-good");
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "durable-blob+canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("x-programmable-canonical-read-status")).toBe(
+      "last-known-good",
     );
   });
 
@@ -755,6 +818,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       const response = await GET(request(query));
       expect(response.status).toBe(400);
       expect(mocks.readCatalog).not.toHaveBeenCalled();
+      expect(mocks.readLastGoodCatalog).not.toHaveBeenCalled();
       expect(mocks.readDex).not.toHaveBeenCalled();
     },
   );

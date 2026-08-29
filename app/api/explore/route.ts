@@ -12,11 +12,16 @@ import {
   envioClassicV3IdentityCommitmentV1,
   mergeEnvioClassicV3CatalogEntriesV1,
   readEnvioClassicV3CatalogV1,
+  type EnvioClassicV3CatalogV1,
 } from
   "../../../lib/market-data/envio-classic-v3-catalog.server";
 import {
+  lastGoodLaunchIdentityCommitmentV1,
+  readLastGoodLaunchCatalogV1,
+  type LastGoodLaunchCatalogV1,
+} from "../../../lib/market-data/last-good-launch-catalog.server";
+import {
   mergeRouterCustomExploreEntriesV1,
-  publicLaunchSourceV1,
   readFinalizedRouterCustomIdentitySnapshotV1,
   ROUTER_CUSTOM_FINALITY_CONFIRMATIONS,
   ROUTER_CUSTOM_LAUNCH_SOURCE,
@@ -48,6 +53,37 @@ const CLASSIC_EXCLUSIONS = Object.freeze([
   "stock-paired-v2",
   "stock-paired-v3",
 ] as const);
+
+type BoundDurableLaunchCatalogV1 = LastGoodLaunchCatalogV1 & Readonly<{
+  asOfBlock: string;
+  asOfBlockHash: `0x${string}`;
+}>;
+
+type ExploreCanonicalCatalogV1 =
+  | EnvioClassicV3CatalogV1
+  | BoundDurableLaunchCatalogV1;
+
+function boundDurableLaunchCatalogV1(
+  catalog: LastGoodLaunchCatalogV1,
+): BoundDurableLaunchCatalogV1 | null {
+  return catalog.asOfBlock !== null && catalog.asOfBlockHash !== null
+    ? catalog as BoundDurableLaunchCatalogV1
+    : null;
+}
+
+function exploreLaunchSourceV1(input: Readonly<{
+  catalog: ExploreCanonicalCatalogV1 | null;
+  registryCustomCurrent: boolean;
+  routerCustomAvailable: boolean;
+}>) {
+  return [
+    ...(input.catalog === null ? [] : [input.catalog.source]),
+    ...(input.registryCustomCurrent ? ["registry.custom-launched"] : []),
+    ...(input.routerCustomAvailable
+      ? [ROUTER_CUSTOM_LAUNCH_SOURCE]
+      : []),
+  ].join("+");
+}
 
 const EXPLORE_QUERY_PARAMETERS = new Set([
   "limit",
@@ -319,18 +355,26 @@ export async function GET(request: NextRequest) {
       socials,
       model,
     } as const;
-    const catalogRead = readEnvioClassicV3CatalogV1({
+    const durableCatalogRead = readLastGoodLaunchCatalogV1({
       signal: readSignal,
       deadlineMs,
     }).then(
-      (catalog) => catalog,
-      () => {
-        console.error("Explore Envio identity read unavailable", {
-          name: "EnvioClassicV3ReadError",
-        });
-        return null;
-      },
+      boundDurableLaunchCatalogV1,
+      () => null,
     );
+    const catalogRead: Promise<ExploreCanonicalCatalogV1 | null> =
+      readEnvioClassicV3CatalogV1({
+        signal: readSignal,
+        deadlineMs,
+      }).then(
+        (catalog) => catalog,
+        async () => {
+          console.error("Explore Envio identity read unavailable", {
+            name: "EnvioClassicV3ReadError",
+          });
+          return await durableCatalogRead;
+        },
+      );
     const registryRead = isCustomLaunchRegistryPublicReadEnabled()
       ? readProductionCustomExploreDirectoryV1(readSignal).then(
           (entries) => ({ entries, status: "current" as const }),
@@ -447,7 +491,15 @@ export async function GET(request: NextRequest) {
           asOfBlock: identityAsOfBlock,
           entries: publicIdentityEntries,
         })
-      : envioClassicV3IdentityCommitmentV1(catalog, publicIdentityEntries);
+      : catalog.source === "envio-classic-v3"
+        ? envioClassicV3IdentityCommitmentV1(
+            catalog,
+            publicIdentityEntries,
+          )
+        : lastGoodLaunchIdentityCommitmentV1(
+            catalog,
+            publicIdentityEntries,
+          );
     const customStatus =
       registryCustomStatus === "current" && routerCustomStatus === "current"
         ? "current" as const
@@ -455,10 +507,10 @@ export async function GET(request: NextRequest) {
             routerCustomStatus === "last-known-good"
           ? "last-known-good" as const
         : "unavailable" as const;
-    const launchSource = publicLaunchSourceV1({
-      envioAvailable: catalog !== null,
+    const launchSource = exploreLaunchSourceV1({
+      catalog,
       registryCustomCurrent: registryCustomStatus === "current",
-      routerCustomCurrent: routerAvailable,
+      routerCustomAvailable: routerAvailable,
     });
     const projectedRouterIdentityCount = publicIdentityEntries.filter(
       (entry) => entry.exploreKind === "token" &&
@@ -466,11 +518,13 @@ export async function GET(request: NextRequest) {
     ).length;
     const catalogStatus = catalog?.status ?? "last-known-good" as const;
     const canonicalStatus = catalog?.status ?? "unavailable" as const;
-    const catalogScope = catalog?.scope ?? {
-      included: [] as readonly string[],
-      excluded: CLASSIC_EXCLUSIONS,
-      publicCategories: ["classic", "custom"] as const,
-    };
+    const catalogScope = catalog?.source === "envio-classic-v3"
+      ? catalog.scope
+      : {
+          included: [] as readonly string[],
+          excluded: CLASSIC_EXCLUSIONS,
+          publicCategories: ["classic", "custom"] as const,
+        };
     const includedSources = new Set<string>(catalogScope.included);
     if (registryCustomStatus === "current") {
       includedSources.add("registry.custom-launched");
@@ -549,7 +603,7 @@ export async function GET(request: NextRequest) {
         snapshot: null,
         marketRead,
         catalog: {
-          source: "envio-classic-v3" as const,
+          source: catalog?.source ?? ("envio-classic-v3" as const),
           launchSource,
           status: catalogStatus,
           lastIndexedAt: identityGeneratedAt,
@@ -567,11 +621,15 @@ export async function GET(request: NextRequest) {
             registryCustom: registryCustomStatus,
             routerCustom: routerCustomStatus,
           },
-          scope: {
-            ...catalogScope,
-            included: [...includedSources],
-          },
-          ...(catalog ? { evidence: catalog.evidence } : {}),
+          ...(catalog?.source === "durable-blob"
+            ? { evidence: catalog.evidence }
+            : {
+                scope: {
+                  ...catalogScope,
+                  included: [...includedSources],
+                },
+                ...(catalog ? { evidence: catalog.evidence } : {}),
+              }),
           routerStamp: {
             source: ROUTER_CUSTOM_LAUNCH_SOURCE,
             status: routerCustomStatus,
