@@ -52,6 +52,7 @@ describe("token detail metadata", () => {
     });
     expect(metadata.twitter).toMatchObject({
       card: "summary_large_image",
+      creator: "@ProgrammableHQ",
       title: "Shard ($SHARD) | Programmable",
       images: [{
         url: "https://programmable.market/brand/projects/shard-token-v1.png",

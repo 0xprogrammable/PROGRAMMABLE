@@ -31,7 +31,7 @@ const ARTIFACT_DIGEST =
 const RUN_ID = 31_519_898_545;
 const RUN_ATTEMPT = 1;
 const WORKFLOW_ID = 321_772_273;
-const REPOSITORY_URL = "https://github.com/programmablehq/programmable-evm";
+const REPOSITORY_URL = "https://github.com/programmablehq/programmable";
 const NOW_MS = Date.parse("2026-08-11T18:10:00Z");
 
 test("pins the immutable production repository identity", () => {
@@ -261,24 +261,24 @@ test("full production Verify proof is deterministic and exact", () => {
 
 test("GitHub display-case drift preserves the canonical production identity", () => {
   assert.equal(
-    canonicalProductionRepository("programmablehq/PROGRAMMABLE-EVM"),
+    canonicalProductionRepository("programmablehq/PROGRAMMABLE"),
     PRODUCTION_REPOSITORY,
   );
   assert.equal(
     canonicalProductionWorkflowRef(
-      "programmablehq/PROGRAMMABLE-EVM/.github/workflows/verify.yml@refs/heads/production",
+      "programmablehq/PROGRAMMABLE/.github/workflows/verify.yml@refs/heads/production",
     ),
     `${PRODUCTION_REPOSITORY}/${VERIFY_WORKFLOW_PATH}@${PRODUCTION_REF}`,
   );
   assert.throws(() =>
-    canonicalProductionRepository("attacker/PROGRAMMABLE-EVM"));
+    canonicalProductionRepository("attacker/PROGRAMMABLE"));
   assert.throws(() =>
-    canonicalProductionRepository("programmable-infra/PROGRAMMABLE-EVM"));
+    canonicalProductionRepository("programmable-infra/PROGRAMMABLE"));
   assert.throws(() =>
-    canonicalProductionRepository("programmablehq/PROGRAMMABLE-EVM "));
+    canonicalProductionRepository("programmablehq/PROGRAMMABLE "));
   assert.throws(() =>
     canonicalProductionWorkflowRef(
-      "programmablehq/PROGRAMMABLE-EVM/.github/workflows/verify.yml@refs/heads/main",
+      "programmablehq/PROGRAMMABLE/.github/workflows/verify.yml@refs/heads/main",
     ));
 });
 
@@ -420,9 +420,9 @@ test("resolver accepts only a fresh exact successful run and immutable artifact"
 test("resolver accepts GitHub repository display-case drift with the exact ID", async () => {
   const fixtures = validApiFixtures();
   const run = fixtures.runs.workflow_runs[0];
-  run.repository.full_name = "programmablehq/PROGRAMMABLE-EVM";
-  run.repository.html_url = "https://github.com/programmablehq/PROGRAMMABLE-EVM";
-  run.head_repository.full_name = "programmablehq/PROGRAMMABLE-EVM";
+  run.repository.full_name = "programmablehq/PROGRAMMABLE";
+  run.repository.html_url = "https://github.com/programmablehq/PROGRAMMABLE";
+  run.head_repository.full_name = "programmablehq/PROGRAMMABLE";
   run.html_url = `${run.repository.html_url}/actions/runs/${RUN_ID}`;
   assert.equal((await resolveFixtures(fixtures)).runId, RUN_ID);
 });

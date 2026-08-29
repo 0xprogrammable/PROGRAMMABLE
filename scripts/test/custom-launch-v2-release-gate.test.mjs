@@ -499,7 +499,7 @@ test("backend binding preserves historical revision 2 profile evidence", async (
     BACKEND_REPOSITORY,
     "programmablehq/programmable-open-hook-v2-internal",
   );
-  assert.equal(WEBSITE_REPOSITORY, "programmablehq/programmable-evm");
+  assert.equal(WEBSITE_REPOSITORY, "programmablehq/programmable");
 });
 
 test("Fly readback accepts the real tag-only release ref and exact machine digest", () => {

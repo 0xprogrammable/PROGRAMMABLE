@@ -185,5 +185,5 @@ The smart contracts in this repository have not undergone an external audit or p
   &nbsp;·&nbsp;
   <a href="https://github.com/programmablehq">GitHub</a>
   &nbsp;·&nbsp;
-  <a href="https://x.com/0xprogrammable">X</a>
+  <a href="https://x.com/ProgrammableHQ">X</a>
 </p>

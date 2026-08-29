@@ -151,7 +151,7 @@ function rawCandidate(fixture: FixtureDefinition) {
     },
     links: {
       websites: [{ label: "Website", url: "https://programmable.market" }],
-      socials: [{ type: "twitter", url: "https://x.com/0xprogrammable" }],
+      socials: [{ type: "twitter", url: "https://x.com/ProgrammableHQ" }],
     },
   };
 }

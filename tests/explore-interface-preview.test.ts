@@ -33,6 +33,10 @@ describe("Explore interface preview", () => {
     for (const token of EXPLORE_PREVIEW_TOKENS) {
       expect(token.imageUrl).toMatch(/^\/brand\/.+\.(?:avif|webp)$/);
       expect(token.links).toHaveLength(3);
+      expect(token.links).toContainEqual({
+        kind: "x",
+        url: "https://x.com/ProgrammableHQ",
+      });
       expect(getExplorePreviewProject(token.tokenAddress)).toMatchObject({
         contributors: expect.any(Number),
         communityMembers: expect.any(Number),

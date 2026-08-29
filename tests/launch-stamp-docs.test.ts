@@ -128,7 +128,7 @@ describe("Launch Stamp developer documentation", () => {
           },
           source: {
             sourceRepository:
-              "https://github.com/programmablehq/PROGRAMMABLE-EVM",
+              "https://github.com/programmablehq/PROGRAMMABLE",
             sourceCommit: "b3cfed41bb841ae8d6188dbb815eddb5e1440218",
             commitSubject: "Add graph launch stamp canary",
           },

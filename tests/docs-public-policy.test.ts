@@ -15,9 +15,9 @@ describe("Public documentation policy", () => {
   it("publishes the transferred public repositories", () => {
     expect(PROGRAMMABLE_PUBLIC_REPOSITORIES).toEqual({
       developers: "https://github.com/programmablehq/Developers",
-      product: "https://github.com/programmablehq/PROGRAMMABLE-EVM",
+      product: "https://github.com/programmablehq/PROGRAMMABLE",
       productIssues:
-        "https://github.com/programmablehq/PROGRAMMABLE-EVM/issues",
+        "https://github.com/programmablehq/PROGRAMMABLE/issues",
       launchPolicy: "https://github.com/programmablehq/Launch-Policy",
     });
   });

@@ -21,7 +21,7 @@ description: Official Programmable product, source, community and analytics link
 | Custom Launch CLI 1.0.1 | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
 | Launch policy           | [github.com/programmablehq/Launch-Policy](https://github.com/programmablehq/Launch-Policy)                         |
 | Read-only developer API | [developers.programmable.family](https://developers.programmable.family)                                           |
-| X                       | [x.com/0xProgrammable](https://x.com/0xProgrammable)                                                               |
+| X                       | [x.com/ProgrammableHQ](https://x.com/ProgrammableHQ)                                                               |
 | Discord                 | [discord.com/invite/programmable](https://discord.com/invite/programmable)                                         |
 | Dune                    | [Programmable analytics](https://dune.com/0xprogrammable6098/programmable-analytics)                               |
 | V4 token                | [Dexscreener](https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0) |
