@@ -111,3 +111,17 @@ closed.
 These commands do not contact an RPC or provider, publish, tag, sign a wallet transaction, or
 broadcast. They verify committed evidence bytes and internal cross-bindings; they do not create
 external proof.
+
+## Postdeployment materialization
+
+Do not replace the nulls in the prepared deployment JSON or this binding by hand. The offline
+postdeployment assembler consumes the exact successful owner transaction, ordered independent L2
+readbacks, Ethereum posting/finality evidence, per-contract source-verification closure and exact
+`production` source revision. It derives a separate live deployment descriptor, every nested digest,
+the `chainDeploymentDescriptorDigest`, all five release evidence objects and a closed promotion
+bundle.
+
+See [POSTDEPLOYMENT.md](POSTDEPLOYMENT.md) for the strict input contract, commands, digest formulas,
+consumer outputs and remaining owner/runtime boundary. The generated bundle state is
+`closed-awaiting-separate-runtime-promotion`; neither assembly nor applying its local artifacts
+activates an indexer, Developers API, public write path, npm release or external deployment.

@@ -253,6 +253,27 @@ node scripts/verify-robinhood-custom-launch-standard-json.mjs
 
 There is intentionally no `--broadcast`, wallet flag or private-key input.
 
+After the separately owner-signed transaction has an exact successful receipt, do not edit the
+predeployment JSON. From the repository root, use the offline postdeployment assembler described in
+[`docs/operations/releases/custom-launch-v4/POSTDEPLOYMENT.md`](../../docs/operations/releases/custom-launch-v4/POSTDEPLOYMENT.md):
+
+```sh
+npm run contracts:robinhood:postdeploy:assemble -- \
+  --input /absolute/path/postdeployment-input.json \
+  --output /absolute/path/robinhood-mainnet-promotion-bundle.json \
+  --repository-root "$PWD"
+
+npm run contracts:robinhood:postdeploy:verify -- \
+  --bundle /absolute/path/robinhood-mainnet-promotion-bundle.json \
+  --repository-root "$PWD"
+```
+
+The assembler pins the prepared artifact bytes, requires ordered dRPC/Alchemy L2 evidence and
+dRPC/QuickNode Ethereum evidence, checks the exact Multicall3 envelope, proves D-1 to D code
+transitions, checks the Router getters and full fresh Safe state, binds source closure, and derives
+the live descriptor plus digest. Applying the reviewed bundle is a separate explicit local command.
+It still does not activate any runtime or public path.
+
 The Standard JSON verifier consumes the two byte-canonical, one-LF artifacts
 under `spec/robinhood-custom-launch/standard-json/`. It checks their full
 source closures against the checkout, authenticates the pinned solc 0.8.26
