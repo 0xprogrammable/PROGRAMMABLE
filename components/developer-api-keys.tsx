@@ -1447,27 +1447,78 @@ function DeveloperApiKeysView({
                     <p className={styles.kicker}>Existing</p>
                     <h2 id="api-keys-title">Your keys</h2>
                   </div>
-                  <button
-                    className={styles.textButton}
-                    disabled={listState === "loading" || refreshingKeys}
-                    type="button"
-                    onClick={refreshApiKeys}
-                  >
-                    <RefreshCw
-                      aria-hidden="true"
-                      className={styles.refreshIcon}
-                      data-spinning={
-                        listState === "loading" || refreshingKeys
-                          ? "true"
-                          : "false"
-                      }
-                      size={16}
-                      strokeWidth={1.9}
-                    />
-                    {listState === "loading" || refreshingKeys
-                      ? "Refreshing"
-                      : "Refresh keys"}
-                  </button>
+                  <div className={styles.listToolbar}>
+                    {keyPageCount > 1 ? (
+                      <nav
+                        className={styles.keyPagination}
+                        aria-label="API key pages"
+                      >
+                        <button
+                          type="button"
+                          aria-label="Previous API key page"
+                          disabled={
+                            activeKeyPage === 1
+                            || listState === "loading"
+                            || refreshingKeys
+                          }
+                          onClick={() => {
+                            const nextPage = Math.max(1, activeKeyPage - 1);
+                            setKeyPage(nextPage);
+                            setStatusMessage(
+                              `Showing API key page ${nextPage}.`,
+                            );
+                          }}
+                        >
+                          <ChevronLeft aria-hidden="true" size={17} />
+                        </button>
+                        <span>
+                          {activeKeyPage} / {keyPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Next API key page"
+                          disabled={
+                            activeKeyPage === keyPageCount
+                            || listState === "loading"
+                            || refreshingKeys
+                          }
+                          onClick={() => {
+                            const nextPage = Math.min(
+                              keyPageCount,
+                              activeKeyPage + 1,
+                            );
+                            setKeyPage(nextPage);
+                            setStatusMessage(
+                              `Showing API key page ${nextPage}.`,
+                            );
+                          }}
+                        >
+                          <ChevronRight aria-hidden="true" size={17} />
+                        </button>
+                      </nav>
+                    ) : null}
+                    <button
+                      className={styles.textButton}
+                      disabled={listState === "loading" || refreshingKeys}
+                      type="button"
+                      onClick={refreshApiKeys}
+                    >
+                      <RefreshCw
+                        aria-hidden="true"
+                        className={styles.refreshIcon}
+                        data-spinning={
+                          listState === "loading" || refreshingKeys
+                            ? "true"
+                            : "false"
+                        }
+                        size={16}
+                        strokeWidth={1.9}
+                      />
+                      {listState === "loading" || refreshingKeys
+                        ? "Refreshing"
+                        : "Refresh keys"}
+                    </button>
+                  </div>
                 </div>
 
                 {listState === "loading" ? <KeyListSkeleton /> : null}
@@ -1495,7 +1546,10 @@ function DeveloperApiKeysView({
 
                 {listState === "ready" && apiKeys.length > 0 ? (
                   <>
-                    <ul className={styles.keyList}>
+                    <ul
+                      className={styles.keyList}
+                      data-paginated={keyPageCount > 1 ? "true" : undefined}
+                    >
                     {visibleApiKeys.map((apiKey) => {
                       const status = keyStatus(apiKey);
                       const confirmingRevoke = confirmingRevokeId === apiKey.id;
@@ -1521,7 +1575,7 @@ function DeveloperApiKeysView({
                         >
                           <div className={styles.keyIdentity}>
                             <div>
-                              <h3>{apiKey.label}</h3>
+                              <h3 title={apiKey.label}>{apiKey.label}</h3>
                               <span
                                 className={styles.keyStatus}
                                 data-status={status.toLowerCase()}
@@ -1667,43 +1721,6 @@ function DeveloperApiKeysView({
                       );
                     })}
                     </ul>
-                    {keyPageCount > 1 ? (
-                      <nav
-                        className={styles.keyPagination}
-                        aria-label="API key pages"
-                      >
-                        <button
-                          type="button"
-                          aria-label="Previous API key page"
-                          disabled={activeKeyPage === 1}
-                          onClick={() => {
-                            const nextPage = Math.max(1, activeKeyPage - 1);
-                            setKeyPage(nextPage);
-                            setStatusMessage(`Showing API key page ${nextPage}.`);
-                          }}
-                        >
-                          <ChevronLeft aria-hidden="true" size={17} />
-                        </button>
-                        <span aria-live="polite">
-                          {activeKeyPage} / {keyPageCount}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label="Next API key page"
-                          disabled={activeKeyPage === keyPageCount}
-                          onClick={() => {
-                            const nextPage = Math.min(
-                              keyPageCount,
-                              activeKeyPage + 1,
-                            );
-                            setKeyPage(nextPage);
-                            setStatusMessage(`Showing API key page ${nextPage}.`);
-                          }}
-                        >
-                          <ChevronRight aria-hidden="true" size={17} />
-                        </button>
-                      </nav>
-                    ) : null}
                   </>
                 ) : null}
                 {listState === "ready" && listError ? (
