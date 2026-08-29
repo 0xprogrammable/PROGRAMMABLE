@@ -64,7 +64,7 @@ function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
       </a>
       <a
         className="header-social-link"
-        href="https://github.com/0xprogrammable"
+        href="https://github.com/programmablehq"
         target="_blank"
         rel="noreferrer"
         aria-label="Programmable on GitHub"
