@@ -18,8 +18,21 @@ import {
   inspectWebpStructure,
   verifyTokenImageWebpV1,
 } from "../lib/server/token-image-webp-v1";
+import nextConfig, { sharpRuntimeFiles } from "../next.config";
 
 describe("token image policy", () => {
+  it("traces the native Sharp runtime into every image-processing route", () => {
+    expect(sharpRuntimeFiles).toEqual([
+      "./node_modules/sharp/**/*",
+      "./node_modules/@img/**/*",
+    ]);
+    expect(nextConfig.outputFileTracingIncludes).toEqual({
+      "/api/token-image": sharpRuntimeFiles,
+      "/api/prediction/asset-logo/*": sharpRuntimeFiles,
+      "/api/profile/projects/*/article/media": sharpRuntimeFiles,
+    });
+  });
+
   it("keeps prepared uploads within the card-performance budget", () => {
     expect(MAX_TOKEN_IMAGE_UPLOAD_BYTES).toBe(1_000_000);
   });
