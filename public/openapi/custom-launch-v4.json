@@ -18579,6 +18579,374 @@
               }
             ]
           },
+          "sourceVerification": {
+            "description": "Optional server-authored post-finality status. It is absent or null until verification jobs exist; clients never submit or infer it.",
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "schemaVersion",
+                  "chainId",
+                  "caip2",
+                  "chainDeploymentId",
+                  "status",
+                  "components",
+                  "updatedAt"
+                ],
+                "properties": {
+                  "schemaVersion": {
+                    "const": "programmable.source-verification-status.v4"
+                  },
+                  "chainId": {
+                    "const": "4663"
+                  },
+                  "caip2": {
+                    "const": "eip155:4663"
+                  },
+                  "chainDeploymentId": {
+                    "const": "robinhood-mainnet-custom-launch-v1"
+                  },
+                  "status": {
+                    "enum": [
+                      "queued",
+                      "retrying",
+                      "exact_match",
+                      "needs_attention"
+                    ]
+                  },
+                  "components": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "targetId",
+                            "address",
+                            "status",
+                            "exactMatchProvider",
+                            "evidenceDigest",
+                            "updatedAt",
+                            "nextAttemptAt"
+                          ],
+                          "properties": {
+                            "targetId": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                            },
+                            "address": {
+                              "type": "string",
+                              "pattern": "^0x[0-9a-f]{40}$"
+                            },
+                            "status": {
+                              "const": "queued"
+                            },
+                            "exactMatchProvider": {
+                              "type": "null"
+                            },
+                            "evidenceDigest": {
+                              "type": "null"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            },
+                            "nextAttemptAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "targetId",
+                            "address",
+                            "status",
+                            "exactMatchProvider",
+                            "evidenceDigest",
+                            "updatedAt",
+                            "nextAttemptAt"
+                          ],
+                          "properties": {
+                            "targetId": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                            },
+                            "address": {
+                              "type": "string",
+                              "pattern": "^0x[0-9a-f]{40}$"
+                            },
+                            "status": {
+                              "const": "retrying"
+                            },
+                            "exactMatchProvider": {
+                              "type": "null"
+                            },
+                            "evidenceDigest": {
+                              "type": "null"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            },
+                            "nextAttemptAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "targetId",
+                            "address",
+                            "status",
+                            "exactMatchProvider",
+                            "evidenceDigest",
+                            "updatedAt"
+                          ],
+                          "properties": {
+                            "targetId": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                            },
+                            "address": {
+                              "type": "string",
+                              "pattern": "^0x[0-9a-f]{40}$"
+                            },
+                            "status": {
+                              "const": "exact_match"
+                            },
+                            "exactMatchProvider": {
+                              "const": "sourcify-v2"
+                            },
+                            "evidenceDigest": {
+                              "type": "string",
+                              "pattern": "^sha256:[0-9a-f]{64}$"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "targetId",
+                            "address",
+                            "status",
+                            "exactMatchProvider",
+                            "evidenceDigest",
+                            "updatedAt"
+                          ],
+                          "properties": {
+                            "targetId": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                            },
+                            "address": {
+                              "type": "string",
+                              "pattern": "^0x[0-9a-f]{40}$"
+                            },
+                            "status": {
+                              "const": "needs_attention"
+                            },
+                            "exactMatchProvider": {
+                              "type": "null"
+                            },
+                            "evidenceDigest": {
+                              "type": "null"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "x-programmable-order": "unique UTF-8 targetId ascending"
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  }
+                },
+                "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+                "x-programmable-order": "updatedAt == max components[*].updatedAt",
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "exact_match"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "components": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "const": "exact_match"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "needs_attention"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "components": {
+                          "type": "array",
+                          "contains": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "const": "needs_attention"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "retrying"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "components": {
+                          "type": "array",
+                          "contains": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "const": "retrying"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          },
+                          "not": {
+                            "contains": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "const": "needs_attention"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "queued"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "components": {
+                          "type": "array",
+                          "contains": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "const": "queued"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          },
+                          "not": {
+                            "contains": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "enum": [
+                                    "needs_attention",
+                                    "retrying"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "actionRequired": {
             "oneOf": [
               {
@@ -23550,6 +23918,27 @@
                       "pattern": "^sha256:[0-9a-f]{64}$"
                     }
                   }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "not": {
+                    "const": "finalized"
+                  }
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "sourceVerification": {
+                  "type": "null"
                 }
               }
             }
@@ -30417,7 +30806,7 @@
                         "pattern": "^(?:https|ipfs|ar):"
                       }
                     },
-                    "description": "Required local PNG, JPEG, WebP, or GIF bytes and their stable public URI. The packer computes and binds the exact byte digest, length, media type, and dimensions."
+                    "description": "Required local PNG or single-frame GIF bytes and their stable public URI. V4 does not admit JPEG, WebP, or animated GIF. The packer computes and binds the exact byte digest, length, media type, dimensions, and GIF frame count."
                   },
                   "links": {
                     "type": "array",
@@ -34558,6 +34947,7 @@
           "liquidityModel",
           "commitments",
           "onchain",
+          "sourceVerification",
           "createdAt",
           "finalizedAt"
         ],
@@ -41286,6 +41676,366 @@
                 "format": "date-time"
               }
             }
+          },
+          "sourceVerification": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schemaVersion",
+              "chainId",
+              "caip2",
+              "chainDeploymentId",
+              "status",
+              "components",
+              "updatedAt"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "const": "programmable.source-verification-status.v4"
+              },
+              "chainId": {
+                "const": "4663"
+              },
+              "caip2": {
+                "const": "eip155:4663"
+              },
+              "chainDeploymentId": {
+                "const": "robinhood-mainnet-custom-launch-v1"
+              },
+              "status": {
+                "enum": [
+                  "queued",
+                  "retrying",
+                  "exact_match",
+                  "needs_attention"
+                ]
+              },
+              "components": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "targetId",
+                        "address",
+                        "status",
+                        "exactMatchProvider",
+                        "evidenceDigest",
+                        "updatedAt",
+                        "nextAttemptAt"
+                      ],
+                      "properties": {
+                        "targetId": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                        },
+                        "address": {
+                          "type": "string",
+                          "pattern": "^0x[0-9a-f]{40}$"
+                        },
+                        "status": {
+                          "const": "queued"
+                        },
+                        "exactMatchProvider": {
+                          "type": "null"
+                        },
+                        "evidenceDigest": {
+                          "type": "null"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        },
+                        "nextAttemptAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "targetId",
+                        "address",
+                        "status",
+                        "exactMatchProvider",
+                        "evidenceDigest",
+                        "updatedAt",
+                        "nextAttemptAt"
+                      ],
+                      "properties": {
+                        "targetId": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                        },
+                        "address": {
+                          "type": "string",
+                          "pattern": "^0x[0-9a-f]{40}$"
+                        },
+                        "status": {
+                          "const": "retrying"
+                        },
+                        "exactMatchProvider": {
+                          "type": "null"
+                        },
+                        "evidenceDigest": {
+                          "type": "null"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        },
+                        "nextAttemptAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "targetId",
+                        "address",
+                        "status",
+                        "exactMatchProvider",
+                        "evidenceDigest",
+                        "updatedAt"
+                      ],
+                      "properties": {
+                        "targetId": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                        },
+                        "address": {
+                          "type": "string",
+                          "pattern": "^0x[0-9a-f]{40}$"
+                        },
+                        "status": {
+                          "const": "exact_match"
+                        },
+                        "exactMatchProvider": {
+                          "const": "sourcify-v2"
+                        },
+                        "evidenceDigest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "targetId",
+                        "address",
+                        "status",
+                        "exactMatchProvider",
+                        "evidenceDigest",
+                        "updatedAt"
+                      ],
+                      "properties": {
+                        "targetId": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                        },
+                        "address": {
+                          "type": "string",
+                          "pattern": "^0x[0-9a-f]{40}$"
+                        },
+                        "status": {
+                          "const": "needs_attention"
+                        },
+                        "exactMatchProvider": {
+                          "type": "null"
+                        },
+                        "evidenceDigest": {
+                          "type": "null"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 16,
+                "x-programmable-order": "unique UTF-8 targetId ascending"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            },
+            "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+            "x-programmable-order": "updatedAt == max components[*].updatedAt",
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "exact_match"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "const": "exact_match"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "needs_attention"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "components": {
+                      "type": "array",
+                      "contains": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "const": "needs_attention"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "retrying"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "components": {
+                      "type": "array",
+                      "contains": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "const": "retrying"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      },
+                      "not": {
+                        "contains": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "const": "needs_attention"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "queued"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "components": {
+                      "type": "array",
+                      "contains": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "const": "queued"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      },
+                      "not": {
+                        "contains": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "enum": [
+                                "needs_attention",
+                                "retrying"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
           },
           "createdAt": {
             "type": "string",
@@ -50807,6 +51557,374 @@
                     }
                   ]
                 },
+                "sourceVerification": {
+                  "description": "Optional server-authored post-finality status. It is absent or null until verification jobs exist; clients never submit or infer it.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "schemaVersion",
+                        "chainId",
+                        "caip2",
+                        "chainDeploymentId",
+                        "status",
+                        "components",
+                        "updatedAt"
+                      ],
+                      "properties": {
+                        "schemaVersion": {
+                          "const": "programmable.source-verification-status.v4"
+                        },
+                        "chainId": {
+                          "const": "4663"
+                        },
+                        "caip2": {
+                          "const": "eip155:4663"
+                        },
+                        "chainDeploymentId": {
+                          "const": "robinhood-mainnet-custom-launch-v1"
+                        },
+                        "status": {
+                          "enum": [
+                            "queued",
+                            "retrying",
+                            "exact_match",
+                            "needs_attention"
+                          ]
+                        },
+                        "components": {
+                          "type": "array",
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "targetId",
+                                  "address",
+                                  "status",
+                                  "exactMatchProvider",
+                                  "evidenceDigest",
+                                  "updatedAt",
+                                  "nextAttemptAt"
+                                ],
+                                "properties": {
+                                  "targetId": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                                  },
+                                  "address": {
+                                    "type": "string",
+                                    "pattern": "^0x[0-9a-f]{40}$"
+                                  },
+                                  "status": {
+                                    "const": "queued"
+                                  },
+                                  "exactMatchProvider": {
+                                    "type": "null"
+                                  },
+                                  "evidenceDigest": {
+                                    "type": "null"
+                                  },
+                                  "updatedAt": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                                  },
+                                  "nextAttemptAt": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "targetId",
+                                  "address",
+                                  "status",
+                                  "exactMatchProvider",
+                                  "evidenceDigest",
+                                  "updatedAt",
+                                  "nextAttemptAt"
+                                ],
+                                "properties": {
+                                  "targetId": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                                  },
+                                  "address": {
+                                    "type": "string",
+                                    "pattern": "^0x[0-9a-f]{40}$"
+                                  },
+                                  "status": {
+                                    "const": "retrying"
+                                  },
+                                  "exactMatchProvider": {
+                                    "type": "null"
+                                  },
+                                  "evidenceDigest": {
+                                    "type": "null"
+                                  },
+                                  "updatedAt": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                                  },
+                                  "nextAttemptAt": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "targetId",
+                                  "address",
+                                  "status",
+                                  "exactMatchProvider",
+                                  "evidenceDigest",
+                                  "updatedAt"
+                                ],
+                                "properties": {
+                                  "targetId": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                                  },
+                                  "address": {
+                                    "type": "string",
+                                    "pattern": "^0x[0-9a-f]{40}$"
+                                  },
+                                  "status": {
+                                    "const": "exact_match"
+                                  },
+                                  "exactMatchProvider": {
+                                    "const": "sourcify-v2"
+                                  },
+                                  "evidenceDigest": {
+                                    "type": "string",
+                                    "pattern": "^sha256:[0-9a-f]{64}$"
+                                  },
+                                  "updatedAt": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "targetId",
+                                  "address",
+                                  "status",
+                                  "exactMatchProvider",
+                                  "evidenceDigest",
+                                  "updatedAt"
+                                ],
+                                "properties": {
+                                  "targetId": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                                  },
+                                  "address": {
+                                    "type": "string",
+                                    "pattern": "^0x[0-9a-f]{40}$"
+                                  },
+                                  "status": {
+                                    "const": "needs_attention"
+                                  },
+                                  "exactMatchProvider": {
+                                    "type": "null"
+                                  },
+                                  "evidenceDigest": {
+                                    "type": "null"
+                                  },
+                                  "updatedAt": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "x-programmable-order": "unique UTF-8 targetId ascending"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        }
+                      },
+                      "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+                      "x-programmable-order": "updatedAt == max components[*].updatedAt",
+                      "allOf": [
+                        {
+                          "if": {
+                            "properties": {
+                              "status": {
+                                "const": "exact_match"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          },
+                          "then": {
+                            "properties": {
+                              "components": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "const": "exact_match"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "status": {
+                                "const": "needs_attention"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          },
+                          "then": {
+                            "properties": {
+                              "components": {
+                                "type": "array",
+                                "contains": {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "const": "needs_attention"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "status": {
+                                "const": "retrying"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          },
+                          "then": {
+                            "properties": {
+                              "components": {
+                                "type": "array",
+                                "contains": {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "const": "retrying"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ]
+                                },
+                                "not": {
+                                  "contains": {
+                                    "type": "object",
+                                    "properties": {
+                                      "status": {
+                                        "const": "needs_attention"
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "status": {
+                                "const": "queued"
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          },
+                          "then": {
+                            "properties": {
+                              "components": {
+                                "type": "array",
+                                "contains": {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "const": "queued"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ]
+                                },
+                                "not": {
+                                  "contains": {
+                                    "type": "object",
+                                    "properties": {
+                                      "status": {
+                                        "enum": [
+                                          "needs_attention",
+                                          "retrying"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "actionRequired": {
                   "oneOf": [
                     {
@@ -55781,6 +56899,27 @@
                       }
                     }
                   }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "status": {
+                        "not": {
+                          "const": "finalized"
+                        }
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "sourceVerification": {
+                        "type": "null"
+                      }
+                    }
+                  }
                 }
               ]
             }
@@ -55881,6 +57020,7 @@
                 "liquidityModel",
                 "commitments",
                 "onchain",
+                "sourceVerification",
                 "createdAt",
                 "finalizedAt"
               ],
@@ -62610,6 +63750,366 @@
                     }
                   }
                 },
+                "sourceVerification": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersion",
+                    "chainId",
+                    "caip2",
+                    "chainDeploymentId",
+                    "status",
+                    "components",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "schemaVersion": {
+                      "const": "programmable.source-verification-status.v4"
+                    },
+                    "chainId": {
+                      "const": "4663"
+                    },
+                    "caip2": {
+                      "const": "eip155:4663"
+                    },
+                    "chainDeploymentId": {
+                      "const": "robinhood-mainnet-custom-launch-v1"
+                    },
+                    "status": {
+                      "enum": [
+                        "queued",
+                        "retrying",
+                        "exact_match",
+                        "needs_attention"
+                      ]
+                    },
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "targetId",
+                              "address",
+                              "status",
+                              "exactMatchProvider",
+                              "evidenceDigest",
+                              "updatedAt",
+                              "nextAttemptAt"
+                            ],
+                            "properties": {
+                              "targetId": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                              },
+                              "address": {
+                                "type": "string",
+                                "pattern": "^0x[0-9a-f]{40}$"
+                              },
+                              "status": {
+                                "const": "queued"
+                              },
+                              "exactMatchProvider": {
+                                "type": "null"
+                              },
+                              "evidenceDigest": {
+                                "type": "null"
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              },
+                              "nextAttemptAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "targetId",
+                              "address",
+                              "status",
+                              "exactMatchProvider",
+                              "evidenceDigest",
+                              "updatedAt",
+                              "nextAttemptAt"
+                            ],
+                            "properties": {
+                              "targetId": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                              },
+                              "address": {
+                                "type": "string",
+                                "pattern": "^0x[0-9a-f]{40}$"
+                              },
+                              "status": {
+                                "const": "retrying"
+                              },
+                              "exactMatchProvider": {
+                                "type": "null"
+                              },
+                              "evidenceDigest": {
+                                "type": "null"
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              },
+                              "nextAttemptAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "targetId",
+                              "address",
+                              "status",
+                              "exactMatchProvider",
+                              "evidenceDigest",
+                              "updatedAt"
+                            ],
+                            "properties": {
+                              "targetId": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                              },
+                              "address": {
+                                "type": "string",
+                                "pattern": "^0x[0-9a-f]{40}$"
+                              },
+                              "status": {
+                                "const": "exact_match"
+                              },
+                              "exactMatchProvider": {
+                                "const": "sourcify-v2"
+                              },
+                              "evidenceDigest": {
+                                "type": "string",
+                                "pattern": "^sha256:[0-9a-f]{64}$"
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "targetId",
+                              "address",
+                              "status",
+                              "exactMatchProvider",
+                              "evidenceDigest",
+                              "updatedAt"
+                            ],
+                            "properties": {
+                              "targetId": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                              },
+                              "address": {
+                                "type": "string",
+                                "pattern": "^0x[0-9a-f]{40}$"
+                              },
+                              "status": {
+                                "const": "needs_attention"
+                              },
+                              "exactMatchProvider": {
+                                "type": "null"
+                              },
+                              "evidenceDigest": {
+                                "type": "null"
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "minItems": 1,
+                      "maxItems": 16,
+                      "x-programmable-order": "unique UTF-8 targetId ascending"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    }
+                  },
+                  "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+                  "x-programmable-order": "updatedAt == max components[*].updatedAt",
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "status": {
+                            "const": "exact_match"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      },
+                      "then": {
+                        "properties": {
+                          "components": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "const": "exact_match"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "status": {
+                            "const": "needs_attention"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      },
+                      "then": {
+                        "properties": {
+                          "components": {
+                            "type": "array",
+                            "contains": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "const": "needs_attention"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "status": {
+                            "const": "retrying"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      },
+                      "then": {
+                        "properties": {
+                          "components": {
+                            "type": "array",
+                            "contains": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "const": "retrying"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ]
+                            },
+                            "not": {
+                              "contains": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "const": "needs_attention"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "status": {
+                            "const": "queued"
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      },
+                      "then": {
+                        "properties": {
+                          "components": {
+                            "type": "array",
+                            "contains": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "const": "queued"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ]
+                            },
+                            "not": {
+                              "contains": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "enum": [
+                                      "needs_attention",
+                                      "retrying"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
@@ -62634,6 +64134,369 @@
             ]
           }
         }
+      },
+      "SourceVerificationStatusV4": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json",
+        "title": "Programmable Custom Launch source-verification status V4",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "chainId",
+          "caip2",
+          "chainDeploymentId",
+          "status",
+          "components",
+          "updatedAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "programmable.source-verification-status.v4"
+          },
+          "chainId": {
+            "const": "4663"
+          },
+          "caip2": {
+            "const": "eip155:4663"
+          },
+          "chainDeploymentId": {
+            "const": "robinhood-mainnet-custom-launch-v1"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "retrying",
+              "exact_match",
+              "needs_attention"
+            ]
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "targetId",
+                    "address",
+                    "status",
+                    "exactMatchProvider",
+                    "evidenceDigest",
+                    "updatedAt",
+                    "nextAttemptAt"
+                  ],
+                  "properties": {
+                    "targetId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                    },
+                    "address": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-f]{40}$"
+                    },
+                    "status": {
+                      "const": "queued"
+                    },
+                    "exactMatchProvider": {
+                      "type": "null"
+                    },
+                    "evidenceDigest": {
+                      "type": "null"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    },
+                    "nextAttemptAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "targetId",
+                    "address",
+                    "status",
+                    "exactMatchProvider",
+                    "evidenceDigest",
+                    "updatedAt",
+                    "nextAttemptAt"
+                  ],
+                  "properties": {
+                    "targetId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                    },
+                    "address": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-f]{40}$"
+                    },
+                    "status": {
+                      "const": "retrying"
+                    },
+                    "exactMatchProvider": {
+                      "type": "null"
+                    },
+                    "evidenceDigest": {
+                      "type": "null"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    },
+                    "nextAttemptAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "targetId",
+                    "address",
+                    "status",
+                    "exactMatchProvider",
+                    "evidenceDigest",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "targetId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                    },
+                    "address": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-f]{40}$"
+                    },
+                    "status": {
+                      "const": "exact_match"
+                    },
+                    "exactMatchProvider": {
+                      "const": "sourcify-v2"
+                    },
+                    "evidenceDigest": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "targetId",
+                    "address",
+                    "status",
+                    "exactMatchProvider",
+                    "evidenceDigest",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "targetId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                    },
+                    "address": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-f]{40}$"
+                    },
+                    "status": {
+                      "const": "needs_attention"
+                    },
+                    "exactMatchProvider": {
+                      "type": "null"
+                    },
+                    "evidenceDigest": {
+                      "type": "null"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    }
+                  }
+                }
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 16,
+            "x-programmable-order": "unique UTF-8 targetId ascending"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        },
+        "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+        "x-programmable-order": "updatedAt == max components[*].updatedAt",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "exact_match"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "components": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "const": "exact_match"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "needs_attention"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "components": {
+                  "type": "array",
+                  "contains": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "const": "needs_attention"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "retrying"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "components": {
+                  "type": "array",
+                  "contains": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "const": "retrying"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  "not": {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "const": "needs_attention"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "queued"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "components": {
+                  "type": "array",
+                  "contains": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "const": "queued"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  "not": {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "needs_attention",
+                            "retrying"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -62977,7 +64840,7 @@
                   "pattern": "^(?:https|ipfs|ar):"
                 }
               },
-              "description": "Required local PNG, JPEG, WebP, or GIF bytes and their stable public URI. The packer computes and binds the exact byte digest, length, media type, and dimensions."
+              "description": "Required local PNG or single-frame GIF bytes and their stable public URI. V4 does not admit JPEG, WebP, or animated GIF. The packer computes and binds the exact byte digest, length, media type, dimensions, and GIF frame count."
             },
             "links": {
               "type": "array",

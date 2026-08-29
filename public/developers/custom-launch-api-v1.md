@@ -37,6 +37,7 @@ Stable planned pointers:
 - `GET /v4/chains/4663/finalized-custom-launches`
 - OpenAPI: <https://programmable.market/openapi/custom-launch-v4.json>
 - pack config: <https://programmable.market/schemas/custom-launch/v4/pack-config.json>
+- source verification: <https://programmable.market/schemas/custom-launch/v4/source-verification-status.json>
 - policy: <https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json>
 
 Use only `Authorization: Bearer $PROGRAMMABLE_API_KEY`. No API key argument, request body field or alternate secret
@@ -46,6 +47,9 @@ and hook targets, 3–16 graph targets and all fourteen hook permissions are str
 claims. `feeBehaviorClaim` is false; generic fee claiming and generic buyback management are not live. External
 indexers may lag or omit chain data, so finalized Router evidence and Programmable indexing state remain distinct.
 Legacy Registry and GitHub intake are closed.
+
+V4 metadata images are exactly PNG or single-frame GIF, as published by `metadataImage.mediaTypes` and `gifFrames`.
+JPEG, WebP, and animated GIF are rejected by the V4 packer before any network request.
 
 A bounded external-contract reference is allowed only when the protected API server verifies its exact
 `eip155:4663` address, live runtime hash, source-verification evidence, declared graph role and checkpoint. Arbitrary
@@ -411,8 +415,12 @@ programmable-launch status REQUEST_UUID --watch --until finalized
 Finality is independent from explorer availability. After a bundled request is finalized, the server enqueues
 idempotent verification work for each exclusive component. Optional `sourceVerification` is server authored and uses
 `queued`, `retrying`, `exact_match` or `needs_attention`. Only literal `exact_match` for every component means Source
-verified. A client must never submit or infer this state. Legacy or unbundled requests remain compatible and
-unverified.
+verified. Components are uniquely sorted by UTF-8 `targetId`; non-exact rows expose no provider or evidence digest,
+while exact rows name only `sourcify-v2` and carry its evidence digest. `nextAttemptAt` exists only for queued or
+retrying rows. Otherwise aggregate state is fail closed: any `needs_attention` wins, then any `retrying`, then
+`queued`; aggregate `updatedAt` is the latest component timestamp. The authenticated resource may omit or
+null this field before finality; the V4 finalized-feed contract requires it. A client must never submit or infer
+this state. Legacy or unbundled requests remain compatible and unverified.
 
 Finalized Router identities remain eligible for Explore and Profile after discovery refreshes even when optional
 market enrichment or an explorer is unavailable. Provenance is not an audit, liquidity guarantee or endorsement.

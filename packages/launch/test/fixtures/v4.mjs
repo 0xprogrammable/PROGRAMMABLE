@@ -1026,6 +1026,56 @@ function framedSha256(domain, value) {
   ]));
 }
 
+export function validV4SourceVerificationStatus(overrides = {}) {
+  const components = overrides.components ?? [
+    {
+      targetId: "hook",
+      address: "0x2222222222222222222222222222222222222222",
+      status: "exact_match",
+      exactMatchProvider: "sourcify-v2",
+      evidenceDigest: `sha256:${"8".repeat(64)}`,
+      updatedAt: "2026-08-29T12:31:00.000Z",
+    },
+    {
+      targetId: "initializer",
+      address: "0x3333333333333333333333333333333333333333",
+      status: "retrying",
+      exactMatchProvider: null,
+      evidenceDigest: null,
+      updatedAt: "2026-08-29T12:32:00.000Z",
+      nextAttemptAt: "2026-08-29T12:34:00.000Z",
+    },
+    {
+      targetId: "token",
+      address: "0x1111111111111111111111111111111111111111",
+      status: "exact_match",
+      exactMatchProvider: "sourcify-v2",
+      evidenceDigest: `sha256:${"9".repeat(64)}`,
+      updatedAt: "2026-08-29T12:30:00.000Z",
+    },
+  ];
+  const status = components.every((component) => component.status === "exact_match")
+    ? "exact_match"
+    : components.some((component) => component.status === "needs_attention")
+      ? "needs_attention"
+      : components.some((component) => component.status === "retrying")
+        ? "retrying"
+        : "queued";
+  const updatedAt = components
+    .map((component) => component.updatedAt)
+    .reduce((latest, current) => current > latest ? current : latest);
+  return {
+    schemaVersion: "programmable.source-verification-status.v4",
+    chainId: ROBINHOOD_CHAIN_ID,
+    caip2: ROBINHOOD_CAIP2,
+    chainDeploymentId: ROBINHOOD_CHAIN_DEPLOYMENT_ID,
+    status,
+    components,
+    updatedAt,
+    ...overrides,
+  };
+}
+
 export function validV4Resource(
   request = validV4Request(),
   rawBytes = v4RequestBytes(request),

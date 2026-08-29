@@ -101,6 +101,11 @@ assert.equal(
   "V4 resource schema name",
 );
 assert.equal(
+  v4.components.schemas.SourceVerificationStatusV4.properties.schemaVersion.const,
+  "programmable.source-verification-status.v4",
+  "V4 source-verification schema name",
+);
+assert.equal(
   v4.components.schemas.CustomLaunchOnchainEvidenceV2.properties.schemaVersion.const,
   "programmable.custom-launch-onchain-evidence.v2",
   "V4 evidence schema name",
@@ -188,6 +193,7 @@ const v4StandaloneComponents = Object.freeze({
   "pack-config.json": "PackConfigV4",
   "custom-launch-create-request.json": "CustomLaunchCreateRequestV4",
   "custom-launch.json": "CustomLaunchResourceV4",
+  "source-verification-status.json": "SourceVerificationStatusV4",
   "capabilities.json": "CustomLaunchCapabilitiesV2",
   "preflight.json": "CustomLaunchPreflightV2",
   "onchain-evidence.json": "CustomLaunchOnchainEvidenceV2",
@@ -860,6 +866,30 @@ for (const requiredField of [
     `CustomLaunchResourceV4 must require ${requiredField}`,
   );
 }
+const sourceVerificationStatusV4 = v4.components.schemas.SourceVerificationStatusV4;
+assertClosedSchemaFields(sourceVerificationStatusV4, [
+  "schemaVersion", "chainId", "caip2", "chainDeploymentId", "status", "components",
+  "updatedAt",
+], "V4 source-verification status");
+assert.equal(
+  sourceVerificationStatusV4.properties.components["x-programmable-order"],
+  "unique UTF-8 targetId ascending",
+  "V4 source-verification components must publish their deterministic order",
+);
+assert.equal(
+  sourceVerificationStatusV4["x-programmable-order"],
+  "updatedAt == max components[*].updatedAt",
+  "V4 source-verification aggregate timestamp must be explicit",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchResourceV4.required.includes("sourceVerification"),
+  false,
+  "authenticated V4 resources must preserve pre-finality omission compatibility",
+);
+assert.ok(
+  v4.components.schemas.CustomLaunchFinalizedMetadataV4.required.includes("sourceVerification"),
+  "V4 finalized metadata must require source-verification readback",
+);
 assertV4ListEnvelope(
   v4,
   "/v4/chains/{chainId}/custom-launches",

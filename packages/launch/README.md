@@ -381,6 +381,10 @@ unique and sorted by UTF-8 path bytes; `contentBase64` encodes exact file bytes 
 The closed API request body is limited to 8,388,608 bytes. The decoded Standard JSON limit leaves room for canonical
 base64 and the rest of the request envelope; `pack` and `validate` enforce both limits before network access.
 
+For Robinhood V4, `metadataImage.mediaTypes` is exactly `image/png` and `image/gif`, and GIF input must contain one
+frame. JPEG, WebP, and animated GIF remain valid in the applicable immutable V3 profiles but are not V4-admitted.
+The V4 packer binds the exact image bytes and rejects unsupported or multi-frame input before network access.
+
 ## Retry and local state
 
 `submit` requires the pack config and first proves that `launch.json` is byte-identical to a fresh pack of the exact

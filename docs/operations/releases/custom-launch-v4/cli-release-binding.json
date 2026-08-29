@@ -65,13 +65,13 @@
       "name": "openapi",
       "path": "public/openapi/custom-launch-v4.json",
       "url": "https://programmable.market/openapi/custom-launch-v4.json",
-      "sha256": "sha256:a86dc96465d0a079d1f0804a8c39499ee7e7e682f10a8e78b2850b8ff77bd53e"
+      "sha256": "sha256:9a92f4614d41516520542266355677a0f02a1a8c9d0c037b4800d553c7ae5e3e"
     },
     {
       "name": "packConfig",
       "path": "public/schemas/custom-launch/v4/pack-config.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
-      "sha256": "sha256:4a7a924a4773bf3ff6a29dab4779c6e314bc53d068d3cd40958a84bbb0e9d8ef"
+      "sha256": "sha256:529ecb2046e902b0b2d7fdcd6b3ef0c3c206817f952ff5f9a9ff400c740529dc"
     },
     {
       "name": "createRequest",
@@ -83,7 +83,13 @@
       "name": "resource",
       "path": "public/schemas/custom-launch/v4/custom-launch.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch.json",
-      "sha256": "sha256:c9849f76da57044e3d0070d4f42a70271d6be50473103a2ff176f1e9ce0a878b"
+      "sha256": "sha256:6d221ede08aca7784e4688f95a45b80467c4c937284c7ec968b557a2aed01730"
+    },
+    {
+      "name": "sourceVerificationStatus",
+      "path": "public/schemas/custom-launch/v4/source-verification-status.json",
+      "url": "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json",
+      "sha256": "sha256:b966aee03edaef7d67e30231f5c13e580edd6c4d983a23293746159b7b9c1c22"
     },
     {
       "name": "capabilities",

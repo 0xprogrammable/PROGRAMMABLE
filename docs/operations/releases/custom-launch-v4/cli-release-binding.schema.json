@@ -34,8 +34,8 @@
     },
     "machineContracts": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 8,
+      "minItems": 9,
+      "maxItems": 9,
       "items": { "$ref": "#/$defs/machineContract" }
     },
     "evidence": {
@@ -165,7 +165,7 @@
       "additionalProperties": false,
       "required": ["name", "path", "url", "sha256"],
       "properties": {
-        "name": { "enum": ["openapi", "packConfig", "createRequest", "resource", "capabilities", "preflight", "onchainEvidence", "exactWalletTransaction"] },
+        "name": { "enum": ["openapi", "packConfig", "createRequest", "resource", "sourceVerificationStatus", "capabilities", "preflight", "onchainEvidence", "exactWalletTransaction"] },
         "path": { "type": "string", "minLength": 1 },
         "url": { "type": "string", "pattern": "^https://programmable\\.market/" },
         "sha256": { "$ref": "#/$defs/sha256" }
@@ -360,7 +360,7 @@
         "deploymentBlockHash": { "$ref": "#/$defs/hex32" },
         "finalityEvidenceDigest": { "$ref": "#/$defs/sha256" },
         "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" },
-        "machineContracts": { "type": "array", "minItems": 8, "maxItems": 8, "items": { "$ref": "#/$defs/machineDigest" } },
+        "machineContracts": { "type": "array", "minItems": 9, "maxItems": 9, "items": { "$ref": "#/$defs/machineDigest" } },
         "releaseManifestDigest": { "$ref": "#/$defs/sha256" }
       }
     }

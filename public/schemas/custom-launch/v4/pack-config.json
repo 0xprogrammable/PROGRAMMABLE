@@ -450,7 +450,7 @@
                   "pattern": "^(?:https|ipfs|ar):"
                 }
               },
-              "description": "Required local PNG, JPEG, WebP, or GIF bytes and their stable public URI. The packer computes and binds the exact byte digest, length, media type, and dimensions."
+              "description": "Required local PNG or single-frame GIF bytes and their stable public URI. V4 does not admit JPEG, WebP, or animated GIF. The packer computes and binds the exact byte digest, length, media type, dimensions, and GIF frame count."
             },
             "links": {
               "type": "array",
