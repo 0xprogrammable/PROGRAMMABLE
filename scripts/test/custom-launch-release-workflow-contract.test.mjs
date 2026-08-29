@@ -283,24 +283,31 @@ function workflowFailures(source) {
     "candidate-runtime-commit-binding",
     '--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"',
   );
-  requireText(
-    "stage-skips-domain-assignment",
-    "vercel deploy --prebuilt --prod --skip-domain",
+  const sourceBuildStart = source.indexOf(
+    "      - name: Stage production source build without assigning domains",
   );
+  const sourceBuildEnd = source.indexOf(
+    "      - name: Resolve exact staged deployment",
+  );
+  const sourceBuildBlock =
+    sourceBuildStart >= 0 && sourceBuildEnd > sourceBuildStart
+      ? source.slice(sourceBuildStart, sourceBuildEnd)
+      : "";
+  if (!sourceBuildBlock.includes(
+    "vercel deploy --prod --skip-domain --archive=tgz",
+  )) failures.push("stage-skips-domain-assignment");
+  if (source.includes("vercel build --prod") || source.includes("--prebuilt")) {
+    failures.push("stage-must-build-source-on-vercel");
+  }
   requireOrder(
     "record-after-rollback-capture",
     "Capture current production rollback target",
     "Verify detached Custom Launch release record",
   );
   requireOrder(
-    "record-before-build",
-    "Verify detached Custom Launch release record",
-    "Build production deployment",
-  );
-  requireOrder(
     "record-before-stage",
     "Verify detached Custom Launch release record",
-    "Stage production build without assigning domains",
+    "Stage production source build without assigning domains",
   );
   requireOrder(
     "proof-before-production-configuration",
@@ -360,6 +367,40 @@ function workflowFailures(source) {
     "candidate-canary-after-stage-resolution",
     "Resolve exact staged deployment",
     "Gate exact staged Custom Launch candidate",
+  );
+  const tokenImageProbeStart = source.indexOf(
+    "      - name: Probe staged token image runtime without writes",
+  );
+  const tokenImageProbeEnd = source.indexOf(
+    "      - name: Probe exact staged Custom Launch V3 release",
+  );
+  const tokenImageProbeBlock =
+    tokenImageProbeStart >= 0 && tokenImageProbeEnd > tokenImageProbeStart
+      ? source.slice(tokenImageProbeStart, tokenImageProbeEnd)
+      : "";
+  for (const [id, binding] of [
+    ["token-image-probe-target", "STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}"],
+    ["token-image-probe-route", '"/api/token-image"'],
+    ["token-image-probe-method", 'method: "POST"'],
+    ["token-image-probe-json", 'contentType !== "application/json"'],
+    ["token-image-probe-status", "response.status !== 401"],
+    ["token-image-probe-error", 'body.error !== "Connect your wallet and try again"'],
+    ["token-image-probe-bounded", "readBoundedResponseText(response"],
+  ]) {
+    if (!tokenImageProbeBlock.includes(binding)) failures.push(id);
+  }
+  if (
+    /(?:^|[{,\n])\s*["']?(?:authorization|cookie|x-privy-identity-token)["']?\s*:/iu
+      .test(tokenImageProbeBlock)
+    || /\n\s+"?body"?\s*:|new\s+(?:FormData|File)\b/iu
+      .test(tokenImageProbeBlock)
+  ) {
+    failures.push("token-image-probe-must-not-send-upload-authority-or-content");
+  }
+  requireOrder(
+    "token-image-probe-after-stage-resolution",
+    "Resolve exact staged deployment",
+    "Probe staged token image runtime without writes",
   );
   const darkGateStart = source.indexOf(
     "      - name: Gate exact staged dark Custom Launch candidate",
@@ -610,6 +651,15 @@ test("workflow contract detects weakened record and stage-only gates", async () 
       "missing-dark-release-artifact",
     ),
     source.replaceAll("--skip-domain", ""),
+    source.replace(
+      "vercel deploy --prod --skip-domain --archive=tgz",
+      "vercel deploy --prebuilt --prod --skip-domain --archive=tgz",
+    ),
+    source.replace("response.status !== 401", "response.status !== 500"),
+    source.replace(
+      'accept: "application/json",',
+      'accept: "application/json",\n              "Authorization": "Bearer unsafe",',
+    ),
     source.replace('--source-digest "$GITHUB_SHA"', ""),
     source.replace('--signer-digest "$GITHUB_SHA"', ""),
     source.replace("--deny-self-hosted-runners", ""),

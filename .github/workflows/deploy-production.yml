@@ -556,11 +556,6 @@ jobs:
             echo "No promotion is authorized by this staging gate."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build production deployment
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-
       - name: Reconcile all residual Generic signer probes before new authority
         id: generic-signer-probe-preflight
         if: >-
@@ -700,7 +695,7 @@ jobs:
           set -euo pipefail
           probe_secret="$(<"${{ steps.generic-signer-probe-authority.outputs.secret_path }}")"
           probe_contract="$(<"${{ steps.generic-signer-probe-authority.outputs.contract_path }}")"
-          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz \
+          deployment_url="$(vercel deploy --prod --skip-domain --archive=tgz \
             --meta githubCommitSha="$GITHUB_SHA" \
             --meta programmableGenericSignerProbe=one-shot-v1 \
             --meta programmableRepositoryId=1314365508 \
@@ -787,12 +782,12 @@ jobs:
           unlinkSync(target);
           NODE
 
-      - name: Stage production build without assigning domains
+      - name: Stage production source build without assigning domains
         id: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
+          deployment_url="$(vercel deploy --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
             *)
@@ -811,6 +806,49 @@ jobs:
           npm run perf:read-model:staged-deployment --
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Probe staged token image runtime without writes
+        env:
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readBoundedResponseText } from "./scripts/read-bounded-response.mjs";
+
+          const response = await fetch(new URL(
+            "/api/token-image",
+            process.env.STAGED_TARGET_URL,
+          ), {
+            method: "POST",
+            redirect: "error",
+            headers: {
+              accept: "application/json",
+              "x-vercel-protection-bypass":
+                process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+              "x-vercel-set-bypass-cookie": "false",
+            },
+            signal: AbortSignal.timeout(30_000),
+          });
+          const contentType = response.headers.get("content-type")
+            ?.split(";", 1)[0]?.trim().toLowerCase();
+          if (contentType !== "application/json") {
+            await response.body?.cancel("unexpected content type").catch(() => {});
+            throw new Error("staged token image runtime did not return JSON");
+          }
+          const body = JSON.parse(await readBoundedResponseText(response, {
+            maximumBytes: 65_536,
+            label: "staged token image runtime response",
+          }));
+          if (
+            response.status !== 401
+            || body === null
+            || Array.isArray(body)
+            || typeof body !== "object"
+            || Object.keys(body).length !== 1
+            || body.error !== "Connect your wallet and try again"
+          ) throw new Error("staged token image runtime contract is invalid");
+          NODE
 
       - name: Probe exact staged Custom Launch V3 release
         id: custom-launch-v3-stage

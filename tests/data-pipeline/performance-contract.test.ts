@@ -1491,6 +1491,17 @@ describe("read-model performance contract", () => {
       "utf8",
     );
     expect(deployWorkflow).toContain("--prod --skip-domain");
+    expect(
+      deployWorkflow.match(
+        /vercel deploy --prod --skip-domain --archive=tgz/gu,
+      ),
+    ).toHaveLength(2);
+    expect(deployWorkflow).not.toContain("vercel build --prod");
+    expect(deployWorkflow).not.toContain("--prebuilt");
+    expect(deployWorkflow).toContain(
+      "Probe staged token image runtime without writes",
+    );
+    expect(deployWorkflow).toContain("response.status !== 401");
     expect(deployWorkflow).toContain(
       '--env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"',
     );
