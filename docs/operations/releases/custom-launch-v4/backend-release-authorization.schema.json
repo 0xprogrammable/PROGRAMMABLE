@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/releases/custom-launch-v4/backend-release-authorization.schema.json",
+  "title": "Programmable Launch CLI V4 backend release authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "trustClass",
+    "repository",
+    "repositoryId",
+    "workflow",
+    "sourceRef",
+    "producerRevision",
+    "producerTree",
+    "stageSourceRevision",
+    "stageSourceTree",
+    "stageBundlePath",
+    "stageBundleSha256",
+    "stageBundleDigest",
+    "backendPromotionPublicInputPath",
+    "backendPromotionPublicInputSha256",
+    "backendPromotionPublicInputDigest",
+    "chainDeploymentDescriptorDigest",
+    "backendPromotionInputDigest",
+    "backendReleaseEvidenceDigest",
+    "runtimeReadinessNormalizedResponseSha256",
+    "flySafeReadbacksDigest",
+    "observedAt",
+    "authorizationDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.launch-cli-v4-backend-release-authorization.v1"
+    },
+    "trustClass": {
+      "enum": ["github-artifact-attestation", "test-only"]
+    },
+    "repository": { "const": "programmablehq/PROGRAMMABLE" },
+    "repositoryId": { "const": "1314365508" },
+    "workflow": {
+      "const": ".github/workflows/finalize-robinhood-custom-launch-promotion.yml"
+    },
+    "sourceRef": { "const": "refs/heads/production" },
+    "producerRevision": { "$ref": "#/$defs/gitHash" },
+    "producerTree": { "$ref": "#/$defs/gitHash" },
+    "stageSourceRevision": { "$ref": "#/$defs/gitHash" },
+    "stageSourceTree": { "$ref": "#/$defs/gitHash" },
+    "stageBundlePath": {
+      "const": "release/robinhood-chain-4663/programmable-stage-bundle.json"
+    },
+    "stageBundleSha256": { "$ref": "#/$defs/sha256" },
+    "stageBundleDigest": { "$ref": "#/$defs/sha256" },
+    "backendPromotionPublicInputPath": {
+      "const": "release/robinhood-chain-4663/backend-promotion-input.public.json"
+    },
+    "backendPromotionPublicInputSha256": { "$ref": "#/$defs/sha256" },
+    "backendPromotionPublicInputDigest": { "$ref": "#/$defs/sha256" },
+    "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+    "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" },
+    "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" },
+    "runtimeReadinessNormalizedResponseSha256": { "$ref": "#/$defs/sha256" },
+    "flySafeReadbacksDigest": { "$ref": "#/$defs/sha256" },
+    "observedAt": { "$ref": "#/$defs/isoSecond" },
+    "authorizationDigest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hex32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "gitHash": {
+      "type": "string",
+      "pattern": "^(?!0{40}$)[0-9a-f]{40}$"
+    },
+    "isoSecond": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    }
+  }
+}

@@ -65,31 +65,31 @@
       "name": "openapi",
       "path": "public/openapi/custom-launch-v4.json",
       "url": "https://programmable.market/openapi/custom-launch-v4.json",
-      "sha256": "sha256:f244d05179424f1806c3cb1b23b798dbbb2f67077586ece17210b914c96869c3"
+      "sha256": "sha256:a86dc96465d0a079d1f0804a8c39499ee7e7e682f10a8e78b2850b8ff77bd53e"
     },
     {
       "name": "packConfig",
       "path": "public/schemas/custom-launch/v4/pack-config.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
-      "sha256": "sha256:661302abc811af2d605e65db10aff5f7e868f838732013d18445e6f82ff81366"
+      "sha256": "sha256:4a7a924a4773bf3ff6a29dab4779c6e314bc53d068d3cd40958a84bbb0e9d8ef"
     },
     {
       "name": "createRequest",
       "path": "public/schemas/custom-launch/v4/custom-launch-create-request.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch-create-request.json",
-      "sha256": "sha256:89fe3d3fff180ad187a6caa5dc33bd96ffe866a05a8587faffa0f24cb0d4b8b9"
+      "sha256": "sha256:d8afb187333cf43212896b561adb640de2ac8832cc8f97f8315436e61f896299"
     },
     {
       "name": "resource",
       "path": "public/schemas/custom-launch/v4/custom-launch.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch.json",
-      "sha256": "sha256:69a565eabf12a3b153dedd3027cc79e2f9c9fab531c941ddb05aaf61b24fe57e"
+      "sha256": "sha256:c9849f76da57044e3d0070d4f42a70271d6be50473103a2ff176f1e9ce0a878b"
     },
     {
       "name": "capabilities",
       "path": "public/schemas/custom-launch/v4/capabilities.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/capabilities.json",
-      "sha256": "sha256:a7b64de399689714c83692c26644b7ce5f48f726817e877f27671c5fe7f18854"
+      "sha256": "sha256:926a96aa9b01d03c0896845b51e3c6442697395343eeb23d901795723e3e5cfd"
     },
     {
       "name": "preflight",
@@ -101,13 +101,13 @@
       "name": "onchainEvidence",
       "path": "public/schemas/custom-launch/v4/onchain-evidence.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/onchain-evidence.json",
-      "sha256": "sha256:d0336167a50ecf6d16f2c0da6cf23d063cc968abafdfe5e9707044a6c2d51029"
+      "sha256": "sha256:598c23ad6cf486db4a8660b21cd53a6c6e068e4d615df162b2392a82bbdd95fa"
     },
     {
       "name": "exactWalletTransaction",
       "path": "public/schemas/custom-launch/v4/exact-wallet-transaction.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/exact-wallet-transaction.json",
-      "sha256": "sha256:e3ba4e5408d7e3042bc99a6f27c4d4561817dccf285854e7935ae78b252758a4"
+      "sha256": "sha256:b15c5047c61ef30e50c6d64fd57806c15e14d11a86aaf0c25d0396f97f1a94b8"
     }
   ],
   "evidence": {
@@ -115,13 +115,15 @@
     "profile": null,
     "manifest": null,
     "source": null,
-    "finality": null
+    "finality": null,
+    "backend": null
   },
   "blockers": [
     "chainDeploymentEvidence",
     "profileEvidence",
     "releaseManifestEvidence",
     "sourceClosureEvidence",
-    "finalityEvidence"
+    "finalityEvidence",
+    "backendReleaseEvidence"
   ]
 }

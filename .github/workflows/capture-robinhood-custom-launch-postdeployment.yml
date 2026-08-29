@@ -1,0 +1,369 @@
+name: Capture Robinhood custom-launch postdeployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_transaction_hash:
+        description: Exact successful Robinhood deployment transaction hash to capture
+        required: true
+        type: string
+      l1_posting_block:
+        description: Exact nonzero Ethereum block locator for the posted L2 batch event
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: robinhood-custom-launch-postdeployment-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    name: Capture, close, and attest Phase A
+    if: >-
+      github.repository_id == 1314365508 &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/production' &&
+      github.ref_protected == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out exact protected production commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          lfs: false
+          submodules: false
+
+      - name: Bind detached checkout to protected origin production
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          askpass="$RUNNER_TEMP/programmable-git-askpass"
+          trap 'rm -f -- "$askpass"' EXIT
+          cat > "$askpass" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git fetch --no-tags --prune origin \
+            +refs/heads/production:refs/remotes/origin/production
+          rm -f -- "$askpass"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/capture-robinhood-custom-launch-postdeployment.yml@$GITHUB_REF"
+          test -z "$(git symbolic-ref -q HEAD || true)"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up exact Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Install exact toolchain and dependency closure
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v24.14.0"
+          test "$(npm --version)" = "11.16.0"
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+            if (pkg.packageManager !== "npm@11.16.0") throw new Error("toolchain drift");
+          '
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      # Evidence #1: retain the historical protected Verify proof and its portable
+      # actions/attest bundle. Later phases reverify these bytes offline.
+      - name: Resolve exact historical production Verify proof
+        id: resolve-proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/production-verify-proof.mjs resolve
+          --repository-root "$GITHUB_WORKSPACE"
+          --verification-mode change
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Download exact historical production Verify proof
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.resolve-proof.outputs.artifact_id }}
+          path: ${{ runner.temp }}/production-verify-proof-download
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.resolve-proof.outputs.verify_run_id }}
+          digest-mismatch: error
+
+      - name: Verify and retain historical Verify proof provenance
+        id: retain-proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_DIGEST: ${{ steps.resolve-proof.outputs.artifact_digest }}
+          VERIFY_ARTIFACT_ID: ${{ steps.resolve-proof.outputs.artifact_id }}
+          VERIFY_RUN_ATTEMPT: ${{ steps.resolve-proof.outputs.verify_run_attempt }}
+          VERIFY_RUN_ID: ${{ steps.resolve-proof.outputs.verify_run_id }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/robinhood-phase-a-evidence"
+          mkdir "$evidence"
+          proof_download="$RUNNER_TEMP/production-verify-proof-download/production-verify-proof.json"
+          proof="$evidence/production-verify-proof.json"
+          proof_bundle="$evidence/production-verify-proof.attestation.json"
+          coordinates="$evidence/production-verify-coordinates.json"
+          test -f "$proof_download"
+          cp -- "$proof_download" "$proof"
+          cmp --silent -- "$proof_download" "$proof"
+          gh attestation verify "$proof" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --signer-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners \
+            --format json > /dev/null
+          bundle_dir="$(mktemp -d "$RUNNER_TEMP/production-verify-attestation.XXXXXX")"
+          (
+            cd "$bundle_dir"
+            gh attestation download "$proof" --repo "$GITHUB_REPOSITORY"
+          )
+          mapfile -d '' bundle_files < <(find "$bundle_dir" -mindepth 1 -maxdepth 1 \
+            -type f ! -type l -print0)
+          test "${#bundle_files[@]}" = "1"
+          test ! -L "${bundle_files[0]}"
+          bundle_size="$(stat -c '%s' "${bundle_files[0]}")"
+          test "$bundle_size" -ge 1
+          test "$bundle_size" -le 16777216
+          cp -- "${bundle_files[0]}" "$proof_bundle"
+          cmp --silent -- "${bundle_files[0]}" "$proof_bundle"
+          trusted_root="$bundle_dir/trusted-root.jsonl"
+          gh attestation trusted-root > "$trusted_root"
+          test -s "$trusted_root"
+          gh attestation verify "$proof" \
+            --bundle "$proof_bundle" \
+            --custom-trusted-root "$trusted_root" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/verify.yml" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --signer-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners \
+            --format json > /dev/null
+          rm -rf -- "$bundle_dir"
+          node scripts/production-verify-proof.mjs verify \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --proof "$proof" \
+            --run-id "$VERIFY_RUN_ID" \
+            --run-attempt "$VERIFY_RUN_ATTEMPT" \
+            --artifact-digest "$ARTIFACT_DIGEST" \
+            --verification-mode change
+          jq --null-input \
+            --arg runId "$VERIFY_RUN_ID" \
+            --arg runAttempt "$VERIFY_RUN_ATTEMPT" \
+            --arg artifactId "$VERIFY_ARTIFACT_ID" \
+            --arg artifactDigest "$ARTIFACT_DIGEST" \
+            '{runId:$runId,runAttempt:$runAttempt,artifactId:$artifactId,artifactDigest:$artifactDigest}' \
+            > "$coordinates"
+          echo "evidence_dir=$evidence" >> "$GITHUB_OUTPUT"
+          echo "proof=$proof" >> "$GITHUB_OUTPUT"
+          echo "proof_bundle=$proof_bundle" >> "$GITHUB_OUTPUT"
+          echo "coordinates=$coordinates" >> "$GITHUB_OUTPUT"
+
+      - name: Capture exact raw L2, L1, and Sourcify evidence
+        id: capture-evidence
+        env:
+          DEPLOYMENT_TX_HASH: ${{ inputs.deployment_transaction_hash }}
+          L1_POSTING_BLOCK: ${{ inputs.l1_posting_block }}
+          ROBINHOOD_MAINNET_RPC_URL_PRIMARY: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL_PRIMARY }}
+          ROBINHOOD_MAINNET_RPC_URL_SECONDARY: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL_SECONDARY }}
+          ETHEREUM_MAINNET_RPC_URL_PRIMARY: ${{ secrets.ETHEREUM_MAINNET_RPC_URL_PRIMARY }}
+          ETHEREUM_MAINNET_RPC_URL_SECONDARY: ${{ secrets.ETHEREUM_MAINNET_RPC_URL_SECONDARY }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOYMENT_TX_HASH" =~ ^0x[0-9a-f]{64}$ ]]
+          [[ "$L1_POSTING_BLOCK" =~ ^[1-9][0-9]*$ ]]
+          output="$RUNNER_TEMP/programmable-postdeployment-capture.json"
+          node contracts/scripts/capture-robinhood-custom-launch-postdeployment.mjs capture \
+            --transaction-hash "$DEPLOYMENT_TX_HASH" \
+            --l1-posting-block "$L1_POSTING_BLOCK" \
+            --output "$output" \
+            --repository-root "$GITHUB_WORKSPACE"
+          test -s "$output"
+          echo "capture=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Attest exact raw postdeployment capture
+        id: attest-capture
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.capture-evidence.outputs.capture }}
+          create-storage-record: true
+
+      - name: Preserve portable capture attestation bytes
+        id: retain-capture
+        env:
+          ACTION_BUNDLE_PATH: ${{ steps.attest-capture.outputs.bundle-path }}
+          EVIDENCE_DIR: ${{ steps.retain-proof.outputs.evidence_dir }}
+        run: |
+          set -euo pipefail
+          capture="$EVIDENCE_DIR/programmable-postdeployment-capture.json"
+          bundle="$EVIDENCE_DIR/programmable-postdeployment-capture.attestation.json"
+          cp -- "${{ steps.capture-evidence.outputs.capture }}" "$capture"
+          cmp --silent -- "${{ steps.capture-evidence.outputs.capture }}" "$capture"
+          cp -- "$ACTION_BUNDLE_PATH" "$bundle"
+          cmp --silent -- "$ACTION_BUNDLE_PATH" "$bundle"
+          echo "capture=$capture" >> "$GITHUB_OUTPUT"
+          echo "capture_bundle=$bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble closed Phase A stage bundle
+        id: assemble-stage
+        env:
+          ARTIFACT_DIGEST: ${{ steps.resolve-proof.outputs.artifact_digest }}
+          VERIFY_ARTIFACT_ID: ${{ steps.resolve-proof.outputs.artifact_id }}
+          VERIFY_RUN_ATTEMPT: ${{ steps.resolve-proof.outputs.verify_run_attempt }}
+          VERIFY_RUN_ID: ${{ steps.resolve-proof.outputs.verify_run_id }}
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/programmable-stage-bundle.json"
+          node contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs assemble-stage \
+            --input "${{ steps.retain-capture.outputs.capture }}" \
+            --output "$stage" \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --capture-attestation-bundle "${{ steps.retain-capture.outputs.capture_bundle }}" \
+            --source-verify-proof "${{ steps.retain-proof.outputs.proof }}" \
+            --source-verify-attestation-bundle "${{ steps.retain-proof.outputs.proof_bundle }}" \
+            --source-verify-run-id "$VERIFY_RUN_ID" \
+            --source-verify-run-attempt "$VERIFY_RUN_ATTEMPT" \
+            --source-verify-artifact-id "$VERIFY_ARTIFACT_ID" \
+            --source-verify-artifact-digest "$ARTIFACT_DIGEST"
+          test -s "$stage"
+          test "$(jq -r '.state' "$stage")" = "closed-awaiting-backend-readiness"
+          test "$(jq -r '.releaseReady' "$stage")" = "false"
+          test "$(jq -r '.publicAuthorization' "$stage")" = "false"
+          test "$(jq -r '.publicWrites' "$stage")" = "false"
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+
+      - name: Attest exact closed Phase A stage bundle
+        id: attest-stage
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.assemble-stage.outputs.stage }}
+          create-storage-record: true
+
+      - name: Preserve and reverify portable stage attestation bytes
+        env:
+          ACTION_BUNDLE_PATH: ${{ steps.attest-stage.outputs.bundle-path }}
+          ARTIFACT_DIGEST: ${{ steps.resolve-proof.outputs.artifact_digest }}
+          EVIDENCE_DIR: ${{ steps.retain-proof.outputs.evidence_dir }}
+          VERIFY_ARTIFACT_ID: ${{ steps.resolve-proof.outputs.artifact_id }}
+          VERIFY_RUN_ATTEMPT: ${{ steps.resolve-proof.outputs.verify_run_attempt }}
+          VERIFY_RUN_ID: ${{ steps.resolve-proof.outputs.verify_run_id }}
+        run: |
+          set -euo pipefail
+          stage="$EVIDENCE_DIR/programmable-stage-bundle.json"
+          stage_bundle="$EVIDENCE_DIR/programmable-stage-bundle.attestation.json"
+          cp -- "${{ steps.assemble-stage.outputs.stage }}" "$stage"
+          cmp --silent -- "${{ steps.assemble-stage.outputs.stage }}" "$stage"
+          cp -- "$ACTION_BUNDLE_PATH" "$stage_bundle"
+          cmp --silent -- "$ACTION_BUNDLE_PATH" "$stage_bundle"
+          node contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs verify-stage \
+            --stage "$stage" \
+            --capture "${{ steps.retain-capture.outputs.capture }}" \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --capture-attestation-bundle "${{ steps.retain-capture.outputs.capture_bundle }}" \
+            --stage-attestation-bundle "$stage_bundle" \
+            --source-verify-proof "${{ steps.retain-proof.outputs.proof }}" \
+            --source-verify-attestation-bundle "${{ steps.retain-proof.outputs.proof_bundle }}" \
+            --source-verify-run-id "$VERIFY_RUN_ID" \
+            --source-verify-run-attempt "$VERIFY_RUN_ATTEMPT" \
+            --source-verify-artifact-id "$VERIFY_ARTIFACT_ID" \
+            --source-verify-artifact-digest "$ARTIFACT_DIGEST"
+
+      - name: Require protected checkout remains unchanged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test "$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')" = "$GITHUB_SHA"
+          evidence="${{ steps.retain-proof.outputs.evidence_dir }}"
+          test "$(find "$evidence" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" = "7"
+          chmod 0644 "$evidence"/*
+          while IFS= read -r -d '' file; do
+            test -f "$file"
+            test ! -L "$file"
+            size="$(stat -c '%s' "$file")"
+            mode="$(stat -c '%a' "$file")"
+            test "$size" -ge 1
+            test "$size" -le 268435456
+            test "$mode" = "644"
+          done < <(find "$evidence" -mindepth 1 -maxdepth 1 -type f -print0)
+
+      - name: Upload exact portable Phase A evidence
+        id: upload-phase-a
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: robinhood-custom-launch-phase-a-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.retain-proof.outputs.evidence_dir }}
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Record exact Phase A evidence coordinates
+        env:
+          ARTIFACT_DIGEST: ${{ steps.upload-phase-a.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.upload-phase-a.outputs.artifact-id }}
+        run: |
+          {
+            echo "## Robinhood custom-launch Phase A"
+            echo
+            echo "- Protected commit: \`$GITHUB_SHA\`"
+            echo "- Artifact ID: \`$ARTIFACT_ID\`"
+            echo "- Artifact digest: \`$ARTIFACT_DIGEST\`"
+            echo "- State: \`closed-awaiting-backend-readiness\`"
+            echo "- Public authorization: \`false\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reconfirm protected production tip at completion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"

@@ -71,7 +71,7 @@ Ethereum `finalized` checkpoint whose block is not earlier than the batch-postin
 
 ## Evidence gates
 
-The five gates have distinct jobs:
+The six gates have distinct jobs:
 
 1. `chainDeployment` contains the normalized full descriptor plus recomputed Keccak descriptor and
    framed binding digests.
@@ -81,7 +81,9 @@ The five gates have distinct jobs:
    unique UTF-8 order.
 4. `finality` binds the deployment transaction and L2 checkpoint to the same complete Ethereum
    finality evidence carried by the atomic deployment and Safe configuration.
-5. `manifest` cross-binds the release identity, all four other evidence objects, and every public
+5. `backend` binds the final backend repository revision/tree, API/migration/OpenAPI/profile/policy
+   identity, fresh V4 readiness receipt and a separate Fly release/machine/image receipt.
+6. `manifest` cross-binds the release identity, all five other evidence objects, and every public
    machine-contract digest before recomputing its own digest.
 
 A foundation source commitment, planned address, prepared owner transaction, local file hash,
@@ -102,8 +104,13 @@ node scripts/programmable-launch-v4-release-binding.mjs verify-release-ready \
 node --test scripts/test/programmable-launch-v4-release-binding.test.mjs
 ```
 
-The first command must currently report `releaseReady: false` and all five blockers. The second is
-the immutable release workflow gate and must currently fail. The focused test validates the
+The first command must currently report `releaseReady: false` and all six blockers. The second is
+the immutable release workflow gate and must currently fail. Even after all six structural objects
+exist, `verify-release-ready` additionally requires `PROGRAMMABLE_PRODUCTION_VERIFY_PROOF` to name
+the exact protected `verify.yml` artifact and cryptographically re-verifies its GitHub attestation;
+it also requires `PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION` to name the separately attested
+runtime/Fly authorization receipt. The unit-test verifier injections are not exposed by the CLI.
+The focused test validates the
 committed JSON against `cli-release-binding.schema.json` offline, exercises a mechanically complete
 synthetic binding, and proves that policy, provenance, evidence, and machine-byte mutations fail
 closed.
@@ -114,14 +121,40 @@ external proof.
 
 ## Postdeployment materialization
 
-Do not replace the nulls in the prepared deployment JSON or this binding by hand. The offline
-postdeployment assembler consumes the exact successful owner transaction, ordered independent L2
-readbacks, Ethereum posting/finality evidence, per-contract source-verification closure and exact
-`production` source revision. It derives a separate live deployment descriptor, every nested digest,
-the `chainDeploymentDescriptorDigest`, all five release evidence objects and a closed promotion
-bundle.
+Do not replace the nulls in the prepared deployment JSON or this binding by hand. The read-only
+Phase A collector consumes the exact successful owner transaction, bounded ordered independent L2
+and L1 readbacks, Ethereum posting/finality evidence, per-contract source-verification closure, the
+historical protected Verify proof and the exact `production` revision/tree. It emits the canonical
+`release/robinhood-chain-4663/programmable-stage-bundle.json`, state
+`closed-awaiting-backend-readiness`, with `releaseReady`, `publicAuthorization` and `publicWrites`
+all false.
 
-See [POSTDEPLOYMENT.md](POSTDEPLOYMENT.md) for the strict input contract, commands, digest formulas,
-consumer outputs and remaining owner/runtime boundary. The generated bundle state is
-`closed-awaiting-separate-runtime-promotion`; neither assembly nor applying its local artifacts
-activates an indexer, Developers API, public write path, npm release or external deployment.
+Backend readiness has an explicit privacy boundary. The backend repository retains the restricted
+raw `backend-promotion-input.json`, but the PROGRAMMABLE finalizer accepts only the separately
+attested `backend-promotion-input.public.json`. The public-safe object carries normalized readiness
+and Fly bindings, safe byte/digest receipts, and a digest/length binding to the private artifact; it
+contains no raw response body, raw request ID, machine configuration, environment or credential. The
+final promotion bundle embeds only this public projection as `backendPromotionBinding`.
+
+The two protected workflows are:
+
+- `.github/workflows/capture-robinhood-custom-launch-postdeployment.yml` for capture, Phase A
+  assembly and portable capture/stage attestations; and
+- `.github/workflows/finalize-robinhood-custom-launch-promotion.yml` for offline portable-evidence
+  verification, canonical backend authorization and Phase B promotion.
+
+The Phase B producer does not claim the later protected evidence PR that lands its outputs. It
+deterministically emits the exact live descriptor and final CLI binding with the four new
+authorization/promotion files, so the later PR never hand-edits JSON. It does not accept an
+operator trusted root, a cross-repository workflow token or the private raw backend file. The
+final `apply` gate is read-only and freshly re-verifies the landed bytes and provider state. Neither
+phase activates an indexer, Developers API, public write path, npm release or external deployment.
+
+See [POSTDEPLOYMENT.md](POSTDEPLOYMENT.md) for the exact CLI interfaces, fixed environment-variable
+names, canonical paths, key sets, digest domains, schemas and remaining owner/runtime boundary. The
+strict checked-in contracts include the [Phase A stage schema](stage-bundle.schema.json),
+[private raw backend schema](backend-promotion-input.schema.json),
+[public-safe backend schema](backend-promotion-public-input.schema.json),
+[backend capture authorization schema](backend-capture-authorization.schema.json),
+[final backend authorization schema](backend-release-authorization.schema.json) and
+[Phase B promotion schema](promotion-bundle.schema.json).

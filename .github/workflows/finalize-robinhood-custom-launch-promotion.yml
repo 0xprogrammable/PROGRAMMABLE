@@ -1,0 +1,434 @@
+name: Finalize Robinhood custom-launch promotion
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: robinhood-custom-launch-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Authorize and attest Phase B
+    if: >-
+      github.repository_id == 1314365508 &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/production' &&
+      github.ref_protected == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    permissions:
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out exact protected production commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          lfs: false
+          submodules: false
+
+      - name: Bind detached checkout to protected origin production
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          askpass="$RUNNER_TEMP/programmable-git-askpass"
+          trap 'rm -f -- "$askpass"' EXIT
+          cat > "$askpass" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git fetch --no-tags --prune origin \
+            +refs/heads/production:refs/remotes/origin/production
+          rm -f -- "$askpass"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/finalize-robinhood-custom-launch-promotion.yml@$GITHUB_REF"
+          test -z "$(git symbolic-ref -q HEAD || true)"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up exact Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Install exact toolchain and dependency closure
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v24.14.0"
+          test "$(npm --version)" = "11.16.0"
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+            if (pkg.packageManager !== "npm@11.16.0") throw new Error("toolchain drift");
+          '
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      # Evidence #1 and the separately attested public-safe backend handoff are
+      # landed by a reviewed evidence PR. The private backend raw capture never
+      # crosses repositories. A default public-repository GITHUB_TOKEN is not
+      # treated as authority to read the private backend repository.
+      - name: Bind exact tracked portable evidence set
+        id: imported
+        run: |
+          set -euo pipefail
+          phase_a="$GITHUB_WORKSPACE/release/robinhood-chain-4663"
+          backend="$phase_a"
+          test -f "$phase_a/programmable-postdeployment-capture.json"
+          test -f "$phase_a/programmable-postdeployment-capture.attestation.json"
+          test -f "$phase_a/programmable-stage-bundle.json"
+          test -f "$phase_a/programmable-stage-bundle.attestation.json"
+          test -f "$phase_a/production-verify-proof.json"
+          test -f "$phase_a/production-verify-proof.attestation.json"
+          test -f "$phase_a/production-verify-coordinates.json"
+          test -f "$backend/backend-promotion-input.public.json"
+          test -f "$backend/backend-promotion-input.attestation.json"
+          test ! -e "$backend/backend-promotion-input.json"
+          for evidence_file in \
+            programmable-postdeployment-capture.json \
+            programmable-postdeployment-capture.attestation.json \
+            programmable-stage-bundle.json \
+            programmable-stage-bundle.attestation.json \
+            production-verify-proof.json \
+            production-verify-proof.attestation.json \
+            production-verify-coordinates.json \
+            backend-promotion-input.public.json \
+            backend-promotion-input.attestation.json
+          do
+            evidence_path="$phase_a/$evidence_file"
+            test -f "$evidence_path"
+            test ! -L "$evidence_path"
+            test "$(stat -c '%a' "$evidence_path")" = "644"
+            evidence_size="$(stat -c '%s' "$evidence_path")"
+            test "$evidence_size" -ge 1
+            test "$evidence_size" -le 268435456
+            git cat-file -e "$GITHUB_SHA:release/robinhood-chain-4663/$evidence_file"
+            cmp --silent -- \
+              <(git show "$GITHUB_SHA:release/robinhood-chain-4663/$evidence_file") \
+              "$evidence_path"
+          done
+          test "$(find "$phase_a" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" = "9"
+          capture_revision="$(jq -er '.capture.sourceOrigin.revision' "$phase_a/programmable-postdeployment-capture.json")"
+          backend_revision="$(jq -er '.backendSource.sourceCommit' "$backend/backend-promotion-input.public.json")"
+          [[ "$capture_revision" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$backend_revision" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$capture_revision" "$GITHUB_SHA"
+          test "$capture_revision" != "$GITHUB_SHA"
+          test "$(git rev-parse "$capture_revision^{tree}")" != "$(git rev-parse "$GITHUB_SHA^{tree}")"
+          echo "phase_a=$phase_a" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "capture_revision=$capture_revision" >> "$GITHUB_OUTPUT"
+          echo "backend_revision=$backend_revision" >> "$GITHUB_OUTPUT"
+
+      - name: Generate verifier-owned GitHub trusted root
+        id: trusted-root
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          trusted_root="$RUNNER_TEMP/github-cli-embedded-tuf-trusted-root.jsonl"
+          gh attestation trusted-root > "$trusted_root"
+          test -s "$trusted_root"
+          echo "path=$trusted_root" >> "$GITHUB_OUTPUT"
+
+      - name: Verify all imported portable attestations offline
+        env:
+          BACKEND_DIR: ${{ steps.imported.outputs.backend }}
+          BACKEND_REVISION: ${{ steps.imported.outputs.backend_revision }}
+          CAPTURE_REVISION: ${{ steps.imported.outputs.capture_revision }}
+          PHASE_A_DIR: ${{ steps.imported.outputs.phase_a }}
+          TRUSTED_ROOT: ${{ steps.trusted-root.outputs.path }}
+        run: |
+          set -euo pipefail
+          verify_portable() {
+            subject="$1"
+            bundle="$2"
+            repository="$3"
+            workflow="$4"
+            source_ref="$5"
+            source_revision="$6"
+            gh attestation verify "$subject" \
+              --bundle "$bundle" \
+              --custom-trusted-root "$TRUSTED_ROOT" \
+              --repo "$repository" \
+              --signer-workflow "$repository/$workflow" \
+              --source-ref "$source_ref" \
+              --source-digest "$source_revision" \
+              --signer-digest "$source_revision" \
+              --deny-self-hosted-runners \
+              --format json > /dev/null
+          }
+          verify_portable \
+            "$PHASE_A_DIR/production-verify-proof.json" \
+            "$PHASE_A_DIR/production-verify-proof.attestation.json" \
+            "$GITHUB_REPOSITORY" ".github/workflows/verify.yml" \
+            "refs/heads/production" "$CAPTURE_REVISION"
+          verify_portable \
+            "$PHASE_A_DIR/programmable-postdeployment-capture.json" \
+            "$PHASE_A_DIR/programmable-postdeployment-capture.attestation.json" \
+            "$GITHUB_REPOSITORY" ".github/workflows/capture-robinhood-custom-launch-postdeployment.yml" \
+            "refs/heads/production" "$CAPTURE_REVISION"
+          verify_portable \
+            "$PHASE_A_DIR/programmable-stage-bundle.json" \
+            "$PHASE_A_DIR/programmable-stage-bundle.attestation.json" \
+            "$GITHUB_REPOSITORY" ".github/workflows/capture-robinhood-custom-launch-postdeployment.yml" \
+            "refs/heads/production" "$CAPTURE_REVISION"
+          verify_portable \
+            "$BACKEND_DIR/backend-promotion-input.public.json" \
+            "$BACKEND_DIR/backend-promotion-input.attestation.json" \
+            "programmablehq/programmable-open-hook-v2-internal" \
+            ".github/workflows/capture-programmable-robinhood-promotion.yml" \
+            "refs/heads/main" "$BACKEND_REVISION"
+
+      - name: Read exact historical Verify coordinates
+        id: coordinates
+        env:
+          PHASE_A_DIR: ${{ steps.imported.outputs.phase_a }}
+        run: |
+          set -euo pipefail
+          coordinates="$PHASE_A_DIR/production-verify-coordinates.json"
+          echo "run_id=$(jq -er '.runId | select(test(\"^[1-9][0-9]*$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
+          echo "run_attempt=$(jq -er '.runAttempt | select(test(\"^[1-9][0-9]*$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$(jq -er '.artifactId | select(test(\"^[1-9][0-9]*$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$(jq -er '.artifactDigest | select(test(\"^sha256:[0-9a-f]{64}$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
+
+      - name: Emit canonical protected backend authorization
+        id: authorize-backend
+        env:
+          BACKEND_DIR: ${{ steps.imported.outputs.backend }}
+          PHASE_A_DIR: ${{ steps.imported.outputs.phase_a }}
+        run: |
+          set -euo pipefail
+          authorization="$RUNNER_TEMP/programmable-backend-authorization.json"
+          node contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs authorize-backend \
+            --stage "$PHASE_A_DIR/programmable-stage-bundle.json" \
+            --capture "$PHASE_A_DIR/programmable-postdeployment-capture.json" \
+            --backend-input "$BACKEND_DIR/backend-promotion-input.public.json" \
+            --backend-attestation-bundle "$BACKEND_DIR/backend-promotion-input.attestation.json" \
+            --output "$authorization" \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --capture-attestation-bundle "$PHASE_A_DIR/programmable-postdeployment-capture.attestation.json" \
+            --stage-attestation-bundle "$PHASE_A_DIR/programmable-stage-bundle.attestation.json" \
+            --source-verify-proof "$PHASE_A_DIR/production-verify-proof.json" \
+            --source-verify-attestation-bundle "$PHASE_A_DIR/production-verify-proof.attestation.json" \
+            --source-verify-run-id "${{ steps.coordinates.outputs.run_id }}" \
+            --source-verify-run-attempt "${{ steps.coordinates.outputs.run_attempt }}" \
+            --source-verify-artifact-id "${{ steps.coordinates.outputs.artifact_id }}" \
+            --source-verify-artifact-digest "${{ steps.coordinates.outputs.artifact_digest }}"
+          test -s "$authorization"
+          echo "path=$authorization" >> "$GITHUB_OUTPUT"
+
+      - name: Attest canonical protected backend authorization
+        id: attest-authorization
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.authorize-backend.outputs.path }}
+          create-storage-record: true
+
+      - name: Preserve exact backend authorization attestation bytes
+        id: retain-authorization
+        env:
+          ACTION_BUNDLE_PATH: ${{ steps.attest-authorization.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/programmable-backend-authorization.attestation.json"
+          cp -- "$ACTION_BUNDLE_PATH" "$bundle"
+          cmp --silent -- "$ACTION_BUNDLE_PATH" "$bundle"
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Materialize canonical Phase B promotion bundle
+        id: promote
+        env:
+          BACKEND_DIR: ${{ steps.imported.outputs.backend }}
+          PHASE_A_DIR: ${{ steps.imported.outputs.phase_a }}
+        run: |
+          set -euo pipefail
+          promotion="$RUNNER_TEMP/programmable-promotion-bundle.json"
+          node contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs promote \
+            --stage "$PHASE_A_DIR/programmable-stage-bundle.json" \
+            --capture "$PHASE_A_DIR/programmable-postdeployment-capture.json" \
+            --backend-input "$BACKEND_DIR/backend-promotion-input.public.json" \
+            --backend-attestation-bundle "$BACKEND_DIR/backend-promotion-input.attestation.json" \
+            --backend-authorization "${{ steps.authorize-backend.outputs.path }}" \
+            --backend-authorization-attestation-bundle "${{ steps.retain-authorization.outputs.bundle }}" \
+            --output "$promotion" \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --capture-attestation-bundle "$PHASE_A_DIR/programmable-postdeployment-capture.attestation.json" \
+            --stage-attestation-bundle "$PHASE_A_DIR/programmable-stage-bundle.attestation.json" \
+            --source-verify-proof "$PHASE_A_DIR/production-verify-proof.json" \
+            --source-verify-attestation-bundle "$PHASE_A_DIR/production-verify-proof.attestation.json" \
+            --source-verify-run-id "${{ steps.coordinates.outputs.run_id }}" \
+            --source-verify-run-attempt "${{ steps.coordinates.outputs.run_attempt }}" \
+            --source-verify-artifact-id "${{ steps.coordinates.outputs.artifact_id }}" \
+            --source-verify-artifact-digest "${{ steps.coordinates.outputs.artifact_digest }}"
+          test "$(jq -r '.state' "$promotion")" = "finalized-live"
+          test "$(jq -r '.releaseReady' "$promotion")" = "true"
+          test "$(jq -r '.publicAuthorization' "$promotion")" = "true"
+          test "$(jq -r '.publicWrites' "$promotion")" = "true"
+          echo "path=$promotion" >> "$GITHUB_OUTPUT"
+
+      - name: Attest canonical Phase B promotion bundle
+        id: attest-promotion
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ steps.promote.outputs.path }}
+          create-storage-record: true
+
+      - name: Deterministically materialize exact evidence-PR release assets
+        id: materialize-assets
+        env:
+          BACKEND_DIR: ${{ steps.imported.outputs.backend }}
+          PHASE_A_DIR: ${{ steps.imported.outputs.phase_a }}
+        run: |
+          set -euo pipefail
+          outputs="$RUNNER_TEMP/robinhood-phase-b-public-evidence"
+          mkdir "$outputs"
+          result="$RUNNER_TEMP/materialize-release-assets.result.json"
+          node contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs materialize-release-assets \
+            --bundle "${{ steps.promote.outputs.path }}" \
+            --stage "$PHASE_A_DIR/programmable-stage-bundle.json" \
+            --capture "$PHASE_A_DIR/programmable-postdeployment-capture.json" \
+            --backend-input "$BACKEND_DIR/backend-promotion-input.public.json" \
+            --backend-attestation-bundle "$BACKEND_DIR/backend-promotion-input.attestation.json" \
+            --backend-authorization "${{ steps.authorize-backend.outputs.path }}" \
+            --backend-authorization-attestation-bundle "${{ steps.retain-authorization.outputs.bundle }}" \
+            --asset-output-root "$outputs" \
+            --repository-root "$GITHUB_WORKSPACE" \
+            --capture-attestation-bundle "$PHASE_A_DIR/programmable-postdeployment-capture.attestation.json" \
+            --stage-attestation-bundle "$PHASE_A_DIR/programmable-stage-bundle.attestation.json" \
+            --source-verify-proof "$PHASE_A_DIR/production-verify-proof.json" \
+            --source-verify-attestation-bundle "$PHASE_A_DIR/production-verify-proof.attestation.json" \
+            --source-verify-run-id "${{ steps.coordinates.outputs.run_id }}" \
+            --source-verify-run-attempt "${{ steps.coordinates.outputs.run_attempt }}" \
+            --source-verify-artifact-id "${{ steps.coordinates.outputs.artifact_id }}" \
+            --source-verify-artifact-digest "${{ steps.coordinates.outputs.artifact_digest }}" \
+            > "$result"
+          test "$(jq -r '.releaseReady' "$result")" = "true"
+          test "$(jq -r '.publicWrites' "$result")" = "false"
+          test "$(jq -r '.assets | length' "$result")" = "2"
+          test -f "$outputs/contracts/deployments/robinhood-custom-launch-v1.json"
+          test -f "$outputs/docs/operations/releases/custom-launch-v4/cli-release-binding.json"
+          echo "outputs=$outputs" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve exact promotion attestation and public outputs
+        id: retain-outputs
+        env:
+          ACTION_BUNDLE_PATH: ${{ steps.attest-promotion.outputs.bundle-path }}
+          BACKEND_DIR: ${{ steps.imported.outputs.backend }}
+        run: |
+          set -euo pipefail
+          outputs="${{ steps.materialize-assets.outputs.outputs }}"
+          evidence="$outputs/release/robinhood-chain-4663"
+          mkdir -p "$evidence"
+          cp -- "$BACKEND_DIR/backend-promotion-input.public.json" "$evidence/backend-promotion-input.public.json"
+          cmp --silent -- "$BACKEND_DIR/backend-promotion-input.public.json" "$evidence/backend-promotion-input.public.json"
+          cp -- "$BACKEND_DIR/backend-promotion-input.attestation.json" "$evidence/backend-promotion-input.attestation.json"
+          cmp --silent -- "$BACKEND_DIR/backend-promotion-input.attestation.json" "$evidence/backend-promotion-input.attestation.json"
+          cp -- "${{ steps.authorize-backend.outputs.path }}" "$evidence/programmable-backend-authorization.json"
+          cmp --silent -- "${{ steps.authorize-backend.outputs.path }}" "$evidence/programmable-backend-authorization.json"
+          cp -- "${{ steps.retain-authorization.outputs.bundle }}" "$evidence/programmable-backend-authorization.attestation.json"
+          cmp --silent -- "${{ steps.retain-authorization.outputs.bundle }}" "$evidence/programmable-backend-authorization.attestation.json"
+          cp -- "${{ steps.promote.outputs.path }}" "$evidence/programmable-promotion-bundle.json"
+          cmp --silent -- "${{ steps.promote.outputs.path }}" "$evidence/programmable-promotion-bundle.json"
+          cp -- "$ACTION_BUNDLE_PATH" "$evidence/programmable-promotion-bundle.attestation.json"
+          cmp --silent -- "$ACTION_BUNDLE_PATH" "$evidence/programmable-promotion-bundle.attestation.json"
+          test "$(find "$outputs" -type f | wc -l | tr -d ' ')" = "8"
+          test -z "$(find "$outputs" -type l -print -quit)"
+          find "$outputs" -type f -exec chmod 0644 {} +
+          for output_file in \
+            "$outputs/contracts/deployments/robinhood-custom-launch-v1.json" \
+            "$outputs/docs/operations/releases/custom-launch-v4/cli-release-binding.json" \
+            "$evidence/backend-promotion-input.public.json" \
+            "$evidence/backend-promotion-input.attestation.json" \
+            "$evidence/programmable-backend-authorization.json" \
+            "$evidence/programmable-backend-authorization.attestation.json" \
+            "$evidence/programmable-promotion-bundle.json" \
+            "$evidence/programmable-promotion-bundle.attestation.json"
+          do
+            test -f "$output_file"
+            test ! -L "$output_file"
+            test "$(stat -c '%a' "$output_file")" = "644"
+            output_size="$(stat -c '%s' "$output_file")"
+            test "$output_size" -ge 1
+            test "$output_size" -le 268435456
+          done
+          echo "outputs=$outputs" >> "$GITHUB_OUTPUT"
+
+      - name: Require protected checkout remains unchanged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test "$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')" = "$GITHUB_SHA"
+
+      - name: Upload exact public-safe Phase B evidence
+        id: upload-phase-b
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: robinhood-custom-launch-phase-b-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.retain-outputs.outputs.outputs }}
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      # Evidence #3 is a later protected evidence PR. This producer workflow emits
+      # exact authorization/promotion plus derived live/binding bytes; it does not claim merge.
+      - name: Record exact Phase B producer evidence
+        env:
+          ARTIFACT_DIGEST: ${{ steps.upload-phase-b.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.upload-phase-b.outputs.artifact-id }}
+        run: |
+          {
+            echo "## Robinhood custom-launch Phase B producer"
+            echo
+            echo "- Producer commit: \`$GITHUB_SHA\`"
+            echo "- Artifact ID: \`$ARTIFACT_ID\`"
+            echo "- Artifact digest: \`$ARTIFACT_DIGEST\`"
+            echo "- Evidence PR merged: \`false\` (separate protected gate)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reconfirm finalization producer remains protected production tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"

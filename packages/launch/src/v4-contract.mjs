@@ -102,7 +102,7 @@ const ATOMIC_DEPLOYMENT_CALLDATA_BYTES = 33_412;
 const EMPTY_RUNTIME_CODE_HASH =
   "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
 const EXTERNAL_DEPLOYMENT_PROVIDER_READBACK_SCHEMA =
-  "programmable.custom-launch-deployment-provider-readback.v1";
+  "programmable.custom-launch-deployment-provider-readback.v2";
 const V4_UNISWAP_REGISTRY_SOURCE = Object.freeze({
   repository: "Uniswap/contracts",
   commit: "4cfc406c8e34da3ce04e60657a7825075b64fd22",
@@ -1307,7 +1307,8 @@ function normalizeV4EthereumFinalityEvidence(value, label) {
     "schemaVersion", "profile", "l2Checkpoint", "batchNumber", "l2Providers",
     "ethereumProviders", "rollup", "sequencerInbox", "postingTransactionHash",
     "postingBlockNumber", "postingBlockHash", "postingLogIndex",
-    "ethereumFinalizedCheckpoint", "observedAt", "evidenceDigest",
+    "ethereumFinalizedCheckpoint", "observedAt", "captureClosureDigest",
+    "postingEventDigest", "l1EvidenceDigest", "evidenceDigest",
   ], label);
   assertExactKeys(value.l2Checkpoint, ["blockNumber", "blockHash"], `${label}.l2Checkpoint`);
   assertExactKeys(
@@ -1335,7 +1336,10 @@ function normalizeV4EthereumFinalityEvidence(value, label) {
     || BigInt(value.ethereumFinalizedCheckpoint.blockNumber) < BigInt(value.postingBlockNumber)
     || typeof value.observedAt !== "string"
     || !Number.isFinite(Date.parse(value.observedAt))
-    || new Date(value.observedAt).toISOString() !== value.observedAt) {
+    || new Date(value.observedAt).toISOString() !== value.observedAt
+    || typeof value.captureClosureDigest !== "string" || !SHA256.test(value.captureClosureDigest)
+    || typeof value.postingEventDigest !== "string" || !SHA256.test(value.postingEventDigest)
+    || typeof value.l1EvidenceDigest !== "string" || !SHA256.test(value.l1EvidenceDigest)) {
     throw new TypeError(`${label} is invalid`);
   }
   const profile = normalizeV4ProfileRef(value.profile);
@@ -1379,6 +1383,9 @@ function normalizeV4EthereumFinalityEvidence(value, label) {
       tag: "finalized",
     },
     observedAt: value.observedAt,
+    captureClosureDigest: value.captureClosureDigest,
+    postingEventDigest: value.postingEventDigest,
+    l1EvidenceDigest: value.l1EvidenceDigest,
   };
   if (value.evidenceDigest !== framedSha256Json(
     V4_L2_CHECKPOINT_ETHEREUM_FINALITY_SCHEMA,
@@ -1448,6 +1455,9 @@ function normalizeV4ExternalRootDeploymentEvidence(value) {
       "address",
       "runtimeCodeHash",
       "transactionHash",
+      "previousBlockNumber",
+      "previousBlockHash",
+      "previousBlockRuntimeCodeHash",
       "startBlock",
       "blockHash",
       "registrySource",
@@ -1464,6 +1474,9 @@ function normalizeV4ExternalRootDeploymentEvidence(value) {
       || address !== expected.address
       || entry.runtimeCodeHash !== expected.runtimeCodeHash
       || entry.transactionHash !== expected.transactionHash
+      || entry.previousBlockNumber !== (BigInt(expected.startBlock) - 1n).toString(10)
+      || !NONZERO_HEX32(entry.previousBlockHash)
+      || entry.previousBlockRuntimeCodeHash !== EMPTY_RUNTIME_CODE_HASH
       || entry.startBlock !== expected.startBlock
       || !NONZERO_HEX32(entry.blockHash)
       || canonicalizeJson(entry.registrySource) !== canonicalizeJson(V4_UNISWAP_REGISTRY_SOURCE)
@@ -1480,7 +1493,14 @@ function normalizeV4ExternalRootDeploymentEvidence(value) {
         `${label}.providerReadbacks[1]`,
       ),
     ];
-    if (providerReadbacks[0].blockHash !== providerReadbacks[1].blockHash
+    if (providerReadbacks[0].rawTransactionDigest
+        !== providerReadbacks[1].rawTransactionDigest
+      || providerReadbacks[0].blockHash !== providerReadbacks[1].blockHash
+      || providerReadbacks[0].previousBlockHash !== providerReadbacks[1].previousBlockHash
+      || providerReadbacks[0].transactionDigest !== providerReadbacks[1].transactionDigest
+      || providerReadbacks[0].transactionReceiptDigest
+        !== providerReadbacks[1].transactionReceiptDigest
+      || entry.previousBlockHash !== providerReadbacks[0].previousBlockHash
       || entry.blockHash !== providerReadbacks[0].blockHash) {
       throw new TypeError(`${label} dual providers disagree on the deployment block`);
     }
@@ -1491,6 +1511,9 @@ function normalizeV4ExternalRootDeploymentEvidence(value) {
       address: expected.address,
       runtimeCodeHash: expected.runtimeCodeHash,
       transactionHash: expected.transactionHash,
+      previousBlockNumber: entry.previousBlockNumber,
+      previousBlockHash: entry.previousBlockHash,
+      previousBlockRuntimeCodeHash: EMPTY_RUNTIME_CODE_HASH,
       startBlock: expected.startBlock,
       blockHash: entry.blockHash,
       registrySource: V4_UNISWAP_REGISTRY_SOURCE,
@@ -1512,11 +1535,18 @@ function normalizeV4ExternalRootProviderReadback(
   label,
 ) {
   assertExactKeys(value, [
-    "providerId", "trustDomain", "transactionHash", "blockNumber", "blockHash",
-    "runtimeCodeHash", "transactionReceiptDigest", "evidenceDigest",
+    "providerId", "trustDomain", "transactionHash", "rawTransactionDigest", "transactionDigest",
+    "previousBlockNumber", "previousBlockHash", "previousBlockRuntimeCodeHash",
+    "blockNumber", "blockHash", "runtimeCodeHash", "transactionReceiptDigest",
+    "evidenceDigest",
   ], label);
   if (value.providerId !== providerId || value.trustDomain !== trustDomain
     || value.transactionHash !== expected.transactionHash
+    || typeof value.rawTransactionDigest !== "string" || !SHA256.test(value.rawTransactionDigest)
+    || typeof value.transactionDigest !== "string" || !SHA256.test(value.transactionDigest)
+    || value.previousBlockNumber !== (BigInt(expected.startBlock) - 1n).toString(10)
+    || !NONZERO_HEX32(value.previousBlockHash)
+    || value.previousBlockRuntimeCodeHash !== EMPTY_RUNTIME_CODE_HASH
     || value.blockNumber !== expected.startBlock
     || !NONZERO_HEX32(value.blockHash)
     || value.runtimeCodeHash !== expected.runtimeCodeHash
@@ -1528,6 +1558,11 @@ function normalizeV4ExternalRootProviderReadback(
     providerId,
     trustDomain,
     transactionHash: expected.transactionHash,
+    rawTransactionDigest: value.rawTransactionDigest,
+    transactionDigest: value.transactionDigest,
+    previousBlockNumber: value.previousBlockNumber,
+    previousBlockHash: value.previousBlockHash,
+    previousBlockRuntimeCodeHash: EMPTY_RUNTIME_CODE_HASH,
     blockNumber: expected.startBlock,
     blockHash: value.blockHash,
     runtimeCodeHash: expected.runtimeCodeHash,

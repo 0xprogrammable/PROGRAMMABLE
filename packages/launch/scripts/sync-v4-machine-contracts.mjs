@@ -185,13 +185,22 @@ const externalRootProviderReadback = (
   runtimeCodeHash,
 ) => closed(
   [
-    "providerId", "trustDomain", "transactionHash", "blockNumber", "blockHash",
-    "runtimeCodeHash", "transactionReceiptDigest", "evidenceDigest",
+    "providerId", "trustDomain", "transactionHash", "rawTransactionDigest", "transactionDigest",
+    "previousBlockNumber", "previousBlockHash", "previousBlockRuntimeCodeHash",
+    "blockNumber", "blockHash", "runtimeCodeHash", "transactionReceiptDigest",
+    "evidenceDigest",
   ],
   {
     providerId: { const: providerId },
     trustDomain: { const: trustDomain },
     transactionHash: { const: transactionHash },
+    rawTransactionDigest: sha256,
+    transactionDigest: sha256,
+    previousBlockNumber: { const: (BigInt(startBlock) - 1n).toString(10) },
+    previousBlockHash: nonzeroHex32,
+    previousBlockRuntimeCodeHash: {
+      const: "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    },
     blockNumber: { const: startBlock },
     blockHash: nonzeroHex32,
     runtimeCodeHash: { const: runtimeCodeHash },
@@ -208,8 +217,9 @@ const externalRootDeployment = (
 ) => closed(
   [
     "schemaVersion", "contract", "kind", "address", "runtimeCodeHash",
-    "transactionHash", "startBlock", "blockHash", "registrySource",
-    "providerReadbacks", "evidenceDigest",
+    "transactionHash", "previousBlockNumber", "previousBlockHash",
+    "previousBlockRuntimeCodeHash", "startBlock", "blockHash",
+    "registrySource", "providerReadbacks", "evidenceDigest",
   ],
   {
     schemaVersion: { const: "programmable.custom-launch-deployment-evidence.v1" },
@@ -218,6 +228,11 @@ const externalRootDeployment = (
     address: { const: contractAddress },
     runtimeCodeHash: { const: runtimeCodeHash },
     transactionHash: { const: transactionHash },
+    previousBlockNumber: { const: (BigInt(startBlock) - 1n).toString(10) },
+    previousBlockHash: nonzeroHex32,
+    previousBlockRuntimeCodeHash: {
+      const: "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    },
     startBlock: { const: startBlock },
     blockHash: nonzeroHex32,
     registrySource: clone(robinhoodUniswapRegistrySource),
@@ -232,8 +247,14 @@ const externalRootDeployment = (
     evidenceDigest: sha256,
   },
   {
-    "x-programmable-order":
-      "blockHash == providerReadbacks[0].blockHash == providerReadbacks[1].blockHash",
+    "x-programmable-order": "previousBlockNumber + 1 == startBlock; "
+      + "previousBlockNumber == providerReadbacks[*].previousBlockNumber; "
+      + "previousBlockHash == providerReadbacks[*].previousBlockHash; "
+      + "startBlock == providerReadbacks[*].blockNumber; "
+      + "blockHash == providerReadbacks[*].blockHash; "
+      + "providerReadbacks[0].rawTransactionDigest == providerReadbacks[1].rawTransactionDigest; "
+      + "providerReadbacks[0].transactionDigest == providerReadbacks[1].transactionDigest; "
+      + "providerReadbacks[0].transactionReceiptDigest == providerReadbacks[1].transactionReceiptDigest",
   },
 );
 const chainDeployment = closed(
@@ -562,7 +583,8 @@ function robinhoodEthereumFinalityEvidence() {
       "schemaVersion", "profile", "l2Checkpoint", "batchNumber", "l2Providers",
       "ethereumProviders", "rollup", "sequencerInbox", "postingTransactionHash",
       "postingBlockNumber", "postingBlockHash", "postingLogIndex",
-      "ethereumFinalizedCheckpoint", "observedAt", "evidenceDigest",
+      "ethereumFinalizedCheckpoint", "observedAt", "captureClosureDigest",
+      "postingEventDigest", "l1EvidenceDigest", "evidenceDigest",
     ],
     {
       schemaVersion: {
@@ -594,6 +616,9 @@ function robinhoodEthereumFinalityEvidence() {
         tag: { const: "finalized" },
       }),
       observedAt: dateTime,
+      captureClosureDigest: sha256,
+      postingEventDigest: sha256,
+      l1EvidenceDigest: sha256,
       evidenceDigest: sha256,
     },
     {
