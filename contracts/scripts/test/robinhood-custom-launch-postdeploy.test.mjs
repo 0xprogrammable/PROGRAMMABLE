@@ -55,6 +55,10 @@ import {
 import {
   ROBINHOOD_LIVE_DEPLOYMENT_PATH,
   ROBINHOOD_PREDEPLOYMENT_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH,
   materializeRobinhoodStageBundle,
   materializeRobinhoodPromotionBundle,
   verifyRobinhoodStageBundle,
@@ -66,19 +70,31 @@ import {
   ROBINHOOD_BACKEND_AUTHORIZATION_ATTESTATION_PATH,
   ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW,
   ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+  ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+  ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
+  ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
   ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
   ROBINHOOD_BACKEND_CAPTURE_WORKFLOW,
+  ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+  ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256,
+  ROBINHOOD_BACKEND_COSIGN_VERSION,
   ROBINHOOD_BACKEND_PROMOTION_INPUT_PATH,
   ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH,
   buildRobinhoodBackendAuthorization,
+  buildRobinhoodBackendCosignVerifyBlobArgs,
   buildRobinhoodBackendCaptureAuthorization,
   buildRobinhoodBackendPromotionFixture,
   buildRobinhoodBackendPromotionInput,
   buildRobinhoodBackendPromotionPublicInput,
   buildRobinhoodBackendPromotionPublicInputFromPrivate,
   freshVerifyRobinhoodBackendPromotionInput,
+  validateRobinhoodBackendCaptureAuthorization,
   validateRobinhoodBackendPromotionInput,
   validateRobinhoodBackendPromotionPublicInput,
+  validateSigstoreMessageBundleV03,
+  SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
 } from "../robinhood-backend-promotion-v1.mjs";
 import { runRobinhoodPostdeploymentCli } from "../finalize-robinhood-custom-launch-deployment.mjs";
 import { validateRobinhoodCaptureEndpoint } from
@@ -569,7 +585,6 @@ test("test-only Phase B remains closed and canonical apply rejects it", async ()
       ...cliDependencies(built),
       authorizeBackendCapture: async () => backend.captureAuthorization,
       authorizeBackendPromotion: async () => ({ authorization: backend.authorization }),
-      backendTrustedRootBytes: backend.trustedRootBytes,
       backendDependencies: backend.dependencies,
     };
     const promotion = await runRobinhoodPostdeploymentCli([
@@ -689,7 +704,7 @@ test("apply replays old authenticated backend evidence but still requires fresh 
     const backend = testBackendEvidence(stage);
     const backendCaptureAuthorization = buildRobinhoodBackendCaptureAuthorization({
       ...structuredClone(backend.captureAuthorization),
-      trustClass: "github-artifact-attestation",
+      trustClass: ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
       verificationDigest: null,
     });
     const distinctRevision =
@@ -721,7 +736,6 @@ test("apply replays old authenticated backend evidence but still requires fresh 
       ...captureDependencies,
       authorizeBackendCapture: async () => backendCaptureAuthorization,
       authorizeBackendPromotion: async () => ({ authorization: backendAuthorization }),
-      backendTrustedRootBytes: backend.trustedRootBytes,
       backendDependencies: { now: backend.dependencies.now },
     };
     const evidenceArgs = [
@@ -916,7 +930,6 @@ test("backend raw promotion input rejects fake summaries, ref swaps, and incompl
       backendPromotionInput: baseline.input,
       backendPromotionInputBytes: baseline.inputBytes,
       backendAttestationBundleBytes: baseline.attestationBundleBytes,
-      backendTrustedRootBytes: baseline.trustedRootBytes,
       backendCaptureAuthorization: wrongCaptureRef,
       backendAuthorization: baseline.authorization,
       backendDependencies: baseline.dependencies,
@@ -938,7 +951,6 @@ test("backend raw promotion input rejects fake summaries, ref swaps, and incompl
         backendPromotionInput: baseline.input,
         backendPromotionInputBytes: baseline.inputBytes,
         backendAttestationBundleBytes: baseline.attestationBundleBytes,
-        backendTrustedRootBytes: baseline.trustedRootBytes,
         backendCaptureAuthorization: invalidClock,
         backendAuthorization: baseline.authorization,
         backendDependencies: baseline.dependencies,
@@ -970,7 +982,6 @@ test("backend raw promotion input rejects fake summaries, ref swaps, and incompl
       backendPromotionInput: baseline.input,
       backendPromotionInputBytes: baseline.inputBytes,
       backendAttestationBundleBytes: baseline.attestationBundleBytes,
-      backendTrustedRootBytes: baseline.trustedRootBytes,
       backendCaptureAuthorization: baseline.captureAuthorization,
       backendAuthorization: wrongFinalRef,
       backendDependencies: baseline.dependencies,
@@ -1202,26 +1213,150 @@ test("phase-A staging copies exact backend assets and rejects missing, tampered,
   try {
     const built = await buildInput(fixture);
     const dependencies = cliDependencies(built);
+    const captureAttestationPath = path.join(
+      fixture.root,
+      "programmable-postdeployment-capture.attestation.json",
+    );
+    const stageAttestationPath = path.join(
+      fixture.root,
+      "programmable-stage-bundle.attestation.json",
+    );
+    await writeFile(captureAttestationPath, built.attestationBundleBytes);
+    await writeFile(stageAttestationPath, dependencies.stageAttestationBundleBytes);
+    const portableStageArguments = [
+      "--capture-attestation-bundle", captureAttestationPath,
+      "--stage-attestation-bundle", stageAttestationPath,
+    ];
     const assembled = await runRobinhoodPostdeploymentCli([
       "assemble-stage", "--input", built.path, "--repository-root", fixture.root,
     ], dependencies);
-    const staged = await runRobinhoodPostdeploymentCli([
-      "stage-backend-assets",
-      "--stage", assembled.outputPath,
-      "--capture", built.path,
-      "--backend-service-root", backendRoot,
-      "--repository-root", fixture.root,
-    ], dependencies);
-    assert.equal(staged.releaseReady, false);
-    assert.equal(staged.assets.length, 4);
-    for (const asset of staged.assets) {
-      assert.equal(sha256Digest(await readFile(asset.output)), asset.sha256);
-    }
     await assert.rejects(
       runRobinhoodPostdeploymentCli([
         "stage-backend-assets",
         "--stage", assembled.outputPath,
         "--capture", built.path,
+        "--stage-attestation-bundle", stageAttestationPath,
+        "--backend-service-root", backendRoot,
+        "--repository-root", fixture.root,
+      ], dependencies),
+      /Usage:/u,
+    );
+    const staged = await runRobinhoodPostdeploymentCli([
+      "stage-backend-assets",
+      "--stage", assembled.outputPath,
+      "--capture", built.path,
+      ...portableStageArguments,
+      "--backend-service-root", backendRoot,
+      "--repository-root", fixture.root,
+    ], dependencies);
+    assert.equal(staged.releaseReady, false);
+    assert.deepEqual(staged.assets.map((asset) => asset.path), [
+      "release/robinhood-v4-chain-deployment.v1.json",
+      "release/robinhood-v4-prepared-root-source-manifest.v1.json",
+      "release/assets/robinhood-v4/ProgrammableLaunchStampRouterV1.standard-input.json",
+      "release/assets/robinhood-v4/ProgrammableCreate2GraphDeployerV1.standard-input.json",
+      ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH,
+      ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH,
+      ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH,
+      ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH,
+    ]);
+    for (const asset of staged.assets) {
+      assert.equal(sha256Digest(await readFile(asset.output)), asset.sha256);
+    }
+    const stagedPhaseA = staged.assets.find(
+      (asset) => asset.path === ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH,
+    );
+    const stagedPhaseAAttestation = staged.assets.find(
+      (asset) => asset.path === ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH,
+    );
+    assert.ok(stagedPhaseA);
+    assert.ok(stagedPhaseAAttestation);
+    const stagedCapture = staged.assets.find(
+      (asset) => asset.path === ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH,
+    );
+    const stagedCaptureAttestation = staged.assets.find(
+      (asset) => asset.path
+        === ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH,
+    );
+    assert.ok(stagedCapture);
+    assert.ok(stagedCaptureAttestation);
+    assert.deepEqual(await readFile(stagedCapture.output), built.bytes);
+    assert.deepEqual(
+      await readFile(stagedCaptureAttestation.output),
+      built.attestationBundleBytes,
+    );
+    assert.deepEqual(await readFile(stagedPhaseA.output), await readFile(assembled.outputPath));
+    assert.deepEqual(
+      await readFile(stagedPhaseAAttestation.output),
+      dependencies.stageAttestationBundleBytes,
+    );
+    const signedStage = JSON.parse(await readFile(assembled.outputPath, "utf8"));
+    const bridgedCapture = JSON.parse(await readFile(stagedCapture.output, "utf8"));
+    assert.equal(
+      bridgedCapture.schemaVersion,
+      "programmable.robinhood-custom-launch.postdeployment-input.v3",
+    );
+    assert.equal(
+      bridgedCapture.capture.schemaVersion,
+      "programmable.robinhood-custom-launch.production-capture.v3",
+    );
+    assert.equal(
+      sha256CaptureBytes(await readFile(stagedCapture.output)),
+      signedStage.captureAuthorization.subjectSha256,
+    );
+    assert.equal(
+      sha256Digest(await readFile(stagedCaptureAttestation.output)),
+      signedStage.captureAuthorization.attestationBundleSha256,
+    );
+    assert.equal(
+      computeRobinhoodCaptureClosureDigest(bridgedCapture.capture),
+      bridgedCapture.capture.captureClosureDigest,
+    );
+    const stagedDescriptor = staged.assets.find(
+      (asset) => asset.path === "release/robinhood-v4-chain-deployment.v1.json",
+    );
+    assert.ok(stagedDescriptor);
+    assert.deepEqual(
+      await readFile(stagedDescriptor.output),
+      Buffer.from(`${JSON.stringify(
+        signedStage.artifacts.backendRelease.chainDeployment.value,
+        null,
+        2,
+      )}\n`, "utf8"),
+    );
+    const descriptor = JSON.parse(await readFile(stagedDescriptor.output, "utf8"));
+    const ethereumFinality = descriptor.deploymentEvidence.ethereumFinalityEvidence;
+    for (const field of [
+      "captureClosureDigest", "postingEventDigest", "l1EvidenceDigest",
+    ]) {
+      assert.match(ethereumFinality[field], /^sha256:[0-9a-f]{64}$/u, field);
+    }
+    const substitutedCaptureAttestationPath = path.join(
+      fixture.root,
+      "substituted-capture.attestation.json",
+    );
+    await writeFile(
+      substitutedCaptureAttestationPath,
+      Buffer.from("substituted-capture-attestation\n", "utf8"),
+    );
+    await assert.rejects(
+      runRobinhoodPostdeploymentCli([
+        "stage-backend-assets",
+        "--stage", assembled.outputPath,
+        "--capture", built.path,
+        "--capture-attestation-bundle", substitutedCaptureAttestationPath,
+        "--stage-attestation-bundle", stageAttestationPath,
+        "--backend-service-root", backendRoot,
+        "--repository-root", fixture.root,
+      ], dependencies),
+      /capture attestation differs from the authenticated closure/u,
+    );
+    await assert.rejects(
+      runRobinhoodPostdeploymentCli([
+        "stage-backend-assets",
+        "--stage", assembled.outputPath,
+        "--capture", built.path,
+        ...portableStageArguments,
         "--backend-service-root", fixture.root,
         "--repository-root", fixture.root,
       ], dependencies),
@@ -1234,6 +1369,7 @@ test("phase-A staging copies exact backend assets and rejects missing, tampered,
         "stage-backend-assets",
         "--stage", assembled.outputPath,
         "--capture", built.path,
+        ...portableStageArguments,
         "--backend-service-root", rootAlias,
         "--repository-root", fixture.root,
       ], dependencies),
@@ -1245,6 +1381,7 @@ test("phase-A staging copies exact backend assets and rejects missing, tampered,
         "stage-backend-assets",
         "--stage", assembled.outputPath,
         "--capture", built.path,
+        ...portableStageArguments,
         "--backend-service-root", backendRoot,
         "--repository-root", fixture.root,
       ], dependencies),
@@ -1259,6 +1396,7 @@ test("phase-A staging copies exact backend assets and rejects missing, tampered,
         "stage-backend-assets",
         "--stage", missingPath,
         "--capture", built.path,
+        ...portableStageArguments,
         "--backend-service-root", escapedRoot,
         "--repository-root", fixture.root,
       ], dependencies),
@@ -1270,6 +1408,7 @@ test("phase-A staging copies exact backend assets and rejects missing, tampered,
         "stage-backend-assets",
         "--stage", assembled.outputPath,
         "--capture", built.path,
+        ...portableStageArguments,
         "--backend-service-root", escapedRoot,
         "--repository-root", fixture.root,
       ], dependencies),
@@ -1280,6 +1419,116 @@ test("phase-A staging copies exact backend assets and rejects missing, tampered,
     await rm(backendRoot, { recursive: true, force: true });
     await rm(escapedRoot, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("backend capture authorization requires exact standardized keyless Sigstore bytes", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const built = await buildInput(fixture);
+    const stage = await materialize(fixture, built);
+    const backend = testBackendEvidence(stage);
+    const productionAuthorization = buildRobinhoodBackendCaptureAuthorization({
+      ...structuredClone(backend.captureAuthorization),
+      trustClass: ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
+      verificationDigest: null,
+    });
+    assert.doesNotThrow(() => validateRobinhoodBackendCaptureAuthorization({
+      authorization: productionAuthorization,
+      inputBytes: backend.inputBytes,
+      attestationBundleBytes: backend.attestationBundleBytes,
+      input: backend.input,
+    }));
+    assert.deepEqual(buildRobinhoodBackendCosignVerifyBlobArgs({
+      subjectPath: "/tmp/backend-promotion-input.public.json",
+      bundlePath: "/tmp/backend-promotion-input.attestation.json",
+      sourceCommit: backend.input.backendSource.sourceCommit,
+    }), [
+      "verify-blob",
+      "--bundle", "/tmp/backend-promotion-input.attestation.json",
+      "--certificate-identity", ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+      "--certificate-oidc-issuer", ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+      "--certificate-github-workflow-name", ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+      "--certificate-github-workflow-repository", backend.input.backendSource.repository,
+      "--certificate-github-workflow-ref", ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+      "--certificate-github-workflow-sha", backend.input.backendSource.sourceCommit,
+      "--certificate-github-workflow-trigger", ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
+      "/tmp/backend-promotion-input.public.json",
+    ]);
+    assert.equal(buildRobinhoodBackendCosignVerifyBlobArgs({
+      subjectPath: "/tmp/backend-promotion-input.public.json",
+      bundlePath: "/tmp/backend-promotion-input.attestation.json",
+      sourceCommit: backend.input.backendSource.sourceCommit,
+    }).some((argument) => argument.startsWith("--insecure")), false);
+
+    const authorizationMutations = [
+      ["legacy trust", { trustClass: "github-artifact-attestation" }],
+      ["legacy schema", {
+        schemaVersion: "programmable.robinhood-custom-launch.backend-capture-authorization.v2",
+      }],
+      ["legacy bundle", {
+        bundleMediaType: "application/vnd.dev.sigstore.bundle+json;version=0.2",
+      }],
+      ["old verifier", {
+        verifier: { ...productionAuthorization.verifier, version: "v3.1.2" },
+      }],
+      ["verifier digest", {
+        verifier: { ...productionAuthorization.verifier, sha256: digest("wrong-cosign") },
+      }],
+      ["certificate identity", { certificateIdentity: "https://github.com/attacker" }],
+      ["certificate issuer", { certificateOidcIssuer: "https://issuer.invalid" }],
+      ["workflow name", { certificateGithubWorkflowName: "Attacker workflow" }],
+      ["workflow repository", { certificateGithubWorkflowRepository: "attacker/repo" }],
+      ["workflow ref", { certificateGithubWorkflowRef: "refs/heads/unprotected" }],
+      ["workflow SHA", { certificateGithubWorkflowSha: "1".repeat(40) }],
+      ["workflow trigger", { certificateGithubWorkflowTrigger: "push" }],
+    ];
+    for (const [label, override] of authorizationMutations) {
+      assert.throws(() => {
+        const candidate = buildRobinhoodBackendCaptureAuthorization({
+          ...structuredClone(productionAuthorization),
+          ...override,
+          verificationDigest: null,
+        });
+        validateRobinhoodBackendCaptureAuthorization({
+          authorization: candidate,
+          inputBytes: backend.inputBytes,
+          attestationBundleBytes: backend.attestationBundleBytes,
+          input: backend.input,
+        });
+      }, /protected backend source|authorization/u, label);
+    }
+
+    const legacyBundle = Buffer.from(JSON.stringify({
+      mediaType: "application/vnd.dev.sigstore.bundle+json;version=0.2",
+      verificationMaterial: { certificate: { rawBytes: "dGVzdA==" }, tlogEntries: [{}] },
+      messageSignature: {
+        messageDigest: {
+          algorithm: "SHA2_256",
+          digest: createHash("sha256").update(backend.inputBytes).digest("base64"),
+        },
+        signature: "dGVzdA==",
+      },
+    }), "utf8");
+    assert.throws(() => validateSigstoreMessageBundleV03({
+      bundleBytes: legacyBundle,
+      subjectBytes: backend.inputBytes,
+    }), /standardized v0\.3/u);
+
+    const publicKeyBundle = JSON.parse(backend.attestationBundleBytes.toString("utf8"));
+    delete publicKeyBundle.verificationMaterial.certificate;
+    publicKeyBundle.verificationMaterial.publicKey = { hint: "dGVzdA==" };
+    assert.throws(() => validateSigstoreMessageBundleV03({
+      bundleBytes: Buffer.from(JSON.stringify(publicKeyBundle), "utf8"),
+      subjectBytes: backend.inputBytes,
+    }), /keyless certificate/u);
+
+    assert.throws(() => validateSigstoreMessageBundleV03({
+      bundleBytes: backend.attestationBundleBytes,
+      subjectBytes: Buffer.from("substituted backend public input\n", "utf8"),
+    }), /exact subject bytes/u);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
   }
 });
 
@@ -2326,6 +2575,10 @@ function cliDependencies(built) {
     allowTestOnly: true,
     authorizeCapture: async () => built.authorization,
     captureDependencies: testCaptureDependencies,
+    stageAttestationBundleBytes: Buffer.from(
+      "test-only-portable-phase-a-stage-attestation\n",
+      "utf8",
+    ),
   };
 }
 
@@ -2349,8 +2602,7 @@ function testBackendEvidence(stageBundle, { privateCanaries = false } = {}) {
     now: () => new Date("2026-08-29T12:01:00Z"),
   });
   const inputBytes = Buffer.from(`${JSON.stringify(input, null, 2)}\n`, "utf8");
-  const attestationBundleBytes = Buffer.from("test-only-attestation-bundle\n", "utf8");
-  const trustedRootBytes = Buffer.from("test-only-trusted-root\n", "utf8");
+  const attestationBundleBytes = fakeSigstoreMessageBundle(inputBytes);
   const dependencies = {
     allowTestOnly: true,
     allowTestOnlyPromotion: true,
@@ -2368,12 +2620,23 @@ function testBackendEvidence(stageBundle, { privateCanaries = false } = {}) {
     subjectSha256: sha256Digest(inputBytes),
     attestationBundlePath: ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH,
     attestationBundleSha256: sha256Digest(attestationBundleBytes),
-    trustedRootSource: "github-cli-embedded-tuf",
-    trustedRootSha256: sha256Digest(trustedRootBytes),
+    bundleMediaType: SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
+    verifier: {
+      name: "cosign",
+      version: ROBINHOOD_BACKEND_COSIGN_VERSION,
+      sha256: ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256,
+    },
+    certificateIdentity: ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+    certificateOidcIssuer: ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+    certificateGithubWorkflowName: ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+    certificateGithubWorkflowRepository: input.backendSource.repository,
+    certificateGithubWorkflowRef: ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+    certificateGithubWorkflowSha: input.backendSource.sourceCommit,
+    certificateGithubWorkflowTrigger: ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
     repository: input.backendSource.repository,
     repositoryId: "1318883798",
     workflow: ROBINHOOD_BACKEND_CAPTURE_WORKFLOW,
-    sourceRef: "refs/heads/main",
+    sourceRef: ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
     sourceRevision: input.backendSource.sourceCommit,
     sourceTree: input.backendSource.sourceTree,
     verifiedAt: input.observedAt,
@@ -2415,7 +2678,6 @@ function testBackendEvidence(stageBundle, { privateCanaries = false } = {}) {
     privateInput,
     privateInputBytes,
     attestationBundleBytes,
-    trustedRootBytes,
     stageBundleBytes,
     evidence: validated.backendReleaseEvidence,
     captureAuthorization,
@@ -2538,6 +2800,25 @@ function externalBlockHash(blockNumber) {
 
 function digest(label) {
   return `sha256:${createHash("sha256").update(label).digest("hex")}`;
+}
+
+function fakeSigstoreMessageBundle(subjectBytes) {
+  return Buffer.from(`${JSON.stringify({
+    mediaType: SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
+    verificationMaterial: {
+      certificate: {
+        rawBytes: Buffer.from("test-only-certificate", "utf8").toString("base64"),
+      },
+      tlogEntries: [{}],
+    },
+    messageSignature: {
+      messageDigest: {
+        algorithm: "SHA2_256",
+        digest: createHash("sha256").update(subjectBytes).digest("base64"),
+      },
+      signature: Buffer.from("test-only-signature", "utf8").toString("base64"),
+    },
+  }, null, 2)}\n`, "utf8");
 }
 
 function abiWord(value) {

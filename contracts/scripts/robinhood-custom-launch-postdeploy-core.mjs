@@ -39,6 +39,7 @@ import {
   validateRobinhoodBackendAuthorization,
   validateRobinhoodBackendCaptureAuthorization,
   validateRobinhoodBackendPromotionPublicInput,
+  ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
 } from "./robinhood-backend-promotion-v1.mjs";
 
 export const ROBINHOOD_POSTDEPLOYMENT_INPUT_SCHEMA =
@@ -65,6 +66,14 @@ export const ROBINHOOD_BACKEND_STANDARD_JSON_PATHS = Object.freeze({
   graphFactory:
     "release/assets/robinhood-v4/ProgrammableCreate2GraphDeployerV1.standard-input.json",
 });
+export const ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH =
+  "release/robinhood-v4-phase-a-stage-bundle.v1.json";
+export const ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH =
+  "release/robinhood-v4-phase-a-stage-bundle.v1.attestation.json";
+export const ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH =
+  "release/robinhood-v4-phase-a-production-capture.v3.json";
+export const ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH =
+  "release/robinhood-v4-phase-a-production-capture.v3.attestation.json";
 
 const PREDEPLOYMENT_SHA256 =
   "sha256:2d58b964232d345f82aa7c7d58e678df03bf83828b9d95da42f3cd54ab03319e";
@@ -2042,8 +2051,20 @@ function buildPublicBackendPromotionBinding({
       subjectSha256: backendCaptureAuthorization.subjectSha256,
       attestationBundlePath: backendCaptureAuthorization.attestationBundlePath,
       attestationBundleSha256: backendCaptureAuthorization.attestationBundleSha256,
-      trustedRootSource: backendCaptureAuthorization.trustedRootSource,
-      trustedRootSha256: backendCaptureAuthorization.trustedRootSha256,
+      bundleMediaType: backendCaptureAuthorization.bundleMediaType,
+      verifier: structuredClone(backendCaptureAuthorization.verifier),
+      certificateIdentity: backendCaptureAuthorization.certificateIdentity,
+      certificateOidcIssuer: backendCaptureAuthorization.certificateOidcIssuer,
+      certificateGithubWorkflowName:
+        backendCaptureAuthorization.certificateGithubWorkflowName,
+      certificateGithubWorkflowRepository:
+        backendCaptureAuthorization.certificateGithubWorkflowRepository,
+      certificateGithubWorkflowRef:
+        backendCaptureAuthorization.certificateGithubWorkflowRef,
+      certificateGithubWorkflowSha:
+        backendCaptureAuthorization.certificateGithubWorkflowSha,
+      certificateGithubWorkflowTrigger:
+        backendCaptureAuthorization.certificateGithubWorkflowTrigger,
       repository: backendCaptureAuthorization.repository,
       repositoryId: backendCaptureAuthorization.repositoryId,
       workflow: backendCaptureAuthorization.workflow,
@@ -2096,7 +2117,6 @@ async function buildRobinhoodPromotionBundle({
   backendPromotionInput,
   backendPromotionInputBytes = canonicalJsonBytes(backendPromotionInput),
   backendAttestationBundleBytes,
-  backendTrustedRootBytes,
   backendCaptureAuthorization,
   backendAuthorization,
   backendDependencies = {},
@@ -2120,7 +2140,6 @@ async function buildRobinhoodPromotionBundle({
     authorization: backendCaptureAuthorization,
     inputBytes: backendPromotionInputBytes,
     attestationBundleBytes: backendAttestationBundleBytes,
-    trustedRootBytes: backendTrustedRootBytes,
     input: backendPromotionInput,
     allowTestOnly: backendDependencies.allowTestOnly === true,
   });
@@ -2146,7 +2165,7 @@ async function buildRobinhoodPromotionBundle({
   });
   const productionAuthorized = stageBundle.captureAuthorization.trustClass
       === "github-artifact-attestation"
-    && backendCapture.trustClass === "github-artifact-attestation"
+    && backendCapture.trustClass === ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS
     && authorization.trustClass === "github-artifact-attestation";
   const explicitlyTestOnly = backendDependencies.allowTestOnlyPromotion === true
     && stageBundle.captureAuthorization.trustClass === "test-only"

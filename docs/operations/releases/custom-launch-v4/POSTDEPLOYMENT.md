@@ -39,11 +39,15 @@ Phase B runs in
 `.github/workflows/finalize-robinhood-custom-launch-promotion.yml`. It consumes only the nine
 tracked portable Phase A/public-safe backend files at the protected producer commit. It rejects the
 private raw backend capture, creates the GitHub CLI embedded-TUF trusted root itself in
-`RUNNER_TEMP`, and verifies all portable attestations offline. It then emits and attests the
-canonical backend authorization and promotion bundle, materializes the exact live descriptor and
-CLI binding into an outside-repository artifact tree, preserves attestation bytes, and uploads the
-eight exact public-safe handoff files. It accepts no operator-supplied trusted root and serializes
-no credentials.
+`RUNNER_TEMP`, and verifies the three public PROGRAMMABLE attestations offline. The private
+backend's public-safe input is instead verified with the SHA-256-pinned Cosign v3.1.3 binary, a
+standardized Sigstore v0.3 bundle, exact GitHub Actions certificate identity, repository, protected
+`main` ref, source SHA, workflow name and `workflow_dispatch` trigger. Transparency-log and SCT
+verification remain enabled. Phase B then emits and attests the canonical backend authorization and
+promotion bundle, materializes the exact live descriptor and CLI binding into an
+outside-repository artifact tree, preserves attestation bytes, and uploads the eight exact
+public-safe handoff files. It accepts no operator-supplied trusted root and serializes no
+credentials.
 
 An authenticated Phase A bundle is always non-public:
 
@@ -72,9 +76,10 @@ The backend producer owns two different artifacts. They are intentionally not in
   bindings, and a semantic capture ID/digest derived only from those public facts. It contains no
   private raw artifact path or digest, raw request or response bytes, raw request ID, machine
   configuration, environment or private address.
-- `release/robinhood-chain-4663/backend-promotion-input.attestation.json` is the portable GitHub
-  attestation bundle for the public-safe input. It does not authorize or disclose the private raw
-  file.
+- `release/robinhood-chain-4663/backend-promotion-input.attestation.json` is the standardized
+  Sigstore v0.3 Cosign bundle for the public-safe input. Keyless signing publishes the subject
+  digest and GitHub Actions identity metadata to the public transparency service; it does not
+  publish, authorize or disclose the private raw file.
 
 The public-safe input is validated against the exact staged deployment, active OpenAPI digest,
 policy/profile/finality identity, backend source commit/tree, readiness response and Fly release.
@@ -86,7 +91,7 @@ private fields cannot alter either digest or any other public byte.
 
 | Artifact | Canonical path | Schema or role |
 | --- | --- | --- |
-| Raw Phase A capture | `release/robinhood-chain-4663/programmable-postdeployment-capture.json` | Top-level `programmable.robinhood-custom-launch.postdeployment-input.v2`; nested `capture` is `programmable.robinhood-custom-launch.production-capture.v2` |
+| Raw Phase A capture | `release/robinhood-chain-4663/programmable-postdeployment-capture.json` | Top-level `programmable.robinhood-custom-launch.postdeployment-input.v3`; nested `capture` is `programmable.robinhood-custom-launch.production-capture.v3` |
 | Capture attestation | `release/robinhood-chain-4663/programmable-postdeployment-capture.attestation.json` | Portable GitHub bundle |
 | Historical Verify proof | `release/robinhood-chain-4663/production-verify-proof.json` | Protected `verify.yml` artifact |
 | Verify proof attestation | `release/robinhood-chain-4663/production-verify-proof.attestation.json` | Portable GitHub bundle |
@@ -94,7 +99,11 @@ private fields cannot alter either digest or any other public byte.
 | Stage attestation | `release/robinhood-chain-4663/programmable-stage-bundle.attestation.json` | Portable GitHub bundle |
 | Private backend raw input | `release/robinhood-chain-4663/backend-promotion-input.json` | `programmable.robinhood-custom-launch.backend-promotion-input.v1`; restricted |
 | Public backend input | `release/robinhood-chain-4663/backend-promotion-input.public.json` | `programmable.robinhood-custom-launch.backend-promotion-public-input.v2` |
-| Public backend attestation | `release/robinhood-chain-4663/backend-promotion-input.attestation.json` | Portable GitHub bundle |
+| Public backend attestation | `release/robinhood-chain-4663/backend-promotion-input.attestation.json` | Standardized Sigstore v0.3 Cosign bundle |
+| Backend Phase A capture bridge | `release/robinhood-v4-phase-a-production-capture.v3.json` | Exact authenticated Phase A production-capture subject bytes copied into the backend repository |
+| Backend Phase A capture attestation bridge | `release/robinhood-v4-phase-a-production-capture.v3.attestation.json` | Exact existing portable PROGRAMMABLE capture-attestation bytes copied into the backend repository |
+| Backend Phase A stage bridge | `release/robinhood-v4-phase-a-stage-bundle.v1.json` | Exact authenticated Phase A stage bytes copied into the backend repository |
+| Backend Phase A stage attestation bridge | `release/robinhood-v4-phase-a-stage-bundle.v1.attestation.json` | Exact existing portable PROGRAMMABLE stage-attestation bytes copied into the backend repository |
 | Backend authorization | `release/robinhood-chain-4663/programmable-backend-authorization.json` | `programmable.launch-cli-v4-backend-release-authorization.v1` |
 | Backend authorization attestation | `release/robinhood-chain-4663/programmable-backend-authorization.attestation.json` | Portable GitHub bundle |
 | Phase B promotion | `release/robinhood-chain-4663/programmable-promotion-bundle.json` | `programmable.robinhood-custom-launch.promotion-bundle.v2` |
@@ -185,9 +194,40 @@ npm run contracts:robinhood:postdeploy:verify-stage -- \
 ```
 
 `stage-backend-assets` accepts the same stage/capture portable evidence and adds
-`--backend-service-root`. It writes only the four fixed Phase A backend-image assets, verifies all
-bytes before creation, rejects symbolic-link parents and replays only when every existing byte is
-identical.
+`--backend-service-root`. Both `--capture-attestation-bundle` and
+`--stage-attestation-bundle` are mandatory CLI inputs. It writes exactly eight fixed files: the
+four Phase A backend-image assets, the byte-exact credential-free production capture at
+`release/robinhood-v4-phase-a-production-capture.v3.json`, its already verified portable
+attestation bytes at
+`release/robinhood-v4-phase-a-production-capture.v3.attestation.json`, the exact authenticated
+Stage A subject bytes at
+`release/robinhood-v4-phase-a-stage-bundle.v1.json`, and its existing portable attestation bytes
+at `release/robinhood-v4-phase-a-stage-bundle.v1.attestation.json`. It verifies all bytes before
+creation, rejects symbolic-link parents and replays only when every existing byte is identical.
+The raw capture is never normalized: its digest is the subject digest in the embedded capture
+authorization and its own `captureClosureDigest` is computed with that field set to `null`. The
+signed stage, not a reconstructed manifest, binds the complete deployment descriptor, including
+`captureClosureDigest`, `postingEventDigest` and `l1EvidenceDigest`, to the four raw backend assets.
+A renderer must separately verify the capture and stage subjects before trusting that inventory.
+
+```sh
+npm run contracts:robinhood:postdeploy:stage-backend-assets -- \
+  --stage /absolute/path/programmable-stage-bundle.json \
+  --capture /absolute/path/programmable-postdeployment-capture.json \
+  --capture-attestation-bundle /absolute/path/programmable-postdeployment-capture.attestation.json \
+  --stage-attestation-bundle /absolute/path/programmable-stage-bundle.attestation.json \
+  --source-verify-proof /absolute/path/production-verify-proof.json \
+  --source-verify-attestation-bundle /absolute/path/production-verify-proof.attestation.json \
+  --source-verify-run-id "$VERIFY_RUN_ID" \
+  --source-verify-run-attempt "$VERIFY_RUN_ATTEMPT" \
+  --source-verify-artifact-id "$VERIFY_ARTIFACT_ID" \
+  --source-verify-artifact-digest "$VERIFY_ARTIFACT_DIGEST" \
+  --backend-service-root \
+    /absolute/path/to/programmable-open-hook-v2-internal/services/custom-launch-api-v1
+```
+
+The backend service root is the private repository's `services/custom-launch-api-v1` directory,
+not the private repository root; all eight paths above are relative to that service root.
 
 The backend fixture command exists for deterministic tests only:
 
@@ -289,7 +329,7 @@ and exclusive file creation.
 ## Exact Phase A capture
 
 The top-level capture input has exactly these keys in schema
-`programmable.robinhood-custom-launch.postdeployment-input.v2`:
+`programmable.robinhood-custom-launch.postdeployment-input.v3`:
 
 ```text
 schemaVersion
@@ -383,14 +423,18 @@ Its protected backend capture authorization has exactly:
 schemaVersion
 trustClass
 subjectPath
-subjectByteLength
 subjectSha256
 attestationBundlePath
-attestationBundleByteLength
 attestationBundleSha256
-trustedRootSource
-trustedRootByteLength
-trustedRootSha256
+bundleMediaType
+verifier
+certificateIdentity
+certificateOidcIssuer
+certificateGithubWorkflowName
+certificateGithubWorkflowRepository
+certificateGithubWorkflowRef
+certificateGithubWorkflowSha
+certificateGithubWorkflowTrigger
 repository
 repositoryId
 workflow
@@ -400,6 +444,12 @@ sourceTree
 verifiedAt
 verificationDigest
 ```
+
+The authorization schema is
+`programmable.robinhood-custom-launch.backend-capture-authorization.v3`; its production
+`trustClass` is `sigstore-keyless-github-actions-protected-main-v1`. `verifier` fixes `cosign`,
+version `v3.1.3`, and the exact Linux amd64 binary digest. Legacy bundles, public-key fallback,
+wrong subject bytes, certificate-claim drift and insecure transparency/SCT bypasses fail closed.
 
 The canonical PROGRAMMABLE backend authorization has exactly:
 
@@ -483,12 +533,12 @@ sha256(UTF8(domain) || 0x00 || UTF8(canonicalJson(value)))
 The relevant domains are:
 
 ```text
-programmable.robinhood-custom-launch.capture-authorization.v1
-programmable.robinhood-custom-launch.capture-closure.v2
+programmable.robinhood-custom-launch.capture-authorization.v2
+programmable.robinhood-custom-launch.capture-closure.v3
 programmable.robinhood-custom-launch.backend-promotion-input.v1
 programmable.robinhood-custom-launch.backend-promotion-public-input.v2
 programmable.robinhood-custom-launch.backend-promotion-semantic-input.v1
-programmable.robinhood-custom-launch.backend-capture-authorization.v2
+programmable.robinhood-custom-launch.backend-capture-authorization.v3
 programmable.launch-cli-v4-backend-release-authorization.v1
 programmable.launch-cli-v4-backend-release-evidence.v1
 programmable.robinhood-custom-launch.stage-bundle.v1

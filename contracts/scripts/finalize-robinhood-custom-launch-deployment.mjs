@@ -35,6 +35,10 @@ import {
   ROBINHOOD_BACKEND_CHAIN_DEPLOYMENT_PATH,
   ROBINHOOD_BACKEND_SOURCE_MANIFEST_PATH,
   ROBINHOOD_BACKEND_STANDARD_JSON_PATHS,
+  ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH,
   ROBINHOOD_STAGE_BUNDLE_PATH,
   ROBINHOOD_PROMOTION_BUNDLE_PATH,
   materializeRobinhoodStageBundle,
@@ -62,16 +66,27 @@ import {
 import {
   ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
   ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+  ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+  ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
+  ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
   ROBINHOOD_BACKEND_CAPTURE_WORKFLOW,
+  ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+  ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256,
+  ROBINHOOD_BACKEND_COSIGN_VERSION,
   ROBINHOOD_BACKEND_AUTHORIZATION_PATH,
   ROBINHOOD_BACKEND_AUTHORIZATION_ATTESTATION_PATH,
   ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH,
   buildRobinhoodBackendAuthorization,
+  buildRobinhoodBackendCosignVerifyBlobArgs,
   buildRobinhoodBackendCaptureAuthorization,
   freshVerifyRobinhoodBackendPromotionInput,
   validateRobinhoodBackendAuthorization,
   validateRobinhoodBackendCaptureAuthorization,
   validateRobinhoodBackendPromotionPublicInput,
+  validateSigstoreMessageBundleV03,
+  SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
 } from "./robinhood-backend-promotion-v1.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -83,7 +98,7 @@ function usage() {
     "Usage:",
     "  finalize-robinhood-custom-launch-deployment.mjs assemble-stage --input <path> [--output <path>] [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs verify-stage --stage <path> --capture <path> [--repository-root <path>]",
-    "  finalize-robinhood-custom-launch-deployment.mjs stage-backend-assets --stage <path> --capture <path> --backend-service-root <path> [--repository-root <path>]",
+    "  finalize-robinhood-custom-launch-deployment.mjs stage-backend-assets --stage <path> --capture <path> --capture-attestation-bundle <path> --stage-attestation-bundle <path> --backend-service-root <path> [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs authorize-backend --stage <path> --capture <path> --backend-input <path> --backend-attestation-bundle <path> [--output <path>] [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs promote --stage <path> --capture <path> --backend-input <path> --backend-attestation-bundle <path> --backend-authorization <path> --backend-authorization-attestation-bundle <path> [--output <path>] [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs verify-promotion --bundle <path> --stage <path> --capture <path> --backend-input <path> --backend-attestation-bundle <path> --backend-authorization <path> --backend-authorization-attestation-bundle <path> [--repository-root <path>]",
@@ -130,7 +145,10 @@ function parseCli(argv) {
   const expected = {
     "assemble-stage": ["--input"],
     "verify-stage": ["--stage", "--capture"],
-    "stage-backend-assets": ["--stage", "--capture", "--backend-service-root"],
+    "stage-backend-assets": [
+      "--stage", "--capture", "--capture-attestation-bundle",
+      "--stage-attestation-bundle", "--backend-service-root",
+    ],
     "authorize-backend": ["--stage", "--capture", "--backend-input",
       "--backend-attestation-bundle"],
     promote: ["--stage", "--capture", "--backend-input", "--backend-attestation-bundle",
@@ -287,30 +305,47 @@ async function freshGithubTrustedRoot() {
 }
 
 async function verifyPortableGithubAttestation({
-  subjectPath,
-  bundlePath,
+  subjectBytes,
+  bundleBytes,
   trustedRootPath,
   repository,
   workflow,
   sourceRef,
   sourceRevision,
 }) {
-  const result = await execFileAsync("gh", [
-    "attestation", "verify", subjectPath,
-    "--bundle", bundlePath,
-    "--custom-trusted-root", trustedRootPath,
-    "--repo", repository,
-    "--signer-workflow", `${repository}/${workflow}`,
-    "--source-ref", sourceRef,
-    "--source-digest", sourceRevision,
-    "--signer-digest", sourceRevision,
-    "--deny-self-hosted-runners",
-    "--format", "json",
-  ], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000 });
-  if (result.stderr.length !== 0) {
-    throw new TypeError("GitHub offline attestation verification returned diagnostics");
+  if (!Buffer.isBuffer(subjectBytes) || subjectBytes.byteLength < 1
+    || subjectBytes.byteLength > 128 * 1024 * 1024
+    || !Buffer.isBuffer(bundleBytes) || bundleBytes.byteLength < 1
+    || bundleBytes.byteLength > 16 * 1024 * 1024) {
+    throw new TypeError("GitHub attestation subject or bundle bytes are invalid");
   }
-  return sha256Digest(Buffer.from(result.stdout, "utf8"));
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "programmable-gh-attestation-"));
+  const subjectPath = path.join(temporary, "subject");
+  const bundlePath = path.join(temporary, "bundle.json");
+  try {
+    await Promise.all([
+      writeFile(subjectPath, subjectBytes, { flag: "wx", mode: 0o600 }),
+      writeFile(bundlePath, bundleBytes, { flag: "wx", mode: 0o600 }),
+    ]);
+    const result = await execFileAsync("gh", [
+      "attestation", "verify", subjectPath,
+      "--bundle", bundlePath,
+      "--custom-trusted-root", trustedRootPath,
+      "--repo", repository,
+      "--signer-workflow", `${repository}/${workflow}`,
+      "--source-ref", sourceRef,
+      "--source-digest", sourceRevision,
+      "--signer-digest", sourceRevision,
+      "--deny-self-hosted-runners",
+      "--format", "json",
+    ], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000 });
+    if (result.stderr.length !== 0) {
+      throw new TypeError("GitHub offline attestation verification returned diagnostics");
+    }
+    return sha256Digest(Buffer.from(result.stdout, "utf8"));
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
 async function withFreshGithubTrustedRoot(callback) {
@@ -320,6 +355,54 @@ async function withFreshGithubTrustedRoot(callback) {
   try {
     await writeFile(trustedRootPath, trustedRootBytes, { flag: "wx", mode: 0o600 });
     return await callback({ trustedRootBytes, trustedRootPath });
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+async function withPinnedBackendCosign({ subjectBytes, bundleBytes }, callback) {
+  const trustOverride = Object.keys(process.env).sort().find((name) =>
+    /^(?:COSIGN|FULCIO|REKOR|SIGSTORE|TUF)_/u.test(name));
+  if (trustOverride !== undefined) {
+    throw new TypeError("backend Sigstore verification rejects trust override environment");
+  }
+  const configured = process.env.PROGRAMMABLE_COSIGN_BIN;
+  if (typeof configured !== "string" || !path.isAbsolute(configured)) {
+    throw new TypeError("backend Sigstore verification requires absolute PROGRAMMABLE_COSIGN_BIN");
+  }
+  let handle;
+  let bytes;
+  try {
+    handle = await open(configured, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const metadata = await handle.stat();
+    if (!metadata.isFile() || metadata.size < 1 || metadata.size > 256 * 1024 * 1024) {
+      throw new TypeError("configured Cosign verifier must be a bounded physical file");
+    }
+    bytes = await handle.readFile();
+    if (bytes.byteLength !== metadata.size) {
+      throw new TypeError("configured Cosign verifier changed while being read");
+    }
+  } catch (error) {
+    throw new TypeError("configured Cosign verifier must be a bounded physical file", {
+      cause: error,
+    });
+  } finally {
+    await handle?.close();
+  }
+  if (sha256Digest(bytes) !== ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256) {
+    throw new TypeError("configured Cosign verifier differs from pinned v3.1.3 bytes");
+  }
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "programmable-cosign-v3-"));
+  const executable = path.join(temporary, "cosign");
+  const subjectPath = path.join(temporary, "backend-promotion-input.public.json");
+  const bundlePath = path.join(temporary, "backend-promotion-input.attestation.json");
+  try {
+    await Promise.all([
+      writeFile(executable, bytes, { flag: "wx", mode: 0o700 }),
+      writeFile(subjectPath, subjectBytes, { flag: "wx", mode: 0o600 }),
+      writeFile(bundlePath, bundleBytes, { flag: "wx", mode: 0o600 }),
+    ]);
+    return await callback({ executable, subjectPath, bundlePath });
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -493,8 +576,8 @@ async function verifyPortableSourceProof({
     verificationMode: "change",
   });
   await verifyPortableGithubAttestation({
-    subjectPath: portable.sourceProof.path,
-    bundlePath: portable.sourceProofBundle.path,
+    subjectBytes: portable.sourceProof.bytes,
+    bundleBytes: portable.sourceProofBundle.bytes,
     trustedRootPath,
     repository: ROBINHOOD_PRODUCTION_REPOSITORY,
     workflow: ".github/workflows/verify.yml",
@@ -504,7 +587,6 @@ async function verifyPortableSourceProof({
 }
 
 async function verifyGithubCaptureAttestation({
-  capturePath,
   captureBytes,
   capture,
   repositoryRoot,
@@ -514,8 +596,8 @@ async function verifyGithubCaptureAttestation({
   await requireGithubContext(capture, repositoryRoot);
   return withFreshGithubTrustedRoot(async ({ trustedRootBytes, trustedRootPath }) => {
     await verifyPortableGithubAttestation({
-      subjectPath: capturePath,
-      bundlePath: portable.captureBundle.path,
+      subjectBytes: captureBytes,
+      bundleBytes: portable.captureBundle.bytes,
       trustedRootPath,
       repository: ROBINHOOD_PRODUCTION_REPOSITORY,
       workflow: ROBINHOOD_CAPTURE_WORKFLOW,
@@ -574,7 +656,6 @@ async function authorizationFor(inputFile, dependencies, options = null) {
   const portable = dependencies.authorizeCapture === undefined
     ? await loadPortableCaptureSidecars(options) : null;
   const result = await authorize({
-    capturePath: inputFile.path,
     captureBytes: inputFile.bytes,
     capture: inputFile.value.capture,
     repositoryRoot: options?.repositoryRoot,
@@ -589,7 +670,10 @@ async function authorizationFor(inputFile, dependencies, options = null) {
 
 async function embeddedStageAuthorization({ options, stageFile, inputFile, dependencies }) {
   if (dependencies.authorizeCapture !== undefined) {
-    return authorizationFor(inputFile, dependencies, options);
+    return {
+      authorization: await authorizationFor(inputFile, dependencies, options),
+      portable: null,
+    };
   }
   const capture = inputFile.value.capture;
   const portable = await loadPortableCaptureSidecars(options, { requireStage: true });
@@ -600,8 +684,8 @@ async function embeddedStageAuthorization({ options, stageFile, inputFile, depen
   );
   await withFreshGithubTrustedRoot(async ({ trustedRootPath }) => {
     await verifyPortableGithubAttestation({
-      subjectPath: inputFile.path,
-      bundlePath: portable.captureBundle.path,
+      subjectBytes: inputFile.bytes,
+      bundleBytes: portable.captureBundle.bytes,
       trustedRootPath,
       repository: ROBINHOOD_PRODUCTION_REPOSITORY,
       workflow: ROBINHOOD_CAPTURE_WORKFLOW,
@@ -615,8 +699,8 @@ async function embeddedStageAuthorization({ options, stageFile, inputFile, depen
       trustedRootPath,
     });
     await verifyPortableGithubAttestation({
-      subjectPath: stageFile.path,
-      bundlePath: portable.stageBundle.path,
+      subjectBytes: stageFile.bytes,
+      bundleBytes: portable.stageBundle.bytes,
       trustedRootPath,
       repository: ROBINHOOD_PRODUCTION_REPOSITORY,
       workflow: ROBINHOOD_CAPTURE_WORKFLOW,
@@ -649,25 +733,32 @@ async function embeddedStageAuthorization({ options, stageFile, inputFile, depen
       throw new TypeError(`embedded capture authorization ${key} differs from portable proof`);
     }
   }
-  return authorization;
+  return { authorization, portable };
 }
 
-async function verifyGithubBackendCaptureAttestation({
+async function verifySigstoreBackendCaptureAttestation({
   inputFile,
   attestationBundleFile,
   now = () => new Date(),
 }) {
   const capture = inputFile.value;
-  return withFreshGithubTrustedRoot(async ({ trustedRootBytes, trustedRootPath }) => {
-    await verifyPortableGithubAttestation({
-      subjectPath: inputFile.path,
-      bundlePath: attestationBundleFile.path,
-      trustedRootPath,
-      repository: capture.backendSource.repository,
-      workflow: ROBINHOOD_BACKEND_CAPTURE_WORKFLOW,
-      sourceRef: "refs/heads/main",
-      sourceRevision: capture.backendSource.sourceCommit,
-    });
+  validateSigstoreMessageBundleV03({
+    bundleBytes: attestationBundleFile.bytes,
+    subjectBytes: inputFile.bytes,
+  });
+  return withPinnedBackendCosign({
+    subjectBytes: inputFile.bytes,
+    bundleBytes: attestationBundleFile.bytes,
+  }, async ({ executable, subjectPath, bundlePath }) => {
+    const result = await execFileAsync(executable, buildRobinhoodBackendCosignVerifyBlobArgs({
+      subjectPath,
+      bundlePath,
+      sourceCommit: capture.backendSource.sourceCommit,
+    }), { encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000 });
+    if (Buffer.byteLength(result.stdout) > 16 * 1024 * 1024
+      || Buffer.byteLength(result.stderr) > 16 * 1024 * 1024) {
+      throw new TypeError("Cosign backend verification diagnostics exceeded their bound");
+    }
     const verifiedDate = now();
     const verifiedAt = verifiedDate instanceof Date && Number.isFinite(verifiedDate.getTime())
       ? new Date(Math.floor(verifiedDate.getTime() / 1000) * 1000)
@@ -675,20 +766,30 @@ async function verifyGithubBackendCaptureAttestation({
       : null;
     if (verifiedAt === null) throw new TypeError("backend verifier clock is invalid");
     return {
-      trustedRootBytes,
       authorization: buildRobinhoodBackendCaptureAuthorization({
         schemaVersion: ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
-        trustClass: "github-artifact-attestation",
+        trustClass: ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
         subjectPath: ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH,
         subjectSha256: sha256Digest(inputFile.bytes),
         attestationBundlePath: ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH,
         attestationBundleSha256: sha256Digest(attestationBundleFile.bytes),
-        trustedRootSource: "github-cli-embedded-tuf",
-        trustedRootSha256: sha256Digest(trustedRootBytes),
+        bundleMediaType: SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
+        verifier: {
+          name: "cosign",
+          version: ROBINHOOD_BACKEND_COSIGN_VERSION,
+          sha256: ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256,
+        },
+        certificateIdentity: ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+        certificateOidcIssuer: ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+        certificateGithubWorkflowName: ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+        certificateGithubWorkflowRepository: capture.backendSource.repository,
+        certificateGithubWorkflowRef: ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+        certificateGithubWorkflowSha: capture.backendSource.sourceCommit,
+        certificateGithubWorkflowTrigger: ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
         repository: capture.backendSource.repository,
         repositoryId: "1318883798",
         workflow: ROBINHOOD_BACKEND_CAPTURE_WORKFLOW,
-        sourceRef: "refs/heads/main",
+        sourceRef: ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
         sourceRevision: capture.backendSource.sourceCommit,
         sourceTree: capture.backendSource.sourceTree,
         verifiedAt,
@@ -718,7 +819,7 @@ async function backendAuthoritiesFor({
     now: backendValidationNow,
   });
   const authorizeCapture = dependencies.authorizeBackendCapture
-    ?? verifyGithubBackendCaptureAttestation;
+    ?? verifySigstoreBackendCaptureAttestation;
   const captureResult = await authorizeCapture({
     inputFile: backendInputFile,
     attestationBundleFile: backendAttestationBundleFile,
@@ -731,14 +832,10 @@ async function backendAuthoritiesFor({
   const freshlyVerifiedCaptureAuthorization = captureResult?.authorization ?? captureResult;
   const backendCaptureAuthorization = embeddedBackendCaptureAuthorization
     ?? freshlyVerifiedCaptureAuthorization;
-  const backendTrustedRootBytes = embeddedBackendCaptureAuthorization === null
-    ? captureResult?.trustedRootBytes ?? dependencies.backendTrustedRootBytes
-    : null;
   validateRobinhoodBackendCaptureAuthorization({
     authorization: backendCaptureAuthorization,
     inputBytes: backendInputFile.bytes,
     attestationBundleBytes: backendAttestationBundleFile.bytes,
-    trustedRootBytes: backendTrustedRootBytes,
     input: backendInputFile.value,
     allowTestOnly: dependencies.backendDependencies?.allowTestOnly === true,
   });
@@ -771,7 +868,6 @@ async function backendAuthoritiesFor({
     backendCaptureAuthorization,
     backendAuthorization,
     backendAttestationBundleBytes: backendAttestationBundleFile.bytes,
-    backendTrustedRootBytes,
   };
 }
 
@@ -834,8 +930,8 @@ async function verifyPortableBackendAuthorization({
   }
   await withFreshGithubTrustedRoot(({ trustedRootPath }) =>
     verifyPortableGithubAttestation({
-      subjectPath: authorizationFile.path,
-      bundlePath: attestationBundleFile.path,
+      subjectBytes: authorizationFile.bytes,
+      bundleBytes: attestationBundleFile.bytes,
       trustedRootPath,
       repository: ROBINHOOD_PRODUCTION_REPOSITORY,
       workflow: ".github/workflows/finalize-robinhood-custom-launch-promotion.yml",
@@ -919,7 +1015,7 @@ async function verifyStage(options, dependencies) {
   const inputFile = await readJsonPath(capturePath, {
     label: "postdeployment capture", maximumBytes: 128 * 1024 * 1024,
   });
-  const captureAuthorization = await embeddedStageAuthorization({
+  const { authorization: captureAuthorization } = await embeddedStageAuthorization({
     options,
     stageFile: bundleFile,
     inputFile,
@@ -946,7 +1042,10 @@ async function stageBackendAssets(options, dependencies) {
   const inputFile = await readJsonPath(capturePath, {
     label: "postdeployment capture", maximumBytes: 128 * 1024 * 1024,
   });
-  const captureAuthorization = await embeddedStageAuthorization({
+  const {
+    authorization: captureAuthorization,
+    portable,
+  } = await embeddedStageAuthorization({
     options,
     stageFile: bundleFile,
     inputFile,
@@ -962,6 +1061,22 @@ async function stageBackendAssets(options, dependencies) {
   });
   if (verified.phase !== "backend-assets" || verified.releaseReady !== false) {
     throw new TypeError("backend assets require the closed phase-A promotion bundle");
+  }
+  const captureAttestationBytes = portable?.captureBundle.bytes
+    ?? (await readOpaquePath(
+      options.captureAttestationBundlePath,
+      "phase-A production capture attestation bundle",
+    )).bytes;
+  const stageAttestationBytes = portable?.stageBundle.bytes
+    ?? (await readOpaquePath(
+      options.stageAttestationBundlePath,
+      "phase-A stage attestation bundle",
+    )).bytes;
+  if (sha256Digest(captureAttestationBytes)
+    !== captureAuthorization.attestationBundleSha256) {
+    throw new TypeError(
+      "phase-A production capture attestation differs from the authenticated closure",
+    );
   }
   const bundle = bundleFile.value;
   const artifacts = bundle.artifacts.backendRelease;
@@ -995,6 +1110,26 @@ async function stageBackendAssets(options, dependencies) {
       }
       return { path: entry.path, bytes, sha256: entry.sha256 };
     }),
+    {
+      path: ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH,
+      bytes: inputFile.bytes,
+      sha256: captureAuthorization.subjectSha256,
+    },
+    {
+      path: ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH,
+      bytes: captureAttestationBytes,
+      sha256: captureAuthorization.attestationBundleSha256,
+    },
+    {
+      path: ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH,
+      bytes: bundleFile.bytes,
+      sha256: sha256Digest(bundleFile.bytes),
+    },
+    {
+      path: ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH,
+      bytes: stageAttestationBytes,
+      sha256: sha256Digest(stageAttestationBytes),
+    },
   ];
   const repositoryPhysicalRoot = await realpath(repositoryRoot);
   const repositoryLexicalRoot = path.resolve(repositoryRoot);
@@ -1068,7 +1203,7 @@ async function authorizeBackend(options, dependencies) {
       () => readOpaquePath(options.backendAttestationBundlePath,
         "backend portable attestation bundle"),
     ]);
-  const captureAuthorization = await embeddedStageAuthorization({
+  const { authorization: captureAuthorization } = await embeddedStageAuthorization({
     options,
     stageFile,
     inputFile,
@@ -1094,7 +1229,7 @@ async function authorizeBackend(options, dependencies) {
     now: dependencies.backendDependencies?.now,
   });
   const authorizeCapture = dependencies.authorizeBackendCapture
-    ?? verifyGithubBackendCaptureAttestation;
+    ?? verifySigstoreBackendCaptureAttestation;
   const captureResult = await authorizeCapture({
     inputFile: backendInputFile,
     attestationBundleFile: backendAttestationBundleFile,
@@ -1103,13 +1238,10 @@ async function authorizeBackend(options, dependencies) {
     now: dependencies.backendVerificationNow,
   });
   const backendCaptureAuthorization = captureResult?.authorization ?? captureResult;
-  const trustedRootBytes = captureResult?.trustedRootBytes
-    ?? dependencies.backendTrustedRootBytes;
   validateRobinhoodBackendCaptureAuthorization({
     authorization: backendCaptureAuthorization,
     inputBytes: backendInputFile.bytes,
     attestationBundleBytes: backendAttestationBundleFile.bytes,
-    trustedRootBytes,
     input: backendInputFile.value,
     allowTestOnly: dependencies.backendDependencies?.allowTestOnly === true,
   });
@@ -1205,7 +1337,7 @@ async function promotionSidecars(
       "backend authorization portable attestation bundle",
     ),
   ]);
-  const captureAuthorization = await embeddedStageAuthorization({
+  const { authorization: captureAuthorization } = await embeddedStageAuthorization({
     options,
     stageFile,
     inputFile,
@@ -1245,7 +1377,6 @@ async function promote(options, dependencies) {
     backendPromotionInput: sidecars.backendInputFile.value,
     backendPromotionInputBytes: sidecars.backendInputFile.bytes,
     backendAttestationBundleBytes: sidecars.backendAttestationBundleBytes,
-    backendTrustedRootBytes: sidecars.backendTrustedRootBytes,
     backendCaptureAuthorization: sidecars.backendCaptureAuthorization,
     backendAuthorization: sidecars.backendAuthorization,
     backendDependencies: dependencies.backendDependencies,
@@ -1262,7 +1393,6 @@ async function promote(options, dependencies) {
     backendPromotionInput: sidecars.backendInputFile.value,
     backendPromotionInputBytes: sidecars.backendInputFile.bytes,
     backendAttestationBundleBytes: sidecars.backendAttestationBundleBytes,
-    backendTrustedRootBytes: sidecars.backendTrustedRootBytes,
     backendCaptureAuthorization: sidecars.backendCaptureAuthorization,
     backendAuthorization: sidecars.backendAuthorization,
     backendDependencies: dependencies.backendDependencies,
@@ -1310,7 +1440,6 @@ async function verifyPromotion(options, dependencies) {
       backendPromotionInput: sidecars.backendInputFile.value,
       backendPromotionInputBytes: sidecars.backendInputFile.bytes,
       backendAttestationBundleBytes: sidecars.backendAttestationBundleBytes,
-      backendTrustedRootBytes: sidecars.backendTrustedRootBytes,
       backendCaptureAuthorization: sidecars.backendCaptureAuthorization,
       backendAuthorization: sidecars.backendAuthorization,
       backendDependencies: dependencies.backendDependencies,
@@ -1337,7 +1466,6 @@ async function materializeReleaseAssets(options, dependencies) {
     backendPromotionInput: sidecars.backendInputFile.value,
     backendPromotionInputBytes: sidecars.backendInputFile.bytes,
     backendAttestationBundleBytes: sidecars.backendAttestationBundleBytes,
-    backendTrustedRootBytes: sidecars.backendTrustedRootBytes,
     backendCaptureAuthorization: sidecars.backendCaptureAuthorization,
     backendAuthorization: sidecars.backendAuthorization,
     backendDependencies: dependencies.backendDependencies,
@@ -1414,7 +1542,6 @@ async function apply(options, dependencies) {
     backendPromotionInput: sidecars.backendInputFile.value,
     backendPromotionInputBytes: sidecars.backendInputFile.bytes,
     backendAttestationBundleBytes: sidecars.backendAttestationBundleBytes,
-    backendTrustedRootBytes: sidecars.backendTrustedRootBytes,
     backendCaptureAuthorization: sidecars.backendCaptureAuthorization,
     backendAuthorization: sidecars.backendAuthorization,
     backendDependencies: backendReplayDependencies,
