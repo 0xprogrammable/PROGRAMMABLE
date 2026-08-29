@@ -11,6 +11,7 @@ import {
   loadExplorePayload,
   resolvedExplorePayloadUpdatedAt,
   shouldRevalidateExplore,
+  stabilizeExploreRevalidationPayload,
 } from "../components/explore-view";
 
 const catalog = {
@@ -66,6 +67,60 @@ afterEach(() => {
 });
 
 describe("Explore background revalidation", () => {
+  it("keeps card order and the last known valuation during partial refreshes", () => {
+    const known = {
+      exploreKind: "token" as const,
+      id: "1:known",
+      tokenAddress: `0x${"11".repeat(20)}` as const,
+      valuation: {
+        status: "available" as const,
+        metric: "fdv" as const,
+        supplyBasis: "total" as const,
+        currency: "usd" as const,
+        valueWad: "1000000000000000000",
+        freshness: "current" as const,
+      },
+    };
+    const second = {
+      ...known,
+      id: "1:second",
+      tokenAddress: `0x${"22".repeat(20)}` as const,
+    };
+    const added = {
+      ...known,
+      id: "1:added",
+      tokenAddress: `0x${"33".repeat(20)}` as const,
+    };
+    const previous = {
+      ...explorePayload("ready"),
+      tokens: [known, second],
+      pageSize: 9,
+      total: 2,
+      totalPages: 1,
+    };
+    const incoming = {
+      ...previous,
+      tokens: [
+        added,
+        { ...known, valuation: { status: "unavailable" as const, reason: "source-unavailable" as const } },
+      ],
+      total: 3,
+    };
+
+    const stable = stabilizeExploreRevalidationPayload(
+      previous as never,
+      incoming as never,
+    );
+
+    expect(stable.tokens.map((token) => token.id)).toEqual([
+      "1:added",
+      "1:known",
+      "1:second",
+    ]);
+    expect(stable.tokens[1]?.valuation).toEqual(known.valuation);
+    expect(stable.total).toBe(3);
+  });
+
   it("runs only when the tab is visible, online and due", () => {
     const due = {
       visibilityState: "visible" as const,

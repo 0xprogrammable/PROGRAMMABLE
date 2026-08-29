@@ -38,7 +38,7 @@
           {
             "type": "text",
             "text": "GitHub",
-            "marks": [{ "type": "link", "attrs": { "href": "https://github.com/0xprogrammable" } }]
+            "marks": [{ "type": "link", "attrs": { "href": "https://github.com/programmablehq" } }]
           },
           { "type": "text", "text": "   " },
           {

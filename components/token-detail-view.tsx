@@ -34,6 +34,10 @@ import { CreatorArticle } from "@/components/creator-article";
 import { CreatorArticleEditAction } from
   "@/components/creator-article-edit-action";
 import {
+  DiscordBrandIcon,
+  GitHubBrandIcon,
+} from "@/components/brand-icons";
+import {
   getExplorePreviewCreatorArticle,
   getExplorePreviewCustomProject,
   getExplorePreviewToken,
@@ -75,6 +79,8 @@ import {
 } from "@/lib/creator-article/contract-v1";
 import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
   "@/lib/creator-article/programmable-example-v1";
+import { PROGRAMMABLE_MAIN_TOKEN_PRESENTATION } from
+  "@/lib/programmable-main-token-presentation";
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import { parseLaunchPartnerAttributionV1 } from
   "@/lib/launch-partner-attribution";
@@ -1400,9 +1406,17 @@ export function formatPreparedMinimum(
   }
 }
 
-function getLinkLabel(kind: TokenLinkKind) {
+type VisibleTokenLinkKind = TokenLinkKind | "github" | "discord";
+type VisibleTokenLink = Readonly<{
+  kind: VisibleTokenLinkKind;
+  url: string;
+}>;
+
+function getLinkLabel(kind: VisibleTokenLinkKind) {
   if (kind === "website") return "Website";
   if (kind === "telegram") return "Telegram";
+  if (kind === "github") return "GitHub";
+  if (kind === "discord") return "Discord";
   return "X";
 }
 
@@ -1434,11 +1448,13 @@ function TelegramBrandIcon() {
   );
 }
 
-function TokenLinkIcon({ kind }: { kind: TokenLinkKind }) {
+function TokenLinkIcon({ kind }: { kind: VisibleTokenLinkKind }) {
   if (kind === "website") {
     return <WebsiteLinkIcon className={styles.websiteIcon} />;
   }
   if (kind === "telegram") return <TelegramBrandIcon />;
+  if (kind === "github") return <GitHubBrandIcon />;
+  if (kind === "discord") return <DiscordBrandIcon />;
   return <XBrandIcon />;
 }
 
@@ -1627,7 +1643,20 @@ function TokenDetailContent({
   const imageUrl =
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
   const imageSource = getTokenCardImageSource(imageUrl);
-  const projectLinks = token.links ?? [];
+  const projectLinks = useMemo<readonly VisibleTokenLink[]>(() => {
+    const links: VisibleTokenLink[] = [...(token.links ?? [])];
+    if (
+      token.tokenAddress.toLowerCase()
+        === PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()
+    ) {
+      for (const link of PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.supplementalLinks) {
+        if (!links.some((candidate) => candidate.kind === link.kind)) {
+          links.push(link);
+        }
+      }
+    }
+    return links;
+  }, [token.links, token.tokenAddress]);
   const tokenDecimals =
     typeof token.tokenDecimals === "number" &&
     Number.isInteger(token.tokenDecimals) &&

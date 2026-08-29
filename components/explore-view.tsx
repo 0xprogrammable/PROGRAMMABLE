@@ -316,6 +316,59 @@ export function preserveExplorePayloadOnRefreshFailure(
       };
 }
 
+function preserveKnownMarketObservation(
+  previous: ValuedExploreEntry,
+  incoming: ValuedExploreEntry,
+): ValuedExploreEntry {
+  const valuation =
+    incoming.valuation.status === "available" ||
+      previous.valuation.status !== "available"
+      ? incoming.valuation
+      : previous.valuation;
+  const marketData = incoming.marketData ?? previous.marketData;
+  const liquidityEvidence =
+    incoming.liquidityEvidence ?? previous.liquidityEvidence;
+
+  return {
+    ...previous,
+    ...incoming,
+    valuation,
+    ...(marketData ? { marketData } : {}),
+    ...(liquidityEvidence ? { liquidityEvidence } : {}),
+  } as ValuedExploreEntry;
+}
+
+export function stabilizeExploreRevalidationPayload(
+  previous: ExplorePayload,
+  incoming: ExplorePayload,
+): ExplorePayload {
+  if (
+    previous.status !== "ready" ||
+    incoming.status !== "ready" ||
+    previous.page !== incoming.page ||
+    previous.pageSize !== incoming.pageSize
+  ) {
+    return incoming;
+  }
+
+  const previousIds = new Set(previous.tokens.map((token) => token.id));
+  const incomingById = new Map(
+    incoming.tokens.map((token) => [token.id, token] as const),
+  );
+  const newTokens = incoming.tokens.filter((token) => !previousIds.has(token.id));
+  const stableTokens = previous.tokens.map((token) => {
+    const next = incomingById.get(token.id);
+    return next ? preserveKnownMarketObservation(token, next) : token;
+  });
+
+  return {
+    ...incoming,
+    tokens: [...newTokens, ...stableTokens].slice(0, incoming.pageSize),
+    total: Math.max(previous.total, incoming.total),
+    totalPages: Math.max(previous.totalPages, incoming.totalPages),
+  };
+}
+
 type PaginationItem = number | "start-gap" | "end-gap";
 
 export const EXPLORE_TOKENS_PER_PAGE = 9;
@@ -2708,12 +2761,17 @@ export function ExploreView({
           setCurrentPage(payload.page);
         }
         handledRequestKey.current = requestKey;
-        setState({
+        setState((current) => ({
           phase: "ready",
-          payload,
+          payload:
+            revalidationKey > 0 &&
+              current.phase === "ready" &&
+              current.contentKey === contentKey
+              ? stabilizeExploreRevalidationPayload(current.payload, payload)
+              : payload,
           requestKey,
           contentKey,
-        });
+        }));
       } catch (error) {
         if (ignore) return;
         const message =
@@ -2869,11 +2927,7 @@ export function ExploreView({
   }
 
   function renderTokenState() {
-    if (
-      displayState.phase === "loading" ||
-      ("requestKey" in displayState &&
-        displayState.requestKey !== requestKey)
-    ) {
+    if (displayState.phase === "loading") {
       return (
         <div className={styles.loadingState} aria-busy="true">
           <p className={styles.loadingStatus} role="status" aria-live="polite">
@@ -2977,7 +3031,6 @@ export function ExploreView({
     return (
       <div
         className={`${styles.runnerGrid} ${styles.revealedGrid}`}
-        key={displayState.contentKey}
       >
         {cards.map((token, index) => {
           const href = token.tokenAddress

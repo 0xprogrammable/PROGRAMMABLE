@@ -283,7 +283,13 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 24px auto 0;
   max-width: 980px;
+  transition: opacity 160ms ease-out;
   width: 100%;
+}
+
+.runnersSection[aria-busy="true"] .runnerGrid {
+  opacity: 0.68;
+  pointer-events: none;
 }
 
 .runnerCard {

@@ -70,7 +70,8 @@ describe("topbar and Explore hero polish", () => {
     expect(landing).toContain("Read more in our docs");
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).not.toContain('if (pathname === "/") return null;');
-    expect(navigation).toContain("<WalletButton compact />");
+    expect(navigation).toContain("<HeaderAccountAction");
+    expect(navigation).toContain("const mobileNavItems = desktopNavItems;");
     expect(navigation).not.toContain("liquid-glass-surface");
     expect(navigation).not.toContain("lucide-react");
     expect(navigation).toContain('if (activePath === "/docs")');
@@ -82,19 +83,19 @@ describe("topbar and Explore hero polish", () => {
     }
     expect(navigationCss).toContain("@media (max-width: 60rem)");
     expect(navigationCss).toContain(
-      "grid-template-columns: repeat(4, minmax(0, 1fr))",
+      "grid-template-columns: 1fr",
     );
     expect(navigation).toContain("<HeaderSocialLinks mobile />");
     expect(navigationCss).toMatch(
-      /@media \(max-width: 60rem\)[\s\S]*?\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*none;[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;/s,
+      /\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*none;[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;/s,
     );
     expect(navigationCss).toMatch(
-      /@media \(max-width: 60rem\)[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;[\s\S]*?\.mobileSocials\s*\{[^}]*display:\s*flex;/s,
+      /\.menuButton\s*\{[^}]*display:\s*inline-flex;[\s\S]*?\.mobileSocials\s*\{[^}]*display:\s*flex;/s,
     );
     expect(navigationCss).not.toContain("(hover: none) and (pointer: coarse)");
     expect(navigationCss).not.toContain("(hover: hover) and (pointer: fine)");
     expect(navigationCss).toMatch(
-      /@media \(max-width: 26rem\)[\s\S]*?\.wallet-menu\)[\s\S]*?position:\s*fixed;/s,
+      /@media \(max-width: 26rem\)[\s\S]*?\.mobileSheet\s*\{[^}]*width:\s*calc\(100vw - 24px\);/s,
     );
     expect(landingCss).toMatch(
       /\.docsLink\s*\{[^}]*font-size:\s*18px;/s,

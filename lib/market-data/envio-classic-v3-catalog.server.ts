@@ -41,6 +41,8 @@ import { buildTokenLinks, sanitizeImageUrl } from "../onchain/metadata";
 import { withOperationalRpcFailover } from
   "../onchain/operational-rpc-failover.server";
 import { canonicalSha256 } from "../server/projection-target/hashing";
+import { PROGRAMMABLE_MAIN_TOKEN_PRESENTATION } from
+  "../programmable-main-token-presentation";
 import type { ExploreEntry, LauncherToken } from "../tokens";
 
 const CATALOG_CACHE_TTL_MS = 15_000;
@@ -1656,11 +1658,9 @@ function buildEntries(
     id: `1:${official.launch.token.toLowerCase()}`,
     name: officialMetadata.name,
     symbol: officialMetadata.symbol,
-    ...(officialMetadata.description
-      ? { description: officialMetadata.description }
-      : {}),
-    ...(officialMetadata.imageUrl ? { imageUrl: officialMetadata.imageUrl } : {}),
-    ...(officialMetadata.links ? { links: officialMetadata.links } : {}),
+    description: PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.description,
+    imageUrl: PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.imageUrl,
+    links: [...PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.links],
     tokenAddress: official.launch.token,
     hookAddress: official.launch.hook,
     poolId: official.launch.poolId,
