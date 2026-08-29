@@ -50,6 +50,8 @@
       "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
       "expectedRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
       "creationCodeHash": "0x84f7cb8e9e445d3322249dbc2b9efc65bb9c7a8ba26902aafef9b0552f4bc208",
+      "standardJsonInputPath": "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
+      "standardJsonInputSha256": "0x8ab811a215d70b1d5aef0c71a47153173953ee78d7632725413833888369ec4d",
       "constructor": [],
       "create2Salt": "0x7d365f1aa1c69761337bf63b896eefcb81a5faedafad1b0b93e2ed7e132bc147",
       "preparedComponentCallIndex": 1
@@ -57,7 +59,12 @@
     "programmableLaunchStampRouter": {
       "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
       "expectedRuntimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+      "baseCreationCodeHash": "0xac3a064602cd7aa5e3665507b69ae125d457942228ad88f15626c46ccac80ef9",
+      "baseRuntimeCodeHash": "0x79ae905ee338fe82158dab92d84c52bc4cf197b031beb9c1b5e402c7f449dfe1",
       "creationCodeHash": "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
+      "constructorAppendedCreationCodeHash": "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
+      "standardJsonInputPath": "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
+      "standardJsonInputSha256": "0x6abca24d06b013599f4ff63e049976419c3f17455fa9bc343b15ec0d6e6a078a",
       "constructor": [
         "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
         "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",

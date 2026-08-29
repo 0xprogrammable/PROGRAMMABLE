@@ -54,7 +54,8 @@
       "currentPath": "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
       "sha256": "0xef87aa9338c364634bffda64423bd3fb096c1630a45cc58ecf854d24959ff163",
       "abiSha256": "0xab25262ce1cb907eba1cb820492754c0cd5d7278eb5fd6a024ba24c767323ac0",
-      "standardJsonInputSha256": "0x77c91af397be05dd277a04bd1357034b6b36bc302051b6274ec02453dc928b51",
+      "standardJsonInputPath": "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
+      "standardJsonInputSha256": "0x6abca24d06b013599f4ff63e049976419c3f17455fa9bc343b15ec0d6e6a078a",
       "recovery": "byte-identical"
     },
     "graphFactory": {
@@ -63,7 +64,8 @@
       "path": "contracts/src/ProgrammableCreate2GraphDeployerV1.sol",
       "sha256": "0x06a3acaf9beeb68647af231f5524c5a34dc013d99611a1b2d0a6c80895f595e9",
       "abiSha256": "0x2d253b16e76c43bc6736a6dadb28881c7f8d52a1c4b8cf8aa22a20b0c6aaa5f4",
-      "standardJsonInputSha256": "0x1c574930980dad4d98f9749f2b957a2f075c4ecc397bc77b46552736e4aa1bc0"
+      "standardJsonInputPath": "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
+      "standardJsonInputSha256": "0x8ab811a215d70b1d5aef0c71a47153173953ee78d7632725413833888369ec4d"
     }
   },
   "observation": {
@@ -158,7 +160,10 @@
       "programmableLaunchStampRouter": {
         "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
         "runtimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+        "baseCreationCodeHash": "0xac3a064602cd7aa5e3665507b69ae125d457942228ad88f15626c46ccac80ef9",
+        "baseRuntimeCodeHash": "0x79ae905ee338fe82158dab92d84c52bc4cf197b031beb9c1b5e402c7f449dfe1",
         "creationCodeHash": "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
+        "constructorAppendedCreationCodeHash": "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
         "deploymentState": "prepared-not-broadcast",
         "preparedComponentCallIndex": 2,
         "launchAndStampV1Selector": "0xe5f6b8cd"

@@ -248,9 +248,20 @@ forge script \
 
 node scripts/verify-robinhood-custom-launch-bindings.mjs
 node scripts/verify-robinhood-custom-launch-router-abi.mjs
+node scripts/verify-robinhood-custom-launch-standard-json.mjs
 ```
 
 There is intentionally no `--broadcast`, wallet flag or private-key input.
+
+The Standard JSON verifier consumes the two byte-canonical, one-LF artifacts
+under `spec/robinhood-custom-launch/standard-json/`. It checks their full
+source closures against the checkout, authenticates the pinned solc 0.8.26
+binary, compiles from an empty temporary directory, and re-derives the
+GraphFactory creation/runtime hashes, Router base creation/runtime hashes,
+constructor-appended creation hash, ABI/source commitments and unchanged
+atomic owner calldata. `--write` regenerates the artifacts only when Forge
+produces the exact reviewed canonical bytes and hashes; it never signs or
+broadcasts.
 
 After a finalized deployment, source publication is a separate explicitly
 authorized external action. Sourcify needs no API key; Blockscout's public
