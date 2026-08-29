@@ -230,6 +230,10 @@ jobs:
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run verify:interface:ci
 
+      - name: Verify V4 clean-room no-broadcast release gate
+        if: needs.scope.outputs.interface == 'true'
+        run: npm run release:custom-launch:v4:clean-room:test
+
       - name: Verify affected read-model operations contract
         if: needs.scope.outputs.read_model == 'true'
         run: npm run perf:read-model:ops-gate
