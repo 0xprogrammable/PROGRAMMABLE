@@ -95,7 +95,11 @@ import {
   type LaunchDraft,
   type LaunchModel,
 } from "@/lib/launch";
-import { prepareTokenImage } from "@/lib/token-image";
+import {
+  isProgrammableTokenImageUrl,
+  prepareTokenImage,
+  readTokenImageUploadResponse,
+} from "@/lib/token-image";
 import {
   browserWalletRequestIsPending,
   subscribeToBrowserWalletRequest,
@@ -3087,11 +3091,19 @@ function TokenStep({
           },
           body: form,
         });
-        const body = (await response.json()) as
-          { url: string } | { error: string };
-        if (!response.ok || !("url" in body)) {
+        const body = await readTokenImageUploadResponse(response);
+        if (body === null) {
+          throw new Error("Image uploads are temporarily unavailable. Try again.");
+        }
+        if (
+          !response.ok
+          || typeof body.url !== "string"
+          || !isProgrammableTokenImageUrl(body.url)
+        ) {
           throw new Error(
-            "error" in body ? body.error : "The image could not be uploaded",
+            typeof body.error === "string"
+              ? body.error
+              : "The image could not be uploaded",
           );
         }
 

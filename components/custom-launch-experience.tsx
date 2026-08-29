@@ -109,6 +109,7 @@ import {
   getTokenCardImageSource,
   isProgrammableTokenImageUrl,
   prepareTokenImage,
+  readTokenImageUploadResponse,
   TOKEN_IMAGE_OUTPUT_SIZE,
 } from "@/lib/token-image";
 
@@ -2105,16 +2106,8 @@ function CustomLaunchRuntime({
         redirect: "error",
         signal: imageController.signal,
       });
-      const contentType = response.headers.get("content-type")
-        ?.split(";", 1)[0]?.trim().toLowerCase();
-      if (contentType !== "application/json" || response.redirected) {
-        throw new Error("Unable to verify the uploaded image");
-      }
-      const body = await response.json() as {
-        url?: unknown;
-        receipt?: unknown;
-        error?: unknown;
-      };
+      const body = await readTokenImageUploadResponse(response);
+      if (body === null) throw new Error("Unable to upload image. Try again.");
       if (!isCurrent()) return;
       if (!response.ok) {
         throw new Error(typeof body.error === "string"

@@ -5,6 +5,8 @@ export const PROGRAMMABLE_TOKEN_IMAGE_HOST =
   "k2uoipt9wchjtz3h.public.blob.vercel-storage.com";
 export const PROGRAMMABLE_TOKEN_IMAGE_STORE_ID = "store_k2uoiPT9WCHJtz3H";
 
+export type TokenImageUploadResponse = Readonly<Record<string, unknown>>;
+
 const acceptedTokenImageTypes = new Set([
   "image/jpeg",
   "image/png",
@@ -75,6 +77,23 @@ export function getTokenImageFileError(file: Pick<File, "size" | "type">) {
     return "Choose an image smaller than 8 MB";
   }
   return "";
+}
+
+export async function readTokenImageUploadResponse(
+  response: Response,
+): Promise<TokenImageUploadResponse | null> {
+  const contentType = response.headers.get("content-type")
+    ?.split(";", 1)[0]?.trim().toLowerCase();
+  if (response.redirected || contentType !== "application/json") return null;
+
+  try {
+    const body: unknown = await response.json();
+    return typeof body === "object" && body !== null && !Array.isArray(body)
+      ? body as TokenImageUploadResponse
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function loadImage(source: string) {

@@ -58,6 +58,23 @@ beforeAll(async () => {
 });
 
 describe("token image upload route", () => {
+  it("returns a JSON session error before reading or writing image data", async () => {
+    const putBlob = vi.fn<Dependencies["putBlob"]>();
+    const handler = createTokenImageUploadHandlerV1(dependencies({
+      authenticateSession: async () => null,
+      putBlob,
+    }));
+    const response = await handler(request(webp));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    await expect(response.json()).resolves.toEqual({
+      error: "Connect your wallet and try again",
+    });
+    expect(putBlob).not.toHaveBeenCalled();
+  });
+
   it("rejects JPEG bytes relabelled as WebP before Blob write", async () => {
     const putBlob = vi.fn<Dependencies["putBlob"]>();
     const handler = createTokenImageUploadHandlerV1(dependencies({ putBlob }));

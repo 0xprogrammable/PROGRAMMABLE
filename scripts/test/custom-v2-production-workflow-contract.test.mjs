@@ -125,7 +125,12 @@ test("Custom V2 stage expectations are explicit, observational, and default disa
 test("Custom V2 evidence is immutable while the workflow remains stage-only", () => {
   assert.match(deploy, /name: custom-v2-stage-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/u);
   assert.match(deploy, /retention-days: 90/u);
-  assert.match(deploy, /vercel deploy --prebuilt --prod --skip-domain/u);
+  const sourceBuild = stepBlock(
+    deploy,
+    "Stage production source build without assigning domains",
+  );
+  assert.match(sourceBuild, /vercel deploy --prod --skip-domain --archive=tgz/u);
+  assert.doesNotMatch(deploy, /vercel build --prod|--prebuilt/u);
   assert.doesNotMatch(deploy, /vercel (?:promote|rollback)|--scope-production-alias/u);
   assert.match(deploy, /Stage-only: no production promotion was attempted\./u);
   assert.ok(
@@ -173,6 +178,38 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   );
 });
 
+test("every staged source build proves the token image runtime without a write", () => {
+  const probe = stepBlock(
+    deploy,
+    "Probe staged token image runtime without writes",
+  );
+  assert.match(
+    probe,
+    /STAGED_TARGET_URL: \$\{\{ steps\.staged-deployment\.outputs\.target_url \}\}/u,
+  );
+  assert.match(probe, /"\/api\/token-image"/u);
+  assert.match(probe, /method: "POST"/u);
+  assert.match(probe, /contentType !== "application\/json"/u);
+  assert.match(probe, /readBoundedResponseText\(response/u);
+  assert.match(probe, /response\.status !== 401/u);
+  assert.match(
+    probe,
+    /body\.error !== "Connect your wallet and try again"/u,
+  );
+  assert.doesNotMatch(
+    probe,
+    /(?:^|[{,\n])\s*["']?(?:authorization|cookie|x-privy-identity-token)["']?\s*:/iu,
+  );
+  assert.doesNotMatch(
+    probe,
+    /\n\s+"?body"?\s*:|new\s+(?:FormData|File)\b/iu,
+  );
+  assert.ok(
+    deploy.indexOf("Resolve exact staged deployment")
+      < deploy.indexOf("Probe staged token image runtime without writes"),
+  );
+});
+
 test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", () => {
   for (const input of [
     "custom_v2_generic_signer_probe_expected_json",
@@ -199,7 +236,7 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
     deploy,
     "Deploy one-shot unaliased Generic signer probe candidate",
   );
-  assert.match(probeDeploy, /vercel deploy --prebuilt --prod --skip-domain/u);
+  assert.match(probeDeploy, /vercel deploy --prod --skip-domain --archive=tgz/u);
   assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_TOKEN/u);
   assert.match(probeDeploy, /PROGRAMMABLE_GENERIC_LAUNCH_SIGNER_PROBE_EXPECTED_V1_JSON/u);
   assert.match(probeDeploy, /programmableGenericSignerProbeRecoveryId/u);
@@ -249,7 +286,7 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   assert.match(deploy, /id-token: write/u);
   assert.ok(
     deploy.indexOf("Reconcile every secret-bearing Generic signer probe deployment")
-      < deploy.indexOf("Stage production build without assigning domains"),
+      < deploy.indexOf("Stage production source build without assigning domains"),
   );
   assert.ok(
     deploy.indexOf("Reconcile all residual Generic signer probes before new authority")

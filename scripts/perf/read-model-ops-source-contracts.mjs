@@ -2075,6 +2075,16 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedCatalogProbe >= 0 && stagedCatalogProbeEnd > stagedCatalogProbe
       ? deployWorkflow.slice(stagedCatalogProbe, stagedCatalogProbeEnd)
       : "";
+  const stagedTokenImageProbe = deployWorkflow.indexOf(
+    "      - name: Probe staged token image runtime without writes",
+  );
+  const stagedTokenImageProbeEnd = deployWorkflow.indexOf(
+    "      - name: Probe exact staged Custom Launch V3 release",
+  );
+  const stagedTokenImageProbeBlock =
+    stagedTokenImageProbe >= 0 && stagedTokenImageProbeEnd > stagedTokenImageProbe
+      ? deployWorkflow.slice(stagedTokenImageProbe, stagedTokenImageProbeEnd)
+      : "";
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
     "Reverify staged candidate binding",
     stagedBitquerySmoke,
@@ -2620,7 +2630,31 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       deployWorkflow.indexOf(
         "Verify Sigstore provenance and exact proof contents",
-      ) < deployWorkflow.indexOf("vercel build --prod") &&
+      ) < deployWorkflow.indexOf(
+        "Stage production source build without assigning domains",
+      ) &&
+      deployWorkflow.includes(
+        "vercel deploy --prod --skip-domain --archive=tgz",
+      ) &&
+      !deployWorkflow.includes("vercel build --prod") &&
+      !deployWorkflow.includes("--prebuilt") &&
+      stagedTokenImageProbe >
+        deployWorkflow.indexOf("Resolve exact staged deployment") &&
+      includesEverySourceFragment(stagedTokenImageProbeBlock, [
+        "STAGED_TARGET_URL: $\{{ steps.staged-deployment.outputs.target_url }}",
+        '"/api/token-image"',
+        'method: "POST"',
+        'contentType !== "application/json"',
+        "readBoundedResponseText(response",
+        "response.status !== 401",
+        'body.error !== "Connect your wallet and try again"',
+      ]) &&
+      !/(?:^|[{,\n])\s*["']?(?:authorization|cookie|x-privy-identity-token)["']?\s*:/iu.test(
+        stagedTokenImageProbeBlock,
+      ) &&
+      !/\n\s+"?body"?\s*:|new\s+(?:FormData|File)\b/iu.test(
+        stagedTokenImageProbeBlock,
+      ) &&
       deployWorkflow.indexOf(
         "Confirm consumed Verify proof identity after production approval",
       ) < deployWorkflow.indexOf("Pull production configuration"),

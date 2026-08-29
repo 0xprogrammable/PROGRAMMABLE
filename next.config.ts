@@ -74,8 +74,18 @@ const securityHeaders = [
   },
 ];
 
+export const sharpRuntimeFiles = [
+  "./node_modules/sharp/**/*",
+  "./node_modules/@img/**/*",
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  outputFileTracingIncludes: {
+    "/api/token-image": sharpRuntimeFiles,
+    "/api/prediction/asset-logo/*": sharpRuntimeFiles,
+    "/api/profile/projects/*/article/media": sharpRuntimeFiles,
+  },
   async headers() {
     return [
       {

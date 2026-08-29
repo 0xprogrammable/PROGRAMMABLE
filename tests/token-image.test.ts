@@ -12,13 +12,27 @@ import {
   isProgrammableTokenImageUrl,
   MAX_TOKEN_IMAGE_UPLOAD_BYTES,
   PROGRAMMABLE_TOKEN_IMAGE_HOST,
+  readTokenImageUploadResponse,
 } from "../lib/token-image";
 import {
   inspectWebpStructure,
   verifyTokenImageWebpV1,
 } from "../lib/server/token-image-webp-v1";
+import nextConfig, { sharpRuntimeFiles } from "../next.config";
 
 describe("token image policy", () => {
+  it("traces the native Sharp runtime into every image-processing route", () => {
+    expect(sharpRuntimeFiles).toEqual([
+      "./node_modules/sharp/**/*",
+      "./node_modules/@img/**/*",
+    ]);
+    expect(nextConfig.outputFileTracingIncludes).toEqual({
+      "/api/token-image": sharpRuntimeFiles,
+      "/api/prediction/asset-logo/*": sharpRuntimeFiles,
+      "/api/profile/projects/*/article/media": sharpRuntimeFiles,
+    });
+  });
+
   it("keeps prepared uploads within the card-performance budget", () => {
     expect(MAX_TOKEN_IMAGE_UPLOAD_BYTES).toBe(1_000_000);
   });
@@ -180,5 +194,41 @@ describe("token image policy", () => {
     expect(image.src).toBe(
       "/brand/programmable-token-fallback-01-dawn.webp",
     );
+  });
+
+  it.each([
+    [500, "text/html; charset=utf-8", "<!DOCTYPE html>"],
+    [404, "text/html", "<html>Not found</html>"],
+    [200, "text/plain", JSON.stringify({ url: "https://example.com/image.webp" })],
+    [500, "application/json", "{broken"],
+  ])("rejects non-JSON upload responses without leaking parser errors", async (
+    status,
+    contentType,
+    body,
+  ) => {
+    const response = new Response(body, {
+      status,
+      headers: { "content-type": contentType },
+    });
+    await expect(readTokenImageUploadResponse(response)).resolves.toBeNull();
+  });
+
+  it("preserves valid upload errors and success responses", async () => {
+    const rejected = new Response(JSON.stringify({
+      error: "Connect your wallet and try again",
+    }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+    await expect(readTokenImageUploadResponse(rejected)).resolves.toEqual({
+      error: "Connect your wallet and try again",
+    });
+
+    const url = `https://${PROGRAMMABLE_TOKEN_IMAGE_HOST}/token-images/example.webp`;
+    const accepted = new Response(JSON.stringify({ url }), {
+      status: 201,
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+    await expect(readTokenImageUploadResponse(accepted)).resolves.toEqual({ url });
   });
 });
