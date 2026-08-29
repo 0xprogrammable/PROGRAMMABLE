@@ -16,7 +16,9 @@ contract RobinhoodAtomicFailureTarget {
 
 contract RobinhoodCustomLaunchFoundationForkTest is Test {
     uint256 internal constant SNAPSHOT_BLOCK = 49_220_000;
-    string internal constant FALLBACK_RPC = "https://rpc.mainnet.chain.robinhood.com";
+    // Robinhood's public node serves the pinned block header but prunes the historical state required by this fork.
+    // QuickNode documents this chain-specific demo endpoint and currently serves the exact archive snapshot.
+    string internal constant FALLBACK_RPC = "https://docs-demo.robinhood-mainnet.quiknode.pro/";
 
     PrepareRobinhoodCustomLaunchFoundationV1 internal preparation;
 
