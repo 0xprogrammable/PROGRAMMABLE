@@ -84,7 +84,7 @@
   box-shadow: 0 0 2.5px rgb(255 255 255 / 0.62);
   color: #fff;
   height: var(--hero-star-size);
-  opacity: 0.12;
+  opacity: 0.16;
   position: absolute;
   transform: scale(0.88);
   transform-origin: center;

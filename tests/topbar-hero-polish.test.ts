@@ -78,7 +78,13 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain("prefetch={false}");
     expect(navigation).toContain("warmedNavigationRoutes.has(href)");
     expect(navigation).toContain("router.prefetch(href)");
-    for (const label of ["Explore", "Create", "Profile", "Docs"]) {
+    for (const label of [
+      "Explore Projects",
+      "Create",
+      "API keys",
+      "Docs",
+      "Profile",
+    ]) {
       expect(navigation).toContain(`label: "${label}"`);
     }
     expect(navigationCss).toContain("@media (max-width: 60rem)");
@@ -93,7 +99,7 @@ describe("topbar and Explore hero polish", () => {
       /\.menuButton\s*\{[^}]*display:\s*inline-flex;[\s\S]*?\.mobileSocials\s*\{[^}]*display:\s*flex;/s,
     );
     expect(navigationCss).not.toContain("(hover: none) and (pointer: coarse)");
-    expect(navigationCss).not.toContain("(hover: hover) and (pointer: fine)");
+    expect(navigationCss).toContain("(hover: hover) and (pointer: fine)");
     expect(navigationCss).toMatch(
       /@media \(max-width: 26rem\)[\s\S]*?\.mobileSheet\s*\{[^}]*width:\s*calc\(100vw - 24px\);/s,
     );

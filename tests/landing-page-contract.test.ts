@@ -16,7 +16,7 @@ describe("landing page contract", () => {
     expect(explorePage).toContain("import { ExploreView }");
     expect(explorePage).toContain('canonical: "/explore"');
     expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore" }',
+      '{ href: "/explore", label: "Explore Projects" }',
     );
     expect(navigation).toContain('href="/"');
     expect(homePage).toContain(
@@ -53,7 +53,8 @@ describe("landing page contract", () => {
     expect(landing).toContain(
       'src="/brand/atmosphere/programmable-floral-foreground-v1.avif"',
     );
-    expect(landing).toContain("const HERO_TWINKLE_COUNT = 88");
+    expect(landing).toContain("const HERO_TWINKLE_COUNT = 120");
+    expect(landing).toContain("const duration = 2.8");
     expect(landing).toContain('<h1 id="landing-title">Programmable</h1>');
     expect(landing).toContain("Shape what assets can do");
     expect(landing).toContain('id="intro"');
@@ -200,7 +201,9 @@ describe("landing page contract", () => {
   it("opens Explore as its own route from the shared topbar", () => {
     const navigation = read("components/site-navigation.tsx");
 
-    expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
+    expect(navigation).toContain(
+      '{ href: "/explore", label: "Explore Projects" }',
+    );
     expect(navigation).not.toContain("prepareLandingExploreNavigation(");
     expect(navigation).not.toContain('window.history.pushState(null, "", "/#explore")');
   });

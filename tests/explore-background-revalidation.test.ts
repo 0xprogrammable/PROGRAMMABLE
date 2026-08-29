@@ -347,13 +347,13 @@ describe("Explore background revalidation", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("keeps background refreshes separate from the visible request identity", () => {
+  it("does not reorder a visible Explore page on an automatic timer", () => {
     const source = readFileSync(
       join(process.cwd(), "components/explore-view.tsx"),
       "utf8",
     );
 
-    expect(source).toContain(
+    expect(source).not.toContain(
       "const [revalidationKey, setRevalidationKey] = useState(0)",
     );
     expect(source).toContain(
@@ -367,10 +367,10 @@ describe("Explore background revalidation", () => {
     );
     expect(source).toContain("modelDatasetCache.current = null;");
     expect(source).toContain("updatedAt: Date.now(),");
-    expect(source).toContain("revalidationKey === 0");
-    expect(source).toContain('document.addEventListener("visibilitychange"');
-    expect(source).toContain('window.addEventListener("online"');
-    expect(source).toContain('window.addEventListener("offline"');
-    expect(source).toContain("scheduler.dispose();");
+    expect(source).not.toContain("revalidationKey === 0");
+    expect(source).not.toContain('document.addEventListener("visibilitychange"');
+    expect(source).not.toContain('window.addEventListener("online"');
+    expect(source).not.toContain('window.addEventListener("offline"');
+    expect(source).not.toContain("scheduler.dispose();");
   });
 });

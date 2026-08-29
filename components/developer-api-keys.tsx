@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -9,7 +10,14 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { Check, ChevronDown, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+} from "lucide-react";
 
 import styles from "@/components/developer-api-keys.module.css";
 import { DeveloperLaunchHistory } from "@/components/developer-launch-history";
@@ -95,6 +103,7 @@ const launchRequestIdPattern =
 const apiKeySecretPattern =
   /^pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
+const API_KEY_PAGE_SIZE = 3;
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -385,11 +394,13 @@ function KeyListSkeleton() {
         Loading API keys
       </span>
       <div className={styles.skeletonList} aria-hidden="true">
-        <div className={styles.skeletonRow}>
-          <span className={styles.skeletonTitle} />
-          <span className={styles.skeletonLine} />
-          <span className={styles.skeletonLineShort} />
-        </div>
+        {Array.from({ length: API_KEY_PAGE_SIZE }, (_, index) => (
+          <div className={styles.skeletonRow} key={index}>
+            <span className={styles.skeletonTitle} />
+            <span className={styles.skeletonLine} />
+            <span className={styles.skeletonLineShort} />
+          </div>
+        ))}
       </div>
     </>
   );
@@ -635,6 +646,7 @@ function DeveloperApiKeysView({
   const [activeSection, setActiveSection] = useState<ActiveSection>("keys");
   const [initialLaunchId, setInitialLaunchId] = useState<string | null>(null);
   const [refreshingKeys, setRefreshingKeys] = useState(false);
+  const [keyPage, setKeyPage] = useState(1);
   const [walletSessionTimedOut, setWalletSessionTimedOut] = useState(false);
   const labelRef = useRef<HTMLInputElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
@@ -647,6 +659,15 @@ function DeveloperApiKeysView({
   const pendingMutationAttemptRef = useRef<ApiKeyMutationAttempt | null>(null);
   const keyItemRefs = useRef(new Map<string, HTMLLIElement>());
   const apiKeyReadGenerationRef = useRef(0);
+  const keyPageCount = Math.max(
+    1,
+    Math.ceil(apiKeys.length / API_KEY_PAGE_SIZE),
+  );
+  const activeKeyPage = Math.min(keyPage, keyPageCount);
+  const visibleApiKeys = apiKeys.slice(
+    (activeKeyPage - 1) * API_KEY_PAGE_SIZE,
+    activeKeyPage * API_KEY_PAGE_SIZE,
+  );
 
   const getAuthHeaders = useCallback(
     async (json = false) => {
@@ -865,6 +886,7 @@ function DeveloperApiKeysView({
       ));
       setListState("ready");
       setMutationResult({ operation: "issue", result: parsed });
+      setKeyPage(1);
       setLabel("");
       setStatusMessage(parsed.secretState === "delivered-once"
         ? `${parsed.apiKey.label} was created. Save the secret now because it will not be shown again.`
@@ -1034,6 +1056,7 @@ function DeveloperApiKeysView({
       ));
       setListState("ready");
       setMutationResult({ operation: "rotate", result: parsed });
+      setKeyPage(1);
       setConfirmingRotateId(null);
       setStatusMessage(parsed.secretState === "delivered-once"
         ? `${apiKey.label} was rotated. Save the replacement secret now because it will not be shown again.`
@@ -1116,6 +1139,11 @@ function DeveloperApiKeysView({
         {statusMessage}
       </p>
 
+      <Link className={styles.backLink} href="/profile">
+        <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.9} />
+        <span>Back to profile</span>
+      </Link>
+
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
           <p className={styles.kicker}>Developer access</p>
@@ -1127,86 +1155,6 @@ function DeveloperApiKeysView({
           </p>
         </div>
       </header>
-
-      {authReady && account ? (
-        <section
-          className={styles.launchPath}
-          aria-labelledby="custom-launch-path-title"
-        >
-          <div className={styles.launchPathHeading}>
-            <div>
-              <p className={styles.kicker}>API to wallet</p>
-              <h2 id="custom-launch-path-title">
-                Before anything reaches your wallet
-              </h2>
-            </div>
-            <a
-              href="https://programmable.market/docs/developers/custom-launch"
-              rel="noreferrer"
-              target="_blank"
-            >
-              Read the Custom launch guide
-            </a>
-          </div>
-          <ol className={styles.launchSteps}>
-            <li>
-              <span>01</span>
-              <div>
-                <strong>Check capabilities</strong>
-                <p>
-                  The public endpoint lists supported project shapes before an
-                  agent packages source.
-                </p>
-                <a
-                  href="https://api.programmable.market/v3/capabilities"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Open public capabilities
-                </a>
-              </div>
-            </li>
-            <li>
-              <span>02</span>
-              <div>
-                <strong>Run preflight</strong>
-                <p>
-                  <code>POST /v3/custom-launches/preflight</code> is
-                  authenticated, quota-free and creates no request, nonce or
-                  wallet action.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span>03</span>
-              <div>
-                <strong>Submit eligible source</strong>
-                <p>
-                  Published automatic rules can return exact changes. Anyone
-                  can submit; unsupported or incomplete source does not bypass
-                  them.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span>04</span>
-              <div>
-                <strong>Review in your wallet</strong>
-                <p>
-                  Funding signatures and the Router transaction remain
-                  separate. Programmable never signs or broadcasts
-                  automatically.
-                </p>
-              </div>
-            </li>
-          </ol>
-          <p className={styles.truthBoundary}>
-            A finalized launch is not automatically source verified, liquid,
-            tradeable or LP locked. Launch history shows those states
-            separately when evidence exists.
-          </p>
-        </section>
-      ) : null}
 
       {!authReady ? (
         walletSessionTimedOut ? (
@@ -1546,8 +1494,9 @@ function DeveloperApiKeysView({
                 ) : null}
 
                 {listState === "ready" && apiKeys.length > 0 ? (
-                  <ul className={styles.keyList}>
-                    {apiKeys.map((apiKey) => {
+                  <>
+                    <ul className={styles.keyList}>
+                    {visibleApiKeys.map((apiKey) => {
                       const status = keyStatus(apiKey);
                       const confirmingRevoke = confirmingRevokeId === apiKey.id;
                       const confirmingRotate = confirmingRotateId === apiKey.id;
@@ -1717,7 +1666,45 @@ function DeveloperApiKeysView({
                         </li>
                       );
                     })}
-                  </ul>
+                    </ul>
+                    {keyPageCount > 1 ? (
+                      <nav
+                        className={styles.keyPagination}
+                        aria-label="API key pages"
+                      >
+                        <button
+                          type="button"
+                          aria-label="Previous API key page"
+                          disabled={activeKeyPage === 1}
+                          onClick={() => {
+                            const nextPage = Math.max(1, activeKeyPage - 1);
+                            setKeyPage(nextPage);
+                            setStatusMessage(`Showing API key page ${nextPage}.`);
+                          }}
+                        >
+                          <ChevronLeft aria-hidden="true" size={17} />
+                        </button>
+                        <span aria-live="polite">
+                          {activeKeyPage} / {keyPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Next API key page"
+                          disabled={activeKeyPage === keyPageCount}
+                          onClick={() => {
+                            const nextPage = Math.min(
+                              keyPageCount,
+                              activeKeyPage + 1,
+                            );
+                            setKeyPage(nextPage);
+                            setStatusMessage(`Showing API key page ${nextPage}.`);
+                          }}
+                        >
+                          <ChevronRight aria-hidden="true" size={17} />
+                        </button>
+                      </nav>
+                    ) : null}
+                  </>
                 ) : null}
                 {listState === "ready" && listError ? (
                   <p className={styles.inlineError} role="alert">
