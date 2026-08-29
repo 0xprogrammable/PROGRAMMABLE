@@ -10,6 +10,9 @@ import {
   CUSTOM_LAUNCH_LIST_SCHEMA_V1,
   CUSTOM_LAUNCH_LIST_SCHEMA_V2,
   CUSTOM_LAUNCH_LIST_SCHEMA_V3,
+  CUSTOM_LAUNCH_LIST_SCHEMA_V4,
+  CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1,
+  CUSTOM_LAUNCH_SUMMARY_SCHEMA_V4,
 } from "../lib/server/custom-launch/launch-history-bridge-v1";
 import { canonicalizeJson } from
   "../lib/server/projection-target/canonical-json";
@@ -21,6 +24,10 @@ const V2_LAUNCH_ID = "50000000-0000-4000-8000-000000000005";
 const V3_LAUNCH_ID = "60000000-0000-4000-8000-000000000006";
 const V3_NATIVE_LAUNCH_ID = "70000000-0000-4000-8000-000000000007";
 const V3_ACTION_REQUIRED_LAUNCH_ID = "80000000-0000-4000-8000-000000000008";
+const V4_LAUNCH_ID = "90000000-0000-4000-8000-000000000009";
+const V4_CHAIN_DEPLOYMENT_ID = "robinhood-mainnet-custom-launch-v1";
+const V4_CHAIN_DEPLOYMENT_DIGEST = `0x${"aa".repeat(32)}` as const;
+const V4_TRANSACTION_HASH = `0x${"bb".repeat(32)}` as const;
 const WEBSITE_TOKEN = "w".repeat(43);
 const BFF_ASSERTION_KEY = "b".repeat(43);
 const ASSERTION_ISSUED_AT = "2026-08-27T08:00:00.000Z";
@@ -289,6 +296,86 @@ function launchV3ActionRequired(ownerWallet: string = WALLET) {
   };
 }
 
+function launchSummaryV4(ownerWallet: string = WALLET) {
+  return {
+    launchId: V4_LAUNCH_ID,
+    chainId: "4663",
+    caip2: "eip155:4663",
+    chainDeploymentId: V4_CHAIN_DEPLOYMENT_ID,
+    chainDeploymentDescriptorDigest: V4_CHAIN_DEPLOYMENT_DIGEST,
+    controller: {
+      namespace: "eip155:4663",
+      address: ownerWallet,
+    },
+    status: "wallet_action_required",
+    walletHandoffUrl:
+      `https://programmable.market/developers/api-keys?launchId=${V4_LAUNCH_ID}&chainId=4663`,
+    expiresAt: "2026-08-29T12:15:00.000Z",
+    createdAt: "2026-08-29T12:05:00.000Z",
+    updatedAt: "2026-08-29T12:05:01.000Z",
+  };
+}
+
+function launchV4(ownerWallet: string = WALLET) {
+  return {
+    schemaVersion: "programmable.custom-launch.v4",
+    apiVersion: "v4",
+    launchId: V4_LAUNCH_ID,
+    requestId: V4_LAUNCH_ID,
+    routeId: "custom-launch:create:v4",
+    chainId: "4663",
+    caip2: "eip155:4663",
+    chainDeploymentId: V4_CHAIN_DEPLOYMENT_ID,
+    chainDeploymentDescriptorDigest: V4_CHAIN_DEPLOYMENT_DIGEST,
+    chainDeployment: {
+      schemaVersion: "programmable.custom-launch-chain-deployment.v1",
+    },
+    profile: {
+      schemaVersion: "programmable.custom-launch-profile-ref.v4",
+    },
+    controller: {
+      namespace: "eip155:4663",
+      address: ownerWallet,
+    },
+    status: "validating",
+    requestHash: `sha256:${"11".repeat(32)}`,
+    rawRequestSha256: `sha256:${"22".repeat(32)}`,
+    sourceBuildCommitment: `sha256:${"33".repeat(32)}`,
+    graphCommitment: `sha256:${"44".repeat(32)}`,
+    metadataCommitment: `sha256:${"55".repeat(32)}`,
+    walletTransactionPreimageHash: null,
+    commitments: {
+      sourceBuild: `sha256:${"33".repeat(32)}`,
+      graph: `sha256:${"44".repeat(32)}`,
+      metadata: `sha256:${"55".repeat(32)}`,
+      verification: `sha256:${"66".repeat(32)}`,
+      fundingPermit: `sha256:${"77".repeat(32)}`,
+      launchIntent: `sha256:${"88".repeat(32)}`,
+    },
+    projectMetadata: PROJECT_METADATA,
+    funding: {
+      schemaVersion: "programmable.custom-launch-funding-intent.v2",
+      mode: "none",
+      valueWei: "0",
+    },
+    liquidityModel: {
+      schemaVersion: "programmable.custom-launch-liquidity-model.v1",
+      model: "none-empty-pool",
+      declaredLaunchState: "pool-initialized-empty",
+      targetIds: [],
+    },
+    walletTransaction: null,
+    preparedArtifact: null,
+    admissionReceipt: null,
+    simulationReceipt: null,
+    externalContractEvidenceReceipt: null,
+    onchain: null,
+    failure: null,
+    createdAt: "2026-08-29T12:05:00.000Z",
+    updatedAt: "2026-08-29T12:05:01.000Z",
+  };
+}
+
 function backendJson(body: Readonly<Record<string, unknown>>) {
   return new Response(JSON.stringify({
     schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V1,
@@ -312,6 +399,19 @@ function backendJsonV2(body: Readonly<Record<string, unknown>>) {
 function backendJsonV3(body: Readonly<Record<string, unknown>>) {
   return new Response(JSON.stringify({
     schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V3,
+    ...body,
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function backendJsonV4(body: Readonly<Record<string, unknown>>) {
+  return new Response(JSON.stringify({
+    schemaVersion: CUSTOM_LAUNCH_LIST_SCHEMA_V4,
+    apiVersion: "v4",
+    chainId: "4663",
+    chainDeploymentId: V4_CHAIN_DEPLOYMENT_ID,
     ...body,
   }), {
     status: 200,
@@ -635,6 +735,211 @@ describe("developer launch history same-origin bridge", () => {
       nextCursor: null,
     });
   });
+
+  it("projects the exact minimized V4 wallet-admin list envelope into one compact website row", async () => {
+    const backendSummary = launchSummaryV4();
+    fetchBackend
+      .mockResolvedValueOnce(backendJson({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV3({ launches: [], nextCursor: null }))
+      .mockResolvedValueOnce(backendJsonV4({
+        launches: [backendSummary],
+        nextCursor: null,
+      }));
+
+    const response = await bridge().list(new Request(
+      `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&limit=5`,
+      { headers: { authorization: "Bearer browser-privy-token" } },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,
+      launches: [{
+        schemaVersion: CUSTOM_LAUNCH_SUMMARY_SCHEMA_V4,
+        apiVersion: "v4",
+        launchId: V4_LAUNCH_ID,
+        requestId: V4_LAUNCH_ID,
+        routeId: "custom-launch:create:v4",
+        chainId: "4663",
+        caip2: "eip155:4663",
+        chainDeploymentId: V4_CHAIN_DEPLOYMENT_ID,
+        chainDeploymentDescriptorDigest: V4_CHAIN_DEPLOYMENT_DIGEST,
+        controller: {
+          namespace: "eip155:4663",
+          address: WALLET,
+        },
+        status: "wallet_action_required",
+        walletHandoffUrl: backendSummary.walletHandoffUrl,
+        expiresAt: backendSummary.expiresAt,
+        createdAt: backendSummary.createdAt,
+        updatedAt: backendSummary.updatedAt,
+      }],
+      nextCursor: null,
+    });
+    expect(Object.keys(body.launches[0])).toEqual([
+      "schemaVersion", "apiVersion", "launchId", "requestId", "routeId",
+      "chainId", "caip2", "chainDeploymentId",
+      "chainDeploymentDescriptorDigest", "controller", "status",
+      "walletHandoffUrl", "expiresAt", "createdAt", "updatedAt",
+    ]);
+    const [url, init] = fetchBackend.mock.calls[3] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      "https://custom-launch-api.example/v4/chains/4663/wallet-admin/custom-launches?limit=5",
+    );
+    expect(new Headers(init.headers).get("authorization"))
+      .toBe(`Bearer ${WEBSITE_TOKEN}`);
+    expect(new Headers(init.headers).get("x-programmable-wallet-address"))
+      .toBe(WALLET);
+  });
+
+  it("returns one exact full V4 resource only from the chain-scoped wallet-admin route", async () => {
+    const resource = launchV4();
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V4_LAUNCH_ID}?walletAddress=${WALLET}&version=v4`,
+      { headers: { authorization: "Bearer browser-privy-token" } },
+    ), V4_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(resource);
+    const [url, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      `https://custom-launch-api.example/v4/chains/4663/wallet-admin/custom-launches/${V4_LAUNCH_ID}`,
+    );
+    expect(new Headers(init.headers).get("authorization"))
+      .toBe(`Bearer ${WEBSITE_TOKEN}`);
+    expect(new Headers(init.headers).get("x-programmable-wallet-address"))
+      .toBe(WALLET);
+  });
+
+  it("proxies only the chain-scoped V4 capabilities document", async () => {
+    const capabilities = {
+      schemaVersion: "programmable.custom-launch-capabilities.v2",
+      apiVersion: "v4",
+      chain: { id: "4663", caip2: "eip155:4663" },
+      chainDeploymentId: V4_CHAIN_DEPLOYMENT_ID,
+      walletHandoffBaseUrl:
+        "https://programmable.market/developers/api-keys",
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(capabilities), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().getV4Capabilities(new Request(
+      "https://programmable.market/api/developer/custom-launches/v4-capabilities",
+      { headers: { accept: "application/json" } },
+    ));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(capabilities);
+    const [url, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      "https://custom-launch-api.example/v4/chains/4663/capabilities",
+    );
+    const headers = new Headers(init.headers);
+    expect(headers.get("accept")).toBe("application/json");
+    expect(headers.get("authorization")).toBeNull();
+    expect(headers.get("x-programmable-wallet-address")).toBeNull();
+  });
+
+  it("forwards only a V4 transaction hash hint and validates the exact non-authoritative 202", async () => {
+    const acceptedAt = "2026-08-29T12:06:00.000Z";
+    const statusPath =
+      `/v4/chains/4663/wallet-admin/custom-launches/${V4_LAUNCH_ID}`;
+    const backendResponse = {
+      schemaVersion: CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1,
+      apiVersion: "v4",
+      launchId: V4_LAUNCH_ID,
+      chainId: "4663",
+      chainDeploymentId: V4_CHAIN_DEPLOYMENT_ID,
+      transactionHash: V4_TRANSACTION_HASH,
+      accepted: true,
+      authoritative: false,
+      acceptedAt,
+      statusPath,
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(
+      JSON.stringify(backendResponse),
+      { status: 202, headers: { "content-type": "application/json" } },
+    ));
+    const submission = {
+      schemaVersion: CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1,
+      transactionHash: V4_TRANSACTION_HASH,
+    };
+
+    const response = await bridge().submitV4SubmissionHint(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V4_LAUNCH_ID}/submission-hint?walletAddress=${WALLET}&version=v4`,
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: "Bearer browser-privy-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(submission),
+      },
+    ), V4_LAUNCH_ID);
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual(backendResponse);
+    const [url, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      `https://custom-launch-api.example${statusPath}/submission-hint`,
+    );
+    expect(Buffer.isBuffer(init.body)).toBe(true);
+    const forwarded = JSON.parse(String(init.body));
+    expect(forwarded).toEqual(submission);
+    expect(Object.keys(forwarded)).toEqual([
+      "schemaVersion",
+      "transactionHash",
+    ]);
+    expect(String(init.body)).not.toContain("pm_live_");
+    expect(String(init.body)).not.toContain("signedTransaction");
+    expect(String(init.body)).not.toContain("rawTransaction");
+    expect(String(init.body)).not.toContain("evidence");
+    const headers = new Headers(init.headers);
+    expect(headers.get("authorization")).toBe(`Bearer ${WEBSITE_TOKEN}`);
+    expect(headers.get("authorization")).not.toContain(RAW_PROGRAMMABLE_API_KEY);
+    expect(headers.get("idempotency-key")).toBeNull();
+    expect(headers.get("x-programmable-bff-assertion-body-sha256"))
+      .toBe(`sha256:${createHash("sha256")
+        .update(init.body as Buffer)
+        .digest("hex")}`);
+  });
+
+  it.each([
+    ["apiKey", RAW_PROGRAMMABLE_API_KEY],
+    ["rawTransaction", `0x${"cc".repeat(128)}`],
+    ["signedTransaction", `0x${"dd".repeat(128)}`],
+    ["evidence", { provider: "untrusted", result: "accepted" }],
+  ] as const)(
+    "rejects a V4 submission hint carrying the extra %s field before backend access",
+    async (field, value) => {
+      const response = await bridge().submitV4SubmissionHint(new Request(
+        `https://programmable.market/api/developer/custom-launches/${V4_LAUNCH_ID}/submission-hint?walletAddress=${WALLET}&version=v4`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            schemaVersion: CUSTOM_LAUNCH_SUBMISSION_HINT_SCHEMA_V1,
+            transactionHash: V4_TRANSACTION_HASH,
+            [field]: value,
+          }),
+        },
+      ), V4_LAUNCH_ID);
+
+      expect(response.status).toBe(503);
+      expect((await response.json()).error.code).toBe("launch_history_unavailable");
+      expect(fetchBackend).not.toHaveBeenCalled();
+    },
+  );
 
   it("preserves canonical project metadata and its domain-framed digest", async () => {
     fetchBackend.mockResolvedValueOnce(new Response(
@@ -1524,9 +1829,9 @@ describe("developer launch history same-origin bridge", () => {
         nextCursor: v2Cursor,
       }))
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(backendJson({ launches: [], nextCursor: null }))
-      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }))
-      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+      .mockResolvedValueOnce(backendJsonV2({ launches: [], nextCursor: null }));
 
     const first = await bridge().list(new Request(
       `https://programmable.market/api/developer/custom-launches?walletAddress=${WALLET}&limit=5`,
@@ -1539,9 +1844,9 @@ describe("developer launch history same-origin bridge", () => {
     ));
 
     expect(second.status).toBe(200);
-    expect((fetchBackend.mock.calls[3]![0] as URL).searchParams.get("cursor"))
-      .toBe(v1Cursor);
     expect((fetchBackend.mock.calls[4]![0] as URL).searchParams.get("cursor"))
+      .toBe(v1Cursor);
+    expect((fetchBackend.mock.calls[5]![0] as URL).searchParams.get("cursor"))
       .toBe(v2Cursor);
     expect(await second.json()).toEqual({
       schemaVersion: CUSTOM_LAUNCH_HISTORY_SCHEMA_V1,

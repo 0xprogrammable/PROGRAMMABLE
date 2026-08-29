@@ -161,6 +161,7 @@ function launch(
     updatedAt,
     output: null,
     failure: null,
+    rawResourceV4: null,
   };
 }
 
@@ -510,6 +511,7 @@ describe("developer launch history interface", () => {
         walletHandoffUrl: null,
         expiresAt: null,
         secondsRemaining: null,
+        rawResourceV4: null,
       }],
       nextCursor: null,
     });
@@ -757,7 +759,7 @@ describe("developer launch history interface", () => {
       hydrationStart,
     );
     const hydrationBoundary = historySource.slice(hydrationStart, hydrationEnd);
-    const validatedHydrationWrite = hydrationBoundary.indexOf(
+    const validatedHydrationWrite = hydrationBoundary.lastIndexOf(
       "setHydratedReviews((reviews) => Object.freeze({",
     );
     expect(validatedHydrationWrite).toBeGreaterThan(
@@ -1364,11 +1366,89 @@ describe("developer launch history interface", () => {
 
   it("opens an exact launch deep link and focuses its current record", () => {
     expect(apiKeysSource).toContain('searchParams.get("launchId")');
+    expect(apiKeysSource).toContain('searchParams.get("chainId")');
+    expect(apiKeysSource).toContain(
+      'setInitialLaunchChainId(chainId === "4663" ? "4663" : null)',
+    );
+    expect(apiKeysSource).toContain(
+      "initialLaunchChainId={initialLaunchChainId}",
+    );
     expect(apiKeysSource).toContain('setActiveSection("history")');
-    expect(historySource).toContain("readV3LaunchById(initialLaunchId");
+    expect(historySource).toContain(
+      'const version = initialLaunchChainId === "4663" ? "v4" : "v3"',
+    );
+    expect(historySource).toContain(
+      "readLaunchById(initialLaunchId, version, controller.signal)",
+    );
     expect(historySource).toContain("Loading the exact wallet handoff.");
     expect(historySource).toContain("focusLaunchCard(launch.requestId)");
     expect(historySource).toContain("tabIndex={-1}");
+  });
+
+  it("keeps the V4 handoff owner-controlled and sends only its hash as a discovery hint", () => {
+    const walletStart = walletProviderSource.indexOf(
+      "const sendCustomLaunchWalletActionV4 = useCallback",
+    );
+    const walletEnd = walletProviderSource.indexOf(
+      "const signCustomLaunchFundingAuthorization = useCallback",
+      walletStart,
+    );
+    const walletBoundary = walletProviderSource.slice(walletStart, walletEnd);
+    expect(walletStart).toBeGreaterThan(-1);
+    expect(walletEnd).toBeGreaterThan(walletStart);
+    expect(walletBoundary).toContain(
+      "deriveCustomLaunchWalletExpectedV4(input.reviewedResource)",
+    );
+    expect(walletBoundary).toContain("prepareCustomLaunchWalletReviewV4({");
+    expect(walletBoundary).toContain("revalidateCustomLaunchWalletRequestV4({");
+    expect(walletBoundary).toContain('method: "eth_sendTransaction"');
+    expect(walletBoundary.indexOf('method: "eth_sendTransaction"')).toBeGreaterThan(
+      walletBoundary.indexOf("revalidateCustomLaunchWalletRequestV4({"),
+    );
+    expect(walletBoundary).toContain("from: transaction.from");
+    expect(walletBoundary).toContain("to: transaction.to");
+    expect(walletBoundary).toContain("data: transaction.data");
+    expect(walletBoundary).toContain("value: transaction.value");
+    expect(walletBoundary).not.toContain("eth_signTransaction");
+    expect(walletBoundary).not.toContain("eth_sendRawTransaction");
+    expect(walletBoundary).not.toContain("wallet_sendCalls");
+    expect(walletBoundary).not.toContain("signedTransaction");
+
+    const submitStart = historySource.indexOf(
+      "const submitV4SubmissionHint = useCallback",
+    );
+    const submitEnd = historySource.indexOf(
+      "const updateLaunch = useCallback",
+      submitStart,
+    );
+    const hintBoundary = historySource.slice(submitStart, submitEnd);
+    expect(submitStart).toBeGreaterThan(-1);
+    expect(submitEnd).toBeGreaterThan(submitStart);
+    expect(hintBoundary).toContain(
+      'schemaVersion: "programmable.custom-launch-submission-hint.v1"',
+    );
+    expect(hintBoundary).toContain("transactionHash,");
+    expect(hintBoundary).not.toContain("apiKey");
+    expect(hintBoundary).not.toContain("rawTransaction");
+    expect(hintBoundary).not.toContain("signedTransaction");
+    expect(hintBoundary).not.toContain("evidence:");
+    expect(hintBoundary).toContain("body.authoritative !== false");
+
+    const sendStart = historySource.indexOf(
+      "const submitWalletTransaction = async",
+    );
+    const sendEnd = historySource.indexOf("return (", sendStart);
+    const sendBoundary = historySource.slice(sendStart, sendEnd);
+    expect(sendBoundary).toContain(
+      'launch.routeId === "custom-launch:create:v4"',
+    );
+    expect(sendBoundary).toContain("sendCustomLaunchWalletActionV4({");
+    expect(sendBoundary).toContain("loadFreshCapabilities: readV4Capabilities");
+    expect(sendBoundary).toContain(
+      "await submitV4SubmissionHint(launch, transactionHash)",
+    );
+    expect(sendBoundary.indexOf("await submitV4SubmissionHint(launch, transactionHash)"))
+      .toBeGreaterThan(sendBoundary.indexOf("sendCustomLaunchWalletActionV4({"));
   });
 
   it("never lets a stale list regress a single-resource launch status", () => {

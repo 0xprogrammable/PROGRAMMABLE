@@ -3,26 +3,41 @@ import path from "node:path";
 
 import {
   API_ORIGIN,
+  CAPABILITIES_PATH_TEMPLATE_V4,
+  CAPABILITIES_SCHEMA_V2,
   CAPABILITIES_PATH_V3,
   CREATE_PATH_V1,
   CREATE_PATH_V2,
   CREATE_PATH_V3,
+  CREATE_PATH_TEMPLATE_V4,
   CREATE_REQUEST_SCHEMA_V3,
+  CREATE_REQUEST_SCHEMA_V4,
+  CUSTOM_LAUNCH_RESOURCE_SCHEMA_V4,
   DIRECT_NATIVE_PROFILE_ID,
   DIRECT_NATIVE_PROFILE_REVISION,
   DIRECT_NATIVE_PROFILE_VERSION,
   MAX_REQUEST_BYTES,
+  MAX_REQUEST_BYTES_V4,
   PERMIT_REISSUE_CAPABILITY_SCHEMA_V1,
   PERMIT_REISSUE_DISPOSITION_SCHEMA_V1,
   PERMIT_REISSUE_PATH_TEMPLATE_V3,
   PERMIT_REISSUE_REQUEST_SCHEMA_V1,
   PREFLIGHT_PATH_V3,
+  PREFLIGHT_PATH_TEMPLATE_V4,
   PREFLIGHT_SCHEMA_V1,
+  PREFLIGHT_SCHEMA_V2,
+  EXACT_WALLET_TRANSACTION_SCHEMA_V4,
+  HOOK_PERMISSIONS,
+  ROBINHOOD_CAIP2,
+  ROBINHOOD_CHAIN_ID,
   TERMINAL_STATUSES,
   WALLET_HANDOFF_BASE_URL,
   WALLET_HANDOFF_STATUS,
+  V4_IDEMPOTENCY_DOMAIN,
+  V4_SUBMIT_JOURNAL_SCHEMA,
 } from "./constants.mjs";
 import {
+  assertExactKeys,
   atomicCreate,
   atomicWrite,
   decodeExactUtf8,
@@ -35,6 +50,16 @@ import {
 import { canonicalizeJson, parseStrictJson } from "./canonical-json.mjs";
 import { validateDirectNativePermitWindow } from "./profile-direct-native-v1.mjs";
 import { validateLaunchFile } from "./validate.mjs";
+import {
+  assertV4DeploymentDescriptorDigest,
+  customLaunchRequestHashV4,
+  normalizeV4ChainDeployment,
+  normalizeV4FundingIntent,
+  normalizeV4LiquidityModel,
+  normalizeV4ProfileRef,
+} from "./v4-contract.mjs";
+import { validateProjectMetadata } from "./project-metadata.mjs";
+import { assertCanonicalWalletTransactionCalldataV4 } from "./wallet-transaction-v4.mjs";
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -45,11 +70,32 @@ const PROFILE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const PARTNER_API_KEY =
   /^pm_partner_(?:root_)?[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
 const MAX_SUBMISSION_JOURNAL_BYTES = 12_582_912;
+const MAX_SUBMISSION_JOURNAL_BYTES_V4 = 33_554_432;
 const PREFLIGHT_DISPOSITIONS = new Set([
   "supported",
   "supported_with_warnings",
   "needs_evidence",
   "unsupported",
+  "system_blocked",
+]);
+const V4_EVIDENCE_TIERS = new Set([
+  "launch_mechanics_verified",
+  "standard_swap_compatible",
+  "advanced_custom_accounting",
+  "governed_external_trust",
+]);
+const V4_RESOURCE_STATUSES = new Set([
+  "received",
+  "validating",
+  "action_required",
+  "authorized",
+  "awaiting_wallet_signature",
+  "wallet_action_required",
+  "submitted",
+  "sequencer_soft_confirmed",
+  "ethereum_posted",
+  "finalized",
+  "failed",
 ]);
 const REMEDIATION_SCHEMA_V1 = "programmable.custom-launch-remediation.v1";
 
@@ -63,16 +109,28 @@ export class ProgrammableApiError extends Error {
 
 export async function getLaunchCapabilities(options = {}) {
   const apiOrigin = productionApiOrigin(options.apiOrigin);
+  const apiVersion = normalizeApiVersion(options.apiVersion ?? 3);
+  const chainId = apiVersion === 4
+    ? normalizeV4ChainId(options.chainId)
+    : undefined;
+  const capabilitiesPath = apiVersion === 4
+    ? v4Path(CAPABILITIES_PATH_TEMPLATE_V4, chainId)
+    : CAPABILITIES_PATH_V3;
   const result = await requestWithRetry({
     method: "GET",
-    url: `${apiOrigin}${CAPABILITIES_PATH_V3}`,
+    url: `${apiOrigin}${capabilitiesPath}`,
     headers: { accept: "application/json" },
     maxAttempts: options.maxAttempts,
     timeoutMs: options.timeoutMs,
     fetchImpl: options.fetchImpl,
     sleepImpl: options.sleepImpl,
+    retryExplicit503Only: apiVersion === 4,
   });
-  assertCapabilitiesResponse(result.body);
+  if (apiVersion === 4) {
+    assertCapabilitiesResponseV4(result.body, { chainId });
+  } else {
+    assertCapabilitiesResponse(result.body);
+  }
   return {
     httpStatus: result.status,
     retryAfter: result.retryAfter,
@@ -93,23 +151,36 @@ export async function validateLaunchRemote(options) {
       "REMOTE_VALIDATION_BYTES_CHANGED: launch.json changed after exact local validation",
     );
   }
-  if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3) {
-    throw new TypeError("remote preflight is available only for V3 Custom launch requests");
+  if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3
+    && validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V4) {
+    throw new TypeError("remote preflight is available only for V3 or V4 Custom launch requests");
   }
-  const serverRequestHash = customLaunchRequestHashV3(requestBytes);
+  const isV4 = validation.schemaVersion === CREATE_REQUEST_SCHEMA_V4;
+  const request = isV4
+    ? parseV4RequestBytes(requestBytes)
+    : null;
+  const chainId = isV4 ? normalizeV4ChainId(request.chainId) : undefined;
+  const serverRequestHash = isV4
+    ? customLaunchRequestHashV4(request)
+    : customLaunchRequestHashV3(requestBytes);
 
   const apiOrigin = productionApiOrigin(options.apiOrigin);
   const capabilities = await getLaunchCapabilities({
     apiOrigin,
+    ...(isV4 ? { apiVersion: 4, chainId } : {}),
     maxAttempts: options.maxAttempts,
     timeoutMs: options.timeoutMs,
     fetchImpl: options.fetchImpl,
     sleepImpl: options.sleepImpl,
   });
+  if (isV4) assertV4RequestMatchesCapabilities(request, capabilities.resource);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
+  const preflightPath = isV4
+    ? v4Path(PREFLIGHT_PATH_TEMPLATE_V4, chainId)
+    : PREFLIGHT_PATH_V3;
   const result = await requestWithRetry({
     method: "POST",
-    url: `${apiOrigin}${PREFLIGHT_PATH_V3}`,
+    url: `${apiOrigin}${preflightPath}`,
     headers: {
       accept: "application/json",
       authorization: `Bearer ${apiKey}`,
@@ -120,8 +191,17 @@ export async function validateLaunchRemote(options) {
     timeoutMs: options.timeoutMs,
     fetchImpl: options.fetchImpl,
     sleepImpl: options.sleepImpl,
+    retryExplicit503Only: isV4,
   });
-  assertPreflightResponse(result.body, serverRequestHash);
+  if (isV4) {
+    assertPreflightResponseV4(result.body, {
+      requestHash: serverRequestHash,
+      rawRequestSha256: validation.requestSha256,
+      request,
+    });
+  } else {
+    assertPreflightResponse(result.body, serverRequestHash);
+  }
   const action = resourceActionSummary(result.body, {
     apiOrigin,
     walletHandoffBaseUrl: capabilities.resource.walletHandoffBaseUrl,
@@ -129,6 +209,7 @@ export async function validateLaunchRemote(options) {
   return {
     ...validation,
     remoteValidation: true,
+    apiVersion: isV4 ? "v4" : "v3",
     capabilitiesHttpStatus: capabilities.httpStatus,
     preflightHttpStatus: result.status,
     capabilities: capabilities.resource,
@@ -166,12 +247,12 @@ export async function submitLaunch(options) {
     launchPath,
     configPath: options.configPath,
   });
-  if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3) {
+  if (validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V3
+    && validation.schemaVersion !== CREATE_REQUEST_SCHEMA_V4) {
     throw new TypeError(
-      `LEGACY_SUBMISSION_READ_ONLY: V1 and V2 launch creation are read-only; submit a ${CREATE_REQUEST_SCHEMA_V3} request built for profile version ${DIRECT_NATIVE_PROFILE_VERSION}`,
+      `LEGACY_SUBMISSION_READ_ONLY: V1 and V2 launch creation are read-only; submit a ${CREATE_REQUEST_SCHEMA_V3} Ethereum request or ${CREATE_REQUEST_SCHEMA_V4} chain-bound request`,
     );
   }
-  const requestPath = CREATE_PATH_V3;
   const requestBytes = Buffer.from(await (options.readLaunchBytesImpl ?? readFile)(launchPath));
   const requestSha256 = sha256Digest(requestBytes);
   if (requestSha256 !== validation.requestSha256) {
@@ -179,26 +260,53 @@ export async function submitLaunch(options) {
       "SUBMISSION_BYTES_CHANGED_AFTER_VALIDATION: launch.json changed after exact config validation",
     );
   }
+  const isV4 = validation.schemaVersion === CREATE_REQUEST_SCHEMA_V4;
+  const request = isV4 ? parseV4RequestBytes(requestBytes) : null;
+  const localCommitments = isV4
+    ? exactLocalV4Commitments(validation, request)
+    : null;
+  const localArtifactBindings = isV4
+    ? exactLocalV4ArtifactBindings(validation, request, localCommitments)
+    : null;
+  const chainId = isV4 ? normalizeV4ChainId(request.chainId) : undefined;
+  const requestPath = isV4
+    ? v4Path(CREATE_PATH_TEMPLATE_V4, chainId)
+    : CREATE_PATH_V3;
   const idempotencyKey = normalizeIdempotencyKey(
-    options.idempotencyKey ?? `programmable-${sha256Hex(requestBytes)}`,
+    options.idempotencyKey ?? (isV4
+      ? `${V4_IDEMPOTENCY_DOMAIN}-${sha256Hex(requestBytes)}`
+      : `programmable-${sha256Hex(requestBytes)}`),
   );
   const apiOrigin = productionApiOrigin(options.apiOrigin);
-  const capabilities = validation.schemaVersion === CREATE_REQUEST_SCHEMA_V3
-    ? await getLaunchCapabilities({
+  const capabilities = await getLaunchCapabilities({
       apiOrigin,
+      ...(isV4 ? { apiVersion: 4, chainId } : {}),
       maxAttempts: options.maxAttempts,
       timeoutMs: options.timeoutMs,
       fetchImpl: options.fetchImpl,
       sleepImpl: options.sleepImpl,
-    })
-    : null;
+    });
+  if (isV4) assertV4RequestMatchesCapabilities(request, capabilities.resource);
   const stateDirectory = path.resolve(options.stateDirectory ?? defaultStateDirectory());
   const journalPath = path.join(
     stateDirectory,
     "submissions",
     `${sha256Hex(Buffer.from(idempotencyKey, "utf8"))}.json`,
   );
-  const binding = {
+  const binding = isV4 ? {
+    schemaVersion: V4_SUBMIT_JOURNAL_SCHEMA,
+    apiVersion: "v4",
+    chainId,
+    caip2: request.caip2,
+    apiOrigin,
+    requestPath,
+    idempotencyKey,
+    rawRequestSha256: requestSha256,
+    exactRequestBytesBase64: requestBytes.toString("base64"),
+    launchId: null,
+    status: null,
+    lastResponse: null,
+  } : {
     schemaVersion: "programmable.launch-submit-journal.v1",
     apiOrigin,
     requestPath,
@@ -217,19 +325,33 @@ export async function submitLaunch(options) {
       "content-type": "application/json",
       "idempotency-key": idempotencyKey,
     },
-    body: Buffer.from(journal.requestBodyBase64, "base64"),
+    body: Buffer.from(
+      isV4 ? journal.exactRequestBytesBase64 : journal.requestBodyBase64,
+      "base64",
+    ),
     maxAttempts: options.maxAttempts,
     timeoutMs: options.timeoutMs,
     fetchImpl: options.fetchImpl,
     sleepImpl: options.sleepImpl,
+    retryExplicit503Only: isV4,
   });
-  await updateJournal(journalPath, journal, result);
+  if (isV4) {
+    assertV4LaunchResource(result.body, {
+      request,
+      rawRequestSha256: requestSha256,
+      capabilities: capabilities.resource,
+      localCommitments,
+      localArtifactBindings,
+    });
+  }
+  await updateJournal(journalPath, journal, result, { isV4 });
   const action = resourceActionSummary(result.body, {
     walletHandoffBaseUrl: capabilities?.resource.walletHandoffBaseUrl,
   });
   return {
     idempotencyKey,
     requestSha256,
+    ...(isV4 ? { apiVersion: "v4", chainId, caip2: request.caip2 } : {}),
     journalPath,
     ...(Array.isArray(validation.diagnostics) && validation.diagnostics.length !== 0
       ? { diagnostics: validation.diagnostics }
@@ -246,7 +368,20 @@ export async function statusLaunch(options) {
     throw new TypeError("status requires the Custom launch request UUID");
   }
   const apiOrigin = productionApiOrigin(options.apiOrigin);
-  const requestPath = createPathForApiVersion(options.apiVersion ?? 3);
+  const apiVersion = normalizeApiVersion(options.apiVersion ?? 3);
+  const chainId = apiVersion === 4 ? normalizeV4ChainId(options.chainId) : undefined;
+  const requestPath = createPathForApiVersion(apiVersion, chainId);
+  const capabilities = apiVersion === 4
+    ? await getLaunchCapabilities({
+        apiOrigin,
+        apiVersion,
+        chainId,
+        maxAttempts: options.maxAttempts,
+        timeoutMs: options.timeoutMs,
+        fetchImpl: options.fetchImpl,
+        sleepImpl: options.sleepImpl,
+      })
+    : null;
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
   const until = options.until ?? WALLET_HANDOFF_STATUS;
   if (until !== WALLET_HANDOFF_STATUS && until !== "finalized") {
@@ -265,8 +400,15 @@ export async function statusLaunch(options) {
       timeoutMs: options.timeoutMs,
       fetchImpl: options.fetchImpl,
       sleepImpl: options.sleepImpl,
+      retryExplicit503Only: apiVersion === 4,
     });
     const resource = result.body;
+    if (apiVersion === 4) {
+      assertV4LaunchResource(resource, {
+        chainId,
+        capabilities: capabilities.resource,
+      });
+    }
     const status = resource?.status;
     if (typeof status !== "string") {
       throw new ProgrammableApiError("Custom Launch API returned a resource without status", {
@@ -275,19 +417,30 @@ export async function statusLaunch(options) {
       });
     }
     const walletHandoffReady = status === WALLET_HANDOFF_STATUS
+      || (apiVersion === 4 && new Set([
+        "wallet_action_required",
+        "awaiting_wallet_signature",
+      ]).has(status))
       || (requestPath === CREATE_PATH_V3 && status === "awaiting_funding_authorization");
-    const reviewPending = requestPath === CREATE_PATH_V3 && status === "pending_review";
-    const reviewActionRequired = requestPath === CREATE_PATH_V3 && status === "action_required";
+    const reviewPending = (requestPath === CREATE_PATH_V3 || apiVersion === 4)
+      && status === "pending_review";
+    const reviewActionRequired = (requestPath === CREATE_PATH_V3 || apiVersion === 4)
+      && status === "action_required";
     const stopped = TERMINAL_STATUSES.has(status)
       || reviewActionRequired
       || (until === WALLET_HANDOFF_STATUS && walletHandoffReady)
       || (until === "finalized" && status === "finalized");
     if (!options.watch || stopped) {
       const action = resourceActionSummary(resource);
-      const permitRecovery = permitRecoverySummary(resource, {
-        permitReissueInspectionAvailable: !PARTNER_API_KEY.test(apiKey),
-      });
+      const permitRecovery = apiVersion === 3
+        ? permitRecoverySummary(resource, {
+            permitReissueInspectionAvailable: !PARTNER_API_KEY.test(apiKey),
+          })
+        : null;
       return {
+        ...(apiVersion === 4
+          ? { apiVersion: "v4", chainId, caip2: ROBINHOOD_CAIP2 }
+          : {}),
         httpStatus: result.status,
         stopped,
         terminal: TERMINAL_STATUSES.has(status),
@@ -296,7 +449,7 @@ export async function statusLaunch(options) {
         walletHandoffReady,
         walletHandoffStage: status === "awaiting_funding_authorization"
           ? "funding-signature-required"
-          : status === WALLET_HANDOFF_STATUS
+          : walletHandoffReady
             ? "router-transaction-required"
             : null,
         resource,
@@ -415,35 +568,56 @@ async function bindJournal(journalPath, binding) {
   }
   const existing = (await readStrictJsonFile(
     journalPath,
-    MAX_SUBMISSION_JOURNAL_BYTES,
+    binding.schemaVersion === V4_SUBMIT_JOURNAL_SCHEMA
+      ? MAX_SUBMISSION_JOURNAL_BYTES_V4
+      : MAX_SUBMISSION_JOURNAL_BYTES,
   )).value;
-  for (const key of [
-    "schemaVersion",
-    "apiOrigin",
-    "requestPath",
-    "idempotencyKey",
-    "requestSha256",
-    "requestBodyBase64",
-  ]) {
+  const bindingKeys = binding.schemaVersion === V4_SUBMIT_JOURNAL_SCHEMA
+    ? [
+        "schemaVersion",
+        "apiVersion",
+        "chainId",
+        "caip2",
+        "apiOrigin",
+        "requestPath",
+        "idempotencyKey",
+        "rawRequestSha256",
+        "exactRequestBytesBase64",
+      ]
+    : [
+        "schemaVersion",
+        "apiOrigin",
+        "requestPath",
+        "idempotencyKey",
+        "requestSha256",
+        "requestBodyBase64",
+      ];
+  for (const key of bindingKeys) {
     if (existing[key] !== binding[key]) {
       throw new TypeError(
-        `IDEMPOTENCY_BINDING_CONFLICT: ${binding.idempotencyKey} is already bound to different request bytes or origin`,
+        `IDEMPOTENCY_BINDING_CONFLICT: ${binding.idempotencyKey} is already bound to different request bytes, route, chain, API version, or origin`,
       );
     }
   }
   return existing;
 }
 
-async function updateJournal(journalPath, journal, result) {
+async function updateJournal(journalPath, journal, result, { isV4 = false } = {}) {
   const publicResponse = {
     httpStatus: result.status,
     retryAfter: result.retryAfter,
     requestId: result.body?.requestId ?? result.body?.launchId ?? errorRequestId(result.body),
     status: result.body?.status ?? null,
   };
+  const updated = isV4 ? {
+    ...journal,
+    launchId: result.body?.launchId ?? result.body?.requestId ?? null,
+    status: result.body?.status ?? null,
+    lastResponse: publicResponse,
+  } : { ...journal, lastResponse: publicResponse };
   await atomicWrite(
     journalPath,
-    Buffer.from(`${canonicalizeJson({ ...journal, lastResponse: publicResponse })}\n`, "utf8"),
+    Buffer.from(`${canonicalizeJson(updated)}\n`, "utf8"),
     0o600,
   );
 }
@@ -491,7 +665,12 @@ async function requestWithRetry(options) {
       if (response.status !== 429 && response.status !== 503) throw error;
       body = null;
     }
-    if (response.status === 429 || response.status === 503) {
+    const retryable503 = response.status === 503
+      && (!options.retryExplicit503Only || explicitlyRetryable503(body));
+    if (response.status === 503 && options.retryExplicit503Only && !retryable503) {
+      throw apiError(response.status, body, retryAfter);
+    }
+    if (response.status === 429 || retryable503) {
       if (attempt === maxAttempts) {
         throw apiError(response.status, body, retryAfter);
       }
@@ -581,6 +760,1156 @@ function assertPreflightResponse(value, requestHash) {
   ]) {
     assertPreflightField(value[field] === expected, field);
   }
+}
+
+function assertPreflightResponseV4(value, {
+  requestHash,
+  rawRequestSha256,
+  request,
+}) {
+  assertResponseObject(value, "V4 preflight");
+  assertV4ExactKeys(value, [
+    "schemaVersion",
+    "apiVersion",
+    "chainId",
+    "caip2",
+    "requestHash",
+    "rawRequestSha256",
+    "chainDeploymentId",
+    "chainDeploymentDescriptorDigest",
+    "profile",
+    "serverTime",
+    "disposition",
+    "launchEligibility",
+    "evidenceTier",
+    "hardBlockFindingCodes",
+    "needsEvidenceFindingCodes",
+    "warningFindingCodes",
+    "remediations",
+    "gates",
+    "quotaConsumed",
+    "nonceAllocated",
+    "persisted",
+    "walletSignatureRequiredLater",
+    "walletBroadcastByService",
+  ], "preflight");
+  const expected = {
+    schemaVersion: PREFLIGHT_SCHEMA_V2,
+    apiVersion: "v4",
+    chainId: request.chainId,
+    caip2: request.caip2,
+    requestHash,
+    rawRequestSha256,
+    chainDeploymentId: request.chainDeployment.chainDeploymentId,
+    chainDeploymentDescriptorDigest: request.chainDeploymentDescriptorDigest,
+  };
+  for (const [field, fieldValue] of Object.entries(expected)) {
+    assertPreflightV4Field(value[field] === fieldValue, field);
+  }
+  assertPreflightV4Field(
+    canonicalizeJson(normalizeV4ProfileRef(value.profile))
+      === canonicalizeJson(normalizeV4ProfileRef(request.profile)),
+    "profile",
+  );
+  assertPreflightV4Field(
+    typeof value.serverTime === "string" && Number.isFinite(Date.parse(value.serverTime)),
+    "serverTime",
+  );
+  assertPreflightV4Field(PREFLIGHT_DISPOSITIONS.has(value.disposition), "disposition");
+  assertPreflightV4Field(isPlainObject(value.launchEligibility), "launchEligibility");
+  assertV4ExactKeys(
+    value.launchEligibility,
+    ["deployable", "routable", "featured"],
+    "preflight.launchEligibility",
+  );
+  assertPreflightV4Field(
+    typeof value.launchEligibility.deployable === "boolean"
+      && typeof value.launchEligibility.routable === "boolean"
+      && value.launchEligibility.featured === false,
+    "launchEligibility",
+  );
+  assertPreflightV4Field(V4_EVIDENCE_TIERS.has(value.evidenceTier), "evidenceTier");
+  for (const field of [
+    "hardBlockFindingCodes",
+    "needsEvidenceFindingCodes",
+    "warningFindingCodes",
+  ]) {
+    assertPreflightV4Field(isCodeArray(value[field]), field);
+  }
+  assertPreflightV4Field(Array.isArray(value.remediations), "remediations");
+  for (const [index, remediation] of value.remediations.entries()) {
+    assertV4ExactKeys(
+      remediation,
+      ["code", "requiredChange", "retryable"],
+      `preflight.remediations[${index}]`,
+    );
+    assertPreflightV4Field(
+      nonemptyString(remediation.code)
+        && nonemptyString(remediation.requiredChange)
+        && typeof remediation.retryable === "boolean",
+      `remediations[${index}]`,
+    );
+  }
+  assertV4ExactKeys(value.gates, [
+    "chainBinding",
+    "trustRoots",
+    "sourceBuild",
+    "graph",
+    "metadata",
+    "fundingSettlement",
+    "deterministicValidation",
+    "chainSimulation",
+  ], "preflight.gates");
+  assertPreflightV4Field(
+    Object.values(value.gates).every((gate) => gate === "passed" || gate === "failed"),
+    "gates",
+  );
+  for (const [field, fieldValue] of Object.entries({
+    quotaConsumed: false,
+    nonceAllocated: false,
+    persisted: false,
+    walletSignatureRequiredLater: true,
+    walletBroadcastByService: false,
+  })) {
+    assertPreflightV4Field(value[field] === fieldValue, field);
+  }
+}
+
+function assertCapabilitiesResponseV4(value, { chainId }) {
+  assertCapabilitiesV4Field(isPlainObject(value), "$", value);
+  assertV4ExactKeys(value, [
+    "schemaVersion",
+    "apiVersion",
+    "serverTime",
+    "readinessUrl",
+    "chain",
+    "chainDeployment",
+    "chainDeploymentDescriptorDigest",
+    "profile",
+    "routes",
+    "authentication",
+    "graph",
+    "funding",
+    "metadataImage",
+    "toolchains",
+    "readiness",
+    "safety",
+    "walletHandoff",
+  ], "capabilities");
+  for (const [field, expected] of Object.entries({
+    schemaVersion: CAPABILITIES_SCHEMA_V2,
+    apiVersion: "v4",
+  })) {
+    assertCapabilitiesV4Field(value[field] === expected, field);
+  }
+  assertCapabilitiesV4Field(
+    typeof value.serverTime === "string" && Number.isFinite(Date.parse(value.serverTime)),
+    "serverTime",
+  );
+  assertCapabilitiesV4Field(value.readinessUrl === "/readyz", "readinessUrl");
+  assertCapabilitiesV4Field(isPlainObject(value.chain), "chain");
+  assertV4ExactKeys(value.chain, ["id", "caip2", "name"], "capabilities.chain");
+  for (const [field, expected] of Object.entries({
+    id: chainId,
+    caip2: ROBINHOOD_CAIP2,
+    name: "Robinhood Chain Mainnet",
+  })) {
+    assertCapabilitiesV4Field(value.chain?.[field] === expected, `chain.${field}`);
+  }
+  const rootsUnavailable = value.chainDeployment === null
+    && value.chainDeploymentDescriptorDigest === null
+    && value.profile === null;
+  const rootsReady = value.chainDeployment !== null
+    && value.chainDeploymentDescriptorDigest !== null
+    && value.profile !== null;
+  assertCapabilitiesV4Field(rootsUnavailable || rootsReady, "chainDeployment");
+  if (rootsReady) {
+    const deployment = normalizeV4ChainDeployment(value.chainDeployment);
+    assertCapabilitiesV4Field(
+      value.chainDeploymentDescriptorDigest === assertV4DeploymentDescriptorDigest(
+        value.chainDeploymentDescriptorDigest,
+        deployment,
+      ),
+      "chainDeploymentDescriptorDigest",
+    );
+    normalizeV4ProfileRef(value.profile);
+  }
+  const base = v4Path(CREATE_PATH_TEMPLATE_V4, chainId);
+  assertCapabilitiesV4Field(isPlainObject(value.routes), "routes");
+  assertV4ExactKeys(value.routes, [
+    "capabilities",
+    "create",
+    "preflight",
+    "list",
+    "status",
+    "finalizedMetadata",
+  ], "capabilities.routes");
+  for (const [field, expected] of Object.entries({
+    capabilities: v4Path(CAPABILITIES_PATH_TEMPLATE_V4, chainId),
+    create: base,
+    preflight: v4Path(PREFLIGHT_PATH_TEMPLATE_V4, chainId),
+    list: base,
+    status: `${base}/{launchId}`,
+    finalizedMetadata: `/v4/chains/${chainId}/finalized-custom-launches`,
+  })) {
+    assertCapabilitiesV4Field(value.routes?.[field] === expected, `routes.${field}`);
+  }
+  assertCapabilitiesV4Field(isPlainObject(value.authentication), "authentication");
+  assertV4ExactKeys(value.authentication, [
+    "create",
+    "preflight",
+    "status",
+    "finalizedMetadata",
+    "capabilities",
+    "requiredScopes",
+    "apiKeyIsWallet",
+  ], "capabilities.authentication");
+  for (const [field, expected] of Object.entries({
+    create: "bearer-api-key",
+    preflight: "bearer-api-key",
+    status: "bearer-api-key",
+    finalizedMetadata: "none",
+    capabilities: "none",
+    apiKeyIsWallet: false,
+  })) {
+    assertCapabilitiesV4Field(
+      value.authentication?.[field] === expected,
+      `authentication.${field}`,
+    );
+  }
+  assertCapabilitiesV4Field(
+    canonicalizeJson(value.authentication?.requiredScopes)
+      === canonicalizeJson(["custom-launch:create", "custom-launch:read"]),
+    "authentication.requiredScopes",
+  );
+  assertCapabilitiesV4Field(isPlainObject(value.graph), "graph");
+  assertV4ExactKeys(
+    value.graph,
+    ["minimumTargets", "maximumTargets", "hookPermissionBits"],
+    "capabilities.graph",
+  );
+  assertCapabilitiesV4Field(value.graph?.minimumTargets === 3, "graph.minimumTargets");
+  assertCapabilitiesV4Field(value.graph?.maximumTargets === 16, "graph.maximumTargets");
+  assertCapabilitiesV4Field(
+    canonicalizeJson(value.graph?.hookPermissionBits) === canonicalizeJson(HOOK_PERMISSIONS),
+    "graph.hookPermissionBits",
+  );
+  assertV4ExactKeys(value.funding, ["modes"], "capabilities.funding");
+  assertCapabilitiesV4Field(
+    canonicalizeJson(value.funding?.modes)
+      === canonicalizeJson(["none", "wallet-transaction-value"]),
+    "funding.modes",
+  );
+  assertV4ExactKeys(value.metadataImage, [
+    "schemaVersion",
+    "mediaTypes",
+    "maximumBytes",
+    "maximumDimension",
+    "maximumPixels",
+    "gifFrames",
+  ], "capabilities.metadataImage");
+  assertCapabilitiesV4Field(
+    value.metadataImage.schemaVersion === "programmable.project-metadata-image-capability.v1"
+      && canonicalizeJson(value.metadataImage.mediaTypes)
+        === canonicalizeJson(["image/png", "image/gif"])
+      && value.metadataImage.maximumBytes === 5_242_880
+      && value.metadataImage.maximumDimension === 8_192
+      && value.metadataImage.maximumPixels === 4_194_304
+      && value.metadataImage.gifFrames === 1,
+    "metadataImage",
+  );
+  assertCapabilitiesV4Field(
+    Array.isArray(value.toolchains),
+    "toolchains",
+  );
+  for (const [index, toolchain] of value.toolchains.entries()) {
+    assertCapabilitiesV4Field(isPlainObject(toolchain), `toolchains[${index}]`);
+    assertV4ExactKeys(
+      toolchain,
+      ["compiler", "version", "digest"],
+      `capabilities.toolchains[${index}]`,
+    );
+    assertCapabilitiesV4Field(nonemptyString(toolchain.compiler), `toolchains[${index}].compiler`);
+    assertCapabilitiesV4Field(nonemptyString(toolchain.version), `toolchains[${index}].version`);
+    assertCapabilitiesV4Field(
+      typeof toolchain.digest === "string" && SHA256.test(toolchain.digest),
+      `toolchains[${index}].digest`,
+    );
+  }
+  assertV4ExactKeys(value.readiness, ["status", "reasonCodes"], "capabilities.readiness");
+  assertCapabilitiesV4Field(
+    new Set(["ready", "unavailable"]).has(value.readiness.status)
+      && isCodeArray(value.readiness.reasonCodes)
+      && (value.readiness.status === "ready"
+        ? rootsReady && value.readiness.reasonCodes.length === 0 && value.toolchains.length > 0
+        : value.readiness.reasonCodes.length > 0),
+    "readiness",
+  );
+  assertCapabilitiesV4Field(isPlainObject(value.safety), "safety");
+  assertV4ExactKeys(value.safety, [
+    "serverAuthoritative",
+    "clientBypassAccepted",
+    "walletSignatureProduced",
+    "transactionBroadcast",
+    "feeBehaviorClaim",
+    "universalFeeBehaviorClaim",
+    "genericClaimingLive",
+  ], "capabilities.safety");
+  for (const [field, expected] of Object.entries({
+    serverAuthoritative: true,
+    clientBypassAccepted: false,
+    walletSignatureProduced: false,
+    transactionBroadcast: false,
+    feeBehaviorClaim: false,
+    universalFeeBehaviorClaim: false,
+    genericClaimingLive: false,
+  })) {
+    assertCapabilitiesV4Field(value.safety?.[field] === expected, `safety.${field}`);
+  }
+  assertV4ExactKeys(
+    value.walletHandoff,
+    ["schemaVersion", "separateWalletSignatureRequired", "walletHandoffBaseUrl"],
+    "capabilities.walletHandoff",
+  );
+  assertCapabilitiesV4Field(
+    value.walletHandoff?.schemaVersion === EXACT_WALLET_TRANSACTION_SCHEMA_V4,
+    "walletHandoff.schemaVersion",
+  );
+  assertCapabilitiesV4Field(
+    value.walletHandoff?.separateWalletSignatureRequired === true,
+    "walletHandoff.separateWalletSignatureRequired",
+  );
+  assertCapabilitiesV4Field(
+    value.walletHandoff?.walletHandoffBaseUrl === WALLET_HANDOFF_BASE_URL,
+    "walletHandoff.walletHandoffBaseUrl",
+  );
+}
+
+function assertV4RequestMatchesCapabilities(request, capabilities) {
+  if (capabilities.readiness?.status !== "ready"
+    || capabilities.chainDeployment === null
+    || capabilities.chainDeploymentDescriptorDigest === null
+    || capabilities.profile === null) {
+    throw new ProgrammableApiError("Robinhood V4 production capabilities are unavailable", {
+      code: "CUSTOM_LAUNCH_V4_UNAVAILABLE",
+      serverDetails: { reasonCodes: capabilities.readiness?.reasonCodes ?? [] },
+    });
+  }
+  if (request.chainId !== capabilities.chain.id || request.caip2 !== capabilities.chain.caip2) {
+    throw new ProgrammableApiError("V4 request chain does not match public capabilities", {
+      code: "CUSTOM_LAUNCH_CHAIN_MISMATCH",
+    });
+  }
+  if (request.chainDeploymentDescriptorDigest
+      !== capabilities.chainDeploymentDescriptorDigest
+    || canonicalizeJson(request.chainDeployment)
+      !== canonicalizeJson(capabilities.chainDeployment)) {
+    throw new ProgrammableApiError("V4 request trust roots do not match public capabilities", {
+      code: "CUSTOM_LAUNCH_DEPLOYMENT_MISMATCH",
+    });
+  }
+  if (canonicalizeJson(request.profile) !== canonicalizeJson(capabilities.profile)) {
+    throw new ProgrammableApiError("V4 request profile does not match public capabilities", {
+      code: "CUSTOM_LAUNCH_PROFILE_MISMATCH",
+    });
+  }
+}
+
+function assertV4LaunchResource(value, {
+  request,
+  rawRequestSha256,
+  chainId,
+  capabilities,
+  localCommitments,
+  localArtifactBindings,
+}) {
+  assertResponseObject(value, "V4 launch resource");
+  const optionalFields = [
+    "actionRequired",
+    "walletHandoffUrl",
+    "expiresAt",
+    "secondsRemaining",
+    "partnerAttribution",
+  ].filter((field) => Object.hasOwn(value, field));
+  assertV4ExactKeys(value, [
+    "schemaVersion",
+    "apiVersion",
+    "launchId",
+    "requestId",
+    "routeId",
+    "chainId",
+    "caip2",
+    "chainDeploymentId",
+    "chainDeploymentDescriptorDigest",
+    "chainDeployment",
+    "profile",
+    "controller",
+    "status",
+    "requestHash",
+    "rawRequestSha256",
+    "sourceBuildCommitment",
+    "graphCommitment",
+    "metadataCommitment",
+    "walletTransactionPreimageHash",
+    "commitments",
+    "projectMetadata",
+    "funding",
+    "liquidityModel",
+    "walletTransaction",
+    "preparedArtifact",
+    "admissionReceipt",
+    "simulationReceipt",
+    "externalContractEvidenceReceipt",
+    ...optionalFields,
+    "onchain",
+    "failure",
+    "createdAt",
+    "updatedAt",
+  ], "resource");
+  const expectedChainId = request?.chainId ?? chainId;
+  for (const [field, expected] of Object.entries({
+    schemaVersion: CUSTOM_LAUNCH_RESOURCE_SCHEMA_V4,
+    apiVersion: "v4",
+    routeId: "custom-launch:create:v4",
+    chainId: expectedChainId,
+    caip2: ROBINHOOD_CAIP2,
+    chainDeploymentId: capabilities.chainDeployment.chainDeploymentId,
+    chainDeploymentDescriptorDigest: capabilities.chainDeploymentDescriptorDigest,
+  })) {
+    if (value[field] !== expected) {
+      throw new ProgrammableApiError("Custom Launch API returned an invalid V4 resource", {
+        code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+        serverDetails: { field },
+      });
+    }
+  }
+  if (canonicalizeJson(normalizeV4ChainDeployment(value.chainDeployment))
+      !== canonicalizeJson(normalizeV4ChainDeployment(capabilities.chainDeployment))) {
+    throw new ProgrammableApiError("Custom Launch API returned a resource for another deployment", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "chainDeployment" },
+    });
+  }
+  if (canonicalizeJson(normalizeV4ProfileRef(value.profile))
+      !== canonicalizeJson(normalizeV4ProfileRef(capabilities.profile))) {
+    throw new ProgrammableApiError("Custom Launch API returned a resource for another profile", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "profile" },
+    });
+  }
+  if (!SHA256.test(value.requestHash ?? "")
+    || !SHA256.test(value.rawRequestSha256 ?? "")
+    || !SHA256.test(value.sourceBuildCommitment ?? "")
+    || !SHA256.test(value.graphCommitment ?? "")
+    || !SHA256.test(value.metadataCommitment ?? "")
+    || (value.walletTransactionPreimageHash !== null
+      && !SHA256.test(value.walletTransactionPreimageHash ?? ""))) {
+    throw new ProgrammableApiError("Custom Launch API returned an unbound V4 resource", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "commitments" },
+    });
+  }
+  if (request !== undefined && value.requestHash !== customLaunchRequestHashV4(request)) {
+    throw new ProgrammableApiError("Custom Launch API resource requestHash does not match request", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "requestHash" },
+    });
+  }
+  if (rawRequestSha256 !== undefined && value.rawRequestSha256 !== rawRequestSha256) {
+    throw new ProgrammableApiError("Custom Launch API resource rawRequestSha256 does not match bytes", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "rawRequestSha256" },
+    });
+  }
+  if (!V4_RESOURCE_STATUSES.has(value.status)) {
+    throw new ProgrammableApiError("Custom Launch API returned a V4 resource without status", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "status" },
+    });
+  }
+  if (typeof value.launchId !== "string" || !REQUEST_ID.test(value.launchId)
+    || typeof value.requestId !== "string" || !REQUEST_ID.test(value.requestId)) {
+    throw new ProgrammableApiError("Custom Launch API returned a V4 resource without launchId", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "launchId" },
+    });
+  }
+  assertV4ExactKeys(value.controller, ["namespace", "address"], "resource.controller");
+  if (value.controller.namespace !== ROBINHOOD_CAIP2
+    || !/^0x[0-9a-fA-F]{40}$/u.test(value.controller.address)
+    || (request?.launchWallet !== undefined
+      && value.controller.address.toLowerCase() !== request.launchWallet.toLowerCase())) {
+    throw new ProgrammableApiError("Custom Launch API returned a resource for another controller", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "controller" },
+    });
+  }
+  assertV4Commitments(value.commitments, "resource.commitments");
+  if (localCommitments !== undefined) {
+    assertV4Commitments(localCommitments, "localValidation.commitments");
+  }
+  const requestVerificationCommitment = request?.verificationBundle === undefined
+    ? undefined
+    : framedV4Commitment(request.verificationBundle.schemaVersion, request.verificationBundle);
+  const requestFundingPermitCommitment = request?.funding === undefined
+      || request?.nonce === undefined
+      || request?.permitWindow === undefined
+    ? undefined
+    : framedV4Commitment("programmable.custom-launch-funding-permit.v4", {
+      funding: request.funding,
+      nonce: request.nonce,
+      permitWindow: request.permitWindow,
+    });
+  if (value.sourceBuildCommitment !== value.commitments.sourceBuild
+    || value.graphCommitment !== value.commitments.graph
+    || value.metadataCommitment !== value.commitments.metadata
+    || (localCommitments !== undefined
+      && canonicalizeJson(value.commitments) !== canonicalizeJson(localCommitments))
+    || (requestVerificationCommitment !== undefined
+      && value.commitments.verification !== requestVerificationCommitment)
+    || (requestFundingPermitCommitment !== undefined
+      && value.commitments.fundingPermit !== requestFundingPermitCommitment)
+    || (request?.launchIntentHash !== undefined
+      && value.commitments.launchIntent !== request.launchIntentHash)) {
+    throw new ProgrammableApiError("Custom Launch API resource commitments drifted", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "commitments" },
+    });
+  }
+  const metadata = validateProjectMetadata(value.projectMetadata, { requireComplete: true });
+  if (!new Set(["image/png", "image/gif"]).has(metadata.presentation.image?.mediaType)) {
+    throw new ProgrammableApiError("Custom Launch API resource metadata image is not V4-admitted", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "projectMetadata.presentation.image" },
+    });
+  }
+  normalizeV4FundingIntent(value.funding);
+  normalizeV4LiquidityModel(value.liquidityModel);
+  if (request?.projectMetadata !== undefined
+    && canonicalizeJson(metadata)
+      !== canonicalizeJson(validateProjectMetadata(request.projectMetadata, {
+        requireComplete: true,
+      }))) {
+    throw new ProgrammableApiError("Custom Launch API resource metadata drifted", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "projectMetadata" },
+    });
+  }
+  if (request?.funding !== undefined
+    && canonicalizeJson(value.funding) !== canonicalizeJson(request.funding)) {
+    throw new ProgrammableApiError("Custom Launch API resource funding drifted", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "funding" },
+    });
+  }
+  if (!Number.isFinite(Date.parse(value.createdAt))
+    || !Number.isFinite(Date.parse(value.updatedAt))) {
+    throw new ProgrammableApiError("Custom Launch API resource timestamps are invalid", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "timestamps" },
+    });
+  }
+  if (value.failure !== null) {
+    assertV4ExactKeys(value.failure, ["code", "message", "retryable"], "resource.failure");
+    if (!nonemptyString(value.failure.code)
+      || !nonemptyString(value.failure.message)
+      || typeof value.failure.retryable !== "boolean") {
+      throw new ProgrammableApiError("Custom Launch API resource failure is invalid", {
+        code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+        serverDetails: { field: "failure" },
+      });
+    }
+  }
+  if (value.actionRequired !== undefined && value.actionRequired !== null) {
+    assertV4ExactKeys(
+      value.actionRequired,
+      ["kind", "walletHandoffUrl", "expiresAt"],
+      "resource.actionRequired",
+    );
+    if (value.actionRequired.kind !== "send-router-transaction"
+      || !nonemptyString(value.actionRequired.walletHandoffUrl)
+      || !Number.isFinite(Date.parse(value.actionRequired.expiresAt))) {
+      throw new ProgrammableApiError("Custom Launch API resource wallet action is invalid", {
+        code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+        serverDetails: { field: "actionRequired" },
+      });
+    }
+  }
+  if (value.walletHandoffUrl !== undefined
+    && value.walletHandoffUrl !== null
+    && !nonemptyString(value.walletHandoffUrl)) {
+    throw new ProgrammableApiError("Custom Launch API resource wallet URL is invalid", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "walletHandoffUrl" },
+    });
+  }
+  if (value.expiresAt !== undefined
+    && value.expiresAt !== null
+    && !Number.isFinite(Date.parse(value.expiresAt))) {
+    throw new ProgrammableApiError("Custom Launch API resource expiry is invalid", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "expiresAt" },
+    });
+  }
+  if (value.secondsRemaining !== undefined
+    && value.secondsRemaining !== null
+    && (!Number.isSafeInteger(value.secondsRemaining) || value.secondsRemaining < 0)) {
+    throw new ProgrammableApiError("Custom Launch API resource countdown is invalid", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "secondsRemaining" },
+    });
+  }
+  const walletState = new Set([
+    WALLET_HANDOFF_STATUS,
+    "wallet_action_required",
+    "awaiting_wallet_signature",
+  ]).has(value.status);
+  if (walletState && value.walletTransaction === null) {
+    throw new ProgrammableApiError("Custom Launch API wallet state omitted its transaction", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "walletTransaction" },
+    });
+  }
+  assertV4ReceiptPhase(value, { request, capabilities });
+  if ((value.walletTransaction === null) !== (value.preparedArtifact === null)) {
+    throw new ProgrammableApiError("Custom Launch API split its wallet transaction and artifact", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "preparedArtifact" },
+    });
+  }
+  if (value.preparedArtifact !== null
+    && canonicalizeJson(value.preparedArtifact.projectMetadata)
+      !== canonicalizeJson(metadata)) {
+    throw new ProgrammableApiError("Custom Launch API artifact metadata drifted", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "preparedArtifact.projectMetadata" },
+    });
+  }
+  if (value.walletTransaction !== null) {
+    assertExactWalletTransactionV4(value.walletTransaction, capabilities, {
+      request,
+      resource: value,
+      localArtifactBindings,
+    });
+  }
+  if (value.onchain !== null) {
+    assertV4OnchainEvidence(value.onchain, capabilities, value);
+  }
+}
+
+function assertExactWalletTransactionV4(
+  value,
+  capabilities,
+  { request, resource, localArtifactBindings } = {},
+) {
+  assertExactKeys(value, [
+    "schemaVersion",
+    "chainId",
+    "caip2",
+    "apiVersion",
+    "chainDeploymentId",
+    "chainDeploymentDescriptorDigest",
+    "chainDeployment",
+    "profile",
+    "finalityPolicy",
+    "from",
+    "to",
+    "valueWei",
+    "calldata",
+    "selector",
+    "transactionPreimageHash",
+    "routerRuntimeCodeHash",
+    "expiresAt",
+    "commitments",
+    "launchSummary",
+  ], "walletTransaction");
+  const router = capabilities.chainDeployment.contracts.programmableLaunchStampRouter;
+  const requestFundingValue = request?.funding?.mode === "wallet-transaction-value"
+    ? request.funding.valueWei
+    : request?.funding?.mode === "none"
+      ? "0"
+      : undefined;
+  const expiryMilliseconds = typeof value?.expiresAt === "string"
+    ? Date.parse(value.expiresAt)
+    : Number.NaN;
+  const afterPermitDeadline = request?.permitWindow?.deadline !== undefined
+    && /^(?:0|[1-9][0-9]*)$/u.test(request.permitWindow.deadline)
+    && Number.isFinite(expiryMilliseconds)
+    && BigInt(Math.floor(expiryMilliseconds / 1_000)) > BigInt(request.permitWindow.deadline);
+  if (value.schemaVersion !== EXACT_WALLET_TRANSACTION_SCHEMA_V4
+    || value.chainId !== ROBINHOOD_CHAIN_ID
+    || value.caip2 !== ROBINHOOD_CAIP2
+    || value.apiVersion !== "v4"
+    || value.chainDeploymentId !== capabilities.chainDeployment.chainDeploymentId
+    || value.chainDeploymentDescriptorDigest !== capabilities.chainDeploymentDescriptorDigest
+    || canonicalizeJson(normalizeV4ChainDeployment(value.chainDeployment))
+      !== canonicalizeJson(normalizeV4ChainDeployment(capabilities.chainDeployment))
+    || canonicalizeJson(normalizeV4ProfileRef(value.profile))
+      !== canonicalizeJson(normalizeV4ProfileRef(capabilities.profile))
+    || canonicalizeJson(value.finalityPolicy)
+      !== canonicalizeJson(capabilities.chainDeployment.finality)
+    || typeof value.from !== "string"
+    || !/^0x[0-9a-fA-F]{40}$/u.test(value.from)
+    || (typeof request?.launchWallet === "string"
+      && value.from.toLowerCase() !== request.launchWallet.toLowerCase())
+    || value.to !== router.address
+    || value.routerRuntimeCodeHash !== router.runtimeCodeHash
+    || typeof value.valueWei !== "string"
+    || !/^(?:0|[1-9][0-9]*)$/u.test(value.valueWei)
+    || (requestFundingValue !== undefined && value.valueWei !== requestFundingValue)
+    || value.selector !== "0xe5f6b8cd"
+    || typeof value.calldata !== "string"
+    || !/^0x(?:[0-9a-f]{2}){4,}$/u.test(value.calldata)
+    || !value.calldata.startsWith(value.selector)
+    || !SHA256.test(value.transactionPreimageHash ?? "")
+    || typeof value.expiresAt !== "string"
+    || !Number.isFinite(expiryMilliseconds)
+    || afterPermitDeadline
+    || !isPlainObject(value.commitments)
+    || !validV4Commitments(value.commitments)
+    || !validV4LaunchSummary(value.launchSummary, value, { request, resource })) {
+    throw new ProgrammableApiError("Custom Launch API returned an unsafe V4 wallet transaction", {
+      code: "EXACT_WALLET_TRANSACTION_INVALID",
+    });
+  }
+  const { transactionPreimageHash: _ignored, ...preimage } = value;
+  const expectedPreimageHash = sha256Digest(Buffer.concat([
+    Buffer.from("programmable.exact-wallet-transaction-preimage.v4", "utf8"),
+    Buffer.from([0]),
+    Buffer.from(canonicalizeJson(preimage), "utf8"),
+  ]));
+  if (value.transactionPreimageHash !== expectedPreimageHash) {
+    throw new ProgrammableApiError("Custom Launch API wallet preimage hash is not canonical", {
+      code: "EXACT_WALLET_TRANSACTION_INVALID",
+    });
+  }
+  if ((resource?.walletTransactionPreimageHash !== null
+      && resource?.walletTransactionPreimageHash !== value.transactionPreimageHash)
+    || (resource?.commitments !== undefined
+      && canonicalizeJson(resource.commitments) !== canonicalizeJson(value.commitments))
+    || (resource?.sourceBuildCommitment !== undefined
+      && resource.sourceBuildCommitment !== value.commitments.sourceBuild)
+    || (resource?.graphCommitment !== undefined
+      && resource.graphCommitment !== value.commitments.graph)
+    || (resource?.metadataCommitment !== undefined
+      && resource.metadataCommitment !== value.commitments.metadata)
+    || (request?.launchIntentHash !== undefined
+      && request.launchIntentHash !== value.commitments.launchIntent)) {
+    throw new ProgrammableApiError("Custom Launch API wallet transaction commitments drifted", {
+      code: "EXACT_WALLET_TRANSACTION_INVALID",
+    });
+  }
+  try {
+    assertCanonicalWalletTransactionCalldataV4({
+      calldata: value.calldata,
+      chainId: ROBINHOOD_CHAIN_ID,
+      router: router.address,
+      graphFactory: capabilities.chainDeployment.contracts.graphFactory.address,
+      launchWallet: value.from,
+      ...(request?.nonce === undefined ? {} : { nonce: request.nonce }),
+      ...(request?.permitWindow === undefined ? {} : { permitWindow: request.permitWindow }),
+      valueWei: value.valueWei,
+      preparedArtifact: resource?.preparedArtifact,
+      commitments: value.commitments,
+      localArtifactBindings,
+    });
+  } catch (cause) {
+    throw new ProgrammableApiError("Custom Launch API wallet calldata or artifact is not canonical", {
+      code: "EXACT_WALLET_TRANSACTION_INVALID",
+      cause,
+    });
+  }
+}
+
+function framedV4Commitment(domain, value) {
+  if (typeof domain !== "string" || domain.length === 0) return undefined;
+  return sha256Digest(Buffer.concat([
+    Buffer.from(domain, "utf8"),
+    Buffer.from([0]),
+    Buffer.from(canonicalizeJson(value), "utf8"),
+  ]));
+}
+
+function exactLocalV4Commitments(validation, request) {
+  const commitments = {
+    sourceBuild: validation.sourceBuildCommitment,
+    graph: validation.graphBundleHash,
+    metadata: validation.projectMetadataHash,
+    verification: validation.verificationBundleHash,
+    fundingPermit: framedV4Commitment("programmable.custom-launch-funding-permit.v4", {
+      funding: request.funding,
+      nonce: request.nonce,
+      permitWindow: request.permitWindow,
+    }),
+    launchIntent: validation.launchIntentHash,
+  };
+  if (!validV4Commitments(commitments)
+    || commitments.launchIntent !== request.launchIntentHash
+    || (request.projectMetadataHash !== undefined
+      && commitments.metadata !== request.projectMetadataHash)) {
+    throw new TypeError(
+      "V4_LOCAL_VALIDATION_COMMITMENTS_INVALID: exact local pack/validate commitments are absent or drifted",
+    );
+  }
+  return Object.freeze(commitments);
+}
+
+function exactLocalV4ArtifactBindings(validation, request, commitments) {
+  const graphTargets = request?.graphBundle?.targets;
+  const predictions = validation?.predictions;
+  if (!Array.isArray(graphTargets)
+    || !Array.isArray(predictions)
+    || graphTargets.length < 3
+    || graphTargets.length !== predictions.length
+    || typeof request?.graphBundle?.sourceBundleSha256 !== "string"
+    || !SHA256.test(request.graphBundle.sourceBundleSha256)
+    || typeof validation?.unboundGraphBundleHash !== "string"
+    || !SHA256.test(validation.unboundGraphBundleHash)) {
+    throw new TypeError(
+      "V4_LOCAL_ARTIFACT_BINDINGS_INVALID: exact local graph materialization is absent",
+    );
+  }
+  const targets = graphTargets.map((target, index) => {
+    const prediction = predictions[index];
+    if (prediction?.targetId !== target?.targetId
+      || typeof target?.creationBytecode !== "string"
+      || !/^0x(?:[0-9a-f]{2})+$/u.test(target.creationBytecode)
+      || typeof prediction?.resolvedConstructorArguments !== "string"
+      || !/^0x(?:[0-9a-f]{2})*$/u.test(prediction.resolvedConstructorArguments)
+      || typeof prediction?.resolvedInitializerCalldata !== "string"
+      || !/^0x(?:[0-9a-f]{2})*$/u.test(prediction.resolvedInitializerCalldata)) {
+      throw new TypeError(
+        "V4_LOCAL_ARTIFACT_BINDINGS_INVALID: local graph predictions drifted",
+      );
+    }
+    return Object.freeze({
+      targetId: target.targetId,
+      targetIdHash: prediction.targetIdHash,
+      applicantSalt: prediction.applicantSalt,
+      deploymentValueWei: target.deploymentValueWei,
+      initializerValueWei: target.initializerValueWei,
+      initCode: `${target.creationBytecode}${prediction.resolvedConstructorArguments.slice(2)}`,
+      initializerCalldata: prediction.resolvedInitializerCalldata,
+      predictedAddress: prediction.predictedAddress,
+      expectedRuntimeCodeHash: target.expectedRuntimeCodeHash,
+    });
+  });
+  return Object.freeze({
+    sourceBundleSha256: request.graphBundle.sourceBundleSha256,
+    unboundGraphBundleHash: validation.unboundGraphBundleHash,
+    projectMetadata: request.projectMetadata,
+    projectMetadataHash: commitments.metadata,
+    graphBundleHash: commitments.graph,
+    verificationBundleHash: commitments.verification,
+    targets: Object.freeze(targets),
+  });
+}
+
+function assertV4ReceiptPhase(resource, { request, capabilities }) {
+  const admission = resource.admissionReceipt;
+  const simulation = resource.simulationReceipt;
+  const externalEvidence = resource.externalContractEvidenceReceipt;
+  if ((admission === null) !== (simulation === null)
+    || (admission === null) !== (externalEvidence === null)) {
+    throw new ProgrammableApiError("Custom Launch API returned an incomplete receipt pair", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "admissionReceipt" },
+    });
+  }
+  if (admission !== null) {
+    assertV4AdmissionReceipt(admission, resource, capabilities);
+    assertV4SimulationReceipt(simulation, resource, capabilities);
+    assertV4ExternalContractEvidenceReceipt(
+      externalEvidence,
+      resource,
+      capabilities,
+      admission,
+    );
+  }
+  const unevaluated = new Set(["received", "validating"]);
+  const walletPrepared = new Set([
+    "wallet_action_required", "awaiting_wallet_signature", "authorized", "submitted",
+    "sequencer_soft_confirmed", "ethereum_posted", "finalized",
+  ]);
+  if ((unevaluated.has(resource.status) && admission !== null)
+    || (!unevaluated.has(resource.status) && admission === null)
+    || (walletPrepared.has(resource.status)
+      && (resource.walletTransaction === null || resource.preparedArtifact === null
+        || simulation.kind !== "exact_wallet_transaction" || simulation.passed !== true))
+    || (!walletPrepared.has(resource.status)
+      && (resource.walletTransaction !== null || resource.preparedArtifact !== null))) {
+    throw new ProgrammableApiError("Custom Launch API receipt phase does not match resource status", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "status" },
+    });
+  }
+  if (request !== undefined && admission !== null
+    && admission.requestHash !== customLaunchRequestHashV4(request)) {
+    throw new ProgrammableApiError("Custom Launch API receipt request binding drifted", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "admissionReceipt.requestHash" },
+    });
+  }
+}
+
+function assertV4ExternalContractEvidenceReceipt(
+  value,
+  resource,
+  capabilities,
+  admission,
+) {
+  assertResponseObject(value, "resource.externalContractEvidenceReceipt");
+  if (value.schemaVersion !== "programmable.custom-launch-external-contract-evidence.v4"
+    || value.requestHash !== resource.requestHash
+    || value.chainDeploymentDescriptorDigest !== capabilities.chainDeploymentDescriptorDigest
+    || value.profileDigest !== capabilities.profile.profileDigest
+    || value.verified !== true
+    || !Array.isArray(value.references)
+    || !Array.isArray(value.providers)
+    || !SHA256.test(value.evidenceDigest ?? "")
+    || value.evidenceDigest !== admission.externalContractEvidenceDigest) {
+    throw new ProgrammableApiError(
+      "Custom Launch API external-contract evidence receipt is not request-bound",
+      {
+        code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+        serverDetails: { field: "externalContractEvidenceReceipt" },
+      },
+    );
+  }
+}
+
+function assertV4AdmissionReceipt(value, resource, capabilities) {
+  assertV4ExactKeys(value, [
+    "schemaVersion", "apiVersion", "chainId", "requestHash", "rawRequestSha256",
+    "chainDeploymentDescriptorDigest", "profileDigest", "commitments",
+    "staticAnalysisDigest", "externalContractEvidenceDigest", "disposition",
+    "evidenceTier", "hardBlockFindingCodes", "needsEvidenceFindingCodes",
+    "warningFindingCodes", "issuedAt", "receiptDigest",
+  ], "resource.admissionReceipt");
+  const { receiptDigest, ...preimage } = value;
+  if (value.schemaVersion !== "programmable.custom-launch-admission-receipt.v4"
+    || value.apiVersion !== "v4" || value.chainId !== ROBINHOOD_CHAIN_ID
+    || value.requestHash !== resource.requestHash
+    || value.rawRequestSha256 !== resource.rawRequestSha256
+    || value.chainDeploymentDescriptorDigest !== capabilities.chainDeploymentDescriptorDigest
+    || value.profileDigest !== capabilities.profile.profileDigest
+    || canonicalizeJson(value.commitments) !== canonicalizeJson(resource.commitments)
+    || !SHA256.test(value.staticAnalysisDigest ?? "")
+    || !SHA256.test(value.externalContractEvidenceDigest ?? "")
+    || !new Set(["supported", "supported_with_warnings", "needs_evidence", "unsupported"])
+      .has(value.disposition)
+    || !V4_EVIDENCE_TIERS.has(value.evidenceTier)
+    || !isCodeArray(value.hardBlockFindingCodes)
+    || !isCodeArray(value.needsEvidenceFindingCodes)
+    || !isCodeArray(value.warningFindingCodes)
+    || !canonicalTimestampV4(value.issuedAt)
+    || receiptDigest !== framedSha256JsonV4(value.schemaVersion, preimage)) {
+    throw new ProgrammableApiError("Custom Launch API admission receipt is invalid", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "admissionReceipt" },
+    });
+  }
+}
+
+function assertV4SimulationReceipt(value, resource, capabilities) {
+  assertV4ExactKeys(value, [
+    "schemaVersion", "apiVersion", "kind", "chainId", "requestHash",
+    "transactionPreimageHash", "chainDeploymentDescriptorDigest", "profileDigest",
+    "providerEvidenceDigest", "passed", "reasonCode", "observedBlockNumber",
+    "observedBlockHash", "issuedAt", "receiptDigest",
+  ], "resource.simulationReceipt");
+  const { receiptDigest, ...preimage } = value;
+  const observedNull = value.observedBlockNumber === null && value.observedBlockHash === null;
+  const observedPresent = typeof value.observedBlockNumber === "string"
+    && /^(?:0|[1-9][0-9]*)$/u.test(value.observedBlockNumber)
+    && NONZERO_HEX32.test(value.observedBlockHash ?? "");
+  if (value.schemaVersion !== "programmable.custom-launch-simulation-receipt.v4"
+    || value.apiVersion !== "v4"
+    || !new Set(["request_preflight", "exact_wallet_transaction"]).has(value.kind)
+    || value.chainId !== ROBINHOOD_CHAIN_ID
+    || value.requestHash !== resource.requestHash
+    || (value.kind === "request_preflight"
+      ? value.transactionPreimageHash !== null
+      : value.transactionPreimageHash !== resource.walletTransactionPreimageHash)
+    || value.chainDeploymentDescriptorDigest !== capabilities.chainDeploymentDescriptorDigest
+    || value.profileDigest !== capabilities.profile.profileDigest
+    || !SHA256.test(value.providerEvidenceDigest ?? "")
+    || typeof value.passed !== "boolean"
+    || (value.passed ? value.reasonCode !== null : !nonemptyString(value.reasonCode))
+    || (!observedNull && !observedPresent)
+    || !canonicalTimestampV4(value.issuedAt)
+    || receiptDigest !== framedSha256JsonV4(value.schemaVersion, preimage)) {
+    throw new ProgrammableApiError("Custom Launch API simulation receipt is invalid", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "simulationReceipt" },
+    });
+  }
+}
+
+function framedSha256JsonV4(domain, value) {
+  return sha256Digest(Buffer.concat([
+    Buffer.from(domain, "utf8"),
+    Buffer.from([0]),
+    Buffer.from(canonicalizeJson(value), "utf8"),
+  ]));
+}
+
+function canonicalTimestampV4(value) {
+  if (typeof value !== "string") return false;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value;
+}
+
+function assertV4OnchainEvidence(value, capabilities, resource) {
+  assertV4ExactKeys(value, [
+    "schemaVersion",
+    "apiVersion",
+    "chainId",
+    "caip2",
+    "chainDeploymentId",
+    "chainDeploymentDescriptorDigest",
+    "chainDeployment",
+    "profile",
+    "router",
+    "routerRuntimeCodeHash",
+    "routerLaunchId",
+    "transactionHash",
+    "blockNumber",
+    "blockHash",
+    "logIndex",
+    "checkpointType",
+    "finalityPolicy",
+    "commitments",
+    "walletTransactionPreimageHash",
+    "evidenceDigest",
+    "terminal",
+    "observedAt",
+  ], "resource.onchain");
+  const deployment = normalizeV4ChainDeployment(value.chainDeployment);
+  const router = capabilities.chainDeployment.contracts.programmableLaunchStampRouter;
+  if (value.schemaVersion !== "programmable.custom-launch-onchain-evidence.v2"
+    || value.apiVersion !== "v4"
+    || value.chainId !== ROBINHOOD_CHAIN_ID
+    || value.caip2 !== ROBINHOOD_CAIP2
+    || value.chainDeploymentId !== capabilities.chainDeployment.chainDeploymentId
+    || value.chainDeploymentDescriptorDigest !== capabilities.chainDeploymentDescriptorDigest
+    || canonicalizeJson(deployment)
+      !== canonicalizeJson(normalizeV4ChainDeployment(capabilities.chainDeployment))
+    || canonicalizeJson(normalizeV4ProfileRef(value.profile))
+      !== canonicalizeJson(normalizeV4ProfileRef(capabilities.profile))
+    || value.router !== router.address
+    || value.routerRuntimeCodeHash !== router.runtimeCodeHash
+    || !NONZERO_HEX32.test(value.routerLaunchId ?? "")
+    || !NONZERO_HEX32.test(value.transactionHash ?? "")
+    || typeof value.blockNumber !== "string"
+    || !/^(?:0|[1-9][0-9]*)$/u.test(value.blockNumber)
+    || !NONZERO_HEX32.test(value.blockHash ?? "")
+    || !Number.isSafeInteger(value.logIndex)
+    || value.logIndex < 0
+    || !new Set([
+      "sequencer_soft_confirmation",
+      "ethereum_posted",
+      "ethereum_finalized",
+    ]).has(value.checkpointType)
+    || canonicalizeJson(value.finalityPolicy)
+      !== canonicalizeJson(capabilities.chainDeployment.finality)
+    || !validV4Commitments(value.commitments)
+    || canonicalizeJson(value.commitments) !== canonicalizeJson(resource.commitments)
+    || value.walletTransactionPreimageHash !== resource.walletTransactionPreimageHash
+    || !SHA256.test(value.walletTransactionPreimageHash ?? "")
+    || !SHA256.test(value.evidenceDigest ?? "")
+    || typeof value.terminal !== "boolean"
+    || !Number.isFinite(Date.parse(value.observedAt))) {
+    throw new ProgrammableApiError("Custom Launch API returned invalid V4 onchain evidence", {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: "onchain" },
+    });
+  }
+}
+
+function validV4Commitments(value) {
+  if (!isPlainObject(value)) return false;
+  const expected = [
+    "sourceBuild",
+    "graph",
+    "metadata",
+    "verification",
+    "fundingPermit",
+    "launchIntent",
+  ];
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  return actual.length === wanted.length
+    && actual.every((key, index) => key === wanted[index])
+    && Object.values(value).every((digest) => typeof digest === "string" && SHA256.test(digest));
+}
+
+function assertV4Commitments(value, label) {
+  if (validV4Commitments(value)) return;
+  throw new ProgrammableApiError("Custom Launch API returned invalid V4 commitments", {
+    code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+    serverDetails: { field: label },
+  });
+}
+
+function validV4LaunchSummary(value, transaction, { request, resource } = {}) {
+  if (!isPlainObject(value)) return false;
+  const keys = ["chainName", "controller", "name", "symbol", "fundingMode", "valueWei"];
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  const expectedMetadata = request?.projectMetadata ?? resource?.projectMetadata;
+  const expectedFunding = request?.funding ?? resource?.funding;
+  return actual.length === expected.length
+    && actual.every((key, index) => key === expected[index])
+    && value.chainName === "Robinhood Chain Mainnet"
+    && typeof value.controller === "string"
+    && value.controller.toLowerCase() === transaction.from.toLowerCase()
+    && nonemptyString(value.name)
+    && nonemptyString(value.symbol)
+    && new Set(["none", "wallet-transaction-value"]).has(value.fundingMode)
+    && value.valueWei === transaction.valueWei
+    && ((value.fundingMode === "none") === (value.valueWei === "0"))
+    && (expectedMetadata === undefined
+      || (value.name === expectedMetadata.token?.name
+        && value.symbol === expectedMetadata.token?.symbol))
+    && (expectedFunding === undefined
+      || (value.fundingMode === expectedFunding.mode
+        && value.valueWei === expectedFunding.valueWei));
+}
+
+function assertV4ExactKeys(value, keys, label) {
+  try {
+    assertExactKeys(value, keys, label);
+  } catch (cause) {
+    throw new ProgrammableApiError("Custom Launch API returned a noncanonical V4 object", {
+      code: "CUSTOM_LAUNCH_V4_CONTRACT_INVALID",
+      serverDetails: { field: label },
+      cause,
+    });
+  }
+}
+
+function assertCapabilitiesV4Field(condition, field, value) {
+  if (condition) return;
+  throw new ProgrammableApiError(
+    "Custom Launch API capabilities do not match the production V4 machine contract",
+    {
+      code: "CAPABILITIES_CONTRACT_INVALID",
+      serverDetails: { field },
+      ...(field === "$" && value !== undefined ? { cause: "response-is-not-an-object" } : {}),
+    },
+  );
+}
+
+function assertPreflightV4Field(condition, field) {
+  if (condition) return;
+  throw new ProgrammableApiError(
+    `Custom Launch API returned an invalid ${PREFLIGHT_SCHEMA_V2} response`,
+    {
+      code: "PREFLIGHT_CONTRACT_INVALID",
+      serverDetails: { field },
+    },
+  );
 }
 
 function assertCapabilitiesResponse(value) {
@@ -1079,6 +2408,12 @@ function retryDelayMs(retryAfter, attempt) {
   return Math.min(1_000 * 2 ** (attempt - 1), 30_000);
 }
 
+function explicitlyRetryable503(body) {
+  const error = body?.error ?? body;
+  return error?.retryable === true
+    || error?.details?.retryable === true;
+}
+
 function normalizeIdempotencyKey(value) {
   if (typeof value !== "string" || !IDEMPOTENCY_KEY.test(value)) {
     throw new TypeError("Idempotency-Key must be 16 to 128 characters from [A-Za-z0-9._:-]");
@@ -1093,11 +2428,42 @@ function productionApiOrigin(value) {
   );
 }
 
-function createPathForApiVersion(value) {
-  if (value === 1 || value === "1" || value === "v1") return CREATE_PATH_V1;
-  if (value === 2 || value === "2" || value === "v2") return CREATE_PATH_V2;
-  if (value === 3 || value === "3" || value === "v3") return CREATE_PATH_V3;
-  throw new TypeError("apiVersion must be 1, 2, or 3");
+function normalizeApiVersion(value) {
+  if (value === 1 || value === "1" || value === "v1") return 1;
+  if (value === 2 || value === "2" || value === "v2") return 2;
+  if (value === 3 || value === "3" || value === "v3") return 3;
+  if (value === 4 || value === "4" || value === "v4") return 4;
+  throw new TypeError("apiVersion must be 1, 2, 3, or 4");
+}
+
+function createPathForApiVersion(value, chainId) {
+  const apiVersion = normalizeApiVersion(value);
+  if (apiVersion === 1) return CREATE_PATH_V1;
+  if (apiVersion === 2) return CREATE_PATH_V2;
+  if (apiVersion === 3) return CREATE_PATH_V3;
+  return v4Path(CREATE_PATH_TEMPLATE_V4, normalizeV4ChainId(chainId));
+}
+
+function normalizeV4ChainId(value) {
+  if (value !== ROBINHOOD_CHAIN_ID) {
+    throw new TypeError(
+      `V4 chain selection is explicit and must be --chain-id ${ROBINHOOD_CHAIN_ID}`,
+    );
+  }
+  return value;
+}
+
+function v4Path(template, chainId) {
+  return template.replace("{chainId}", encodeURIComponent(normalizeV4ChainId(chainId)));
+}
+
+function parseV4RequestBytes(requestBytes) {
+  const source = decodeExactUtf8(requestBytes, "V4 launch request");
+  const request = parseStrictJson(source, { maximumBytes: MAX_REQUEST_BYTES_V4 });
+  if (!isPlainObject(request) || request.schemaVersion !== CREATE_REQUEST_SCHEMA_V4) {
+    throw new TypeError(`request schemaVersion must be ${CREATE_REQUEST_SCHEMA_V4}`);
+  }
+  return request;
 }
 
 function errorRequestId(body) {

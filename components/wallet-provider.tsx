@@ -48,6 +48,11 @@ import {
   verifyCustomLaunchFundingSignatureV3,
   type CustomLaunchFundingAuthorizationV3,
 } from "@/lib/custom-launch/wallet-handoff-v3";
+import {
+  deriveCustomLaunchWalletExpectedV4,
+  prepareCustomLaunchWalletReviewV4,
+  revalidateCustomLaunchWalletRequestV4,
+} from "@/lib/custom-launch/wallet-handoff-v4";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
 import {
@@ -122,6 +127,12 @@ export type WalletApplicantSessionV1 = Readonly<{
   launchWallet: `0x${string}`;
 }>;
 
+export type CustomLaunchWalletActionInputV4 = Readonly<{
+  reviewedResource: unknown;
+  loadFreshCapabilities: () => Promise<unknown>;
+  loadFreshResource: () => Promise<unknown>;
+}>;
+
 type WalletContextValue = {
   wallet: WalletState | null;
   walletLinked: boolean;
@@ -175,6 +186,9 @@ type WalletContextValue = {
   }>) => Promise<Hex>;
   sendCustomLaunchWalletAction: (
     input: CustomLaunchWalletActionV1,
+  ) => Promise<Hex>;
+  sendCustomLaunchWalletActionV4: (
+    input: CustomLaunchWalletActionInputV4,
   ) => Promise<Hex>;
   signCustomLaunchFundingAuthorization: (
     input: CustomLaunchFundingAuthorizationV3,
@@ -938,6 +952,9 @@ function DeferredWalletProvider({
         throw new Error("Wallet sign-in is still loading");
       },
       sendCustomLaunchWalletAction: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      sendCustomLaunchWalletActionV4: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
       signCustomLaunchFundingAuthorization: async () => {
@@ -2138,6 +2155,72 @@ function PrivyWalletBridge({
     return sendBrowserWalletAction(checked);
   }, [sendBrowserWalletAction, wallet]);
 
+  const sendCustomLaunchWalletActionV4 = useCallback(async (
+    input: CustomLaunchWalletActionInputV4,
+  ) => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+    const sessionSubject = user?.id ?? null;
+    if (sessionSubject === null) {
+      throw new Error("Your wallet session expired. Reconnect and try again");
+    }
+    const expectedAccount = wallet.account.toLowerCase();
+    const assertCurrentSession = () => {
+      const current = walletRequestSessionRef.current;
+      if (!current.authenticated
+        || current.privyUserId !== sessionSubject
+        || current.account?.toLowerCase() !== expectedAccount) {
+        throw new Error("The wallet session changed. Reconnect and try again");
+      }
+    };
+    try {
+      const expected = deriveCustomLaunchWalletExpectedV4(input.reviewedResource);
+      if (wallet.chainId !== robinhoodChainHex) {
+        await connectedWallet.switchChain(robinhoodChain.id);
+        assertCurrentSession();
+      }
+      const provider = await connectedWallet.getEthereumProvider();
+      const review = await prepareCustomLaunchWalletReviewV4({
+        provider,
+        loadFreshCapabilities: input.loadFreshCapabilities,
+        loadFreshResource: input.loadFreshResource,
+        expected,
+      });
+      assertCurrentSession();
+      return await runWithBrowserWalletRequestLock({
+        sessionSubject,
+        account: wallet.account,
+        chainId: String(robinhoodChain.id),
+        requestSubject: JSON.stringify([
+          "custom-launch-wallet-action-v4",
+          review.transactionPreimageHash,
+        ]),
+        assertCurrentSession,
+        execute: async () => {
+          const transaction = await revalidateCustomLaunchWalletRequestV4({
+            provider,
+            review,
+            candidate: review.walletRequest,
+          });
+          assertCurrentSession();
+          const hash = await provider.request({
+            method: "eth_sendTransaction",
+            params: [{
+              from: transaction.from,
+              to: transaction.to,
+              data: transaction.data,
+              value: transaction.value,
+            }],
+          });
+          return parseSubmittedTransactionHash(hash);
+        },
+      });
+    } catch (caught) {
+      throw new Error(getWalletTransactionErrorMessage(caught));
+    }
+  }, [connectedWallet, user?.id, wallet]);
+
   const signCustomLaunchFundingAuthorization = useCallback(async (
     input: CustomLaunchFundingAuthorizationV3,
   ) => {
@@ -2321,6 +2404,7 @@ function PrivyWalletBridge({
       signPredictionTokenPermit,
       sendBrowserWalletAction,
       sendCustomLaunchWalletAction,
+      sendCustomLaunchWalletActionV4,
       signCustomLaunchFundingAuthorization,
       sendTransaction,
       sendPredictionV2Transaction,
@@ -2351,6 +2435,7 @@ function PrivyWalletBridge({
       reauthorizeGithub,
       sendBrowserWalletAction,
       sendCustomLaunchWalletAction,
+      sendCustomLaunchWalletActionV4,
       signCustomLaunchFundingAuthorization,
       sendPredictionV2Transaction,
       sendTransaction,
@@ -2453,6 +2538,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendCustomLaunchWalletAction: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      sendCustomLaunchWalletActionV4: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       signCustomLaunchFundingAuthorization: async () => {

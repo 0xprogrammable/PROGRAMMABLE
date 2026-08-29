@@ -249,38 +249,40 @@ describe("public Custom Launch CLI surface", () => {
     expect(JSON.stringify(document)).not.toContain("prelaunch");
   });
 
-  it("binds published CLI discovery to the deterministic package bytes", () => {
-    const temporaryRoot = mkdtempSync(join(tmpdir(), "programmable-launch-release-"));
-    try {
-      execFileSync("npm", [
-        "pack",
-        "./packages/launch",
-        "--pack-destination",
-        temporaryRoot,
-        "--ignore-scripts",
-        "--json",
-      ], { cwd: root, stdio: "pipe" });
-      const tarball = readFileSync(
-        join(temporaryRoot, "programmable-launch-3.3.9.tgz"),
-      );
-      const digest = `sha256:${createHash("sha256").update(tarball).digest("hex")}`;
-      const document = programmableWellKnownDocumentV1(
-        PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
-      );
-      expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/u);
-      expect(tarball.byteLength).toBeGreaterThan(0);
-      expect(document.customLaunchApi.cli.releaseVersion).toBe("3.3.9");
-      expect(document.customLaunchApi.releaseCandidate).toMatchObject({
-        status: "promoted-to-public",
-        artifactPublished: true,
-        releaseVersion: "3.3.9",
-        tarballSha256:
-          "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
-      });
-      expect(digest).toBe(document.customLaunchApi.cli.tarballSha256);
-    } finally {
-      rmSync(temporaryRoot, { recursive: true, force: true });
-    }
+  it("binds published V3 discovery and its immutable machine bytes", () => {
+    const digest = (bytes: Buffer) =>
+      `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    const publicPackSchema = readFileSync(
+      join(root, "public/schemas/custom-launch/v3/pack-config.json"),
+    );
+    const packagedPackSchema = readFileSync(
+      join(root, "packages/launch/schemas/programmable-launch-pack-config-v3.json"),
+    );
+    const publicOpenApi = readFileSync(
+      join(root, "public/openapi/custom-launch-v3.json"),
+    );
+    const document = programmableWellKnownDocumentV1(
+      PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
+    );
+
+    expect(publicPackSchema.equals(packagedPackSchema)).toBe(true);
+    expect(digest(publicPackSchema)).toBe(
+      "sha256:65e80af492582b8e42a440d9bbb23a776af31e22306ec828208959e8a790be15",
+    );
+    expect(digest(publicOpenApi)).toBe(
+      "sha256:8c7f90255f62bb8c27083c868dfdef5a7cc15d9ed0815248c55b67b7b9302b6a",
+    );
+    expect(document.customLaunchApi.cli.releaseVersion).toBe("3.3.9");
+    expect(document.customLaunchApi.cli.tarballSha256).toBe(
+      "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
+    );
+    expect(document.customLaunchApi.releaseCandidate).toMatchObject({
+      status: "promoted-to-public",
+      artifactPublished: true,
+      releaseVersion: "3.3.9",
+      tarballSha256:
+        "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
+    });
   });
 
   it("publishes a public, reference-complete V2 contract", () => {

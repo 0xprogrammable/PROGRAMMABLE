@@ -9,8 +9,16 @@ import {
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  V4_RELEASE_BINDING_PATH,
+  V4_RELEASE_BINDING_SCHEMA,
+  requireV4ReleaseReady,
+} from "./programmable-launch-v4-release-binding.mjs";
+
 export const RELEASE_ASSET_SCHEMA =
   "programmable.launch-cli-release-assets.v1";
+export const RELEASE_ASSET_SCHEMA_V2 =
+  "programmable.launch-cli-release-assets.v2";
 export const RELEASE_REPOSITORY = "programmablehq/programmable";
 export const RELEASE_NODE_VERSION = "24.14.0";
 export const RELEASE_NPM_VERSION = "11.16.0";
@@ -82,8 +90,26 @@ export function buildReleaseManifest(input) {
   if (assets.some((asset, index) => asset.name !== expectedNames[index])) {
     throw new Error("Release manifest asset names are not exact.");
   }
+  const requiresV4Binding = input.version.split(".")[0] === "4";
+  let machineContractBinding;
+  if (requiresV4Binding) {
+    const value = input.machineContractBinding;
+    if (value?.schemaVersion !== V4_RELEASE_BINDING_SCHEMA
+      || value?.path !== V4_RELEASE_BINDING_PATH
+      || typeof value?.sha256 !== "string"
+      || !/^sha256:[0-9a-f]{64}$/u.test(value.sha256)) {
+      throw new Error("V4 release manifest requires the exact machine-contract binding.");
+    }
+    machineContractBinding = Object.freeze({
+      schemaVersion: value.schemaVersion,
+      path: value.path,
+      sha256: value.sha256,
+    });
+  } else if (input.machineContractBinding !== undefined) {
+    throw new Error("Pre-V4 release manifests must not change their immutable binding.");
+  }
   return Object.freeze({
-    schemaVersion: RELEASE_ASSET_SCHEMA,
+    schemaVersion: requiresV4Binding ? RELEASE_ASSET_SCHEMA_V2 : RELEASE_ASSET_SCHEMA,
     repository: RELEASE_REPOSITORY,
     source: Object.freeze({
       ref: input.ref,
@@ -99,6 +125,7 @@ export function buildReleaseManifest(input) {
       node: RELEASE_NODE_VERSION,
       npm: RELEASE_NPM_VERSION,
     }),
+    ...(machineContractBinding === undefined ? {} : { machineContractBinding }),
     assets: Object.freeze(assets),
   });
 }
@@ -164,6 +191,9 @@ function build(options) {
     commitSha: context.commitSha,
     treeSha: context.treeSha,
     assets: payloads,
+    ...(context.machineContractBinding === null
+      ? {}
+      : { machineContractBinding: context.machineContractBinding }),
   });
   writeFileSync(
     join(context.output, context.names.manifest),
@@ -215,6 +245,9 @@ function verify(options) {
       bytes: bytes.length,
       sha256: sha256(bytes),
     })),
+    ...(context.machineContractBinding === null
+      ? {}
+      : { machineContractBinding: context.machineContractBinding }),
   });
   requireExact(canonicalJson(manifest), canonicalJson(rebuilt), "release manifest");
 
@@ -255,6 +288,16 @@ function repositoryContext(options) {
   if (!/^refs\/heads\/[A-Za-z0-9._/-]+$/u.test(options.sourceRef ?? "")) {
     throw new Error("Source ref is invalid.");
   }
+  const machineContractBinding = packageJson.version.split(".")[0] === "4"
+    ? (() => {
+        const result = requireV4ReleaseReady({ repositoryRoot: root });
+        return Object.freeze({
+          schemaVersion: V4_RELEASE_BINDING_SCHEMA,
+          path: V4_RELEASE_BINDING_PATH,
+          sha256: result.bindingSha256,
+        });
+      })()
+    : null;
   return Object.freeze({
     root,
     packageRoot,
@@ -263,6 +306,7 @@ function repositoryContext(options) {
     names: releaseNames(packageJson.version),
     commitSha,
     treeSha,
+    machineContractBinding,
   });
 }
 

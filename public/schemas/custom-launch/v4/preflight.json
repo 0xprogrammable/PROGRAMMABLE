@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch/v4/preflight.json",
+  "title": "Programmable Custom Launch preflight V2 for API V4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "apiVersion",
+    "chainId",
+    "caip2",
+    "requestHash",
+    "rawRequestSha256",
+    "chainDeploymentId",
+    "chainDeploymentDescriptorDigest",
+    "profile",
+    "serverTime",
+    "disposition",
+    "launchEligibility",
+    "evidenceTier",
+    "hardBlockFindingCodes",
+    "needsEvidenceFindingCodes",
+    "warningFindingCodes",
+    "remediations",
+    "gates",
+    "quotaConsumed",
+    "nonceAllocated",
+    "persisted",
+    "walletSignatureRequiredLater",
+    "walletBroadcastByService"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.custom-launch-preflight.v2"
+    },
+    "apiVersion": {
+      "const": "v4"
+    },
+    "chainId": {
+      "const": "4663"
+    },
+    "caip2": {
+      "const": "eip155:4663"
+    },
+    "requestHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "rawRequestSha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "chainDeploymentId": {
+      "const": "robinhood-mainnet-custom-launch-v1"
+    },
+    "chainDeploymentDescriptorDigest": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "structuralProfileId",
+        "businessProfileId",
+        "admissionDescriptorDigest",
+        "admissionPolicyDigest",
+        "admissionBindingDigest",
+        "admissionSchemaDigest",
+        "profileRevision",
+        "profileVersion",
+        "profileDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-profile-ref.v4"
+        },
+        "structuralProfileId": {
+          "const": "programmable.custom-launch.robinhood-mainnet.v1"
+        },
+        "businessProfileId": {
+          "const": "robinhood-production-launch"
+        },
+        "admissionDescriptorDigest": {
+          "const": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948"
+        },
+        "admissionPolicyDigest": {
+          "const": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216"
+        },
+        "admissionBindingDigest": {
+          "const": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2"
+        },
+        "admissionSchemaDigest": {
+          "const": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7"
+        },
+        "profileRevision": {
+          "const": 1
+        },
+        "profileVersion": {
+          "const": "4.0.0"
+        },
+        "profileDigest": {
+          "const": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+        }
+      }
+    },
+    "serverTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "disposition": {
+      "enum": [
+        "supported",
+        "supported_with_warnings",
+        "needs_evidence",
+        "unsupported",
+        "system_blocked"
+      ]
+    },
+    "launchEligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deployable",
+        "routable",
+        "featured"
+      ],
+      "properties": {
+        "deployable": {
+          "type": "boolean"
+        },
+        "routable": {
+          "type": "boolean"
+        },
+        "featured": {
+          "const": false
+        }
+      }
+    },
+    "evidenceTier": {
+      "enum": [
+        "launch_mechanics_verified",
+        "standard_swap_compatible",
+        "advanced_custom_accounting",
+        "governed_external_trust"
+      ]
+    },
+    "hardBlockFindingCodes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "needsEvidenceFindingCodes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warningFindingCodes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "remediations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "requiredChange",
+          "retryable"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "requiredChange": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chainBinding",
+        "trustRoots",
+        "sourceBuild",
+        "graph",
+        "metadata",
+        "fundingSettlement",
+        "deterministicValidation",
+        "chainSimulation"
+      ],
+      "properties": {
+        "chainBinding": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "trustRoots": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "sourceBuild": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "graph": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "metadata": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "fundingSettlement": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "deterministicValidation": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "chainSimulation": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        }
+      }
+    },
+    "quotaConsumed": {
+      "const": false
+    },
+    "nonceAllocated": {
+      "const": false
+    },
+    "persisted": {
+      "const": false
+    },
+    "walletSignatureRequiredLater": {
+      "const": true
+    },
+    "walletBroadcastByService": {
+      "const": false
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "@programmable/launch",
-  "version": "3.3.9",
+  "version": "4.0.0",
   "packageManager": "npm@11.16.0",
   "description": "Deterministic pack, validation, submission, and status tooling for the Programmable Custom Launch API",
   "type": "module",
@@ -40,11 +40,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0xprogrammable/PROGRAMMABLE.git",
+    "url": "git+https://github.com/programmablehq/PROGRAMMABLE.git",
     "directory": "packages/launch"
   },
   "homepage": "https://programmable.market/docs/developers/custom-launch",
   "bugs": {
-    "url": "https://github.com/0xprogrammable/PROGRAMMABLE/issues"
+    "url": "https://github.com/programmablehq/PROGRAMMABLE/issues"
   }
 }

@@ -21,7 +21,10 @@ import {
 
 import styles from "@/components/developer-api-keys.module.css";
 import { DeveloperLaunchHistory } from "@/components/developer-launch-history";
-import { useWallet } from "@/components/wallet-provider";
+import {
+  useWallet,
+  type CustomLaunchWalletActionInputV4,
+} from "@/components/wallet-provider";
 import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
   "@/lib/custom-launch/agent-setup-v1";
 import type { CustomLaunchWalletActionV1 } from
@@ -82,6 +85,9 @@ type DeveloperApiKeysViewProps = Readonly<{
   openWallet: () => void;
   sendCustomLaunchWalletAction: (
     input: CustomLaunchWalletActionV1,
+  ) => Promise<`0x${string}`>;
+  sendCustomLaunchWalletActionV4: (
+    input: CustomLaunchWalletActionInputV4,
   ) => Promise<`0x${string}`>;
   signCustomLaunchFundingAuthorization: (
     input: CustomLaunchFundingAuthorizationV3,
@@ -578,6 +584,7 @@ export function DeveloperApiKeys() {
     getIdentityToken,
     openWallet,
     sendCustomLaunchWalletAction,
+    sendCustomLaunchWalletActionV4,
     signCustomLaunchFundingAuthorization,
     wallet,
   } = useWallet();
@@ -594,6 +601,7 @@ export function DeveloperApiKeys() {
       getIdentityToken={getIdentityToken}
       openWallet={openWallet}
       sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
+      sendCustomLaunchWalletActionV4={sendCustomLaunchWalletActionV4}
       signCustomLaunchFundingAuthorization={
         signCustomLaunchFundingAuthorization
       }
@@ -609,6 +617,7 @@ function DeveloperApiKeysView({
   getIdentityToken,
   openWallet,
   sendCustomLaunchWalletAction,
+  sendCustomLaunchWalletActionV4,
   signCustomLaunchFundingAuthorization,
 }: DeveloperApiKeysViewProps) {
   const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
@@ -645,6 +654,7 @@ function DeveloperApiKeysView({
   const [statusMessage, setStatusMessage] = useState("");
   const [activeSection, setActiveSection] = useState<ActiveSection>("keys");
   const [initialLaunchId, setInitialLaunchId] = useState<string | null>(null);
+  const [initialLaunchChainId, setInitialLaunchChainId] = useState<"4663" | null>(null);
   const [refreshingKeys, setRefreshingKeys] = useState(false);
   const [keyPage, setKeyPage] = useState(1);
   const [walletSessionTimedOut, setWalletSessionTimedOut] = useState(false);
@@ -795,10 +805,13 @@ function DeveloperApiKeysView({
   }, [authReady]);
 
   useEffect(() => {
-    const candidate = new URL(window.location.href).searchParams.get("launchId");
+    const url = new URL(window.location.href);
+    const candidate = url.searchParams.get("launchId");
     if (!candidate || !launchRequestIdPattern.test(candidate)) return;
+    const chainId = url.searchParams.get("chainId");
     const update = window.setTimeout(() => {
       setInitialLaunchId(candidate);
+      setInitialLaunchChainId(chainId === "4663" ? "4663" : null);
       setActiveSection("history");
       setStatusMessage("Opening the requested launch handoff.");
     }, 0);
@@ -950,7 +963,9 @@ function DeveloperApiKeysView({
     const url = new URL(window.location.href);
     if (section === "keys") {
       url.searchParams.delete("launchId");
+      url.searchParams.delete("chainId");
       setInitialLaunchId(null);
+      setInitialLaunchChainId(null);
     }
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
     setStatusMessage(
@@ -1734,9 +1749,11 @@ function DeveloperApiKeysView({
             <DeveloperLaunchHistory
               account={account}
               initialLaunchId={initialLaunchId}
+              initialLaunchChainId={initialLaunchChainId}
               getAccessToken={getAccessToken}
               getIdentityToken={getIdentityToken}
               sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
+              sendCustomLaunchWalletActionV4={sendCustomLaunchWalletActionV4}
               signCustomLaunchFundingAuthorization={
                 signCustomLaunchFundingAuthorization
               }

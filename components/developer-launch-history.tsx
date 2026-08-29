@@ -10,6 +10,8 @@ import { RefreshCw } from "lucide-react";
 import NextImage from "next/image";
 
 import styles from "@/components/developer-launch-history.module.css";
+import type { CustomLaunchWalletActionInputV4 } from
+  "@/components/wallet-provider";
 import { canonicalBrowserSha256V2, fileSha256V2 } from
   "@/lib/custom-launch/browser-authority-v2";
 import {
@@ -122,7 +124,11 @@ export type LaunchStatus =
   | "funding_authorization_verified"
   | "simulating"
   | "authorized"
+  | "awaiting_wallet_signature"
+  | "wallet_action_required"
   | "submitted"
+  | "sequencer_soft_confirmed"
+  | "ethereum_posted"
   | "finalized"
   | "failed"
   | "cancelled";
@@ -131,17 +137,19 @@ export type LaunchResource = Readonly<{
   schemaVersion:
     | "programmable.custom-launch.v1"
     | "programmable.custom-launch.v2"
-    | "programmable.custom-launch.v3";
+    | "programmable.custom-launch.v3"
+    | "programmable.custom-launch.v4";
   launchId: string;
   requestId: string;
   onchainLaunchId: `0x${string}` | null;
   routeId:
     | "custom-launch:create:v1"
     | "custom-launch:create:v2"
-    | "custom-launch:create:v3";
+    | "custom-launch:create:v3"
+    | "custom-launch:create:v4";
   ownerWallet: `0x${string}`;
   status: LaunchStatus;
-  requestHash: `sha256:${string}`;
+  requestHash: `sha256:${string}` | null;
   launchProfileVersion:
     | "2.0.0"
     | "3.0.0"
@@ -163,6 +171,7 @@ export type LaunchResource = Readonly<{
   createdAt: string;
   updatedAt: string;
   output: Record<string, JsonValue> | null;
+  rawResourceV4: Record<string, JsonValue> | null;
   failure: Readonly<{
     code: string;
     message: string;
@@ -179,10 +188,14 @@ type HistoryPage = Readonly<{
 type DeveloperLaunchHistoryProps = Readonly<{
   account: `0x${string}`;
   initialLaunchId: string | null;
+  initialLaunchChainId: "4663" | null;
   getAccessToken: () => Promise<string | null>;
   getIdentityToken: () => Promise<string | null>;
   sendCustomLaunchWalletAction: (
     input: CustomLaunchWalletActionV1,
+  ) => Promise<`0x${string}`>;
+  sendCustomLaunchWalletActionV4: (
+    input: CustomLaunchWalletActionInputV4,
   ) => Promise<`0x${string}`>;
   signCustomLaunchFundingAuthorization: (
     input: CustomLaunchFundingAuthorizationV3,
@@ -194,6 +207,7 @@ const listSchemaVersions = new Set([
   "programmable.custom-launch-list.v1",
   "programmable.custom-launch-list.v2",
   "programmable.custom-launch-list.v3",
+  "programmable.custom-launch-list.v4",
 ]);
 const pageSize = 5;
 const statuses = new Set<LaunchStatus>([
@@ -206,7 +220,11 @@ const statuses = new Set<LaunchStatus>([
   "funding_authorization_verified",
   "simulating",
   "authorized",
+  "awaiting_wallet_signature",
+  "wallet_action_required",
   "submitted",
+  "sequencer_soft_confirmed",
+  "ethereum_posted",
   "finalized",
   "failed",
   "cancelled",
@@ -233,7 +251,11 @@ const launchStatusRank: Readonly<Record<LaunchStatus, number>> = Object.freeze({
   prepared: 5,
   simulating: 6,
   authorized: 7,
+  awaiting_wallet_signature: 7,
+  wallet_action_required: 7,
   submitted: 8,
+  sequencer_soft_confirmed: 8,
+  ethereum_posted: 8,
   failed: 9,
   cancelled: 9,
   finalized: 10,
@@ -606,7 +628,171 @@ export function parseCustomLaunchProjectMetadataV1(
   });
 }
 
+function parseV4LaunchSummary(
+  value: Readonly<Record<string, unknown>>,
+  account: string,
+): LaunchResource | null {
+  if (value.schemaVersion !== "programmable.custom-launch-summary.v4"
+    || value.apiVersion !== "v4"
+    || value.routeId !== "custom-launch:create:v4"
+    || value.chainId !== "4663"
+    || value.caip2 !== "eip155:4663"
+    || value.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
+    || typeof value.chainDeploymentDescriptorDigest !== "string"
+    || !/^0x[0-9a-f]{64}$/u.test(value.chainDeploymentDescriptorDigest)
+    || typeof value.launchId !== "string"
+    || !requestIdPattern.test(value.launchId)
+    || value.requestId !== value.launchId
+    || !isRecord(value.controller)
+    || value.controller.namespace !== "eip155:4663"
+    || typeof value.controller.address !== "string"
+    || value.controller.address.toLowerCase() !== account.toLowerCase()
+    || typeof value.status !== "string"
+    || !statuses.has(value.status as LaunchStatus)
+    || (value.walletHandoffUrl !== null && typeof value.walletHandoffUrl !== "string")
+    || (value.expiresAt !== null && typeof value.expiresAt !== "string")
+    || typeof value.createdAt !== "string"
+    || typeof value.updatedAt !== "string") return null;
+  return {
+    schemaVersion: "programmable.custom-launch.v4",
+    launchId: value.launchId,
+    requestId: value.launchId,
+    onchainLaunchId: null,
+    routeId: "custom-launch:create:v4",
+    ownerWallet: value.controller.address as `0x${string}`,
+    status: value.status as LaunchStatus,
+    requestHash: null,
+    launchProfileVersion: null,
+    launchProfileHash: null,
+    launchIntentHash: null,
+    projectMetadata: null,
+    projectMetadataHash: null,
+    fundingIntentHash: null,
+    liquidityIntent: null,
+    sourceVerification: null,
+    walletHandoffUrl: value.walletHandoffUrl as string | null,
+    expiresAt: value.expiresAt as string | null,
+    secondsRemaining: null,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    output: null,
+    rawResourceV4: null,
+    failure: null,
+  };
+}
+
+function parseV4Launch(
+  value: Readonly<Record<string, unknown>>,
+  account: string,
+): LaunchResource | null {
+  if (value.schemaVersion !== "programmable.custom-launch.v4"
+    || value.apiVersion !== "v4"
+    || value.routeId !== "custom-launch:create:v4"
+    || value.chainId !== "4663"
+    || value.caip2 !== "eip155:4663"
+    || typeof value.launchId !== "string"
+    || !requestIdPattern.test(value.launchId)
+    || typeof value.requestId !== "string"
+    || value.requestId !== value.launchId
+    || !isRecord(value.controller)
+    || value.controller.namespace !== "eip155:4663"
+    || typeof value.controller.address !== "string"
+    || value.controller.address.toLowerCase() !== account.toLowerCase()
+    || typeof value.status !== "string"
+    || !statuses.has(value.status as LaunchStatus)
+    || typeof value.requestHash !== "string"
+    || !sha256Pattern.test(value.requestHash)
+    || typeof value.createdAt !== "string"
+    || typeof value.updatedAt !== "string"
+    || !isRecord(value.profile)
+    || typeof value.profile.profileDigest !== "string"
+    || !sha256Pattern.test(value.profile.profileDigest)
+    || !isRecord(value.commitments)
+    || typeof value.commitments.launchIntent !== "string"
+    || !sha256Pattern.test(value.commitments.launchIntent)
+    || typeof value.metadataCommitment !== "string"
+    || !sha256Pattern.test(value.metadataCommitment)) return null;
+  const projectMetadata = parseCustomLaunchProjectMetadataV1(value.projectMetadata);
+  if (!projectMetadata) return null;
+  let failure: LaunchResource["failure"] = null;
+  if (value.failure !== null) {
+    if (!isRecord(value.failure)
+      || typeof value.failure.code !== "string"
+      || typeof value.failure.message !== "string"
+      || typeof value.failure.retryable !== "boolean") return null;
+    failure = {
+      code: value.failure.code,
+      message: value.failure.message,
+      retryable: value.failure.retryable,
+      remediations: [],
+    };
+  }
+  const onchain = isRecord(value.onchain) ? value.onchain : null;
+  const onchainLaunchId = onchain
+    && typeof onchain.routerLaunchId === "string"
+    && /^0x[0-9a-f]{64}$/u.test(onchain.routerLaunchId)
+    ? onchain.routerLaunchId as `0x${string}`
+    : null;
+  const walletHandoffUrl = typeof value.walletHandoffUrl === "string"
+    ? value.walletHandoffUrl
+    : isRecord(value.actionRequired)
+      && typeof value.actionRequired.walletHandoffUrl === "string"
+      ? value.actionRequired.walletHandoffUrl
+      : null;
+  const expiresAt = typeof value.expiresAt === "string"
+    ? value.expiresAt
+    : isRecord(value.actionRequired) && typeof value.actionRequired.expiresAt === "string"
+      ? value.actionRequired.expiresAt
+      : null;
+  const secondsRemaining = typeof value.secondsRemaining === "number"
+    && Number.isSafeInteger(value.secondsRemaining)
+    && value.secondsRemaining >= 0
+    ? value.secondsRemaining
+    : null;
+  const output = value.walletTransaction === null && value.preparedArtifact === null
+    ? null
+    : {
+        walletTransaction: value.walletTransaction as JsonValue,
+        artifact: value.preparedArtifact as JsonValue,
+      };
+  return {
+    schemaVersion: "programmable.custom-launch.v4",
+    launchId: value.launchId,
+    requestId: value.requestId,
+    onchainLaunchId,
+    routeId: "custom-launch:create:v4",
+    ownerWallet: value.controller.address as `0x${string}`,
+    status: value.status as LaunchStatus,
+    requestHash: value.requestHash as `sha256:${string}`,
+    launchProfileVersion: null,
+    launchProfileHash: value.profile.profileDigest as `sha256:${string}`,
+    launchIntentHash: value.commitments.launchIntent as `sha256:${string}`,
+    projectMetadata,
+    projectMetadataHash: value.metadataCommitment as `sha256:${string}`,
+    fundingIntentHash: null,
+    liquidityIntent: null,
+    sourceVerification: null,
+    walletHandoffUrl,
+    expiresAt,
+    secondsRemaining,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    output,
+    rawResourceV4: value as Record<string, JsonValue>,
+    failure,
+  };
+}
+
 function parseLaunch(value: unknown, account: string): LaunchResource | null {
+  if (isRecord(value)
+    && value.schemaVersion === "programmable.custom-launch-summary.v4") {
+    return parseV4LaunchSummary(value, account);
+  }
+  if (isRecord(value)
+    && value.schemaVersion === "programmable.custom-launch.v4"
+    && value.routeId === "custom-launch:create:v4") {
+    return parseV4Launch(value, account);
+  }
   const v1 = isRecord(value)
     && value.schemaVersion === "programmable.custom-launch.v1"
     && value.routeId === "custom-launch:create:v1";
@@ -767,6 +953,7 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     output: value.output as Record<string, JsonValue> | null,
+    rawResourceV4: null,
     failure,
   };
 }
@@ -780,7 +967,7 @@ export function parseHistoryPage(
     || typeof value.schemaVersion !== "string"
     || !listSchemaVersions.has(value.schemaVersion)
     || !Array.isArray(value.launches)
-    || value.launches.length > pageSize * 2
+    || value.launches.length > pageSize * 4
     || (value.nextCursor !== null && typeof value.nextCursor !== "string")
   ) return null;
   const launches: LaunchResource[] = [];
@@ -870,7 +1057,11 @@ function statusCopy(status: LaunchStatus) {
     case "funding_authorization_verified": return "Funding verified";
     case "simulating": return "Simulating";
     case "authorized": return "Wallet action required";
+    case "awaiting_wallet_signature": return "Wallet action required";
+    case "wallet_action_required": return "Wallet action required";
     case "submitted": return "Confirming onchain";
+    case "sequencer_soft_confirmed": return "Sequencer confirmed";
+    case "ethereum_posted": return "Posted to Ethereum";
     case "finalized": return "Finalized";
     case "failed": return "Failed";
     case "cancelled": return "Cancelled";
@@ -888,7 +1079,11 @@ function statusDescription(status: LaunchStatus) {
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
     case "simulating": return "The exact wallet transaction is being simulated.";
     case "authorized": return "Review the exact Mainnet transaction, then ask your wallet to send it.";
+    case "awaiting_wallet_signature": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
+    case "wallet_action_required": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
     case "submitted": return "The wallet transaction is being tracked onchain.";
+    case "sequencer_soft_confirmed": return "Robinhood Chain reported a soft confirmation. Ethereum posting and finality are still pending.";
+    case "ethereum_posted": return "The transaction was posted to Ethereum. Finality is still pending.";
     case "finalized": return "The Router launch reached 64+ confirmations. Source, liquidity, custody and trading remain separate states.";
     case "failed": return "This request did not complete.";
     case "cancelled": return "This request was cancelled.";
@@ -1096,11 +1291,14 @@ export function walletProjectMetadataSummaryV1(
   launch: LaunchResource,
 ): WalletProjectMetadataBindingV1 | null {
   if (
-    launch.routeId !== "custom-launch:create:v3"
-    || (launch.launchProfileVersion !== "3.2.0"
-      && launch.launchProfileVersion !== "3.3.0"
-      && launch.launchProfileVersion !== "3.4.0")
+    (launch.routeId !== "custom-launch:create:v4" && (
+      launch.routeId !== "custom-launch:create:v3"
+      || (launch.launchProfileVersion !== "3.2.0"
+        && launch.launchProfileVersion !== "3.3.0"
+        && launch.launchProfileVersion !== "3.4.0")
+    ))
     || !launch.launchIntentHash
+    || !launch.requestHash
     || !launch.projectMetadata
     || !launch.projectMetadataHash
     || browserProjectMetadataHashV1(launch.projectMetadata)
@@ -1168,6 +1366,7 @@ function walletLegacyProjectBindingV1(
       && launch.launchProfileVersion !== "3.1.0"
     )
     || !launch.launchIntentHash
+    || !launch.requestHash
     || launch.projectMetadata !== null
     || launch.projectMetadataHash !== null
   ) return null;
@@ -1268,7 +1467,8 @@ function sameWalletHandoff(
 }
 
 function onchainTransactionHash(launch: LaunchResource) {
-  const onchain = launch.output?.onchain;
+  const v4Onchain = launch.rawResourceV4?.onchain;
+  const onchain = isRecord(v4Onchain) ? v4Onchain : launch.output?.onchain;
   if (!isRecord(onchain) || typeof onchain.transactionHash !== "string") {
     return null;
   }
@@ -1887,9 +2087,11 @@ function RemediationDetails({
 export function DeveloperLaunchHistory({
   account,
   initialLaunchId,
+  initialLaunchChainId,
   getAccessToken,
   getIdentityToken,
   sendCustomLaunchWalletAction,
+  sendCustomLaunchWalletActionV4,
   signCustomLaunchFundingAuthorization,
 }: DeveloperLaunchHistoryProps) {
   const [launches, setLaunches] = useState<LaunchResource[]>([]);
@@ -2079,7 +2281,9 @@ export function DeveloperLaunchHistory({
     launch: Pick<LaunchResource, "requestId" | "routeId">,
     signal?: AbortSignal,
   ) => {
-    const version = launch.routeId === "custom-launch:create:v3"
+    const version = launch.routeId === "custom-launch:create:v4"
+      ? "v4"
+      : launch.routeId === "custom-launch:create:v3"
       ? "v3"
       : launch.routeId === "custom-launch:create:v2"
         ? "v2"
@@ -2111,16 +2315,84 @@ export function DeveloperLaunchHistory({
     return updated;
   }, [account, getAuthHeaders]);
 
+  const readV4Capabilities = useCallback(async () => {
+    const response = await fetch(
+      "/api/developer/custom-launches/v4-capabilities",
+      {
+        cache: "no-store",
+        headers: await getAuthHeaders(),
+      },
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw readApiError(
+        response,
+        body,
+        "Unable to refresh Robinhood Chain launch capabilities.",
+      );
+    }
+    return body;
+  }, [getAuthHeaders]);
+
+  const submitV4SubmissionHint = useCallback(async (
+    launch: LaunchResource,
+    transactionHash: `0x${string}`,
+  ) => {
+    const headers = await getAuthHeaders();
+    headers.set("Content-Type", "application/json");
+    const response = await fetch(
+      `/api/developer/custom-launches/${
+        encodeURIComponent(launch.requestId)
+      }/submission-hint?walletAddress=${
+        encodeURIComponent(account)
+      }&version=v4`,
+      {
+        method: "POST",
+        cache: "no-store",
+        headers,
+        body: JSON.stringify({
+          schemaVersion: "programmable.custom-launch-submission-hint.v1",
+          transactionHash,
+        }),
+      },
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw readApiError(
+        response,
+        body,
+        "The transaction hash could not be registered for independent discovery.",
+      );
+    }
+    if (response.status !== 202
+      || !isRecord(body)
+      || body.schemaVersion !== "programmable.custom-launch-submission-hint.v1"
+      || body.apiVersion !== "v4"
+      || body.launchId !== launch.requestId
+      || body.chainId !== "4663"
+      || body.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
+      || body.transactionHash !== transactionHash
+      || body.accepted !== true
+      || body.authoritative !== false
+      || typeof body.acceptedAt !== "string"
+      || body.statusPath
+        !== `/v4/chains/4663/wallet-admin/custom-launches/${launch.requestId}`) {
+      throw new Error("The API returned an invalid transaction discovery receipt.");
+    }
+    return body;
+  }, [account, getAuthHeaders]);
+
   const updateLaunch = useCallback((updated: LaunchResource) => {
     setLaunches((current) => mergeLaunchResources(current, [updated], false));
   }, []);
 
-  const readV3LaunchById = useCallback(async (
+  const readLaunchById = useCallback(async (
     launchId: string,
+    version: "v3" | "v4",
     signal?: AbortSignal,
   ) => {
     const response = await fetch(
-      `/api/developer/custom-launches/${encodeURIComponent(launchId)}?walletAddress=${encodeURIComponent(account)}&version=v3`,
+      `/api/developer/custom-launches/${encodeURIComponent(launchId)}?walletAddress=${encodeURIComponent(account)}&version=${version}`,
       {
         cache: "no-store",
         headers: await getAuthHeaders(),
@@ -2135,7 +2407,7 @@ export function DeveloperLaunchHistory({
     if (
       !launch
       || launch.requestId !== launchId
-      || launch.routeId !== "custom-launch:create:v3"
+      || launch.routeId !== `custom-launch:create:${version}`
     ) throw new Error("The API returned an invalid wallet handoff.");
     return launch;
   }, [account, getAuthHeaders]);
@@ -2172,16 +2444,17 @@ export function DeveloperLaunchHistory({
 
   useEffect(() => {
     if (!initialLaunchId || !requestIdPattern.test(initialLaunchId)) return;
-    const deepLinkKey = `${account}:${initialLaunchId}`;
+    const version = initialLaunchChainId === "4663" ? "v4" : "v3";
+    const deepLinkKey = `${account}:${version}:${initialLaunchId}`;
     if (deepLinkHandledRef.current === deepLinkKey) return;
     deepLinkHandledRef.current = deepLinkKey;
     exactHandoffLoadedRef.current = null;
     const controller = new AbortController();
     hydrateInFlightRef.current = true;
-    setHydratingId(`custom-launch:create:v3:${initialLaunchId}`);
+    setHydratingId(`custom-launch:create:${version}:${initialLaunchId}`);
     setError("");
     setStatusMessage("Loading the exact wallet handoff.");
-    void readV3LaunchById(initialLaunchId, controller.signal)
+    void readLaunchById(initialLaunchId, version, controller.signal)
       .then((launch) => {
         const key = launchResourceKey(launch);
         updateLaunch(launch);
@@ -2192,7 +2465,10 @@ export function DeveloperLaunchHistory({
         exactHandoffLoadedRef.current = deepLinkKey;
         setState("ready");
         setStatusMessage(
-          ["awaiting_funding_authorization", "authorized"]
+          [
+            "awaiting_funding_authorization", "authorized",
+            "wallet_action_required", "awaiting_wallet_signature",
+          ]
             .includes(launch.status)
             ? "Wallet handoff loaded. Review every field before opening your wallet."
             : "Launch loaded. Its current status does not request a wallet action.",
@@ -2217,7 +2493,8 @@ export function DeveloperLaunchHistory({
     account,
     focusLaunchCard,
     initialLaunchId,
-    readV3LaunchById,
+    initialLaunchChainId,
+    readLaunchById,
     updateLaunch,
   ]);
 
@@ -2341,26 +2618,30 @@ export function DeveloperLaunchHistory({
 
   const loadWalletReview = async (launch: LaunchResource) => {
     const key = launchResourceKey(launch);
+    const v3Review = launch.routeId === "custom-launch:create:v3"
+      && ["awaiting_funding_authorization", "authorized"].includes(launch.status);
+    const v4Review = launch.routeId === "custom-launch:create:v4"
+      && ["wallet_action_required", "awaiting_wallet_signature"].includes(launch.status);
     if (
       hydrateInFlightRef.current
       || hydratingId !== null
-      || launch.routeId !== "custom-launch:create:v3"
-      || !["awaiting_funding_authorization", "authorized"]
-        .includes(launch.status)
+      || (!v3Review && !v4Review)
     ) return;
     hydrateInFlightRef.current = true;
     setHydratingId(key);
     clearLaunchError(key);
     setError("");
     setStatusMessage(
-      launch.status === "awaiting_funding_authorization"
+      v4Review
+        ? "Loading the exact Robinhood Chain Router transaction for review."
+        : launch.status === "awaiting_funding_authorization"
         ? "Loading the exact funding authorization for review."
         : "Loading the exact Router transaction for review.",
     );
     try {
       const current = await readLaunchResource(launch);
       if (
-        current.routeId !== "custom-launch:create:v3"
+        current.routeId !== launch.routeId
         || current.status !== launch.status
       ) {
         updateLaunch(Object.freeze({ ...current, output: null }));
@@ -2373,6 +2654,26 @@ export function DeveloperLaunchHistory({
         throw new Error(
           "This launch changed while its wallet review was loading. Review its current status.",
         );
+      }
+      if (v4Review) {
+        if (current.rawResourceV4 === null
+          || current.output === null
+          || !isRecord(current.output.walletTransaction)
+          || !isRecord(current.output.artifact)) {
+          throw new Error(
+            "The exact Robinhood Chain wallet artifact is unavailable. No wallet action was opened.",
+          );
+        }
+        updateLaunch(current);
+        setHydratedReviews((reviews) => Object.freeze({
+          ...reviews,
+          [key]: current,
+        }));
+        clearLaunchError(key);
+        setStatusMessage(
+          "Robinhood Chain review loaded. Check every field before the separate owner wallet transaction.",
+        );
+        return;
       }
       const currentProjectBinding = walletProjectRequestBindingV1(current);
       if (!currentProjectBinding) {
@@ -2450,6 +2751,30 @@ export function DeveloperLaunchHistory({
                 : "Launch tracking reached a terminal state.",
             );
             return;
+          }
+          if (updated.routeId === "custom-launch:create:v4") {
+            if (![
+              "wallet_action_required", "awaiting_wallet_signature", "authorized",
+              "submitted", "sequencer_soft_confirmed", "ethereum_posted",
+            ].includes(updated.status)) {
+              throw new Error(
+                "The Robinhood Chain launch returned an unexpected status after wallet broadcast.",
+              );
+            }
+            setStatusMessage(
+              updated.status === "ethereum_posted"
+                ? "Transaction posted to Ethereum. Waiting for the bound finality policy."
+                : updated.status === "sequencer_soft_confirmed"
+                  ? "Transaction soft-confirmed by the sequencer. Waiting for Ethereum posting."
+                  : updated.status === "submitted"
+                    ? "Transaction independently discovered. Waiting for staged finality."
+                    : "Transaction hash accepted as a discovery hint. Waiting for independent provider readback.",
+            );
+            waitMs = updated.status === "wallet_action_required"
+              || updated.status === "awaiting_wallet_signature"
+              ? authorizedPollIntervalMs
+              : submittedPollIntervalMs;
+            continue;
           }
           if (updated.status !== "authorized" && updated.status !== "submitted") {
             throw new Error("The launch returned an unexpected status after broadcast.");
@@ -2785,6 +3110,44 @@ export function DeveloperLaunchHistory({
     clearLaunchError(key);
     setError("");
     try {
+      if (launch.routeId === "custom-launch:create:v4") {
+        if (launch.rawResourceV4 === null
+          || !["wallet_action_required", "awaiting_wallet_signature"]
+            .includes(launch.status)) {
+          throw new Error(
+            "Load and review the current Robinhood Chain transaction before opening the wallet.",
+          );
+        }
+        const transactionHash = await sendCustomLaunchWalletActionV4({
+          reviewedResource: launch.rawResourceV4,
+          loadFreshCapabilities: readV4Capabilities,
+          loadFreshResource: async () => {
+            const current = await readLaunchResource(launch);
+            updateLaunch(current);
+            if (current.rawResourceV4 === null) {
+              throw new Error("The API omitted the exact Robinhood Chain wallet resource.");
+            }
+            return current.rawResourceV4;
+          },
+        });
+        if (!transactionHashPattern.test(transactionHash)) {
+          throw new Error("The wallet returned an invalid transaction hash.");
+        }
+        setSubmittedHashes((currentHashes) => Object.freeze({
+          ...currentHashes,
+          [key]: transactionHash,
+        }));
+        clearLaunchError(key);
+        setStatusMessage(
+          "Transaction submitted from the wallet. Sending its hash for independent backend discovery.",
+        );
+        await submitV4SubmissionHint(launch, transactionHash);
+        setStatusMessage(
+          "Transaction hash accepted as a non-authoritative discovery hint. Waiting for independent provider verification.",
+        );
+        startStatusPolling(launch);
+        return;
+      }
       const reviewedProjectBinding = launch.routeId
         === "custom-launch:create:v3"
         ? walletProjectRequestBindingV1(launch)
@@ -3327,6 +3690,8 @@ export function DeveloperLaunchHistory({
                 {expiryCopy && [
                   "awaiting_funding_authorization",
                   "authorized",
+                  "wallet_action_required",
+                  "awaiting_wallet_signature",
                 ].includes(reviewLaunch.status) ? (
                   <div
                     className={styles.handoffExpiry}
@@ -3359,9 +3724,47 @@ export function DeveloperLaunchHistory({
                   "funding_authorization_verified",
                   "simulating",
                   "authorized",
+                  "wallet_action_required",
+                  "awaiting_wallet_signature",
                   "submitted",
+                  "sequencer_soft_confirmed",
+                  "ethereum_posted",
                 ].includes(launch.status) ? (
                   <div className={styles.launchActions}>
+                    {["wallet_action_required", "awaiting_wallet_signature"]
+                      .includes(launch.status)
+                      && launch.routeId === "custom-launch:create:v4" ? (
+                        reviewLaunch.rawResourceV4 !== null
+                          && walletTransaction(reviewLaunch) !== null ? (
+                            <button
+                              className={styles.walletButton}
+                              disabled={
+                                submittingId !== null
+                                || hydratingId !== null
+                                || checkingId !== null
+                                || Boolean(pollingIds[key])
+                                || handoffExpired
+                              }
+                              type="button"
+                              onClick={() => void submitWalletTransaction(reviewLaunch)}
+                            >
+                              {submittingId === key
+                                ? "Opening wallet transaction review"
+                                : "Review and send on Robinhood Chain"}
+                            </button>
+                          ) : (
+                            <button
+                              className={styles.walletButton}
+                              disabled={hydratingId !== null || submittingId !== null}
+                              type="button"
+                              onClick={() => void loadWalletReview(launch)}
+                            >
+                              {hydratingId === key
+                                ? "Loading exact wallet review"
+                                : "Load exact wallet review"}
+                            </button>
+                          )
+                      ) : null}
                     {launch.status === "awaiting_funding_authorization"
                       && launch.routeId === "custom-launch:create:v3" ? (
                         fundingReview && projectRequestBinding ? (
@@ -3412,7 +3815,8 @@ export function DeveloperLaunchHistory({
                           </button>
                         ) : null
                       ) : null}
-                    {launch.status === "authorized" ? (
+                    {launch.status === "authorized"
+                      && launch.routeId !== "custom-launch:create:v4" ? (
                       launch.routeId !== "custom-launch:create:v3"
                         || (routerReview && projectRequestBinding) ? (
                           <button

@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/releases/custom-launch-v4/cli-release-binding.schema.json",
+  "title": "Programmable Launch CLI V4 release binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "releaseReady",
+    "releaseIdentity",
+    "chain",
+    "machineContracts",
+    "evidence",
+    "blockers"
+  ],
+  "properties": {
+    "$schema": { "const": "./cli-release-binding.schema.json" },
+    "schemaVersion": { "const": "programmable.launch-cli-v4-release-binding.v1" },
+    "releaseReady": { "type": "boolean" },
+    "releaseIdentity": { "$ref": "#/$defs/releaseIdentity" },
+    "chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainId", "caip2", "chainDeploymentId", "chainDeploymentDescriptorDigest"],
+      "properties": {
+        "chainId": { "const": "4663" },
+        "caip2": { "const": "eip155:4663" },
+        "chainDeploymentId": { "const": "robinhood-mainnet-custom-launch-v1" },
+        "chainDeploymentDescriptorDigest": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/hex32" }]
+        }
+      }
+    },
+    "machineContracts": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/machineContract" }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainDeployment", "profile", "manifest", "source", "finality"],
+      "properties": {
+        "chainDeployment": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/deploymentBinding" }] },
+        "profile": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/profileEvidence" }] },
+        "manifest": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/releaseManifest" }] },
+        "source": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sourceClosure" }] },
+        "finality": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/finalityEvidence" }] }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "chainDeploymentEvidence",
+          "profileEvidence",
+          "releaseManifestEvidence",
+          "sourceClosureEvidence",
+          "finalityEvidence"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "hex32": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+    "gitHash": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "tag", "repository"],
+      "properties": {
+        "name": { "const": "@programmable/launch" },
+        "version": { "const": "4.0.0" },
+        "tag": { "const": "programmable-launch-v4.0.0" },
+        "repository": { "const": "programmablehq/PROGRAMMABLE" }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "structuralProfileId", "businessProfileId",
+        "admissionDescriptorDigest", "admissionPolicyDigest", "admissionBindingDigest",
+        "admissionSchemaDigest", "profileRevision", "profileVersion", "profileDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.custom-launch-profile-ref.v4" },
+        "structuralProfileId": { "const": "programmable.custom-launch.robinhood-mainnet.v1" },
+        "businessProfileId": { "const": "robinhood-production-launch" },
+        "admissionDescriptorDigest": { "const": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948" },
+        "admissionPolicyDigest": { "const": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216" },
+        "admissionBindingDigest": { "const": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2" },
+        "admissionSchemaDigest": { "const": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7" },
+        "profileRevision": { "const": 1 },
+        "profileVersion": { "const": "4.0.0" },
+        "profileDigest": { "const": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0" }
+      }
+    },
+    "finalityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "policyId", "policyRevision", "policyDigest"],
+      "properties": {
+        "schemaVersion": { "const": "programmable.custom-launch-finality-policy-ref.v1" },
+        "policyId": { "const": "robinhood-stage-finality-v1" },
+        "policyRevision": { "const": 1 },
+        "policyDigest": { "const": "sha256:537d531423d1285a3808556a57303ec68f1e6bdeea3c9aaf6320f9e5a0e47153" }
+      }
+    },
+    "policyArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "policySource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "repository", "repositoryId", "protectedBranch",
+        "verifiedMergeCommit", "verifiedTree", "artifacts"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.custom-launch-policy-source.v1" },
+        "repository": { "const": "programmablehq/Launch-Policy" },
+        "repositoryId": { "const": 1320171831 },
+        "protectedBranch": { "const": "main" },
+        "verifiedMergeCommit": { "const": "987215867472229690e30e11000c626d58f46e16" },
+        "verifiedTree": { "const": "284fb19f05cdf9b5b60b8bacfbd480f6b98decd3" },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["descriptor", "businessPolicy", "generatedBinding", "schema"],
+          "properties": {
+            "descriptor": { "$ref": "#/$defs/policyArtifact" },
+            "businessPolicy": { "$ref": "#/$defs/policyArtifact" },
+            "generatedBinding": { "$ref": "#/$defs/policyArtifact" },
+            "schema": { "$ref": "#/$defs/policyArtifact" }
+          }
+        }
+      }
+    },
+    "releaseIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "profile", "finalityPolicy", "policySource"],
+      "properties": {
+        "package": { "$ref": "#/$defs/package" },
+        "profile": { "$ref": "#/$defs/profile" },
+        "finalityPolicy": { "$ref": "#/$defs/finalityPolicy" },
+        "policySource": { "$ref": "#/$defs/policySource" }
+      }
+    },
+    "machineContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "url", "sha256"],
+      "properties": {
+        "name": { "enum": ["openapi", "packConfig", "createRequest", "resource", "capabilities", "preflight", "onchainEvidence", "exactWalletTransaction"] },
+        "path": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "pattern": "^https://programmable\\.market/" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "machineDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "deploymentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "descriptor", "descriptorDigest", "bindingDigest"],
+      "properties": {
+        "schemaVersion": { "const": "programmable.launch-cli-v4-chain-deployment-binding.v1" },
+        "descriptor": { "type": "object" },
+        "descriptorDigest": { "$ref": "#/$defs/hex32" },
+        "bindingDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "profileEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "profile", "chainDeploymentDescriptorDigest", "fundingModes", "capabilities", "profileEvidenceDigest"],
+      "properties": {
+        "schemaVersion": { "const": "programmable.launch-cli-v4-profile-evidence.v1" },
+        "profile": { "$ref": "#/$defs/profile" },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "fundingModes": { "const": ["none", "wallet-transaction-value"] },
+        "capabilities": { "type": "object" },
+        "profileEvidenceDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "byteLength", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "byteLength": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceClosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "repository", "branch", "revision", "tree", "foundationSourceCommitment", "entries", "sourceClosureDigest"],
+      "properties": {
+        "schemaVersion": { "const": "programmable.launch-cli-v4-source-closure.v1" },
+        "repository": { "const": "programmablehq/PROGRAMMABLE" },
+        "branch": { "const": "production" },
+        "revision": { "$ref": "#/$defs/gitHash" },
+        "tree": { "$ref": "#/$defs/gitHash" },
+        "foundationSourceCommitment": { "const": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730" },
+        "entries": { "type": "array", "minItems": 4, "items": { "$ref": "#/$defs/sourceEntry" } },
+        "sourceClosureDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "finalityEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "chainDeploymentDescriptorDigest", "deploymentTransactionHash", "l2Checkpoint", "ethereumFinalityEvidence", "finalityEvidenceDigest"],
+      "properties": {
+        "schemaVersion": { "const": "programmable.launch-cli-v4-finality-evidence.v1" },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "deploymentTransactionHash": { "$ref": "#/$defs/hex32" },
+        "l2Checkpoint": { "type": "object" },
+        "ethereumFinalityEvidence": { "type": "object" },
+        "finalityEvidenceDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "releaseManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "releaseIdentity", "chainId", "caip2", "chainDeploymentId",
+        "chainDeploymentDescriptorDigest", "chainDeploymentBindingDigest",
+        "profileEvidenceDigest", "sourceRevision", "sourceTree", "sourceClosureDigest",
+        "deploymentTransactionHash", "deploymentBlockHash", "finalityEvidenceDigest",
+        "machineContracts", "releaseManifestDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "programmable.launch-cli-v4-release-manifest.v1" },
+        "releaseIdentity": { "$ref": "#/$defs/releaseIdentity" },
+        "chainId": { "const": "4663" },
+        "caip2": { "const": "eip155:4663" },
+        "chainDeploymentId": { "const": "robinhood-mainnet-custom-launch-v1" },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "chainDeploymentBindingDigest": { "$ref": "#/$defs/sha256" },
+        "profileEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "sourceRevision": { "$ref": "#/$defs/gitHash" },
+        "sourceTree": { "$ref": "#/$defs/gitHash" },
+        "sourceClosureDigest": { "$ref": "#/$defs/sha256" },
+        "deploymentTransactionHash": { "$ref": "#/$defs/hex32" },
+        "deploymentBlockHash": { "$ref": "#/$defs/hex32" },
+        "finalityEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "machineContracts": { "type": "array", "minItems": 8, "maxItems": 8, "items": { "$ref": "#/$defs/machineDigest" } },
+        "releaseManifestDigest": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

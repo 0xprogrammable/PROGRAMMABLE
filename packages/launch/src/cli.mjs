@@ -3,12 +3,17 @@ import {
   OPENAPI_URL_V1,
   OPENAPI_URL_V2,
   OPENAPI_URL_V3,
+  OPENAPI_URL_V4,
   PACK_CONFIG_SCHEMA_V3,
+  PACK_CONFIG_SCHEMA_V4,
   PACK_CONFIG_V3_CONTRACT_URL,
   PACK_CONFIG_V3_EXAMPLE_URL,
+  PACK_CONFIG_V4_CONTRACT_URL,
+  PACK_CONFIG_V4_EXAMPLE_URL,
   PACKAGE_VERSION,
   RELEASE_URL,
   RELEASE_URL_V1,
+  RELEASE_URL_V3,
 } from "./constants.mjs";
 import { createCliDiagnosticError } from "./diagnostics.mjs";
 import { packLaunch } from "./pack.mjs";
@@ -126,6 +131,7 @@ export async function main(argv) {
       maxAttempts: integerFlag(parsed, "max-attempts"),
       timeoutMs: integerFlag(parsed, "timeout-ms"),
       pollIntervalMs: integerFlag(parsed, "poll-ms"),
+      chainId: parsed.flags["chain-id"],
     });
   } else {
     throw new TypeError(`Unknown command ${command}. Expected pack, validate, submit, or status.`);
@@ -149,6 +155,7 @@ function parseArguments(argv) {
     "poll-ms",
     "until",
     "api-version",
+    "chain-id",
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -189,6 +196,11 @@ function requiredV3ConfigFlag(parsed) {
       schemaVersion: PACK_CONFIG_SCHEMA_V3,
       configContract: PACK_CONFIG_V3_CONTRACT_URL,
       executableExample: PACK_CONFIG_V3_EXAMPLE_URL,
+      chainAwareAlternative: {
+        schemaVersion: PACK_CONFIG_SCHEMA_V4,
+        configContract: PACK_CONFIG_V4_CONTRACT_URL,
+        executableExample: PACK_CONFIG_V4_EXAMPLE_URL,
+      },
     },
     observed: { flag: null },
   });
@@ -219,19 +231,20 @@ function usage(command) {
     ],
     validate: [
       "Usage: programmable-launch validate <launch.json> [--config programmable-launch.config.json] [--remote]",
-      "--remote runs the public capabilities check and authenticated, quota-free V3 preflight after exact local validation.",
+      "--remote fetches public unauthenticated chain capabilities before reading the API key, then runs authenticated side-effect-free preflight.",
       "Preflight requires an API key with custom-launch:create, read only from the environment or OS secret store.",
-      "V3 validation requires --config so launch.json remains bound to fresh source and build artifacts.",
+      "V3 retains its quota-free V3 preflight contract; V4 uses the chain-scoped V4 preflight contract.",
+      "V3 and V4 validation require --config so launch.json remains bound to fresh source and build artifacts.",
       "Remote validation never allocates a nonce, persists a launch, signs, or broadcasts.",
     ],
     submit: [
       "Usage: programmable-launch submit <launch.json> --config <programmable-launch.config.json> [--idempotency-key key]",
       "The API key is read only from PROGRAMMABLE_API_KEY or the OS secret store.",
-      "Only V3.3 requests can be submitted. V1 and V2 remain readable but their create routes are closed.",
+      "V3 Ethereum and V4 Robinhood requests can be submitted. V1 and V2 remain readable but their create routes are closed.",
     ],
     status: [
-      "Usage: programmable-launch status <request-id> [--api-version 1|2|3] [--watch] [--until authorized|finalized]",
-      "V3 is the default. Use --api-version 1 or 2 only to read a legacy request.",
+      "Usage: programmable-launch status <request-id> [--api-version 1|2|3|4] [--chain-id 4663] [--watch] [--until authorized|finalized]",
+      "V3 is the default with unchanged Ethereum behavior. V4 requires explicit --api-version 4 --chain-id 4663.",
       "This command never signs or broadcasts a wallet transaction.",
     ],
   };
@@ -242,8 +255,10 @@ function usage(command) {
     `OpenAPI V1 (read compatibility; create fenced): ${OPENAPI_URL_V1}`,
     `OpenAPI V2 (read compatibility; create fenced): ${OPENAPI_URL_V2}`,
     `OpenAPI V3 general hook profile: ${OPENAPI_URL_V3}`,
+    `OpenAPI V4 chain-aware Custom Launch: ${OPENAPI_URL_V4}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,
-    `Public V3 release: ${RELEASE_URL}`,
+    `Public V3 release (immutable): ${RELEASE_URL_V3}`,
+    `Public V4 release: ${RELEASE_URL}`,
   ].join("\n");
 }
 

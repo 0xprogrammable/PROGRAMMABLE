@@ -41,15 +41,22 @@ const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
 const ROUTE_NAMESPACE_TYPEHASH = keccak256(stringToHex(API_ROUTE_NAMESPACE_TYPE));
 const TARGET_SALT_TYPEHASH = keccak256(stringToHex(GRAPH_TARGET_SALT_TYPE));
 
-export function deriveRouteNamespace(sourceBundleSha256, launchWallet) {
+export function deriveRouteNamespace(sourceBundleSha256, launchWallet, chainContext) {
   if (typeof sourceBundleSha256 !== "string"
     || !/^sha256:[0-9a-f]{64}$/.test(sourceBundleSha256)) {
     throw new TypeError("sourceBundleSha256 is invalid");
   }
   const sourceHash = `0x${sourceBundleSha256.slice("sha256:".length)}`;
+  const deployment = normalizeGraphChainContext(chainContext);
   return keccak256(encodeAbiParameters(
     parseAbiParameters("bytes32,bytes32,address,address,address"),
-    [ROUTE_NAMESPACE_TYPEHASH, sourceHash, getAddress(launchWallet), ROUTER, GRAPH_FACTORY],
+    [
+      ROUTE_NAMESPACE_TYPEHASH,
+      sourceHash,
+      getAddress(launchWallet),
+      deployment.router,
+      deployment.graphFactory,
+    ],
   ));
 }
 
@@ -62,6 +69,7 @@ export function buildGraphBundle({
   projectMetadataHash,
   noDelegationRuntimeTargetIds = [],
   enforceV4PermissionDependencies = false,
+  chainContext,
 }) {
   if (!Array.isArray(targets) || targets.length < 2 || targets.length > MAX_GRAPH_TARGETS) {
     throw new TypeError("targets must contain between 2 and 16 targets");
@@ -113,6 +121,7 @@ export function buildGraphBundle({
     launchWallet: getAddress(launchWallet),
     nonce,
     noDelegationTargets,
+    chainContext,
   });
   const graphBundle = {
     schemaVersion: GRAPH_BUNDLE_SCHEMA,
@@ -137,7 +146,7 @@ export function normalizeAndPredictSubmittedGraph(
   graphInput,
   launchWallet,
   nonce,
-  { enforceV4PermissionDependencies = false, projectMetadataHash } = {},
+  { enforceV4PermissionDependencies = false, projectMetadataHash, chainContext } = {},
 ) {
   assertObjectKeys(graphInput, ["schemaVersion", "sourceBundleSha256", "targets", "pool"], "graphBundle");
   if (graphInput.schemaVersion !== GRAPH_BUNDLE_SCHEMA) {
@@ -191,6 +200,7 @@ export function normalizeAndPredictSubmittedGraph(
     sourceBundleSha256: normalized.sourceBundleSha256,
     launchWallet: getAddress(launchWallet),
     nonce,
+    chainContext,
   });
   return {
     graphBundle: normalized,
@@ -559,8 +569,10 @@ function predictGraph({
   launchWallet,
   nonce,
   noDelegationTargets = new Set(),
+  chainContext,
 }) {
-  const routeNamespace = deriveRouteNamespace(sourceBundleSha256, launchWallet);
+  const deployment = normalizeGraphChainContext(chainContext);
+  const routeNamespace = deriveRouteNamespace(sourceBundleSha256, launchWallet, deployment);
   const identities = new Map();
   const predictions = [];
   const resolvedTargets = [];
@@ -589,6 +601,7 @@ function predictGraph({
       nonce,
       targetIdHash,
       initCodeHash,
+      chainContext: deployment,
     });
     const { applicantSalt, effectiveSalt, predictedAddress } = resolved;
     if ([...identities.values()].some((address) => address.toLowerCase() === predictedAddress.toLowerCase())) {
@@ -662,22 +675,41 @@ function predictGraph({
   return { predictions, resolvedTargets, runtimeCodes };
 }
 
-function resolveSaltAndAddress({ target, routeNamespace, nonce, targetIdHash, initCodeHash }) {
+function resolveSaltAndAddress({
+  target,
+  routeNamespace,
+  nonce,
+  targetIdHash,
+  initCodeHash,
+  chainContext,
+}) {
   const desiredMask = target.componentKind === "hook"
     ? permissionMask(target.declaredHookPermissions)
     : null;
   if (target.saltSelection.kind === "fixed") {
     const applicantSalt = target.saltSelection.value;
-    const effectiveSalt = effectiveTargetSalt(routeNamespace, nonce, targetIdHash, applicantSalt);
-    const predictedAddress = predictedTargetAddress(effectiveSalt, initCodeHash);
+    const effectiveSalt = effectiveTargetSalt(
+      routeNamespace,
+      nonce,
+      targetIdHash,
+      applicantSalt,
+      chainContext,
+    );
+    const predictedAddress = predictedTargetAddress(effectiveSalt, initCodeHash, chainContext);
     return { applicantSalt, effectiveSalt, predictedAddress };
   }
   for (let offset = 0n; offset < target.saltSelection.maxAttempts; offset += 1n) {
     const candidate = target.saltSelection.start + offset;
     if (candidate >= 1n << 256n) break;
     const applicantSalt = `0x${candidate.toString(16).padStart(64, "0")}`;
-    const effectiveSalt = effectiveTargetSalt(routeNamespace, nonce, targetIdHash, applicantSalt);
-    const predictedAddress = predictedTargetAddress(effectiveSalt, initCodeHash);
+    const effectiveSalt = effectiveTargetSalt(
+      routeNamespace,
+      nonce,
+      targetIdHash,
+      applicantSalt,
+      chainContext,
+    );
+    const predictedAddress = predictedTargetAddress(effectiveSalt, initCodeHash, chainContext);
     if (Number(BigInt(predictedAddress) & 0x3fffn) === desiredMask) {
       return { applicantSalt, effectiveSalt, predictedAddress };
     }
@@ -687,29 +719,52 @@ function resolveSaltAndAddress({ target, routeNamespace, nonce, targetIdHash, in
   );
 }
 
-function effectiveTargetSalt(routeNamespace, nonce, targetIdHash, applicantSalt) {
+function effectiveTargetSalt(routeNamespace, nonce, targetIdHash, applicantSalt, chainContext) {
+  const deployment = normalizeGraphChainContext(chainContext);
   return keccak256(encodeAbiParameters(
     parseAbiParameters("bytes32,uint256,address,bytes32,bytes32,bytes32,bytes32,address"),
     [
       TARGET_SALT_TYPEHASH,
-      BigInt(MAINNET_CHAIN_ID),
-      GRAPH_FACTORY,
+      BigInt(deployment.chainId),
+      deployment.graphFactory,
       routeNamespace,
       nonce,
       targetIdHash,
       applicantSalt,
-      ROUTER,
+      deployment.router,
     ],
   ));
 }
 
-function predictedTargetAddress(effectiveSalt, initCodeHash) {
+function predictedTargetAddress(effectiveSalt, initCodeHash, chainContext) {
+  const deployment = normalizeGraphChainContext(chainContext);
   return getContractAddress({
     opcode: "CREATE2",
-    from: GRAPH_FACTORY,
+    from: deployment.graphFactory,
     salt: effectiveSalt,
     bytecodeHash: initCodeHash,
   });
+}
+
+function normalizeGraphChainContext(value) {
+  if (value === undefined) {
+    return {
+      chainId: MAINNET_CHAIN_ID,
+      router: ROUTER,
+      graphFactory: GRAPH_FACTORY,
+    };
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("graph chain context must be an object");
+  }
+  if (typeof value.chainId !== "string" || !/^[1-9][0-9]*$/u.test(value.chainId)) {
+    throw new TypeError("graph chain context chainId must be a canonical positive decimal string");
+  }
+  return {
+    chainId: value.chainId,
+    router: getAddress(value.router),
+    graphFactory: getAddress(value.graphFactory),
+  };
 }
 
 export function patchAddressLocators(source, locators, identities, label) {
