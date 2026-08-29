@@ -29,6 +29,13 @@ describe("Site footer", () => {
     expect(footerSource).toContain('label: "Discord"');
   });
 
+  it("links the official X account from Resources", () => {
+    expect(footerSource).toContain(
+      'href: "https://x.com/ProgrammableHQ"',
+    );
+    expect(footerSource).toContain('label: "X"');
+  });
+
   it("places the Dune dashboard between Dexscreener and Discord", () => {
     const dexscreener = footerSource.indexOf("https://dexscreener.com/");
     const dune = footerSource.indexOf(

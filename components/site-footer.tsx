@@ -36,7 +36,7 @@ const resourceLinks = [
     external: true,
   },
   {
-    href: "https://x.com/0xProgrammable",
+    href: "https://x.com/ProgrammableHQ",
     label: "X",
     external: true,
   },

@@ -16,7 +16,7 @@ export const programmableSiteStructuredData = {
         url: `${SITE_ORIGIN}/apple-touch-icon.png`,
       },
       sameAs: [
-        "https://x.com/0xProgrammable",
+        "https://x.com/ProgrammableHQ",
         "https://github.com/programmablehq",
         "https://discord.com/invite/programmable",
       ],

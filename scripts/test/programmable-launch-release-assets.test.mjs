@@ -58,7 +58,7 @@ test("release manifest binds source, exact toolchain, and all payload bytes", ()
   });
   assert.equal(manifest.schemaVersion, RELEASE_ASSET_SCHEMA);
   assert.equal(manifest.repository, RELEASE_REPOSITORY);
-  assert.equal(manifest.repository, "programmablehq/programmable-evm");
+  assert.equal(manifest.repository, "programmablehq/programmable");
   assert.equal(manifest.source.commitSha, COMMIT);
   assert.equal(manifest.source.treeSha, TREE);
   assert.equal(manifest.toolchain.node, "24.14.0");

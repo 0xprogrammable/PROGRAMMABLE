@@ -88,7 +88,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Programmable",
     description: siteDescription,
-    creator: "@0xprogrammable",
+    creator: "@ProgrammableHQ",
     images: [
       {
         url: socialImageUrl,

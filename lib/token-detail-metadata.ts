@@ -201,7 +201,7 @@ export function genericTokenDetailMetadata(
       card: "summary_large_image",
       title: "Programmable",
       description: SITE_DESCRIPTION,
-      creator: "@0xprogrammable",
+      creator: "@ProgrammableHQ",
       images: [{ url: FALLBACK_SOCIAL_IMAGE, alt: FALLBACK_SOCIAL_ALT }],
     },
   };
@@ -249,7 +249,7 @@ export function tokenDetailMetadataFromProjection(
       card: "summary_large_image",
       title,
       description: projected.description,
-      creator: "@0xprogrammable",
+      creator: "@ProgrammableHQ",
       images: [{ url: projected.imageUrl, alt: imageAlt }],
     },
   };

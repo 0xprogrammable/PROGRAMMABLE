@@ -6,7 +6,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 export const BACKEND_REPOSITORY =
   "programmablehq/programmable-open-hook-v2-internal";
 export const BACKEND_REPOSITORY_ID = 1_318_883_798;
-export const WEBSITE_REPOSITORY = "programmablehq/programmable-evm";
+export const WEBSITE_REPOSITORY = "programmablehq/programmable";
 export const WEBSITE_REPOSITORY_ID = 1_314_365_508;
 export const BINDING_PATH =
   "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json";

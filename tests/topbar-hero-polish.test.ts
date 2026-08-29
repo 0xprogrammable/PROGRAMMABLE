@@ -52,6 +52,7 @@ describe("topbar and Explore hero polish", () => {
       'src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"',
     );
     expect(navigation).toContain('aria-label="Programmable on X"');
+    expect(navigation).toContain('href="https://x.com/ProgrammableHQ"');
     expect(navigation).toContain('aria-label="Programmable on GitHub"');
     expect(navigation).toContain('aria-label="Programmable on Discord"');
     expect(navigation).toContain('aria-label="Programmable on Dexscreener"');

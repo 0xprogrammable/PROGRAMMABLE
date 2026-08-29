@@ -22,7 +22,7 @@ export type ExplorePreviewProject = {
 
 const PROJECT_LINKS = [
   { kind: "website" as const, url: "https://programmable.market" },
-  { kind: "x" as const, url: "https://x.com/0xProgrammable" },
+  { kind: "x" as const, url: "https://x.com/ProgrammableHQ" },
   { kind: "telegram" as const, url: "https://t.me/programmable" },
 ];
 

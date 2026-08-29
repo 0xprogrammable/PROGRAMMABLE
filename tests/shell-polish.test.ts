@@ -25,19 +25,55 @@ describe("public shell polish", () => {
     expect(source).not.toContain('href: "https://github.com/0xprogrammable"');
     expect(source).toContain('label: "Discord"');
     expect(source).toContain('label: "X"');
+    expect(source).toContain('href: "https://x.com/ProgrammableHQ"');
     expect(source).toContain('label: "Token"');
     expect(source).not.toContain("XBrandIcon");
     expect(source).not.toContain("GitHubBrandIcon");
   });
 
-  it("links the public shell and structured identity to the canonical GitHub organization", () => {
+  it("links the public shell and structured identity to the canonical public accounts", () => {
     const navigation = read("components/site-navigation.tsx");
     const structuredData = read("lib/site-structured-data.ts");
+    const rootLayout = read("app/layout.tsx");
+    const homePage = read("app/page.tsx");
+    const officialLinks = read("docs/public/reference/official-links.md");
+    const readme = read("README.md");
 
     expect(navigation).toContain('href="https://github.com/programmablehq"');
+    expect(navigation).toContain('href="https://x.com/ProgrammableHQ"');
     expect(navigation).not.toContain('href="https://github.com/0xprogrammable"');
     expect(structuredData).toContain('"https://github.com/programmablehq"');
+    expect(structuredData).toContain('"https://x.com/ProgrammableHQ"');
     expect(structuredData).not.toContain('"https://github.com/0xprogrammable"');
+    expect(rootLayout).toContain('creator: "@ProgrammableHQ"');
+    expect(homePage).toContain('creator: "@ProgrammableHQ"');
+    expect(officialLinks).toContain(
+      "[x.com/ProgrammableHQ](https://x.com/ProgrammableHQ)",
+    );
+    expect(readme).toContain('href="https://x.com/ProgrammableHQ"');
+  });
+
+  it("keeps the retired X identity out of current public sources", () => {
+    const retiredXProfile = ["https://x.com/", "0x", "programmable"].join("");
+    const retiredCreator = ["@", "0x", "programmable"].join("");
+    const currentPublicSources = [
+      "README.md",
+      "app/layout.tsx",
+      "app/page.tsx",
+      "components/explore-preview-data.ts",
+      "components/prediction-market-v2-local-preview.tsx",
+      "components/site-footer.tsx",
+      "components/site-navigation.tsx",
+      "config/creator-article-programmable-example.v1.json",
+      "docs/public/reference/official-links.md",
+      "lib/site-structured-data.ts",
+      "lib/token-detail-metadata.ts",
+    ].map((path) => read(path).toLowerCase());
+
+    for (const source of currentPublicSources) {
+      expect(source).not.toContain(retiredXProfile);
+      expect(source).not.toContain(retiredCreator);
+    }
   });
 
   it("keeps route motion measured, interruptible and compositor-friendly", () => {

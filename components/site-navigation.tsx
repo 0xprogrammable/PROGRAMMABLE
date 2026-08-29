@@ -55,7 +55,7 @@ function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
     >
       <a
         className="header-social-link"
-        href="https://x.com/0xProgrammable"
+        href="https://x.com/ProgrammableHQ"
         target="_blank"
         rel="noreferrer"
         aria-label="Programmable on X"

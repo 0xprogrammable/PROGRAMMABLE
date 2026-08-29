@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 
 export const RELEASE_ASSET_SCHEMA =
   "programmable.launch-cli-release-assets.v1";
-export const RELEASE_REPOSITORY = "programmablehq/programmable-evm";
+export const RELEASE_REPOSITORY = "programmablehq/programmable";
 export const RELEASE_NODE_VERSION = "24.14.0";
 export const RELEASE_NPM_VERSION = "11.16.0";
 

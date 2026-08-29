@@ -432,6 +432,7 @@ describe("agent-readable public surface", () => {
     ]);
     const serialized = serializeStructuredData(programmableSiteStructuredData);
     expect(serialized).toContain('"@context":"https://schema.org"');
+    expect(serialized).toContain("https://x.com/ProgrammableHQ");
     expect(serialized).not.toContain('"address"');
     expect(serialized).not.toContain('"contactPoint"');
     expect(serialized).not.toContain('"offers"');
