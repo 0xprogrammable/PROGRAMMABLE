@@ -9,7 +9,7 @@ description: Official Programmable product, source, community and analytics link
 | Website                 | [programmable.market](https://programmable.market)                                                                 |
 | Create                  | [programmable.market/launch](https://programmable.market/launch)                                                   |
 | Explore                 | [programmable.market/explore](https://programmable.market/explore)                                                 |
-| GitHub                  | [github.com/0xprogrammable](https://github.com/0xprogrammable)                                                     |
+| GitHub                  | [github.com/programmablehq](https://github.com/programmablehq)                                                     |
 | Custom Launch API keys  | [programmable.market/developers/api-keys](https://programmable.market/developers/api-keys)                         |
 | Custom Launch API guide | [programmable.market/developers/custom-launch-api-v1.md](https://programmable.market/developers/custom-launch-api-v1.md) |
 | Custom Launch V1 OpenAPI | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
@@ -19,7 +19,7 @@ description: Official Programmable product, source, community and analytics link
 | Custom API readiness    | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                           |
 | Custom Launch CLI 3.3.9 | [public V3 GitHub Release asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz) |
 | Custom Launch CLI 1.0.1 | [V1 compatibility asset](https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz) |
-| Launch policy           | [github.com/0xprogrammable/launch-policy](https://github.com/0xprogrammable/launch-policy)                         |
+| Launch policy           | [github.com/programmablehq/Launch-Policy](https://github.com/programmablehq/Launch-Policy)                         |
 | Read-only developer API | [developers.programmable.family](https://developers.programmable.family)                                           |
 | X                       | [x.com/0xProgrammable](https://x.com/0xProgrammable)                                                               |
 | Discord                 | [discord.com/invite/programmable](https://discord.com/invite/programmable)                                         |

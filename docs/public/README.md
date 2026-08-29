@@ -51,4 +51,4 @@ Programmable keeps agent evidence, exact-source provider status, API preparation
 
 ## Official sources
 
-The website is [programmable.market](https://programmable.market), the authenticated Custom write API is [api.programmable.market](https://api.programmable.market), and the read only Ethereum developer service is [developers.programmable.family](https://developers.programmable.family). The public organization is [0xprogrammable](https://github.com/0xprogrammable). Contract addresses and integration data should come from canonical release evidence rather than copied screenshots or third party token metadata.
+The website is [programmable.market](https://programmable.market), the authenticated Custom write API is [api.programmable.market](https://api.programmable.market), and the read only Ethereum developer service is [developers.programmable.family](https://developers.programmable.family). The public organization is [programmablehq](https://github.com/programmablehq). Contract addresses and integration data should come from canonical release evidence rather than copied screenshots or third party token metadata.
