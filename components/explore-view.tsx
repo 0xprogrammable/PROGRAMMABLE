@@ -557,12 +557,12 @@ function useExploreTokensPerPage() {
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
 const fallbackTokenImages = [
-  "/brand/programmable-token-fallback-01-dawn.webp",
-  "/brand/programmable-token-fallback-02-moon.webp",
-  "/brand/programmable-token-fallback-03-sun.webp",
-  "/brand/programmable-token-fallback-04-mint.webp",
-  "/brand/programmable-token-fallback-05-lavender.webp",
-  "/brand/programmable-token-fallback-06-dusk.webp",
+  "/brand/programmable-token-card-fallback-night-garden-01.webp",
+  "/brand/programmable-token-card-fallback-night-garden-02.webp",
+  "/brand/programmable-token-card-fallback-night-garden-03.webp",
+  "/brand/programmable-token-card-fallback-night-garden-04.webp",
+  "/brand/programmable-token-card-fallback-night-garden-05.webp",
+  "/brand/programmable-token-card-fallback-night-garden-06.webp",
 ] as const;
 const valuationSortOptions: {
   id: Exclude<ExploreValuationSort, "none">;
