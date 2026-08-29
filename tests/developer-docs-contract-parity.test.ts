@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { PROGRAMMABLE_DEVELOPER_REPOSITORY } from
+  "../components/developer-docs-contract";
 import {
   LAUNCH_KIND_V1,
   PROGRAMMABLE_LAUNCH_STAMP_MANIFEST,
@@ -38,6 +40,12 @@ const routerReferenceSource = readFileSync(
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
 
 describe("Router-first public developer-contract facts", () => {
+  it("publishes the transferred developer repository", () => {
+    expect(PROGRAMMABLE_DEVELOPER_REPOSITORY).toBe(
+      "https://github.com/programmablehq/Developers",
+    );
+  });
+
   it("locks the live Ethereum trust root", () => {
     expect(PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.chainId).toBe(1);
     expect(router).toMatchObject({
@@ -70,17 +78,17 @@ describe("Router-first public developer-contract facts", () => {
       abiUrl:
         "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json",
       abiGithubUrl:
-        "https://raw.githubusercontent.com/0xprogrammable/developers/main/abis/ethereum/programmable-launch-stamp-router-v1.json",
+        "https://raw.githubusercontent.com/programmablehq/Developers/main/abis/ethereum/programmable-launch-stamp-router-v1.json",
       abiSha256:
         "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
       referenceUrl:
-        "https://github.com/0xprogrammable/developers/blob/main/docs/reference/launch-stamp.md",
+        "https://github.com/programmablehq/Developers/blob/main/docs/reference/launch-stamp.md",
       terminalGuideUrl:
-        "https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
+        "https://github.com/programmablehq/Developers/blob/main/docs/guides/terminals-and-scanners.md",
       jsonRpcVerifierUrl:
-        "https://github.com/0xprogrammable/developers/blob/main/examples/verify-launch-stamp.mjs",
+        "https://github.com/programmablehq/Developers/blob/main/examples/verify-launch-stamp.mjs",
       viemVerifierUrl:
-        "https://github.com/0xprogrammable/developers/blob/main/examples/verify-launch-stamp-viem.ts",
+        "https://github.com/programmablehq/Developers/blob/main/examples/verify-launch-stamp-viem.ts",
     });
     for (const value of [
       PROGRAMMABLE_LAUNCH_STAMP_RESOURCES.discoveryUrl,

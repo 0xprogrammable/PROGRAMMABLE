@@ -49,6 +49,13 @@ describe("Custom Launch cold-agent remediation contract", () => {
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
     );
 
+    expect(document.sourceUrl).toBe(
+      "https://github.com/programmablehq/Developers",
+    );
+    expect(document.extensions["programmable.legacy-v1"].migrationGuideUrl)
+      .toBe(
+        "https://github.com/programmablehq/Developers/blob/main/docs/migrations/v1-to-v2.md",
+      );
     expect(document.customLaunchApi.agentIntegration).toEqual({
       status: "live",
       schemaVersion:

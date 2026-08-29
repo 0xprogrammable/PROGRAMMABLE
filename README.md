@@ -160,8 +160,8 @@ intake is closed.
 
 | Repository                                                                                 | Responsibility                                                              |
 | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| [`Launch-Policy`](https://github.com/0xprogrammable/Launch-Policy)                         | Versioned Custom launch requirements, policies and schemas                  |
-| [`Developers`](https://github.com/0xprogrammable/Developers)                               | Read-only discovery manifests, API contracts and verification rules         |
+| [`Launch-Policy`](https://github.com/programmablehq/Launch-Policy)                         | Versioned Custom launch requirements, policies and schemas                  |
+| [`Developers`](https://github.com/programmablehq/Developers)                               | Read-only discovery manifests, API contracts and verification rules         |
 
 ## Release and security boundaries
 
@@ -183,7 +183,7 @@ The smart contracts in this repository have not undergone an external audit or p
   &nbsp;·&nbsp;
   <a href="https://programmable.market/docs">Docs</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/0xprogrammable">GitHub</a>
+  <a href="https://github.com/programmablehq">GitHub</a>
   &nbsp;·&nbsp;
   <a href="https://x.com/0xprogrammable">X</a>
 </p>
