@@ -1,0 +1,65 @@
+{
+  "$schema": "urn:programmable:schema:market-template:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "namespace": "org.programmable.examples.batch_auction",
+  "name": "batch_auction",
+  "revision": "1",
+  "summary": "A delayed clearing Engine that combines multiple stored Principal authorizations in one atomic settlement Envelope.",
+  "domain_policy": {
+    "selector_id": "org.programmable.policy.dynamic_asset_domain.v1",
+    "description": "The exact assets and Domains are selected per Envelope and must satisfy local admission."
+  },
+  "asset_roles": [
+    {
+      "role_id": "org.programmable.role.auction_input.v1",
+      "description": "An asset a Principal is willing to debit.",
+      "cardinality": "one_or_more"
+    },
+    {
+      "role_id": "org.programmable.role.auction_output.v1",
+      "description": "An asset a Principal requires as credited output.",
+      "cardinality": "one_or_more"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "org.programmable.action.store_intent.v1",
+      "description": "Create a cancellable and partially fillable Authorization Scope without protected movement.",
+      "required_protected_capabilities": [
+        "programmable.capability.authorization_state.v1"
+      ],
+      "proposed_protected_effects": [],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.cancel_intent.v1",
+      "description": "Permanently close an unused Authorization Scope.",
+      "required_protected_capabilities": [
+        "programmable.capability.authorization_state.v1"
+      ],
+      "proposed_protected_effects": [],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.clear_batch.v1",
+      "description": "Settle the selected fills, origin-bound refunds, and per-Principal assessment groups atomically.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1",
+        "programmable.capability.temporary_obligation.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1",
+        "programmable.effect.temporary_obligation_open.v1"
+      ],
+      "opaque_engine_effects": []
+    }
+  ],
+  "extensions": {
+    "org.programmable.examples.execution_profile": "BOUNDED_SESSION_V1",
+    "org.programmable.examples.scope_profile": "stored-scope-v1",
+    "org.programmable.examples.non_guarantees": [
+      "fair_clearing_price",
+      "solver_availability"
+    ]
+  }
+}

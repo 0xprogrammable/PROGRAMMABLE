@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "programmable.dex-evm.protocol-lock-verification/v1",
+  "checkedOn": "2026-08-29",
+  "checkoutMode": "READ_ONLY_FOR_THIS_TASK",
+  "repository": "https://github.com/programmablehq/PROGRAMMABLE-PROTOCOL.git",
+  "git": {
+    "head": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "tree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+    "branch": "main",
+    "upstream": "origin/main",
+    "worktreeWasClean": true
+  },
+  "releaseInventory": {
+    "path": "protocol-version.json",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "status": "draft",
+    "productionEligible": false,
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "portableVectorSetDigest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137"
+  },
+  "repositoryCheck": {
+    "command": "make check",
+    "exitCode": 0,
+    "result": "PASS",
+    "files": 70,
+    "schemas": 12,
+    "exampleFixtures": 10,
+    "marketTemplates": 8,
+    "portableVectorCases": 221,
+    "bindingReleases": 0,
+    "conformanceReports": 0,
+    "normativeRequirements": 175,
+    "localLinks": 16
+  },
+  "evidenceBoundary": "This verifies internal consistency of the locked Protocol repository. It does not prove EVM implementation conformance, native profile conformance, deployment, source verification, independent review, or production eligibility."
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "urn:programmable:schema:market-template:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "namespace": "org.programmable.examples.multi_asset_basket",
+  "name": "multi_asset_basket",
+  "revision": "1",
+  "summary": "A dynamic basket Engine that issues and redeems a receipt against multiple independently accounted component assets.",
+  "domain_policy": {
+    "selector_id": "org.programmable.policy.dynamic_basket_domain.v1",
+    "description": "The immutable policy admits a dynamic component set while every Envelope binds each exact component and profile."
+  },
+  "asset_roles": [
+    {
+      "role_id": "org.programmable.role.component_asset.v1",
+      "description": "A component asset accounted and assessed in its own atomic units.",
+      "cardinality": "one_or_more"
+    },
+    {
+      "role_id": "org.programmable.role.basket_receipt.v1",
+      "description": "The Engine-defined receipt representing a basket claim.",
+      "cardinality": "one"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "org.programmable.action.issue_basket.v1",
+      "description": "Debit the selected components and credit a bounded receipt amount.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1",
+        "programmable.capability.profile_operation.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1",
+        "programmable.effect.profile_operation.v1"
+      ],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.redeem_basket.v1",
+      "description": "Debit the basket receipt and credit the exact selected component amounts.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1",
+        "programmable.capability.profile_operation.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1",
+        "programmable.effect.profile_operation.v1"
+      ],
+      "opaque_engine_effects": []
+    }
+  ],
+  "extensions": {
+    "org.programmable.examples.assessment_rule": "each_principal_asset_group_is_independent",
+    "org.programmable.examples.non_guarantees": [
+      "component_solvency",
+      "rebalance_quality"
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "programmable.dex-evm.protocol-lock/v1",
+  "protocolRepository": "https://github.com/programmablehq/PROGRAMMABLE-PROTOCOL.git",
+  "protocolCommit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+  "protocolTree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+  "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+  "constitution": {
+    "path": "constitution/programmable-constitution-v1.json",
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301"
+  },
+  "portableVectorSet": {
+    "digest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137",
+    "caseCount": 221,
+    "paths": [
+      "vectors/bounded-session-v1.json",
+      "vectors/canonical-identifiers-v1.json",
+      "vectors/evidence-v1.json",
+      "vectors/identifiers-v1.json",
+      "vectors/protected-effects-v1.json",
+      "vectors/protocol-assessment-v1.json"
+    ]
+  },
+  "status": "draft",
+  "productionEligible": false,
+  "referencePolicy": "EXACT_COMMIT_ONLY",
+  "verificationReport": "packages/dex-evm/binding/reports/protocol-lock-verification.json"
+}

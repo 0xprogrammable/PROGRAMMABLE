@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "programmable.dex-evm.binding-local-profile/v1",
+  "kind": "ENGINE_INTERFACE",
+  "name": "return-only-opaque-v1",
+  "identifierPreimage": "programmable.dex.evm.engine-interface.return-only-opaque.v1",
+  "identifierDerivation": "keccak256(utf8(identifierPreimage))",
+  "claimStatus": "ARCHITECTURE_BASELINE_ONLY",
+  "protectedExecutionStatus": "BLOCKED_BY_SPEC",
+  "source": {
+    "interface": "packages/dex-evm/src/interfaces/IReturnOnlyEngineV1.sol",
+    "referenceFixture": "packages/dex-evm/src/reference-engines/OpaqueStateEngineV1.sol"
+  },
+  "selectorSet": [
+    "proposeOpaque((bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,bytes32,uint32,uint8,bytes))"
+  ],
+  "semantics": [
+    "a future enabled binding permits only CALL and forbids DELEGATECALL to the Engine",
+    "the current Core performs no Engine call because protected execution hard-reverts",
+    "the Engine may mutate Engine-owned state and call with Engine-owned authority",
+    "the response is opaque bytes; the declared resource constants are future binding requirements and are not enforced by the current Core",
+    "the response grants no Core, DomainVault, Principal or Collector authority",
+    "registration grants no authority"
+  ],
+  "resourceLimits": {
+    "maximumActionPayloadBytes": 16384,
+    "maximumProposalBytes": 16384,
+    "maximumOpaqueDataBytes": 8192,
+    "maximumSegments": 16,
+    "engineCallGasLimit": 1000000,
+    "postEngineGasReserve": 250000,
+    "maximumEngineReturnDataBytes": 25600
+  },
+  "resourceLimitEnforcement": "NOT_REACHABLE_OR_ENFORCED_BY_CURRENT_CORE",
+  "unavailableClaims": [
+    "portable return-only transcript conformance",
+    "one-shot target-slot accounting",
+    "protected Effect execution",
+    "normalized Receipt reconstruction"
+  ],
+  "blockers": [
+    "SPEC-GAP-012",
+    "SPEC-GAP-001",
+    "SPEC-GAP-002",
+    "SPEC-GAP-004",
+    "SPEC-GAP-005",
+    "SPEC-GAP-007"
+  ]
+}

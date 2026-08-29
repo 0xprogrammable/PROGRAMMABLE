@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "programmable.dex-evm.binding-local-profile/v1",
+  "kind": "ENGINE_CODE_POLICY",
+  "name": "entry-runtime-codehash-only-v1",
+  "identifierPreimage": "programmable.dex.evm.engine-code.entry-runtime-codehash-only.v1",
+  "identifierDerivation": "keccak256(utf8(identifierPreimage))",
+  "claimStatus": "ARCHITECTURE_BASELINE_ONLY",
+  "protectedExecutionStatus": "BLOCKED_BY_SPEC",
+  "source": {
+    "contract": "packages/dex-evm/src/core/CoreV1.sol"
+  },
+  "checks": [
+    "the Engine address has nonempty code at registration",
+    "the descriptor runtimeCodeHash equals EXTCODEHASH of the Engine entry address at registration",
+    "authentication rechecks the same entry-address runtime code hash"
+  ],
+  "proxyShapedCodePermitted": true,
+  "proves": [
+    "entry runtime code hash equality at each successful check"
+  ],
+  "doesNotProve": [
+    "configuration immutability",
+    "storage immutability",
+    "implementation immutability",
+    "beacon or facet immutability",
+    "library immutability",
+    "external dependency immutability",
+    "truth or enforcement of opaque descriptor commitments"
+  ],
+  "authorityEffect": "NONE_REGISTRATION_GRANTS_NO_PROTECTED_AUTHORITY",
+  "coreEnforcedImmutabilityClaim": false
+}

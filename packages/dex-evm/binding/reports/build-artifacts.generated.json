@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 1,
+  "artifactClass": "draft-foundations-build-inventory",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "scope": "compiled EVM foundations only",
+  "claims": {
+    "bindingRelease": false,
+    "conformanceReport": false,
+    "deployment": false,
+    "executionAbiFrozen": false,
+    "productionEligible": false,
+    "sourceVerified": false
+  },
+  "blocker": {
+    "code": "BLOCKED_BY_SPEC",
+    "subject": "protected execution ABI and complete native-to-portable binding",
+    "effect": "No Binding Release, conformance claim, deployment manifest, or production artifact is generated."
+  },
+  "inputs": {
+    "foundryConfigSha256": "sha256:336330c42cd5e2a8855f7c431920ce630633bd8f2d9dbcbd704906166215ad8f",
+    "foundationsAbiBundleSha256": "sha256:1c0ecb2958e7a9a2033df832337e79756ab46b7edb1a6c05597a8ce066718a2c",
+    "protocolLockSha256": "sha256:6f07a87e82af026daa7baf5a351dc11a89a217b1c5c7d9a6eefae37d4cb7b29e",
+    "remappingsSha256": "sha256:c415d53fbbe771c451cdb2ed7ac7300c79fa84815367cdc02f8151e8c4197616",
+    "sourceSetAlgorithm": "sha256(path + NUL + prefixed-source-sha256 + LF), sorted by path",
+    "sourceSetSha256": "sha256:6ce17046615abd2c2ae6cdbfbb8549cb3c5b9869b9aaf16589feefa28b7594ad"
+  },
+  "toolchainRequirements": {
+    "evidenceClass": "required-version-and-artifact-metadata",
+    "foundry": {
+      "version": "1.7.1",
+      "commit": "4072e48705af9d93e3c0f6e29e93b5e9a40caed8",
+      "binarySha256": null,
+      "binaryHashBoundary": "Platform-specific Foundry binary hashes are not claimed by this cross-platform report."
+    },
+    "solidity": {
+      "version": "0.8.26+commit.8a97fa7a",
+      "commit": "8a97fa7a",
+      "attestedByEveryIncludedContractArtifactMetadata": true,
+      "binarySha256": null,
+      "binaryHashBoundary": "The compiler version and commit are artifact-attested; a cross-platform compiler binary hash is not claimed."
+    }
+  },
+  "compiler": {
+    "version": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "optimizer": {
+      "enabled": true,
+      "runs": 1000
+    },
+    "metadata": {
+      "appendCbor": false,
+      "bytecodeHash": "none"
+    }
+  },
+  "sizeLimits": {
+    "eip170RuntimeBytes": 24576,
+    "eip3860InitcodeBytes": 49152,
+    "constructorArgumentsIncluded": false,
+    "note": "EIP-3860 is rechecked against complete initcode before any deployment owner gate."
+  },
+  "sources": [
+    {
+      "path": "src/core/CoreV1.sol",
+      "sha256": "sha256:697e1b8015e6124bbdeb8941b0a46a0eacc4c99277e40fceaa0182f341145f4d"
+    },
+    {
+      "path": "src/core/DomainVaultV1.sol",
+      "sha256": "sha256:632a265c2545f3f6aa2e1c2f3ff8b3ea99de06d4e6c342859b9e4412f24e57ab"
+    },
+    {
+      "path": "src/core/ExecutionLockV1.sol",
+      "sha256": "sha256:191772794d59a2c42606f645eb073cce936809ac2195fa72834b0d0c6988b2d0"
+    },
+    {
+      "path": "src/core/NativeIdentityV1.sol",
+      "sha256": "sha256:b8aabcb8498d737751959e0ebca2360ff905e98c6e04825fcc9b362598f5e7a4"
+    },
+    {
+      "path": "src/core/ProtocolAssessmentV1.sol",
+      "sha256": "sha256:cf4f5c6d6deccdb19d9e74dadc21b497a04605ec79d8e7cb9be376a3d5798f3c"
+    },
+    {
+      "path": "src/interfaces/IDomainVaultV1.sol",
+      "sha256": "sha256:0019d01f225c4fca61a02ef0cb485823c0cf51c6b3f4c49e14821b327cdc3c86"
+    },
+    {
+      "path": "src/interfaces/IERC1271V1.sol",
+      "sha256": "sha256:7f0537f1b1835ccce200a72bbc52a5d5f553fa2bee1ae335383103188151c327"
+    },
+    {
+      "path": "src/interfaces/IReturnOnlyEngineV1.sol",
+      "sha256": "sha256:2f4e454799bbce2e2b601a4b1ea12df494270a0e7177864df0b8501ed358fbde"
+    },
+    {
+      "path": "src/profiles/CanonicalEOASignatureV1.sol",
+      "sha256": "sha256:c7b59ed2f6dca6463246b4e52bb4436923bd97062dd46bee3cafe582bba63bab"
+    },
+    {
+      "path": "src/profiles/EIP712HashingV1.sol",
+      "sha256": "sha256:7fd51b4dbcd7dbbf616bde013e537d3304c2b1591432ffd1a8277b78142887b3"
+    },
+    {
+      "path": "src/profiles/ERC1271VerifierV1.sol",
+      "sha256": "sha256:2881c874a859518557c005c275586c9765064c5b1a66a638204a029143485e74"
+    },
+    {
+      "path": "src/profiles/NativeETHProfileV1.sol",
+      "sha256": "sha256:76bb0e3d7531003a72c76fb037566202b60ebf0126d0c223db34e97a23dfe4c0"
+    },
+    {
+      "path": "src/profiles/StrictMeasuredERC20ProfileV1.sol",
+      "sha256": "sha256:5629cb450f43b80bc4576e03072f3aa449968fb92aaf0253a655fd3fa6605ec7"
+    },
+    {
+      "path": "src/reference-engines/OpaqueBatchAccumulatorEngineFixture.sol",
+      "sha256": "sha256:dc96a794ad4556d646660305666bcf87f573b20dc81a1c0a8c7f12f1e353d921"
+    },
+    {
+      "path": "src/reference-engines/OpaqueLifecycleEngineFixture.sol",
+      "sha256": "sha256:9e4deca555c5ab698b323cfdb0ce8b264cb5f0db66949bb3d3fa900e6637b3c1"
+    },
+    {
+      "path": "src/reference-engines/OpaqueStateEngineV1.sol",
+      "sha256": "sha256:91f41fd1fa76d8574da869e149060e3a9af83c348f71fe56471ff509d76a918c"
+    }
+  ],
+  "contracts": [
+    {
+      "artifactPath": "out/CoreV1.sol/CoreV1.json",
+      "sourcePath": "src/core/CoreV1.sol",
+      "contractName": "CoreV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:d9a1709864c587f08497d7b856f722e53e395106d4d5cb9e0dbb403b6129b7c3",
+      "creationBytecodeBytes": 16389,
+      "creationBytecodeSha256": "sha256:897dae0588a242fe4b92d7f480cc0fa5cea075ddaaebc3cd2f072d46d6d81e6e",
+      "runtimeBytecodeBytes": 15858,
+      "runtimeBytecodeSha256": "sha256:84ca52ebfb292c8d5637a1c6e1e8875ba2919de76ce26cd80b2cf1373b840f9b",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/DomainVaultV1.sol/DomainVaultV1.json",
+      "sourcePath": "src/core/DomainVaultV1.sol",
+      "contractName": "DomainVaultV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:3220e4c9647fcebf924cc226f00a92586c5af81432b2b48944702ffdf6a87dce",
+      "creationBytecodeBytes": 5651,
+      "creationBytecodeSha256": "sha256:908e9d5a2af67458b0d60821d42dccaa04ab0ae90ae5cb4a08bfbf683eb66dc2",
+      "runtimeBytecodeBytes": 4596,
+      "runtimeBytecodeSha256": "sha256:7baee7dca1800d33ef2770229d2f87bce1cd52ec8520f75a476624ee05a2642e",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/NativeIdentityV1.sol/NativeIdentityV1.json",
+      "sourcePath": "src/core/NativeIdentityV1.sol",
+      "contractName": "NativeIdentityV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/ProtocolAssessmentV1.sol/ProtocolAssessmentV1.json",
+      "sourcePath": "src/core/ProtocolAssessmentV1.sol",
+      "contractName": "ProtocolAssessmentV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:f801dd79d1b765b06e419c1b921c8604c07a680f88f797658f79c42e58bc32ff",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/IReturnOnlyEngineV1.sol/ReturnOnlyEngineLimitsV1.json",
+      "sourcePath": "src/interfaces/IReturnOnlyEngineV1.sol",
+      "contractName": "ReturnOnlyEngineLimitsV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/CanonicalEOASignatureV1.sol/CanonicalEOASignatureV1.json",
+      "sourcePath": "src/profiles/CanonicalEOASignatureV1.sol",
+      "contractName": "CanonicalEOASignatureV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:960798d8fd81f08f6ce7c0a28dc5bfb5ebaefdb9d63bfda726ff4a3c74566caf",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/EIP712HashingV1.sol/EIP712HashingV1.json",
+      "sourcePath": "src/profiles/EIP712HashingV1.sol",
+      "contractName": "EIP712HashingV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/ERC1271VerifierV1.sol/ERC1271VerifierV1.json",
+      "sourcePath": "src/profiles/ERC1271VerifierV1.sol",
+      "contractName": "ERC1271VerifierV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:76f0ac1324ce3876f650429e38f722cb0624fc029c6dcdd64443cf2976df8341",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/NativeETHProfileV1.sol/NativeETHProfileV1.json",
+      "sourcePath": "src/profiles/NativeETHProfileV1.sol",
+      "contractName": "NativeETHProfileV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:2aca2833385443a384a696b3a23b7b83c23de372ed55d279965697f71c20f0c7",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/StrictMeasuredERC20ProfileV1.sol/StrictMeasuredERC20ProfileV1.json",
+      "sourcePath": "src/profiles/StrictMeasuredERC20ProfileV1.sol",
+      "contractName": "StrictMeasuredERC20ProfileV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:bc796ba839753394e3a742256d0e6f2d54b78c51a8c9e14f63b64b37b56dbaa1",
+      "creationBytecodeBytes": 81,
+      "creationBytecodeSha256": "sha256:0af3358a4888b4df904cc3de0880507ff22400bd22ddde7f0e1feee3ae8d7941",
+      "runtimeBytecodeBytes": 31,
+      "runtimeBytecodeSha256": "sha256:e52bc03bfabdec0f91aa1bdf726c7237f4b01ac0756ddc37ba3da7b967bfc842",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/OpaqueBatchAccumulatorEngineFixture.sol/OpaqueBatchAccumulatorEngineFixture.json",
+      "sourcePath": "src/reference-engines/OpaqueBatchAccumulatorEngineFixture.sol",
+      "contractName": "OpaqueBatchAccumulatorEngineFixture",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:172c6a23a3a048ae642467e506e487215d0e34bdab65ff9574d5d633bb05fb6c",
+      "creationBytecodeBytes": 2078,
+      "creationBytecodeSha256": "sha256:fb176dfe1339447b84b1d6f9c0221775e6846c077fe4756e1c27d66f0d1c1d7d",
+      "runtimeBytecodeBytes": 2050,
+      "runtimeBytecodeSha256": "sha256:38b5bd2469d9a9de8ad0160f4f53cf0c990d2747936eb6a4dbbc362804fb0291",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/OpaqueLifecycleEngineFixture.sol/OpaqueLifecycleEngineFixture.json",
+      "sourcePath": "src/reference-engines/OpaqueLifecycleEngineFixture.sol",
+      "contractName": "OpaqueLifecycleEngineFixture",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:9588707a6dd94510cbdb18e0a536a32df383d456d53b6bdac9b25d5997b830ce",
+      "creationBytecodeBytes": 1838,
+      "creationBytecodeSha256": "sha256:fd7f36f0996d92620dbb3c02476ed955be16f6567bc8c95fc4d83eb9824a27eb",
+      "runtimeBytecodeBytes": 1810,
+      "runtimeBytecodeSha256": "sha256:5a5421fb94a2b0b926cb7ddabf674031e6d111dab6fabeee5d6585afbd2c2040",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    },
+    {
+      "artifactPath": "out/OpaqueStateEngineV1.sol/OpaqueStateEngineV1.json",
+      "sourcePath": "src/reference-engines/OpaqueStateEngineV1.sol",
+      "contractName": "OpaqueStateEngineV1",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "abiSha256": "sha256:7b06b8e12540fb40ce7c4732b5ade97fc6e48349c432de1daf8db6941409c549",
+      "creationBytecodeBytes": 1623,
+      "creationBytecodeSha256": "sha256:d7e10dab83686bac9493615cee5e9fefee8486823eefe0637d875e1efd363285",
+      "runtimeBytecodeBytes": 1595,
+      "runtimeBytecodeSha256": "sha256:cf0da25344c2582ca202a7d3f089574a8f0545eafbf817ef0a685b3e39945508",
+      "gates": {
+        "creationBytecodeWithinEip3860BeforeConstructorArguments": true,
+        "runtimeBytecodeWithinEip170": true
+      }
+    }
+  ]
+}

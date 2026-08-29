@@ -1,0 +1,190 @@
+{
+  "$schema": "urn:programmable:dex-evm:asset-foundations-vectors:v1",
+  "classification": "BINDING_LOCAL_ASSET_FOUNDATIONS_ONLY_NON_CONFORMANCE",
+  "description": "Point-in-time native ETH and strict measured ERC-20 transfer-observation cases for the foundations-only EVM binding.",
+  "claims": {
+    "asset_profile_conformance": false,
+    "evm_013": false,
+    "lifetime_token_safety": false,
+    "portable_conformance": false,
+    "protected_execution": false
+  },
+  "profiles": {
+    "native_eth": {
+      "identifier": "0x11bd3b922fc099e5d10a6fc42d85a4d527d518c38371c61b4a7ae08e69d88b4c",
+      "profile_source": "packages/dex-evm/binding/profiles/asset.native-eth-strict.v1.json",
+      "solidity_source": "packages/dex-evm/src/profiles/NativeETHProfileV1.sol"
+    },
+    "strict_measured_erc20": {
+      "identifier": "0x17590f19c39f156c871671beb9d33f04c534d3c73dd6d4d303b1ad156ee1e07a",
+      "profile_source": "packages/dex-evm/binding/profiles/asset.erc20-strict-measured.v1.json",
+      "solidity_source": "packages/dex-evm/src/profiles/StrictMeasuredERC20ProfileV1.sol"
+    }
+  },
+  "test_source": "packages/dex-evm/test/unit/AssetFoundationVectors.t.sol",
+  "resource_boundaries": {
+    "erc20_transfer_returndata_exact_bytes": 32,
+    "erc20_transfer_returndata_exact_plus_one_bytes": 33,
+    "native_returndata_max_bytes": 256,
+    "native_returndata_max_plus_one_bytes": 257
+  },
+  "native_eth_case_count": 6,
+  "native_eth_cases": [
+    {
+      "accepted": true,
+      "amount": 2000000000000000000,
+      "case_id": "native-exact-empty-return",
+      "committed_destination_credit": 2000000000000000000,
+      "committed_source_debit": 2000000000000000000,
+      "expected_error": "",
+      "recipient_behavior": "retain-empty-return",
+      "return_bytes": 0
+    },
+    {
+      "accepted": true,
+      "amount": 1000000000000000000,
+      "case_id": "native-max-return-bytes",
+      "committed_destination_credit": 1000000000000000000,
+      "committed_source_debit": 1000000000000000000,
+      "expected_error": "",
+      "recipient_behavior": "retain-configured-return",
+      "return_bytes": 256
+    },
+    {
+      "accepted": false,
+      "amount": 1000000000000000000,
+      "case_id": "native-max-plus-one-return-bytes",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "NativeReturnDataTooLarge",
+      "recipient_behavior": "retain-configured-return",
+      "return_bytes": 257
+    },
+    {
+      "accepted": false,
+      "amount": 1000000000000000000,
+      "case_id": "native-recipient-revert",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "NativeTransferFailed",
+      "recipient_behavior": "revert",
+      "return_bytes": 0
+    },
+    {
+      "accepted": false,
+      "amount": 1000000000000000000,
+      "case_id": "native-forwarded-credit",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "NativeDestinationCreditMismatch",
+      "recipient_behavior": "forward",
+      "return_bytes": 0
+    },
+    {
+      "accepted": false,
+      "amount": 0,
+      "case_id": "native-zero-amount",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "ZeroAmount",
+      "recipient_behavior": "retain-empty-return",
+      "return_bytes": 0
+    }
+  ],
+  "strict_measured_erc20_case_count": 8,
+  "strict_measured_erc20_cases": [
+    {
+      "accepted": true,
+      "amount": 100,
+      "case_id": "erc20-exact-pull",
+      "committed_destination_credit": 100,
+      "committed_source_debit": 100,
+      "expected_error": "",
+      "operation": "pull",
+      "return_bytes": 32,
+      "token_behavior": "strict"
+    },
+    {
+      "accepted": true,
+      "amount": 40,
+      "case_id": "erc20-exact-push",
+      "committed_destination_credit": 40,
+      "committed_source_debit": 40,
+      "expected_error": "",
+      "operation": "push",
+      "return_bytes": 32,
+      "token_behavior": "strict"
+    },
+    {
+      "accepted": false,
+      "amount": 100,
+      "case_id": "erc20-false-return",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "InvalidTokenBoolean",
+      "operation": "pull",
+      "return_bytes": 32,
+      "token_behavior": "false-return"
+    },
+    {
+      "accepted": false,
+      "amount": 100,
+      "case_id": "erc20-empty-return",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "InvalidTokenReturnLength",
+      "operation": "pull",
+      "return_bytes": 0,
+      "token_behavior": "empty-return"
+    },
+    {
+      "accepted": false,
+      "amount": 100,
+      "case_id": "erc20-exact-plus-one-return-bytes",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "InvalidTokenReturnLength",
+      "operation": "pull",
+      "return_bytes": 33,
+      "token_behavior": "exact-plus-one-return"
+    },
+    {
+      "accepted": false,
+      "amount": 100,
+      "case_id": "erc20-fee-undercredit",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "DestinationCreditMismatch",
+      "operation": "pull",
+      "return_bytes": 32,
+      "token_behavior": "fee-undercredit"
+    },
+    {
+      "accepted": false,
+      "amount": 100,
+      "case_id": "erc20-overdebit",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "SourceDebitMismatch",
+      "operation": "pull",
+      "return_bytes": 32,
+      "token_behavior": "overdebit"
+    },
+    {
+      "accepted": false,
+      "amount": 0,
+      "case_id": "erc20-zero-amount",
+      "committed_destination_credit": 0,
+      "committed_source_debit": 0,
+      "expected_error": "ZeroAmount",
+      "operation": "pull",
+      "return_bytes": 32,
+      "token_behavior": "strict"
+    }
+  ],
+  "limitations": [
+    "Accepted observations establish only exact point-in-time source debit and destination credit for the executed call.",
+    "These vectors do not prove truthful balanceOf behavior, immutable token dependencies, absence of future rebases or confiscation, or asynchronous deficit provenance.",
+    "No current Core protected-execution path invokes these primitives."
+  ]
+}

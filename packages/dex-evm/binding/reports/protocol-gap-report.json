@@ -1,0 +1,420 @@
+{
+  "schemaVersion": "programmable.dex-evm.protocol-gap-report/v1",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "protocolLock": {
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "tree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "portableVectorSetDigest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "scope": "Twelve portable ambiguities and coverage defects discovered while attempting the EVM binding. No Robinhood-specific interpretation is selected here.",
+  "issueCount": 12,
+  "executionSentinel": {
+    "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_PROTECTED_EXECUTION_GRAMMAR_V1",
+    "classification": "UMBRELLA_FAIL_CLOSED_SENTINEL",
+    "separatePortableGap": false,
+    "coversIssueIds": [
+      "SPEC-GAP-001",
+      "SPEC-GAP-002",
+      "SPEC-GAP-003",
+      "SPEC-GAP-004",
+      "SPEC-GAP-005",
+      "SPEC-GAP-006",
+      "SPEC-GAP-007",
+      "SPEC-GAP-008",
+      "SPEC-GAP-009",
+      "SPEC-GAP-010",
+      "SPEC-GAP-011",
+      "SPEC-GAP-012"
+    ]
+  },
+  "issues": [
+    {
+      "id": "SPEC-GAP-001",
+      "label": "refund-effect-representation",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_REFUND_GRAMMAR_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/03-protocol-assessment.md",
+          "lines": "123-150",
+          "requirementIds": ["FEE-005"],
+          "summary": "A basis-reducing Refund must bind stable refund and origin-debit identities, satisfy same-Fill causality, and reject malformed allocation."
+        },
+        {
+          "path": "spec/08-protected-effect-algebra.md",
+          "lines": "23-44,51-171,214-240",
+          "requirementIds": ["EFFECT-002", "EFFECT-007", "EFFECT-010"],
+          "summary": "The closed Effect algebra and validation order must carry the authoritative data required to derive assessment basis."
+        },
+        {
+          "path": "schemas/protected-effects-v1-vectors.schema.json",
+          "lines": "222-365",
+          "requirementIds": [],
+          "summary": "The proposed Effect vocabulary has no Refund Effect, refund identifier, or origin-debit reference."
+        }
+      ],
+      "minimalCounterexample": "One Principal has gross debit 100 and receives 20 back in the same Fill. Treating the 20 as an ordinary credit yields B_fill=100; treating it as a valid causal Refund yields B_fill=80. The released protected-Effect shape cannot encode refund_id and origin_debit_id, so both portable interpretations use the same representable Effect data.",
+      "impact": "ProtocolAssessmentV1 basis, fee delta, and Receipt assessment records are not uniquely derivable from the released protected-Effect representation."
+    },
+    {
+      "id": "SPEC-GAP-002",
+      "label": "scope-capability-commitment",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_CAPABILITY_COMMITMENTS_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/02-execution-and-authority.md",
+          "lines": "39-64",
+          "requirementIds": ["AUTH-001"],
+          "summary": "Every authority-relevant authorization field must participate in the most restrictive authority intersection."
+        },
+        {
+          "path": "spec/10-canonical-identifiers.md",
+          "lines": "75-125",
+          "requirementIds": ["ID-004"],
+          "summary": "Every authority-relevant Principal Authorization field must be represented directly or by an exact Core-major commitment field."
+        },
+        {
+          "path": "spec/08-protected-effect-algebra.md",
+          "lines": "71-153,173-194",
+          "requirementIds": ["EFFECT-003", "EFFECT-004", "EFFECT-005", "EFFECT-006", "EFFECT-008"],
+          "summary": "Capabilities bind type-specific Asset Move, Core Rights, Profile Operation, and temporary-obligation authority."
+        },
+        {
+          "path": "schemas/canonical-identifiers-v1-vectors.schema.json",
+          "lines": "145-225,277-402",
+          "requirementIds": [],
+          "summary": "The Scope Descriptor commits Targets and asset bounds but has no defined commitment grammar for rights, profile-operation, or temporary-obligation capability fields."
+        }
+      ],
+      "minimalCounterexample": "Two implementations derive the same Scope ID for the same Target and asset authorization. One derives a Capability permitting a Core Rights increase of 1; the other derives no Core Rights Capability. The released Scope Descriptor has no rights-Capability field or defined commitment that distinguishes those authorities.",
+      "impact": "The exact authorization preimage for the complete V1 protected-authority intersection is not defined."
+    },
+    {
+      "id": "SPEC-GAP-003",
+      "label": "stored-scope-fill-limit-semantics",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_STORED_SCOPE_MINIMUM_CREDITS_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/02-execution-and-authority.md",
+          "lines": "200-209",
+          "requirementIds": ["EXEC-009"],
+          "summary": "A stored Scope must preserve cumulative use across fills."
+        },
+        {
+          "path": "spec/10-canonical-identifiers.md",
+          "lines": "157-174",
+          "requirementIds": ["ID-006", "ID-007"],
+          "summary": "One stored Scope identity persists across fills and preserves cumulative use."
+        },
+        {
+          "path": "schemas/canonical-identifiers-v1-vectors.schema.json",
+          "lines": "179-225,337-365",
+          "requirementIds": [],
+          "summary": "The descriptor contains one maximum-debit and minimum-credit tuple plus a cumulative-fill flag, without per-fill or proportional rules."
+        }
+      ],
+      "minimalCounterexample": "A stored Scope authorizes maximum market gross debit 1,000,000 and minimum spendable credit 900,000, then executes two fills with gross debit 500,000 each. The release does not say whether each fill must credit at least 900,000, whether cumulative credit must reach 900,000 only after the second fill, or whether each fill must satisfy a proportional 450,000 floor.",
+      "impact": "Independent conforming implementations can accept different fills and expose different protected Principal outcomes under the same Scope ID."
+    },
+    {
+      "id": "SPEC-GAP-004",
+      "label": "core-derived-occurrence-id",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_EFFECT_OCCURRENCE_ID_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/08-protected-effect-algebra.md",
+          "lines": "23-44",
+          "requirementIds": ["EFFECT-002"],
+          "summary": "Core, not the Engine, derives each occurrence ID from the canonical proposal and authenticated execution context."
+        },
+        {
+          "path": "schemas/protected-effects-v1-vectors.schema.json",
+          "lines": "222-249",
+          "requirementIds": [],
+          "summary": "Every proposed Effect is required to carry occurrence_id as input."
+        },
+        {
+          "path": "tools/semantic-vectors.mjs",
+          "lines": "393-451",
+          "requirementIds": [],
+          "summary": "The official evaluator checks only proposer-supplied occurrence-ID uniqueness and never derives the required ID."
+        }
+      ],
+      "minimalCounterexample": "The same canonical Asset Move proposal is submitted once with occurrence_id='occurrence:a' and once with occurrence_id='occurrence:b'. Each document is schema-valid and the evaluator accepts either when it is unique, although EFFECT-002 requires one Core-derived result.",
+      "impact": "Portable vectors cannot prove occurrence identity, alias rejection, Refund linkage, or Receipt reconstruction against the normative derivation rule."
+    },
+    {
+      "id": "SPEC-GAP-005",
+      "label": "asset-move-endpoint-classes",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_ASSET_SOURCE_DESTINATION_CLASSES_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/08-protected-effect-algebra.md",
+          "lines": "53-78",
+          "requirementIds": ["EFFECT-003"],
+          "summary": "An Asset Move has enumerated source and destination classes, and Core derives authority and assessment classification from them."
+        },
+        {
+          "path": "schemas/protected-effects-v1-vectors.schema.json",
+          "lines": "100-130,250-268",
+          "requirementIds": [],
+          "summary": "Asset Move constraints and payloads carry endpoint identifiers but no source-class or destination-class field."
+        }
+      ],
+      "minimalCounterexample": "The same native_source_id and recipient_id represent either a PRINCIPAL-to-LIQUIDITY_DOMAIN move or a LIQUIDITY_DOMAIN-to-LIQUIDITY_DOMAIN move. The first can consume Principal-funded assessment basis while the second can be internal inventory movement, yet both have the same released vector shape.",
+      "impact": "Authority coverage and Protocol Assessment classification are not uniquely testable from the portable Asset Move vector."
+    },
+    {
+      "id": "SPEC-GAP-006",
+      "label": "asynchronous-deficit-provenance",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_ASYNC_DEFICIT_OBSERVABILITY_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/06-security-properties.md",
+          "lines": "76-90",
+          "requirementIds": ["SEC-010"],
+          "summary": "A deficit must not be hidden by a later unrelated Principal inflow, and the deficit policy applies before accepting new protected value."
+        },
+        {
+          "path": "bindings/evm.md",
+          "lines": "184-207",
+          "requirementIds": ["EVM-010"],
+          "summary": "Exact Asset Profiles must measure or disclose rebases, confiscation and other nonstandard balance changes."
+        }
+      ],
+      "minimalCounterexample": "A resting vault has observed custody 100 and liabilities 100. An issuer asynchronously confiscates 20, reducing custody to 80 without a Core call. Before Core observes that state, an unrelated address transfers 20 directly to the vault. The next observation is again 100, so no EVM balance query can prove that the earlier deficit existed or that the later inflow masked it.",
+      "impact": "The portable requirement demands historical causality that the released model does not make observable or otherwise prove for assets with asynchronous balance mutation."
+    },
+    {
+      "id": "SPEC-GAP-007",
+      "label": "receipt-relation-and-identity",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_RECEIPT_TARGET_DOMAIN_MAPPING_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/04-evidence-and-discovery.md",
+          "lines": "43-120",
+          "requirementIds": ["EVID-009"],
+          "summary": "Receipt reconstruction must preserve exact Target, Domain Revision and protected-Effect relationships; re-association invalidates the Receipt."
+        },
+        {
+          "path": "spec/04-evidence-and-discovery.md",
+          "lines": "104-110,128-145",
+          "requirementIds": ["EVID-003", "EVID-011"],
+          "summary": "Native bindings derive Receipt identity and evidence references and must reconstruct every required field."
+        },
+        {
+          "path": "schemas/evidence-v1-vectors.schema.json",
+          "lines": "382-463,465-577,639-690",
+          "requirementIds": [],
+          "summary": "The Receipt carries one global Domain Revision set; Target and protected-Effect rows do not carry a Target-to-Domain association. receipt_id and evidence_ref are unconstrained identifiers."
+        },
+        {
+          "path": "tools/semantic-vectors.mjs",
+          "lines": "690-769",
+          "requirementIds": [],
+          "summary": "The evaluator checks Receipt-ID presence and exact copied rows, but does not derive Receipt IDs or evidence references and cannot check an unencoded Target-to-Domain relation."
+        }
+      ],
+      "minimalCounterexample": "An Envelope uses Target A with Domain X and Target B with Domain Y. A normalized Receipt lists Targets [A,B] and the global Domain set [X,Y]. Re-associating X with B and Y with A changes no Receipt field. Separately, changing receipt_id from 'receipt:1' to 'receipt:2' remains schema-valid because no derivation is supplied.",
+      "impact": "The normalized Receipt shape cannot prove every relationship and identity that EVID-009 requires."
+    },
+    {
+      "id": "SPEC-GAP-008",
+      "label": "identifier-vector-required-profiles",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_IDENTIFIER_PROFILE_METADATA_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/07-conformance.md",
+          "lines": "65-68",
+          "requirementIds": ["CONF-006"],
+          "summary": "Every shared vector case must list the exact portable profiles that make it applicable."
+        },
+        {
+          "path": "vectors/identifiers-v1.json",
+          "lines": "10-59",
+          "requirementIds": [],
+          "summary": "All eight identifier cases omit required_profiles."
+        },
+        {
+          "path": "schemas/identifier-v1-vectors.schema.json",
+          "lines": "25-42",
+          "requirementIds": [],
+          "summary": "The identifier-case schema forbids required_profiles through additionalProperties=false."
+        },
+        {
+          "path": "tools/check.mjs",
+          "lines": "1120-1144",
+          "requirementIds": [],
+          "summary": "The official checker injects portable-core-v1 at runtime instead of reading the released case artifact."
+        }
+      ],
+      "minimalCounterexample": "A verifier implemented only from vectors/identifiers-v1.json cannot determine whether identifier.constant_product_market is applicable to portable-core-v1, another profile, or no claimed profile. The official checker makes an extra-artifact choice.",
+      "impact": "A strict Conformance Report cannot establish exact applicable-case completeness for the locked vector set."
+    },
+    {
+      "id": "SPEC-GAP-009",
+      "label": "engine-independent-exit-vector-coverage",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_EXIT_PROFILE_VECTORS_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/07-conformance.md",
+          "lines": "20-40,65-68",
+          "requirementIds": ["CONF-006"],
+          "summary": "engine-independent-exit-v1 is an independently claimable portable profile whose applicable cases must be exact."
+        },
+        {
+          "path": "constitution/programmable-constitution-v1.json",
+          "lines": "45-51",
+          "requirementIds": [],
+          "summary": "The selected Constitution permits engine-independent-exit-v1."
+        },
+        {
+          "path": "vectors",
+          "lines": "all six released vector documents",
+          "requirementIds": [],
+          "summary": "Zero of the 221 portable cases names engine-independent-exit-v1 in required_profiles."
+        }
+      ],
+      "minimalCounterexample": "An implementation claims portable-core-v1 and engine-independent-exit-v1 while every exit still calls the Engine. The applicable portable result set is unchanged because the exit profile adds zero cases.",
+      "impact": "A passing portable result set would make the exit-profile claim vacuous."
+    },
+    {
+      "id": "SPEC-GAP-010",
+      "label": "principal-native-source-binding",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_PRINCIPAL_SOURCE_BINDING_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/02-execution-and-authority.md",
+          "lines": "39-64",
+          "requirementIds": ["AUTH-001"],
+          "summary": "Principal Authorization must bind every authority-relevant field used by the most restrictive authority intersection."
+        },
+        {
+          "path": "spec/08-protected-effect-algebra.md",
+          "lines": "60-78",
+          "requirementIds": ["EFFECT-003"],
+          "summary": "An Asset Move must identify the exact authorized source from which value is debited."
+        },
+        {
+          "path": "spec/10-canonical-identifiers.md",
+          "lines": "75-125",
+          "requirementIds": ["ID-004"],
+          "summary": "The Scope Descriptor must commit every authority-relevant Principal Authorization field directly or through an exact Core-major commitment."
+        },
+        {
+          "path": "schemas/canonical-identifiers-v1-vectors.schema.json",
+          "lines": "179-225",
+          "requirementIds": [],
+          "summary": "Asset authorization carries asset, profile and limit data but no exact native source or source-class binding."
+        }
+      ],
+      "minimalCounterexample": "One Scope authorizes the same token, asset profile and limits. In execution S1 the exact source is a Principal wallet reached through an allowance; in execution S2 it is a Core claim or custody balance. The source changes both authority and assessment, but the released Scope Descriptor produces the same representable authorization for S1 and S2.",
+      "impact": "A native binding cannot prove that the source actually debited is the source the Principal authorized."
+    },
+    {
+      "id": "SPEC-GAP-011",
+      "label": "portable-scope-id-native-signature-bridge",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_SCOPE_EIP712_BRIDGE_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "spec/10-canonical-identifiers.md",
+          "lines": "8-22,141-160",
+          "requirementIds": ["ID-001"],
+          "summary": "A native binding must validate native fields and construct the portable descriptor; a caller-supplied digest is not a substitute, while the portable Scope ID is derived with RFC 8785 canonicalization and SHA-256."
+        },
+        {
+          "path": "bindings/evm.md",
+          "lines": "18-50",
+          "requirementIds": ["EVM-001", "EVM-003"],
+          "summary": "EIP-712 authorization must bind chain, Core deployment, Core major and all portable authority fields."
+        },
+        {
+          "path": "bindings/evm.md",
+          "lines": "120-131",
+          "requirementIds": ["EVM-007"],
+          "summary": "A Binding Release must freeze descriptor encoding, native revision derivation and native identifier vectors."
+        }
+      ],
+      "minimalCounterexample": "Two EVM implementations reconstruct the same signed native authorization with the chain reference encoded as '4663' and 'eip155:4663'. They produce different RFC-8785/SHA-256 Scope IDs and therefore different replay and assessment state, yet the released EVM binding provides no exact EIP-712 type strings and reconstruction map that chooses one result. Accepting a supplied Scope ID instead would violate ID-001 rather than resolve the ambiguity.",
+      "impact": "The exact cryptographic bridge between the portable Scope identity and the native signed or onchain representation is not reproducible."
+    },
+    {
+      "id": "SPEC-GAP-012",
+      "label": "return-only-proposal-acquisition-transcript",
+      "bindingLocalIssueIdPreimage": "DEX_EVM_SPEC_RETURN_ONLY_PROPOSAL_TRANSCRIPT_V1",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "bindings/evm.md",
+          "lines": "63-83",
+          "requirementIds": ["EVM-004", "EVM-005"],
+          "summary": "The initial interaction is return-only: Core invokes an authenticated Engine and receives a proposal without granting mutation authority."
+        },
+        {
+          "path": "spec/09-bounded-session-state-machine.md",
+          "lines": "22-104",
+          "requirementIds": ["SESSION-002", "SESSION-003", "SESSION-004", "SESSION-005", "SESSION-006"],
+          "summary": "Each Engine Target is a one-shot call slot, and the proposer-supplied proposal is an authenticated return in the bounded session."
+        },
+        {
+          "path": "spec/09-bounded-session-state-machine.md",
+          "lines": "157-196",
+          "requirementIds": ["SESSION-009"],
+          "summary": "A Segment Record commits ordered target IDs and proposals for transcript reconstruction."
+        },
+        {
+          "path": "schemas/bounded-session-v1-vectors.schema.json",
+          "lines": "123-175,317-345",
+          "requirementIds": [],
+          "summary": "The released vector shape lists targets and target_ids but does not classify proposal acquisition as inside or outside the one-shot target sequence."
+        }
+      ],
+      "minimalCounterexample": "Core needs a proposal from Engine E for a segment whose first target is T0=E. Interpretation A counts the proposer Engine call as consuming T0; Interpretation B obtains the proposal outside target_ids and then invokes T0 again. Both readings can satisfy the released text, but they produce different ordering, target-reuse validity, resource counts and transcript records.",
+      "impact": "The native Engine call sequence and the Receipt or indexer transcript cannot be implemented or verified uniquely."
+    }
+  ],
+  "releaseGates": [
+    {
+      "id": "RELEASE-GATE-001",
+      "label": "protocol-release-eligibility",
+      "status": "BLOCKED_BY_SPEC",
+      "requirements": [
+        {
+          "path": "protocol-version.json",
+          "lines": "3-6",
+          "requirementIds": [],
+          "summary": "The exact locked Protocol is draft and production_eligible is false."
+        },
+        {
+          "path": "spec/05-versioning.md",
+          "lines": "129-158,184-194",
+          "requirementIds": ["VER-009", "VER-010", "VER-011"],
+          "summary": "A Binding Release requires a complete passing Conformance Report; a testnet-candidate resolves that Binding Release; Production also requires this exact Protocol commit to be final and production eligible."
+        },
+        {
+          "path": "spec/11-release-artifact-identity.md",
+          "lines": "127-183",
+          "requirementIds": ["ARTIFACT-005", "ARTIFACT-006", "ARTIFACT-007"],
+          "summary": "The release chain must resolve exactly and Production must terminate at a final, production-eligible Protocol inventory."
+        }
+      ],
+      "minimalCounterexample": "A Production manifest that otherwise contains passing native tests and bytecode evidence still resolves to protocol commit 334bb26703a4dab18ce0fca8485c6275a879933a, where status='draft' and production_eligible=false. It fails VER-011. A testnet-candidate manifest cannot be completed while SPEC-GAP-001 through SPEC-GAP-012 prevent the required strict Binding Release and Conformance Report.",
+      "impact": "Mainnet is prohibited. The current testnet state may contain read-only pre-owner-gate preparation only; it cannot include a transaction package or be classified as a Protocol-conforming testnet candidate."
+    }
+  ],
+  "coordinatorDisposition": "Return all twelve ambiguity counterexamples and the separate release-eligibility gate to the portable Protocol release coordinator. Continue only unaffected architecture, native implementation, tests, documentation and unsigned network preparation. Do not publish a Binding Release, Conformance Report, testnet-candidate manifest, or Production claim against this lock."
+}

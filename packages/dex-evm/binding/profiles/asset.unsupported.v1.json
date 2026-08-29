@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "programmable.dex-evm.unsupported-assets/v1",
+  "classification": "EXPLICIT_EXCLUSIONS_NOT_A_PROFILE_CLAIM",
+  "protectedExecutionStatus": "BLOCKED_BY_SPEC",
+  "categories": [
+    {
+      "category": "fee-or-burn-on-transfer",
+      "reason": "requested amount can differ from exact source debit or spendable destination credit"
+    },
+    {
+      "category": "rebasing-reflection-or-asynchronous-confiscation",
+      "reason": "custody can change outside a measured Core transfer and historical deficit provenance is not observable"
+    },
+    {
+      "category": "noncanonical-erc20-return",
+      "reason": "empty, malformed, oversized, false or non-one transfer return values are rejected"
+    },
+    {
+      "category": "unexpected-callback-token",
+      "reason": "callback behavior adds hostile call and reentrancy surfaces outside the strict profile claim"
+    },
+    {
+      "category": "erc721-erc1155-or-multi-asset",
+      "reason": "no exact native profile or typed vault operation exists"
+    },
+    {
+      "category": "deceptive-balance",
+      "reason": "point-in-time balance queries cannot establish truthful spendable custody"
+    },
+    {
+      "category": "mutable-entry-or-proxy-token-as-immutable",
+      "reason": "entry code hash does not prove implementation, configuration, storage or dependency immutability"
+    },
+    {
+      "category": "permissioned-blocklisted-or-issuer-managed",
+      "reason": "external authority can change transferability or confiscate value outside Core authority"
+    }
+  ],
+  "admissionRule": "No excluded category may be represented as supported merely because one transfer observation succeeded."
+}

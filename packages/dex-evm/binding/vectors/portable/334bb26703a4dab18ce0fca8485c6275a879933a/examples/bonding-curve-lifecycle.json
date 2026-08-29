@@ -1,0 +1,68 @@
+{
+  "$schema": "urn:programmable:schema:market-template:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "namespace": "org.programmable.examples.bonding_curve",
+  "name": "bonding_curve_lifecycle",
+  "revision": "1",
+  "summary": "A supply-dependent market that moves through immutable lifecycle phases and can end in a migration-available state without executing a migration.",
+  "domain_policy": {
+    "selector_id": "org.programmable.policy.lifecycle_domain.v1",
+    "description": "The Domain admits the exact Engine Revision and immutable lifecycle policy."
+  },
+  "asset_roles": [
+    {
+      "role_id": "org.programmable.role.issued_asset.v1",
+      "description": "The asset whose circulating amount influences the Engine price.",
+      "cardinality": "one"
+    },
+    {
+      "role_id": "org.programmable.role.quote_asset.v1",
+      "description": "The fungible asset used to fund purchases and redemptions.",
+      "cardinality": "one"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "org.programmable.action.curve_purchase.v1",
+      "description": "Purchase issued units under current Engine state and exact user limits.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.curve_redeem.v1",
+      "description": "Redeem issued units for a bounded quote-asset credit when the phase permits it.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.lifecycle_transition.v1",
+      "description": "Commit a terminal phase that records migration availability without performing a migration.",
+      "required_protected_capabilities": [],
+      "proposed_protected_effects": [],
+      "opaque_engine_effects": [
+        "org.programmable.examples.effect.engine_state_commit.v1"
+      ]
+    }
+  ],
+  "extensions": {
+    "org.programmable.examples.phases": [
+      "active_curve",
+      "terminal",
+      "migration_available"
+    ],
+    "org.programmable.examples.non_guarantees": [
+      "fair_launch",
+      "anti_bot_behavior"
+    ]
+  }
+}

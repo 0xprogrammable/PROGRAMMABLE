@@ -1,0 +1,60 @@
+{
+  "$schema": "urn:programmable:schema:identifier-vectors:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "algorithm": {
+    "canonicalization": "RFC8785-JCS",
+    "hash": "SHA-256",
+    "domain_prefix": "programmable:market-template:v1",
+    "separator": "00"
+  },
+  "cases": [
+    {
+      "case_id": "identifier.batch_auction",
+      "purpose": "Locks the portable identity of the batch-auction example.",
+      "document_path": "examples/batch-auction.json",
+      "expected_id": "sha256:84d1dfe684b8bfbaa91717c25a56a5db797e842ea8f517cec8c4ec7f6e03aa9a"
+    },
+    {
+      "case_id": "identifier.bonding_curve_lifecycle",
+      "purpose": "Locks the portable identity of the bonding-curve lifecycle example.",
+      "document_path": "examples/bonding-curve-lifecycle.json",
+      "expected_id": "sha256:9809e4702ac9416e3ef706951b124790587eb0baa6a6957779e51378605a5e70"
+    },
+    {
+      "case_id": "identifier.conditional_outcome_market",
+      "purpose": "Locks the portable identity of the conditional-outcome example.",
+      "document_path": "examples/conditional-outcome-market.json",
+      "expected_id": "sha256:c0b648daa0c55a97b16b8aa1426791c7f13a1be3bbc0050f40dfe4d3c187dd0b"
+    },
+    {
+      "case_id": "identifier.constant_product_market",
+      "purpose": "Locks the portable identity of the constant-product example.",
+      "document_path": "examples/constant-product-market.json",
+      "expected_id": "sha256:481d346d78730c9253076e3b378cc9b29ffee50335ae8b5b0a89cefaf50838f4"
+    },
+    {
+      "case_id": "identifier.multi_asset_basket",
+      "purpose": "Locks the portable identity of the multi-asset basket example.",
+      "document_path": "examples/multi-asset-basket.json",
+      "expected_id": "sha256:c5644926bb6628501bd47f4aa27b4f1a765dc3c585bc6687be0cb32e84f50d1c"
+    },
+    {
+      "case_id": "identifier.nft_bid_pool",
+      "purpose": "Locks the portable identity of the non-fungible bid-pool example.",
+      "document_path": "examples/nft-bid-pool.json",
+      "expected_id": "sha256:12e5a5d9bcf4542f25ffb2cdd084e52b275e7fa102d51edece75ecaf21f35ebe"
+    },
+    {
+      "case_id": "identifier.shared_domain_composition",
+      "purpose": "Locks the portable identity of the shared-Domain composition example.",
+      "document_path": "examples/shared-domain-composition.json",
+      "expected_id": "sha256:fb9e84c9f6f9e5a0842154440af7632da03bd5413a02ca4c82db6a93deef0566"
+    },
+    {
+      "case_id": "identifier.signed_rfq_jit",
+      "purpose": "Locks the portable identity of the signed request-for-quote example.",
+      "document_path": "examples/signed-rfq-jit.json",
+      "expected_id": "sha256:dc8d756fd91d1dac2538195713563fe648754aeb30aa3a750d2eb118386fa209"
+    }
+  ]
+}

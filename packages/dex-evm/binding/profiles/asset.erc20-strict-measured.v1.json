@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "programmable.dex-evm.binding-local-profile/v1",
+  "kind": "ASSET_PROFILE",
+  "name": "erc20-strict-measured-v1",
+  "identifierPreimage": "programmable.dex.evm.asset-profile.erc20-strict-measured.v1",
+  "identifierDerivation": "keccak256(utf8(identifierPreimage))",
+  "claimStatus": "ARCHITECTURE_BASELINE_ONLY",
+  "protectedExecutionStatus": "BLOCKED_BY_SPEC",
+  "source": {
+    "executableVectors": "packages/dex-evm/binding/vectors/asset-foundations-v1.json",
+    "foundryVectorTest": "packages/dex-evm/test/unit/AssetFoundationVectors.t.sol",
+    "library": "packages/dex-evm/src/profiles/StrictMeasuredERC20ProfileV1.sol",
+    "vault": "packages/dex-evm/src/core/DomainVaultV1.sol"
+  },
+  "supportedOperations": [
+    "source-to-vault exact pull through transferFrom",
+    "vault-to-recipient exact push through transfer"
+  ],
+  "callPolicy": {
+    "balanceCallGasLimit": 40000,
+    "transferCallGasLimit": 120000,
+    "postTokenGasReserve": 100000,
+    "preCallOverheadAllowance": 10000,
+    "postCallReserveChecked": true,
+    "requiredReturnBytes": 32,
+    "requiredTransferReturnWord": 1
+  },
+  "measurement": {
+    "requiresExactSourceDebit": true,
+    "requiresExactSpendableDestinationCredit": true,
+    "rejectsReversedBalanceDirection": true,
+    "checksEntryRuntimeCodeHashBeforeVaultCommand": true
+  },
+  "vaultPushRestrictions": [
+    "Core recipient is forbidden"
+  ],
+  "pointInTimeOnly": true,
+  "doesNotProve": [
+    "honest balanceOf implementation",
+    "configuration or storage immutability",
+    "proxy implementation or dependency immutability",
+    "absence of future rebase or confiscation",
+    "issuer solvency or policy",
+    "historical asynchronous deficit provenance"
+  ],
+  "fundingWarning": "A canonical vault created by the current immutable sentinel Core has no command path that can release funds and must not receive tokens.",
+  "blockers": [
+    "SPEC-GAP-006",
+    "SPEC-GAP-010"
+  ],
+  "vectorBoundary": "The linked vectors execute point-in-time observations only and make no Asset Profile conformance, EVM-013, lifetime token safety, or protected-execution claim."
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "urn:programmable:schema:market-template:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "namespace": "org.programmable.examples.constant_product",
+  "name": "constant_product_market",
+  "revision": "1",
+  "summary": "A two-asset constant-product Engine with Engine-defined capital accounting.",
+  "domain_policy": {
+    "selector_id": "org.programmable.policy.fixed_domain.v1",
+    "description": "Each Market instance uses one explicitly admitted Liquidity Domain."
+  },
+  "asset_roles": [
+    {
+      "role_id": "org.programmable.role.reserve_x.v1",
+      "description": "The first fungible reserve asset.",
+      "cardinality": "one"
+    },
+    {
+      "role_id": "org.programmable.role.reserve_y.v1",
+      "description": "The second fungible reserve asset.",
+      "cardinality": "one"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "org.programmable.action.exchange_exact_input.v1",
+      "description": "Exchange a bounded gross input for a minimum credited output.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.provide_capital.v1",
+      "description": "Fund both reserves under Engine-defined provider accounting.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.remove_capital.v1",
+      "description": "Redeem an Engine-defined provider claim under the bound exit profile.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    }
+  ],
+  "extensions": {
+    "org.programmable.examples.accounting_owner": "engine",
+    "org.programmable.examples.execution_profile": "ATOMIC_PLAN_V1",
+    "org.programmable.examples.non_guarantees": [
+      "fair_price",
+      "positive_provider_return"
+    ]
+  }
+}

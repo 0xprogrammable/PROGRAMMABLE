@@ -1,0 +1,1353 @@
+{
+  "$schema": "urn:programmable:schema:protocol-assessment-vectors:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "assessment_profile": {
+    "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "assessment_id": "ProtocolAssessmentV1",
+    "basis_id": "PrincipalFundedGrossDebitV1",
+    "exclusion_set_id": "PrincipalFundedGrossDebitV1ClosedExclusions",
+    "rate_numerator": "5",
+    "rate_denominator": "10000",
+    "reduced_denominator": "2000",
+    "rounding": "floor_after_cumulative_group_aggregation",
+    "minimum": "0",
+    "flat_component": "0",
+    "fee_asset_rule": "same_as_basis_asset",
+    "funding_rule": "additive",
+    "assessment_amount_rule": "gross_source_debit",
+    "arithmetic_bits": "128",
+    "collector_policy": "immutable_per_core_deployment"
+  },
+  "authenticated_principal_evidence": [
+    {
+      "authorization_evidence_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "authorization_scope_id": "sha256:9bac172928a5f64a8617f5e8b0f72ef29f50ec61c770b6d3d8e19f3b05764321",
+      "principal_id": "test.principal.sponsor",
+      "authorization_profile_id": "signed-one-shot-v1",
+      "authentication_result": "AUTHENTICATED",
+      "primary_provenance": "CORE_VERIFIED",
+      "execution_coverage": "CORE_ENFORCED",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.sponsor",
+        "principal_nonce": "7",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "0",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "0"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope",
+        "sponsored_assessment_authorizations": [
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-a",
+            "maximum_gross_assessment_debit": "500",
+            "protocol_collector_id": "test.collector.core-1"
+          }
+        ]
+      }
+    },
+    {
+      "authorization_evidence_ref": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "authorization_scope_id": "sha256:ea2a61e42729f488cdb912344ff6b92318f86d392515616bf7acc381c73b8e7b",
+      "principal_id": "test.principal.sponsor",
+      "authorization_profile_id": "signed-one-shot-v1",
+      "authentication_result": "AUTHENTICATED",
+      "primary_provenance": "CORE_VERIFIED",
+      "execution_coverage": "CORE_ENFORCED",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.sponsor",
+        "principal_nonce": "7",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "0",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "0"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope",
+        "sponsored_assessment_authorizations": [
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-a",
+            "maximum_gross_assessment_debit": "1",
+            "protocol_collector_id": "test.collector.core-1"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "assessment.no_applicable_group",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "An Envelope with only a closed exemption has no assessment group record.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:no-applicable",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {
+                  "debit_id": "debit:network-exempt",
+                  "amount": "100",
+                  "classification": "closed_exemption",
+                  "label": "network_fee"
+                }
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "0",
+                "basis_after": "0",
+                "assessment_before": "0",
+                "assessment_delta": "0",
+                "assessment_after": "0",
+                "remainder_before": "0",
+                "remainder_after": "0",
+                "emit_assessment_record": false,
+                "gross_assessment_debit": "0",
+                "funded_credit": "0",
+                "liability_delta": "0"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.formula.one",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "One atomic unit creates basis and a zero-valued assessment record.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:one",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:one", "amount": "1", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "1",
+                "basis_after": "1",
+                "assessment_before": "0",
+                "assessment_delta": "0",
+                "assessment_after": "0",
+                "remainder_before": "0",
+                "remainder_after": "1",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "0",
+                "funded_credit": "0",
+                "liability_delta": "0"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.formula.below_boundary",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A cumulative basis below 2,000 rounds to zero.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:below",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:below", "amount": "1999", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "1999",
+                "basis_after": "1999",
+                "assessment_before": "0",
+                "assessment_delta": "0",
+                "assessment_after": "0",
+                "remainder_before": "0",
+                "remainder_after": "1999",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "0",
+                "funded_credit": "0",
+                "liability_delta": "0"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.formula.first_boundary",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "The first 2,000 atomic units produce one assessment unit.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:first-boundary",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:first-boundary", "amount": "2000", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "2000",
+                "basis_after": "2000",
+                "assessment_before": "0",
+                "assessment_delta": "1",
+                "assessment_after": "1",
+                "remainder_before": "0",
+                "remainder_after": "0",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "1",
+                "funded_credit": "1",
+                "liability_delta": "1"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.formula.above_boundary",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "Basis 2,001 produces one assessment unit and one unit of remainder.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:above-boundary",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:above-boundary", "amount": "2001", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "2001",
+                "basis_after": "2001",
+                "assessment_before": "0",
+                "assessment_delta": "1",
+                "assessment_after": "1",
+                "remainder_before": "0",
+                "remainder_after": "1",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "1",
+                "funded_credit": "1",
+                "liability_delta": "1"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.formula.unsigned_64_maximum",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "The unsigned 64-bit maximum is evaluated without floating point or multiplication.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:u64-max",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:u64-max", "amount": "18446744073709551615", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "18446744073709551615",
+                "basis_after": "18446744073709551615",
+                "assessment_before": "0",
+                "assessment_delta": "9223372036854775",
+                "assessment_after": "9223372036854775",
+                "remainder_before": "0",
+                "remainder_after": "1615",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "9223372036854775",
+                "funded_credit": "9223372036854775",
+                "liability_delta": "9223372036854775"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.formula.unsigned_128_maximum",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "The minimum portable arithmetic domain includes the unsigned 128-bit maximum.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:u128-max",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:u128-max", "amount": "340282366920938463463374607431768211455", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "340282366920938463463374607431768211455",
+                "basis_after": "340282366920938463463374607431768211455",
+                "assessment_before": "0",
+                "assessment_delta": "170141183460469231731687303715884105",
+                "assessment_after": "170141183460469231731687303715884105",
+                "remainder_before": "0",
+                "remainder_after": "1455",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "170141183460469231731687303715884105",
+                "funded_credit": "170141183460469231731687303715884105",
+                "liability_delta": "170141183460469231731687303715884105"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.partial_fill.carry_realization",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1"],
+      "purpose": "Two fills in one Scope telescope and the second fill realizes the previous remainder.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:carry",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "stored_assessment": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:carry-0", "amount": "1999", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "0",
+                "fill_basis": "1999",
+                "basis_after": "1999",
+                "assessment_before": "0",
+                "assessment_delta": "0",
+                "assessment_after": "0",
+                "remainder_before": "0",
+                "remainder_after": "1999",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "0",
+                "funded_credit": "0",
+                "liability_delta": "0"
+              }
+            },
+            {
+              "fill_sequence": "1",
+              "debits": [
+                {"debit_id": "debit:carry-1", "amount": "1", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {
+                "basis_before": "1999",
+                "fill_basis": "1",
+                "basis_after": "2000",
+                "assessment_before": "0",
+                "assessment_delta": "1",
+                "assessment_after": "1",
+                "remainder_before": "1999",
+                "remainder_after": "0",
+                "emit_assessment_record": true,
+                "gross_assessment_debit": "1",
+                "funded_credit": "1",
+                "liability_delta": "1"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.partial_fill.four_parts",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1"],
+      "purpose": "Four equal fills in one Scope produce the same final assessment as one combined fill.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:four-parts",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:part-0", "amount": "500", "classification": "applicable"}],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "500", "basis_after": "500", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "0", "remainder_after": "500", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}
+            },
+            {
+              "fill_sequence": "1",
+              "debits": [{"debit_id": "debit:part-1", "amount": "500", "classification": "applicable"}],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "500", "fill_basis": "500", "basis_after": "1000", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "500", "remainder_after": "1000", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}
+            },
+            {
+              "fill_sequence": "2",
+              "debits": [{"debit_id": "debit:part-2", "amount": "500", "classification": "applicable"}],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "1000", "fill_basis": "500", "basis_after": "1500", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "1000", "remainder_after": "1500", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}
+            },
+            {
+              "fill_sequence": "3",
+              "debits": [{"debit_id": "debit:part-3", "amount": "500", "classification": "applicable"}],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "1500", "fill_basis": "500", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "1500", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.aggregation.same_group_sources",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "Two source debits in one group aggregate before rounding.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {
+            "core_deployment_id": "deployment:example",
+            "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+            "authorization_scope_id": "scope:aggregate",
+            "assessment_principal_id": "principal:alice",
+            "asset_profile_id": "asset-profile:exact-fungible-v1",
+            "native_asset_id": "asset:quote"
+          },
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:source-a", "amount": "1000", "classification": "applicable"},
+                {"debit_id": "debit:source-b", "amount": "1000", "classification": "applicable"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "2000", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.aggregation.different_principals",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "Different assessment Principals remain independent rounding groups.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:multi-principal-alice", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:alice", "amount": "1000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0", "expected": {"basis_before": "0", "fill_basis": "1000", "basis_after": "1000", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "0", "remainder_after": "1000", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}}
+          ]
+        },
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:multi-principal-bob", "assessment_principal_id": "principal:bob", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:bob", "amount": "1000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0", "expected": {"basis_before": "0", "fill_basis": "1000", "basis_after": "1000", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "0", "remainder_after": "1000", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.aggregation.different_assets",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "Unlike assets remain independent and are never summed into one onchain basis.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:multi-asset", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:alpha"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:alpha", "amount": "1000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0", "expected": {"basis_before": "0", "fill_basis": "1000", "basis_after": "1000", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "0", "remainder_after": "1000", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}}
+          ]
+        },
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:multi-asset", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:beta"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:beta", "amount": "1000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0", "expected": {"basis_before": "0", "fill_basis": "1000", "basis_after": "1000", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "0", "remainder_after": "1000", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.routing.internal_hops_not_reassessed",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "One external Principal debit is assessed once even when the route has internal legs.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:routed", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:external", "amount": "2000", "classification": "applicable"},
+                {"debit_id": "debit:internal-hop-a", "amount": "2000", "classification": "closed_exemption", "label": "internal_inventory_movement"},
+                {"debit_id": "debit:internal-hop-b", "amount": "2000", "classification": "closed_exemption", "label": "internal_inventory_movement"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "2000", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.refund.valid_origin",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A segregated unused origin Refund reduces 2,500 basis units to 2,000.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:valid-refund", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:prefund", "amount": "2500", "classification": "applicable"}],
+              "refunds": [{"refund_id": "refund:unused", "origin_debit_id": "debit:prefund", "amount": "500", "proof": "segregated_unused_origin"}],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "2000", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.refund.below_boundary",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A one-unit exact reversal reduces 2,000 basis units below the first boundary.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:refund-below", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:reversible", "amount": "2000", "classification": "applicable"}],
+              "refunds": [{"refund_id": "refund:one", "origin_debit_id": "debit:reversible", "amount": "1", "proof": "exact_pre_use_reversal"}],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "1999", "basis_after": "1999", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "0", "remainder_after": "1999", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.refund.full_refund_record",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A fully refunded applicable debit emits a zero-valued assessment record.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:full-refund", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:full-refund", "amount": "2000", "classification": "applicable"}],
+              "refunds": [{"refund_id": "refund:full", "origin_debit_id": "debit:full-refund", "amount": "2000", "proof": "segregated_unused_origin"}],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "0", "basis_after": "0", "assessment_before": "0", "assessment_delta": "0", "assessment_after": "0", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "0", "funded_credit": "0", "liability_delta": "0"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.components.no_double_count",
+      "required_profiles": ["portable-core-v1", "external-asset-tax-v1"],
+      "purpose": "Builder and external-tax disclosures inside one gross debit are not added again.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:components", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:measured-tax-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:gross", "amount": "10000", "classification": "applicable", "included_disclosures": ["builder_component:100", "external_tax:100"]}],
+              "refunds": [],
+              "protocol_withholding": "1",
+              "expected": {"basis_before": "0", "fill_basis": "10000", "basis_after": "10000", "assessment_before": "0", "assessment_delta": "5", "assessment_after": "5", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "5", "funded_credit": "4", "liability_delta": "4"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.classification.lp_deposit",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "An ordinary LP deposit remains applicable unless a closed objective exemption proves otherwise.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:lp-deposit", "assessment_principal_id": "principal:lp", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:lp", "amount": "2000", "classification": "applicable", "label": "lp_deposit"}],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "2000", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.classification.nft_payment",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A fungible payment for a non-fungible asset is assessed without oracle-valuing the NFT.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:nft-payment", "assessment_principal_id": "principal:buyer", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:nft-payment", "amount": "2000", "classification": "applicable", "label": "nft_payment"}],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "2000", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.classification.assessment_leg_excluded",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "The Protocol Assessment leg does not recursively increase basis.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:nonrecursive", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [
+                {"debit_id": "debit:basis", "amount": "3999", "classification": "applicable"},
+                {"debit_id": "debit:assessment-leg", "amount": "1", "classification": "closed_exemption", "label": "protocol_assessment_leg"}
+              ],
+              "refunds": [],
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "3999", "basis_after": "3999", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "0", "remainder_after": "1999", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.sponsor.group_not_reset",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1", "sponsored-assessment-v1"],
+      "purpose": "A separate fee-funding Principal does not change the assessment group or basis.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "test.collector.core-1",
+          "group_key": {"core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc", "assessment_principal_id": "test.principal.alice", "asset_profile_id": "test.asset-profile.plain-v1", "native_asset_id": "test.asset.token-a"},
+          "basis_before": "1999",
+          "stored_assessment": "0",
+          "fills": [
+            {
+              "fill_sequence": "1",
+              "debits": [{"debit_id": "debit:sponsored-fill", "amount": "1", "classification": "applicable"}],
+              "refunds": [],
+              "fee_funding_principal_id": "test.principal.sponsor",
+              "fee_funding_scope_id": "sha256:9bac172928a5f64a8617f5e8b0f72ef29f50ec61c770b6d3d8e19f3b05764321",
+              "fee_funding_authorization_evidence_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "1999", "fill_basis": "1", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "1999", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.sponsor.one_shot_authorized",
+      "required_profiles": ["portable-core-v1", "sponsored-assessment-v1"],
+      "purpose": "A separately authenticated sponsor may fund one exact assessment tuple without changing its basis Principal.",
+      "expected_status": "accept",
+      "groups": [
+        {
+          "protocol_collector_id": "test.collector.core-1",
+          "group_key": {"core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc", "assessment_principal_id": "test.principal.alice", "asset_profile_id": "test.asset-profile.plain-v1", "native_asset_id": "test.asset.token-a"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:alice-one-shot", "amount": "2000", "classification": "applicable"}],
+              "refunds": [],
+              "fee_funding_principal_id": "test.principal.sponsor",
+              "fee_funding_scope_id": "sha256:9bac172928a5f64a8617f5e8b0f72ef29f50ec61c770b6d3d8e19f3b05764321",
+              "fee_funding_authorization_evidence_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "protocol_withholding": "0",
+              "expected": {"basis_before": "0", "fill_basis": "2000", "basis_after": "2000", "assessment_before": "0", "assessment_delta": "1", "assessment_after": "1", "remainder_before": "0", "remainder_after": "0", "emit_assessment_record": true, "gross_assessment_debit": "1", "funded_credit": "1", "liability_delta": "1"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.sponsor.reject_scope_mismatch",
+      "required_profiles": ["portable-core-v1", "sponsored-assessment-v1"],
+      "purpose": "Sponsor authority for another assessment Scope cannot fund this group.",
+      "expected_status": "reject",
+      "expected_error": "sponsor_scope_mismatch",
+      "groups": [
+        {
+          "protocol_collector_id": "test.collector.core-1",
+          "group_key": {"core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "assessment_principal_id": "test.principal.alice", "asset_profile_id": "test.asset-profile.plain-v1", "native_asset_id": "test.asset.token-a"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:alice", "amount": "2000", "classification": "applicable"}],
+              "refunds": [],
+              "fee_funding_principal_id": "test.principal.sponsor",
+              "fee_funding_scope_id": "sha256:9bac172928a5f64a8617f5e8b0f72ef29f50ec61c770b6d3d8e19f3b05764321",
+              "fee_funding_authorization_evidence_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "protocol_withholding": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.sponsor.reject_ceiling",
+      "required_profiles": ["portable-core-v1", "sponsored-assessment-v1"],
+      "purpose": "A sponsor cannot fund more gross assessment than its exact authorization permits.",
+      "expected_status": "reject",
+      "expected_error": "sponsor_assessment_ceiling_exceeded",
+      "groups": [
+        {
+          "protocol_collector_id": "test.collector.core-1",
+          "group_key": {"core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc", "assessment_principal_id": "test.principal.alice", "asset_profile_id": "test.asset-profile.plain-v1", "native_asset_id": "test.asset.token-a"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:alice", "amount": "4000", "classification": "applicable"}],
+              "refunds": [],
+              "fee_funding_principal_id": "test.principal.sponsor",
+              "fee_funding_scope_id": "sha256:ea2a61e42729f488cdb912344ff6b92318f86d392515616bf7acc381c73b8e7b",
+              "fee_funding_authorization_evidence_ref": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "protocol_withholding": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.sponsor.reject_evidence_reference",
+      "required_profiles": ["portable-core-v1", "sponsored-assessment-v1"],
+      "purpose": "A sponsor claim cannot use an authorization evidence reference that Core did not authenticate.",
+      "expected_status": "reject",
+      "expected_error": "sponsor_authorization_evidence_missing",
+      "groups": [
+        {
+          "protocol_collector_id": "test.collector.core-1",
+          "group_key": {"core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc", "assessment_principal_id": "test.principal.alice", "asset_profile_id": "test.asset-profile.plain-v1", "native_asset_id": "test.asset.token-a"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:sponsor-missing-evidence", "amount": "2000", "classification": "applicable"}],
+              "refunds": [],
+              "fee_funding_principal_id": "test.principal.sponsor",
+              "fee_funding_scope_id": "sha256:9bac172928a5f64a8617f5e8b0f72ef29f50ec61c770b6d3d8e19f3b05764321",
+              "fee_funding_authorization_evidence_ref": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "protocol_withholding": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.sponsor.reject_scope_evidence_mismatch",
+      "required_profiles": ["portable-core-v1", "sponsored-assessment-v1"],
+      "purpose": "A fill cannot pair authenticated evidence with a different fee-funding Scope ID.",
+      "expected_status": "reject",
+      "expected_error": "sponsor_scope_evidence_mismatch",
+      "groups": [
+        {
+          "protocol_collector_id": "test.collector.core-1",
+          "group_key": {"core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc", "assessment_principal_id": "test.principal.alice", "asset_profile_id": "test.asset-profile.plain-v1", "native_asset_id": "test.asset.token-a"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:sponsor-scope-evidence", "amount": "2000", "classification": "applicable"}],
+              "refunds": [],
+              "fee_funding_principal_id": "test.principal.sponsor",
+              "fee_funding_scope_id": "sha256:ea2a61e42729f488cdb912344ff6b92318f86d392515616bf7acc381c73b8e7b",
+              "fee_funding_authorization_evidence_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "protocol_withholding": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.sponsor.reject_principal_evidence_mismatch",
+      "required_profiles": ["portable-core-v1", "sponsored-assessment-v1"],
+      "purpose": "A fill cannot substitute another fee-funding Principal for the Principal authenticated by evidence.",
+      "expected_status": "reject",
+      "expected_error": "sponsor_principal_evidence_mismatch",
+      "groups": [
+        {
+          "protocol_collector_id": "test.collector.core-1",
+          "group_key": {"core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc", "assessment_principal_id": "test.principal.alice", "asset_profile_id": "test.asset-profile.plain-v1", "native_asset_id": "test.asset.token-a"},
+          "basis_before": "0",
+          "fills": [
+            {
+              "fill_sequence": "0",
+              "debits": [{"debit_id": "debit:sponsor-principal-evidence", "amount": "2000", "classification": "applicable"}],
+              "refunds": [],
+              "fee_funding_principal_id": "test.principal.mallory",
+              "fee_funding_scope_id": "sha256:9bac172928a5f64a8617f5e8b0f72ef29f50ec61c770b6d3d8e19f3b05764321",
+              "fee_funding_authorization_evidence_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "protocol_withholding": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.duplicate_group_key",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "One Envelope cannot contain the same canonical assessment group twice.",
+      "expected_status": "reject",
+      "expected_error": "duplicate_group_key",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-group", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:duplicate-group-first", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        },
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-group", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:duplicate-group-second", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.withholding_exceeds_assessment",
+      "required_profiles": ["portable-core-v1", "external-asset-tax-v1"],
+      "purpose": "External withholding cannot exceed the gross Protocol Assessment debit.",
+      "expected_status": "reject",
+      "expected_error": "withholding_exceeds_assessment",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:withholding-over", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:measured-tax-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:withholding-over", "amount": "2000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "2"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.duplicate_debit_across_stored_fills",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1"],
+      "purpose": "A debit occurrence identity cannot be reused across stored fills in one Scope.",
+      "expected_status": "reject",
+      "expected_error": "duplicate_debit_id",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-debit-stored", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:stored-duplicate", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"},
+            {"fill_sequence": "1", "debits": [{"debit_id": "debit:stored-duplicate", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.duplicate_refund_across_stored_fills",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1"],
+      "purpose": "A Refund occurrence identity cannot be reused across stored fills in one Scope.",
+      "expected_status": "reject",
+      "expected_error": "duplicate_refund_id",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-refund-stored", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:stored-refund-first", "amount": "100", "classification": "applicable"}], "refunds": [{"refund_id": "refund:stored-duplicate", "origin_debit_id": "debit:stored-refund-first", "amount": "1", "proof": "segregated_unused_origin"}], "protocol_withholding": "0"},
+            {"fill_sequence": "1", "debits": [{"debit_id": "debit:stored-refund-second", "amount": "100", "classification": "applicable"}], "refunds": [{"refund_id": "refund:stored-duplicate", "origin_debit_id": "debit:stored-refund-second", "amount": "1", "proof": "segregated_unused_origin"}], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.duplicate_occurrence_across_groups",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "An effect occurrence identity cannot be reused by distinct assessment groups sharing one Scope.",
+      "expected_status": "reject",
+      "expected_error": "duplicate_debit_id",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-occurrence-groups", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:alpha"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:cross-group-duplicate", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        },
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-occurrence-groups", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:beta"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:cross-group-duplicate", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.scope_principal_mismatch",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "One Authorization Scope under one Core and Constitution cannot bind multiple assessment Principals.",
+      "expected_status": "reject",
+      "expected_error": "scope_principal_mismatch",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:principal-owner", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:alpha"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:principal-owner-alice", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        },
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:principal-owner", "assessment_principal_id": "principal:bob", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:beta"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:principal-owner-bob", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.refund_exceeds_origin",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A Refund cannot exceed its originating debit.",
+      "expected_status": "reject",
+      "expected_error": "refund_exceeds_origin",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:refund-over", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:origin", "amount": "1000", "classification": "applicable"}], "refunds": [{"refund_id": "refund:over", "origin_debit_id": "debit:origin", "amount": "1001", "proof": "segregated_unused_origin"}], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.duplicate_refund_id",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "One Refund occurrence cannot be applied twice.",
+      "expected_status": "reject",
+      "expected_error": "duplicate_refund_id",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-refund", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:origin", "amount": "1000", "classification": "applicable"}], "refunds": [{"refund_id": "refund:duplicate", "origin_debit_id": "debit:origin", "amount": "100", "proof": "segregated_unused_origin"}, {"refund_id": "refund:duplicate", "origin_debit_id": "debit:origin", "amount": "100", "proof": "segregated_unused_origin"}], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.unknown_refund_origin",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A Refund must reference a debit in the same group and fill provenance set.",
+      "expected_status": "reject",
+      "expected_error": "unknown_refund_origin",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:unknown-origin", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:known", "amount": "1000", "classification": "applicable"}], "refunds": [{"refund_id": "refund:unknown", "origin_debit_id": "debit:missing", "amount": "1", "proof": "segregated_unused_origin"}], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.invalid_refund_proof",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "Mixed or unrelated inventory cannot be presented as a basis-reducing Refund.",
+      "expected_status": "reject",
+      "expected_error": "invalid_refund_proof",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:mixed-refund", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:origin", "amount": "1000", "classification": "applicable"}], "refunds": [{"refund_id": "refund:mixed", "origin_debit_id": "debit:origin", "amount": "100", "proof": "invalid_or_mixed_inventory"}], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.duplicate_debit_id",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "Two effect occurrences cannot share one debit identity.",
+      "expected_status": "reject",
+      "expected_error": "duplicate_debit_id",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:duplicate-debit", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:duplicate", "amount": "1000", "classification": "applicable"}, {"debit_id": "debit:duplicate", "amount": "1000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.non_increasing_fill_sequence",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1"],
+      "purpose": "Stored fills must have a strictly increasing sequence.",
+      "expected_status": "reject",
+      "expected_error": "non_increasing_fill_sequence",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:replayed-fill", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:first", "amount": "1000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"},
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:replay", "amount": "1000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.refund_from_prior_fill",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1"],
+      "purpose": "A later compensating credit cannot retroactively reduce the basis of a committed Fill.",
+      "expected_status": "reject",
+      "expected_error": "refund_origin_not_current_fill",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:late-refund", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:committed-origin", "amount": "2000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"},
+            {"fill_sequence": "1", "debits": [], "refunds": [{"refund_id": "refund:late", "origin_debit_id": "debit:committed-origin", "amount": "2000", "proof": "exact_pre_use_reversal"}], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.unsigned_128_overflow",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A binding claiming the minimum portable arithmetic domain rejects overflow rather than wrapping.",
+      "expected_status": "reject",
+      "expected_error": "arithmetic_overflow",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:overflow", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "340282366920938463463374607431768211455",
+          "fills": [
+            {"fill_sequence": "1", "debits": [{"debit_id": "debit:overflow", "amount": "1", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.stored_assessment_mismatch",
+      "required_profiles": ["portable-core-v1", "stored-scope-v1"],
+      "purpose": "A cached cumulative assessment must equal cumulative basis divided by 2,000.",
+      "expected_status": "reject",
+      "expected_error": "stored_assessment_mismatch",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:bad-cache", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "2000",
+          "stored_assessment": "0",
+          "fills": [
+            {"fill_sequence": "1", "debits": [], "refunds": [], "protocol_withholding": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.signed_ceiling_exceeded",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "Core rejects rather than clipping an assessment above the signed ceiling.",
+      "expected_status": "reject",
+      "expected_error": "assessment_ceiling_exceeded",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:ceiling", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:ceiling", "amount": "2000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0", "assessment_ceiling": "0"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.zero_funded_credit",
+      "required_profiles": ["portable-core-v1", "external-asset-tax-v1"],
+      "purpose": "A positive assessment that funds zero spendable credit rejects the complete Envelope.",
+      "expected_status": "reject",
+      "expected_error": "zero_funded_credit",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:zero-funded", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:measured-tax-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:taxed", "amount": "2000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "1"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "assessment.reject.postcondition_failure_rolls_back",
+      "required_profiles": ["portable-core-v1"],
+      "purpose": "A failure after calculation cannot commit basis, transfer, liability, or Receipt state.",
+      "expected_status": "reject",
+      "expected_error": "postcondition_failure",
+      "groups": [
+        {
+          "protocol_collector_id": "collector:deployment-example",
+          "group_key": {"core_deployment_id": "deployment:example", "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301", "authorization_scope_id": "scope:postcondition", "assessment_principal_id": "principal:alice", "asset_profile_id": "asset-profile:exact-fungible-v1", "native_asset_id": "asset:quote"},
+          "basis_before": "0",
+          "fills": [
+            {"fill_sequence": "0", "debits": [{"debit_id": "debit:prospective", "amount": "2000", "classification": "applicable"}], "refunds": [], "protocol_withholding": "0", "force_postcondition_failure": true}
+          ]
+        }
+      ]
+    }
+  ]
+}

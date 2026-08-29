@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "programmable.dex-evm.binding-local-profile/v1",
+  "kind": "ASSET_PROFILE",
+  "name": "native-eth-strict-v1",
+  "identifierPreimage": "programmable.dex.evm.asset-profile.native-eth-strict.v1",
+  "identifierDerivation": "keccak256(utf8(identifierPreimage))",
+  "claimStatus": "ARCHITECTURE_BASELINE_ONLY",
+  "protectedExecutionStatus": "BLOCKED_BY_SPEC",
+  "source": {
+    "executableVectors": "packages/dex-evm/binding/vectors/asset-foundations-v1.json",
+    "foundryVectorTest": "packages/dex-evm/test/unit/AssetFoundationVectors.t.sol",
+    "library": "packages/dex-evm/src/profiles/NativeETHProfileV1.sol",
+    "vault": "packages/dex-evm/src/core/DomainVaultV1.sol"
+  },
+  "nativeAssetEncoding": "0x0000000000000000000000000000000000000000",
+  "supportedOperations": [
+    "vault-to-recipient exact push"
+  ],
+  "measurement": {
+    "requiresExactSourceDebit": true,
+    "requiresExactDestinationCredit": true,
+    "recipientCallGasArgument": 47700,
+    "nonzeroValueCallStipend": 2300,
+    "maximumRecipientExecutionGas": 50000,
+    "postRecipientGasReserve": 75000,
+    "preCallOverheadAllowance": 40000,
+    "postCallReserveChecked": true,
+    "maximumReturnBytes": 256
+  },
+  "rejects": [
+    "zero recipient",
+    "vault self-recipient",
+    "Core recipient",
+    "zero amount",
+    "recipient call failure",
+    "oversized return data",
+    "source-debit mismatch",
+    "destination-credit mismatch"
+  ],
+  "limitations": [
+    "the profile has no native pull operation",
+    "direct native donation does not create a Principal claim or accounting credit",
+    "a canonical vault created by the current immutable sentinel Core has no command path that can release funds and must not be funded",
+    "no protected settlement invokes this profile in the current Core",
+    "the linked vectors are binding-local point-in-time foundation evidence, not Asset Profile conformance or EVM-013 evidence"
+  ]
+}

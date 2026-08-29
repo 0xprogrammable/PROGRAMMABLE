@@ -1,0 +1,1415 @@
+{
+  "$schema": "urn:programmable:schema:canonical-identifiers-vectors:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "algorithms": {
+    "canonical_json_test": {
+      "canonicalization": "RFC8785-JCS",
+      "hash": "SHA-256",
+      "domain_prefix": "programmable:canonical-json-test:v1",
+      "separator": "00",
+      "output": "sha256-lowercase-hex"
+    },
+    "authorization_scope_v1": {
+      "canonicalization": "RFC8785-JCS",
+      "hash": "SHA-256",
+      "domain_prefix": "programmable:authorization-scope:v1",
+      "separator": "00",
+      "output": "sha256-lowercase-hex",
+      "excluded_preimage_categories": [
+        "computed_scope_id",
+        "native_signature_material"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "case_id": "canonical.equivalence.compact",
+      "purpose": "Establishes the digest for a compact object source.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b22616c706861223a226f6e65222c2262657461223a2274776f227d",
+      "expected_canonical_utf8_hex": "7b22616c706861223a226f6e65222c2262657461223a2274776f227d",
+      "expected_digest": "sha256:fa18c1d45e167cb93f2c740addf008ff2e7f0ea6322e0a488b017632ec8e6ca8"
+    },
+    {
+      "case_id": "canonical.equivalence.reordered_whitespace",
+      "purpose": "Member order and insignificant source whitespace do not change the digest.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "207b0a2020226265746122203a202274776f222c0a202022616c70686122203a20226f6e65220a207d20",
+      "expected_canonical_utf8_hex": "7b22616c706861223a226f6e65222c2262657461223a2274776f227d",
+      "expected_digest": "sha256:fa18c1d45e167cb93f2c740addf008ff2e7f0ea6322e0a488b017632ec8e6ca8"
+    },
+    {
+      "case_id": "canonical.values.boolean_null",
+      "purpose": "Boolean and null values remain valid portable values and are not converted to strings.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b226d697373696e67223a6e756c6c2c22656e61626c6564223a747275652c226172726179223a5b747275652c66616c73652c6e756c6c5d7d",
+      "expected_canonical_utf8_hex": "7b226172726179223a5b747275652c66616c73652c6e756c6c5d2c22656e61626c6564223a747275652c226d697373696e67223a6e756c6c7d",
+      "expected_digest": "sha256:775f22a7026fa948c08b18ae815ad012aa94c8f005917b5e208e92238207a4b1"
+    },
+    {
+      "case_id": "canonical.values.escaping_controls",
+      "purpose": "JCS emits the required escaping for quotes, backslashes, and control characters.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b2274657874223a2271756f74653d5c2220736c6173683d5c5c20636f6e74726f6c733d5c625c745c6e5c665c72206e756c6c3d5c7530303030227d",
+      "expected_canonical_utf8_hex": "7b2274657874223a2271756f74653d5c2220736c6173683d5c5c20636f6e74726f6c733d5c625c745c6e5c665c72206e756c6c3d5c7530303030227d",
+      "expected_digest": "sha256:ff90952ff527123ce25cb11c6d0326b9320d0adf274edbd32367e31d96780902"
+    },
+    {
+      "case_id": "canonical.values.unicode_literal",
+      "purpose": "Unicode scalar values are preserved without normalization.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b22707265636f6d706f736564223a22c3a9222c22656d6f6a69223a22f09f9880222c226465636f6d706f736564223a2265cc81227d",
+      "expected_canonical_utf8_hex": "7b226465636f6d706f736564223a2265cc81222c22656d6f6a69223a22f09f9880222c22707265636f6d706f736564223a22c3a9227d",
+      "expected_digest": "sha256:64cd5831084f1ecedd506181d6656ee389a6762fb52bb94328256c422633627f"
+    },
+    {
+      "case_id": "canonical.values.unicode_escaped",
+      "purpose": "Unicode escape spelling and literal UTF-8 spelling produce the same scalar values.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b226465636f6d706f736564223a22655c7530333031222c22707265636f6d706f736564223a225c7530306539222c22656d6f6a69223a225c75643833645c7564653030227d",
+      "expected_canonical_utf8_hex": "7b226465636f6d706f736564223a2265cc81222c22656d6f6a69223a22f09f9880222c22707265636f6d706f736564223a22c3a9227d",
+      "expected_digest": "sha256:64cd5831084f1ecedd506181d6656ee389a6762fb52bb94328256c422633627f"
+    },
+    {
+      "case_id": "canonical.order.ascii_keys",
+      "purpose": "ASCII object member names use the exact JCS order.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b2262223a2235222c226161223a2234222c2261223a2233222c225a223a2232222c2241223a2231227d",
+      "expected_canonical_utf8_hex": "7b2241223a2231222c225a223a2232222c2261223a2233222c226161223a2234222c2262223a2235227d",
+      "expected_digest": "sha256:c83d725ef71bc9da63d05cbf74e6c0b6e380c328707879d7cb0238dd870c0996"
+    },
+    {
+      "case_id": "canonical.reject.duplicate_key",
+      "purpose": "Duplicate object member names are rejected before parser overwrite can occur.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b2261223a226f6e65222c2261223a2274776f227d",
+      "reject_code": "duplicate_object_key"
+    },
+    {
+      "case_id": "canonical.reject.raw_control",
+      "purpose": "An unescaped control character makes the source invalid JSON.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b2276616c7565223a226c696e650a627265616b227d",
+      "reject_code": "invalid_json"
+    },
+    {
+      "case_id": "canonical.reject.lone_surrogate",
+      "purpose": "An unpaired UTF-16 surrogate is not an I-JSON string value.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b2276616c7565223a225c7564383030227d",
+      "reject_code": "ijson_lone_surrogate"
+    },
+    {
+      "case_id": "canonical.reject.json_number",
+      "purpose": "Portable hashable values reject JSON numbers even when the value is integral.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b22616d6f756e74223a317d",
+      "reject_code": "json_number_forbidden"
+    },
+    {
+      "case_id": "canonical.reject.non_ascii_key",
+      "purpose": "Portable hashable objects reject non-ASCII member names.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "canonical_json_digest",
+      "input_utf8_hex": "7b22c3a9223a2276616c7565227d",
+      "reject_code": "non_ascii_object_key"
+    },
+    {
+      "case_id": "scope.one_shot.baseline",
+      "purpose": "Locks the one-shot Authorization Scope ID for one complete Principal Authorization.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc"
+    },
+    {
+      "case_id": "scope.sensitivity.nonce",
+      "purpose": "Changing only the Principal nonce changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "43",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:a4372d8b7e642cba89a7d11c4a2d6291c8f4643fd9f7a70114b8996b7c7afdf5"
+    },
+    {
+      "case_id": "scope.multi_principal.bob",
+      "purpose": "A second Principal authorizing the same Target has an independent Scope.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.bob",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:22af0aff1aa2935496d53b085541f87989a74c004848a9edb783cd31575aea7a"
+    },
+    {
+      "case_id": "scope.sensitivity.core",
+      "purpose": "Changing only the Core Deployment changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:359b57fa72a92a0ed89109388efae23cc5f53696e40d4a60755353c6563de7ff"
+    },
+    {
+      "case_id": "scope.sensitivity.chain",
+      "purpose": "Changing only the chain reference changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:1",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:25733ea15a0e4e39465b090cd437e7b752d899a02633e41f5a5a02e6b0bb9eb6"
+    },
+    {
+      "case_id": "scope.sensitivity.target",
+      "purpose": "Changing only the Market in the ordered Target changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:0e50df247625579b0273156c5b8712be1e5b76d662c5f30655541babd43a2308"
+    },
+    {
+      "case_id": "scope.sensitivity.engine_revision",
+      "purpose": "Changing only the Engine Revision changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:c1d5fdc2102c335510d900833947c9f4acb00875afd1cf7c644bdb25a65f6655"
+    },
+    {
+      "case_id": "scope.sensitivity.domain_revision",
+      "purpose": "Changing only the Liquidity Domain Revision changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:390160b05f8a85153ebb4595f58476d5779f75be1926c7bd2ed4f50fcd6c2e8e"
+    },
+    {
+      "case_id": "scope.sensitivity.binding_domain",
+      "purpose": "Changing only the binding Scope domain separator changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v2",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:6c65b7f5f1d7bc98cd46c21c082446e93c9aa0f984166ac82aacecfcde5e70d6"
+    },
+    {
+      "case_id": "scope.sensitivity.asset_limit",
+      "purpose": "Changing only an asset debit limit changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000600",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:882e7f5610b42f52227de7dd00a91673a03f0f14585a125a7eba83c66bb893ef"
+    },
+    {
+      "case_id": "scope.sensitivity.deadline",
+      "purpose": "Changing only the deadline changes the Scope ID.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000001"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:dd6bf00ee67e257a87901fe824d0f481f5c5b8a1033efa65cf94d62a0289e266"
+    },
+    {
+      "case_id": "scope.stored.baseline",
+      "purpose": "Locks a stored Scope identity that persists across cumulative partial fills.",
+      "required_profiles": [
+        "portable-core-v1",
+        "stored-scope-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "stored-scope-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "cumulative_fills_allowed",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:2b899c3f883207c6201e47a79bdde74e3114b710b15dbbf15ff806f834b947d8"
+    },
+    {
+      "case_id": "scope.stored.sensitivity.nonce",
+      "purpose": "Changing only the Principal nonce changes the stored Scope identity.",
+      "required_profiles": [
+        "portable-core-v1",
+        "stored-scope-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "stored-scope-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "43",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "cumulative_fills_allowed",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:c02ccfb6835838fe93a7b87f19f6c728a1c495b89979e7dc220a326498a4f41b"
+    },
+    {
+      "case_id": "scope.direct_one_shot.baseline",
+      "purpose": "Locks direct one-shot lifecycle identity separately from detached signed authorization.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "direct-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "expected_digest": "sha256:17174a689da9684f71489ba72081ec998543093da4f76da1f5b85ce2a2fd7724"
+    },
+    {
+      "case_id": "scope.sponsor.baseline",
+      "purpose": "Locks a fee-funding Principal Scope to one exact assessment Scope, Principal, asset tuple, ceiling, and Collector.",
+      "required_profiles": [
+        "portable-core-v1",
+        "sponsored-assessment-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.sponsor",
+        "principal_nonce": "7",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "0",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "0"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope",
+        "sponsored_assessment_authorizations": [
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-a",
+            "maximum_gross_assessment_debit": "500",
+            "protocol_collector_id": "test.collector.core-1"
+          }
+        ]
+      },
+      "expected_digest": "sha256:9bac172928a5f64a8617f5e8b0f72ef29f50ec61c770b6d3d8e19f3b05764321"
+    },
+    {
+      "case_id": "scope.sponsor.sensitivity.maximum",
+      "purpose": "Changing only the sponsored gross-assessment maximum changes the sponsor Scope identity.",
+      "required_profiles": [
+        "portable-core-v1",
+        "sponsored-assessment-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.sponsor",
+        "principal_nonce": "7",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "0",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "0"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope",
+        "sponsored_assessment_authorizations": [
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-a",
+            "maximum_gross_assessment_debit": "400",
+            "protocol_collector_id": "test.collector.core-1"
+          }
+        ]
+      },
+      "expected_digest": "sha256:391bbbab10d892052ed538b120442f34a3f37e68a46e3b8f592a08daf0499b23"
+    },
+    {
+      "case_id": "scope.reject.duplicate_asset_tuple",
+      "purpose": "The same Asset Profile and native asset tuple cannot carry conflicting limits twice.",
+      "required_profiles": [
+        "portable-core-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.alice",
+        "principal_nonce": "42",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          },
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "1000000",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "1000600",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "900000"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope"
+      },
+      "reject_code": "duplicate_asset_authorization_tuple"
+    },
+    {
+      "case_id": "scope.reject.duplicate_sponsored_assessment_tuple",
+      "purpose": "The same assessment Scope and asset tuple cannot carry two sponsor ceilings.",
+      "required_profiles": [
+        "portable-core-v1",
+        "sponsored-assessment-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.sponsor",
+        "principal_nonce": "7",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "0",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "0"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope",
+        "sponsored_assessment_authorizations": [
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-a",
+            "maximum_gross_assessment_debit": "500",
+            "protocol_collector_id": "test.collector.core-1"
+          },
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-a",
+            "maximum_gross_assessment_debit": "400",
+            "protocol_collector_id": "test.collector.core-1"
+          }
+        ]
+      },
+      "reject_code": "duplicate_sponsored_assessment_tuple"
+    },
+    {
+      "case_id": "scope.reject.sponsor_asset_not_authorized",
+      "purpose": "A sponsored assessment record must use an asset tuple authorized by the fee-funding Principal.",
+      "required_profiles": [
+        "portable-core-v1",
+        "sponsored-assessment-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.sponsor",
+        "principal_nonce": "7",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "0",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "0"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope",
+        "sponsored_assessment_authorizations": [
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-b",
+            "maximum_gross_assessment_debit": "500",
+            "protocol_collector_id": "test.collector.core-1"
+          }
+        ]
+      },
+      "reject_code": "sponsored_assessment_asset_not_authorized"
+    },
+    {
+      "case_id": "scope.reject.sponsor_limit_exceeds_asset_authorization",
+      "purpose": "The sponsor ceiling cannot exceed its matching per-asset assessment or total debit limit.",
+      "required_profiles": [
+        "portable-core-v1",
+        "sponsored-assessment-v1"
+      ],
+      "operation": "authorization_scope_id",
+      "scope_descriptor": {
+        "$schema": "urn:programmable:schema:authorization-scope-descriptor:v1",
+        "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+        "constitution_id": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+        "runtime_id": "test.runtime.alpha",
+        "chain_reference": "test.chain:4663",
+        "core_deployment_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_scope_domain_separator": "programmable:test-runtime:scope:v1",
+        "authorization_profile_id": "signed-one-shot-v1",
+        "principal_id": "test.principal.sponsor",
+        "principal_nonce": "7",
+        "ordered_targets": [
+          {
+            "market_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "engine_revision_id": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "domain_revision_ids": [
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            ],
+            "action_payload_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "execution_phase": "test.execution.execute"
+          }
+        ],
+        "asset_authorizations": [
+          {
+            "native_asset_id": "test.asset.token-a",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "max_market_execution_gross_debit": "0",
+            "max_protocol_assessment_gross_debit": "500",
+            "max_total_gross_debit": "500",
+            "max_market_execution_external_withholding": "0",
+            "max_protocol_assessment_external_withholding": "0",
+            "credit_recipient_policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "minimum_spendable_credit": "0"
+          }
+        ],
+        "deadline": {
+          "kind": "bounded",
+          "clock_id": "test.clock.unix-seconds",
+          "not_after": "2000000000"
+        },
+        "partial_fill_policy": "forbidden",
+        "cancellation_policy": "cancel_closes_scope",
+        "sponsored_assessment_authorizations": [
+          {
+            "assessment_authorization_scope_id": "sha256:203be7e771dfa856e89f1797a4d882f56f48676393f8bfbcd2d4a89e74b0b7dc",
+            "assessment_principal_id": "test.principal.alice",
+            "asset_profile_id": "test.asset-profile.plain-v1",
+            "native_asset_id": "test.asset.token-a",
+            "maximum_gross_assessment_debit": "501",
+            "protocol_collector_id": "test.collector.core-1"
+          }
+        ]
+      },
+      "reject_code": "sponsored_assessment_limit_exceeds_asset_authorization"
+    }
+  ],
+  "relations": [
+    {
+      "relation_id": "relation.canonical.member_order_whitespace",
+      "purpose": "Equivalent object values have equal digests despite source member order and whitespace.",
+      "operator": "equal_digest",
+      "case_ids": [
+        "canonical.equivalence.compact",
+        "canonical.equivalence.reordered_whitespace"
+      ]
+    },
+    {
+      "relation_id": "relation.canonical.unicode_escape_spelling",
+      "purpose": "Equivalent Unicode scalar values have equal digests regardless of source escape spelling.",
+      "operator": "equal_digest",
+      "case_ids": [
+        "canonical.values.unicode_literal",
+        "canonical.values.unicode_escaped"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.nonce",
+      "purpose": "The baseline and scope.sensitivity.nonce cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.nonce"
+      ]
+    },
+    {
+      "relation_id": "relation.multi-principal.bob",
+      "purpose": "Two Principals authorizing the same Target retain independent Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.multi_principal.bob"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.core",
+      "purpose": "The baseline and scope.sensitivity.core cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.core"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.chain",
+      "purpose": "The baseline and scope.sensitivity.chain cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.chain"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.target",
+      "purpose": "The baseline and scope.sensitivity.target cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.target"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.engine-revision",
+      "purpose": "The baseline and scope.sensitivity.engine_revision cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.engine_revision"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.domain-revision",
+      "purpose": "The baseline and scope.sensitivity.domain_revision cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.domain_revision"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.binding-domain",
+      "purpose": "The baseline and scope.sensitivity.binding_domain cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.binding_domain"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.asset-limit",
+      "purpose": "The baseline and scope.sensitivity.asset_limit cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.asset_limit"
+      ]
+    },
+    {
+      "relation_id": "relation.sensitivity.deadline",
+      "purpose": "The baseline and scope.sensitivity.deadline cases have distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.sensitivity.deadline"
+      ]
+    },
+    {
+      "relation_id": "relation.scope.profile",
+      "purpose": "One-shot and stored lifecycle profiles produce distinct Scope identities for otherwise equal authorization fields.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.stored.baseline"
+      ]
+    },
+    {
+      "relation_id": "relation.scope.stored-nonce",
+      "purpose": "The Principal nonce is bound into a stored Scope identity.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.stored.baseline",
+        "scope.stored.sensitivity.nonce"
+      ]
+    },
+    {
+      "relation_id": "relation.authorization.direct-versus-signed",
+      "purpose": "Direct and signed one-shot profiles produce distinct Scope identities.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.one_shot.baseline",
+        "scope.direct_one_shot.baseline"
+      ]
+    },
+    {
+      "relation_id": "relation.sponsor.maximum",
+      "purpose": "Changing a sponsored-assessment ceiling changes the sponsor Scope identity.",
+      "operator": "distinct_digest",
+      "case_ids": [
+        "scope.sponsor.baseline",
+        "scope.sponsor.sensitivity.maximum"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "urn:programmable:schema:market-template:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "namespace": "org.programmable.examples.shared_domain_composition",
+  "name": "shared_domain_composition",
+  "revision": "1",
+  "summary": "A Market family whose distinct Market instances may use one Liquidity Domain only through that Domain Revision's local admission rule.",
+  "domain_policy": {
+    "selector_id": "org.programmable.policy.shared_domain_admission.v1",
+    "description": "Every Market remains separately identified; shared liquidity exists only where one exact Domain Revision admits that Market and Engine Revision."
+  },
+  "asset_roles": [
+    {
+      "role_id": "org.programmable.role.shared_inventory_asset.v1",
+      "description": "An exact asset whose accounted inventory is intentionally available to admitted Market instances.",
+      "cardinality": "one_or_more"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "org.programmable.action.admit_market_revision.v1",
+      "description": "Create a new Domain Revision that records an authority-relevant Market admission change.",
+      "required_protected_capabilities": [
+        "programmable.capability.domain_revision.v1"
+      ],
+      "proposed_protected_effects": [],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.execute_admitted_market.v1",
+      "description": "Use shared inventory only within the exact Market, Engine Revision, asset, and gross limits admitted by the Domain Revision.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    }
+  ],
+  "extensions": {
+    "org.programmable.examples.accounting_scope": "one_domain_revision_across_admitted_markets",
+    "org.programmable.examples.non_guarantees": [
+      "market_independent_liquidity",
+      "uncorrelated_engine_risk",
+      "independent_liveness"
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "urn:programmable:schema:market-template:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "namespace": "org.programmable.examples.signed_rfq_jit",
+  "name": "signed_rfq_jit",
+  "revision": "1",
+  "summary": "A request-for-quote Engine that atomically settles independently authorized maker and taker Scopes with temporary inventory.",
+  "domain_policy": {
+    "selector_id": "org.programmable.policy.rfq_inventory_domain.v1",
+    "description": "Each Envelope binds the exact maker, quote commitment, Liquidity Domain Revision, assets, expiry, and temporary-inventory limits."
+  },
+  "asset_roles": [
+    {
+      "role_id": "org.programmable.role.taker_input.v1",
+      "description": "The exact asset and gross amount authorized by the taker.",
+      "cardinality": "one"
+    },
+    {
+      "role_id": "org.programmable.role.maker_inventory.v1",
+      "description": "The exact asset and bounded inventory independently authorized by the maker.",
+      "cardinality": "one"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "org.programmable.action.publish_quote.v1",
+      "description": "Commit an Engine-defined quote whose signature and expiry remain separate from Core settlement evidence.",
+      "required_protected_capabilities": [],
+      "proposed_protected_effects": [],
+      "opaque_engine_effects": [
+        "org.programmable.examples.effect.quote_commit.v1"
+      ]
+    },
+    {
+      "action_id": "org.programmable.action.execute_quote_jit.v1",
+      "description": "Settle exact maker and taker Scopes while closing every temporary inventory obligation inside one Envelope.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1",
+        "programmable.capability.temporary_obligation.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1",
+        "programmable.effect.temporary_obligation_open.v1"
+      ],
+      "opaque_engine_effects": [
+        "org.programmable.examples.effect.quote_consumption.v1"
+      ]
+    }
+  ],
+  "extensions": {
+    "org.programmable.examples.authorization_profile": "signed-one-shot-v1",
+    "org.programmable.examples.execution_profile": "BOUNDED_SESSION_V1",
+    "org.programmable.examples.non_guarantees": [
+      "maker_availability",
+      "competitive_price",
+      "quote_privacy"
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "urn:programmable:schema:market-template:v1",
+  "protocol_spec_id": "programmable-protocol/0.1.0-draft.1",
+  "namespace": "org.programmable.examples.nft_bid_pool",
+  "name": "nft_bid_pool",
+  "revision": "1",
+  "summary": "A collection-aware Engine that exchanges selected non-fungible assets against a fungible quote asset.",
+  "domain_policy": {
+    "selector_id": "org.programmable.policy.collection_selector.v1",
+    "description": "Each selected non-fungible asset and collection condition is bound per Envelope and checked by the exact native profile."
+  },
+  "asset_roles": [
+    {
+      "role_id": "org.programmable.role.collection_asset.v1",
+      "description": "A non-fungible asset satisfying the Engine's selected collection condition.",
+      "cardinality": "one_or_more"
+    },
+    {
+      "role_id": "org.programmable.role.quote_asset.v1",
+      "description": "The fungible payment and bid asset.",
+      "cardinality": "one"
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "org.programmable.action.sell_selected_asset.v1",
+      "description": "Debit one selected non-fungible asset and credit bounded quote value.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    },
+    {
+      "action_id": "org.programmable.action.buy_selected_asset.v1",
+      "description": "Debit fungible quote value and credit the exact selected non-fungible asset.",
+      "required_protected_capabilities": [
+        "programmable.capability.asset_move.v1"
+      ],
+      "proposed_protected_effects": [
+        "programmable.effect.asset_move.v1"
+      ],
+      "opaque_engine_effects": []
+    }
+  ],
+  "extensions": {
+    "org.programmable.examples.payment_basis": "fungible_quote_debit_only",
+    "org.programmable.examples.profile_requirements": [
+      "exact_nonfungible_asset_profile",
+      "receiver_callback_profile"
+    ],
+    "org.programmable.examples.non_guarantees": [
+      "collection_legitimacy",
+      "metadata_truth",
+      "royalty_correctness"
+    ]
+  }
+}

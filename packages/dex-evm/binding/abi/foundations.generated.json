@@ -1,0 +1,3587 @@
+{
+  "schemaVersion": 1,
+  "artifactClass": "draft-foundations-abi-bundle",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "scope": "compiled EVM foundations only",
+  "protectedExecutionAbiFrozen": false,
+  "claims": {
+    "bindingRelease": false,
+    "conformanceReport": false,
+    "deployment": false,
+    "protectedExecutionAbiFrozen": false,
+    "productionEligible": false
+  },
+  "warning": "These compiler-derived ABIs are developer artifacts for the implemented foundations. They do not freeze the protected-execution ABI or establish a Binding Release.",
+  "protocolLockSha256": "sha256:6f07a87e82af026daa7baf5a351dc11a89a217b1c5c7d9a6eefae37d4cb7b29e",
+  "compilerVersion": "0.8.26+commit.8a97fa7a",
+  "entries": [
+    {
+      "artifactPath": "out/CoreV1.sol/CoreV1.json",
+      "sourcePath": "src/core/CoreV1.sol",
+      "contractName": "CoreV1",
+      "abiSha256": "sha256:d9a1709864c587f08497d7b856f722e53e395106d4d5cb9e0dbb403b6129b7c3",
+      "abi": [
+        {
+          "type": "constructor",
+          "inputs": [
+            {
+              "name": "constitutionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "collector",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "COLLECTOR",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "CONSTITUTION_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "CORE_DEPLOYMENT_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "CORE_MAJOR",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint32",
+              "internalType": "uint32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEPLOYMENT_CHAIN_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_ASSET_SOURCE_DESTINATION_CLASSES",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_ASYNC_DEFICIT_OBSERVABILITY",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_CAPABILITY_COMMITMENTS",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_EFFECT_OCCURRENCE_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_EXIT_PROFILE_VECTORS",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_IDENTIFIER_PROFILE_METADATA",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_PRINCIPAL_SOURCE_BINDING",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_PROTECTED_EXECUTION_GRAMMAR",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_RECEIPT_TARGET_DOMAIN_MAPPING",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_REFUND_GRAMMAR",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_RETURN_ONLY_PROPOSAL_TRANSCRIPT",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_SCOPE_EIP712_BRIDGE",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DEX_EVM_SPEC_STORED_SCOPE_MINIMUM_CREDITS",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "ENTRY_RUNTIME_CODEHASH_ONLY_POLICY_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "EVM_RUNTIME_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "KNOWN_BLOCKED_SPEC_ISSUE_COUNT",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "NATIVE_ETH_ASSET_PROFILE_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "RETURN_ONLY_ENGINE_INTERFACE_PROFILE_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "RETURN_ONLY_SELECTOR_SET_HASH",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "STRICT_MEASURED_ERC20_ASSET_PROFILE_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "authenticateEngineRevision",
+          "inputs": [
+            {
+              "name": "engineRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "engine",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "blockedSpecIssueId",
+          "inputs": [
+            {
+              "name": "index",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "pure"
+        },
+        {
+          "type": "function",
+          "name": "createDomainRevision",
+          "inputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct DomainRevisionDescriptorV1",
+              "components": [
+                {
+                  "name": "domainId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "admissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "custodyProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "exitProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorityPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableConfigurationCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "createDomainVault",
+          "inputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "vault",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "createMarket",
+          "inputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct MarketDescriptorV1",
+              "components": [
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableParametersCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "domainAdmissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "assetAdmissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "requiredCapabilityProfileCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "marketId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "currentRuntimeCodeHash",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "deriveDomainRevisionId",
+          "inputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct DomainRevisionDescriptorV1",
+              "components": [
+                {
+                  "name": "domainId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "admissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "custodyProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "exitProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorityPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableConfigurationCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "deriveEngineRevisionId",
+          "inputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct EngineRevisionDescriptorV1",
+              "components": [
+                {
+                  "name": "chainId",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "engine",
+                  "type": "address",
+                  "internalType": "address"
+                },
+                {
+                  "name": "runtimeCodeHash",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "interfaceProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "selectorSetHash",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "codePolicyId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableConfigurationCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "dependencyPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "capabilityProfileCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "pure"
+        },
+        {
+          "type": "function",
+          "name": "deriveMarketId",
+          "inputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct MarketDescriptorV1",
+              "components": [
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableParametersCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "domainAdmissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "assetAdmissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "requiredCapabilityProfileCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "deriveVaultId",
+          "inputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "domainRevisionDescriptor",
+          "inputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct DomainRevisionDescriptorV1",
+              "components": [
+                {
+                  "name": "domainId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "admissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "custodyProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "exitProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorityPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableConfigurationCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "domainVault",
+          "inputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "engineRevisionDescriptor",
+          "inputs": [
+            {
+              "name": "engineRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct EngineRevisionDescriptorV1",
+              "components": [
+                {
+                  "name": "chainId",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "engine",
+                  "type": "address",
+                  "internalType": "address"
+                },
+                {
+                  "name": "runtimeCodeHash",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "interfaceProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "selectorSetHash",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "codePolicyId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableConfigurationCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "dependencyPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "capabilityProfileCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "executeProtected",
+          "inputs": [
+            {
+              "name": "",
+              "type": "bytes",
+              "internalType": "bytes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "payable"
+        },
+        {
+          "type": "function",
+          "name": "executionPhase",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "expectedDomainVault",
+          "inputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "marketDescriptor",
+          "inputs": [
+            {
+              "name": "marketId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct MarketDescriptorV1",
+              "components": [
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableParametersCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "domainAdmissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "assetAdmissionPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "requiredCapabilityProfileCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "registerEngineRevision",
+          "inputs": [
+            {
+              "name": "descriptor",
+              "type": "tuple",
+              "internalType": "struct EngineRevisionDescriptorV1",
+              "components": [
+                {
+                  "name": "chainId",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "engine",
+                  "type": "address",
+                  "internalType": "address"
+                },
+                {
+                  "name": "runtimeCodeHash",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "interfaceProfileId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "selectorSetHash",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "codePolicyId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "immutableConfigurationCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "dependencyPolicyCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "capabilityProfileCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "engineRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "event",
+          "name": "DomainRevisionCreated",
+          "inputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "domainId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "creator",
+              "type": "address",
+              "indexed": true,
+              "internalType": "address"
+            }
+          ],
+          "anonymous": false
+        },
+        {
+          "type": "event",
+          "name": "DomainVaultCreated",
+          "inputs": [
+            {
+              "name": "vaultId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "indexed": false,
+              "internalType": "address"
+            },
+            {
+              "name": "vault",
+              "type": "address",
+              "indexed": false,
+              "internalType": "address"
+            }
+          ],
+          "anonymous": false
+        },
+        {
+          "type": "event",
+          "name": "EngineRevisionRegistered",
+          "inputs": [
+            {
+              "name": "engineRevisionId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "engine",
+              "type": "address",
+              "indexed": true,
+              "internalType": "address"
+            },
+            {
+              "name": "runtimeCodeHash",
+              "type": "bytes32",
+              "indexed": false,
+              "internalType": "bytes32"
+            }
+          ],
+          "anonymous": false
+        },
+        {
+          "type": "event",
+          "name": "MarketCreated",
+          "inputs": [
+            {
+              "name": "marketId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "engineRevisionId",
+              "type": "bytes32",
+              "indexed": true,
+              "internalType": "bytes32"
+            },
+            {
+              "name": "creator",
+              "type": "address",
+              "indexed": true,
+              "internalType": "address"
+            }
+          ],
+          "anonymous": false
+        },
+        {
+          "type": "error",
+          "name": "BlockedBySpec",
+          "inputs": [
+            {
+              "name": "issueId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "DeploymentChainIdMismatch",
+          "inputs": [
+            {
+              "name": "deploymentChainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "currentChainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "EngineChainMismatch",
+          "inputs": [
+            {
+              "name": "descriptorChainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "deploymentChainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "EngineHasNoCode",
+          "inputs": [
+            {
+              "name": "engine",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "EngineRuntimeCodeHashMismatch",
+          "inputs": [
+            {
+              "name": "engine",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "expected",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "actual",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "EvidenceReadDuringExecution",
+          "inputs": [
+            {
+              "name": "activePhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidBlockedIssueIndex",
+          "inputs": [
+            {
+              "name": "index",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidEngine",
+          "inputs": [
+            {
+              "name": "engine",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidPhaseTransition",
+          "inputs": [
+            {
+              "name": "currentPhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            },
+            {
+              "name": "expectedPhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            },
+            {
+              "name": "requestedPhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NestedMutatingEntry",
+          "inputs": [
+            {
+              "name": "activePhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "UnknownDomainRevision",
+          "inputs": [
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "UnknownEngineRevision",
+          "inputs": [
+            {
+              "name": "engineRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "UnknownMarket",
+          "inputs": [
+            {
+              "name": "marketId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "UnsupportedEngineCodePolicy",
+          "inputs": [
+            {
+              "name": "codePolicyId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "UnsupportedEngineInterface",
+          "inputs": [
+            {
+              "name": "interfaceProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "selectorSetHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "ZeroCollector",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "ZeroConstitutionId",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "ZeroDescriptorField",
+          "inputs": [
+            {
+              "name": "fieldName",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/DomainVaultV1.sol/DomainVaultV1.json",
+      "sourcePath": "src/core/DomainVaultV1.sol",
+      "contractName": "DomainVaultV1",
+      "abiSha256": "sha256:3220e4c9647fcebf924cc226f00a92586c5af81432b2b48944702ffdf6a87dce",
+      "abi": [
+        {
+          "type": "constructor",
+          "inputs": [
+            {
+              "name": "coreDeploymentId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "constitutionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "coreMajor",
+              "type": "uint32",
+              "internalType": "uint32"
+            },
+            {
+              "name": "collector",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "domainRevisionId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "receive",
+          "stateMutability": "payable"
+        },
+        {
+          "type": "function",
+          "name": "ASSET_PROFILE_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "CORE",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "CORE_DEPLOYMENT_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DOMAIN_REVISION_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "NATIVE_ASSET",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "NATIVE_ASSET_RUNTIME_CODE_HASH",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "VAULT_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "pullERC20Exact",
+          "inputs": [
+            {
+              "name": "source",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "observation",
+              "type": "tuple",
+              "internalType": "struct TransferObservationV1",
+              "components": [
+                {
+                  "name": "grossSourceDebit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "spendableDestinationCredit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "pushERC20Exact",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "observation",
+              "type": "tuple",
+              "internalType": "struct TransferObservationV1",
+              "components": [
+                {
+                  "name": "grossSourceDebit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "spendableDestinationCredit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "pushNativeExact",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address payable"
+            },
+            {
+              "name": "amount",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "observation",
+              "type": "tuple",
+              "internalType": "struct TransferObservationV1",
+              "components": [
+                {
+                  "name": "grossSourceDebit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "spendableDestinationCredit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "error",
+          "name": "AliasedEndpoints",
+          "inputs": [
+            {
+              "name": "endpoint",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "CoreDeploymentIdMismatch",
+          "inputs": [
+            {
+              "name": "supplied",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "derived",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "CoreRecipientForbidden",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "DestinationCreditMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InsufficientNativeCallGas",
+          "inputs": [
+            {
+              "name": "available",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "required",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InsufficientTokenCallGas",
+          "inputs": [
+            {
+              "name": "available",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "required",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidBalanceDirection",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "account",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "beforeBalance",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "afterBalance",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidCoreDeploymentId",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InvalidDomainRevisionId",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InvalidEndpoint",
+          "inputs": [
+            {
+              "name": "endpoint",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidRecipient",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidToken",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidTokenBoolean",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "selector",
+              "type": "bytes4",
+              "internalType": "bytes4"
+            },
+            {
+              "name": "actualValue",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidTokenReturnLength",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "selector",
+              "type": "bytes4",
+              "internalType": "bytes4"
+            },
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeAssetProfileMismatch",
+          "inputs": [
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeAssetRuntimeChanged",
+          "inputs": [
+            {
+              "name": "nativeAsset",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "expectedCodeHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "actualCodeHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeDestinationCreditMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeReturnDataTooLarge",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "maximumLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeSourceDebitMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeTransferFailed",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeValueRejected",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "OnlyCore",
+          "inputs": [
+            {
+              "name": "caller",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "SourceDebitMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "TokenCallFailed",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "selector",
+              "type": "bytes4",
+              "internalType": "bytes4"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "UnsupportedAssetProfile",
+          "inputs": [
+            {
+              "name": "assetProfileId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "ZeroAmount",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "ZeroAmount",
+          "inputs": []
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/ExecutionLockV1.sol/ExecutionLockV1.json",
+      "sourcePath": "src/core/ExecutionLockV1.sol",
+      "contractName": "ExecutionLockV1",
+      "abiSha256": "sha256:7ca937c763156a20b77f0c3cddedaa9027c9fa9df0aa07df26ed7ea59e9619f2",
+      "abi": [
+        {
+          "type": "function",
+          "name": "executionPhase",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "error",
+          "name": "EvidenceReadDuringExecution",
+          "inputs": [
+            {
+              "name": "activePhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidPhaseTransition",
+          "inputs": [
+            {
+              "name": "currentPhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            },
+            {
+              "name": "expectedPhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            },
+            {
+              "name": "requestedPhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NestedMutatingEntry",
+          "inputs": [
+            {
+              "name": "activePhase",
+              "type": "uint8",
+              "internalType": "enum ExecutionLockV1.Phase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/NativeIdentityV1.sol/NativeIdentityV1.json",
+      "sourcePath": "src/core/NativeIdentityV1.sol",
+      "contractName": "NativeIdentityV1",
+      "abiSha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "abi": []
+    },
+    {
+      "artifactPath": "out/ProtocolAssessmentV1.sol/ProtocolAssessmentV1.json",
+      "sourcePath": "src/core/ProtocolAssessmentV1.sol",
+      "contractName": "ProtocolAssessmentV1",
+      "abiSha256": "sha256:f801dd79d1b765b06e419c1b921c8604c07a680f88f797658f79c42e58bc32ff",
+      "abi": [
+        {
+          "type": "error",
+          "name": "CumulativeBasisOverflow",
+          "inputs": [
+            {
+              "name": "cumulativeBasisBefore",
+              "type": "uint128",
+              "internalType": "uint128"
+            },
+            {
+              "name": "basisDelta",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "CumulativeBasisRegression",
+          "inputs": [
+            {
+              "name": "cumulativeBasisBefore",
+              "type": "uint128",
+              "internalType": "uint128"
+            },
+            {
+              "name": "cumulativeBasisAfter",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/IDomainVaultV1.sol/IDomainVaultV1.json",
+      "sourcePath": "src/interfaces/IDomainVaultV1.sol",
+      "contractName": "IDomainVaultV1",
+      "abiSha256": "sha256:f0c07e097f729ec161ab28a01733f54a646cb36bb122ce02179cdd8caaeff845",
+      "abi": [
+        {
+          "type": "function",
+          "name": "ASSET_PROFILE_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "CORE",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "CORE_DEPLOYMENT_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "DOMAIN_REVISION_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "NATIVE_ASSET",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "address",
+              "internalType": "address"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "VAULT_ID",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "pullERC20Exact",
+          "inputs": [
+            {
+              "name": "source",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "observation",
+              "type": "tuple",
+              "internalType": "struct TransferObservationV1",
+              "components": [
+                {
+                  "name": "grossSourceDebit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "spendableDestinationCredit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "pushERC20Exact",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "observation",
+              "type": "tuple",
+              "internalType": "struct TransferObservationV1",
+              "components": [
+                {
+                  "name": "grossSourceDebit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "spendableDestinationCredit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "pushNativeExact",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address payable"
+            },
+            {
+              "name": "amount",
+              "type": "uint128",
+              "internalType": "uint128"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "observation",
+              "type": "tuple",
+              "internalType": "struct TransferObservationV1",
+              "components": [
+                {
+                  "name": "grossSourceDebit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                },
+                {
+                  "name": "spendableDestinationCredit",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/IERC1271V1.sol/IERC1271V1.json",
+      "sourcePath": "src/interfaces/IERC1271V1.sol",
+      "contractName": "IERC1271V1",
+      "abiSha256": "sha256:98f05e3b7579c5a19bf7541ae5cc36ad597ea61d2c1703d84a768f723f013031",
+      "abi": [
+        {
+          "type": "function",
+          "name": "isValidSignature",
+          "inputs": [
+            {
+              "name": "digest",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "signature",
+              "type": "bytes",
+              "internalType": "bytes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "magicValue",
+              "type": "bytes4",
+              "internalType": "bytes4"
+            }
+          ],
+          "stateMutability": "view"
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/IReturnOnlyEngineV1.sol/IReturnOnlyEngineV1.json",
+      "sourcePath": "src/interfaces/IReturnOnlyEngineV1.sol",
+      "contractName": "IReturnOnlyEngineV1",
+      "abiSha256": "sha256:c40cd114ccce75b1605ef443cc3f0e23cde5d5a620e127ba4ac2185e947db790",
+      "abi": [
+        {
+          "type": "function",
+          "name": "proposeOpaque",
+          "inputs": [
+            {
+              "name": "request",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineRequestV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "actionPayloadDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "actionPayload",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "response",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineResponseV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "proposalCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "proposal",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                },
+                {
+                  "name": "opaqueData",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/IReturnOnlyEngineV1.sol/ReturnOnlyEngineLimitsV1.json",
+      "sourcePath": "src/interfaces/IReturnOnlyEngineV1.sol",
+      "contractName": "ReturnOnlyEngineLimitsV1",
+      "abiSha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "abi": []
+    },
+    {
+      "artifactPath": "out/CanonicalEOASignatureV1.sol/CanonicalEOASignatureV1.json",
+      "sourcePath": "src/profiles/CanonicalEOASignatureV1.sol",
+      "contractName": "CanonicalEOASignatureV1",
+      "abiSha256": "sha256:960798d8fd81f08f6ce7c0a28dc5bfb5ebaefdb9d63bfda726ff4a3c74566caf",
+      "abi": [
+        {
+          "type": "error",
+          "name": "InvalidRecoveredSigner",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InvalidSignatureLength",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidSignatureS",
+          "inputs": [
+            {
+              "name": "s",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidSignatureV",
+          "inputs": [
+            {
+              "name": "v",
+              "type": "uint8",
+              "internalType": "uint8"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/EIP712HashingV1.sol/EIP712HashingV1.json",
+      "sourcePath": "src/profiles/EIP712HashingV1.sol",
+      "contractName": "EIP712HashingV1",
+      "abiSha256": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "abi": []
+    },
+    {
+      "artifactPath": "out/ERC1271VerifierV1.sol/ERC1271VerifierV1.json",
+      "sourcePath": "src/profiles/ERC1271VerifierV1.sol",
+      "contractName": "ERC1271VerifierV1",
+      "abiSha256": "sha256:76f0ac1324ce3876f650429e38f722cb0624fc029c6dcdd64443cf2976df8341",
+      "abi": [
+        {
+          "type": "error",
+          "name": "InsufficientVerifierGas",
+          "inputs": [
+            {
+              "name": "available",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "required",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidWalletMagic",
+          "inputs": [
+            {
+              "name": "actualWord",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidWalletReturnLength",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "SignatureTooLarge",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "maximumLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "WalletCallFailed",
+          "inputs": [
+            {
+              "name": "wallet",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "WalletHasNoCode",
+          "inputs": [
+            {
+              "name": "wallet",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/NativeETHProfileV1.sol/NativeETHProfileV1.json",
+      "sourcePath": "src/profiles/NativeETHProfileV1.sol",
+      "contractName": "NativeETHProfileV1",
+      "abiSha256": "sha256:2aca2833385443a384a696b3a23b7b83c23de372ed55d279965697f71c20f0c7",
+      "abi": [
+        {
+          "type": "error",
+          "name": "InsufficientNativeCallGas",
+          "inputs": [
+            {
+              "name": "available",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "required",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidRecipient",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeDestinationCreditMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeReturnDataTooLarge",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "maximumLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeSourceDebitMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "NativeTransferFailed",
+          "inputs": [
+            {
+              "name": "recipient",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "ZeroAmount",
+          "inputs": []
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/StrictMeasuredERC20ProfileV1.sol/StrictMeasuredERC20ProfileV1.json",
+      "sourcePath": "src/profiles/StrictMeasuredERC20ProfileV1.sol",
+      "contractName": "StrictMeasuredERC20ProfileV1",
+      "abiSha256": "sha256:bc796ba839753394e3a742256d0e6f2d54b78c51a8c9e14f63b64b37b56dbaa1",
+      "abi": [
+        {
+          "type": "error",
+          "name": "AliasedEndpoints",
+          "inputs": [
+            {
+              "name": "endpoint",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "DestinationCreditMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InsufficientTokenCallGas",
+          "inputs": [
+            {
+              "name": "available",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "required",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidBalanceDirection",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "account",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "beforeBalance",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "afterBalance",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidEndpoint",
+          "inputs": [
+            {
+              "name": "endpoint",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidToken",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidTokenBoolean",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "selector",
+              "type": "bytes4",
+              "internalType": "bytes4"
+            },
+            {
+              "name": "actualValue",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidTokenReturnLength",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "selector",
+              "type": "bytes4",
+              "internalType": "bytes4"
+            },
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "SourceDebitMismatch",
+          "inputs": [
+            {
+              "name": "requested",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "observed",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "TokenCallFailed",
+          "inputs": [
+            {
+              "name": "token",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "selector",
+              "type": "bytes4",
+              "internalType": "bytes4"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "ZeroAmount",
+          "inputs": []
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/OpaqueBatchAccumulatorEngineFixture.sol/OpaqueBatchAccumulatorEngineFixture.json",
+      "sourcePath": "src/reference-engines/OpaqueBatchAccumulatorEngineFixture.sol",
+      "contractName": "OpaqueBatchAccumulatorEngineFixture",
+      "abiSha256": "sha256:172c6a23a3a048ae642467e506e487215d0e34bdab65ff9574d5d633bb05fb6c",
+      "abi": [
+        {
+          "type": "function",
+          "name": "accumulatorByTarget",
+          "inputs": [
+            {
+              "name": "executionTargetId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "accumulator",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "batchesByTarget",
+          "inputs": [
+            {
+              "name": "executionTargetId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "batches",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "proposeOpaque",
+          "inputs": [
+            {
+              "name": "request",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineRequestV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "actionPayloadDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "actionPayload",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "response",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineResponseV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "proposalCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "proposal",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                },
+                {
+                  "name": "opaqueData",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "error",
+          "name": "ActionPayloadDigestMismatch",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "ActionPayloadTooLarge",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "BatchTooLarge",
+          "inputs": [
+            {
+              "name": "actualItems",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidPhase",
+          "inputs": [
+            {
+              "name": "actualPhase",
+              "type": "uint8",
+              "internalType": "uint8"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "SegmentOutOfRange",
+          "inputs": [
+            {
+              "name": "segmentIndex",
+              "type": "uint32",
+              "internalType": "uint32"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/OpaqueLifecycleEngineFixture.sol/OpaqueLifecycleEngineFixture.json",
+      "sourcePath": "src/reference-engines/OpaqueLifecycleEngineFixture.sol",
+      "contractName": "OpaqueLifecycleEngineFixture",
+      "abiSha256": "sha256:9588707a6dd94510cbdb18e0a536a32df383d456d53b6bdac9b25d5997b830ce",
+      "abi": [
+        {
+          "type": "function",
+          "name": "lifecycle",
+          "inputs": [
+            {
+              "name": "objectId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "revision",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "stateCommitment",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "proposeOpaque",
+          "inputs": [
+            {
+              "name": "request",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineRequestV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "actionPayloadDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "actionPayload",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "response",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineResponseV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "proposalCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "proposal",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                },
+                {
+                  "name": "opaqueData",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "error",
+          "name": "ActionPayloadDigestMismatch",
+          "inputs": []
+        },
+        {
+          "type": "error",
+          "name": "InvalidActionLength",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidPhase",
+          "inputs": [
+            {
+              "name": "actualPhase",
+              "type": "uint8",
+              "internalType": "uint8"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "LifecycleRevisionExhausted",
+          "inputs": [
+            {
+              "name": "objectId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "LifecycleRevisionMismatch",
+          "inputs": [
+            {
+              "name": "objectId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "expectedRevision",
+              "type": "uint64",
+              "internalType": "uint64"
+            },
+            {
+              "name": "actualRevision",
+              "type": "uint64",
+              "internalType": "uint64"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "SegmentOutOfRange",
+          "inputs": [
+            {
+              "name": "segmentIndex",
+              "type": "uint32",
+              "internalType": "uint32"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactPath": "out/OpaqueStateEngineV1.sol/OpaqueStateEngineV1.json",
+      "sourcePath": "src/reference-engines/OpaqueStateEngineV1.sol",
+      "contractName": "OpaqueStateEngineV1",
+      "abiSha256": "sha256:7b06b8e12540fb40ce7c4732b5ade97fc6e48349c432de1daf8db6941409c549",
+      "abi": [
+        {
+          "type": "function",
+          "name": "proposalCount",
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "function",
+          "name": "proposeOpaque",
+          "inputs": [
+            {
+              "name": "request",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineRequestV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "actionPayloadDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "actionPayload",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "name": "response",
+              "type": "tuple",
+              "internalType": "struct OpaqueEngineResponseV1",
+              "components": [
+                {
+                  "name": "coreDeploymentId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "engineRevisionId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "marketId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "authorizationScopeId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "sessionDigest",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "executionTargetId",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "proposalCommitment",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                },
+                {
+                  "name": "segmentIndex",
+                  "type": "uint32",
+                  "internalType": "uint32"
+                },
+                {
+                  "name": "phase",
+                  "type": "uint8",
+                  "internalType": "uint8"
+                },
+                {
+                  "name": "proposal",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                },
+                {
+                  "name": "opaqueData",
+                  "type": "bytes",
+                  "internalType": "bytes"
+                }
+              ]
+            }
+          ],
+          "stateMutability": "nonpayable"
+        },
+        {
+          "type": "function",
+          "name": "stateByTarget",
+          "inputs": [
+            {
+              "name": "executionTargetId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "stateCommitment",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ],
+          "stateMutability": "view"
+        },
+        {
+          "type": "error",
+          "name": "ActionPayloadDigestMismatch",
+          "inputs": [
+            {
+              "name": "expected",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "actual",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "ActionPayloadTooLarge",
+          "inputs": [
+            {
+              "name": "actualLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "maximumLength",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "InvalidEnginePhase",
+          "inputs": [
+            {
+              "name": "actualPhase",
+              "type": "uint8",
+              "internalType": "uint8"
+            }
+          ]
+        },
+        {
+          "type": "error",
+          "name": "SegmentOutOfRange",
+          "inputs": [
+            {
+              "name": "segmentIndex",
+              "type": "uint32",
+              "internalType": "uint32"
+            },
+            {
+              "name": "maximumSegments",
+              "type": "uint32",
+              "internalType": "uint32"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

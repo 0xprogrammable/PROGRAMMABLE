@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "programmable.dex-evm.conformance-status/v1",
+  "classification": "NON_PRODUCTION_ARCHITECTURE_BASELINE",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "protocolLock": {
+    "path": "packages/dex-evm/binding/protocol-lock.json",
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "tree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "portableVectorSetDigest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "protocolRepositoryCheck": {
+    "report": "packages/dex-evm/binding/reports/protocol-lock-verification.json",
+    "result": "PROTOCOL_REPOSITORY_INTERNAL_CHECK_PASS",
+    "portableVectorCases": 221,
+    "bindingReleasesInLockedInventory": 0,
+    "conformanceReportsInLockedInventory": 0,
+    "evidenceBoundary": "Internal Protocol repository consistency only"
+  },
+  "bindingRelease": {
+    "published": false,
+    "reason": "The native mapping cannot be frozen uniquely while twelve portable ambiguities remain unresolved."
+  },
+  "conformanceReport": {
+    "published": false,
+    "passingClaim": false,
+    "reason": "A strict report requires an exact Binding Release and exact applicable-case completeness; neither is available at this lock."
+  },
+  "portableProfileClaims": [],
+  "bindingLocalArtifacts": {
+    "claimStatus": "ARCHITECTURE_BASELINE_ONLY",
+    "profilesPath": "packages/dex-evm/binding/profiles",
+    "generatedFoundationsAbi": "packages/dex-evm/binding/abi/foundations.generated.json",
+    "generatedFoundationsBuildInventory": "packages/dex-evm/binding/reports/build-artifacts.generated.json",
+    "bindingNativeFoundationVectors": "packages/dex-evm/binding/vectors/foundations-v1.json",
+    "bindingLocalAssetFoundationVectors": "packages/dex-evm/binding/vectors/asset-foundations-v1.json",
+    "assetFoundationVectorClaim": "POINT_IN_TIME_FOUNDATION_CASES_ONLY_NO_ASSET_PROFILE_CONFORMANCE",
+    "protectedExecution": "HARD_REVERTS_BLOCKED_BY_SPEC",
+    "registrationAuthority": "NONE"
+  },
+  "blockingReport": {
+    "path": "packages/dex-evm/binding/reports/protocol-gap-report.json",
+    "ambiguityCount": 12,
+    "separateReleaseGateCount": 1
+  },
+  "requirementTraceability": {
+    "path": "packages/dex-evm/binding/reports/requirement-traceability.json",
+    "classification": "FOUNDATION_ONLY_NON_CONFORMANCE_TRACEABILITY",
+    "claims175Of175ImplementationCoverage": false
+  },
+  "prohibitedClassifications": [
+    "Binding Release",
+    "Conformance Report",
+    "testnet candidate",
+    "production candidate",
+    "production eligible",
+    "production deployed"
+  ]
+}

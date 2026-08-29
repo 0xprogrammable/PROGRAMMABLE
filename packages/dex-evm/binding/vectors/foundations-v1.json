@@ -1,0 +1,140 @@
+{
+  "$schema": "urn:programmable:dex-evm:binding-vectors:foundations-v1",
+  "classification": "BINDING_NATIVE_FOUNDATIONS_ONLY",
+  "portable_conformance_claim": false,
+  "binding_release_claim": false,
+  "protocol": {
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "spec_id": "programmable-protocol/0.1.0-draft.1",
+    "status": "draft",
+    "production_eligible": false,
+    "protected_execution_status": "BLOCKED_BY_SPEC",
+    "known_blocked_issue_count": 12
+  },
+  "constants": {
+    "runtime_id": "0xb58652289b006f49990923c8ea33b7be0012c2c0c6043cb3b61d49da2a765e31",
+    "return_only_interface_profile_id": "0xadda6c04009e880e6ba7d5866163ce19b3e707d2b874d5c65b7ac3d05cf28bdb",
+    "return_only_selector": "0x9cec9971",
+    "return_only_selector_set_hash": "0x1dc4c7a16cea765d93494019f874033455221ba4744888b6660397f8879d6435",
+    "entry_code_policy_id": "0xe4e8048ac1a54da5edde7eacd2600736ee598098ba5ac3440a685fda09eccea7",
+    "native_eth_asset_profile_id": "0x11bd3b922fc099e5d10a6fc42d85a4d527d518c38371c61b4a7ae08e69d88b4c",
+    "strict_measured_erc20_asset_profile_id": "0x17590f19c39f156c871671beb9d33f04c534d3c73dd6d4d303b1ad156ee1e07a"
+  },
+  "identities": {
+    "core": {
+      "input": {
+        "chain_id": 46630,
+        "core": "0x1111111111111111111111111111111111111111",
+        "constitution_id": "0x2727272727272727272727272727272727272727272727272727272727272727",
+        "core_major": 1,
+        "collector": "0x2222222222222222222222222222222222222222"
+      },
+      "expected_id": "0xe0b8c5700ae9b202de21cf768dc4c012a7bd3bb8bc52ce5dcb6d0cb5619061dc"
+    },
+    "engine": {
+      "input": {
+        "chain_id": 46630,
+        "engine": "0x3333333333333333333333333333333333333333",
+        "runtime_code_hash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "interface_profile_id": "0xadda6c04009e880e6ba7d5866163ce19b3e707d2b874d5c65b7ac3d05cf28bdb",
+        "selector_set_hash": "0x1dc4c7a16cea765d93494019f874033455221ba4744888b6660397f8879d6435",
+        "code_policy_id": "0xe4e8048ac1a54da5edde7eacd2600736ee598098ba5ac3440a685fda09eccea7",
+        "immutable_configuration_commitment": "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "dependency_policy_commitment": "0x6666666666666666666666666666666666666666666666666666666666666666",
+        "capability_profile_commitment": "0x7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "expected_id": "0x5a18d7a7dda95300c1b2bb6f372ac21397e959550d08293fa8179ce16881aff0"
+    },
+    "market": {
+      "input": {
+        "core_deployment_id": "0xe0b8c5700ae9b202de21cf768dc4c012a7bd3bb8bc52ce5dcb6d0cb5619061dc",
+        "engine_revision_id": "0x5a18d7a7dda95300c1b2bb6f372ac21397e959550d08293fa8179ce16881aff0",
+        "immutable_parameters_commitment": "0x8888888888888888888888888888888888888888888888888888888888888888",
+        "domain_admission_policy_commitment": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "asset_admission_policy_commitment": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "required_capability_profile_commitment": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "expected_id": "0x3e2f76209ea80eb30f2fb27df84fcab234d5cf16eca1bf168e39780ca7bd7e72"
+    },
+    "domain": {
+      "input": {
+        "core_deployment_id": "0xe0b8c5700ae9b202de21cf768dc4c012a7bd3bb8bc52ce5dcb6d0cb5619061dc",
+        "domain_id": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "admission_policy_commitment": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "custody_profile_id": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "exit_profile_id": "0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "authority_policy_commitment": "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+        "immutable_configuration_commitment": "0x2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"
+      },
+      "expected_id": "0x649136e6d65290f853cfdefea5f264cc3a29b3dc57f385e2c621c83ce38c62af"
+    },
+    "vault": {
+      "input": {
+        "core_deployment_id": "0xe0b8c5700ae9b202de21cf768dc4c012a7bd3bb8bc52ce5dcb6d0cb5619061dc",
+        "domain_revision_id": "0x649136e6d65290f853cfdefea5f264cc3a29b3dc57f385e2c621c83ce38c62af",
+        "asset_profile_id": "0x11bd3b922fc099e5d10a6fc42d85a4d527d518c38371c61b4a7ae08e69d88b4c",
+        "native_asset": "0x0000000000000000000000000000000000000000"
+      },
+      "expected_id": "0xccc7da566d8308d219b03701b2526273db2bcc65773154b984348dea688cda44"
+    }
+  },
+  "vault_deployment": {
+    "classification": "DETERMINISTIC_TEST_VECTOR_ONLY",
+    "source": "src/core/DomainVaultV1.sol:DomainVaultV1",
+    "compiler": {
+      "solc_version": "0.8.26",
+      "evm_version": "cancun",
+      "optimizer_enabled": true,
+      "optimizer_runs": 1000,
+      "bytecode_hash": "none",
+      "cbor_metadata": false
+    },
+    "core_deployer": "0x1111111111111111111111111111111111111111",
+    "constructor_core_identity_source": "identities.core.input",
+    "constructor_vault_identity_source": "identities.vault.input",
+    "creation_code_file": "domain-vault-v1.creation-code.hex",
+    "creation_code_bytes": 5651,
+    "creation_code_keccak256": "0x6d553248da271b500b07586847f3b317f62247e11afc16663cb8cc0bdb9d0172",
+    "init_code_bytes": 5875,
+    "init_code_keccak256": "0xba1d2c31bb2be015bccf3c7198bcaf7fcb09cdef4f4eab27d22ea878aa8755c3",
+    "salt": "0xccc7da566d8308d219b03701b2526273db2bcc65773154b984348dea688cda44",
+    "expected_create2_address": "0x60fae16Bd4908146c4035206d9a4E83a02D10cf1"
+  },
+  "assessment_cases": [
+    {
+      "case_id": "zero",
+      "basis_before": "0",
+      "fill_basis": "0",
+      "basis_after": "0",
+      "assessment_delta": "0"
+    },
+    {
+      "case_id": "below-boundary",
+      "basis_before": "0",
+      "fill_basis": "1999",
+      "basis_after": "1999",
+      "assessment_delta": "0"
+    },
+    {
+      "case_id": "boundary",
+      "basis_before": "0",
+      "fill_basis": "2000",
+      "basis_after": "2000",
+      "assessment_delta": "1"
+    },
+    {
+      "case_id": "cumulative-carry",
+      "basis_before": "1999",
+      "fill_basis": "1",
+      "basis_after": "2000",
+      "assessment_delta": "1"
+    },
+    {
+      "case_id": "uint128-maximum-no-addition",
+      "basis_before": "340282366920938463463374607431768211455",
+      "fill_basis": "0",
+      "basis_after": "340282366920938463463374607431768211455",
+      "assessment_delta": "0"
+    }
+  ]
+}

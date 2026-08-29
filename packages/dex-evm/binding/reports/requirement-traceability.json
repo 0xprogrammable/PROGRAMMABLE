@@ -1,0 +1,346 @@
+{
+  "schemaVersion": "programmable.dex-evm.requirement-traceability-status/v1",
+  "classification": "FOUNDATION_ONLY_NON_CONFORMANCE_TRACEABILITY",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "protocolLock": {
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "tree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "portableVectorSetDigest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "coverageBoundary": {
+    "lockedNormativeRequirementCount": 175,
+    "claims175Of175ImplementationCoverage": false,
+    "claimsConformanceCoverage": false,
+    "claimsTestExecution": false,
+    "statement": "This report is not 175/175 implementation coverage, not a complete requirement matrix, not a test report, and not a Conformance Report. It maps only the named unaffected foundation claims and every recorded blocker. No unimplemented Protocol requirement is claimed."
+  },
+  "evidenceVocabulary": {
+    "SOURCE_PRESENT": "The named source path exists; no execution result is implied.",
+    "TEST_SOURCE_PRESENT": "The named test source exists; passing execution is not claimed without a separate revision-bound report.",
+    "GENERATED_FOUNDATION_EVIDENCE": "The named generated artifact inventories foundation output and explicitly carries no Binding Release or conformance claim.",
+    "BLOCKED_BY_SPEC": "The cited portable requirement cannot be implemented uniquely at this lock without selecting an extra-Protocol interpretation.",
+    "NOT_CLAIMED": "The architecture baseline deliberately makes no implementation or conformance claim for the requirement."
+  },
+  "foundationClaims": [
+    {
+      "id": "FOUNDATION-001",
+      "claim": "The repository pins and verifies one exact Draft Protocol checkout.",
+      "protocolRequirementIds": ["CONF-001"],
+      "status": "SOURCE_AND_PROTOCOL_CHECK_EVIDENCE_PRESENT",
+      "sourcePaths": [
+        "packages/dex-evm/binding/protocol-lock.json"
+      ],
+      "testSourcePaths": [],
+      "evidencePaths": [
+        "packages/dex-evm/binding/reports/protocol-lock-verification.json"
+      ],
+      "limitation": "The Protocol repository make check proves internal consistency only, not native implementation conformance."
+    },
+    {
+      "id": "FOUNDATION-002",
+      "claim": "CoreV1 uses a direct-construction non-proxy design and fixes Constitution, Collector address, chain and Core major at construction with no Core administration surface.",
+      "protocolRequirementIds": ["EVM-002", "VER-004"],
+      "status": "SOURCE_PRESENT_TEST_SOURCE_PRESENT_NOT_PRODUCTION_CLAIM",
+      "sourcePaths": [
+        "packages/dex-evm/src/core/CoreV1.sol",
+        "packages/dex-evm/src/core/NativeIdentityV1.sol"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/unit/CoreIdentity.t.sol",
+        "packages/dex-evm/test/fuzz/IdentityAndAssessmentFuzz.t.sol"
+      ],
+      "evidencePaths": [
+        "packages/dex-evm/binding/abi/foundations.generated.json",
+        "packages/dex-evm/binding/reports/build-artifacts.generated.json"
+      ],
+      "limitation": "The locked Protocol is not production eligible and the architecture snapshot is not revision-bound deployment evidence."
+    },
+    {
+      "id": "FOUNDATION-003",
+      "claim": "Engine Revision registration derives an immutable descriptor identity and authenticates only the Engine entry runtime code hash.",
+      "protocolRequirementIds": ["EVM-007", "VER-005"],
+      "status": "BINDING_LOCAL_FOUNDATION_ONLY_NOT_CORE_ENFORCED_PROFILE",
+      "sourcePaths": [
+        "packages/dex-evm/src/core/CoreV1.sol",
+        "packages/dex-evm/src/core/NativeIdentityV1.sol",
+        "packages/dex-evm/binding/profiles/engine-code.entry-runtime-codehash-only.v1.json"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/unit/CoreIdentity.t.sol",
+        "packages/dex-evm/test/unit/ReferenceEngineGenerality.t.sol"
+      ],
+      "evidencePaths": [
+        "packages/dex-evm/binding/vectors/foundations-v1.json"
+      ],
+      "limitation": "The admitted entry-runtime-codehash-only policy permits proxy-shaped code and proves no configuration, storage, implementation or dependency immutability. Registration grants no protected authority and no EVM-007 CORE_ENFORCED conformance claim is made."
+    },
+    {
+      "id": "FOUNDATION-004",
+      "claim": "Market, Domain Revision and DomainVault foundation identities bind the exact native descriptor fields implemented by NativeIdentityV1.",
+      "protocolRequirementIds": ["EVM-001", "EVM-008"],
+      "status": "BINDING_LOCAL_IDENTITY_AND_PHYSICAL_VAULT_FOUNDATION_ONLY",
+      "sourcePaths": [
+        "packages/dex-evm/src/core/CoreV1.sol",
+        "packages/dex-evm/src/core/NativeIdentityV1.sol",
+        "packages/dex-evm/src/core/DomainVaultV1.sol"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/unit/CoreIdentity.t.sol",
+        "packages/dex-evm/test/unit/DomainVaultV1.t.sol",
+        "packages/dex-evm/test/invariant/DomainVaultInvariant.t.sol",
+        "packages/dex-evm/sdk/test/native-identities.test.ts"
+      ],
+      "evidencePaths": [
+        "packages/dex-evm/binding/vectors/foundations-v1.json"
+      ],
+      "limitation": "No enabled protected accounting or liability system proves the complete resting-state property, and the portable Scope/native identity bridge remains blocked."
+    },
+    {
+      "id": "FOUNDATION-005",
+      "claim": "Protected execution fails closed before interpreting Envelope bytes or calling an Engine.",
+      "protocolRequirementIds": ["EVM-011", "EFFECT-010"],
+      "status": "FAIL_CLOSED_SENTINEL_SOURCE_PRESENT_TEST_SOURCE_PRESENT",
+      "sourcePaths": [
+        "packages/dex-evm/src/core/CoreV1.sol",
+        "packages/dex-evm/src/core/ExecutionLockV1.sol"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/adversarial/ExecutionLockAdversarial.t.sol",
+        "packages/dex-evm/test/adversarial/HostileBoundaries.t.sol"
+      ],
+      "evidencePaths": [
+        "packages/dex-evm/binding/reports/protocol-gap-report.json"
+      ],
+      "limitation": "A hard revert is a safety boundary, not an implementation of authorization, Effect settlement, obligations, assessment funding or Receipts."
+    },
+    {
+      "id": "FOUNDATION-006",
+      "claim": "The native ETH primitive uses bounded calls and requires exact point-in-time source debit and destination credit.",
+      "protocolRequirementIds": ["EVM-006", "EVM-010"],
+      "status": "BINDING_LOCAL_ASSET_FOUNDATION_SOURCE_AND_TEST_SOURCE_PRESENT",
+      "sourcePaths": [
+        "packages/dex-evm/src/profiles/NativeETHProfileV1.sol",
+        "packages/dex-evm/src/core/DomainVaultV1.sol",
+        "packages/dex-evm/binding/profiles/asset.native-eth-strict.v1.json"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/unit/DomainVaultV1.t.sol",
+        "packages/dex-evm/test/unit/AssetFoundationVectors.t.sol",
+        "packages/dex-evm/test/adversarial/HostileBoundaries.t.sol"
+      ],
+      "evidencePaths": [
+        "packages/dex-evm/binding/vectors/asset-foundations-v1.json"
+      ],
+      "limitation": "The binding-owned cases are point-in-time foundation vectors only. This architecture-baseline traceability record claims neither Asset Profile conformance nor revision-bound native test evidence."
+    },
+    {
+      "id": "FOUNDATION-007",
+      "claim": "The strict measured ERC-20 primitive accepts only exact canonical returns and exact point-in-time source debit and spendable destination credit.",
+      "protocolRequirementIds": ["EVM-006", "EVM-010"],
+      "status": "BINDING_LOCAL_ASSET_FOUNDATION_SOURCE_AND_TEST_SOURCE_PRESENT",
+      "sourcePaths": [
+        "packages/dex-evm/src/profiles/StrictMeasuredERC20ProfileV1.sol",
+        "packages/dex-evm/src/core/DomainVaultV1.sol",
+        "packages/dex-evm/binding/profiles/asset.erc20-strict-measured.v1.json",
+        "packages/dex-evm/binding/profiles/asset.unsupported.v1.json"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/unit/DomainVaultV1.t.sol",
+        "packages/dex-evm/test/unit/AssetFoundationVectors.t.sol",
+        "packages/dex-evm/test/invariant/DomainVaultInvariant.t.sol",
+        "packages/dex-evm/test/adversarial/HostileBoundaries.t.sol"
+      ],
+      "evidencePaths": [
+        "packages/dex-evm/binding/vectors/asset-foundations-v1.json"
+      ],
+      "limitation": "One observation proves no historical or future token behavior; async deficit provenance is blocked, and this architecture-baseline traceability record claims neither Asset Profile conformance nor native test evidence."
+    },
+    {
+      "id": "FOUNDATION-008",
+      "claim": "ProtocolAssessmentV1 implements unsigned uint128 cumulative-floor arithmetic A(B)=floor(B/2000).",
+      "protocolRequirementIds": ["FEE-001", "FEE-002"],
+      "status": "PURE_ARITHMETIC_SOURCE_AND_TEST_SOURCE_PRESENT",
+      "sourcePaths": [
+        "packages/dex-evm/src/core/ProtocolAssessmentV1.sol",
+        "packages/dex-evm/sdk/src/assessment.ts"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/unit/ProtocolAssessmentV1.t.sol",
+        "packages/dex-evm/test/fuzz/IdentityAndAssessmentFuzz.t.sol",
+        "packages/dex-evm/sdk/test/assessment.test.ts"
+      ],
+      "evidencePaths": [
+        "packages/dex-evm/binding/vectors/foundations-v1.json"
+      ],
+      "limitation": "Refund representation, grouping, source classification, storage, funding and Receipt semantics are not implemented or claimed."
+    },
+    {
+      "id": "FOUNDATION-009",
+      "claim": "Canonical EOA recovery and bounded ERC-1271 verification utilities exist as unfrozen native candidates.",
+      "protocolRequirementIds": ["EVM-003", "EVM-006"],
+      "status": "UNFROZEN_UTILITY_SOURCE_AND_TEST_SOURCE_PRESENT",
+      "sourcePaths": [
+        "packages/dex-evm/src/profiles/CanonicalEOASignatureV1.sol",
+        "packages/dex-evm/src/profiles/ERC1271VerifierV1.sol",
+        "packages/dex-evm/src/profiles/EIP712HashingV1.sol",
+        "packages/dex-evm/sdk/src/eip712-candidate.ts"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/test/unit/SignatureUtilitiesV1.t.sol",
+        "packages/dex-evm/sdk/test/eip712-candidate.test.ts"
+      ],
+      "evidencePaths": [],
+      "limitation": "The exact portable Scope-to-EIP-712 reconstruction is SPEC-GAP-011; no authorization type or signature profile is frozen or claimed."
+    },
+    {
+      "id": "FOUNDATION-010",
+      "claim": "The SDK strictly decodes foundation events and provides bounded reorg-aware checkpoint handling.",
+      "protocolRequirementIds": ["EVID-003", "EVID-005"],
+      "status": "FOUNDATION_EVENT_AND_INDEXER_UTILITY_ONLY",
+      "sourcePaths": [
+        "packages/dex-evm/sdk/src/event-indexer.ts",
+        "packages/dex-evm/sdk/src/receipt-decoder.ts"
+      ],
+      "testSourcePaths": [
+        "packages/dex-evm/sdk/test/event-indexer.test.ts",
+        "packages/dex-evm/sdk/test/receipt-transaction.test.ts"
+      ],
+      "evidencePaths": [],
+      "limitation": "Foundation event decoding is not normalized Receipt reconstruction. The binding-local projection remains explicitly unnormalized and BLOCKED_BY_SPEC."
+    },
+    {
+      "id": "FOUNDATION-011",
+      "claim": "Robinhood Chain records separate stable network identity from dated mutable observations and preserve a canonical-network no-deployment boundary.",
+      "protocolRequirementIds": [],
+      "status": "NETWORK_CONFIGURATION_AND_DATED_READ_ONLY_EVIDENCE_PRESENT",
+      "sourcePaths": [
+        "config/networks/robinhood-chain/network.schema.json",
+        "config/networks/robinhood-chain/4663.json",
+        "config/networks/robinhood-chain/46630.json"
+      ],
+      "testSourcePaths": [],
+      "evidencePaths": [
+        "deployments/dex/robinhood/4663/deployment-status.json",
+        "deployments/dex/robinhood/46630/preparation-status.json"
+      ],
+      "limitation": "Single official public RPC observations are not provider-quorum finality, continuing endpoint state or deployment evidence."
+    },
+    {
+      "id": "FOUNDATION-012",
+      "claim": "Binding-local native profile boundaries and exclusions are documented without publishing native conformance claims.",
+      "protocolRequirementIds": ["CONF-007", "EVM-013"],
+      "status": "PROFILE_DEFINITIONS_PRESENT_CLAIMS_ABSENT",
+      "sourcePaths": [
+        "packages/dex-evm/binding/profiles"
+      ],
+      "testSourcePaths": [],
+      "evidencePaths": [
+        "packages/dex-evm/binding/reports/conformance-status.json"
+      ],
+      "limitation": "EVM-013 is not satisfied: no exact claimed native vector-set and native-test-report pair, Binding Release or Conformance Report is published."
+    }
+  ],
+  "blockedRequirements": [
+    {
+      "id": "SPEC-GAP-001",
+      "label": "refund-effect-representation",
+      "requirementIds": ["FEE-005", "EFFECT-002", "EFFECT-007", "EFFECT-010"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-002",
+      "label": "scope-capability-commitment",
+      "requirementIds": ["AUTH-001", "ID-004", "EFFECT-003", "EFFECT-004", "EFFECT-005", "EFFECT-006", "EFFECT-008"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-003",
+      "label": "stored-scope-fill-limit-semantics",
+      "requirementIds": ["EXEC-009", "ID-006", "ID-007"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-004",
+      "label": "core-derived-occurrence-id",
+      "requirementIds": ["EFFECT-002"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-005",
+      "label": "asset-move-endpoint-classes",
+      "requirementIds": ["EFFECT-003"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-006",
+      "label": "asynchronous-deficit-provenance",
+      "requirementIds": ["SEC-010", "EVM-010"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-007",
+      "label": "receipt-relation-and-identity",
+      "requirementIds": ["EVID-009", "EVID-003", "EVID-011"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-008",
+      "label": "identifier-vector-required-profiles",
+      "requirementIds": ["CONF-006"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-009",
+      "label": "engine-independent-exit-vector-coverage",
+      "requirementIds": ["CONF-006"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-010",
+      "label": "principal-native-source-binding",
+      "requirementIds": ["AUTH-001", "EFFECT-003", "ID-004"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-011",
+      "label": "portable-scope-id-native-signature-bridge",
+      "requirementIds": ["ID-001", "EVM-001", "EVM-003", "EVM-007"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    },
+    {
+      "id": "SPEC-GAP-012",
+      "label": "return-only-proposal-acquisition-transcript",
+      "requirementIds": ["EVM-004", "EVM-005", "SESSION-002", "SESSION-003", "SESSION-004", "SESSION-005", "SESSION-006", "SESSION-009"],
+      "status": "BLOCKED_BY_SPEC",
+      "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+    }
+  ],
+  "releaseGate": {
+    "id": "RELEASE-GATE-001",
+    "label": "protocol-release-eligibility",
+    "requirementIds": ["VER-009", "VER-010", "VER-011", "ARTIFACT-005", "ARTIFACT-006", "ARTIFACT-007"],
+    "status": "BLOCKED_BY_SPEC",
+    "facts": {
+      "protocolStatus": "draft",
+      "protocolProductionEligible": false,
+      "bindingReleasePublished": false,
+      "conformanceReportPublished": false
+    },
+    "detailPath": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+  }
+}
