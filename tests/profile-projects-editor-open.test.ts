@@ -8,6 +8,7 @@ import type {
   CreatorProjectMarketCapV1,
   CreatorProjectSummaryV1,
 } from "../components/profile-projects";
+import type { ClassicV3Reward } from "../lib/profile/classic-v3-rewards";
 
 const project = {
   chainId: 1 as const,
@@ -19,7 +20,109 @@ const project = {
   article: null,
 };
 
+const rewardOwner = "0x1111111111111111111111111111111111111111" as const;
+const rewardVault = "0x2222222222222222222222222222222222222222" as const;
+const reward = {
+  releaseVersion: "classic-v4",
+  tokenAddress: project.tokenAddress,
+  tokenName: project.name,
+  tokenSymbol: project.symbol,
+  poolId: `0x${"4".repeat(64)}`,
+  vaultAddress: rewardVault,
+  beneficiary: rewardOwner,
+  payoutAddress: rewardOwner,
+  shareBps: 10_000,
+  ownedAllocations: [{
+    allocationIndex: 0,
+    beneficiary: rewardOwner,
+    payoutAddress: rewardOwner,
+    shareBps: 10_000,
+  }],
+  claimableWei: "0",
+  claimableEth: "0",
+  claimedWei: "0",
+  claimedEth: "0",
+  buySwapFeeBps: 10,
+  sellSwapFeeBps: 10,
+  platformFeeBps: 10,
+  beneficiaries: [{
+    allocationIndex: 0,
+    beneficiary: rewardOwner,
+    payoutAddress: rewardOwner,
+    shareBps: 10_000,
+  }],
+  launchTransactionHash: `0x${"5".repeat(64)}`,
+} satisfies ClassicV3Reward;
+
 describe("My projects editor opening", () => {
+  it("offers reward receiver changes only to the verified current owner", () => {
+    const manageable = profileProjects.manageableClassicRewardsByTokenV1(
+      [reward],
+      rewardOwner,
+    );
+
+    expect(manageable.get(project.tokenAddress.toLowerCase())).toBe(reward);
+    expect(profileProjects.manageableClassicRewardsByTokenV1(
+      [reward],
+      "0x9999999999999999999999999999999999999999",
+    ).size).toBe(0);
+    expect(profileProjects.manageableClassicRewardsByTokenV1(
+      [{ ...reward, ownedAllocations: [] }],
+      rewardOwner,
+    ).size).toBe(0);
+  });
+
+  it("fails closed when two reward identities claim the same token", () => {
+    expect(profileProjects.manageableClassicRewardsByTokenV1(
+      [reward, { ...reward, vaultAddress: project.tokenAddress }],
+      rewardOwner,
+    ).size).toBe(0);
+  });
+
+  it("validates a new, non-zero reward receiver", () => {
+    expect(profileProjects.rewardReceiverAddressErrorV1("nope", rewardOwner))
+      .toBe("Enter a valid Ethereum address.");
+    expect(profileProjects.rewardReceiverAddressErrorV1(
+      "0x0000000000000000000000000000000000000000",
+      rewardOwner,
+    )).toBe("Enter a valid Ethereum address.");
+    expect(profileProjects.rewardReceiverAddressErrorV1(
+      rewardOwner.toUpperCase().replace("0X", "0x"),
+      rewardOwner,
+    )).toBe("Enter a different reward receiver.");
+    expect(profileProjects.rewardReceiverAddressErrorV1(
+      "0x9999999999999999999999999999999999999999",
+      rewardOwner,
+    )).toBe("");
+  });
+
+  it("wires an accessible reward receiver dialog into each eligible launch", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const viewSource = readFileSync(
+      join(process.cwd(), "components/profile-view.tsx"),
+      "utf8",
+    );
+    const styles = readFileSync(
+      join(process.cwd(), "components/profile-projects.module.css"),
+      "utf8",
+    );
+
+    expect(source).toContain("Change reward receiver");
+    expect(source).toContain("if (!dialog.open) dialog.showModal()");
+    expect(source).toContain("htmlFor={fieldId}");
+    expect(source).toContain("aria-invalid={fieldError ? true : undefined}");
+    expect(source).toContain("Future creator fees for this allocation");
+    expect(viewSource).toContain("onChangeRewardReceiver={(reward, newReceiver, allocationIndex)");
+    expect(viewSource).toContain("rewardReceiverActionKeyV1(reward.vaultAddress)");
+    expect(styles).toContain('grid-template-areas: "article receiver token"');
+    expect(styles).toMatch(
+      /grid-template-areas:\s*"article token"\s*"receiver receiver"/u,
+    );
+  });
+
   it("preloads the editor only after explicit user intent", () => {
     const source = readFileSync(
       join(process.cwd(), "components/profile-projects.tsx"),

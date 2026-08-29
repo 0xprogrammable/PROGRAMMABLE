@@ -1607,6 +1607,7 @@ describe("profile transaction status", () => {
 
   it("restores only validated pending transactions for the connected account", () => {
     const stateKey = `${secondAddress.toLowerCase()}:claim`;
+    const updateStateKey = `${secondAddress.toLowerCase()}:update-payout`;
     const record = {
       version: 1,
       account: firstAddress.toLowerCase(),
@@ -1617,10 +1618,17 @@ describe("profile transaction status", () => {
       transactionHash,
       submittedAt: 1_800_000_000_000,
     } satisfies PendingProfileTransactionRecord;
+    const updateRecord = {
+      ...record,
+      stateKey: updateStateKey,
+      action: "update-payout",
+      transactionHash: secondTransactionHash,
+    } satisfies PendingProfileTransactionRecord;
     const serialized = JSON.stringify({
       version: 1,
       transactions: [
         record,
+        updateRecord,
         { ...record, account: secondAddress.toLowerCase() },
         { ...record, transactionHash: "0x1234" },
         { ...record, stateKey: `${secondAddress.toLowerCase()}:update-payout` },
@@ -1630,17 +1638,23 @@ describe("profile transaction status", () => {
 
     expect(parsePendingProfileTransactions(serialized, firstAddress)).toEqual([
       record,
+      updateRecord,
     ]);
     expect(parsePendingProfileTransactions(serialized, secondAddress)).toEqual([
       { ...record, account: secondAddress.toLowerCase() },
     ]);
     expect(parsePendingProfileTransactions("{", firstAddress)).toEqual([]);
 
-    const restored = groupPendingProfileTransactionStates([record]);
+    const restored = groupPendingProfileTransactionStates([record, updateRecord]);
     expect(restored["classic-v3"][stateKey]).toMatchObject({
       account: firstAddress.toLowerCase(),
       status: "pending",
       transactionHash,
+    });
+    expect(restored["classic-v3"][updateStateKey]).toMatchObject({
+      account: firstAddress.toLowerCase(),
+      status: "pending",
+      transactionHash: secondTransactionHash,
     });
     expect(restored.classic).toEqual({});
     expect(restored.deep).toEqual({});

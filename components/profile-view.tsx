@@ -21,6 +21,7 @@ import { useWallet } from "@/components/wallet-provider";
 import {
   creatorProjectPageSize,
   ProfileProjects,
+  rewardReceiverActionKeyV1,
   type CreatorProjectInitialBuyV1,
   type CreatorProjectMarketCapV1,
   type CreatorProjectSummaryV1,
@@ -481,7 +482,10 @@ export function profileCreatorClaimErrorMessage(error: unknown) {
   return creatorClaimNotSubmitted;
 }
 
-export function profileRewardActionErrorMessage(error: unknown) {
+export function profileRewardActionErrorMessage(
+  error: unknown,
+  action: "claim" | "update-payout" = "claim",
+) {
   if (walletActionWasCancelled(error)) {
     return "Transaction cancelled. Rewards remain available.";
   }
@@ -497,7 +501,9 @@ export function profileRewardActionErrorMessage(error: unknown) {
       return message;
     }
   }
-  return "Unable to claim. Try again.";
+  return action === "update-payout"
+    ? "Unable to change the reward receiver. Try again."
+    : "Unable to claim. Try again.";
 }
 
 const pendingProfileTransactionStoragePrefix =
@@ -2606,7 +2612,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       const stateKey =
         action === "claim"
           ? `${reward.vaultAddress.toLowerCase()}:claim`
-          : `${reward.vaultAddress.toLowerCase()}:update-payout:${allocationIndex}`;
+          : rewardReceiverActionKeyV1(reward.vaultAddress);
       const setActionState = (
         state: Omit<ClassicV3ActionState, "account">,
       ) => {
@@ -2715,7 +2721,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         }
         setActionState({
           status: "error",
-          message: profileRewardActionErrorMessage(caught),
+          message: profileRewardActionErrorMessage(caught, action),
         });
       }
     },
@@ -3758,9 +3764,22 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
       <ProfileProjects
         key={account?.toLowerCase() ?? "disconnected"}
+        classicRewards={
+          scopedClassicV3Rewards.status === "ready"
+            ? scopedClassicV3Rewards.rewards
+            : []
+        }
         initialBuys={creatorProjectInitialBuys}
         marketCaps={creatorProjectMarketCaps}
         walletProjects={creatorWalletProjects}
+        rewardReceiverActionStates={classicV3ActionStates}
+        onChangeRewardReceiver={(reward, newReceiver, allocationIndex) =>
+          void submitClassicV3Action(
+            reward,
+            "update-payout",
+            newReceiver,
+            allocationIndex,
+          )}
         onRefresh={retryProfileData}
         refreshing={profileRefreshing}
       />

@@ -4,7 +4,14 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import { formatUnits, getAddress, isAddress } from "viem";
 
@@ -19,6 +26,7 @@ import { PartnerLaunchAttribution } from
   "@/components/partner-launch-attribution";
 import { parseLaunchPartnerAttributionV1 } from
   "@/lib/launch-partner-attribution";
+import type { ClassicV3Reward } from "@/lib/profile/classic-v3-rewards";
 
 import styles from "./profile-projects.module.css";
 
@@ -44,6 +52,11 @@ const creatorProjectRefreshTimeoutMs = 12_000;
 const creatorProjectRefreshTimeoutReason = "creator-project-refresh-timeout";
 const emptyCreatorProjectsV1: readonly CreatorProjectSummaryV1[] =
   Object.freeze([]);
+const emptyClassicRewardsV1: readonly ClassicV3Reward[] = Object.freeze([]);
+const emptyRewardReceiverActionStatesV1: Readonly<
+  Record<string, CreatorProjectRewardReceiverActionStateV1>
+> = Object.freeze({});
+const zeroAddress = "0x0000000000000000000000000000000000000000";
 
 export type CreatorProjectMarketCapV1 = Readonly<{
   tokenAddress: `0x${string}`;
@@ -70,6 +83,64 @@ export type CreatorProjectOwnerStateV1 = Readonly<{
   phase: "loading" | "ready" | "error";
   projects: readonly CreatorProjectSummaryV1[];
 }>;
+
+export type CreatorProjectRewardReceiverActionStateV1 = Readonly<{
+  account: string;
+  status:
+    | "preparing"
+    | "wallet"
+    | "confirming"
+    | "pending"
+    | "not-found"
+    | "confirmed"
+    | "error";
+  message: string;
+}>;
+
+export function rewardReceiverActionKeyV1(vaultAddress: string) {
+  return `${vaultAddress.toLowerCase()}:update-payout`;
+}
+
+export function rewardReceiverAddressErrorV1(
+  value: string,
+  currentReceiver: string,
+) {
+  const candidate = value.trim();
+  if (!isAddress(candidate) || candidate.toLowerCase() === zeroAddress) {
+    return "Enter a valid Ethereum address.";
+  }
+  if (candidate.toLowerCase() === currentReceiver.toLowerCase()) {
+    return "Enter a different reward receiver.";
+  }
+  return "";
+}
+
+export function manageableClassicRewardsByTokenV1(
+  rewards: readonly ClassicV3Reward[],
+  walletAccount: string | null,
+) {
+  const candidates = new Map<string, ClassicV3Reward | null>();
+  if (walletAccount === null) return new Map<string, ClassicV3Reward>();
+
+  for (const reward of rewards) {
+    if (
+      !reward.ownedAllocations.some(
+        (allocation) =>
+          allocation.payoutAddress.toLowerCase() === walletAccount,
+      )
+    ) {
+      continue;
+    }
+    const token = reward.tokenAddress.toLowerCase();
+    candidates.set(token, candidates.has(token) ? null : reward);
+  }
+
+  return new Map(
+    [...candidates].filter(
+      (entry): entry is [string, ClassicV3Reward] => entry[1] !== null,
+    ),
+  );
+}
 
 export function scopeCreatorProjectOwnerStateV1(
   state: CreatorProjectOwnerStateV1 | null,
@@ -150,15 +221,27 @@ export async function loadCreatorProjectListV1(input: Readonly<{
 }
 
 export function ProfileProjects({
+  classicRewards = emptyClassicRewardsV1,
   initialBuys = [],
   marketCaps = [],
+  onChangeRewardReceiver,
   onRefresh,
+  rewardReceiverActionStates = emptyRewardReceiverActionStatesV1,
   refreshing = false,
   walletProjects = [],
 }: Readonly<{
+  classicRewards?: readonly ClassicV3Reward[];
   initialBuys?: readonly CreatorProjectInitialBuyV1[];
   marketCaps?: readonly CreatorProjectMarketCapV1[];
+  onChangeRewardReceiver?: (
+    reward: ClassicV3Reward,
+    newReceiver: string,
+    allocationIndex: number,
+  ) => void;
   onRefresh?: () => void;
+  rewardReceiverActionStates?: Readonly<
+    Record<string, CreatorProjectRewardReceiverActionStateV1>
+  >;
   refreshing?: boolean;
   walletProjects?: readonly CreatorProjectSummaryV1[];
 }>) {
@@ -174,6 +257,12 @@ export function ProfileProjects({
     ownerAccount: string;
     project: CreatorProjectSummaryV1;
   }> | null>(null);
+  const [rewardReceiverEditor, setRewardReceiverEditor] =
+    useState<Readonly<{
+      ownerAccount: string;
+      project: CreatorProjectSummaryV1;
+      reward: ClassicV3Reward;
+    }> | null>(null);
   const [projectPage, setProjectPage] = useState(1);
   const [projectError, setProjectError] = useState<Readonly<{
     ownerAccount: string;
@@ -181,6 +270,7 @@ export function ProfileProjects({
   }> | null>(null);
   const editorRequestsRef = useRef(new Map<string, Promise<EditorState>>());
   const editorTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const rewardReceiverTriggerRef = useRef<HTMLButtonElement | null>(null);
   const openRequestRef = useRef(0);
   const projectRequestRef = useRef(0);
   const projectRefreshControllerRef = useRef<AbortController | null>(null);
@@ -198,6 +288,10 @@ export function ProfileProjects({
   const scopedOpeningProject = openingProject?.ownerAccount === walletAccount
     ? openingProject.project
     : null;
+  const scopedRewardReceiverEditor =
+    rewardReceiverEditor?.ownerAccount === walletAccount
+      ? rewardReceiverEditor
+      : null;
   const scopedProjectError = projectError?.ownerAccount === walletAccount
     ? projectError.message
     : "";
@@ -304,6 +398,10 @@ export function ProfileProjects({
       initialBuy,
     ]),
   ), [initialBuys]);
+  const manageableClassicRewardsByToken = useMemo(
+    () => manageableClassicRewardsByTokenV1(classicRewards, walletAccount),
+    [classicRewards, walletAccount],
+  );
 
   const getEditorState = useCallback((project: CreatorProjectSummaryV1) => {
     if (walletAccount === null) {
@@ -374,7 +472,25 @@ export function ProfileProjects({
     focusEditorTrigger();
   }, [focusEditorTrigger, setEditor]);
 
-  if (!wallet) return null;
+  const closeRewardReceiverEditor = useCallback(() => {
+    setRewardReceiverEditor(null);
+    window.requestAnimationFrame(() =>
+      rewardReceiverTriggerRef.current?.focus());
+  }, [setRewardReceiverEditor]);
+
+  const receiverEditorActionState = scopedRewardReceiverEditor
+    ? rewardReceiverActionStates[
+        rewardReceiverActionKeyV1(
+          scopedRewardReceiverEditor.reward.vaultAddress,
+        )
+      ]
+    : undefined;
+  const scopedReceiverEditorActionState =
+    receiverEditorActionState?.account.toLowerCase() === walletAccount
+      ? receiverEditorActionState
+      : undefined;
+
+  if (!wallet || walletAccount === null) return null;
   return (
     <section className={styles.section} aria-labelledby="profile-launches-title">
       <header className={styles.heading}>
@@ -467,6 +583,21 @@ export function ProfileProjects({
             const canEditArticle = editableTokens.has(
               project.tokenAddress.toLowerCase(),
             );
+            const manageableReward = manageableClassicRewardsByToken.get(
+              project.tokenAddress.toLowerCase(),
+            );
+            const receiverState = manageableReward
+              ? rewardReceiverActionStates[
+                  rewardReceiverActionKeyV1(manageableReward.vaultAddress)
+                ]
+              : undefined;
+            const scopedReceiverState =
+              receiverState?.account.toLowerCase() === walletAccount
+                ? receiverState
+                : undefined;
+            const canChangeRewardReceiver = Boolean(
+              manageableReward && onChangeRewardReceiver,
+            );
             return (
             <article className={styles.project} key={project.tokenAddress}>
               <div className={styles.art}>
@@ -504,7 +635,12 @@ export function ProfileProjects({
                   </div>
                 ) : null}
               </div>
-              <div className={styles.actions}>
+              <div
+                className={styles.actions}
+                data-reward-action={
+                  canChangeRewardReceiver ? "available" : "unavailable"
+                }
+              >
                 <span className={styles.articleActionSlot}>
                   {canEditArticle ? (
                     <button
@@ -533,7 +669,32 @@ export function ProfileProjects({
                     </span>
                   )}
                 </span>
-                <Link href={`/token/${project.tokenAddress}`}>View token</Link>
+                {canChangeRewardReceiver && manageableReward ? (
+                  <button
+                    className={styles.rewardReceiverAction}
+                    type="button"
+                    aria-busy={
+                      rewardReceiverActionBusyV1(scopedReceiverState) ||
+                      undefined
+                    }
+                    onClick={(event) => {
+                      rewardReceiverTriggerRef.current = event.currentTarget;
+                      setRewardReceiverEditor({
+                        ownerAccount: walletAccount,
+                        project,
+                        reward: manageableReward,
+                      });
+                    }}
+                  >
+                    {rewardReceiverTriggerLabelV1(scopedReceiverState)}
+                  </button>
+                ) : null}
+                <Link
+                  className={styles.viewTokenAction}
+                  href={`/token/${project.tokenAddress}`}
+                >
+                  View token
+                </Link>
               </div>
             </article>
             );
@@ -578,8 +739,247 @@ export function ProfileProjects({
           onClose={closeOpeningEditor}
         />
       ) : null}
+      {scopedRewardReceiverEditor && onChangeRewardReceiver ? (
+        <RewardReceiverDialog
+          project={scopedRewardReceiverEditor.project}
+          reward={scopedRewardReceiverEditor.reward}
+          actionState={scopedReceiverEditorActionState}
+          onClose={closeRewardReceiverEditor}
+          onSubmit={(newReceiver, allocationIndex) =>
+            onChangeRewardReceiver(
+              scopedRewardReceiverEditor.reward,
+              newReceiver,
+              allocationIndex,
+            )}
+        />
+      ) : null}
     </section>
   );
+}
+
+function rewardReceiverActionBusyV1(
+  state?: CreatorProjectRewardReceiverActionStateV1,
+) {
+  return (
+    state?.status === "preparing" ||
+    state?.status === "wallet" ||
+    state?.status === "confirming"
+  );
+}
+
+function rewardReceiverTriggerLabelV1(
+  state?: CreatorProjectRewardReceiverActionStateV1,
+) {
+  if (rewardReceiverActionBusyV1(state)) return "Updating receiver…";
+  if (state?.status === "pending" || state?.status === "not-found") {
+    return "Check receiver status";
+  }
+  if (state?.status === "confirmed") return "Receiver updated";
+  if (state?.status === "error") return "Retry receiver update";
+  return "Change reward receiver";
+}
+
+function formatRewardShareV1(shareBps: number) {
+  return `${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(shareBps / 100)}%`;
+}
+
+function RewardReceiverDialog({
+  actionState,
+  onClose,
+  onSubmit,
+  project,
+  reward,
+}: Readonly<{
+  actionState?: CreatorProjectRewardReceiverActionStateV1;
+  onClose(): void;
+  onSubmit(newReceiver: string, allocationIndex: number): void;
+  project: CreatorProjectSummaryV1;
+  reward: ClassicV3Reward;
+}>) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [allocationIndex, setAllocationIndex] = useState(
+    reward.ownedAllocations[0]?.allocationIndex ?? 0,
+  );
+  const [newReceiver, setNewReceiver] = useState("");
+  const [fieldError, setFieldError] = useState("");
+  const [complete, setComplete] = useState(false);
+  const currentAllocation = reward.ownedAllocations.find(
+    (allocation) => allocation.allocationIndex === allocationIndex,
+  ) ?? reward.ownedAllocations[0];
+  const currentReceiver = currentAllocation?.payoutAddress ?? reward.payoutAddress;
+  const busy = rewardReceiverActionBusyV1(actionState);
+  const checkingStatus =
+    actionState?.status === "pending" || actionState?.status === "not-found";
+  const titleId = `reward-receiver-${project.tokenAddress.slice(2)}-title`;
+  const fieldId = `reward-receiver-${project.tokenAddress.slice(2)}-address`;
+  const hintId = `${fieldId}-hint`;
+  const errorId = `${fieldId}-error`;
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previousOverflow = window.document.body.style.overflow;
+    window.document.body.style.overflow = "hidden";
+    if (!dialog.open) dialog.showModal();
+    inputRef.current?.focus({ preventScroll: true });
+    return () => {
+      window.document.body.style.overflow = previousOverflow;
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  if (!complete && actionState?.status === "confirmed") {
+    setComplete(true);
+  }
+
+  function submitReceiver(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (checkingStatus) {
+      onSubmit(currentReceiver, allocationIndex);
+      return;
+    }
+    const error = rewardReceiverAddressErrorV1(
+      newReceiver,
+      currentReceiver,
+    );
+    setFieldError(error);
+    if (error) {
+      inputRef.current?.focus();
+      return;
+    }
+    onSubmit(getAddress(newReceiver.trim()), allocationIndex);
+  }
+
+  if (typeof document === "undefined") return null;
+  return createPortal((
+    <dialog
+      ref={dialogRef}
+      className={styles.receiverBackdrop}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className={styles.receiverDialog}>
+        <header className={styles.receiverHeader}>
+          <div>
+            <p>{project.symbol ? `$${project.symbol}` : "Classic launch"}</p>
+            <h2 id={titleId}>Change reward receiver</h2>
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            aria-label="Close reward receiver"
+            onClick={onClose}
+          >
+            <X aria-hidden="true" size={18} strokeWidth={1.8} />
+          </button>
+        </header>
+
+        <form className={styles.receiverForm} noValidate onSubmit={submitReceiver}>
+          {reward.ownedAllocations.length > 1 ? (
+            <label className={styles.receiverField}>
+              <span>Reward allocation</span>
+              <select
+                value={allocationIndex}
+                disabled={busy || complete}
+                onChange={(event) => {
+                  setAllocationIndex(Number(event.target.value));
+                  setNewReceiver("");
+                  setFieldError("");
+                }}
+              >
+                {reward.ownedAllocations.map((allocation) => (
+                  <option
+                    key={allocation.allocationIndex}
+                    value={allocation.allocationIndex}
+                  >
+                    {`Allocation ${allocation.allocationIndex + 1} · ${formatRewardShareV1(allocation.shareBps)}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <div className={styles.currentReceiver}>
+            <span>Current receiver</span>
+            <code>{currentReceiver}</code>
+            <small>{formatRewardShareV1(currentAllocation?.shareBps ?? reward.shareBps)} of creator rewards</small>
+          </div>
+
+          <label className={styles.receiverField} htmlFor={fieldId}>
+            <span>New reward receiver</span>
+          </label>
+          <input
+            ref={inputRef}
+            id={fieldId}
+            name="reward-receiver"
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="0x…"
+            value={newReceiver}
+            disabled={busy || checkingStatus || complete}
+            aria-invalid={fieldError ? true : undefined}
+            aria-describedby={`${hintId}${fieldError ? ` ${errorId}` : ""}`}
+            onChange={(event) => {
+              setNewReceiver(event.target.value);
+              if (fieldError) setFieldError("");
+            }}
+          />
+          <p id={hintId} className={styles.receiverHint}>
+            Future creator fees for this allocation will go to the new address.
+            Fees earned before confirmation stay with the current receiver.
+          </p>
+          {fieldError ? (
+            <p id={errorId} className={styles.receiverError}>
+              {fieldError}
+            </p>
+          ) : null}
+          <p
+            className={styles.receiverStatus}
+            role={actionState?.status === "error" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            {complete
+              ? "Reward receiver changed. Future creator fees now use the new address."
+              : actionState?.message ?? ""}
+          </p>
+
+          <div className={styles.receiverActions}>
+            <button type="button" onClick={onClose}>
+              {complete ? "Done" : "Cancel"}
+            </button>
+            {!complete ? (
+              <button
+                className={styles.receiverSubmit}
+                type="submit"
+                aria-busy={busy || undefined}
+                disabled={busy}
+              >
+                {busy
+                  ? rewardReceiverTriggerLabelV1(actionState)
+                  : checkingStatus
+                    ? "Check status"
+                    : actionState?.status === "error"
+                      ? "Try again"
+                      : "Change receiver"}
+              </button>
+            ) : null}
+          </div>
+        </form>
+      </section>
+    </dialog>
+  ), document.body);
 }
 
 function ProfileProjectsSkeleton() {

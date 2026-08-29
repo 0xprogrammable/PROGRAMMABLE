@@ -439,8 +439,15 @@
   display: grid;
   gap: 6px;
   grid-template-columns: 104px 84px;
+  grid-template-areas: "article token";
   justify-content: flex-end;
   min-width: 194px;
+}
+
+.actions[data-reward-action="available"] {
+  grid-template-columns: 104px 164px 84px;
+  grid-template-areas: "article receiver token";
+  min-width: 364px;
 }
 
 .actions button,
@@ -456,7 +463,16 @@
 
 .articleActionSlot {
   display: flex;
+  grid-area: article;
   min-width: 0;
+}
+
+.rewardReceiverAction {
+  grid-area: receiver;
+}
+
+.viewTokenAction {
+  grid-area: token;
 }
 
 .articleActionState {
@@ -483,6 +499,12 @@
   color: #0a0a0c;
 }
 
+.actions .rewardReceiverAction {
+  background: transparent;
+  border-color: var(--webde-line, rgb(255 255 255 / 14%));
+  color: var(--text-soft, rgb(255 255 255 / 72%));
+}
+
 .articleAction[data-opening="true"]:disabled {
   cursor: wait;
   opacity: 0.74;
@@ -500,10 +522,205 @@
   color: #ff9d9d;
 }
 
+.receiverBackdrop {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  color: inherit;
+  display: flex;
+  height: 100dvh;
+  inset: 0;
+  justify-content: center;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  overflow: hidden;
+  padding: 1rem;
+  position: fixed;
+  width: 100%;
+  z-index: 1001;
+}
+
+.receiverBackdrop::backdrop {
+  background: rgb(0 0 0 / 78%);
+}
+
+.receiverDialog {
+  background: #0b0b0f;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 1rem;
+  box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
+  max-height: calc(100dvh - 2rem);
+  max-width: 32rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0;
+  width: 100%;
+}
+
+.receiverHeader {
+  align-items: center;
+  border-block-end: 1px solid rgb(255 255 255 / 10%);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1rem 0.9rem 1.1rem;
+}
+
+.receiverHeader p,
+.receiverHeader h2 {
+  margin: 0;
+}
+
+.receiverHeader p {
+  color: rgb(255 255 255 / 48%);
+  font-size: 0.7rem;
+  font-weight: 620;
+  letter-spacing: 0.02em;
+}
+
+.receiverHeader h2 {
+  font-size: 1.05rem;
+  letter-spacing: -0.018em;
+  margin-block-start: 0.15rem;
+}
+
+.receiverHeader button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.6rem;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.receiverForm {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.1rem;
+}
+
+.receiverField {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.receiverField > span,
+.currentReceiver > span {
+  color: rgb(255 255 255 / 66%);
+  font-size: 0.72rem;
+  font-weight: 620;
+}
+
+.receiverForm input,
+.receiverForm select {
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 0.7rem;
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+  min-height: 3rem;
+  padding-inline: 0.8rem;
+  width: 100%;
+}
+
+.receiverForm input::placeholder {
+  color: rgb(255 255 255 / 34%);
+}
+
+.receiverForm input[aria-invalid="true"] {
+  border-color: #ff9d9d;
+}
+
+.currentReceiver {
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.8rem;
+}
+
+.currentReceiver code {
+  color: rgb(255 255 255 / 86%);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.currentReceiver small,
+.receiverHint,
+.receiverStatus,
+.receiverError {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.currentReceiver small,
+.receiverHint,
+.receiverStatus {
+  color: rgb(255 255 255 / 52%);
+}
+
+.receiverError,
+.receiverStatus[role="alert"] {
+  color: #ff9d9d;
+}
+
+.receiverStatus:empty {
+  display: none;
+}
+
+.receiverActions {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 1fr 1.3fr;
+  margin-block-start: 0.2rem;
+}
+
+.receiverActions button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.7rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  justify-content: center;
+  min-height: 3rem;
+  padding-inline: 0.9rem;
+}
+
+.receiverActions .receiverSubmit {
+  background: var(--brand-ivory, #f0eee8);
+  border-color: var(--brand-ivory, #f0eee8);
+  color: #0a0a0c;
+}
+
+.receiverActions button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .refresh:focus-visible,
 .pagination button:focus-visible,
 .actions button:focus-visible,
-.actions a:focus-visible {
+.actions a:focus-visible,
+.receiverHeader button:focus-visible,
+.receiverForm input:focus-visible,
+.receiverForm select:focus-visible,
+.receiverActions button:focus-visible {
   outline: 2px solid #8fc5ff;
   outline-offset: 2px;
 }
@@ -518,6 +735,19 @@
   }
 
   .actions button:not(:disabled):hover {
+    filter: brightness(0.94);
+  }
+
+  .actions .rewardReceiverAction:not(:disabled):hover,
+  .receiverHeader button:hover,
+  .receiverActions button:not(.receiverSubmit):hover {
+    background: var(--profile-subtle, rgb(255 255 255 / 6%));
+    border-color: var(--webde-line, rgb(255 255 255 / 18%));
+    color: var(--text, #fff);
+    filter: none;
+  }
+
+  .receiverActions .receiverSubmit:not(:disabled):hover {
     filter: brightness(0.94);
   }
 
@@ -563,6 +793,15 @@
   .actions {
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "article token";
+    min-width: 0;
+  }
+
+  .actions[data-reward-action="available"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "article token"
+      "receiver receiver";
     min-width: 0;
   }
 
@@ -579,6 +818,18 @@
   .openingDialog {
     border-radius: 1rem 1rem 0 0;
     border-width: 1px 0 0;
+    max-width: none;
+  }
+
+  .receiverBackdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .receiverDialog {
+    border-radius: 1rem 1rem 0 0;
+    border-width: 1px 0 0;
+    max-height: min(92dvh, 44rem);
     max-width: none;
   }
 }
@@ -604,6 +855,13 @@
 
   .openingProgress {
     animation: none;
+  }
+
+  .receiverDialog,
+  .receiverActions button,
+  .receiverForm input,
+  .receiverForm select {
+    scroll-behavior: auto;
   }
 
   .skeletonArt,
