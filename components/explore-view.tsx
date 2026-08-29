@@ -167,8 +167,12 @@ type ExploreRanking = Readonly<{
 }>;
 
 type ExploreCatalogBoundary = Readonly<{
-  source: "envio-classic-v3";
+  source: "envio-classic-v3" | "durable-blob";
   launchSource:
+    | "durable-blob"
+    | "durable-blob+registry.custom-launched"
+    | "durable-blob+canonical-launch-stamp-router"
+    | "durable-blob+registry.custom-launched+canonical-launch-stamp-router"
     | "registry.custom-launched"
     | "canonical-launch-stamp-router"
     | "registry.custom-launched+canonical-launch-stamp-router"
@@ -184,12 +188,12 @@ type ExploreCatalogBoundary = Readonly<{
   identityCommitment: `sha256:${string}`;
   completeness: Readonly<{
     classic: "current" | "last-known-good" | "unavailable";
-    stock: "excluded";
+    stock: "current" | "last-known-good" | "unavailable" | "excluded";
     custom: "current" | "last-known-good" | "unavailable";
     registryCustom?: "current" | "unavailable";
     routerCustom?: "current" | "last-known-good" | "unavailable";
   }>;
-  scope: Readonly<{
+  scope?: Readonly<{
     included: readonly (
       | "classic-v3"
       | "classic-v4"
@@ -213,6 +217,9 @@ type ExploreCatalogBoundary = Readonly<{
     progressBlock: string;
     progressOccurrenceId: string;
     commitment: `sha256:${string}`;
+  }> | Readonly<{
+    kind: "durable-envelope";
+    commitment: `0x${string}`;
   }>;
   routerStamp?: Readonly<{
     source: "canonical-launch-stamp-router";
@@ -1180,14 +1187,33 @@ function exactStringArray(value: unknown, expected: readonly string[]) {
 }
 
 function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
-  if (!isRecord(value) || !isRecord(value.completeness) ||
-    !isRecord(value.scope)) return null;
-  const envioEvidence = value.evidence === undefined
+  if (!isRecord(value) || !isRecord(value.completeness)) return null;
+  const evidence = value.evidence === undefined
     ? null
     : isRecord(value.evidence)
       ? value.evidence
       : null;
-  if (value.evidence !== undefined && envioEvidence === null) return null;
+  const scope = value.scope === undefined
+    ? null
+    : isRecord(value.scope)
+      ? value.scope
+      : null;
+  if (
+    (value.evidence !== undefined && evidence === null) ||
+    (value.scope !== undefined && scope === null)
+  ) return null;
+  const envioEvidence = evidence?.kind === "envio-indexer-state"
+    ? evidence
+    : null;
+  const durableEvidence = evidence?.kind === "durable-envelope"
+    ? evidence
+    : null;
+  if (evidence !== null && envioEvidence === null && durableEvidence === null) {
+    return null;
+  }
+  const durableSource = value.source === "durable-blob";
+  const envioSource = value.source === "envio-classic-v3";
+  if (!durableSource && !envioSource) return null;
   const hasSplitCustomStatus =
     value.completeness.registryCustom !== undefined ||
     value.completeness.routerCustom !== undefined;
@@ -1214,7 +1240,11 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
     CLASSIC_V4_PUBLIC_RELEASE_BINDING,
   );
   const expectedLaunchSource = [
-    ...(envioEvidence ? ["envio-classic-v3"] : []),
+    ...(durableSource
+      ? ["durable-blob"]
+      : envioEvidence
+        ? ["envio-classic-v3"]
+        : []),
     ...(registryCustomStatus === "current"
       ? ["registry.custom-launched"]
       : []),
@@ -1263,7 +1293,6 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
   ) return null;
   if (!hasSplitCustomStatus && routerStamp !== undefined) return null;
   if (
-    value.source !== "envio-classic-v3" ||
     value.launchSource !== expectedLaunchSource ||
     !["current", "last-known-good"].includes(String(value.status)) ||
     !exactIsoTimestamp(value.lastIndexedAt) ||
@@ -1278,7 +1307,11 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
     !["current", "last-known-good", "unavailable"].includes(
       String(value.completeness.classic),
     ) ||
-    value.completeness.stock !== "excluded" ||
+    (durableSource
+      ? !["current", "last-known-good", "unavailable"].includes(
+          String(value.completeness.stock),
+        )
+      : value.completeness.stock !== "excluded") ||
     !["current", "last-known-good", "unavailable"].includes(
       String(value.completeness.custom),
     ) ||
@@ -1290,20 +1323,30 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
               routerCustomStatus === "last-known-good"
             ? "last-known-good"
           : "unavailable")) ||
-    !exactStringArray(value.scope.included, expectedIncluded) ||
-    !exactStringArray(value.scope.excluded, [
-      "classic-v1",
-      "classic-v2",
-      "stock-paired-v1",
-      "stock-paired-v2",
-      "stock-paired-v3",
-    ]) ||
-    !exactStringArray(value.scope.publicCategories, ["classic", "custom"]) ||
-    (envioEvidence === null && (
+    (durableSource
+      ? scope !== null
+      : scope === null ||
+        !exactStringArray(scope.included, expectedIncluded) ||
+        !exactStringArray(scope.excluded, [
+          "classic-v1",
+          "classic-v2",
+          "stock-paired-v1",
+          "stock-paired-v2",
+          "stock-paired-v3",
+        ]) ||
+        !exactStringArray(scope.publicCategories, ["classic", "custom"])) ||
+    (durableSource && (
+      envioEvidence !== null ||
+      durableEvidence === null ||
+      typeof durableEvidence.commitment !== "string" ||
+      !/^0x[0-9a-f]{64}$/u.test(durableEvidence.commitment)
+    )) ||
+    (envioSource && durableEvidence !== null) ||
+    (envioSource && envioEvidence === null && (
       value.status !== "last-known-good" ||
       value.completeness.classic !== "unavailable"
     )) ||
-    (envioEvidence !== null && (
+    (envioSource && envioEvidence !== null && (
       envioEvidence.kind !== "envio-indexer-state" ||
       typeof envioEvidence.deployment !== "string" ||
       !/^[a-z0-9][a-z0-9-]{0,127}$/u.test(envioEvidence.deployment) ||
@@ -1334,6 +1377,12 @@ function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
         status: value.routerStamp.status,
         finalityConfirmations: value.routerStamp.finalityConfirmations,
       };
+  const envioEvidence = value.evidence?.kind === "envio-indexer-state"
+    ? value.evidence
+    : null;
+  const durableEvidence = value.evidence?.kind === "durable-envelope"
+    ? value.evidence
+    : null;
   return JSON.stringify({
     source: value.source,
     launchSource: value.launchSource,
@@ -1343,8 +1392,9 @@ function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
     completeness: value.completeness,
     scope: value.scope,
     routerStamp: routerStampBoundary,
-    deployment: value.evidence?.deployment ?? null,
-    sourceCommit: value.evidence?.sourceCommit ?? null,
+    deployment: envioEvidence?.deployment ?? null,
+    sourceCommit: envioEvidence?.sourceCommit ?? null,
+    durableCommitment: durableEvidence?.commitment ?? null,
   });
 }
 

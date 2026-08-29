@@ -507,6 +507,77 @@ describe("Explore refresh state", () => {
     });
   });
 
+  it("hydrates a bounded durable catalog during a cold Envio read", () => {
+    const durableFallback = {
+      ...payload,
+      catalog: {
+        source: "durable-blob" as const,
+        launchSource:
+          "durable-blob+canonical-launch-stamp-router" as const,
+        status: "last-known-good" as const,
+        lastIndexedAt: "2026-08-25T06:00:00.000Z",
+        asOfBlock: "25740001",
+        asOfBlockHash: `0x${"bc".repeat(32)}`,
+        identityCount: 351,
+        identityCommitment: `sha256:${"ac".repeat(32)}`,
+        completeness: {
+          classic: "last-known-good" as const,
+          stock: "last-known-good" as const,
+          custom: "unavailable" as const,
+          registryCustom: "unavailable" as const,
+          routerCustom: "current" as const,
+        },
+        evidence: {
+          kind: "durable-envelope" as const,
+          commitment: `0x${"cd".repeat(32)}`,
+        },
+        routerStamp: {
+          source: "canonical-launch-stamp-router" as const,
+          status: "current" as const,
+          finalityConfirmations: 64 as const,
+          verifiedIdentityCount: 1,
+          projectedIdentityCount: 1,
+          generatedAt: "2026-08-25T06:00:00.000Z",
+          asOfBlock: "25740001",
+          asOfBlockHash: `0x${"bc".repeat(32)}`,
+          identityCommitment: `sha256:${"ac".repeat(32)}`,
+        },
+      },
+    };
+
+    expect(createExploreInitialState(
+      { ok: true, body: durableFallback },
+      {
+        contentKey: "durable-fallback-content",
+        requestKey: "durable-fallback-request",
+        pageSize: EXPLORE_TOKENS_PER_PAGE,
+      },
+    )).toMatchObject({
+      phase: "ready",
+      payload: {
+        catalog: {
+          source: "durable-blob",
+          status: "last-known-good",
+        },
+      },
+    });
+
+    expect(createExploreInitialState({
+      ok: true,
+      body: {
+        ...durableFallback,
+        catalog: { ...durableFallback.catalog, evidence: undefined },
+      },
+    }, {
+      contentKey: "durable-fallback-invalid-content",
+      requestKey: "durable-fallback-invalid-request",
+      pageSize: EXPLORE_TOKENS_PER_PAGE,
+    })).toMatchObject({
+      phase: "error",
+      message: "The token registry returned invalid catalog data",
+    });
+  });
+
   it("surfaces a server-side Explore failure with explicit recovery", () => {
     const initialState = createExploreInitialState(
         {
