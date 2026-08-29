@@ -12,6 +12,10 @@ import {
   creatorArticleLinkLabelV1,
   creatorArticleLinkProviderV1,
 } from "@/components/creator-article-link-icon";
+import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
+  "@/lib/creator-article/programmable-example-v1";
+import { PROGRAMMABLE_MAIN_TOKEN_PRESENTATION } from
+  "@/lib/programmable-main-token-presentation";
 
 import styles from "./creator-article.module.css";
 
@@ -21,6 +25,34 @@ type CreatorArticleHeaderLinkV1 = Readonly<{
   href: string;
   label: string;
 }>;
+
+const PROGRAMMABLE_CURRENT_X =
+  PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.links.find(({ kind }) => kind === "x")!
+    .url;
+const PROGRAMMABLE_CURRENT_GITHUB =
+  PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.supplementalLinks.find(
+    ({ kind }) => kind === "github",
+  )!.url;
+
+function currentCreatorArticleHeaderLinkV1(
+  article: CreatorArticleV1,
+  link: CreatorArticleHeaderLinkV1,
+): CreatorArticleHeaderLinkV1 {
+  if (
+    article.chainId !== 1 ||
+    article.tokenAddress.toLowerCase() !==
+      PROGRAMMABLE_MAIN_TOKEN_ADDRESS.toLowerCase()
+  ) return link;
+  const normalized = link.href.toLowerCase().replace(/\/+$/u, "");
+  const href = normalized === "https://x.com/0xprogrammable"
+    ? PROGRAMMABLE_CURRENT_X
+    : normalized === "https://github.com/0xprogrammable"
+      ? PROGRAMMABLE_CURRENT_GITHUB
+      : link.href;
+  return href === link.href
+    ? link
+    : Object.freeze({ href, label: creatorArticleLinkLabelV1(href) });
+}
 
 export function CreatorArticle({
   article,
@@ -41,6 +73,9 @@ export function CreatorArticle({
     ) : null;
   }
   const headerContent = creatorArticleHeaderContentV1(article.document.content);
+  const headerLinks = headerContent.links.map((link) =>
+    currentCreatorArticleHeaderLinkV1(article, link)
+  );
   const updated = new Intl.DateTimeFormat("en", {
     year: "numeric",
     month: "short",
@@ -75,9 +110,9 @@ export function CreatorArticle({
         <time className={styles.updated} dateTime={article.updatedAt}>
           Updated {updated}
         </time>
-        {headerContent.links.length > 0 ? (
+        {headerLinks.length > 0 ? (
           <nav className={styles.socials} aria-label="Project links">
-            {headerContent.links.map((link) => (
+            {headerLinks.map((link) => (
               <a
                 href={link.href}
                 target="_blank"
