@@ -184,6 +184,23 @@ describe("interaction accessibility", () => {
     expect(source).toContain("menuButtonRef.current?.focus()");
   });
 
+  it("keeps the shared header disclosure focused without trapping the page", () => {
+    const source = readFileSync(
+      join(root, "components/site-navigation.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("onBlur={closeOnFocusLeave}");
+    expect(source).toContain("event.currentTarget.contains(event.relatedTarget)");
+    expect(source).toContain("header.contains(document.activeElement)");
+    expect(source).not.toContain(
+      '.querySelector<HTMLElement>("a, button:not(:disabled)")',
+    );
+    expect(source).toContain("focusConnectAfterDisconnectRef.current = true");
+    expect(source).toContain("node.focus({ preventScroll: true })");
+    expect(source).toContain("onConnect();\n        openWallet();");
+  });
+
   it("keeps the sticky header and its wallet disclosure above page content", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 

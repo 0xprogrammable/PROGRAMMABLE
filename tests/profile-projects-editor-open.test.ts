@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import * as profileProjects from "../components/profile-projects";
 import type {
-  CreatorProjectInitialBuyV1,
   CreatorProjectMarketCapV1,
   CreatorProjectSummaryV1,
 } from "../components/profile-projects";
@@ -117,9 +116,27 @@ describe("My projects editor opening", () => {
     expect(source).toContain("Future creator fees for this allocation");
     expect(viewSource).toContain("onChangeRewardReceiver={(reward, newReceiver, allocationIndex)");
     expect(viewSource).toContain("rewardReceiverActionKeyV1(reward.vaultAddress)");
-    expect(styles).toContain('grid-template-areas: "article receiver token"');
+    const receiverAction = source.indexOf(
+      "{canChangeRewardReceiver && manageableReward ? (",
+    );
+    const articleAction = source.indexOf(
+      "<span className={styles.articleActionSlot}>",
+    );
+    const tokenAction = source.indexOf(
+      "className={styles.viewTokenAction}",
+    );
+    expect(receiverAction).toBeGreaterThan(-1);
+    expect(articleAction).toBeGreaterThan(receiverAction);
+    expect(tokenAction).toBeGreaterThan(articleAction);
+    expect(styles).toContain('grid-template-areas: "receiver article token"');
     expect(styles).toMatch(
-      /grid-template-areas:\s*"article token"\s*"receiver receiver"/u,
+      /grid-template-areas:\s*"receiver receiver"\s*"article token"/u,
+    );
+    expect(styles).toMatch(
+      /\.actions button,\s*\.actions a\s*\{[^}]*background:\s*transparent;[^}]*border-color:/su,
+    );
+    expect(styles).not.toMatch(
+      /\.actions button\s*\{[^}]*background:\s*var\(--brand-ivory/u,
     );
   });
 
@@ -439,38 +456,29 @@ describe("My projects editor opening", () => {
     ]);
   });
 
-  it("shows the initial buy amount and immutable custody schedule", () => {
-    const format = (profileProjects as unknown as {
-      formatCreatorProjectInitialBuyV1(
-        initialBuy: CreatorProjectInitialBuyV1,
-        symbol: string | null,
-        now: number,
-      ): Readonly<{ amount: string; status: string; state: string }>;
-    }).formatCreatorProjectInitialBuyV1;
-    const lock = {
-      tokenAddress: project.tokenAddress,
-      ethAmountWei: "50000000000000000",
-      tokenAmountRaw: "34883942100954326694409764",
-      tokenDecimals: 18,
-      custodyAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const,
-      custodyMode: "fixed-lock" as const,
-      durationDays: 360,
-      cliffDays: 0,
-      cliffAt: "2027-08-18T08:32:59.000Z",
-      releaseAt: "2027-08-18T08:32:59.000Z",
-    };
+  it("keeps launch cards focused on identity, market cap, and actions", () => {
+    const source = readFileSync(
+      join(process.cwd(), "components/profile-projects.tsx"),
+      "utf8",
+    );
+    const viewSource = readFileSync(
+      join(process.cwd(), "components/profile-view.tsx"),
+      "utf8",
+    );
+    const styles = readFileSync(
+      join(process.cwd(), "components/profile-projects.module.css"),
+      "utf8",
+    );
 
-    expect(format(lock, "DIGITALCAT", Date.parse("2026-08-23T12:00:00Z")))
-      .toEqual({
-        amount: "Initial buy 0.05 ETH → 34.88M $DIGITALCAT",
-        status: "Locked until Aug 18, 2027",
-        state: "locked",
-      });
-    expect(format(
-      { ...lock, custodyAddress: null, custodyMode: "unlocked", durationDays: 0 },
-      "DIGITALCAT",
-      Date.parse("2026-08-23T12:00:00Z"),
-    )).toMatchObject({ status: "Unlocked at launch", state: "unlocked" });
+    expect(source).not.toContain("CreatorProjectInitialBuyV1");
+    expect(source).not.toContain("formatCreatorProjectInitialBuyV1");
+    expect(source).not.toContain("Initial buy ");
+    expect(source).toContain("Market cap ");
+    expect(source).toContain("project.partnerAttribution");
+    expect(source).toContain("project.article");
+    expect(viewSource).not.toContain("creatorProjectInitialBuys");
+    expect(viewSource).not.toContain("initialBuys={");
+    expect(styles).not.toContain(".initialBuy");
   });
 
   it("refreshes the Privy identity before reading the bound access token", async () => {

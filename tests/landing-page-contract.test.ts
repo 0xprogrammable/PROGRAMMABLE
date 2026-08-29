@@ -16,7 +16,7 @@ describe("landing page contract", () => {
     expect(explorePage).toContain("import { ExploreView }");
     expect(explorePage).toContain('canonical: "/explore"');
     expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore Projects" }',
+      '{ href: "/explore", label: "Explore" }',
     );
     expect(navigation).toContain('href="/"');
     expect(homePage).toContain(
@@ -202,7 +202,7 @@ describe("landing page contract", () => {
     const navigation = read("components/site-navigation.tsx");
 
     expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore Projects" }',
+      '{ href: "/explore", label: "Explore" }',
     );
     expect(navigation).not.toContain("prepareLandingExploreNavigation(");
     expect(navigation).not.toContain('window.history.pushState(null, "", "/#explore")');

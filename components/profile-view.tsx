@@ -22,7 +22,6 @@ import {
   creatorProjectPageSize,
   ProfileProjects,
   rewardReceiverActionKeyV1,
-  type CreatorProjectInitialBuyV1,
   type CreatorProjectMarketCapV1,
   type CreatorProjectSummaryV1,
 } from "@/components/profile-projects";
@@ -2182,12 +2181,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     })),
     [scopedOnchainData.tokens],
   );
-  const creatorProjectInitialBuys = useMemo<readonly CreatorProjectInitialBuyV1[]>(
-    () => scopedOnchainData.tokens.flatMap((token) => token.initialBuy
-      ? [{ tokenAddress: token.address, ...token.initialBuy }]
-      : []),
-    [scopedOnchainData.tokens],
-  );
   const creatorWalletProjects = useMemo<readonly CreatorProjectSummaryV1[]>(
     () => scopedOnchainData.tokens.map((token) => ({
       chainId: 1 as const,
@@ -3769,7 +3762,6 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             ? scopedClassicV3Rewards.rewards
             : []
         }
-        initialBuys={creatorProjectInitialBuys}
         marketCaps={creatorProjectMarketCaps}
         walletProjects={creatorWalletProjects}
         rewardReceiverActionStates={classicV3ActionStates}

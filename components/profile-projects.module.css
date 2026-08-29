@@ -391,69 +391,21 @@
   to { opacity: 0.9; }
 }
 
-.initialBuy {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  margin-block-start: 2px;
-  min-width: 0;
-}
-
-.initialBuy small {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-}
-
-.initialBuyStatus {
-  align-items: center;
-  display: inline-flex;
-  gap: 5px;
-}
-
-.initialBuyStatus::before {
-  background: currentcolor;
-  border-radius: 999px;
-  content: "";
-  flex: none;
-  height: 4px;
-  opacity: 0.8;
-  width: 4px;
-}
-
-.initialBuyStatus[data-state="locked"] {
-  color: #e6b46f;
-}
-
-.initialBuyStatus[data-state="vesting"] {
-  color: #9ec7ef;
-}
-
-.initialBuyStatus[data-state="unlocked"],
-.initialBuyStatus[data-state="complete"] {
-  color: #9bd2ae;
-}
-
 .actions {
   display: grid;
   gap: 6px;
-  grid-template-columns: 104px 84px;
-  grid-template-areas: "article token";
+  grid-template-columns: 164px 104px 84px;
+  grid-template-areas: "receiver article token";
   justify-content: flex-end;
-  min-width: 194px;
-}
-
-.actions[data-reward-action="available"] {
-  grid-template-columns: 104px 164px 84px;
-  grid-template-areas: "article receiver token";
   min-width: 364px;
 }
 
 .actions button,
 .actions a {
   align-items: center;
+  background: transparent;
   border-color: var(--webde-line, rgb(255 255 255 / 14%));
+  color: var(--text-soft, rgb(255 255 255 / 72%));
   display: inline-flex;
   justify-content: center;
   padding-inline: 12px;
@@ -491,18 +443,6 @@
 .articleActionState[data-state="loading"] {
   background: color-mix(in srgb, var(--text, #fff) 4%, transparent);
   border-radius: 10px;
-}
-
-.actions button {
-  background: var(--brand-ivory, #f0eee8);
-  border-color: var(--brand-ivory, #f0eee8);
-  color: #0a0a0c;
-}
-
-.actions .rewardReceiverAction {
-  background: transparent;
-  border-color: var(--webde-line, rgb(255 255 255 / 14%));
-  color: var(--text-soft, rgb(255 255 255 / 72%));
 }
 
 .articleAction[data-opening="true"]:disabled {
@@ -734,11 +674,7 @@
     color: var(--text, #fff);
   }
 
-  .actions button:not(:disabled):hover {
-    filter: brightness(0.94);
-  }
-
-  .actions .rewardReceiverAction:not(:disabled):hover,
+  .actions button:not(:disabled):hover,
   .receiverHeader button:hover,
   .receiverActions button:not(.receiverSubmit):hover {
     background: var(--profile-subtle, rgb(255 255 255 / 6%));
@@ -800,8 +736,8 @@
   .actions[data-reward-action="available"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      "article token"
-      "receiver receiver";
+      "receiver receiver"
+      "article token";
     min-width: 0;
   }
 

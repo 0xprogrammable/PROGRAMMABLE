@@ -5,6 +5,7 @@ import {
   useId,
   useRef,
   useState,
+  type FocusEvent,
   type MouseEvent,
 } from "react";
 import Image from "next/image";
@@ -24,10 +25,10 @@ import { useWallet } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
-  { href: "/explore", label: "Explore Projects" },
+  { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
-  { href: "/developers/api-keys", label: "API keys" },
   { href: "/docs", label: "Docs" },
+  { href: "/developers/api-keys", label: "API Keys" },
   { href: "/profile", label: "Profile" },
 ];
 
@@ -131,10 +132,10 @@ function ProgrammableAccountMark() {
 
 function HeaderAccountAction({
   menuOpen,
-  onNavigate,
+  onConnect,
 }: Readonly<{
   menuOpen: boolean;
-  onNavigate: () => void;
+  onConnect: () => void;
 }>) {
   const {
     wallet,
@@ -149,6 +150,7 @@ function HeaderAccountAction({
     preloadWallet,
   } = useWallet();
   const [disconnectError, setDisconnectError] = useState("");
+  const focusConnectAfterDisconnectRef = useRef(false);
 
   if (wallet) {
     return (
@@ -178,13 +180,14 @@ function HeaderAccountAction({
           tabIndex={menuOpen ? undefined : -1}
           onClick={async () => {
             setDisconnectError("");
+            focusConnectAfterDisconnectRef.current = true;
             const disconnected = await disconnect({
               showDialogOnFailure: false,
             });
             if (disconnected) {
-              onNavigate();
               return;
             }
+            focusConnectAfterDisconnectRef.current = false;
             setDisconnectError("Wallet could not be disconnected. Try again.");
           }}
         >
@@ -209,6 +212,11 @@ function HeaderAccountAction({
 
   return (
     <button
+      ref={(node) => {
+        if (!node || !focusConnectAfterDisconnectRef.current) return;
+        focusConnectAfterDisconnectRef.current = false;
+        if (menuOpen) node.focus({ preventScroll: true });
+      }}
       className={styles.connectWallet}
       type="button"
       disabled={!authReady || connecting}
@@ -216,7 +224,10 @@ function HeaderAccountAction({
       aria-busy={connecting || undefined}
       onFocus={preloadWallet}
       onPointerEnter={preloadWallet}
-      onClick={openWallet}
+      onClick={() => {
+        onConnect();
+        openWallet();
+      }}
     >
       <ProgrammableAccountMark />
       <span>{label}</span>
@@ -239,12 +250,37 @@ function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
   return pathname === activePath || pathname.startsWith(`${activePath}/`);
 }
 
+function DesktopNavigation() {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  return (
+    <nav className="desktop-nav" aria-label="Primary navigation">
+      {desktopNavItems.map((item) => {
+        const current = isCurrent(pathname, item);
+        return (
+          <Link
+            key={item.href}
+            className={current ? "active" : undefined}
+            href={item.href}
+            prefetch={false}
+            aria-current={current ? "page" : undefined}
+            onFocus={() => warmNavigationRoute(router, item.href)}
+            onPointerEnter={() => warmNavigationRoute(router, item.href)}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function SiteHeader() {
   const pathname = usePathname();
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const menuSurfaceRef = useRef<HTMLDivElement>(null);
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
 
@@ -265,12 +301,6 @@ export function SiteHeader() {
 
   useEffect(() => {
     if (!menuOpen) return;
-
-    window.requestAnimationFrame(() => {
-      menuSurfaceRef.current
-        ?.querySelector<HTMLElement>("a, button:not(:disabled)")
-        ?.focus({ preventScroll: true });
-    });
 
     const closeOnOutsidePress = (event: PointerEvent) => {
       if (
@@ -296,8 +326,27 @@ export function SiteHeader() {
     };
   }, [menuOpen]);
 
+  function closeOnFocusLeave(event: FocusEvent<HTMLElement>) {
+    if (!menuOpen) return;
+    if (
+      event.relatedTarget instanceof Node &&
+      event.currentTarget.contains(event.relatedTarget)
+    ) {
+      return;
+    }
+
+    const header = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      if (!header.contains(document.activeElement)) setMenuPath(null);
+    });
+  }
+
   return (
-    <header ref={headerRef} className={`site-header ${styles.siteHeader}`}>
+    <header
+      ref={headerRef}
+      className={`site-header ${styles.siteHeader}`}
+      onBlur={closeOnFocusLeave}
+    >
       <div className={`header-inner ${styles.headerInner}`}>
         <div className="header-brand">
           <Link
@@ -319,6 +368,8 @@ export function SiteHeader() {
           </Link>
         </div>
 
+        <DesktopNavigation />
+
         <div className={`header-actions ${styles.headerActions}`}>
           <button
             ref={menuButtonRef}
@@ -326,7 +377,7 @@ export function SiteHeader() {
             type="button"
             aria-controls={menuId}
             aria-expanded={menuOpen}
-            aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
             onClick={() => setMenuPath(menuOpen ? null : pathname)}
           >
             <span className={styles.menuIcon} aria-hidden="true">
@@ -349,13 +400,12 @@ export function SiteHeader() {
         inert={menuOpen ? undefined : true}
       >
         <div
-          ref={menuSurfaceRef}
           className={styles.mobileSheetSurface}
           id={menuId}
         >
           <HeaderAccountAction
             menuOpen={menuOpen}
-            onNavigate={() => setMenuPath(null)}
+            onConnect={() => setMenuPath(null)}
           />
           <MobileNavigation
             id={menuId}

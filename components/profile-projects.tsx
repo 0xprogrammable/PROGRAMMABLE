@@ -13,7 +13,7 @@ import {
   type FormEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { formatUnits, getAddress, isAddress } from "viem";
+import { getAddress, isAddress } from "viem";
 
 import {
   acquireCreatorArticleAuthHeadersV1,
@@ -63,19 +63,6 @@ export type CreatorProjectMarketCapV1 = Readonly<{
   usdWad: string | null;
   ethWei: string | null;
   label: string | null;
-}>;
-
-export type CreatorProjectInitialBuyV1 = Readonly<{
-  tokenAddress: `0x${string}`;
-  ethAmountWei: string;
-  tokenAmountRaw: string;
-  tokenDecimals: number;
-  custodyAddress: `0x${string}` | null;
-  custodyMode: "unlocked" | "fixed-lock" | "linear" | "cliff-linear";
-  durationDays: number;
-  cliffDays: number;
-  cliffAt: string;
-  releaseAt: string;
 }>;
 
 export type CreatorProjectOwnerStateV1 = Readonly<{
@@ -222,7 +209,6 @@ export async function loadCreatorProjectListV1(input: Readonly<{
 
 export function ProfileProjects({
   classicRewards = emptyClassicRewardsV1,
-  initialBuys = [],
   marketCaps = [],
   onChangeRewardReceiver,
   onRefresh,
@@ -231,7 +217,6 @@ export function ProfileProjects({
   walletProjects = [],
 }: Readonly<{
   classicRewards?: readonly ClassicV3Reward[];
-  initialBuys?: readonly CreatorProjectInitialBuyV1[];
   marketCaps?: readonly CreatorProjectMarketCapV1[];
   onChangeRewardReceiver?: (
     reward: ClassicV3Reward,
@@ -392,12 +377,6 @@ export function ProfileProjects({
   const marketCapByToken = useMemo(() => new Map(
     marketCaps.map((marketCap) => [marketCap.tokenAddress.toLowerCase(), marketCap]),
   ), [marketCaps]);
-  const initialBuyByToken = useMemo(() => new Map(
-    initialBuys.map((initialBuy) => [
-      initialBuy.tokenAddress.toLowerCase(),
-      initialBuy,
-    ]),
-  ), [initialBuys]);
   const manageableClassicRewardsByToken = useMemo(
     () => manageableClassicRewardsByTokenV1(classicRewards, walletAccount),
     [classicRewards, walletAccount],
@@ -569,12 +548,6 @@ export function ProfileProjects({
       ) : (
         <div className={styles.list}>
           {pageData.items.map((project) => {
-            const initialBuy = initialBuyByToken.get(
-              project.tokenAddress.toLowerCase(),
-            );
-            const initialBuyLabel = initialBuy
-              ? formatCreatorProjectInitialBuyV1(initialBuy, project.symbol)
-              : null;
             const launchType =
               project.source === "registry.custom-launched" ||
               project.source === "canonical-launch-stamp-router"
@@ -623,17 +596,6 @@ export function ProfileProjects({
                     compact
                   />
                 ) : null}
-                {initialBuyLabel ? (
-                  <div className={styles.initialBuy}>
-                    <small>{initialBuyLabel.amount}</small>
-                    <small
-                      className={styles.initialBuyStatus}
-                      data-state={initialBuyLabel.state}
-                    >
-                      {initialBuyLabel.status}
-                    </small>
-                  </div>
-                ) : null}
               </div>
               <div
                 className={styles.actions}
@@ -641,6 +603,26 @@ export function ProfileProjects({
                   canChangeRewardReceiver ? "available" : "unavailable"
                 }
               >
+                {canChangeRewardReceiver && manageableReward ? (
+                  <button
+                    className={styles.rewardReceiverAction}
+                    type="button"
+                    aria-busy={
+                      rewardReceiverActionBusyV1(scopedReceiverState) ||
+                      undefined
+                    }
+                    onClick={(event) => {
+                      rewardReceiverTriggerRef.current = event.currentTarget;
+                      setRewardReceiverEditor({
+                        ownerAccount: walletAccount,
+                        project,
+                        reward: manageableReward,
+                      });
+                    }}
+                  >
+                    {rewardReceiverTriggerLabelV1(scopedReceiverState)}
+                  </button>
+                ) : null}
                 <span className={styles.articleActionSlot}>
                   {canEditArticle ? (
                     <button
@@ -669,26 +651,6 @@ export function ProfileProjects({
                     </span>
                   )}
                 </span>
-                {canChangeRewardReceiver && manageableReward ? (
-                  <button
-                    className={styles.rewardReceiverAction}
-                    type="button"
-                    aria-busy={
-                      rewardReceiverActionBusyV1(scopedReceiverState) ||
-                      undefined
-                    }
-                    onClick={(event) => {
-                      rewardReceiverTriggerRef.current = event.currentTarget;
-                      setRewardReceiverEditor({
-                        ownerAccount: walletAccount,
-                        project,
-                        reward: manageableReward,
-                      });
-                    }}
-                  >
-                    {rewardReceiverTriggerLabelV1(scopedReceiverState)}
-                  </button>
-                ) : null}
                 <Link
                   className={styles.viewTokenAction}
                   href={`/token/${project.tokenAddress}`}
@@ -1117,70 +1079,6 @@ export function mergeCreatorWalletProjectsV1(
     byToken.set(project.tokenAddress.toLowerCase(), project);
   }
   return Object.freeze([...byToken.values()]);
-}
-
-export function formatCreatorProjectInitialBuyV1(
-  initialBuy: CreatorProjectInitialBuyV1,
-  symbol: string | null,
-  now = Date.now(),
-) {
-  const ethAmount = Number(formatUnits(BigInt(initialBuy.ethAmountWei), 18));
-  const tokenAmount = Number(formatUnits(
-    BigInt(initialBuy.tokenAmountRaw),
-    initialBuy.tokenDecimals,
-  ));
-  const ethLabel = Number.isFinite(ethAmount)
-    ? new Intl.NumberFormat("en-US", { maximumSignificantDigits: 6 }).format(ethAmount)
-    : formatUnits(BigInt(initialBuy.ethAmountWei), 18);
-  const tokenLabel = Number.isFinite(tokenAmount)
-    ? new Intl.NumberFormat("en-US", {
-        compactDisplay: "short",
-        maximumFractionDigits: 2,
-        notation: "compact",
-      }).format(tokenAmount)
-    : formatUnits(BigInt(initialBuy.tokenAmountRaw), initialBuy.tokenDecimals);
-  const ticker = symbol ? `$${symbol}` : "tokens";
-  const date = (value: string) => new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(value));
-  const releaseTime = Date.parse(initialBuy.releaseAt);
-  const cliffTime = Date.parse(initialBuy.cliffAt);
-  if (initialBuy.custodyMode === "unlocked") {
-    return Object.freeze({
-      amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
-      status: "Unlocked at launch",
-      state: "unlocked" as const,
-    });
-  }
-  if (initialBuy.custodyMode === "fixed-lock") {
-    return Object.freeze({
-      amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
-      status: now < releaseTime
-        ? `Locked until ${date(initialBuy.releaseAt)}`
-        : `Lock ended ${date(initialBuy.releaseAt)}`,
-      state: now < releaseTime ? "locked" as const : "complete" as const,
-    });
-  }
-  if (
-    initialBuy.custodyMode === "cliff-linear" &&
-    now < cliffTime
-  ) {
-    return Object.freeze({
-      amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
-      status: `Cliff until ${date(initialBuy.cliffAt)} · vests by ${date(initialBuy.releaseAt)}`,
-      state: "locked" as const,
-    });
-  }
-  return Object.freeze({
-    amount: `Initial buy ${ethLabel} ETH → ${tokenLabel} ${ticker}`,
-    status: now < releaseTime
-      ? `Vesting until ${date(initialBuy.releaseAt)}`
-      : `Vesting ended ${date(initialBuy.releaseAt)}`,
-    state: now < releaseTime ? "vesting" as const : "complete" as const,
-  });
 }
 
 function parseProjectList(value: unknown): readonly CreatorProjectSummaryV1[] {
