@@ -150,7 +150,85 @@ test("V4 pack schema accepts a 3-target Robinhood general-hook graph", () => {
   const config = baseConfig();
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
   config.targets.push({ ...config.targets[2], targetId: "fourth" });
+  config.targets.sort((left, right) => compareUtf8(left.targetId, right.targetId));
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
+});
+
+test("V4 programmable-order semantics fail closed for every declared machine rule", () => {
+  const declaredRules = new Set();
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    if (typeof value["x-programmable-order"] === "string") {
+      declaredRules.add(value["x-programmable-order"]);
+    }
+    Object.values(value).forEach(visit);
+  };
+  for (const schema of publicSchemas.values()) visit(schema);
+  assert.deepEqual([...declaredRules].sort(compareUtf8), [
+    "Safe atomicRootStateEvidenceDigest == permitAuthority result stateEvidenceDigest",
+    "UTF-8 role, NUL, lowercase address; unique",
+    "caller-declared-and-hash-bound",
+    "dependency-topological with UTF-8 tie-break",
+    "ethereumFinalizedCheckpoint.blockNumber >= postingBlockNumber",
+    "previousBlockNumber + 1 == startBlock; previousBlockNumber == providerReadbacks[*].previousBlockNumber; previousBlockHash == providerReadbacks[*].previousBlockHash; startBlock == providerReadbacks[*].blockNumber; blockHash == providerReadbacks[*].blockHash; providerReadbacks[0].rawTransactionDigest == providerReadbacks[1].rawTransactionDigest; providerReadbacks[0].transactionDigest == providerReadbacks[1].transactionDigest; providerReadbacks[0].transactionReceiptDigest == providerReadbacks[1].transactionReceiptDigest",
+    "providerReadbacks[0].blockHash == providerReadbacks[1].blockHash",
+    "resultingContracts providerReadbacks prove blockNumber - 1 -> blockNumber",
+    "strictly increasing logIndex; unique",
+    "unique UTF-8 ascending",
+  ].sort(compareUtf8));
+  for (const rule of declaredRules) {
+    assert.equal(validateProgrammableOrder(rule, null), false, `${rule} rejects malformed input`);
+  }
+  assert.equal(validateProgrammableOrder("unknown rule", []), false);
+
+  const externalContracts = [
+    { role: "alpha", address: "0x2222222222222222222222222222222222222222" },
+    { role: "beta", address: "0x1111111111111111111111111111111111111111" },
+  ];
+  assert.equal(validateProgrammableOrder(
+    "UTF-8 role, NUL, lowercase address; unique",
+    externalContracts,
+  ), true);
+  assert.equal(validateProgrammableOrder(
+    "UTF-8 role, NUL, lowercase address; unique",
+    externalContracts.toReversed(),
+  ), false);
+
+  const targets = [
+    { targetId: "alpha", constructorArguments: [] },
+    { targetId: "beta", constructorArguments: [{ target: "alpha" }] },
+  ];
+  assert.equal(validateProgrammableOrder(
+    "dependency-topological with UTF-8 tie-break",
+    targets,
+  ), true);
+  assert.equal(validateProgrammableOrder(
+    "dependency-topological with UTF-8 tie-break",
+    targets.toReversed(),
+  ), false);
+  assert.equal(validateProgrammableOrder(
+    "dependency-topological with UTF-8 tie-break",
+    [{ targetId: "alpha", constructorArguments: [{ target: "missing" }] }],
+  ), false);
+
+  const steps = [{ stepId: "first" }, { stepId: "second" }];
+  assert.equal(validateProgrammableOrder("caller-declared-and-hash-bound", steps), true);
+  assert.equal(validateProgrammableOrder(
+    "caller-declared-and-hash-bound",
+    steps.toReversed(),
+  ), true, "caller order remains intentional rather than sorted");
+  assert.equal(validateProgrammableOrder(
+    "caller-declared-and-hash-bound",
+    [{ stepId: "duplicate" }, { stepId: "duplicate" }],
+  ), false);
+
+  assert.equal(validateProgrammableOrder("unique UTF-8 ascending", ["alpha", "beta"]), true);
+  assert.equal(validateProgrammableOrder("unique UTF-8 ascending", ["beta", "alpha"]), false);
+  assert.equal(validateProgrammableOrder("unique UTF-8 ascending", ["alpha", "alpha"]), false);
 });
 
 test("V4 pack schema rejects cross-chain, trust-root, profile, funding, and graph bypasses", () => {
@@ -281,6 +359,35 @@ test("V4 chain deployment schema locks atomic, registry, Permit2, Safe, and fina
     ["external root provider block disagreement", (deployment) => {
       deployment.externalRootDeploymentEvidence[0].providerReadbacks[1].blockHash =
         `0x${"a".repeat(64)}`;
+    }],
+    ["external root top predecessor hash relabel", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].previousBlockHash = `0x${"b".repeat(64)}`;
+    }],
+    ["external root provider predecessor hash disagreement", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].providerReadbacks[1].previousBlockHash =
+        `0x${"b".repeat(64)}`;
+    }],
+    ["external root top block hash relabel", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].blockHash = `0x${"b".repeat(64)}`;
+    }],
+    ["external root provider block hash disagreement", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].providerReadbacks[1].blockHash =
+        `0x${"b".repeat(64)}`;
+    }],
+    ["external root predecessor number drift", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].previousBlockNumber = "9068";
+    }],
+    ["external root raw transaction digest disagreement", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].providerReadbacks[1].rawTransactionDigest =
+        `sha256:${"b".repeat(64)}`;
+    }],
+    ["external root transaction digest disagreement", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].providerReadbacks[1].transactionDigest =
+        `sha256:${"b".repeat(64)}`;
+    }],
+    ["external root receipt digest disagreement", (deployment) => {
+      deployment.externalRootDeploymentEvidence[0].providerReadbacks[1]
+        .transactionReceiptDigest = `sha256:${"b".repeat(64)}`;
     }],
     ["unknown external root evidence field", (deployment) => {
       deployment.externalRootDeploymentEvidence[0].sourceCommitment =
@@ -669,7 +776,6 @@ function baseConfig() {
     },
     compilationUnits: [{ compilationUnitId: "unit", standardJson: "standard-json.json" }],
     targets: [
-      { ...target, targetId: "token", componentKind: "token" },
       {
         ...target,
         targetId: "hook",
@@ -677,6 +783,7 @@ function baseConfig() {
         declaredHookPermissions: ["beforeSwap"],
       },
       { ...target, targetId: "initializer" },
+      { ...target, targetId: "token", componentKind: "token" },
     ],
     pool: {
       tokenTargetId: "token",
@@ -756,45 +863,144 @@ function machineContractAjv() {
 }
 
 function validateProgrammableOrder(rule, value) {
+  if (rule === "UTF-8 role, NUL, lowercase address; unique") {
+    if (!Array.isArray(value)) return false;
+    const keys = value.map((entry) => {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)
+        || typeof entry.role !== "string" || typeof entry.address !== "string") return null;
+      return `${entry.role}\0${entry.address.toLowerCase()}`;
+    });
+    return keys.every((key, index) => key !== null
+      && (index === 0 || compareUtf8(keys[index - 1], key) < 0));
+  }
+  if (rule === "dependency-topological with UTF-8 tie-break") {
+    if (!Array.isArray(value)) return false;
+    const byId = new Map();
+    for (const target of value) {
+      if (target === null || typeof target !== "object" || Array.isArray(target)
+        || typeof target.targetId !== "string" || byId.has(target.targetId)
+        || !Array.isArray(target.constructorArguments)) return false;
+      byId.set(target.targetId, target);
+    }
+    const indegree = new Map([...byId.keys()].map((targetId) => [targetId, 0]));
+    const dependents = new Map([...byId.keys()].map((targetId) => [targetId, new Set()]));
+    for (const target of value) {
+      const dependencies = new Set();
+      collectTargetReferences(target.constructorArguments, dependencies);
+      if (dependencies.has(target.targetId)) return false;
+      for (const dependency of dependencies) {
+        if (!byId.has(dependency)) return false;
+        dependents.get(dependency).add(target.targetId);
+      }
+      indegree.set(target.targetId, dependencies.size);
+    }
+    const ready = [...indegree.entries()]
+      .filter(([, count]) => count === 0)
+      .map(([targetId]) => targetId)
+      .sort(compareUtf8);
+    const orderedIds = [];
+    while (ready.length > 0) {
+      const targetId = ready.shift();
+      orderedIds.push(targetId);
+      for (const dependent of [...dependents.get(targetId)].sort(compareUtf8)) {
+        const remaining = indegree.get(dependent) - 1;
+        indegree.set(dependent, remaining);
+        if (remaining === 0) {
+          ready.push(dependent);
+          ready.sort(compareUtf8);
+        }
+      }
+    }
+    return orderedIds.length === value.length
+      && orderedIds.every((targetId, index) => targetId === value[index].targetId);
+  }
+  if (rule === "caller-declared-and-hash-bound") {
+    if (!Array.isArray(value)) return false;
+    const stepIds = new Set();
+    for (const step of value) {
+      if (step === null || typeof step !== "object" || Array.isArray(step)
+        || typeof step.stepId !== "string" || stepIds.has(step.stepId)) return false;
+      stepIds.add(step.stepId);
+    }
+    return true;
+  }
+  if (rule === "unique UTF-8 ascending") {
+    return Array.isArray(value) && value.every((entry, index) => typeof entry === "string"
+      && (index === 0 || compareUtf8(value[index - 1], entry) < 0));
+  }
+  if (rule
+    === "previousBlockNumber + 1 == startBlock; "
+      + "previousBlockNumber == providerReadbacks[*].previousBlockNumber; "
+      + "previousBlockHash == providerReadbacks[*].previousBlockHash; "
+      + "startBlock == providerReadbacks[*].blockNumber; "
+      + "blockHash == providerReadbacks[*].blockHash; "
+      + "providerReadbacks[0].rawTransactionDigest == providerReadbacks[1].rawTransactionDigest; "
+      + "providerReadbacks[0].transactionDigest == providerReadbacks[1].transactionDigest; "
+      + "providerReadbacks[0].transactionReceiptDigest == providerReadbacks[1].transactionReceiptDigest") {
+    const providerReadbacks = value?.providerReadbacks;
+    if (!Array.isArray(providerReadbacks) || providerReadbacks.length !== 2) return false;
+    const [primary, secondary] = providerReadbacks;
+    if (primary === null || typeof primary !== "object" || Array.isArray(primary)
+      || secondary === null || typeof secondary !== "object" || Array.isArray(secondary)
+      || typeof value?.previousBlockNumber !== "string"
+      || !/^(?:0|[1-9][0-9]*)$/u.test(value.previousBlockNumber)
+      || typeof value?.previousBlockHash !== "string"
+      || typeof value?.startBlock !== "string"
+      || !/^[1-9][0-9]*$/u.test(value.startBlock)
+      || typeof value?.blockHash !== "string"
+      || typeof primary.rawTransactionDigest !== "string"
+      || typeof secondary.rawTransactionDigest !== "string"
+      || typeof primary.transactionDigest !== "string"
+      || typeof secondary.transactionDigest !== "string"
+      || typeof primary.transactionReceiptDigest !== "string"
+      || typeof secondary.transactionReceiptDigest !== "string") return false;
+    return BigInt(value.previousBlockNumber) + 1n === BigInt(value.startBlock)
+      && primary.previousBlockNumber === value.previousBlockNumber
+      && secondary.previousBlockNumber === value.previousBlockNumber
+      && primary.previousBlockHash === value.previousBlockHash
+      && secondary.previousBlockHash === value.previousBlockHash
+      && primary.blockNumber === value.startBlock
+      && secondary.blockNumber === value.startBlock
+      && primary.blockHash === value.blockHash
+      && secondary.blockHash === value.blockHash
+      && primary.rawTransactionDigest === secondary.rawTransactionDigest
+      && primary.transactionDigest === secondary.transactionDigest
+      && primary.transactionReceiptDigest === secondary.transactionReceiptDigest;
+  }
   if (rule === "strictly increasing logIndex; unique") {
-    if (!Array.isArray(value)) return true;
+    if (!Array.isArray(value)) return false;
     const indexes = value.map((entry) => entry?.logIndex);
     if (indexes.some((index) => typeof index !== "string"
-      || !/^(?:0|[1-9][0-9]*)$/u.test(index))) return true;
+      || !/^(?:0|[1-9][0-9]*)$/u.test(index))) return false;
     return indexes.every((index, position) => position === 0
       || BigInt(index) > BigInt(indexes[position - 1]));
   }
   if (rule === "providerReadbacks[0].blockHash == providerReadbacks[1].blockHash") {
-    const [primary, secondary] = Array.isArray(value?.providerReadbacks)
-      ? value.providerReadbacks
-      : [];
+    const providerReadbacks = value?.providerReadbacks;
+    if (!Array.isArray(providerReadbacks) || providerReadbacks.length !== 2) return false;
+    const [primary, secondary] = providerReadbacks;
     if (typeof primary?.blockHash !== "string"
-      || typeof secondary?.blockHash !== "string") return true;
+      || typeof secondary?.blockHash !== "string") return false;
     return primary.blockHash === secondary.blockHash;
-  }
-  if (rule
-    === "blockHash == providerReadbacks[0].blockHash == providerReadbacks[1].blockHash") {
-    const [primary, secondary] = Array.isArray(value?.providerReadbacks)
-      ? value.providerReadbacks
-      : [];
-    if (typeof value?.blockHash !== "string"
-      || typeof primary?.blockHash !== "string"
-      || typeof secondary?.blockHash !== "string") return true;
-    return value.blockHash === primary.blockHash
-      && value.blockHash === secondary.blockHash;
   }
   if (rule
     === "resultingContracts providerReadbacks prove blockNumber - 1 -> blockNumber") {
     if (typeof value?.blockNumber !== "string"
       || !/^[1-9][0-9]*$/u.test(value.blockNumber)
       || typeof value?.blockHash !== "string"
-      || !Array.isArray(value?.resultingContracts)) return true;
+      || !Array.isArray(value?.resultingContracts)
+      || value.resultingContracts.length === 0) return false;
     const predecessorBlockNumber = (BigInt(value.blockNumber) - 1n).toString(10);
     return value.resultingContracts.every((result) => {
-      const [primary, secondary] = Array.isArray(result?.providerReadbacks)
-        ? result.providerReadbacks
-        : [];
-      return primary !== undefined && secondary !== undefined
+      if (result === null || typeof result !== "object" || Array.isArray(result)
+        || typeof result.contract !== "string" || typeof result.address !== "string"
+        || typeof result.previousBlockRuntimeCodeHash !== "string"
+        || typeof result.runtimeCodeHash !== "string"
+        || !Array.isArray(result.providerReadbacks)
+        || result.providerReadbacks.length !== 2) return false;
+      const [primary, secondary] = result.providerReadbacks;
+      return primary !== null && typeof primary === "object" && !Array.isArray(primary)
+        && secondary !== null && typeof secondary === "object" && !Array.isArray(secondary)
         && primary.preDeploymentBlockNumber === predecessorBlockNumber
         && secondary.preDeploymentBlockNumber === predecessorBlockNumber
         && primary.preDeploymentBlockHash === secondary.preDeploymentBlockHash
@@ -818,21 +1024,36 @@ function validateProgrammableOrder(rule, value) {
       ?.configurationEvidence?.atomicRootStateEvidenceDigest;
     const resultDigest = value?.deploymentEvidence?.resultingContracts?.[0]
       ?.stateEvidenceDigest;
-    if (typeof safeDigest !== "string" || typeof resultDigest !== "string") return true;
+    if (typeof safeDigest !== "string" || typeof resultDigest !== "string") return false;
     return safeDigest === resultDigest;
   }
-  if (rule !== "ethereumFinalizedCheckpoint.blockNumber >= postingBlockNumber") {
-    return true;
+  if (rule === "ethereumFinalizedCheckpoint.blockNumber >= postingBlockNumber") {
+    const postingBlockNumber = value?.postingBlockNumber;
+    const finalizedBlockNumber = value?.ethereumFinalizedCheckpoint?.blockNumber;
+    if (typeof postingBlockNumber !== "string"
+      || !/^(?:0|[1-9][0-9]*)$/u.test(postingBlockNumber)
+      || typeof finalizedBlockNumber !== "string"
+      || !/^(?:0|[1-9][0-9]*)$/u.test(finalizedBlockNumber)) return false;
+    return BigInt(finalizedBlockNumber) >= BigInt(postingBlockNumber);
   }
-  const postingBlockNumber = value?.postingBlockNumber;
-  const finalizedBlockNumber = value?.ethereumFinalizedCheckpoint?.blockNumber;
-  if (typeof postingBlockNumber !== "string"
-    || !/^(?:0|[1-9][0-9]*)$/u.test(postingBlockNumber)
-    || typeof finalizedBlockNumber !== "string"
-    || !/^(?:0|[1-9][0-9]*)$/u.test(finalizedBlockNumber)) {
-    return true;
+  return false;
+}
+
+function compareUtf8(left, right) {
+  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
+function collectTargetReferences(value, targetIds) {
+  if (Array.isArray(value)) {
+    for (const entry of value) collectTargetReferences(entry, targetIds);
+    return;
   }
-  return BigInt(finalizedBlockNumber) >= BigInt(postingBlockNumber);
+  if (value === null || typeof value !== "object") return;
+  if (Object.keys(value).length === 1 && typeof value.target === "string") {
+    targetIds.add(value.target);
+    return;
+  }
+  for (const entry of Object.values(value)) collectTargetReferences(entry, targetIds);
 }
 
 function framedSha256Json(domain, value) {
@@ -1014,6 +1235,16 @@ function fixtureFromSchema(schema, root = schema, index = 0) {
         entry.contract = contractEnum[entryIndex % contractEnum.length];
       }
       entries.push(entry);
+    }
+    if (schema["x-programmable-order"] === "dependency-topological with UTF-8 tie-break") {
+      entries.sort((left, right) => compareUtf8(left.targetId, right.targetId));
+    } else if (schema["x-programmable-order"] === "UTF-8 role, NUL, lowercase address; unique") {
+      entries.sort((left, right) => compareUtf8(
+        `${left.role}\0${left.address.toLowerCase()}`,
+        `${right.role}\0${right.address.toLowerCase()}`,
+      ));
+    } else if (schema["x-programmable-order"] === "unique UTF-8 ascending") {
+      entries.sort(compareUtf8);
     }
     return entries;
   }

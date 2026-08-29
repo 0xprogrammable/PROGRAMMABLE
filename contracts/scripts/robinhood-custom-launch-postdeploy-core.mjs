@@ -2,12 +2,16 @@ import { spawnSync } from "node:child_process";
 import { realpathSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { getAddress } from "viem";
+import { encodeAbiParameters, getAddress, parseAbiParameters } from "viem";
 
-import { canonicalizeJson } from "../../packages/launch/src/canonical-json.mjs";
+import {
+  canonicalizeJson,
+  parseStrictJson,
+} from "../../packages/launch/src/canonical-json.mjs";
 import {
   assertExactKeys,
   compareUtf8,
+  decodeExactUtf8,
   resolveInside,
   sha256Digest,
 } from "../../packages/launch/src/io.mjs";
@@ -25,16 +29,42 @@ import {
   computeV4ProfileEvidenceDigest,
   computeV4ReleaseManifestDigest,
   computeV4SourceClosureDigest,
+  validateV4BackendReleaseEvidence,
 } from "../../scripts/programmable-launch-v4-release-binding.mjs";
+import {
+  ROBINHOOD_CAPTURE_CLOSURE_SCHEMA,
+  validateRobinhoodProductionCapture,
+} from "./robinhood-custom-launch-capture-v2.mjs";
+import {
+  validateRobinhoodBackendAuthorization,
+  validateRobinhoodBackendCaptureAuthorization,
+  validateRobinhoodBackendPromotionPublicInput,
+} from "./robinhood-backend-promotion-v1.mjs";
 
 export const ROBINHOOD_POSTDEPLOYMENT_INPUT_SCHEMA =
-  "programmable.robinhood-custom-launch.postdeployment-input.v1";
+  "programmable.robinhood-custom-launch.postdeployment-input.v3";
+export const ROBINHOOD_STAGE_BUNDLE_SCHEMA =
+  "programmable.robinhood-custom-launch.stage-bundle.v1";
 export const ROBINHOOD_PROMOTION_BUNDLE_SCHEMA =
-  "programmable.robinhood-custom-launch.promotion-bundle.v1";
+  "programmable.robinhood-custom-launch.promotion-bundle.v2";
+export const ROBINHOOD_STAGE_BUNDLE_PATH =
+  "release/robinhood-chain-4663/programmable-stage-bundle.json";
+export const ROBINHOOD_PROMOTION_BUNDLE_PATH =
+  "release/robinhood-chain-4663/programmable-promotion-bundle.json";
 export const ROBINHOOD_LIVE_DEPLOYMENT_PATH =
   "contracts/deployments/robinhood-custom-launch-v1.json";
 export const ROBINHOOD_PREDEPLOYMENT_PATH =
   "contracts/deployments/robinhood-custom-launch-v1.predeployment.json";
+export const ROBINHOOD_BACKEND_CHAIN_DEPLOYMENT_PATH =
+  "release/robinhood-v4-chain-deployment.v1.json";
+export const ROBINHOOD_BACKEND_SOURCE_MANIFEST_PATH =
+  "release/robinhood-v4-prepared-root-source-manifest.v1.json";
+export const ROBINHOOD_BACKEND_STANDARD_JSON_PATHS = Object.freeze({
+  router:
+    "release/assets/robinhood-v4/ProgrammableLaunchStampRouterV1.standard-input.json",
+  graphFactory:
+    "release/assets/robinhood-v4/ProgrammableCreate2GraphDeployerV1.standard-input.json",
+});
 
 const PREDEPLOYMENT_SHA256 =
   "sha256:2d58b964232d345f82aa7c7d58e678df03bf83828b9d95da42f3cd54ab03319e";
@@ -190,16 +220,33 @@ const DOMAINS = Object.freeze({
   deploymentEvidence: "programmable.custom-launch-deployment-evidence.v1",
   permit2Readback: "programmable.custom-launch-genesis-provider-readback.v1",
   permit2: "programmable.custom-launch-genesis-provenance.v1",
-  externalReadback: "programmable.custom-launch-deployment-provider-readback.v1",
+  externalReadback: "programmable.custom-launch-deployment-provider-readback.v2",
   sourceVerification:
-    "programmable.robinhood-custom-launch.source-verification-closure.v1",
-  bundle: ROBINHOOD_PROMOTION_BUNDLE_SCHEMA,
+    "programmable.robinhood-custom-launch.source-verification-closure.v4",
+  backendReleaseAssets:
+    "programmable.robinhood-custom-launch.backend-release-assets.v1",
+  stageBundle: ROBINHOOD_STAGE_BUNDLE_SCHEMA,
+  promotionBundle: ROBINHOOD_PROMOTION_BUNDLE_SCHEMA,
 });
 
 const PROVIDERS = Object.freeze([
   Object.freeze({ providerId: "drpc", trustDomain: "drpc.org" }),
   Object.freeze({ providerId: "alchemy", trustDomain: "alchemy.com" }),
 ]);
+
+function assertJsonBytesMatch(value, bytes, label, maximumBytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.byteLength < 1 || bytes.byteLength > maximumBytes) {
+    throw new TypeError(`${label} bytes are empty or exceed the bounded input limit`);
+  }
+  const parsed = parseStrictJson(decodeExactUtf8(bytes, `${label} bytes`), {
+    maximumBytes,
+    maximumDepth: 256,
+  });
+  if (canonicalizeJson(parsed) !== canonicalizeJson(value)) {
+    throw new TypeError(`${label} object differs from its exact authorized bytes`);
+  }
+  return bytes;
+}
 
 function framedSha256(domain, value) {
   return sha256Digest(Buffer.concat([
@@ -526,12 +573,16 @@ function normalizePermit2Genesis(value, label) {
 
 function normalizeExternalRoot(value, label, contract) {
   assertExactKeys(value, [
-    "contract", "address", "runtimeCodeHash", "transactionHash", "startBlock",
-    "blockHash", "transactionReceiptDigest",
+    "contract", "address", "preStartBlockNumber", "preStartBlockHash",
+    "preStartBlockRuntimeCodeHash", "runtimeCodeHash", "transactionHash",
+    "rawTransactionDigest", "transactionDigest", "startBlock", "blockHash",
+    "transactionReceiptDigest",
   ], label);
   const expected = EXTERNAL_ROOTS[contract];
   if (value.contract !== contract || value.transactionHash !== expected.transactionHash
-    || value.startBlock !== expected.startBlock) {
+    || value.startBlock !== expected.startBlock
+    || value.preStartBlockNumber !== (BigInt(expected.startBlock) - 1n).toString(10)
+    || value.preStartBlockRuntimeCodeHash !== EMPTY_RUNTIME_CODE_HASH) {
     throw new TypeError(`${label} differs from the pinned Uniswap deployment tuple`);
   }
   return {
@@ -547,6 +598,14 @@ function normalizeExternalRoot(value, label, contract) {
       `${label}.transactionHash`,
       expected.transactionHash,
     ),
+    rawTransactionDigest: exactSha256(
+      value.rawTransactionDigest,
+      `${label}.rawTransactionDigest`,
+    ),
+    transactionDigest: exactSha256(value.transactionDigest, `${label}.transactionDigest`),
+    preStartBlockNumber: value.preStartBlockNumber,
+    preStartBlockHash: exactHex32(value.preStartBlockHash, `${label}.preStartBlockHash`),
+    preStartBlockRuntimeCodeHash: EMPTY_RUNTIME_CODE_HASH,
     startBlock: expected.startBlock,
     blockHash: exactHex32(value.blockHash, `${label}.blockHash`),
     transactionReceiptDigest: exactSha256(
@@ -638,7 +697,8 @@ function normalizeFinalityInput(value, profile, blockNumber, blockHash) {
     "schemaVersion", "l2Checkpoint", "batchNumber", "l2Providers",
     "ethereumProviders", "rollup", "sequencerInbox", "postingTransactionHash",
     "postingBlockNumber", "postingBlockHash", "postingLogIndex",
-    "ethereumFinalizedCheckpoint", "observedAt",
+    "ethereumFinalizedCheckpoint", "observedAt", "captureClosureDigest",
+    "postingEventDigest", "l1EvidenceDigest",
   ], label);
   assertExactKeys(value.l2Checkpoint, ["blockNumber", "blockHash"], `${label}.l2Checkpoint`);
   assertExactKeys(
@@ -723,6 +783,18 @@ function normalizeFinalityInput(value, profile, blockNumber, blockHash) {
       tag: "finalized",
     },
     observedAt: isoDate(value.observedAt, `${label}.observedAt`),
+    captureClosureDigest: exactSha256(
+      value.captureClosureDigest,
+      `${label}.captureClosureDigest`,
+    ),
+    postingEventDigest: exactSha256(
+      value.postingEventDigest,
+      `${label}.postingEventDigest`,
+    ),
+    l1EvidenceDigest: exactSha256(
+      value.l1EvidenceDigest,
+      `${label}.l1EvidenceDigest`,
+    ),
   };
   return { ...normalized, evidenceDigest: framedSha256(DOMAINS.finality, normalized) };
 }
@@ -731,7 +803,7 @@ function normalizeSourceVerification(value) {
   const label = "sourceVerification";
   assertExactKeys(value, [
     "schemaVersion", "provider", "graphFactory", "programmableLaunchStampRouter",
-    "permitAuthority",
+    "permitAuthority", "sourceVerificationClosureDigest",
   ], label);
   if (value.schemaVersion !== DOMAINS.sourceVerification || value.provider !== "sourcify-v2") {
     throw new TypeError(`${label} must use the exact Sourcify V2 closure`);
@@ -756,26 +828,52 @@ function normalizeSourceVerification(value) {
     const entryLabel = `${label}.${name}`;
     const entry = value[name];
     assertExactKeys(entry, [
-      "chainId", "address", "match", "standardJsonInputPath",
-      "standardJsonInputSha256", "verificationResponseDigest",
+      "chainId", "address", "match", "creationMatch", "runtimeMatch", "observedAt",
+      "compiler", "sourceFilesDigest", "urlPath", "httpStatus",
+      "contentType", "standardJsonInputPath",
+      "standardJsonInputSha256", "normalizedVerificationDigest",
     ], entryLabel);
-    if (entry.chainId !== CHAIN_ID || entry.match !== "exact"
+    assertExactKeys(entry.compiler, [
+      "language", "compiler", "compilerVersion", "name", "fullyQualifiedName",
+      "compilerSettingsDigest",
+    ], `${entryLabel}.compiler`);
+    if (entry.chainId !== CHAIN_ID || entry.match !== "exact_match"
+      || entry.creationMatch !== "exact_match" || entry.runtimeMatch !== "exact_match"
+      || entry.httpStatus !== 200 || entry.contentType !== "application/json"
       || entry.standardJsonInputPath !== expected.standardJsonInputPath) {
       throw new TypeError(`${entryLabel} is not the exact prepared compiler input match`);
     }
     return [name, {
       chainId: CHAIN_ID,
       address: exactAddress(entry.address, `${entryLabel}.address`, expected.address),
-      match: "exact",
+      match: "exact_match",
+      creationMatch: "exact_match",
+      runtimeMatch: "exact_match",
+      observedAt: isoDate(entry.observedAt, `${entryLabel}.observedAt`),
+      compiler: {
+        language: entry.compiler.language,
+        compiler: entry.compiler.compiler,
+        compilerVersion: entry.compiler.compilerVersion,
+        name: entry.compiler.name,
+        fullyQualifiedName: entry.compiler.fullyQualifiedName,
+        compilerSettingsDigest: exactSha256(
+          entry.compiler.compilerSettingsDigest,
+          `${entryLabel}.compiler.compilerSettingsDigest`,
+        ),
+      },
+      sourceFilesDigest: exactSha256(entry.sourceFilesDigest, `${entryLabel}.sourceFilesDigest`),
+      urlPath: entry.urlPath,
+      httpStatus: 200,
+      contentType: "application/json",
       standardJsonInputPath: expected.standardJsonInputPath,
       standardJsonInputSha256: exactSha256(
         entry.standardJsonInputSha256,
         `${entryLabel}.standardJsonInputSha256`,
         expected.standardJsonInputSha256,
       ),
-      verificationResponseDigest: exactSha256(
-        entry.verificationResponseDigest,
-        `${entryLabel}.verificationResponseDigest`,
+      normalizedVerificationDigest: exactSha256(
+        entry.normalizedVerificationDigest,
+        `${entryLabel}.normalizedVerificationDigest`,
       ),
     }];
   }));
@@ -804,6 +902,10 @@ function normalizeSourceVerification(value) {
         SAFE_SOURCE_COMMITMENT,
       ),
     },
+    sourceVerificationClosureDigest: exactSha256(
+      value.sourceVerificationClosureDigest,
+      `${label}.sourceVerificationClosureDigest`,
+    ),
   };
   return {
     ...normalized,
@@ -890,6 +992,11 @@ function buildExternalRootEvidence(providers) {
         providerId: provider.providerId,
         trustDomain: provider.trustDomain,
         transactionHash: expected.transactionHash,
+        rawTransactionDigest: observed.rawTransactionDigest,
+        transactionDigest: observed.transactionDigest,
+        previousBlockNumber: observed.preStartBlockNumber,
+        previousBlockHash: observed.preStartBlockHash,
+        previousBlockRuntimeCodeHash: observed.preStartBlockRuntimeCodeHash,
         blockNumber: expected.startBlock,
         blockHash: observed.blockHash,
         runtimeCodeHash: expected.runtimeCodeHash,
@@ -901,9 +1008,13 @@ function buildExternalRootEvidence(providers) {
       };
     });
     if (providerReadbacks[0].blockHash !== providerReadbacks[1].blockHash
+      || providerReadbacks[0].previousBlockHash !== providerReadbacks[1].previousBlockHash
+      || providerReadbacks[0].rawTransactionDigest
+        !== providerReadbacks[1].rawTransactionDigest
+      || providerReadbacks[0].transactionDigest !== providerReadbacks[1].transactionDigest
       || providerReadbacks[0].transactionReceiptDigest
         !== providerReadbacks[1].transactionReceiptDigest) {
-      throw new TypeError(`${contract} providers disagree on its deployment receipt`);
+      throw new TypeError(`${contract} providers disagree on its exact deployment transition`);
     }
     const normalized = {
       schemaVersion: DOMAINS.deploymentEvidence,
@@ -912,6 +1023,9 @@ function buildExternalRootEvidence(providers) {
       address: expected.address,
       runtimeCodeHash: expected.runtimeCodeHash,
       transactionHash: expected.transactionHash,
+      previousBlockNumber: providerReadbacks[0].previousBlockNumber,
+      previousBlockHash: providerReadbacks[0].previousBlockHash,
+      previousBlockRuntimeCodeHash: EMPTY_RUNTIME_CODE_HASH,
       startBlock: expected.startBlock,
       blockHash: providerReadbacks[0].blockHash,
       registrySource: UNISWAP_REGISTRY_SOURCE,
@@ -1042,10 +1156,82 @@ function buildAtomicDeploymentEvidence(providers, results, ethereumFinalityEvide
   };
 }
 
-export function buildRobinhoodChainDeployment({ input, profile }) {
+function finalityFromCapture(captureClosure) {
+  const posting = captureClosure.postingEvent;
+  return {
+    schemaVersion: "programmable.robinhood-l2-checkpoint-ethereum-finality-input.v1",
+    l2Checkpoint: structuredClone(captureClosure.l2Checkpoint),
+    batchNumber: captureClosure.batchNumber,
+    l2Providers: captureClosure.l2ProviderReadbacks.map((entry) => ({
+      providerId: entry.identity.providerId,
+      trustDomain: entry.identity.trustDomain,
+      l1Confirmations: entry.l1Confirmations,
+    })),
+    ethereumProviders: captureClosure.ethereumProviderReadbacks.map((entry) => ({
+      providerId: entry.identity.providerId,
+      trustDomain: entry.identity.trustDomain,
+    })),
+    rollup: ROLLUP,
+    sequencerInbox: SEQUENCER_INBOX,
+    postingTransactionHash: posting.transactionHash,
+    postingBlockNumber: posting.blockNumber,
+    postingBlockHash: posting.blockHash,
+    postingLogIndex: posting.logIndex,
+    ethereumFinalizedCheckpoint: structuredClone(captureClosure.ethereumFinalizedCheckpoint),
+    observedAt: captureClosure.observedAt,
+    captureClosureDigest: captureClosure.captureClosureDigest,
+    postingEventDigest: framedSha256(
+      "programmable.robinhood-custom-launch.sequencer-posting-event.v1",
+      posting,
+    ),
+    l1EvidenceDigest: framedSha256(
+      "programmable.robinhood-custom-launch.ethereum-finality-readbacks.v1",
+      captureClosure.ethereumProviderReadbacks,
+    ),
+  };
+}
+
+function sourceVerificationFromCapture(captureClosure) {
+  const entries = Object.fromEntries(captureClosure.sourcify.map((entry) => [entry.contract, {
+    chainId: entry.chainId,
+    address: entry.address,
+    match: entry.match,
+    creationMatch: entry.creationMatch,
+    runtimeMatch: entry.runtimeMatch,
+    observedAt: entry.observedAt,
+    compiler: structuredClone(entry.compiler),
+    sourceFilesDigest: entry.sourceFilesDigest,
+    urlPath: entry.urlPath,
+    httpStatus: entry.httpStatus,
+    contentType: entry.contentType,
+    standardJsonInputPath: entry.standardJsonInputPath,
+    standardJsonInputSha256: entry.standardJsonInputSha256,
+    normalizedVerificationDigest: entry.normalizedVerificationDigest,
+  }]));
+  return {
+    schemaVersion: DOMAINS.sourceVerification,
+    provider: "sourcify-v2",
+    ...entries,
+    permitAuthority: {
+      address: ROOTS.permitAuthority.address,
+      kind: "official-source-pinned",
+      sourceCommitment: SAFE_SOURCE_COMMITMENT,
+    },
+    sourceVerificationClosureDigest: captureClosure.sourceVerificationClosureDigest,
+  };
+}
+
+export async function buildRobinhoodChainDeployment({
+  input,
+  inputBytes,
+  profile,
+  repositoryRoot,
+  captureAuthorization,
+  captureDependencies = {},
+}) {
+  assertJsonBytesMatch(input, inputBytes, "postdeployment input", 128 * 1024 * 1024);
   assertExactKeys(input, [
-    "schemaVersion", "chainDeploymentId", "providers", "ethereumFinality",
-    "sourceVerification", "sourceClosure",
+    "schemaVersion", "chainDeploymentId", "providers", "sourceClosure", "capture",
   ], "postdeployment input");
   if (input.schemaVersion !== ROBINHOOD_POSTDEPLOYMENT_INPUT_SCHEMA
     || input.chainDeploymentId !== CHAIN_DEPLOYMENT_ID
@@ -1057,10 +1243,19 @@ export function buildRobinhoodChainDeployment({ input, profile }) {
   deepEqual(providers[0].receipt, providers[1].receipt, "foundation receipt");
   deepEqual(providers[0].routerState, providers[1].routerState, "Router finalized state");
   deepEqual(providers[0].multicall3, providers[1].multicall3, "Multicall3 finalized code");
+  const captureClosure = await validateRobinhoodProductionCapture({
+    capture: input.capture,
+    captureBytes: inputBytes,
+    repositoryRoot,
+    normalizedProviders: providers,
+    authorization: captureAuthorization,
+    readFile: (root, relativePath) => readFileSync(resolveInside(root, relativePath)),
+    ...captureDependencies,
+  });
   const blockNumber = providers[0].transaction.blockNumber;
   const blockHash = providers[0].transaction.blockHash;
   const ethereumFinalityEvidence = normalizeFinalityInput(
-    input.ethereumFinality,
+    finalityFromCapture(captureClosure),
     profile,
     blockNumber,
     blockHash,
@@ -1096,20 +1291,21 @@ export function buildRobinhoodChainDeployment({ input, profile }) {
     ])),
   };
   const normalizedDescriptor = normalizeV4ChainDeployment(descriptor);
-  const sourceVerification = normalizeSourceVerification(input.sourceVerification);
+  const sourceVerificationInput = sourceVerificationFromCapture(captureClosure);
+  const sourceVerification = normalizeSourceVerification(sourceVerificationInput);
   return {
     descriptor: normalizedDescriptor,
     chainDeploymentDescriptorDigest: hashV4ChainDeployment(normalizedDescriptor),
     providers,
     sourceVerification,
+    captureClosure,
     sourceClosureInput: input.sourceClosure,
     normalizedInput: {
       schemaVersion: ROBINHOOD_POSTDEPLOYMENT_INPUT_SCHEMA,
       chainDeploymentId: CHAIN_DEPLOYMENT_ID,
       providers,
-      ethereumFinality: input.ethereumFinality,
-      sourceVerification: input.sourceVerification,
       sourceClosure: input.sourceClosure,
+      captureClosureDigest: captureClosure.captureClosureDigest,
     },
   };
 }
@@ -1125,7 +1321,13 @@ function git(repositoryRoot, args, label) {
   return result.stdout;
 }
 
-function buildSourceClosure(repositoryRoot, input, foundationSourceCommitment) {
+function buildSourceClosure(
+  repositoryRoot,
+  input,
+  foundationSourceCommitment,
+  sourceVerificationClosureDigest,
+  { historicalReplay = false } = {},
+) {
   assertExactKeys(input, ["repository", "branch", "revision", "tree"], "sourceClosure");
   if (input.repository !== "programmablehq/PROGRAMMABLE" || input.branch !== "production"
     || typeof input.revision !== "string" || !/^[0-9a-f]{40}$/u.test(input.revision)
@@ -1145,11 +1347,22 @@ function buildSourceClosure(repositoryRoot, input, foundationSourceCommitment) {
   if (revision !== input.revision || tree !== input.tree) {
     throw new TypeError("sourceClosure revision or tree does not resolve exactly");
   }
-  git(
+  const head = git(repositoryRoot, ["rev-parse", "--verify", "HEAD^{commit}"],
+    "source closure HEAD").toString("utf8").trim();
+  const protectedRemote = git(
     repositoryRoot,
-    ["merge-base", "--is-ancestor", revision, "refs/heads/production"],
-    "source closure revision is not on local production",
-  );
+    ["rev-parse", "--verify", "refs/remotes/origin/production^{commit}"],
+    "source closure protected origin/production",
+  ).toString("utf8").trim();
+  if (historicalReplay) {
+    git(repositoryRoot, ["merge-base", "--is-ancestor", revision, head],
+      "source closure protected ancestry");
+    if (protectedRemote !== head) {
+      throw new TypeError("source closure requires protected origin/production at current HEAD");
+    }
+  } else if (head !== revision || protectedRemote !== revision) {
+    throw new TypeError("source closure requires HEAD and protected origin/production at revision");
+  }
   const paths = [...V4_RELEASE_REQUIRED_SOURCE_PATHS].sort(compareUtf8);
   const entries = paths.map((relativePath) => {
     const currentBytes = readFileSync(resolveInside(repositoryRoot, relativePath));
@@ -1170,11 +1383,17 @@ function buildSourceClosure(repositoryRoot, input, foundationSourceCommitment) {
   const normalized = {
     schemaVersion: "programmable.launch-cli-v4-source-closure.v1",
     repository: "programmablehq/PROGRAMMABLE",
+    repositoryId: "1314365508",
     branch: "production",
+    protectedRef: "refs/heads/production",
     revision,
     tree,
     foundationSourceCommitment,
     entries,
+    sourceVerificationClosureDigest: exactSha256(
+      sourceVerificationClosureDigest,
+      "source verification response closure digest",
+    ),
     sourceClosureDigest: null,
   };
   normalized.sourceClosureDigest = computeV4SourceClosureDigest(normalized);
@@ -1256,28 +1475,9 @@ function buildReleaseBinding({ template, descriptor, descriptorDigest, sourceClo
     finalityEvidenceDigest: null,
   };
   finality.finalityEvidenceDigest = computeV4FinalityEvidenceDigest(finality);
-  const manifest = {
-    schemaVersion: "programmable.launch-cli-v4-release-manifest.v1",
-    releaseIdentity: structuredClone(template.releaseIdentity),
-    chainId: CHAIN_ID,
-    caip2: CAIP2,
-    chainDeploymentId: CHAIN_DEPLOYMENT_ID,
-    chainDeploymentDescriptorDigest: descriptorDigest,
-    chainDeploymentBindingDigest: deployment.bindingDigest,
-    profileEvidenceDigest: profile.profileEvidenceDigest,
-    sourceRevision: sourceClosure.revision,
-    sourceTree: sourceClosure.tree,
-    sourceClosureDigest: sourceClosure.sourceClosureDigest,
-    deploymentTransactionHash: atomic.transactionHash,
-    deploymentBlockHash: atomic.blockHash,
-    finalityEvidenceDigest: finality.finalityEvidenceDigest,
-    machineContracts: template.machineContracts.map(({ name, sha256 }) => ({ name, sha256 })),
-    releaseManifestDigest: null,
-  };
-  manifest.releaseManifestDigest = computeV4ReleaseManifestDigest(manifest);
   return {
     ...structuredClone(template),
-    releaseReady: true,
+    releaseReady: false,
     chain: {
       chainId: CHAIN_ID,
       caip2: CAIP2,
@@ -1287,15 +1487,141 @@ function buildReleaseBinding({ template, descriptor, descriptorDigest, sourceClo
     evidence: {
       chainDeployment: deployment,
       profile,
-      manifest,
+      manifest: null,
       source: sourceClosure,
       finality,
+      backend: null,
     },
-    blockers: [],
+    blockers: ["releaseManifestEvidence", "backendReleaseEvidence"],
   };
 }
 
-function buildConsumerInputs({ descriptor, descriptorDigest, binding, sourceVerification }) {
+function buildBackendReleaseAssets({
+  repositoryRoot,
+  descriptor,
+  descriptorDigest,
+  captureClosure,
+}) {
+  const sourceByContract = Object.fromEntries(
+    captureClosure.sourcify.map((entry) => [entry.contract, entry]),
+  );
+  const transactionHash = descriptor.deploymentEvidence.transactionHash;
+  const finalizedBlockNumber = descriptor.deploymentEvidence.blockNumber;
+  const chainDeployment = artifact(ROBINHOOD_BACKEND_CHAIN_DEPLOYMENT_PATH, descriptor);
+  const targets = [
+    {
+      contract: "router",
+      captureKey: "programmableLaunchStampRouter",
+      targetId: "robinhood-v4-programmable-launch-stamp-router",
+      backendPath: ROBINHOOD_BACKEND_STANDARD_JSON_PATHS.router,
+      constructorArguments: encodeAbiParameters(parseAbiParameters("address,address,address"), [
+        descriptor.contracts.permitAuthority.address,
+        descriptor.contracts.graphFactory.address,
+        descriptor.contracts.poolManager.address,
+      ]),
+    },
+    {
+      contract: "graphFactory",
+      captureKey: "graphFactory",
+      targetId: "robinhood-v4-programmable-create2-graph-deployer",
+      backendPath: ROBINHOOD_BACKEND_STANDARD_JSON_PATHS.graphFactory,
+      constructorArguments: "0x",
+    },
+  ];
+  const standardJsonInputs = targets.map((target) => {
+    const source = sourceByContract[target.captureKey];
+    if (source === undefined) {
+      throw new TypeError(`backend source asset is missing ${target.captureKey}`);
+    }
+    const bytes = readFileSync(resolveInside(repositoryRoot, source.standardJsonInputPath));
+    if (sha256Digest(bytes) !== source.standardJsonInputSha256) {
+      throw new TypeError(`backend source asset changed for ${target.captureKey}`);
+    }
+    return {
+      target,
+      source,
+      artifact: binaryArtifact(target.backendPath, bytes),
+    };
+  });
+  const jobs = standardJsonInputs.map(({ target, source }) => ({
+    contract: target.contract,
+    verificationJobId:
+      `robinhood-v4-${target.contract}-${captureClosure.captureId.slice(0, 16)}`,
+    requestId: captureClosure.captureId,
+    attemptNumber: 1,
+    targetId: target.targetId,
+    address: source.address,
+    expectedRuntimeCodeHash: descriptor.contracts[target.captureKey].runtimeCodeHash,
+    compilerVersion: source.compiler.compilerVersion,
+    standardJsonInputPath: target.backendPath.slice("release/".length),
+    standardJsonInputSha256: source.standardJsonInputSha256,
+    sourcePath: source.compiler.fullyQualifiedName.split(":", 1)[0],
+    contractName: source.compiler.name,
+    constructorArguments: target.constructorArguments,
+    artifactHash: framedSha256(
+      "programmable.robinhood-custom-launch.backend-source-job-artifact.v1",
+      {
+        chainDeploymentDescriptorDigest: descriptorDigest,
+        contract: target.contract,
+        address: source.address,
+        runtimeCodeHash: descriptor.contracts[target.captureKey].runtimeCodeHash,
+        standardJsonInputSha256: source.standardJsonInputSha256,
+      },
+    ),
+    verificationBundleHash: captureClosure.sourceVerificationClosureDigest,
+    finalizedBlockNumber,
+    creationTransactionHash: transactionHash,
+  }));
+  const sourceManifest = artifact(ROBINHOOD_BACKEND_SOURCE_MANIFEST_PATH, {
+    schemaVersion: "programmable.robinhood-prepared-root-source-manifest.v1",
+    providerProfileDigest: captureClosure.profileDigest,
+    jobs,
+  });
+  const normalized = {
+    schemaVersion: DOMAINS.backendReleaseAssets,
+    state: "phase-a-closed",
+    publicAuthorization: false,
+    chainDeploymentDescriptorDigest: descriptorDigest,
+    chainDeployment: {
+      path: chainDeployment.path,
+      sha256: chainDeployment.sha256,
+      byteLength: chainDeployment.byteLength,
+    },
+    preparedRootSourceManifest: {
+      path: sourceManifest.path,
+      sha256: sourceManifest.sha256,
+      byteLength: sourceManifest.byteLength,
+    },
+    standardJsonInputs: standardJsonInputs.map(({ target, artifact: value }) => ({
+      contract: target.contract,
+      path: value.path,
+      sha256: value.sha256,
+      byteLength: value.byteLength,
+    })),
+    backendRuntimeReadinessRequired: true,
+    flyControlPlaneReceiptRequired: true,
+  };
+  return {
+    closure: {
+      ...normalized,
+      backendReleaseAssetsDigest: framedSha256(DOMAINS.backendReleaseAssets, normalized),
+    },
+    artifacts: {
+      chainDeployment,
+      preparedRootSourceManifest: sourceManifest,
+      standardJsonInputs: standardJsonInputs.map(({ artifact: value }) => value),
+    },
+  };
+}
+
+function buildConsumerInputs({
+  descriptor,
+  descriptorDigest,
+  binding,
+  sourceVerification,
+  captureClosure,
+  backendReleaseAssets,
+}) {
   const atomic = descriptor.deploymentEvidence;
   const source = binding.evidence.source;
   const finalityEvidence = binding.evidence.finality;
@@ -1312,6 +1638,9 @@ function buildConsumerInputs({ descriptor, descriptorDigest, binding, sourceVeri
   return {
     indexer: {
       schemaVersion: "programmable.robinhood-custom-launch.indexer-bootstrap.v1",
+      status: "closed-awaiting-backend-readiness",
+      publicAuthorization: false,
+      publicWrites: false,
       chainId: CHAIN_ID,
       caip2: CAIP2,
       chainDeploymentId: CHAIN_DEPLOYMENT_ID,
@@ -1327,20 +1656,39 @@ function buildConsumerInputs({ descriptor, descriptorDigest, binding, sourceVeri
       sourceRevision: source.revision,
       sourceTree: source.tree,
       sourceClosureDigest: source.sourceClosureDigest,
+      sourceVerificationClosureDigest: source.sourceVerificationClosureDigest,
+      captureClosureDigest: captureClosure.captureClosureDigest,
+      backendReleaseAssetsDigest: backendReleaseAssets.backendReleaseAssetsDigest,
+      backendPromotionPublicInputDigest: null,
+      backendPromotionInputDigest: null,
+      backendReleaseEvidenceDigest: null,
+      backendAuthorizationDigest: null,
+      releaseManifestDigest: null,
+      postingEventDigest: descriptor.deploymentEvidence.ethereumFinalityEvidence.postingEventDigest,
       standardJsonInputs,
     },
     cli: {
       schemaVersion: "programmable.robinhood-custom-launch.cli-promotion-input.v1",
+      status: "closed-awaiting-backend-readiness",
+      publicAuthorization: false,
+      publicWrites: false,
       chainDeploymentId: CHAIN_DEPLOYMENT_ID,
       chainDeploymentDescriptorDigest: descriptorDigest,
       chainDeploymentPath: ROBINHOOD_LIVE_DEPLOYMENT_PATH,
       releaseBindingPath: V4_RELEASE_BINDING_PATH,
       profile: structuredClone(binding.releaseIdentity.profile),
-      releaseManifestDigest: binding.evidence.manifest.releaseManifestDigest,
+      releaseManifestDigest: null,
+      captureClosureDigest: captureClosure.captureClosureDigest,
+      sourceVerificationClosureDigest: source.sourceVerificationClosureDigest,
+      backendReleaseAssetsDigest: backendReleaseAssets.backendReleaseAssetsDigest,
+      backendPromotionPublicInputDigest: null,
+      backendPromotionInputDigest: null,
+      backendReleaseEvidenceDigest: null,
+      backendAuthorizationDigest: null,
     },
     developers: {
       schemaVersion: "programmable.robinhood-custom-launch.developers-promotion-input.v1",
-      status: "ethereum-finalized-source-closed",
+      status: "closed-awaiting-backend-readiness",
       publicAuthorization: false,
       publicWrites: false,
       chainId: CHAIN_ID,
@@ -1355,9 +1703,41 @@ function buildConsumerInputs({ descriptor, descriptorDigest, binding, sourceVeri
       finalityPolicy: FINALITY,
       roots: structuredClone(descriptor.contracts),
       sourceVerificationEvidenceDigest: sourceVerification.evidenceDigest,
+      sourceVerificationClosureDigest: source.sourceVerificationClosureDigest,
+      captureClosureDigest: captureClosure.captureClosureDigest,
+      postingEventDigest: descriptor.deploymentEvidence.ethereumFinalityEvidence.postingEventDigest,
+      backendReleaseAssetsDigest: backendReleaseAssets.backendReleaseAssetsDigest,
+      backendPromotionPublicInputDigest: null,
+      backendPromotionInputDigest: null,
+      backendReleaseEvidenceDigest: null,
+      backendAuthorizationDigest: null,
+      releaseManifestDigest: null,
+      backendRuntimeReadinessRequired: true,
+      flyControlPlaneReceiptRequired: true,
       sourceRevision: source.revision,
       sourceTree: source.tree,
       sourceClosureDigest: source.sourceClosureDigest,
+    },
+    backend: {
+      schemaVersion: "programmable.robinhood-custom-launch.backend-release-input.v1",
+      state: "phase-a-closed",
+      publicAuthorization: false,
+      chainId: CHAIN_ID,
+      chainDeploymentId: CHAIN_DEPLOYMENT_ID,
+      chainDeploymentDescriptorDigest: descriptorDigest,
+      backendReleaseAssetsDigest: backendReleaseAssets.backendReleaseAssetsDigest,
+      backendPromotionPublicInputDigest: null,
+      backendPromotionInputDigest: null,
+      backendReleaseEvidenceDigest: null,
+      backendAuthorizationDigest: null,
+      chainDeployment: structuredClone(backendReleaseAssets.chainDeployment),
+      preparedRootSourceManifest:
+        structuredClone(backendReleaseAssets.preparedRootSourceManifest),
+      standardJsonInputs: structuredClone(backendReleaseAssets.standardJsonInputs),
+      runtimeReadinessPath: "/v4/chains/4663/readiness",
+      runtimeReadinessSchemaVersion:
+        "programmable.custom-launch-api-release-identity.v4",
+      flyControlPlaneReceiptRequired: true,
     },
   };
 }
@@ -1372,18 +1752,65 @@ function artifact(pathValue, value) {
   };
 }
 
-export function materializeRobinhoodPromotionBundle({ repositoryRoot, input }) {
+function binaryArtifact(pathValue, bytes) {
+  return {
+    path: pathValue,
+    sha256: sha256Digest(bytes),
+    byteLength: String(bytes.byteLength),
+    bytesBase64: Buffer.from(bytes).toString("base64"),
+  };
+}
+
+async function buildRobinhoodStageBundle({
+  repositoryRoot,
+  input,
+  inputBytes = canonicalJsonBytes(input),
+  captureAuthorization,
+  captureDependencies = {},
+}, { historicalReplay }) {
   const root = realpathSync(path.resolve(repositoryRoot));
   const prepared = readPreparedArtifact(root);
-  const templateAudit = auditV4ReleaseBinding({ repositoryRoot: root });
+  const sourceRevision = input?.sourceClosure?.revision;
+  if (typeof sourceRevision !== "string" || !/^[0-9a-f]{40}$/u.test(sourceRevision)) {
+    throw new TypeError("stage source revision is invalid");
+  }
+  const templateAudit = historicalReplay
+    ? auditV4ReleaseBinding({
+        repositoryRoot: root,
+        bindingBytes: git(
+          root,
+          ["show", `${sourceRevision}:${V4_RELEASE_BINDING_PATH}`],
+          "historical release binding template",
+        ),
+      })
+    : auditV4ReleaseBinding({ repositoryRoot: root });
   const template = templateAudit.binding;
   const profile = normalizeV4ProfileRef(template.releaseIdentity.profile);
-  const deployment = buildRobinhoodChainDeployment({ input, profile });
+  const deployment = await buildRobinhoodChainDeployment({
+    input,
+    inputBytes,
+    profile,
+    repositoryRoot: root,
+    captureAuthorization,
+    captureDependencies,
+  });
   const sourceClosure = buildSourceClosure(
     root,
     deployment.sourceClosureInput,
     deployment.descriptor.foundationSourceCommitment,
+    deployment.captureClosure.sourceVerificationClosureDigest,
+    { historicalReplay },
   );
+  if (canonicalizeJson({
+    repository: sourceClosure.repository,
+    repositoryId: sourceClosure.repositoryId,
+    protectedRef: sourceClosure.protectedRef,
+    revision: sourceClosure.revision,
+    tree: sourceClosure.tree,
+    sourceClosureDigest: sourceClosure.sourceClosureDigest,
+  }) !== canonicalizeJson(deployment.captureClosure.sourceOrigin)) {
+    throw new TypeError("authenticated capture source origin differs from protected Git closure");
+  }
   bindSourceVerificationToClosure(root, deployment.sourceVerification, sourceClosure);
   const binding = buildReleaseBinding({
     template,
@@ -1391,15 +1818,28 @@ export function materializeRobinhoodPromotionBundle({ repositoryRoot, input }) {
     descriptorDigest: deployment.chainDeploymentDescriptorDigest,
     sourceClosure,
   });
+  const backendRelease = buildBackendReleaseAssets({
+    repositoryRoot: root,
+    descriptor: deployment.descriptor,
+    descriptorDigest: deployment.chainDeploymentDescriptorDigest,
+    captureClosure: deployment.captureClosure,
+  });
   const consumerInputs = buildConsumerInputs({
     descriptor: deployment.descriptor,
     descriptorDigest: deployment.chainDeploymentDescriptorDigest,
     binding,
     sourceVerification: deployment.sourceVerification,
+    captureClosure: deployment.captureClosure,
+    backendReleaseAssets: backendRelease.closure,
   });
   const normalized = {
-    schemaVersion: ROBINHOOD_PROMOTION_BUNDLE_SCHEMA,
-    state: "closed-awaiting-separate-runtime-promotion",
+    schemaVersion: ROBINHOOD_STAGE_BUNDLE_SCHEMA,
+    state: deployment.captureClosure.authorization.trustClass === "test-only"
+      ? "test-only-structural"
+      : "closed-awaiting-backend-readiness",
+    releaseReady: false,
+    publicAuthorization: false,
+    publicWrites: false,
     chainDeploymentId: CHAIN_DEPLOYMENT_ID,
     inputEvidenceDigest: framedSha256(
       ROBINHOOD_POSTDEPLOYMENT_INPUT_SCHEMA,
@@ -1411,8 +1851,11 @@ export function materializeRobinhoodPromotionBundle({ repositoryRoot, input }) {
       state: "prepared-not-broadcast",
       preserved: true,
     },
+    captureAuthorization: deployment.captureClosure.authorization,
+    captureClosure: deployment.captureClosure,
     sourceVerification: deployment.sourceVerification,
     sourceClosure,
+    backendReleaseAssets: backendRelease.closure,
     finalizedBindings: {
       chainId: CHAIN_ID,
       caip2: CAIP2,
@@ -1423,125 +1866,382 @@ export function materializeRobinhoodPromotionBundle({ repositoryRoot, input }) {
       deploymentBlockHash: deployment.descriptor.deploymentEvidence.blockHash,
       startBlock: deployment.descriptor.deploymentEvidence.blockNumber,
       finalityEvidenceDigest: binding.evidence.finality.finalityEvidenceDigest,
+      captureClosureDigest: deployment.captureClosure.captureClosureDigest,
+      postingEventDigest:
+        deployment.descriptor.deploymentEvidence.ethereumFinalityEvidence.postingEventDigest,
       sourceClosureDigest: sourceClosure.sourceClosureDigest,
-      releaseManifestDigest: binding.evidence.manifest.releaseManifestDigest,
+      sourceVerificationClosureDigest: sourceClosure.sourceVerificationClosureDigest,
+      backendReleaseAssetsDigest:
+        backendRelease.closure.backendReleaseAssetsDigest,
+      backendPromotionPublicInputDigest: null,
+      backendPromotionInputDigest: null,
+      backendReleaseEvidenceDigest: null,
+      backendAuthorizationDigest: null,
+      releaseManifestDigest: null,
     },
     artifacts: {
       liveDeployment: artifact(ROBINHOOD_LIVE_DEPLOYMENT_PATH, deployment.descriptor),
-      cliReleaseBinding: artifact(V4_RELEASE_BINDING_PATH, binding),
+      cliReleaseBinding: {
+        ...artifact(V4_RELEASE_BINDING_PATH, binding),
+        replacesSha256: templateAudit.bindingSha256,
+      },
+      backendRelease: backendRelease.artifacts,
     },
     consumerInputs,
   };
   return {
     ...normalized,
-    promotionBundleDigest: framedSha256(DOMAINS.bundle, normalized),
+    stageBundleDigest: framedSha256(DOMAINS.stageBundle, normalized),
   };
 }
 
-function verifySourceClosure(repositoryRoot, value) {
-  const rebuilt = buildSourceClosure(repositoryRoot, {
-    repository: value.repository,
-    branch: value.branch,
-    revision: value.revision,
-    tree: value.tree,
-  }, FOUNDATION_SOURCE_COMMITMENT);
-  deepEqual(value, rebuilt, "promotion source closure");
+export async function materializeRobinhoodStageBundle(options) {
+  return buildRobinhoodStageBundle(options, { historicalReplay: false });
 }
 
-function verifyReleaseBindingValue(template, binding, descriptor, sourceClosure) {
-  const expected = buildReleaseBinding({
-    template,
-    descriptor,
-    descriptorDigest: hashV4ChainDeployment(descriptor),
-    sourceClosure,
+export async function verifyRobinhoodStageBundle({
+  repositoryRoot,
+  bundle,
+  input,
+  inputBytes = canonicalJsonBytes(input),
+  captureAuthorization,
+  captureDependencies = {},
+}) {
+  if (input === null || typeof input !== "object") {
+    throw new TypeError("promotion verification requires the exact retained capture sidecar");
+  }
+  const rebuilt = await buildRobinhoodStageBundle({
+    repositoryRoot,
+    input,
+    inputBytes,
+    captureAuthorization,
+    captureDependencies,
+  }, { historicalReplay: true });
+  deepEqual(bundle, rebuilt, "stage bundle and authenticated capture sidecar");
+  return Object.freeze({
+    chainDeploymentDescriptorDigest:
+      rebuilt.finalizedBindings.chainDeploymentDescriptorDigest,
+    stageBundleDigest: rebuilt.stageBundleDigest,
+    startBlock: rebuilt.finalizedBindings.startBlock,
+    structurallyValid: true,
+    releaseReady: false,
+    phase: "backend-assets",
+    authorizationClass: rebuilt.captureAuthorization.trustClass,
   });
-  deepEqual(binding, expected, "promotion release binding");
 }
 
-export function verifyRobinhoodPromotionBundle({ repositoryRoot, bundle }) {
-  const root = realpathSync(path.resolve(repositoryRoot));
-  assertExactKeys(bundle, [
-    "schemaVersion", "state", "chainDeploymentId", "inputEvidenceDigest",
-    "preparedArtifact", "sourceVerification", "sourceClosure", "finalizedBindings",
-    "artifacts", "consumerInputs", "promotionBundleDigest",
-  ], "promotion bundle");
-  if (bundle.schemaVersion !== ROBINHOOD_PROMOTION_BUNDLE_SCHEMA
-    || bundle.state !== "closed-awaiting-separate-runtime-promotion"
-    || bundle.chainDeploymentId !== CHAIN_DEPLOYMENT_ID) {
-    throw new TypeError("promotion bundle identity is invalid");
-  }
-  exactSha256(bundle.inputEvidenceDigest, "promotion input evidence digest");
-  assertExactKeys(bundle.preparedArtifact, ["path", "sha256", "state", "preserved"],
-    "promotion preparedArtifact");
-  if (bundle.preparedArtifact.path !== ROBINHOOD_PREDEPLOYMENT_PATH
-    || bundle.preparedArtifact.sha256 !== PREDEPLOYMENT_SHA256
-    || bundle.preparedArtifact.state !== "prepared-not-broadcast"
-    || bundle.preparedArtifact.preserved !== true) {
-    throw new TypeError("promotion bundle does not preserve the exact prepared artifact");
-  }
-  readPreparedArtifact(root);
-  const { evidenceDigest: suppliedSourceVerificationDigest, ...sourceVerificationInput } =
-    bundle.sourceVerification;
-  const sourceVerification = normalizeSourceVerification(sourceVerificationInput);
-  if (sourceVerification.evidenceDigest !== suppliedSourceVerificationDigest) {
-    throw new TypeError("source verification closure digest differs");
-  }
-  verifySourceClosure(root, bundle.sourceClosure);
-  bindSourceVerificationToClosure(root, sourceVerification, bundle.sourceClosure);
-  assertExactKeys(bundle.artifacts, ["liveDeployment", "cliReleaseBinding"],
-    "promotion artifacts");
-  for (const [name, expectedPath] of [
-    ["liveDeployment", ROBINHOOD_LIVE_DEPLOYMENT_PATH],
-    ["cliReleaseBinding", V4_RELEASE_BINDING_PATH],
-  ]) {
-    const entry = bundle.artifacts[name];
-    assertExactKeys(entry, ["path", "sha256", "byteLength", "value"],
-      `promotion artifacts.${name}`);
-    const bytes = canonicalJsonBytes(entry.value);
-    if (entry.path !== expectedPath || entry.sha256 !== sha256Digest(bytes)
-      || entry.byteLength !== String(bytes.byteLength)) {
-      throw new TypeError(`promotion artifacts.${name} bytes are invalid`);
-    }
-  }
-  const descriptor = normalizeV4ChainDeployment(bundle.artifacts.liveDeployment.value);
-  const descriptorDigest = hashV4ChainDeployment(descriptor);
-  const template = auditV4ReleaseBinding({ repositoryRoot: root }).binding;
-  verifyReleaseBindingValue(
-    template,
-    bundle.artifacts.cliReleaseBinding.value,
-    descriptor,
-    bundle.sourceClosure,
-  );
-  const expectedConsumers = buildConsumerInputs({
-    descriptor,
-    descriptorDigest,
-    binding: bundle.artifacts.cliReleaseBinding.value,
-    sourceVerification: bundle.sourceVerification,
-  });
-  deepEqual(bundle.consumerInputs, expectedConsumers, "promotion consumer inputs");
-  const binding = bundle.artifacts.cliReleaseBinding.value;
-  const expectedFinalizedBindings = {
+function buildReleaseManifest(binding, backend) {
+  const deployment = binding.evidence.chainDeployment;
+  const profile = binding.evidence.profile;
+  const source = binding.evidence.source;
+  const finality = binding.evidence.finality;
+  const atomic = deployment.descriptor.deploymentEvidence;
+  const manifest = {
+    schemaVersion: "programmable.launch-cli-v4-release-manifest.v1",
+    releaseIdentity: structuredClone(binding.releaseIdentity),
     chainId: CHAIN_ID,
     caip2: CAIP2,
     chainDeploymentId: CHAIN_DEPLOYMENT_ID,
-    chainDeploymentDescriptorDigest: descriptorDigest,
-    deploymentTransactionHash: descriptor.deploymentEvidence.transactionHash,
-    deploymentBlockNumber: descriptor.deploymentEvidence.blockNumber,
-    deploymentBlockHash: descriptor.deploymentEvidence.blockHash,
-    startBlock: descriptor.deploymentEvidence.blockNumber,
-    finalityEvidenceDigest: binding.evidence.finality.finalityEvidenceDigest,
-    sourceClosureDigest: bundle.sourceClosure.sourceClosureDigest,
-    releaseManifestDigest: binding.evidence.manifest.releaseManifestDigest,
+    chainDeploymentDescriptorDigest: deployment.descriptorDigest,
+    chainDeploymentBindingDigest: deployment.bindingDigest,
+    profileEvidenceDigest: profile.profileEvidenceDigest,
+    sourceRevision: source.revision,
+    sourceTree: source.tree,
+    sourceClosureDigest: source.sourceClosureDigest,
+    sourceVerificationClosureDigest: source.sourceVerificationClosureDigest,
+    deploymentTransactionHash: atomic.transactionHash,
+    deploymentBlockHash: atomic.blockHash,
+    finalityEvidenceDigest: finality.finalityEvidenceDigest,
+    backendReleaseEvidenceDigest: backend.backendReleaseEvidenceDigest,
+    machineContracts: binding.machineContracts.map(({ name, sha256 }) => ({ name, sha256 })),
+    releaseManifestDigest: null,
   };
-  deepEqual(bundle.finalizedBindings, expectedFinalizedBindings, "promotion finalized bindings");
-  const { promotionBundleDigest, ...withoutDigest } = bundle;
-  if (promotionBundleDigest !== framedSha256(DOMAINS.bundle, withoutDigest)) {
-    throw new TypeError("promotion bundle digest is invalid");
+  manifest.releaseManifestDigest = computeV4ReleaseManifestDigest(manifest);
+  return manifest;
+}
+
+function buildFinalReleaseBinding(stageBinding, backend, productionAuthorized) {
+  const binding = structuredClone(stageBinding);
+  binding.evidence.backend = structuredClone(backend);
+  binding.evidence.manifest = productionAuthorized ? buildReleaseManifest(binding, backend) : null;
+  binding.blockers = productionAuthorized ? [] : ["releaseManifestEvidence"];
+  binding.releaseReady = productionAuthorized;
+  return binding;
+}
+
+function buildFinalConsumerInputs({
+  stageInputs,
+  finalBinding,
+  backendPromotionPublicInput,
+  backendReleaseEvidence,
+  backendAuthorization,
+  productionAuthorized,
+}) {
+  const releaseManifestDigest = finalBinding.evidence.manifest?.releaseManifestDigest ?? null;
+  const common = {
+    status: productionAuthorized ? "authorized-live" : "test-only-finalized",
+    publicAuthorization: productionAuthorized,
+    publicWrites: productionAuthorized,
+    backendPromotionPublicInputDigest: backendPromotionPublicInput.publicInputDigest,
+    backendPromotionInputDigest: backendReleaseEvidence.backendPromotionInputDigest,
+    backendReleaseEvidenceDigest: backendReleaseEvidence.backendReleaseEvidenceDigest,
+    backendAuthorizationDigest: backendAuthorization.authorizationDigest,
+    releaseManifestDigest,
+  };
+  return {
+    indexer: { ...structuredClone(stageInputs.indexer), ...common },
+    cli: { ...structuredClone(stageInputs.cli), ...common },
+    developers: {
+      ...structuredClone(stageInputs.developers),
+      ...common,
+      backendRuntimeReadinessRequired: false,
+      flyControlPlaneReceiptRequired: false,
+    },
+    backend: {
+      ...structuredClone(stageInputs.backend),
+      state: productionAuthorized ? "phase-b-authorized" : "test-only-finalized",
+      publicAuthorization: productionAuthorized,
+      backendPromotionPublicInputDigest: backendPromotionPublicInput.publicInputDigest,
+      backendPromotionInputDigest: backendReleaseEvidence.backendPromotionInputDigest,
+      backendReleaseEvidenceDigest: backendReleaseEvidence.backendReleaseEvidenceDigest,
+      backendAuthorizationDigest: backendAuthorization.authorizationDigest,
+      runtimeReadinessNormalizedResponseSha256:
+        backendReleaseEvidence.runtimeReadiness.normalizedResponseSha256,
+      flySafeReadbacksDigest: backendReleaseEvidence.flyControlPlane.safeReadbacksDigest,
+    },
+  };
+}
+
+function buildPublicBackendPromotionBinding({
+  publicInput,
+  inputBytes,
+  backendReleaseEvidence,
+  backendCaptureAuthorization,
+  backendAuthorization,
+}) {
+  const runtime = backendReleaseEvidence.runtimeReadiness;
+  const fly = backendReleaseEvidence.flyControlPlane;
+  const result = {
+    schemaVersion: "programmable.robinhood-custom-launch.backend-promotion-binding.v1",
+    publicArtifact: {
+      path: backendAuthorization.backendPromotionPublicInputPath,
+      byteLength: String(inputBytes.byteLength),
+      sha256: sha256Digest(inputBytes),
+    },
+    publicInputDigest: publicInput.publicInputDigest,
+    readbackReceipts: structuredClone(publicInput.readbackReceipts),
+    backendPromotionInputDigest: backendReleaseEvidence.backendPromotionInputDigest,
+    backendSource: {
+      repository: backendReleaseEvidence.repository,
+      sourceCommit: backendReleaseEvidence.sourceCommit,
+      sourceTree: backendReleaseEvidence.sourceTree,
+    },
+    captureAuthorization: {
+      trustClass: backendCaptureAuthorization.trustClass,
+      subjectPath: backendCaptureAuthorization.subjectPath,
+      subjectSha256: backendCaptureAuthorization.subjectSha256,
+      attestationBundlePath: backendCaptureAuthorization.attestationBundlePath,
+      attestationBundleSha256: backendCaptureAuthorization.attestationBundleSha256,
+      trustedRootSource: backendCaptureAuthorization.trustedRootSource,
+      trustedRootSha256: backendCaptureAuthorization.trustedRootSha256,
+      repository: backendCaptureAuthorization.repository,
+      repositoryId: backendCaptureAuthorization.repositoryId,
+      workflow: backendCaptureAuthorization.workflow,
+      sourceRef: backendCaptureAuthorization.sourceRef,
+      sourceRevision: backendCaptureAuthorization.sourceRevision,
+      sourceTree: backendCaptureAuthorization.sourceTree,
+      verificationDigest: backendCaptureAuthorization.verificationDigest,
+    },
+    runtimeReadiness: {
+      schemaVersion: runtime.schemaVersion,
+      path: runtime.path,
+      httpStatus: runtime.httpStatus,
+      contentType: runtime.contentType,
+      normalizedResponseSha256: runtime.normalizedResponseSha256,
+      releaseIdentityDigest: runtime.releaseIdentityDigest,
+      observedAt: runtime.observedAt,
+      authorizationDigest: runtime.authorizationDigest,
+    },
+    flyControlPlane: {
+      schemaVersion: fly.schemaVersion,
+      app: fly.app,
+      appStatus: fly.appStatus,
+      releaseIdDigest: fly.releaseIdDigest,
+      releaseVersionDigest: fly.releaseVersionDigest,
+      imageTag: fly.imageTag,
+      imageIdentityDigest: fly.imageIdentityDigest,
+      machines: structuredClone(fly.machines),
+      safeReadbacksDigest: fly.safeReadbacksDigest,
+      releaseIdentityDigest: fly.releaseIdentityDigest,
+      observedAt: fly.observedAt,
+      authorizationDigest: fly.authorizationDigest,
+    },
+    backendReleaseEvidenceDigest: backendReleaseEvidence.backendReleaseEvidenceDigest,
+  };
+  const forbidden = /"(?:private_ip|instance_id|config|env|metadata|bodyBytesBase64|sanitizedBytesBase64|request|response)"\s*:/u;
+  if (forbidden.test(JSON.stringify(result))) {
+    throw new TypeError("public backend promotion binding contains private provider fields");
   }
+  return result;
+}
+
+async function buildRobinhoodPromotionBundle({
+  repositoryRoot,
+  stageBundle,
+  stageBundleBytes = canonicalJsonBytes(stageBundle),
+  input,
+  inputBytes = canonicalJsonBytes(input),
+  captureAuthorization,
+  captureDependencies = {},
+  backendPromotionInput,
+  backendPromotionInputBytes = canonicalJsonBytes(backendPromotionInput),
+  backendAttestationBundleBytes,
+  backendTrustedRootBytes,
+  backendCaptureAuthorization,
+  backendAuthorization,
+  backendDependencies = {},
+}, { historicalReplay }) {
+  assertJsonBytesMatch(stageBundle, stageBundleBytes, "stage bundle", 64 * 1024 * 1024);
+  assertJsonBytesMatch(
+    backendPromotionInput,
+    backendPromotionInputBytes,
+    "backend promotion public input",
+    32 * 1024 * 1024,
+  );
+  await verifyRobinhoodStageBundle({
+    repositoryRoot,
+    bundle: stageBundle,
+    input,
+    inputBytes,
+    captureAuthorization,
+    captureDependencies,
+  });
+  const backendCapture = validateRobinhoodBackendCaptureAuthorization({
+    authorization: backendCaptureAuthorization,
+    inputBytes: backendPromotionInputBytes,
+    attestationBundleBytes: backendAttestationBundleBytes,
+    trustedRootBytes: backendTrustedRootBytes,
+    input: backendPromotionInput,
+    allowTestOnly: backendDependencies.allowTestOnly === true,
+  });
+  const backend = validateRobinhoodBackendPromotionPublicInput({
+    input: backendPromotionInput,
+    stageBundle,
+    now: historicalReplay
+      ? () => new Date(backendPromotionInput.observedAt)
+      : backendDependencies.now,
+  });
+  validateV4BackendReleaseEvidence(
+    backend.backendReleaseEvidence,
+    stageBundle.finalizedBindings.chainDeploymentDescriptorDigest,
+  );
+  const authorization = validateRobinhoodBackendAuthorization({
+    authorization: backendAuthorization,
+    stageBundle,
+    stageBundleBytes,
+    backendPromotionInputBytes,
+    backendPromotionPublicInput: backendPromotionInput,
+    backendReleaseEvidence: backend.backendReleaseEvidence,
+    allowTestOnly: backendDependencies.allowTestOnly === true,
+  });
+  const productionAuthorized = stageBundle.captureAuthorization.trustClass
+      === "github-artifact-attestation"
+    && backendCapture.trustClass === "github-artifact-attestation"
+    && authorization.trustClass === "github-artifact-attestation";
+  const explicitlyTestOnly = backendDependencies.allowTestOnlyPromotion === true
+    && stageBundle.captureAuthorization.trustClass === "test-only"
+    && backendCapture.trustClass === "test-only"
+    && authorization.trustClass === "test-only";
+  if (!productionAuthorized && !explicitlyTestOnly) {
+    throw new TypeError("Phase B requires three authenticated production authorities");
+  }
+  const finalBinding = buildFinalReleaseBinding(
+    stageBundle.artifacts.cliReleaseBinding.value,
+    backend.backendReleaseEvidence,
+    productionAuthorized,
+  );
+  const consumerInputs = buildFinalConsumerInputs({
+    stageInputs: stageBundle.consumerInputs,
+    finalBinding,
+    backendPromotionPublicInput: backendPromotionInput,
+    backendReleaseEvidence: backend.backendReleaseEvidence,
+    backendAuthorization: authorization,
+    productionAuthorized,
+  });
+  const normalized = {
+    schemaVersion: ROBINHOOD_PROMOTION_BUNDLE_SCHEMA,
+    state: productionAuthorized ? "finalized-live" : "test-only-finalized",
+    releaseReady: productionAuthorized,
+    publicAuthorization: productionAuthorized,
+    publicWrites: productionAuthorized,
+    stageBundle: {
+      path: ROBINHOOD_STAGE_BUNDLE_PATH,
+      sha256: sha256Digest(stageBundleBytes),
+      byteLength: String(stageBundleBytes.byteLength),
+      stageBundleDigest: stageBundle.stageBundleDigest,
+    },
+    chainDeploymentId: stageBundle.chainDeploymentId,
+    inputEvidenceDigest: stageBundle.inputEvidenceDigest,
+    preparedArtifact: structuredClone(stageBundle.preparedArtifact),
+    captureAuthorization: structuredClone(stageBundle.captureAuthorization),
+    captureClosure: structuredClone(stageBundle.captureClosure),
+    sourceVerification: structuredClone(stageBundle.sourceVerification),
+    sourceClosure: structuredClone(stageBundle.sourceClosure),
+    backendReleaseAssets: structuredClone(stageBundle.backendReleaseAssets),
+    backendPromotionBinding: buildPublicBackendPromotionBinding({
+      publicInput: backendPromotionInput,
+      inputBytes: backendPromotionInputBytes,
+      backendReleaseEvidence: backend.backendReleaseEvidence,
+      backendCaptureAuthorization: backendCapture,
+      backendAuthorization: authorization,
+    }),
+    backendCaptureAuthorization: backendCapture,
+    backendAuthorization: authorization,
+    finalizedBindings: {
+      ...structuredClone(stageBundle.finalizedBindings),
+      backendPromotionPublicInputDigest: backendPromotionInput.publicInputDigest,
+      backendPromotionInputDigest:
+        backend.backendReleaseEvidence.backendPromotionInputDigest,
+      backendReleaseEvidenceDigest:
+        backend.backendReleaseEvidence.backendReleaseEvidenceDigest,
+      backendAuthorizationDigest: authorization.authorizationDigest,
+      releaseManifestDigest: finalBinding.evidence.manifest?.releaseManifestDigest ?? null,
+    },
+    artifacts: {
+      liveDeployment: structuredClone(stageBundle.artifacts.liveDeployment),
+      cliReleaseBinding: {
+        ...artifact(V4_RELEASE_BINDING_PATH, finalBinding),
+        replacesSha256: stageBundle.artifacts.cliReleaseBinding.replacesSha256,
+      },
+      backendRelease: structuredClone(stageBundle.artifacts.backendRelease),
+    },
+    consumerInputs,
+  };
   return Object.freeze({
-    chainDeploymentDescriptorDigest: descriptorDigest,
-    promotionBundleDigest,
-    startBlock: descriptor.deploymentEvidence.blockNumber,
-    releaseReady: true,
+    ...normalized,
+    promotionBundleDigest: framedSha256(DOMAINS.promotionBundle, normalized),
+  });
+}
+
+export async function materializeRobinhoodPromotionBundle(options) {
+  return buildRobinhoodPromotionBundle(options, { historicalReplay: false });
+}
+
+export async function verifyRobinhoodPromotionBundle(options) {
+  const rebuilt = await buildRobinhoodPromotionBundle(options, { historicalReplay: true });
+  deepEqual(options.bundle, rebuilt,
+    "promotion bundle and exact stage/capture/backend evidence sidecars");
+  const production = rebuilt.state === "finalized-live";
+  return Object.freeze({
+    chainDeploymentDescriptorDigest:
+      rebuilt.finalizedBindings.chainDeploymentDescriptorDigest,
+    promotionBundleDigest: rebuilt.promotionBundleDigest,
+    startBlock: rebuilt.finalizedBindings.startBlock,
+    structurallyValid: true,
+    releaseReady: production,
+    publicAuthorization: rebuilt.publicAuthorization,
+    publicWrites: rebuilt.publicWrites,
+    phase: "promotion",
+    authorizationClass: production ? "production" : "test-only",
   });
 }

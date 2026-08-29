@@ -1,0 +1,755 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/releases/custom-launch-v4/promotion-bundle.schema.json",
+  "title": "Programmable Robinhood custom-launch Phase B promotion bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "state",
+    "releaseReady",
+    "publicAuthorization",
+    "publicWrites",
+    "stageBundle",
+    "chainDeploymentId",
+    "inputEvidenceDigest",
+    "preparedArtifact",
+    "captureAuthorization",
+    "captureClosure",
+    "sourceVerification",
+    "sourceClosure",
+    "backendReleaseAssets",
+    "backendPromotionBinding",
+    "backendCaptureAuthorization",
+    "backendAuthorization",
+    "finalizedBindings",
+    "artifacts",
+    "consumerInputs",
+    "promotionBundleDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.robinhood-custom-launch.promotion-bundle.v2"
+    },
+    "state": { "enum": ["finalized-live", "test-only-finalized"] },
+    "releaseReady": { "type": "boolean" },
+    "publicAuthorization": { "type": "boolean" },
+    "publicWrites": { "type": "boolean" },
+    "stageBundle": { "$ref": "#/$defs/stageBundleReference" },
+    "chainDeploymentId": {
+      "const": "robinhood-mainnet-custom-launch-v1"
+    },
+    "inputEvidenceDigest": { "$ref": "#/$defs/sha256" },
+    "preparedArtifact": {
+      "$ref": "./stage-bundle.schema.json#/$defs/preparedArtifact"
+    },
+    "captureAuthorization": {
+      "$ref": "./stage-bundle.schema.json#/$defs/captureAuthorization"
+    },
+    "captureClosure": {
+      "$ref": "./stage-bundle.schema.json#/$defs/captureClosure"
+    },
+    "sourceVerification": {
+      "$ref": "./stage-bundle.schema.json#/$defs/sourceVerification"
+    },
+    "sourceClosure": {
+      "$ref": "./stage-bundle.schema.json#/$defs/sourceClosure"
+    },
+    "backendReleaseAssets": {
+      "$ref": "./stage-bundle.schema.json#/$defs/backendReleaseAssets"
+    },
+    "backendPromotionBinding": { "$ref": "#/$defs/backendPromotionBinding" },
+    "backendCaptureAuthorization": {
+      "$ref": "./backend-capture-authorization.schema.json"
+    },
+    "backendAuthorization": {
+      "$ref": "./backend-release-authorization.schema.json"
+    },
+    "finalizedBindings": { "$ref": "#/$defs/finalizedBindings" },
+    "artifacts": { "$ref": "#/$defs/promotionArtifacts" },
+    "consumerInputs": { "$ref": "#/$defs/promotionConsumerInputs" },
+    "promotionBundleDigest": { "$ref": "#/$defs/sha256" }
+  },
+  "oneOf": [
+    {
+      "title": "Authenticated production promotion",
+      "properties": {
+        "state": { "const": "finalized-live" },
+        "releaseReady": { "const": true },
+        "publicAuthorization": { "const": true },
+        "publicWrites": { "const": true },
+        "captureAuthorization": {
+          "type": "object",
+          "properties": {
+            "trustClass": { "const": "github-artifact-attestation" }
+          }
+        },
+        "backendCaptureAuthorization": {
+          "type": "object",
+          "properties": {
+            "trustClass": { "const": "github-artifact-attestation" }
+          }
+        },
+        "backendAuthorization": {
+          "type": "object",
+          "properties": {
+            "trustClass": { "const": "github-artifact-attestation" }
+          }
+        },
+        "finalizedBindings": {
+          "type": "object",
+          "properties": {
+            "releaseManifestDigest": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "properties": {
+            "cliReleaseBinding": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "releaseReady": { "const": true },
+                    "blockers": { "const": [] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "consumerInputs": {
+          "type": "object",
+          "properties": {
+            "indexer": {
+              "type": "object",
+              "properties": {
+                "status": { "const": "authorized-live" },
+                "publicAuthorization": { "const": true },
+                "publicWrites": { "const": true }
+              }
+            },
+            "cli": {
+              "type": "object",
+              "properties": {
+                "status": { "const": "authorized-live" },
+                "publicAuthorization": { "const": true },
+                "publicWrites": { "const": true }
+              }
+            },
+            "developers": {
+              "type": "object",
+              "properties": {
+                "status": { "const": "authorized-live" },
+                "publicAuthorization": { "const": true },
+                "publicWrites": { "const": true }
+              }
+            },
+            "backend": {
+              "type": "object",
+              "properties": {
+                "state": { "const": "phase-b-authorized" },
+                "publicAuthorization": { "const": true }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "Explicitly non-public structural test promotion",
+      "properties": {
+        "state": { "const": "test-only-finalized" },
+        "releaseReady": { "const": false },
+        "publicAuthorization": { "const": false },
+        "publicWrites": { "const": false },
+        "captureAuthorization": {
+          "type": "object",
+          "properties": { "trustClass": { "const": "test-only" } }
+        },
+        "backendCaptureAuthorization": {
+          "type": "object",
+          "properties": { "trustClass": { "const": "test-only" } }
+        },
+        "backendAuthorization": {
+          "type": "object",
+          "properties": { "trustClass": { "const": "test-only" } }
+        },
+        "finalizedBindings": {
+          "type": "object",
+          "properties": {
+            "releaseManifestDigest": { "type": "null" }
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "properties": {
+            "cliReleaseBinding": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "releaseReady": { "const": false },
+                    "blockers": { "const": ["releaseManifestEvidence"] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "consumerInputs": {
+          "type": "object",
+          "properties": {
+            "indexer": {
+              "type": "object",
+              "properties": {
+                "status": { "const": "test-only-finalized" },
+                "publicAuthorization": { "const": false },
+                "publicWrites": { "const": false },
+                "releaseManifestDigest": { "type": "null" }
+              }
+            },
+            "cli": {
+              "type": "object",
+              "properties": {
+                "status": { "const": "test-only-finalized" },
+                "publicAuthorization": { "const": false },
+                "publicWrites": { "const": false },
+                "releaseManifestDigest": { "type": "null" }
+              }
+            },
+            "developers": {
+              "type": "object",
+              "properties": {
+                "status": { "const": "test-only-finalized" },
+                "publicAuthorization": { "const": false },
+                "publicWrites": { "const": false },
+                "releaseManifestDigest": { "type": "null" }
+              }
+            },
+            "backend": {
+              "type": "object",
+              "properties": {
+                "state": { "const": "test-only-finalized" },
+                "publicAuthorization": { "const": false }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hex32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "gitHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "isoSecond": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "stageBundleReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byteLength", "stageBundleDigest"],
+      "properties": {
+        "path": {
+          "const": "release/robinhood-chain-4663/programmable-stage-bundle.json"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "$ref": "#/$defs/positiveDecimal" },
+        "stageBundleDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "publicArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "byteLength", "sha256"],
+      "properties": {
+        "path": {
+          "const": "release/robinhood-chain-4663/backend-promotion-input.public.json"
+        },
+        "byteLength": { "$ref": "#/$defs/positiveDecimal" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "backendCaptureAuthorizationBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trustClass",
+        "subjectPath",
+        "subjectSha256",
+        "attestationBundlePath",
+        "attestationBundleSha256",
+        "trustedRootSource",
+        "trustedRootSha256",
+        "repository",
+        "repositoryId",
+        "workflow",
+        "sourceRef",
+        "sourceRevision",
+        "sourceTree",
+        "verificationDigest"
+      ],
+      "properties": {
+        "trustClass": {
+          "enum": ["github-artifact-attestation", "test-only"]
+        },
+        "subjectPath": {
+          "const": "release/robinhood-chain-4663/backend-promotion-input.public.json"
+        },
+        "subjectSha256": { "$ref": "#/$defs/sha256" },
+        "attestationBundlePath": {
+          "const": "release/robinhood-chain-4663/backend-promotion-input.attestation.json"
+        },
+        "attestationBundleSha256": { "$ref": "#/$defs/sha256" },
+        "trustedRootSource": { "const": "github-cli-embedded-tuf" },
+        "trustedRootSha256": { "$ref": "#/$defs/sha256" },
+        "repository": {
+          "const": "programmablehq/programmable-open-hook-v2-internal"
+        },
+        "repositoryId": { "const": "1318883798" },
+        "workflow": {
+          "const": ".github/workflows/capture-programmable-robinhood-promotion.yml"
+        },
+        "sourceRef": { "const": "refs/heads/main" },
+        "sourceRevision": { "$ref": "#/$defs/gitHash" },
+        "sourceTree": { "$ref": "#/$defs/gitHash" },
+        "verificationDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "runtimeReadinessBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "path",
+        "httpStatus",
+        "contentType",
+        "normalizedResponseSha256",
+        "releaseIdentityDigest",
+        "observedAt",
+        "authorizationDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-api-runtime-readiness-receipt.v4"
+        },
+        "path": { "const": "/v4/chains/4663/readiness" },
+        "httpStatus": { "const": 200 },
+        "contentType": { "const": "application/json" },
+        "normalizedResponseSha256": { "$ref": "#/$defs/sha256" },
+        "releaseIdentityDigest": { "$ref": "#/$defs/sha256" },
+        "observedAt": { "$ref": "#/$defs/isoSecond" },
+        "authorizationDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "flyMachineBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "machineIdentityDigest", "state", "region"],
+      "properties": {
+        "slot": { "type": "string", "pattern": "^[1-8]$" },
+        "machineIdentityDigest": { "$ref": "#/$defs/sha256" },
+        "state": { "const": "started" },
+        "region": { "const": "fra" }
+      }
+    },
+    "flyControlPlaneBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "app",
+        "appStatus",
+        "releaseIdDigest",
+        "releaseVersionDigest",
+        "imageTag",
+        "imageIdentityDigest",
+        "machines",
+        "safeReadbacksDigest",
+        "releaseIdentityDigest",
+        "observedAt",
+        "authorizationDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-api-fly-control-plane-receipt.v2"
+        },
+        "app": { "const": "programmable-custom-launch-api" },
+        "appStatus": { "const": "deployed" },
+        "releaseIdDigest": { "$ref": "#/$defs/sha256" },
+        "releaseVersionDigest": { "$ref": "#/$defs/sha256" },
+        "imageTag": { "type": "string", "pattern": "^main-[0-9a-f]{12}$" },
+        "imageIdentityDigest": { "$ref": "#/$defs/sha256" },
+        "machines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/flyMachineBinding" }
+        },
+        "safeReadbacksDigest": { "$ref": "#/$defs/sha256" },
+        "releaseIdentityDigest": { "$ref": "#/$defs/sha256" },
+        "observedAt": { "$ref": "#/$defs/isoSecond" },
+        "authorizationDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "backendPromotionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "publicArtifact",
+        "publicInputDigest",
+        "readbackReceipts",
+        "backendPromotionInputDigest",
+        "backendSource",
+        "captureAuthorization",
+        "runtimeReadiness",
+        "flyControlPlane",
+        "backendReleaseEvidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-custom-launch.backend-promotion-binding.v1"
+        },
+        "publicArtifact": { "$ref": "#/$defs/publicArtifact" },
+        "publicInputDigest": { "$ref": "#/$defs/sha256" },
+        "readbackReceipts": {
+          "$ref": "./backend-promotion-public-input.schema.json#/$defs/readbackReceipts"
+        },
+        "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendSource": {
+          "$ref": "./backend-promotion-public-input.schema.json#/$defs/backendSource"
+        },
+        "captureAuthorization": {
+          "$ref": "#/$defs/backendCaptureAuthorizationBinding"
+        },
+        "runtimeReadiness": { "$ref": "#/$defs/runtimeReadinessBinding" },
+        "flyControlPlane": { "$ref": "#/$defs/flyControlPlaneBinding" },
+        "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "finalizedBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chainId",
+        "caip2",
+        "chainDeploymentId",
+        "chainDeploymentDescriptorDigest",
+        "deploymentTransactionHash",
+        "deploymentBlockNumber",
+        "deploymentBlockHash",
+        "startBlock",
+        "finalityEvidenceDigest",
+        "captureClosureDigest",
+        "postingEventDigest",
+        "sourceClosureDigest",
+        "sourceVerificationClosureDigest",
+        "backendReleaseAssetsDigest",
+        "backendPromotionPublicInputDigest",
+        "backendPromotionInputDigest",
+        "backendReleaseEvidenceDigest",
+        "backendAuthorizationDigest",
+        "releaseManifestDigest"
+      ],
+      "properties": {
+        "chainId": { "const": "4663" },
+        "caip2": { "const": "eip155:4663" },
+        "chainDeploymentId": {
+          "const": "robinhood-mainnet-custom-launch-v1"
+        },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "deploymentTransactionHash": { "$ref": "#/$defs/hex32" },
+        "deploymentBlockNumber": { "$ref": "#/$defs/positiveDecimal" },
+        "deploymentBlockHash": { "$ref": "#/$defs/hex32" },
+        "startBlock": { "$ref": "#/$defs/positiveDecimal" },
+        "finalityEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "captureClosureDigest": { "$ref": "#/$defs/sha256" },
+        "postingEventDigest": { "$ref": "#/$defs/sha256" },
+        "sourceClosureDigest": { "$ref": "#/$defs/sha256" },
+        "sourceVerificationClosureDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseAssetsDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionPublicInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "backendAuthorizationDigest": { "$ref": "#/$defs/sha256" },
+        "releaseManifestDigest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        }
+      }
+    },
+    "promotionArtifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["liveDeployment", "cliReleaseBinding", "backendRelease"],
+      "properties": {
+        "liveDeployment": {
+          "$ref": "./stage-bundle.schema.json#/$defs/jsonArtifact"
+        },
+        "cliReleaseBinding": {
+          "$ref": "./stage-bundle.schema.json#/$defs/cliReleaseBindingArtifact"
+        },
+        "backendRelease": {
+          "$ref": "./stage-bundle.schema.json#/$defs/backendReleaseArtifacts"
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockNumber", "blockHash"],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/positiveDecimal" },
+        "blockHash": { "$ref": "#/$defs/hex32" }
+      }
+    },
+    "rootStart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "runtimeCodeHash", "startBlock"],
+      "properties": {
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9A-Fa-f]{40}$"
+        },
+        "runtimeCodeHash": { "$ref": "#/$defs/hex32" },
+        "startBlock": { "$ref": "#/$defs/positiveDecimal" }
+      }
+    },
+    "standardJsonDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "indexerInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "status", "publicAuthorization", "publicWrites", "chainId",
+        "caip2", "chainDeploymentId", "chainDeploymentDescriptorDigest", "router",
+        "graphFactory", "permitAuthority", "finalizedCheckpoint", "finalityEvidenceDigest",
+        "sourceRevision", "sourceTree", "sourceClosureDigest",
+        "sourceVerificationClosureDigest", "captureClosureDigest",
+        "backendReleaseAssetsDigest", "backendPromotionPublicInputDigest",
+        "backendPromotionInputDigest",
+        "backendReleaseEvidenceDigest", "backendAuthorizationDigest",
+        "releaseManifestDigest", "postingEventDigest", "standardJsonInputs"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-custom-launch.indexer-bootstrap.v1"
+        },
+        "status": { "enum": ["authorized-live", "test-only-finalized"] },
+        "publicAuthorization": { "type": "boolean" },
+        "publicWrites": { "type": "boolean" },
+        "chainId": { "const": "4663" },
+        "caip2": { "const": "eip155:4663" },
+        "chainDeploymentId": { "const": "robinhood-mainnet-custom-launch-v1" },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "router": { "$ref": "#/$defs/rootStart" },
+        "graphFactory": { "$ref": "#/$defs/rootStart" },
+        "permitAuthority": { "$ref": "#/$defs/rootStart" },
+        "finalizedCheckpoint": { "$ref": "#/$defs/checkpoint" },
+        "finalityEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "sourceRevision": { "$ref": "#/$defs/gitHash" },
+        "sourceTree": { "$ref": "#/$defs/gitHash" },
+        "sourceClosureDigest": { "$ref": "#/$defs/sha256" },
+        "sourceVerificationClosureDigest": { "$ref": "#/$defs/sha256" },
+        "captureClosureDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseAssetsDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionPublicInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "backendAuthorizationDigest": { "$ref": "#/$defs/sha256" },
+        "releaseManifestDigest": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+        },
+        "postingEventDigest": { "$ref": "#/$defs/sha256" },
+        "standardJsonInputs": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/standardJsonDigest" }
+        }
+      }
+    },
+    "cliInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "status", "publicAuthorization", "publicWrites",
+        "chainDeploymentId", "chainDeploymentDescriptorDigest", "chainDeploymentPath",
+        "releaseBindingPath", "profile", "releaseManifestDigest", "captureClosureDigest",
+        "sourceVerificationClosureDigest", "backendReleaseAssetsDigest",
+        "backendPromotionPublicInputDigest", "backendPromotionInputDigest",
+        "backendReleaseEvidenceDigest",
+        "backendAuthorizationDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-custom-launch.cli-promotion-input.v1"
+        },
+        "status": { "enum": ["authorized-live", "test-only-finalized"] },
+        "publicAuthorization": { "type": "boolean" },
+        "publicWrites": { "type": "boolean" },
+        "chainDeploymentId": { "const": "robinhood-mainnet-custom-launch-v1" },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "chainDeploymentPath": {
+          "const": "contracts/deployments/robinhood-custom-launch-v1.json"
+        },
+        "releaseBindingPath": {
+          "const": "docs/operations/releases/custom-launch-v4/cli-release-binding.json"
+        },
+        "profile": {
+          "$ref": "./cli-release-binding.schema.json#/$defs/profile"
+        },
+        "releaseManifestDigest": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+        },
+        "captureClosureDigest": { "$ref": "#/$defs/sha256" },
+        "sourceVerificationClosureDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseAssetsDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionPublicInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "backendAuthorizationDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "developersInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "status", "publicAuthorization", "publicWrites", "chainId",
+        "caip2", "chainDeploymentId", "chainDeploymentDescriptorDigest", "startBlock",
+        "finalizedCheckpoint", "finalityPolicy", "roots",
+        "sourceVerificationEvidenceDigest", "sourceVerificationClosureDigest",
+        "captureClosureDigest", "postingEventDigest", "backendReleaseAssetsDigest",
+        "backendPromotionPublicInputDigest", "backendPromotionInputDigest",
+        "backendReleaseEvidenceDigest",
+        "backendAuthorizationDigest", "releaseManifestDigest",
+        "backendRuntimeReadinessRequired", "flyControlPlaneReceiptRequired",
+        "sourceRevision", "sourceTree", "sourceClosureDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-custom-launch.developers-promotion-input.v1"
+        },
+        "status": { "enum": ["authorized-live", "test-only-finalized"] },
+        "publicAuthorization": { "type": "boolean" },
+        "publicWrites": { "type": "boolean" },
+        "chainId": { "const": "4663" },
+        "caip2": { "const": "eip155:4663" },
+        "chainDeploymentId": { "const": "robinhood-mainnet-custom-launch-v1" },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "startBlock": { "$ref": "#/$defs/positiveDecimal" },
+        "finalizedCheckpoint": { "$ref": "#/$defs/checkpoint" },
+        "finalityPolicy": {
+          "$ref": "./cli-release-binding.schema.json#/$defs/finalityPolicy"
+        },
+        "roots": { "type": "object", "minProperties": 1 },
+        "sourceVerificationEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "sourceVerificationClosureDigest": { "$ref": "#/$defs/sha256" },
+        "captureClosureDigest": { "$ref": "#/$defs/sha256" },
+        "postingEventDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseAssetsDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionPublicInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "backendAuthorizationDigest": { "$ref": "#/$defs/sha256" },
+        "releaseManifestDigest": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+        },
+        "backendRuntimeReadinessRequired": { "const": false },
+        "flyControlPlaneReceiptRequired": { "const": false },
+        "sourceRevision": { "$ref": "#/$defs/gitHash" },
+        "sourceTree": { "$ref": "#/$defs/gitHash" },
+        "sourceClosureDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "backendInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "state", "publicAuthorization", "chainId",
+        "chainDeploymentId", "chainDeploymentDescriptorDigest",
+        "backendReleaseAssetsDigest", "backendPromotionPublicInputDigest",
+        "backendPromotionInputDigest",
+        "backendReleaseEvidenceDigest", "backendAuthorizationDigest",
+        "chainDeployment", "preparedRootSourceManifest", "standardJsonInputs",
+        "runtimeReadinessPath", "runtimeReadinessSchemaVersion",
+        "flyControlPlaneReceiptRequired", "runtimeReadinessNormalizedResponseSha256",
+        "flySafeReadbacksDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-custom-launch.backend-release-input.v1"
+        },
+        "state": { "enum": ["phase-b-authorized", "test-only-finalized"] },
+        "publicAuthorization": { "type": "boolean" },
+        "chainId": { "const": "4663" },
+        "chainDeploymentId": { "const": "robinhood-mainnet-custom-launch-v1" },
+        "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "backendReleaseAssetsDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionPublicInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" },
+        "backendReleaseEvidenceDigest": { "$ref": "#/$defs/sha256" },
+        "backendAuthorizationDigest": { "$ref": "#/$defs/sha256" },
+        "chainDeployment": {
+          "$ref": "./stage-bundle.schema.json#/$defs/pathDigestLength"
+        },
+        "preparedRootSourceManifest": {
+          "$ref": "./stage-bundle.schema.json#/$defs/pathDigestLength"
+        },
+        "standardJsonInputs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "./stage-bundle.schema.json#/$defs/backendReleaseAssetEntry"
+          }
+        },
+        "runtimeReadinessPath": { "const": "/v4/chains/4663/readiness" },
+        "runtimeReadinessSchemaVersion": {
+          "const": "programmable.custom-launch-api-release-identity.v4"
+        },
+        "flyControlPlaneReceiptRequired": { "const": true },
+        "runtimeReadinessNormalizedResponseSha256": { "$ref": "#/$defs/sha256" },
+        "flySafeReadbacksDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "promotionConsumerInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["indexer", "cli", "developers", "backend"],
+      "properties": {
+        "indexer": { "$ref": "#/$defs/indexerInput" },
+        "cli": { "$ref": "#/$defs/cliInput" },
+        "developers": { "$ref": "#/$defs/developersInput" },
+        "backend": { "$ref": "#/$defs/backendInput" }
+      }
+    }
+  }
+}

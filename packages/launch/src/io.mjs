@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { chmod, link, mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
+import {
+  chmod, link, lstat, mkdir, open, readFile, realpath, rename, stat, unlink,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -87,6 +89,39 @@ export function resolveInside(root, relativePath, label = "path") {
     throw new TypeError(`${label} escapes the source root`);
   }
   return resolved;
+}
+
+/**
+ * Rejects symlinks in every existing component below an already-real root.
+ * Call immediately before a write; this is a lexical/physical target guard,
+ * not a substitute for exclusive creation or an atomic rename.
+ */
+export async function assertNoSymlinkWritePath(root, filePath, label = "write path") {
+  const realRoot = await realpath(path.resolve(root));
+  const absolute = path.resolve(filePath);
+  if (absolute === realRoot || !absolute.startsWith(`${realRoot}${path.sep}`)) {
+    throw new TypeError(`${label} escapes its real root`);
+  }
+  const relative = path.relative(realRoot, absolute);
+  let cursor = realRoot;
+  for (const segment of relative.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    let metadata;
+    try {
+      metadata = await lstat(cursor);
+    } catch (error) {
+      if (error?.code === "ENOENT") break;
+      throw error;
+    }
+    if (metadata.isSymbolicLink()) throw new TypeError(`${label} contains a symbolic link`);
+    if (cursor !== absolute && !metadata.isDirectory()) {
+      throw new TypeError(`${label} has a non-directory parent`);
+    }
+    if (cursor === absolute && !metadata.isFile()) {
+      throw new TypeError(`${label} existing target is not a regular file`);
+    }
+  }
+  return absolute;
 }
 
 export async function atomicWrite(filePath, bytes, mode = 0o600) {

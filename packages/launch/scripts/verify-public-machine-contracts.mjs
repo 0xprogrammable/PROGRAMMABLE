@@ -586,12 +586,20 @@ for (const [index, entry] of externalRootDeploymentEvidence.prefixItems.entries(
   const expectedRoot = expectedExternalRoots[index];
   assertClosedSchemaFields(entry, [
     "schemaVersion", "contract", "kind", "address", "runtimeCodeHash",
-    "transactionHash", "startBlock", "blockHash", "registrySource",
-    "providerReadbacks", "evidenceDigest",
+    "transactionHash", "previousBlockNumber", "previousBlockHash",
+    "previousBlockRuntimeCodeHash", "startBlock", "blockHash",
+    "registrySource", "providerReadbacks", "evidenceDigest",
   ], `V4 external root deployment evidence ${expectedRoot.contract}`);
   assert.equal(
     entry["x-programmable-order"],
-    "blockHash == providerReadbacks[0].blockHash == providerReadbacks[1].blockHash",
+    "previousBlockNumber + 1 == startBlock; "
+      + "previousBlockNumber == providerReadbacks[*].previousBlockNumber; "
+      + "previousBlockHash == providerReadbacks[*].previousBlockHash; "
+      + "startBlock == providerReadbacks[*].blockNumber; "
+      + "blockHash == providerReadbacks[*].blockHash; "
+      + "providerReadbacks[0].rawTransactionDigest == providerReadbacks[1].rawTransactionDigest; "
+      + "providerReadbacks[0].transactionDigest == providerReadbacks[1].transactionDigest; "
+      + "providerReadbacks[0].transactionReceiptDigest == providerReadbacks[1].transactionReceiptDigest",
     `V4 ${expectedRoot.contract} must publish its dual-provider receipt-block invariant`,
   );
   assertClosedSchemaFields(
@@ -607,8 +615,10 @@ for (const [index, entry] of externalRootDeploymentEvidence.prefixItems.entries(
   );
   entry.properties.providerReadbacks.prefixItems.forEach((provider, providerIndex) => {
     assertClosedSchemaFields(provider, [
-      "providerId", "trustDomain", "transactionHash", "blockNumber", "blockHash",
-      "runtimeCodeHash", "transactionReceiptDigest", "evidenceDigest",
+      "providerId", "trustDomain", "transactionHash", "rawTransactionDigest", "transactionDigest",
+      "previousBlockNumber", "previousBlockHash", "previousBlockRuntimeCodeHash",
+      "blockNumber", "blockHash", "runtimeCodeHash", "transactionReceiptDigest",
+      "evidenceDigest",
     ], `V4 ${expectedRoot.contract} provider readback ${providerIndex}`);
   });
   assert.deepEqual(
@@ -741,7 +751,8 @@ assertClosedSchemaFields(ethereumFinalityEvidence, [
   "schemaVersion", "profile", "l2Checkpoint", "batchNumber", "l2Providers",
   "ethereumProviders", "rollup", "sequencerInbox", "postingTransactionHash",
   "postingBlockNumber", "postingBlockHash", "postingLogIndex",
-  "ethereumFinalizedCheckpoint", "observedAt", "evidenceDigest",
+  "ethereumFinalizedCheckpoint", "observedAt", "captureClosureDigest",
+  "postingEventDigest", "l1EvidenceDigest", "evidenceDigest",
 ], "V4 Robinhood-to-Ethereum finality evidence");
 assertJsonEqual(
   ethereumFinalityEvidence.properties.profile,

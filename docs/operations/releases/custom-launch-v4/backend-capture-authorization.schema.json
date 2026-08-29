@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/releases/custom-launch-v4/backend-capture-authorization.schema.json",
+  "title": "Programmable Robinhood backend capture authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "trustClass",
+    "subjectPath",
+    "subjectSha256",
+    "attestationBundlePath",
+    "attestationBundleSha256",
+    "trustedRootSource",
+    "trustedRootSha256",
+    "repository",
+    "repositoryId",
+    "workflow",
+    "sourceRef",
+    "sourceRevision",
+    "sourceTree",
+    "verifiedAt",
+    "verificationDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.robinhood-custom-launch.backend-capture-authorization.v2"
+    },
+    "trustClass": {
+      "enum": ["github-artifact-attestation", "test-only"]
+    },
+    "subjectPath": {
+      "const": "release/robinhood-chain-4663/backend-promotion-input.public.json"
+    },
+    "subjectSha256": { "$ref": "#/$defs/sha256" },
+    "attestationBundlePath": {
+      "const": "release/robinhood-chain-4663/backend-promotion-input.attestation.json"
+    },
+    "attestationBundleSha256": { "$ref": "#/$defs/sha256" },
+    "trustedRootSource": { "const": "github-cli-embedded-tuf" },
+    "trustedRootSha256": { "$ref": "#/$defs/sha256" },
+    "repository": {
+      "const": "programmablehq/programmable-open-hook-v2-internal"
+    },
+    "repositoryId": { "const": "1318883798" },
+    "workflow": {
+      "const": ".github/workflows/capture-programmable-robinhood-promotion.yml"
+    },
+    "sourceRef": { "const": "refs/heads/main" },
+    "sourceRevision": { "$ref": "#/$defs/gitHash" },
+    "sourceTree": { "$ref": "#/$defs/gitHash" },
+    "verifiedAt": { "$ref": "#/$defs/isoSecond" },
+    "verificationDigest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitHash": {
+      "type": "string",
+      "pattern": "^(?!0{40}$)[0-9a-f]{40}$"
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "isoSecond": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    }
+  }
+}

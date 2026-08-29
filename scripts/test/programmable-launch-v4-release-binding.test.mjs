@@ -10,7 +10,10 @@ import Ajv2020 from "ajv/dist/2020.js";
 
 import {
   V4_RELEASE_BINDING_SCHEMA,
+  auditV4ReleaseCommitChain,
+  auditV4ReleaseBindingTransition,
   auditV4ReleaseBinding,
+  computeV4BackendReleaseEvidenceDigest,
   computeV4ChainDeploymentBindingDigest,
   computeV4ChainDeploymentDescriptorDigest,
   computeV4FinalityEvidenceDigest,
@@ -42,6 +45,7 @@ const expectedBlockers = [
   "releaseManifestEvidence",
   "sourceClosureEvidence",
   "finalityEvidence",
+  "backendReleaseEvidence",
 ];
 const expectedPolicySource = {
   schemaVersion: "programmable.custom-launch-policy-source.v1",
@@ -70,7 +74,7 @@ const expectedPolicySource = {
   },
 };
 
-test("committed V4 binding pins policy bytes and remains blocked on five evidence objects", () => {
+test("committed V4 binding pins policy bytes and remains blocked on six evidence objects", () => {
   const result = auditV4ReleaseBinding({ repositoryRoot });
   assert.equal(result.binding.schemaVersion, V4_RELEASE_BINDING_SCHEMA);
   assert.equal(result.releaseReady, false);
@@ -82,6 +86,7 @@ test("committed V4 binding pins policy bytes and remains blocked on five evidenc
     manifest: null,
     source: null,
     finality: null,
+    backend: null,
   });
   assert.throws(
     () => requireV4ReleaseReady({ repositoryRoot }),
@@ -104,7 +109,7 @@ test("descriptor digest uses Ethereum Keccak-256 rather than NIST SHA3-256", () 
   );
 });
 
-test("a digest-shaped deployment placeholder does not reduce the five release blockers", async () => {
+test("a digest-shaped deployment placeholder does not reduce the six release blockers", async () => {
   const fixture = await materializeFixture();
   try {
     fixture.binding.chain.chainDeploymentDescriptorDigest = `0x${"1".repeat(64)}`;
@@ -125,10 +130,31 @@ test("a digest-shaped deployment placeholder does not reduce the five release bl
   }
 });
 
-test("five mechanically recomputed evidence objects unlock readiness", async () => {
+test("six mechanically recomputed evidence objects unlock structural readiness", async () => {
   const fixture = await materializeFixture({ complete: true });
   try {
-    const result = requireV4ReleaseReady({ repositoryRoot: fixture.root });
+    assert.throws(
+      () => requireV4ReleaseReady({
+        repositoryRoot: fixture.root,
+        productionVerifyProofPath: "",
+      }),
+      /PROGRAMMABLE_PRODUCTION_VERIFY_PROOF/u,
+      "local structural evidence must not authorize a production release",
+    );
+    assert.throws(
+      () => requireV4ReleaseReady({
+        repositoryRoot: fixture.root,
+        verifyProductionProof: () => ({ trustClass: "test-only" }),
+        backendAuthorizationPath: "",
+      }),
+      /PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION/u,
+      "caller-authored backend/Fly summaries must not authorize a production release",
+    );
+    const result = requireV4ReleaseReady({
+      repositoryRoot: fixture.root,
+      verifyProductionProof: () => ({ trustClass: "test-only" }),
+      verifyBackendAuthorization: () => ({ trustClass: "test-only" }),
+    });
     assert.equal(result.releaseReady, true);
     assert.deepEqual(result.blockers, []);
     assert.match(
@@ -181,6 +207,197 @@ test("five mechanically recomputed evidence objects unlock readiness", async () 
   }
 });
 
+test("release authority requires ordered distinct #1 source, #2 producer, and #3 evidence commits", async () => {
+  const fixture = await materializeFixture({ complete: true });
+  try {
+    const chain = {
+      repositoryRoot: fixture.root,
+      stageSourceRevision: fixture.commitChain.sourceRevision,
+      stageSourceTree: fixture.commitChain.sourceTree,
+      producerRevision: fixture.commitChain.producerRevision,
+      producerTree: fixture.commitChain.producerTree,
+      currentRevision: fixture.commitChain.currentRevision,
+      currentTree: fixture.commitChain.currentTree,
+    };
+    assert.deepEqual(auditV4ReleaseCommitChain(chain), {
+      stageSourceRevision: chain.stageSourceRevision,
+      stageSourceTree: chain.stageSourceTree,
+      producerRevision: chain.producerRevision,
+      producerTree: chain.producerTree,
+      currentRevision: chain.currentRevision,
+      currentTree: chain.currentTree,
+    });
+    for (const mutation of [
+      { producerRevision: chain.stageSourceRevision, producerTree: chain.stageSourceTree },
+      { currentRevision: chain.producerRevision, currentTree: chain.producerTree },
+      { currentRevision: chain.stageSourceRevision, currentTree: chain.stageSourceTree },
+    ]) {
+      assert.throws(
+        () => auditV4ReleaseCommitChain({ ...chain, ...mutation }),
+        /distinct source, finalization producer, and evidence commits/u,
+      );
+    }
+    assert.throws(() => auditV4ReleaseCommitChain({
+      ...chain,
+      producerRevision: chain.currentRevision,
+      producerTree: chain.currentTree,
+      currentRevision: chain.producerRevision,
+      currentTree: chain.producerTree,
+    }), /source Git binding failed/u, "#2/#3 swap must fail ancestry");
+    assert.throws(() => auditV4ReleaseCommitChain({
+      ...chain,
+      stageSourceRevision: chain.producerRevision,
+      stageSourceTree: chain.producerTree,
+      producerRevision: chain.stageSourceRevision,
+      producerTree: chain.stageSourceTree,
+    }), /source Git binding failed/u, "#1/#2 swap must fail ancestry");
+
+    runGit(fixture.root, ["checkout", "--detach", chain.producerRevision]);
+    const replayedOutput = path.join(
+      fixture.root,
+      "release/robinhood-chain-4663/programmable-backend-authorization.json",
+    );
+    await mkdir(path.dirname(replayedOutput), { recursive: true });
+    await writeFile(replayedOutput, "{}\n", "utf8");
+    runGit(fixture.root, ["add", "-A"]);
+    runGit(fixture.root, [
+      "-c", "user.name=Programmable Release Test",
+      "-c", "user.email=release-test@programmable.invalid",
+      "commit", "-m", "malicious producer replay",
+    ]);
+    const replayProducer = runGit(fixture.root, ["rev-parse", "HEAD^{commit}"]);
+    const replayProducerTree = runGit(fixture.root, ["rev-parse", "HEAD^{tree}"]);
+    await writeFile(path.join(fixture.root, ".fixture", "replay-current"), "later\n", "utf8");
+    runGit(fixture.root, ["add", "-A"]);
+    runGit(fixture.root, [
+      "-c", "user.name=Programmable Release Test",
+      "-c", "user.email=release-test@programmable.invalid",
+      "commit", "-m", "later evidence after replay",
+    ]);
+    assert.throws(() => auditV4ReleaseCommitChain({
+      ...chain,
+      producerRevision: replayProducer,
+      producerTree: replayProducerTree,
+      currentRevision: runGit(fixture.root, ["rev-parse", "HEAD^{commit}"]),
+      currentTree: runGit(fixture.root, ["rev-parse", "HEAD^{tree}"]),
+    }), /Phase B outputs must not already exist/u);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("release authority rejects a live deployment replayed into producer #2", async () => {
+  const fixture = await materializeFixture({ complete: true });
+  try {
+    const chain = {
+      repositoryRoot: fixture.root,
+      stageSourceRevision: fixture.commitChain.sourceRevision,
+      stageSourceTree: fixture.commitChain.sourceTree,
+      producerRevision: fixture.commitChain.producerRevision,
+      producerTree: fixture.commitChain.producerTree,
+      currentRevision: fixture.commitChain.currentRevision,
+      currentTree: fixture.commitChain.currentTree,
+    };
+    runGit(fixture.root, ["checkout", "--detach", chain.producerRevision]);
+    const replayedLiveDeployment = path.join(
+      fixture.root,
+      "contracts/deployments/robinhood-custom-launch-v1.json",
+    );
+    await mkdir(path.dirname(replayedLiveDeployment), { recursive: true });
+    await writeFile(replayedLiveDeployment, "{}\n", "utf8");
+    runGit(fixture.root, ["add", "-A"]);
+    runGit(fixture.root, [
+      "-c", "user.name=Programmable Release Test",
+      "-c", "user.email=release-test@programmable.invalid",
+      "commit", "-m", "malicious live deployment replay",
+    ]);
+    const replayProducer = runGit(fixture.root, ["rev-parse", "HEAD^{commit}"]);
+    const replayProducerTree = runGit(fixture.root, ["rev-parse", "HEAD^{tree}"]);
+    await writeFile(path.join(fixture.root, ".fixture", "replay-live-current"), "later\n", "utf8");
+    runGit(fixture.root, ["add", "-A"]);
+    runGit(fixture.root, [
+      "-c", "user.name=Programmable Release Test",
+      "-c", "user.email=release-test@programmable.invalid",
+      "commit", "-m", "later evidence after live replay",
+    ]);
+    assert.throws(() => auditV4ReleaseCommitChain({
+      ...chain,
+      producerRevision: replayProducer,
+      producerTree: replayProducerTree,
+      currentRevision: runGit(fixture.root, ["rev-parse", "HEAD^{commit}"]),
+      currentTree: runGit(fixture.root, ["rev-parse", "HEAD^{tree}"]),
+    }), /Phase B outputs must not already exist/u);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("release authority binds the #2 CLI baseline to the exact #3 replacement", async () => {
+  const fixture = await materializeFixture({ complete: true });
+  try {
+    const baseline = runGitBytes(fixture.root, [
+      "show", `${fixture.commitChain.producerRevision}:docs/operations/releases/custom-launch-v4/cli-release-binding.json`,
+    ]);
+    const current = await readFile(path.join(
+      fixture.root,
+      "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+    ));
+    const replacement = {
+      repositoryRoot: fixture.root,
+      producerRevision: fixture.commitChain.producerRevision,
+      replacesSha256: digest(baseline),
+      currentSha256: digest(current),
+    };
+    assert.deepEqual(auditV4ReleaseBindingTransition(replacement), {
+      replacesSha256: replacement.replacesSha256,
+      currentSha256: replacement.currentSha256,
+    });
+    assert.throws(() => auditV4ReleaseBindingTransition({
+      ...replacement,
+      replacesSha256: `sha256:${"f".repeat(64)}`,
+    }), /replacement baseline/u);
+    assert.throws(() => auditV4ReleaseBindingTransition({
+      ...replacement,
+      currentSha256: replacement.replacesSha256,
+    }), /current CLI release binding bytes/u);
+    await writeFile(path.join(
+      fixture.root,
+      "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+    ), baseline);
+    assert.throws(() => auditV4ReleaseBindingTransition({
+      ...replacement,
+      currentSha256: replacement.replacesSha256,
+    }), /must replace the finalization producer baseline/u);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("production source audit rejects attached, unprotected, and dirty current checkouts", async () => {
+  const fixture = await materializeFixture({ complete: true });
+  try {
+    runGit(fixture.root, ["checkout", "-B", "production", fixture.commitChain.currentRevision]);
+    assert.throws(
+      () => auditV4ReleaseBinding({ repositoryRoot: fixture.root }),
+      /detached HEAD/u,
+    );
+    runGit(fixture.root, ["checkout", "--detach", fixture.commitChain.currentRevision]);
+    process.env.GITHUB_REF_PROTECTED = "false";
+    assert.throws(
+      () => auditV4ReleaseBinding({ repositoryRoot: fixture.root }),
+      /GITHUB_REF_PROTECTED/u,
+    );
+    process.env.GITHUB_REF_PROTECTED = "true";
+    await writeFile(path.join(fixture.root, "untracked-release-input"), "drift\n", "utf8");
+    assert.throws(
+      () => auditV4ReleaseBinding({ repositoryRoot: fixture.root }),
+      /must be clean/u,
+    );
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("each full evidence gate rejects drift after its outer digest is recomputed", async () => {
   const fixture = await materializeFixture({ complete: true });
   try {
@@ -208,6 +425,12 @@ test("each full evidence gate rejects drift after its outer digest is recomputed
           binding.evidence.finality,
         );
       }, /finality\/deployment Ethereum evidence/u],
+      ["backend", (binding) => {
+        binding.evidence.backend.flyControlPlane.machines[0].machineIdentityDigest =
+          `sha256:${"c".repeat(64)}`;
+        binding.evidence.backend.backendReleaseEvidenceDigest =
+          computeV4BackendReleaseEvidenceDigest(binding.evidence.backend);
+      }, /manifest backend release evidence digest/u],
       ["manifest", (binding) => {
         binding.evidence.manifest.sourceRevision = "a".repeat(40);
         binding.evidence.manifest.releaseManifestDigest = computeV4ReleaseManifestDigest(
@@ -218,7 +441,7 @@ test("each full evidence gate rejects drift after its outer digest is recomputed
     for (const [label, mutate, message] of cases) {
       const binding = structuredClone(fixture.binding);
       mutate(binding);
-      await writeBinding(fixture.root, binding);
+      await commitProtectedFixtureRevision(fixture.root, binding, `reject ${label} drift`);
       assert.throws(
         () => auditV4ReleaseBinding({ repositoryRoot: fixture.root }),
         message,
@@ -316,9 +539,11 @@ async function materializeFixture({ complete = false } = {}) {
   for (const { path: relative } of binding.machineContracts) {
     await cp(path.join(repositoryRoot, relative), path.join(root, relative));
   }
-  if (complete) await addCompleteEvidence(root, binding);
   await writeBinding(root, binding);
-  return { root, binding };
+  const commitChain = complete
+    ? await addCompleteEvidence(root, binding)
+    : null;
+  return { root, binding, commitChain };
 }
 
 async function addCompleteEvidence(root, binding) {
@@ -368,11 +593,14 @@ async function addCompleteEvidence(root, binding) {
   const source = {
     schemaVersion: "programmable.launch-cli-v4-source-closure.v1",
     repository: "programmablehq/PROGRAMMABLE",
+    repositoryId: "1314365508",
     branch: "production",
+    protectedRef: "refs/heads/production",
     revision,
     tree,
     foundationSourceCommitment: descriptor.foundationSourceCommitment,
     entries,
+    sourceVerificationClosureDigest: `sha256:${"7".repeat(64)}`,
     sourceClosureDigest: null,
   };
   source.sourceClosureDigest = computeV4SourceClosureDigest(source);
@@ -388,6 +616,59 @@ async function addCompleteEvidence(root, binding) {
   };
   finality.finalityEvidenceDigest = computeV4FinalityEvidenceDigest(finality);
 
+  const runtimeResponseSha256 = `sha256:${"a".repeat(64)}`;
+  const backend = {
+    schemaVersion: "programmable.launch-cli-v4-backend-release-evidence.v1",
+    repository: "programmablehq/programmable-open-hook-v2-internal",
+    sourceCommit: "8".repeat(40),
+    sourceTree: "9".repeat(40),
+    chainDeploymentDescriptorDigest: deployment.descriptorDigest,
+    backendPromotionInputDigest: `sha256:${"0".repeat(64)}`,
+    apiContract: {
+      path: "release/custom-launch-api-contract.v4.json",
+      sha256: `sha256:${"1".repeat(64)}`,
+    },
+    migration: {
+      path: "migrations/0017_chain_aware_custom_launch_v4.sql",
+      sha256: `sha256:${"2".repeat(64)}`,
+    },
+    openApiSha256: binding.machineContracts.find(({ name }) => name === "openapi").sha256,
+    profileDigest: binding.releaseIdentity.profile.profileDigest,
+    admissionPolicyDigest: binding.releaseIdentity.profile.admissionPolicyDigest,
+    finalityPolicyDigest: binding.releaseIdentity.finalityPolicy.policyDigest,
+    runtimeReadiness: {
+      schemaVersion: "programmable.custom-launch-api-runtime-readiness-receipt.v4",
+      path: "/v4/chains/4663/readiness",
+      httpStatus: 200,
+      contentType: "application/json",
+      normalizedResponseSha256: runtimeResponseSha256,
+      releaseIdentityDigest: `sha256:${"3".repeat(64)}`,
+      observedAt: "2026-08-29T12:00:00Z",
+      authorizationDigest: `sha256:${"4".repeat(64)}`,
+    },
+    flyControlPlane: {
+      schemaVersion: "programmable.custom-launch-api-fly-control-plane-receipt.v2",
+      app: "programmable-custom-launch-api",
+      appStatus: "deployed",
+      releaseIdDigest: `sha256:${"5".repeat(64)}`,
+      releaseVersionDigest: `sha256:${"6".repeat(64)}`,
+      imageTag: "main-888888888888",
+      imageIdentityDigest: `sha256:${"7".repeat(64)}`,
+      machines: [{
+        slot: "1",
+        machineIdentityDigest: `sha256:${"8".repeat(64)}`,
+        state: "started",
+        region: "fra",
+      }],
+      safeReadbacksDigest: `sha256:${"9".repeat(64)}`,
+      releaseIdentityDigest: `sha256:${"a".repeat(64)}`,
+      observedAt: "2026-08-29T12:00:01Z",
+      authorizationDigest: `sha256:${"b".repeat(64)}`,
+    },
+    backendReleaseEvidenceDigest: null,
+  };
+  backend.backendReleaseEvidenceDigest = computeV4BackendReleaseEvidenceDigest(backend);
+
   const manifest = {
     schemaVersion: "programmable.launch-cli-v4-release-manifest.v1",
     releaseIdentity: structuredClone(binding.releaseIdentity),
@@ -400,18 +681,51 @@ async function addCompleteEvidence(root, binding) {
     sourceRevision: source.revision,
     sourceTree: source.tree,
     sourceClosureDigest: source.sourceClosureDigest,
+    sourceVerificationClosureDigest: source.sourceVerificationClosureDigest,
     deploymentTransactionHash: atomic.transactionHash,
     deploymentBlockHash: atomic.blockHash,
     finalityEvidenceDigest: finality.finalityEvidenceDigest,
+    backendReleaseEvidenceDigest: backend.backendReleaseEvidenceDigest,
     machineContracts: binding.machineContracts.map(({ name, sha256 }) => ({ name, sha256 })),
     releaseManifestDigest: null,
   };
   manifest.releaseManifestDigest = computeV4ReleaseManifestDigest(manifest);
 
   binding.chain.chainDeploymentDescriptorDigest = deployment.descriptorDigest;
-  binding.evidence = { chainDeployment: deployment, profile, manifest, source, finality };
+  binding.evidence = { chainDeployment: deployment, profile, manifest, source, finality, backend };
   binding.blockers = [];
   binding.releaseReady = true;
+  await mkdir(path.join(root, ".fixture"), { recursive: true });
+  await writeFile(path.join(root, ".fixture", "finalization-producer"), "#2\n", "utf8");
+  runGit(root, ["add", "-A"]);
+  runGit(root, [
+    "-c", "user.name=Programmable Release Test",
+    "-c", "user.email=release-test@programmable.invalid",
+    "commit", "-m", "import exact Phase A and backend evidence",
+  ]);
+  const producerRevision = runGit(root, ["rev-parse", "HEAD"]);
+  const producerTree = runGit(root, ["rev-parse", "HEAD^{tree}"]);
+  await writeBinding(root, binding);
+  await writeFile(path.join(root, ".fixture", "final-evidence"), "#3\n", "utf8");
+  runGit(root, ["add", "-A"]);
+  runGit(root, [
+    "-c", "user.name=Programmable Release Test",
+    "-c", "user.email=release-test@programmable.invalid",
+    "commit", "-m", "land exact Phase B evidence",
+  ]);
+  const currentRevision = runGit(root, ["rev-parse", "HEAD"]);
+  const currentTree = runGit(root, ["rev-parse", "HEAD^{tree}"]);
+  runGit(root, ["remote", "add", "origin", "https://github.com/programmablehq/PROGRAMMABLE"]);
+  runGit(root, ["update-ref", "refs/remotes/origin/production", currentRevision]);
+  runGit(root, ["checkout", "--detach", currentRevision]);
+  setProtectedFixtureEnvironment(currentRevision);
+  assert.notEqual(revision, producerRevision);
+  assert.notEqual(producerRevision, currentRevision);
+  assert.notEqual(tree, producerTree);
+  assert.notEqual(producerTree, currentTree);
+  assert.notEqual(tree, currentTree);
+  return { sourceRevision: revision, sourceTree: tree, producerRevision, producerTree,
+    currentRevision, currentTree };
 }
 
 function buildCompleteChainDeployment(releaseIdentity) {
@@ -481,7 +795,7 @@ function buildCompleteChainDeployment(releaseIdentity) {
       readback.blockHash = external.blockHash;
       recomputeEvidence(
         readback,
-        "programmable.custom-launch-deployment-provider-readback.v1",
+        "programmable.custom-launch-deployment-provider-readback.v2",
       );
     }
     recomputeEvidence(external);
@@ -576,6 +890,37 @@ function runGit(root, args) {
   const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout.trim();
+}
+
+function runGitBytes(root, args) {
+  const result = spawnSync("git", ["-C", root, ...args]);
+  if (result.status !== 0) throw new Error(result.stderr.toString("utf8"));
+  return result.stdout;
+}
+
+function setProtectedFixtureEnvironment(revision) {
+  Object.assign(process.env, {
+    GITHUB_ACTIONS: "true",
+    GITHUB_REPOSITORY: "programmablehq/PROGRAMMABLE",
+    GITHUB_REPOSITORY_ID: "1314365508",
+    GITHUB_REF: "refs/heads/production",
+    GITHUB_REF_PROTECTED: "true",
+    GITHUB_SHA: revision,
+  });
+}
+
+async function commitProtectedFixtureRevision(root, binding, message) {
+  await writeBinding(root, binding);
+  runGit(root, ["add", "-A"]);
+  runGit(root, [
+    "-c", "user.name=Programmable Release Test",
+    "-c", "user.email=release-test@programmable.invalid",
+    "commit", "-m", message,
+  ]);
+  const revision = runGit(root, ["rev-parse", "HEAD^{commit}"]);
+  runGit(root, ["update-ref", "refs/remotes/origin/production", revision]);
+  setProtectedFixtureEnvironment(revision);
+  return revision;
 }
 
 async function writeBinding(root, binding) {

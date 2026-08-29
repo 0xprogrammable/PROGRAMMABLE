@@ -82,6 +82,9 @@ const safeEthereumFinalityPreimage = Object.freeze({
     tag: "finalized",
   },
   observedAt: "2026-08-29T12:00:00.000Z",
+  captureClosureDigest: `sha256:${"7".repeat(64)}`,
+  postingEventDigest: `sha256:${"8".repeat(64)}`,
+  l1EvidenceDigest: `sha256:${"9".repeat(64)}`,
 });
 
 const safeEthereumFinalityEvidence = Object.freeze({
@@ -346,23 +349,31 @@ const externalRootDeploymentEvidence = Object.freeze([
     "0xdfb76494e158d8dea4376160315239271636a18515207fd4526e574bc7eeb456", "3347899"],
 ].map(([contract, contractAddress, runtimeCodeHash, transactionHash, startBlock], index) => {
   const blockHash = codeHash(String((index + 5) % 10));
+  const previousBlockHash = codeHash(String((index + 4) % 10));
+  const previousBlockNumber = (BigInt(startBlock) - 1n).toString(10);
   const providerReadbacks = Object.freeze([
-    ["drpc", "drpc.org", "1"],
-    ["alchemy", "alchemy.com", "2"],
-  ].map(([providerId, trustDomain, digestDigit]) => {
+    ["drpc", "drpc.org"],
+    ["alchemy", "alchemy.com"],
+  ].map(([providerId, trustDomain]) => {
     const preimage = Object.freeze({
       providerId,
       trustDomain,
       transactionHash,
+      rawTransactionDigest: `sha256:${"0".repeat(64)}`,
+      transactionDigest: `sha256:${"1".repeat(64)}`,
+      previousBlockNumber,
+      previousBlockHash,
+      previousBlockRuntimeCodeHash:
+        "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
       blockNumber: startBlock,
       blockHash,
       runtimeCodeHash,
-      transactionReceiptDigest: `sha256:${digestDigit.repeat(64)}`,
+      transactionReceiptDigest: `sha256:${"2".repeat(64)}`,
     });
     return Object.freeze({
       ...preimage,
       evidenceDigest: framedSha256Json(
-        "programmable.custom-launch-deployment-provider-readback.v1",
+        "programmable.custom-launch-deployment-provider-readback.v2",
         preimage,
       ),
     });
@@ -374,6 +385,10 @@ const externalRootDeploymentEvidence = Object.freeze([
     address: contractAddress,
     runtimeCodeHash,
     transactionHash,
+    previousBlockNumber,
+    previousBlockHash,
+    previousBlockRuntimeCodeHash:
+      "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
     startBlock,
     blockHash,
     registrySource: uniswapRegistrySource,
