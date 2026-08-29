@@ -33,7 +33,7 @@ export function programmableWellKnownDocumentV1(
       "https://developers.programmable.family/openapi/programmable-v2.yaml",
     schemasBaseUrl: "https://developers.programmable.family/schemas/v2/",
     documentationUrl: "https://developers.programmable.family/",
-    sourceUrl: "https://github.com/0xprogrammable/developers",
+    sourceUrl: "https://github.com/programmablehq/Developers",
     customLaunchApi: Object.freeze({
       status: "live" as const,
       readStatus: "live" as const,
@@ -510,7 +510,7 @@ export function programmableWellKnownDocumentV1(
         status: "supported" as const,
         apiBaseUrl: "https://developers.programmable.family/api/v1",
         migrationGuideUrl:
-          "https://github.com/0xprogrammable/developers/blob/main/docs/migrations/v1-to-v2.md",
+          "https://github.com/programmablehq/Developers/blob/main/docs/migrations/v1-to-v2.md",
       }),
     }),
   });

@@ -1,7 +1,7 @@
 export const PROGRAMMABLE_DEVELOPER_ORIGIN =
   "https://developers.programmable.family";
 export const PROGRAMMABLE_DEVELOPER_REPOSITORY =
-  "https://github.com/0xprogrammable/developers";
+  "https://github.com/programmablehq/Developers";
 
 export const PROGRAMMABLE_PLATFORM_ID = "programmable";
 export const PROGRAMMABLE_ACTIVE_API_VERSION = "2";

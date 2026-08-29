@@ -4,6 +4,7 @@ import {
   formatBps,
   isProgrammableStatusCurrent,
   PROGRAMMABLE_FEE_TABLE,
+  PROGRAMMABLE_PUBLIC_REPOSITORIES,
   PROGRAMMABLE_PRODUCT_STATES,
   PROGRAMMABLE_REVENUE_CURRENT,
   PROGRAMMABLE_REVENUE_TARGET,
@@ -11,6 +12,16 @@ import {
 } from "../components/docs-public-policy";
 
 describe("Public documentation policy", () => {
+  it("publishes the transferred public repositories", () => {
+    expect(PROGRAMMABLE_PUBLIC_REPOSITORIES).toEqual({
+      developers: "https://github.com/programmablehq/Developers",
+      product: "https://github.com/programmablehq/PROGRAMMABLE-EVM",
+      productIssues:
+        "https://github.com/programmablehq/PROGRAMMABLE-EVM/issues",
+      launchPolicy: "https://github.com/programmablehq/Launch-Policy",
+    });
+  });
+
   it("keeps active and planned fee paths distinct", () => {
     expect(PROGRAMMABLE_FEE_TABLE.classic).toMatchObject({
       programmableBps: 10,

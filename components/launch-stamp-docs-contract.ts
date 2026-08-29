@@ -13,17 +13,17 @@ export const PROGRAMMABLE_LAUNCH_STAMP_RESOURCES = {
   abiUrl:
     "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json",
   abiGithubUrl:
-    "https://raw.githubusercontent.com/0xprogrammable/developers/main/abis/ethereum/programmable-launch-stamp-router-v1.json",
+    "https://raw.githubusercontent.com/programmablehq/Developers/main/abis/ethereum/programmable-launch-stamp-router-v1.json",
   abiSha256:
     "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
   referenceUrl:
-    "https://github.com/0xprogrammable/developers/blob/main/docs/reference/launch-stamp.md",
+    "https://github.com/programmablehq/Developers/blob/main/docs/reference/launch-stamp.md",
   terminalGuideUrl:
-    "https://github.com/0xprogrammable/developers/blob/main/docs/guides/terminals-and-scanners.md",
+    "https://github.com/programmablehq/Developers/blob/main/docs/guides/terminals-and-scanners.md",
   jsonRpcVerifierUrl:
-    "https://github.com/0xprogrammable/developers/blob/main/examples/verify-launch-stamp.mjs",
+    "https://github.com/programmablehq/Developers/blob/main/examples/verify-launch-stamp.mjs",
   viemVerifierUrl:
-    "https://github.com/0xprogrammable/developers/blob/main/examples/verify-launch-stamp-viem.ts",
+    "https://github.com/programmablehq/Developers/blob/main/examples/verify-launch-stamp-viem.ts",
 } as const;
 
 export const PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI = {
@@ -212,7 +212,7 @@ export const PROGRAMMABLE_LAUNCH_STAMP_MANIFEST = {
         classicOnchainCanary: false,
       },
       source: {
-        sourceRepository: "https://github.com/0xprogrammable/programmable",
+        sourceRepository: "https://github.com/programmablehq/PROGRAMMABLE-EVM",
         sourceCommit: "b3cfed41bb841ae8d6188dbb815eddb5e1440218",
         commitSubject: "Add graph launch stamp canary",
       },
