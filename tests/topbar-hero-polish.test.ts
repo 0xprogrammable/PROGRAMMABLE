@@ -71,6 +71,7 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).not.toContain('if (pathname === "/") return null;');
     expect(navigation).toContain("<HeaderAccountAction");
+    expect(navigation).toContain("<DesktopNavigation />");
     expect(navigation).toContain("const mobileNavItems = desktopNavItems;");
     expect(navigation).not.toContain("liquid-glass-surface");
     expect(navigation).not.toContain("lucide-react");
@@ -79,10 +80,10 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain("warmedNavigationRoutes.has(href)");
     expect(navigation).toContain("router.prefetch(href)");
     for (const label of [
-      "Explore Projects",
+      "Explore",
       "Create",
-      "API keys",
       "Docs",
+      "API Keys",
       "Profile",
     ]) {
       expect(navigation).toContain(`label: "${label}"`);
@@ -93,7 +94,16 @@ describe("topbar and Explore hero polish", () => {
     );
     expect(navigation).toContain("<HeaderSocialLinks mobile />");
     expect(navigationCss).toMatch(
-      /\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*none;[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;/s,
+      /\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*flex;[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;/s,
+    );
+    expect(navigationCss).toMatch(
+      /\.mobileSheet\.mobileSheet :global\(\.mobile-nav\)\s*\{[^}]*display:\s*none;/s,
+    );
+    expect(navigationCss).toMatch(
+      /@media \(max-width: 60rem\)[\s\S]*?\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*none;[\s\S]*?\.mobileSheet\.mobileSheet :global\(\.mobile-nav\)\s*\{[^}]*display:\s*grid;/s,
+    );
+    expect(navigation).toContain(
+      'aria-label={menuOpen ? "Close menu" : "Open menu"}',
     );
     expect(navigationCss).toMatch(
       /\.menuButton\s*\{[^}]*display:\s*inline-flex;[\s\S]*?\.mobileSocials\s*\{[^}]*display:\s*flex;/s,
