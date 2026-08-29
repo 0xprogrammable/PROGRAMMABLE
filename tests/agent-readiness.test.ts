@@ -22,7 +22,7 @@ import {
   programmableSiteStructuredData,
   serializeStructuredData,
 } from "../lib/site-structured-data";
-import { proxy } from "../proxy";
+import { config as proxyConfig, proxy } from "../proxy";
 
 const ORIGIN = "https://programmable.market";
 const CUSTOM_LAUNCH_API_ORIGIN = "https://api.programmable.market";
@@ -338,6 +338,7 @@ describe("agent-readable public surface", () => {
       source: "/api/prediction/:match*",
       destination: "/api/retired-prediction",
     });
+    expect(proxyConfig.matcher).toContain("/api/prediction/:path*");
 
     for (const response of [
       getRetiredPredictionApi(),
@@ -353,6 +354,36 @@ describe("agent-readable public surface", () => {
         status: "error",
         error: { code: "api_route_not_found" },
       });
+    }
+
+    const retiredBody = JSON.stringify({
+      schemaVersion: "programmable.api-error.v1",
+      status: "error",
+      error: {
+        code: "api_route_not_found",
+        message: "No public Programmable API route matches this path.",
+      },
+    });
+    for (const path of ["/api/prediction", "/api/prediction/v2/directory"]) {
+      for (const method of [
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+      ]) {
+        const response = proxy(
+          new NextRequest(`${ORIGIN}${path}`, { method }),
+        );
+        expect(response.status).toBe(404);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.get("x-robots-tag")).toBe(
+          "noindex, nofollow",
+        );
+        expect(await response.text()).toBe(retiredBody);
+      }
     }
 
     expect(programmableHomeMarkdown).not.toMatch(/prediction markets?/iu);
