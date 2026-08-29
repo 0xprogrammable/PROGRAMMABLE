@@ -20,7 +20,7 @@ import {
   NavigationCloseIcon,
   NavigationMenuIcon,
 } from "@/components/navigation-icons";
-import { WalletButton } from "@/components/wallet-provider";
+import { useWallet } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
@@ -109,6 +109,102 @@ function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
+function shortenAddress(address: string) {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+function ProgrammableAccountMark() {
+  return (
+    <span className={styles.accountMark} aria-hidden="true">
+      <Image
+        className={styles.accountMarkImage}
+        src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"
+        alt=""
+        width={1168}
+        height={1536}
+        sizes="18px"
+      />
+    </span>
+  );
+}
+
+function HeaderAccountAction({
+  menuOpen,
+  onNavigate,
+}: Readonly<{
+  menuOpen: boolean;
+  onNavigate: () => void;
+}>) {
+  const {
+    wallet,
+    username,
+    avatarDataUrl,
+    authReady,
+    connecting,
+    hasSession,
+    openWallet,
+    preloadWallet,
+  } = useWallet();
+
+  if (wallet) {
+    return (
+      <div className={styles.accountGroup}>
+        <div className={styles.accountAction}>
+          {avatarDataUrl ? (
+            <Image
+              className={styles.accountAvatar}
+              src={avatarDataUrl}
+              alt=""
+              width={36}
+              height={36}
+              unoptimized
+            />
+          ) : (
+            <ProgrammableAccountMark />
+          )}
+          <span className={styles.accountCopy}>
+            <strong>Connected wallet</strong>
+            <small>{username || shortenAddress(wallet.account)}</small>
+          </span>
+        </div>
+        <Link
+          className={styles.apiKeysLink}
+          href="/developers/api-keys"
+          prefetch={false}
+          tabIndex={menuOpen ? undefined : -1}
+          onClick={onNavigate}
+        >
+          API keys
+        </Link>
+      </div>
+    );
+  }
+
+  const label = !authReady
+    ? "Loading wallet"
+    : connecting
+      ? "Opening wallet"
+      : hasSession
+        ? "Reconnect wallet"
+        : "Connect wallet";
+
+  return (
+    <button
+      className={styles.connectWallet}
+      type="button"
+      disabled={!authReady || connecting}
+      tabIndex={menuOpen ? undefined : -1}
+      aria-busy={connecting || undefined}
+      onFocus={preloadWallet}
+      onPointerEnter={preloadWallet}
+      onClick={openWallet}
+    >
+      <ProgrammableAccountMark />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
   const activePath = "activePath" in item ? item.activePath : item.href;
 
@@ -126,10 +222,10 @@ function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const router = useRouter();
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuSurfaceRef = useRef<HTMLDivElement>(null);
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
 
@@ -150,6 +246,12 @@ export function SiteHeader() {
 
   useEffect(() => {
     if (!menuOpen) return;
+
+    window.requestAnimationFrame(() => {
+      menuSurfaceRef.current
+        ?.querySelector<HTMLElement>("a, button:not(:disabled)")
+        ?.focus({ preventScroll: true });
+    });
 
     const closeOnOutsidePress = (event: PointerEvent) => {
       if (
@@ -198,25 +300,7 @@ export function SiteHeader() {
           </Link>
         </div>
 
-        <nav className="desktop-nav" aria-label="Primary navigation">
-          {desktopNavItems.map((item) => (
-            <Link
-              key={item.href}
-              className={isCurrent(pathname, item) ? "active" : undefined}
-              href={item.href}
-              prefetch={false}
-              aria-current={isCurrent(pathname, item) ? "page" : undefined}
-              onFocus={() => warmNavigationRoute(router, item.href)}
-              onPointerEnter={() => warmNavigationRoute(router, item.href)}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
         <div className={`header-actions ${styles.headerActions}`}>
-          <HeaderSocialLinks />
-          <WalletButton compact />
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
@@ -234,7 +318,6 @@ export function SiteHeader() {
                 className={menuOpen ? styles.iconVisible : styles.iconHidden}
               />
             </span>
-            <span>Menu</span>
           </button>
         </div>
       </div>
@@ -243,8 +326,18 @@ export function SiteHeader() {
         className={`${styles.mobileSheet} ${
           menuOpen ? styles.mobileSheetOpen : ""
         }`}
+        aria-hidden={!menuOpen}
+        inert={menuOpen ? undefined : true}
       >
-        <div className={styles.mobileSheetSurface} id={menuId}>
+        <div
+          ref={menuSurfaceRef}
+          className={styles.mobileSheetSurface}
+          id={menuId}
+        >
+          <HeaderAccountAction
+            menuOpen={menuOpen}
+            onNavigate={() => setMenuPath(null)}
+          />
           <MobileNavigation
             id={menuId}
             open={menuOpen}

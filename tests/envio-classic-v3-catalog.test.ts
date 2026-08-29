@@ -558,11 +558,12 @@ describe("Envio Classic V3 public catalog", () => {
       launchModel: "classic",
       launchModelVersion: "classic-v2",
       totalSwapFeeBps: 100,
-      description: "The official Programmable token",
-      imageUrl: "https://assets.example/programmble.webp",
+      description:
+        "The Programmable token for custom Uniswap v4 launches and onchain markets.",
+      imageUrl: "/brand/projects/programmable-main-token-v1.webp",
       links: [
-        { kind: "website", url: "https://programmable.family/" },
-        { kind: "x", url: "https://x.com/programmable" },
+        { kind: "website", url: "https://programmable.market/" },
+        { kind: "x", url: "https://x.com/ProgrammableHQ" },
       ],
     });
     expect(catalog.entries.filter((entry) =>
