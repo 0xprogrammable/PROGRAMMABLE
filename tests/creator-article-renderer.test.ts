@@ -145,4 +145,43 @@ describe("creator article public renderer", () => {
     expect(html).not.toContain(">Analytics<");
     expect(html).toContain("The article story remains visible.");
   });
+
+  it("replaces stale organization links on the official Programmable article", () => {
+    const staleArticle = parseCreatorArticleV1({
+      ...article,
+      document: {
+        type: "doc",
+        content: [{
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "X",
+              marks: [{
+                type: "link",
+                attrs: { href: "https://x.com/0xProgrammable" },
+              }],
+            },
+            { type: "text", text: "   " },
+            {
+              type: "text",
+              text: "GitHub",
+              marks: [{
+                type: "link",
+                attrs: { href: "https://github.com/0xprogrammable" },
+              }],
+            },
+          ],
+        }],
+      },
+    });
+
+    const html = renderToStaticMarkup(createElement(CreatorArticle, {
+      article: staleArticle,
+    }));
+    expect(html).toContain('href="https://x.com/ProgrammableHQ"');
+    expect(html).toContain('href="https://github.com/programmablehq"');
+    expect(html).not.toContain('href="https://x.com/0xProgrammable"');
+    expect(html).not.toContain('href="https://github.com/0xprogrammable"');
+  });
 });
