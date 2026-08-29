@@ -72,6 +72,23 @@ jobs:
         with:
           node-version: 24.14.0
 
+      - name: Install exact Cosign verifier
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = "Linux"
+          test "$RUNNER_ARCH" = "X64"
+          cosign_dir="$(mktemp -d "$RUNNER_TEMP/cosign-v3.1.3.XXXXXX")"
+          chmod 0700 "$cosign_dir"
+          cosign="$cosign_dir/cosign-linux-amd64"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            "https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64" \
+            --output "$cosign"
+          printf '%s  %s\n' \
+            '4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71' \
+            "$cosign" | sha256sum --check --strict
+          chmod 0700 "$cosign"
+          echo "PROGRAMMABLE_COSIGN_BIN=$cosign" >> "$GITHUB_ENV"
+
       - name: Install exact toolchain and dependency closure
         run: |
           set -euo pipefail
@@ -152,7 +169,7 @@ jobs:
           test -s "$trusted_root"
           echo "path=$trusted_root" >> "$GITHUB_OUTPUT"
 
-      - name: Verify all imported portable attestations offline
+      - name: Verify PROGRAMMABLE bundles and backend Sigstore evidence
         env:
           BACKEND_DIR: ${{ steps.imported.outputs.backend }}
           BACKEND_REVISION: ${{ steps.imported.outputs.backend_revision }}
@@ -194,12 +211,26 @@ jobs:
             "$PHASE_A_DIR/programmable-stage-bundle.attestation.json" \
             "$GITHUB_REPOSITORY" ".github/workflows/capture-robinhood-custom-launch-postdeployment.yml" \
             "refs/heads/production" "$CAPTURE_REVISION"
-          verify_portable \
-            "$BACKEND_DIR/backend-promotion-input.public.json" \
-            "$BACKEND_DIR/backend-promotion-input.attestation.json" \
-            "programmablehq/programmable-open-hook-v2-internal" \
-            ".github/workflows/capture-programmable-robinhood-promotion.yml" \
-            "refs/heads/main" "$BACKEND_REVISION"
+          trust_overrides="$(
+            compgen -A variable | grep -E '^(COSIGN|FULCIO|REKOR|SIGSTORE|TUF)_' || true
+          )"
+          if [[ -n "$trust_overrides" ]]; then
+            echo "Sigstore trust override environment is forbidden" >&2
+            exit 1
+          fi
+          "$PROGRAMMABLE_COSIGN_BIN" verify-blob \
+            --bundle "$BACKEND_DIR/backend-promotion-input.attestation.json" \
+            --certificate-identity \
+              "https://github.com/programmablehq/programmable-open-hook-v2-internal/.github/workflows/capture-programmable-robinhood-promotion.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-github-workflow-name \
+              "Capture Programmable Robinhood backend promotion" \
+            --certificate-github-workflow-repository \
+              "programmablehq/programmable-open-hook-v2-internal" \
+            --certificate-github-workflow-ref "refs/heads/main" \
+            --certificate-github-workflow-sha "$BACKEND_REVISION" \
+            --certificate-github-workflow-trigger "workflow_dispatch" \
+            "$BACKEND_DIR/backend-promotion-input.public.json"
 
       - name: Read exact historical Verify coordinates
         id: coordinates

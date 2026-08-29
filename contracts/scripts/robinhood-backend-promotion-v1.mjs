@@ -33,9 +33,25 @@ export const ROBINHOOD_BACKEND_AUTHORIZATION_SCHEMA =
 export const ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW =
   ".github/workflows/finalize-robinhood-custom-launch-promotion.yml";
 export const ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA =
-  "programmable.robinhood-custom-launch.backend-capture-authorization.v2";
+  "programmable.robinhood-custom-launch.backend-capture-authorization.v3";
 export const ROBINHOOD_BACKEND_CAPTURE_WORKFLOW =
   ".github/workflows/capture-programmable-robinhood-promotion.yml";
+export const ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME =
+  "Capture Programmable Robinhood backend promotion";
+export const ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS =
+  "sigstore-keyless-github-actions-protected-main-v1";
+export const ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY =
+  "https://github.com/programmablehq/programmable-open-hook-v2-internal/"
+    + ".github/workflows/capture-programmable-robinhood-promotion.yml@refs/heads/main";
+export const ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER =
+  "https://token.actions.githubusercontent.com";
+export const ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF = "refs/heads/main";
+export const ROBINHOOD_BACKEND_CAPTURE_TRIGGER = "workflow_dispatch";
+export const ROBINHOOD_BACKEND_COSIGN_VERSION = "v3.1.3";
+export const ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256 =
+  "sha256:4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71";
+export const SIGSTORE_BUNDLE_V03_MEDIA_TYPE =
+  "application/vnd.dev.sigstore.bundle.v0.3+json";
 export const ROBINHOOD_BACKEND_READINESS_SCHEMA =
   "programmable.custom-launch-api-release-identity.v4";
 export const ROBINHOOD_BACKEND_EVIDENCE_SCHEMA =
@@ -134,6 +150,90 @@ const BACKEND_MIGRATION_SHA256 =
 const BACKEND_API_CONTRACT_PATH = "release/custom-launch-api-contract.v4.json";
 const BACKEND_API_CONTRACT_SHA256 =
   "sha256:ddf45b96ff5bc402951e009849924fda8796b8db8498521c6903f7b1a2c29e62";
+
+export function validateSigstoreMessageBundleV03({ bundleBytes, subjectBytes }) {
+  if (!Buffer.isBuffer(bundleBytes) || bundleBytes.byteLength < 1
+    || bundleBytes.byteLength > 16 * 1024 * 1024
+    || !Buffer.isBuffer(subjectBytes) || subjectBytes.byteLength < 1
+    || subjectBytes.byteLength > BACKEND_PUBLIC_INPUT_BYTES) {
+    throw new TypeError("Sigstore bundle or subject bytes are empty or oversized");
+  }
+  const bundle = parseStrictJson(
+    decodeExactUtf8(bundleBytes, "Sigstore v0.3 bundle"),
+    { maximumBytes: 16 * 1024 * 1024, maximumDepth: 256 },
+  );
+  assertExactKeys(bundle, [
+    "mediaType", "verificationMaterial", "messageSignature",
+  ], "Sigstore v0.3 message-signature bundle");
+  if (bundle.mediaType !== SIGSTORE_BUNDLE_V03_MEDIA_TYPE) {
+    throw new TypeError("Sigstore bundle is not the required standardized v0.3 format");
+  }
+  const materialKeys = Object.keys(bundle.verificationMaterial ?? {});
+  const allowedMaterialKeys = new Set([
+    "certificate", "tlogEntries", "timestampVerificationData",
+  ]);
+  if (bundle.verificationMaterial?.certificate !== undefined) {
+    assertExactKeys(
+      bundle.verificationMaterial.certificate,
+      ["rawBytes"],
+      "Sigstore leaf certificate",
+    );
+  }
+  const certificateBytes = typeof bundle.verificationMaterial?.certificate?.rawBytes === "string"
+    ? Buffer.from(bundle.verificationMaterial.certificate.rawBytes, "base64")
+    : Buffer.alloc(0);
+  if (materialKeys.some((key) => !allowedMaterialKeys.has(key))
+    || certificateBytes.byteLength === 0
+    || certificateBytes.toString("base64")
+      !== bundle.verificationMaterial?.certificate?.rawBytes
+    || !Array.isArray(bundle.verificationMaterial?.tlogEntries)
+    || bundle.verificationMaterial.tlogEntries.length < 1
+    || bundle.verificationMaterial.tlogEntries.some((entry) =>
+      entry === null || typeof entry !== "object" || Array.isArray(entry))) {
+    throw new TypeError("Sigstore bundle lacks keyless certificate or transparency-log proof");
+  }
+  assertExactKeys(bundle.messageSignature, [
+    "messageDigest", "signature",
+  ], "Sigstore message signature");
+  assertExactKeys(bundle.messageSignature.messageDigest, [
+    "algorithm", "digest",
+  ], "Sigstore message digest");
+  const expectedDigest = createHash("sha256").update(subjectBytes).digest("base64");
+  const signatureBytes = typeof bundle.messageSignature.signature === "string"
+    ? Buffer.from(bundle.messageSignature.signature, "base64")
+    : Buffer.alloc(0);
+  if (bundle.messageSignature.messageDigest.algorithm !== "SHA2_256"
+    || bundle.messageSignature.messageDigest.digest !== expectedDigest
+    || signatureBytes.byteLength === 0
+    || signatureBytes.toString("base64") !== bundle.messageSignature.signature) {
+    throw new TypeError("Sigstore message signature does not bind the exact subject bytes");
+  }
+  return Object.freeze(structuredClone(bundle));
+}
+
+export function buildRobinhoodBackendCosignVerifyBlobArgs({
+  subjectPath,
+  bundlePath,
+  sourceCommit,
+}) {
+  if (typeof subjectPath !== "string" || subjectPath.length === 0
+    || typeof bundlePath !== "string" || bundlePath.length === 0
+    || !HEX40.test(sourceCommit)) {
+    throw new TypeError("backend Cosign verification coordinates are invalid");
+  }
+  return Object.freeze([
+    "verify-blob",
+    "--bundle", bundlePath,
+    "--certificate-identity", ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+    "--certificate-oidc-issuer", ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+    "--certificate-github-workflow-name", ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+    "--certificate-github-workflow-repository", BACKEND_REPOSITORY,
+    "--certificate-github-workflow-ref", ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+    "--certificate-github-workflow-sha", sourceCommit,
+    "--certificate-github-workflow-trigger", ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
+    subjectPath,
+  ]);
+}
 
 function framedSha256(domain, value) {
   return sha256Digest(Buffer.concat([
@@ -1177,7 +1277,6 @@ export function validateRobinhoodBackendCaptureAuthorization({
   authorization,
   inputBytes,
   attestationBundleBytes,
-  trustedRootBytes = null,
   input,
   allowTestOnly = false,
 }) {
@@ -1190,34 +1289,58 @@ export function validateRobinhoodBackendCaptureAuthorization({
   assertExactKeys(authorization, [
     "schemaVersion", "trustClass", "subjectPath", "subjectSha256",
     "attestationBundlePath", "attestationBundleSha256",
-    "trustedRootSource", "trustedRootSha256",
+    "bundleMediaType", "verifier",
+    "certificateIdentity", "certificateOidcIssuer",
+    "certificateGithubWorkflowName", "certificateGithubWorkflowRepository",
+    "certificateGithubWorkflowRef", "certificateGithubWorkflowSha",
+    "certificateGithubWorkflowTrigger",
     "repository", "repositoryId",
     "workflow", "sourceRef", "sourceRevision", "sourceTree", "verifiedAt",
     "verificationDigest",
   ], "backend capture authorization");
+  assertExactKeys(authorization.verifier, [
+    "name", "version", "sha256",
+  ], "backend capture Cosign verifier");
   if (!Buffer.isBuffer(attestationBundleBytes) || attestationBundleBytes.byteLength < 1
-    || attestationBundleBytes.byteLength > 16 * 1024 * 1024
-    || (trustedRootBytes !== null && (!Buffer.isBuffer(trustedRootBytes)
-      || trustedRootBytes.byteLength < 1 || trustedRootBytes.byteLength > 16 * 1024 * 1024))) {
-    throw new TypeError("backend capture trust sidecars are empty or oversized");
+    || attestationBundleBytes.byteLength > 16 * 1024 * 1024) {
+    throw new TypeError("backend capture trust sidecar is empty or oversized");
   }
-  const trustAllowed = authorization.trustClass === "github-artifact-attestation"
+  const productionTrust = authorization.trustClass
+    === ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS;
+  const trustAllowed = productionTrust
     || (allowTestOnly && authorization.trustClass === "test-only");
-  const trustedRootBindingValid = trustedRootBytes === null
-    ? SHA256.test(authorization.trustedRootSha256)
-    : authorization.trustedRootSha256 === sha256Digest(trustedRootBytes);
+  if (productionTrust) {
+    validateSigstoreMessageBundleV03({
+      bundleBytes: attestationBundleBytes,
+      subjectBytes: inputBytes,
+    });
+  }
   if (authorization.schemaVersion !== ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA
     || !trustAllowed
     || authorization.subjectPath !== ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH
     || authorization.subjectSha256 !== sha256Digest(inputBytes)
     || authorization.attestationBundlePath !== ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH
     || authorization.attestationBundleSha256 !== sha256Digest(attestationBundleBytes)
-    || authorization.trustedRootSource !== "github-cli-embedded-tuf"
-    || !trustedRootBindingValid
+    || authorization.bundleMediaType !== SIGSTORE_BUNDLE_V03_MEDIA_TYPE
+    || authorization.verifier.name !== "cosign"
+    || authorization.verifier.version !== ROBINHOOD_BACKEND_COSIGN_VERSION
+    || authorization.verifier.sha256 !== ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256
+    || authorization.certificateIdentity
+      !== ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY
+    || authorization.certificateOidcIssuer
+      !== ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER
+    || authorization.certificateGithubWorkflowName
+      !== ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME
+    || authorization.certificateGithubWorkflowRepository !== BACKEND_REPOSITORY
+    || authorization.certificateGithubWorkflowRef
+      !== ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF
+    || authorization.certificateGithubWorkflowSha !== input.backendSource.sourceCommit
+    || authorization.certificateGithubWorkflowTrigger
+      !== ROBINHOOD_BACKEND_CAPTURE_TRIGGER
     || authorization.repository !== BACKEND_REPOSITORY
     || authorization.repositoryId !== BACKEND_REPOSITORY_ID
     || authorization.workflow !== ROBINHOOD_BACKEND_CAPTURE_WORKFLOW
-    || authorization.sourceRef !== "refs/heads/main"
+    || authorization.sourceRef !== ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF
     || authorization.sourceRevision !== input.backendSource.sourceCommit
     || authorization.sourceTree !== input.backendSource.sourceTree) {
     throw new TypeError("backend capture authorization does not bind protected backend source");

@@ -76,6 +76,12 @@ function failures(value) {
     "test \"$(git remote get-url origin)\" = \"https://github.com/$GITHUB_REPOSITORY\"",
     "test -z \"$(git status --porcelain=v1 --untracked-files=all)\"",
     "node-version: 24.14.0",
+    "mktemp -d \"$RUNNER_TEMP/cosign-v3.1.3.XXXXXX\"",
+    "curl --proto '=https' --tlsv1.2",
+    "https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64",
+    "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71",
+    "sha256sum --check --strict",
+    "PROGRAMMABLE_COSIGN_BIN=$cosign",
     "npm@11.16.0",
     "npm install --global npm@11.16.0 --ignore-scripts --no-audit --no-fund",
     "pkg.packageManager !== \"npm@11.16.0\"",
@@ -521,6 +527,12 @@ function robinhoodPromotionFailures(value) {
     cleanCheckoutAssertion,
     "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
     "node-version: 24.14.0",
+    "mktemp -d \"$RUNNER_TEMP/cosign-v3.1.3.XXXXXX\"",
+    "curl --proto '=https' --tlsv1.2",
+    "https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64",
+    "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71",
+    "sha256sum --check --strict",
+    "PROGRAMMABLE_COSIGN_BIN=$cosign",
     "npm@11.16.0",
     "npm install --global npm@11.16.0 --ignore-scripts --no-audit --no-fund",
     "npm ci --ignore-scripts --no-audit --no-fund",
@@ -540,6 +552,18 @@ function robinhoodPromotionFailures(value) {
     "test \"$capture_revision\" != \"$GITHUB_SHA\"",
     "backend-promotion-input.public.json",
     "backend-promotion-input.attestation.json",
+    "compgen -A variable | grep -E '^(COSIGN|FULCIO|REKOR|SIGSTORE|TUF)_' || true",
+    "Sigstore trust override environment is forbidden",
+    "\"$PROGRAMMABLE_COSIGN_BIN\" verify-blob",
+    "--certificate-identity",
+    "https://github.com/programmablehq/programmable-open-hook-v2-internal/.github/workflows/capture-programmable-robinhood-promotion.yml@refs/heads/main",
+    "--certificate-oidc-issuer \"https://token.actions.githubusercontent.com\"",
+    "--certificate-github-workflow-name",
+    "Capture Programmable Robinhood backend promotion",
+    "--certificate-github-workflow-repository",
+    "--certificate-github-workflow-ref \"refs/heads/main\"",
+    "--certificate-github-workflow-sha \"$BACKEND_REVISION\"",
+    "--certificate-github-workflow-trigger \"workflow_dispatch\"",
     "gh attestation trusted-root > \"$trusted_root\"",
     "--bundle \"$bundle\"",
     "--custom-trusted-root \"$TRUSTED_ROOT\"",
@@ -579,6 +603,20 @@ function robinhoodPromotionFailures(value) {
     "Reconfirm finalization producer remains protected production tip",
   ];
   const missing = required.filter((item) => !value.includes(item));
+  const forbiddenCosignOptions = [
+    "--insecure-ignore-tlog",
+    "--insecure-ignore-sct",
+    "--certificate-identity-regexp",
+    "--certificate-oidc-issuer-regexp",
+    "--key",
+    "--trusted-root",
+    "--rekor-url",
+    "--fulcio-url",
+  ];
+  for (const option of forbiddenCosignOptions) {
+    const pattern = new RegExp(`(^|\\s)${option}(?:\\s|=|$)`, "u");
+    if (pattern.test(value)) missing.push(`forbidden Cosign option ${option}`);
+  }
   if (value.split(cleanCheckoutAssertion).length - 1 !== 2) {
     missing.push("exactly two initial/final clean-checkout assertions");
   }
@@ -631,6 +669,22 @@ test("Robinhood Phase B workflow contract mutations fail closed", () => {
     robinhoodPromotionSource.replace("--source-digest \"$source_revision\"", ""),
     robinhoodPromotionSource.replace("--signer-digest \"$source_revision\"", ""),
     robinhoodPromotionSource.replace("--deny-self-hosted-runners", ""),
+    robinhoodPromotionSource.replace("--certificate-github-workflow-sha \"$BACKEND_REVISION\"", ""),
+    robinhoodPromotionSource.replace("--certificate-github-workflow-trigger \"workflow_dispatch\"", ""),
+    robinhoodPromotionSource.replace(
+      "compgen -A variable | grep -E '^(COSIGN|FULCIO|REKOR|SIGSTORE|TUF)_' || true",
+      "true",
+    ),
+    ...[
+      "--insecure-ignore-tlog",
+      "--insecure-ignore-sct",
+      "--certificate-identity-regexp",
+      "--certificate-oidc-issuer-regexp",
+      "--key",
+      "--trusted-root",
+      "--rekor-url",
+      "--fulcio-url",
+    ].map((option) => `${robinhoodPromotionSource}\n${option} attacker-controlled\n`),
     robinhoodPromotionSource.replaceAll("backend-promotion-input.public.json", "backend-promotion-input.json"),
     robinhoodPromotionSource.replace(
       "finalize-robinhood-custom-launch-deployment.mjs authorize-backend",
