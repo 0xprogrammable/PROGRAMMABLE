@@ -6,6 +6,19 @@ description: Package, submit and track one deterministic Custom project
 
 Public V3.3 general-hook creation and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.
 
+Robinhood Chain V4 is planned and not deployed, so it is not a public launch path. Its stable discovery contract is published
+for integration work, but public writes remain disabled until deployment, simulation, wallet-binding, Router-finality,
+source-verification and indexing gates pass. Do not send funds to a V4 route based on documentation alone. When it is
+activated, API authentication will use only `$PROGRAMMABLE_API_KEY`, while the connected controller wallet will still
+review and sign separately. The server selects the chain-bound policy profile; a project or client cannot choose it.
+An external contract reference does not become trusted by being named in a V4 config. The server must verify its exact
+`eip155:4663` address, live runtime hash, source evidence, graph role and checkpoint; an arbitrary or unbound reference
+blocks admission. This planned rule is not deployment or live-capability evidence.
+The reviewed foundation source commitment is
+`0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`; it is not a deployed-address claim.
+Sourcify v2 exact match is required for source verification. Robinhood Blockscout is optional, currently unproven and
+degraded, and cannot support an exact-source claim or block or revise finality.
+
 ## Prepare the source
 
 Keep the contracts, tests, deployment logic and material project information needed to understand the release in one reproducible source bundle. Derive the exact API request with the versioned public `programmable-launch` CLI and validate it against the published schema.

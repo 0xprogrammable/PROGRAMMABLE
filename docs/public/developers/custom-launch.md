@@ -23,6 +23,47 @@ and current resources. The [V2 OpenAPI document](https://programmable.market/ope
 compatibility contracts. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is
 executable by a cold external agent.
 
+## Robinhood Chain V4 is planned
+
+Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`) is published in discovery as `planned` and `planned-not-deployed`.
+It has no public V4 write authorization yet. The API server, not a request field or client, selects
+`robinhood-launch-readiness` and `robinhood-production-launch` from the authenticated chain binding. Do not send real
+funds or treat a V4 route as live until discovery changes only after the chain deployments, fork simulation, wallet
+binding, finalized Router evidence, source-verification and indexing gates have all passed.
+
+The stable planned contract uses
+`/v4/chains/4663/capabilities`, `/v4/chains/4663/custom-launches/preflight`,
+`/v4/chains/4663/custom-launches`, `/v4/chains/4663/custom-launches/{launchId}` and
+`/v4/chains/4663/finalized-custom-launches`. Read the
+[V4 OpenAPI pointer](https://programmable.market/openapi/custom-launch-v4.json), the
+[V4 pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and the
+[V4 admission descriptor](https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json).
+Authentication is handed off only through `$PROGRAMMABLE_API_KEY`; it never selects a policy profile or grants wallet
+authority. V4 currently advertises only no funding and exact wallet transaction value. ERC-20 funding needs separate
+settlement proof before it can be advertised.
+
+Project-owned token and hook targets, 3–16 graph targets and all fourteen hook permission bits are structurally
+representable. That does not prove safety or behavior. `feeBehaviorClaim` remains false, generic fee claiming and
+generic buyback management are not live, and outside indexers may lag or omit Robinhood data even after a launch is
+finalized. Legacy Registry and GitHub intake stay closed.
+
+A bounded V4 external-contract reference is admissible only after the protected API server verifies its exact
+`eip155:4663` address, live runtime hash, source-verification evidence, declared graph role and verification
+checkpoint. Naming an arbitrary, cross-chain, missing-code, stale-hash or otherwise unbound contract does not make it
+a trust root and blocks admission. This planned validation contract is not evidence that V4 or the reference is live.
+
+The reviewed foundation source closure is bound by
+`0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`; this is a source commitment, not a
+deployment or live-address claim. Sourcify v2 exact match is the required supported source-verification path.
+Robinhood Blockscout is optional, currently unproven and degraded. It cannot support an exact-source claim, and its
+failure cannot block or revise finality.
+
+While discovery says `planned`, every field in its V4 `deploymentEvidence` record is null, including every contract
+root. Canary status is valid only after the server publishes the exact deployment ID and descriptor digest, foundation
+source commitment, finality-policy digest, finalized block, pinned finalized-evidence reference, and address,
+runtime-hash and start-block tuples for the Router, GraphFactory, PermitAuthority Safe, PoolManager, PositionManager,
+Permit2, StateView, Universal Router and V4 Quoter. Partial evidence cannot promote the lane.
+
 ## Existing-project integration
 
 An API key authorizes only its scoped API operations; it does not contain integration instructions or wallet authority.
@@ -248,9 +289,9 @@ Install the pinned public GitHub Release asset. Do not substitute an unverified 
 ```bash
 programmable_cli_dir="$(mktemp -d)"
 curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
+  https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
 curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
+  https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
 (cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.9.tgz.sha256)
 npm install --global "$programmable_cli_dir/programmable-launch-3.3.9.tgz"
 programmable-launch --version

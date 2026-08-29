@@ -20,7 +20,7 @@ export function programmableWellKnownDocumentV1(
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
     description:
-      "Canonical discovery for Programmable Classic and Custom launches. Fresh V3.3 general-hook writes and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 remain readable but their creation routes are write-fenced.",
+      "Canonical discovery for Programmable Classic and Custom launches. Fresh V3.3 general-hook writes and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. Robinhood Chain V4 is planned and not deployed; its public routes stay disabled until deployment, policy, finality and indexing gates pass. V2 and V1 remain readable but their creation routes are write-fenced.",
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -147,11 +147,11 @@ export function programmableWellKnownDocumentV1(
         binary: "programmable-launch",
         releaseVersion: "3.3.9",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
+          "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
+          "https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
+          "https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
         tarballSha256:
           "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
       }),
@@ -161,7 +161,7 @@ export function programmableWellKnownDocumentV1(
             "https://programmable.market/openapi/custom-launch-v1.json",
           cliReleaseVersion: "1.0.1" as const,
           cliTarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
+            "https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz",
         }),
         v2: Object.freeze({
           openApiUrl:
@@ -187,11 +187,11 @@ export function programmableWellKnownDocumentV1(
           binary: "programmable-launch",
           releaseVersion: "3.3.9",
           releaseUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
+            "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
           tarballUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
+            "https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
           checksumUrl:
-            "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
+            "https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
           tarballSha256:
             "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
         }),
@@ -379,11 +379,11 @@ export function programmableWellKnownDocumentV1(
         releaseVersion: "3.3.9",
         releaseTag: "programmable-launch-v3.3.9",
         releaseUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
+          "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v3.3.9",
         tarballUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
+          "https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz",
         checksumUrl:
-          "https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
+          "https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256",
         tarballSha256:
           "sha256:44b71185355bea8db6820b61f12351db7cc1237aa7ecf9b0db3cfbb09bebee01",
         openApiUrl:
@@ -461,19 +461,129 @@ export function programmableWellKnownDocumentV1(
           preflightPersisted: false as const,
           retryAfter: "honor-on-429-or-503" as const,
         }),
+        v4: Object.freeze({
+          status: "planned" as const,
+          activationStage: "planned-not-deployed" as const,
+          publicAuthorization: false as const,
+          publicWrites: false as const,
+          chainId: 4663 as const,
+          caip2: "eip155:4663" as const,
+          network: "Robinhood Chain Mainnet" as const,
+          capabilitiesPath: "/v4/chains/4663/capabilities" as const,
+          preflightPath:
+            "/v4/chains/4663/custom-launches/preflight" as const,
+          createPath: "/v4/chains/4663/custom-launches" as const,
+          statusPath:
+            "/v4/chains/4663/custom-launches/{launchId}" as const,
+          finalizedMetadataPath:
+            "/v4/chains/4663/finalized-custom-launches" as const,
+          openApiUrl:
+            "https://programmable.market/openapi/custom-launch-v4.json",
+          packConfigSchemaUrl:
+            "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
+          admissionDescriptorUrl:
+            "https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json",
+          sourceRepository:
+            "https://github.com/programmablehq/PROGRAMMABLE",
+          launchPolicyRepository:
+            "https://github.com/programmablehq/Launch-Policy",
+          foundationSourceCommitment:
+            "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730" as const,
+          sourceVerification: Object.freeze({
+            requiredProvider: "sourcify-v2" as const,
+            requiredMatch: "exact" as const,
+            blockscoutAvailability: "optional-unproven-degraded" as const,
+            blockscoutExactSourceClaimAllowed: false as const,
+            blockscoutFinalityBlocker: false as const,
+            finalityIndependent: true as const,
+          }),
+          deploymentEvidence: Object.freeze({
+            chainDeploymentDescriptorDigest: null,
+            chainDeploymentId: null,
+            finalityPolicyDigest: null,
+            finalizedBlock: null,
+            finalizedEvidenceRef: null,
+            foundationSourceCommitment: null,
+            roots: Object.freeze({
+              graphFactory: null,
+              permit2: null,
+              permitAuthoritySafe: null,
+              poolManager: null,
+              positionManager: null,
+              programmableLaunchStampRouter: null,
+              stateView: null,
+              universalRouter: null,
+              v4Quoter: null,
+            }),
+          }),
+          authentication: "bearer-api-key" as const,
+          apiKeyEnvironmentVariable: "PROGRAMMABLE_API_KEY" as const,
+          apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY" as const,
+          walletAuthorization: "separate-review-and-sign" as const,
+          profileSelection: "api-server-chain-binding" as const,
+          clientSelectableProfile: false as const,
+          readinessProfile: "robinhood-launch-readiness" as const,
+          productionProfile: "robinhood-production-launch" as const,
+          decisionAuthority: "api-server" as const,
+          localOrModelApprovalAccepted: false as const,
+          projectOwnedToken: true as const,
+          projectOwnedHook: true as const,
+          minimumTargets: 3 as const,
+          maximumTargets: 16 as const,
+          hookPermissionMaskRange: Object.freeze({
+            minimum: 0 as const,
+            maximum: 16_383 as const,
+          }),
+          allFourteenHookPermissionsStructurallySupported: true as const,
+          advertisedFundingModes: Object.freeze([
+            "none",
+            "wallet-transaction-value",
+          ] as const),
+          erc20FundingStatus: "not-advertised-until-separate-proof" as const,
+          safetyClaim: false as const,
+          feeBehaviorClaim: false as const,
+          genericFeeClaiming: "not-live" as const,
+          genericBuybackManagement: "not-live" as const,
+          externalIndexingGuaranteed: false as const,
+          legacyIntake: Object.freeze({
+            registry: "closed" as const,
+            github: "closed" as const,
+          }),
+          activationBlockers: Object.freeze([
+            "programmable-chain-deployments",
+            "server-chain-fork-simulation",
+            "wallet-chain-binding",
+            "finalized-router-evidence",
+            "source-verification-provider-binding",
+            "chain-indexing-readiness",
+          ] as const),
+        }),
       }),
       legacyIntake: Object.freeze({
         registry: "closed" as const,
         github: "closed" as const,
       }),
     }),
-    chains: Object.freeze([Object.freeze({
-      chainId: 1,
-      caip2: "eip155:1" as const,
-      name: "Ethereum Mainnet",
-      explorerUrl: "https://etherscan.io",
-      status: "live" as const,
-    })]),
+    chains: Object.freeze([
+      Object.freeze({
+        chainId: 1,
+        caip2: "eip155:1" as const,
+        name: "Ethereum Mainnet",
+        explorerUrl: "https://etherscan.io",
+        status: "live" as const,
+      }),
+      Object.freeze({
+        chainId: 4663,
+        caip2: "eip155:4663" as const,
+        name: "Robinhood Chain Mainnet",
+        explorerUrl: "https://robinhoodchain.blockscout.com",
+        status: "planned" as const,
+        customLaunchApiVersion: "4" as const,
+        activationStage: "planned-not-deployed" as const,
+        publicWrites: false as const,
+        externalIndexingGuaranteed: false as const,
+      }),
+    ]),
     publicCategories: Object.freeze({
       classic: Object.freeze({ discoveryStatus: "live" as const }),
       custom: Object.freeze({
