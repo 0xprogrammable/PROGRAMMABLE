@@ -536,6 +536,7 @@ describe("profile workspace loading state", () => {
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonLaunch\s*\{[^}]*min-height:\s*463px;/s,
     );
+    expect(profileViewSource).not.toContain("profileSkeletonPrediction");
     expect(profileExperienceCss).toMatch(
       /@media \(max-width:\s*820px\)[\s\S]*?\.profileSkeletonSummary,[\s\S]*?\.profileSkeletonClaims\s*\{[^}]*min-height:\s*340px;/s,
     );

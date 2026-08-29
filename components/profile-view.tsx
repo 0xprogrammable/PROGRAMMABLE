@@ -4537,33 +4537,23 @@ function ProfileLoadingSkeleton({
         </div>
       ) : null}
       {showHero ? (
-        <>
-          <div
-            className={`${styles.profileSkeletonSection} ${styles.profileSkeletonLaunch}`}
-            aria-hidden="true"
-          >
-            <span className={styles.profileSkeletonSectionHeader}>
-              <span className={styles.profileSkeletonHeading} />
-            </span>
-            <span className={styles.profileSkeletonRows}>
-              {Array.from({ length: creatorProjectPageSize }, (_, item) => (
-                <span className={styles.profileSkeletonRow} key={item}>
-                  <span />
-                  <span />
-                  <span />
-                </span>
-              ))}
-            </span>
-          </div>
-          <div
-            className={`${styles.profileSkeletonSection} ${styles.profileSkeletonPrediction}`}
-            aria-hidden="true"
-          >
-            <span className={styles.profileSkeletonSectionHeader}>
-              <span className={styles.profileSkeletonHeading} />
-            </span>
-          </div>
-        </>
+        <div
+          className={`${styles.profileSkeletonSection} ${styles.profileSkeletonLaunch}`}
+          aria-hidden="true"
+        >
+          <span className={styles.profileSkeletonSectionHeader}>
+            <span className={styles.profileSkeletonHeading} />
+          </span>
+          <span className={styles.profileSkeletonRows}>
+            {Array.from({ length: creatorProjectPageSize }, (_, item) => (
+              <span className={styles.profileSkeletonRow} key={item}>
+                <span />
+                <span />
+                <span />
+              </span>
+            ))}
+          </span>
+        </div>
       ) : null}
       <div
         className={`${styles.profileSkeletonWorkspace} ${

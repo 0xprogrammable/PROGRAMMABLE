@@ -1368,7 +1368,6 @@
 .profileSkeletonLine,
 .profileSkeletonBar,
 .profileSkeletonTabs,
-.profileSkeletonPredictionRow,
 .profileSkeletonRow > span {
   animation: profile-skeleton-pulse 1.4s ease-in-out infinite alternate;
   background: color-mix(in srgb, var(--text) 9%, transparent);
@@ -1441,7 +1440,7 @@
 
 .profileSkeletonSummary,
 .profileSkeletonClaims {
-  min-height: 398px;
+  min-height: 360px;
 }
 
 .profileSkeletonSection {
@@ -1452,10 +1451,6 @@
 .profileSkeletonLaunch {
   margin-block-start: 40px;
   min-height: 463px;
-}
-
-.profileSkeletonPrediction {
-  min-height: 422px;
 }
 
 .profileSkeletonSectionHeader {
@@ -1469,18 +1464,6 @@
   display: block;
   height: 52px;
   width: 100%;
-}
-
-.profileSkeletonPredictionRow {
-  border-radius: 11px;
-  display: block;
-  min-height: 82px;
-  width: 100%;
-}
-
-.profileSkeletonPredictionRows {
-  display: grid;
-  gap: 8px;
 }
 
 .profileSkeletonHeading {
@@ -1705,8 +1688,8 @@
     min-height: 340px;
   }
 
-  .profileSkeletonPredictionRow {
-    min-height: 190px;
+  .profileSkeletonSummary {
+    min-height: 370px;
   }
 
   .customProjects {
@@ -1996,7 +1979,6 @@
   .profileSkeletonLine,
   .profileSkeletonBar,
   .profileSkeletonTabs,
-  .profileSkeletonPredictionRow,
   .profileSkeletonRow > span {
     animation: none;
   }
@@ -2602,20 +2584,8 @@
     margin-block-start: 28px;
   }
 
-  .profileSkeletonPrediction {
-    padding: 16px;
-  }
-
   .profileSkeletonWorkspacePage {
     margin-block-start: 12px;
-  }
-
-  .profileSkeletonPredictionRow {
-    min-height: 322px;
-  }
-
-  .profileSkeletonPredictionRow:nth-child(n + 3) {
-    display: none;
   }
 
   .profileSkeletonHero {

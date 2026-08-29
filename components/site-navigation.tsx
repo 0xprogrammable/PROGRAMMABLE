@@ -24,10 +24,11 @@ import { useWallet } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
-  { href: "/explore", label: "Explore" },
+  { href: "/explore", label: "Explore Projects" },
   { href: "/launch", label: "Create" },
-  { href: "/profile", label: "Profile" },
+  { href: "/developers/api-keys", label: "API keys" },
   { href: "/docs", label: "Docs" },
+  { href: "/profile", label: "Profile" },
 ];
 
 const mobileNavItems = desktopNavItems;
@@ -141,10 +142,13 @@ function HeaderAccountAction({
     avatarDataUrl,
     authReady,
     connecting,
+    disconnecting,
     hasSession,
+    disconnect,
     openWallet,
     preloadWallet,
   } = useWallet();
+  const [disconnectError, setDisconnectError] = useState("");
 
   if (wallet) {
     return (
@@ -167,15 +171,30 @@ function HeaderAccountAction({
             <small>{username || shortenAddress(wallet.account)}</small>
           </span>
         </div>
-        <Link
-          className={styles.apiKeysLink}
-          href="/developers/api-keys"
-          prefetch={false}
+        <button
+          className={styles.disconnectWallet}
+          type="button"
+          disabled={disconnecting}
           tabIndex={menuOpen ? undefined : -1}
-          onClick={onNavigate}
+          onClick={async () => {
+            setDisconnectError("");
+            const disconnected = await disconnect({
+              showDialogOnFailure: false,
+            });
+            if (disconnected) {
+              onNavigate();
+              return;
+            }
+            setDisconnectError("Wallet could not be disconnected. Try again.");
+          }}
         >
-          API keys
-        </Link>
+          {disconnecting ? "Disconnecting" : "Disconnect"}
+        </button>
+        {disconnectError ? (
+          <p className={styles.accountError} role="alert">
+            {disconnectError}
+          </p>
+        ) : null}
       </div>
     );
   }

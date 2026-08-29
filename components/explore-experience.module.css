@@ -1225,7 +1225,7 @@
 .runnerImage {
   height: 100% !important;
   inset: 0 !important;
-  object-position: center 58%;
+  object-position: center;
   width: 100% !important;
 }
 
@@ -1372,6 +1372,16 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .runnersIntro :global(.token-filter summary:hover) {
+    background: var(--webde-surface-raised);
+    border-color: #505050;
+  }
+
+  .filterMenu button:hover {
+    background: var(--webde-control);
+    color: var(--webde-ink);
+  }
+
   .runnerCard:has(a.runnerHitArea):hover {
     background: var(--webde-surface-raised);
     border-color: #505050;

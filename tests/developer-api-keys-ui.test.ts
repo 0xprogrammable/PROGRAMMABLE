@@ -277,17 +277,12 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "keys"}');
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "history"}');
     expect(apiKeysSource).toContain('activeSection === "keys" ?');
-    expect(apiKeysSource).toContain("launchPath");
-    expect(apiKeysSource).toContain(
-      "https://api.programmable.market/v3/capabilities",
-    );
-    expect(apiKeysSource).toContain("POST /v3/custom-launches/preflight");
-    expect(apiKeysSource).toContain("authenticated, quota-free and creates");
-    expect(apiKeysSource).toContain("no request, nonce or");
-    expect(apiKeysSource).toContain("wallet action");
-    expect(apiKeysSource).toContain(
-      "A finalized launch is not automatically source verified, liquid,",
-    );
+    expect(apiKeysSource).not.toContain("Before anything reaches your wallet");
+    expect(apiKeysSource).toContain('href="/profile"');
+    expect(apiKeysSource).toContain("Back to profile");
+    expect(apiKeysSource).toContain("const API_KEY_PAGE_SIZE = 3");
+    expect(apiKeysSource).toContain("visibleApiKeys.map");
+    expect(apiKeysSource).toContain('aria-label="API key pages"');
     expect(apiKeysSource).not.toContain("Fee claims and automated buybacks");
     expect(apiKeysSource).not.toContain("Key owner");
     expect(apiKeysSource).not.toContain("activeCount");

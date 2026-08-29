@@ -2518,7 +2518,6 @@ export function ExploreView({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = useExploreTokensPerPage();
   const [retryKey, setRetryKey] = useState(0);
-  const [revalidationKey, setRevalidationKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const activeExploreContentKey = useRef<string | null>(null);
@@ -2644,51 +2643,6 @@ export function ExploreView({
     if (
       preview ||
       loadingOnly ||
-      isInterfacePreviewHost(window.location.hostname)
-    ) return;
-
-    const schedulerStartedAt = Date.now();
-    const scheduler = createExploreRevalidationScheduler({
-      visibilityState: () => document.visibilityState,
-      online: () => navigator.onLine,
-      now: () => Date.now(),
-      setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
-      clearTimeout: (timer) => window.clearTimeout(timer),
-      onRevalidate: () => {
-        if (!explorePageSizeMatchesViewport(pageSize, window.innerWidth)) return;
-        modelDatasetCache.current = null;
-        expireResolvedExplorePayloadCache(activeRequestContentKey);
-        setRevalidationKey((value) => value + 1);
-      },
-      lastRevalidationAt: exploreRevalidationCacheTimestamp({
-        activeKey: activeRequestContentKey,
-        fallback: schedulerStartedAt,
-        resolvedUpdatedAt: resolvedExplorePayloadUpdatedAt(
-          activeRequestContentKey,
-          schedulerStartedAt,
-        ),
-        modelDataset: modelDatasetCache.current,
-      }),
-    });
-    const syncScheduler = () => scheduler.sync();
-
-    document.addEventListener("visibilitychange", syncScheduler);
-    window.addEventListener("focus", syncScheduler);
-    window.addEventListener("online", syncScheduler);
-    window.addEventListener("offline", syncScheduler);
-    return () => {
-      scheduler.dispose();
-      document.removeEventListener("visibilitychange", syncScheduler);
-      window.removeEventListener("focus", syncScheduler);
-      window.removeEventListener("online", syncScheduler);
-      window.removeEventListener("offline", syncScheduler);
-    };
-  }, [activeRequestContentKey, loadingOnly, pageSize, preview]);
-
-  useEffect(() => {
-    if (
-      preview ||
-      loadingOnly ||
       (typeof window !== "undefined" &&
         isInterfacePreviewHost(window.location.hostname))
     ) {
@@ -2727,8 +2681,7 @@ export function ExploreView({
       socialFilter === "all" &&
       modelFilter === initialModelFilter &&
       currentPage === 1 &&
-      retryKey === 0 &&
-      revalidationKey === 0;
+      retryKey === 0;
     const responsiveInitialState = createResponsiveExploreInitialState(
       initialResponse,
       {
@@ -2811,17 +2764,12 @@ export function ExploreView({
           setCurrentPage(payload.page);
         }
         handledRequestKey.current = requestKey;
-        setState((current) => ({
+        setState({
           phase: "ready",
-          payload:
-            revalidationKey > 0 &&
-              current.phase === "ready" &&
-              current.contentKey === contentKey
-              ? stabilizeExploreRevalidationPayload(current.payload, payload)
-              : payload,
+          payload,
           requestKey,
           contentKey,
-        }));
+        });
       } catch (error) {
         if (ignore) return;
         const message =
@@ -2855,7 +2803,6 @@ export function ExploreView({
     initialState,
     loadingOnly,
     preview,
-    revalidationKey,
     requestKey,
     retryKey,
     requiresCompleteDataset,

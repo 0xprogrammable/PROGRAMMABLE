@@ -27,23 +27,18 @@
   color: var(--navigation-glass-ink);
   display: inline-flex;
   flex: none;
-  height: 44px;
+  height: 48px;
   justify-content: center;
   padding: 0;
   transition:
     background-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
     border-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
     transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
-  width: 44px;
-}
-
-.menuButton:hover {
-  background: rgb(255 255 255 / 0.06);
-  border-color: rgb(255 255 255 / 0.08);
+  width: 48px;
 }
 
 .menuButton:active {
-  transform: scale(0.94);
+  transform: scale(0.96);
 }
 
 .menuButton:focus-visible {
@@ -53,20 +48,20 @@
 
 .menuIcon {
   display: block;
-  height: 20px;
+  height: 24px;
   position: relative;
-  width: 20px;
+  width: 24px;
 }
 
 .menuIcon svg {
-  height: 20px;
+  height: 24px;
   inset: 0;
   position: absolute;
   transition:
     filter 200ms cubic-bezier(0.2, 0, 0, 1),
     opacity 180ms cubic-bezier(0.2, 0, 0, 1),
     transform 200ms cubic-bezier(0.2, 0, 0, 1);
-  width: 20px;
+  width: 24px;
 }
 
 .iconVisible {
@@ -104,7 +99,7 @@
   transform: translate3d(0, 0, 0) scale(1);
   transition:
     opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
-    transform 300ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 240ms cubic-bezier(0.32, 0.72, 0, 1),
     visibility 0s linear 0s;
   visibility: visible;
 }
@@ -176,8 +171,7 @@
 }
 
 .mobileSheet.mobileSheet :global(.mobile-nav a:focus-visible),
-.accountAction:focus-visible,
-.apiKeysLink:focus-visible,
+.disconnectWallet:focus-visible,
 .connectWallet:focus-visible,
 .mobileSocials :global(.header-social-link:focus-visible) {
   outline: 2px solid var(--brand-ivory);
@@ -188,22 +182,22 @@
   align-items: center;
   border-top: 1px solid rgb(255 255 255 / 0.09);
   display: flex;
-  gap: 4px;
-  justify-content: flex-start;
+  gap: 8px;
+  justify-content: center;
   margin-top: 6px;
   padding: 7px 2px 0;
 }
 
 .mobileSocials :global(.header-social-link) {
   color: var(--navigation-glass-ink-muted);
-  height: 42px;
-  width: 42px;
+  height: 46px;
+  width: 46px;
 }
 
 .mobileSocials :global(.header-social-link svg),
 .mobileSocials :global(.header-social-link img) {
-  height: 19px;
-  width: 19px;
+  height: 22px;
+  width: 22px;
 }
 
 .mobileSocials :global(.header-social-logo) {
@@ -212,11 +206,26 @@
 
 .accountGroup {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   grid-template-columns: minmax(0, 1fr) auto;
+  padding: 2px 2px 6px;
 }
 
-.accountAction,
+.accountAction {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--navigation-glass-ink);
+  display: flex;
+  font-family: var(--font-instrument), sans-serif;
+  gap: 10px;
+  min-height: 52px;
+  min-width: 0;
+  padding: 6px 8px;
+  text-align: start;
+  width: 100%;
+}
+
 .connectWallet {
   align-items: center;
   background: rgb(255 255 255 / 0.055);
@@ -285,23 +294,60 @@
   white-space: nowrap;
 }
 
-.apiKeysLink {
+.disconnectWallet {
   align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 12px;
   color: var(--navigation-glass-ink-muted);
+  cursor: pointer;
   display: flex;
+  font-family: var(--font-instrument), sans-serif;
   font-size: 13px;
   font-weight: 600;
   justify-content: center;
-  min-height: 58px;
+  min-height: 52px;
   padding: 0 12px;
+  transition:
+    background-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.apiKeysLink:hover,
-.accountAction:hover,
-.connectWallet:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.09);
-  color: var(--navigation-glass-ink);
+.disconnectWallet:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.disconnectWallet:active {
+  transform: scale(0.96);
+}
+
+.accountError {
+  color: #f2a1a5;
+  font-size: 12px;
+  grid-column: 1 / -1;
+  line-height: 1.4;
+  margin: 0 8px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menuButton:hover {
+    background: rgb(255 255 255 / 0.06);
+    border-color: rgb(255 255 255 / 0.08);
+  }
+
+  .mobileSheet.mobileSheet :global(.mobile-nav a:hover) {
+    background: rgb(255 255 255 / 0.055);
+    color: var(--navigation-glass-ink);
+  }
+
+  .mobileSocials :global(.header-social-link:hover),
+  .disconnectWallet:hover:not(:disabled),
+  .connectWallet:hover:not(:disabled) {
+    background: rgb(255 255 255 / 0.09);
+    color: var(--navigation-glass-ink);
+  }
 }
 
 @media (max-width: 60rem) {
@@ -328,7 +374,8 @@
   .menuButton,
   .menuIcon svg,
   .mobileSheet,
-  .mobileSheet.mobileSheet :global(.mobile-nav a) {
+  .mobileSheet.mobileSheet :global(.mobile-nav a),
+  .disconnectWallet {
     transition-duration: 0.01ms;
   }
 
@@ -344,8 +391,7 @@
 
   .menuButton:focus-visible,
   .mobileSheet.mobileSheet :global(.mobile-nav a:focus-visible),
-  .accountAction:focus-visible,
-  .apiKeysLink:focus-visible,
+  .disconnectWallet:focus-visible,
   .connectWallet:focus-visible {
     outline-color: Highlight;
   }
