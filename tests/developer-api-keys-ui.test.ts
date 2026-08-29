@@ -350,12 +350,12 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain("Copy agent setup");
     expect(apiKeysSource).toContain("PROGRAMMABLE_AGENT_SETUP_TEXT_V1");
     expect(apiKeysSource).toContain(
-      "Agent setup contains the <code>$PROGRAMMABLE_API_KEY</code>",
+      "Agent setup uses only the <code>$PROGRAMMABLE_API_KEY</code>",
     );
     expect(apiKeysSource).toContain(
-      "discovery, capabilities, preflight, remediation, pack schema,",
+      "public CLI, guide and OpenAPI contract.",
     );
-    expect(apiKeysSource).not.toContain("Agent setup contains only");
+    expect(apiKeysSource).toContain("never includes this key");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("$PROGRAMMABLE_API_KEY");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli,
@@ -534,7 +534,7 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("&version=${version}");
     expect(historySource).toContain("Wallet action required");
     expect(historySource).toContain(
-      "Review the exact Mainnet transaction, then ask your wallet to send it.",
+      "Review the exact Ethereum Mainnet transaction, then ask your wallet to send it.",
     );
     expect(historySource).not.toContain("Your agent&apos;s first accepted request");
     expect(historyStyles).not.toContain("height: clamp(");

@@ -51,7 +51,7 @@ describe("Explore UI contract", () => {
     expect(source).toContain("const eagerImage = !embedded");
     expect(source).toContain("function ExploreGridSkeleton");
     expect(source).toContain(
-      "<ExploreGridSkeleton count={EXPLORE_TOKENS_PER_PAGE} />",
+      "<ExploreGridSkeleton count={pageSize} />",
     );
     expect(source).toContain('data-skeleton="true"');
     expect(source).toContain(
@@ -141,10 +141,12 @@ describe("Explore UI contract", () => {
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
     expect(source).toContain('{ id: "custom-hook", label: "Custom" }');
-    expect(source).toContain('Number(valuationSort !== "none")');
+    expect(source).toContain(
+      'valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT',
+    );
     expect(source).toContain('Number(ageSort !== "none")');
     expect(source).toContain("<span>Filters</span>");
-    expect(source).toContain("{activeFilterCount}");
+    expect(source).toContain("activeFilterCount > 0");
     expect(source.indexOf('id="explore-model-label"')).toBeLessThan(
       source.indexOf('id="explore-valuation-label"'),
     );
@@ -243,13 +245,13 @@ describe("Explore UI contract", () => {
       /\.runnerImagePreserved\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
     );
     expect(source).not.toContain("<small>CA</small>");
-    expect(source).toContain("<small>Market cap</small>");
+    expect(source).toContain('<small title="Fully diluted valuation">FDV</small>');
     expect(source).toContain("formatExploreContractAddress(token.tokenAddress)");
     expect(styles).toMatch(
-      /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*11px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*11px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*11px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*11px;/s,
+      /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*12px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*12px;/s,
     );
     expect(source).toMatch(
-      /\{valuationLabel \? \([\s\S]*?<small>Market cap<\/small>[\s\S]*?\) : null\}/,
+      /<small title="Fully diluted valuation">FDV<\/small>[\s\S]*?valuationLabel \?\? token\.marketStatus \?\? "Unavailable"/,
     );
     expect(source).not.toContain(
       "exploreUnavailableFdvLabel(token.marketStatus)",

@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type FocusEvent,
-  type MouseEvent,
 } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -28,7 +27,7 @@ const desktopNavItems = [
   { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
   { href: "/docs", label: "Docs" },
-  { href: "/developers/api-keys", label: "API Keys" },
+  { href: "/developers/api-keys", label: "API keys" },
   { href: "/profile", label: "Profile" },
 ];
 
@@ -78,7 +77,7 @@ function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
         href="https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0"
         target="_blank"
         rel="noreferrer"
-        aria-label="Programmable on Dexscreener"
+        aria-label="Programmable on DEX Screener"
       >
         <Image
           className="header-social-logo"
@@ -284,21 +283,6 @@ export function SiteHeader() {
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
 
-  function restartHome(event: MouseEvent<HTMLAnchorElement>) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    window.location.assign("/");
-  }
-
   useEffect(() => {
     if (!menuOpen) return;
 
@@ -354,7 +338,6 @@ export function SiteHeader() {
             href="/"
             prefetch={false}
             aria-label="Programmable home"
-            onClick={restartHome}
           >
             <Image
               className="wordmark-logo"

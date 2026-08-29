@@ -25,16 +25,16 @@ export default function GlobalError({
               aria-describedby="global-error-description"
             >
               <p className={styles.eyebrow}>Site unavailable</p>
-              <h1 id="global-error-title">Programmable could not start.</h1>
+              <h1 id="global-error-title">Programmable could not load.</h1>
               <p className={styles.description} id="global-error-description">
-                Try starting the site again. If it still does not load, reload
-                it to begin a fresh session.
+                Try again. If the problem continues, reload the site to start a
+                new session.
               </p>
             </div>
 
             <p className={styles.guidance}>
-              If you were reviewing a wallet action, check the wallet before
-              trying again.
+              If you were reviewing a wallet action, check your wallet before
+              retrying so you do not repeat an action.
             </p>
 
             <div className={styles.actions}>

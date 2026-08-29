@@ -544,7 +544,12 @@ export function ProfileProjects({
             || "Launches could not be refreshed. Select Refresh to try again."}
         </p>
       ) : visibleProjects.length === 0 ? (
-        <p className={styles.empty}>Your finalized launches will appear here.</p>
+        <div className={styles.empty}>
+          <p>Your finalized launches will appear here.</p>
+          <Link className={styles.refresh} href="/launch">
+            Create a launch
+          </Link>
+        </div>
       ) : (
         <div className={styles.list}>
           {pageData.items.map((project) => {

@@ -893,7 +893,7 @@
   }
 
   .runnerCategory {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .runnerMarketCap {
@@ -948,39 +948,39 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .revealedGrid .runnerCard {
-    animation: explore-card-reveal 900ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    animation: explore-card-reveal 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
 
   .revealedGrid .runnerCard:nth-child(2) {
-    animation-delay: 80ms;
+    animation-delay: 15ms;
   }
 
   .revealedGrid .runnerCard:nth-child(3) {
-    animation-delay: 160ms;
+    animation-delay: 30ms;
   }
 
   .revealedGrid .runnerCard:nth-child(4) {
-    animation-delay: 120ms;
+    animation-delay: 20ms;
   }
 
   .revealedGrid .runnerCard:nth-child(5) {
-    animation-delay: 200ms;
+    animation-delay: 35ms;
   }
 
   .revealedGrid .runnerCard:nth-child(6) {
-    animation-delay: 280ms;
+    animation-delay: 50ms;
   }
 
   .revealedGrid .runnerCard:nth-child(7) {
-    animation-delay: 240ms;
+    animation-delay: 40ms;
   }
 
   .revealedGrid .runnerCard:nth-child(8) {
-    animation-delay: 320ms;
+    animation-delay: 55ms;
   }
 
   .revealedGrid .runnerCard:nth-child(9) {
-    animation-delay: 400ms;
+    animation-delay: 60ms;
   }
 }
 
@@ -1250,9 +1250,15 @@
 }
 
 .runnerHeading h3 {
+  display: -webkit-box;
   font-size: 22px;
   font-weight: 580;
   letter-spacing: -0.03em;
+  line-height: 1.15;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .runnerHeading > span {
@@ -1512,7 +1518,7 @@
   }
 
   .runnerHeading > span {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .runnerData {
@@ -1521,11 +1527,11 @@
   }
 
   .runnerData small {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .runnerData strong {
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .runnerMeta {
@@ -1537,7 +1543,7 @@
 
   .runnerCategory,
   .runnerMarketStatus {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .runnerCategory {
@@ -1557,7 +1563,7 @@
   }
 
   .runnerContract code {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .runnerCopyButton {

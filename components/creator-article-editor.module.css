@@ -170,8 +170,11 @@
   padding: 0 0 0.7rem;
 }
 
-.titleField input:focus {
+.titleField input:focus-visible {
   border-color: #8fc5ff;
+  border-radius: 0.25rem;
+  outline: 2px solid #8fc5ff;
+  outline-offset: 3px;
 }
 
 .bannerField {
@@ -315,6 +318,12 @@
   min-height: 22rem;
   outline: none;
   padding-block: 0.5rem 5rem;
+}
+
+.prose:focus-visible {
+  border-radius: 0.4rem;
+  outline: 2px solid #8fc5ff;
+  outline-offset: 5px;
 }
 
 .prose p {
@@ -498,5 +507,6 @@
   .dialogFooter div { margin-inline-start: 0; }
   .dialogFooter button { flex: 1; }
   .linkControl { flex: 0 0 14rem; margin-inline-start: 0; width: auto; }
-  .linkControl input { flex: 1; min-width: 0; }
+  .linkControl input { flex: 1; font-size: 1rem; min-width: 0; }
+  .imageFields input { font-size: 1rem; }
 }

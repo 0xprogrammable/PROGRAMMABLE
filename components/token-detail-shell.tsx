@@ -16,6 +16,7 @@ export function TokenDetailShell() {
       <div
         className={`${styles.layout} ${styles.classicLayout} ${styles.detailSkeleton}`}
         aria-hidden="true"
+        data-skeleton-model="neutral"
       >
         <section className={styles.overview}>
           <div className={styles.identity}>
@@ -49,8 +50,8 @@ export function TokenDetailShell() {
               className={styles.detailSkeletonChart}
               data-skeleton="true"
             />
-            <dl className={styles.metrics} data-count="3">
-              {Array.from({ length: 3 }, (_, index) => (
+            <dl className={styles.metrics} data-count="4">
+              {Array.from({ length: 4 }, (_, index) => (
                 <div className={styles.metric} key={index}>
                   <dt
                     className={`${styles.detailSkeletonLine} ${styles.detailSkeletonMetricLabel}`}
@@ -67,7 +68,10 @@ export function TokenDetailShell() {
         </section>
 
         <aside className={styles.tradeShell}>
-          <div className={styles.detailSkeletonTradeBody}>
+          <div
+            className={styles.detailSkeletonTradeBody}
+            data-skeleton-panel="market-access"
+          >
             <span
               className={`${styles.detailSkeletonLine} ${styles.detailSkeletonTradeHeading}`}
               data-skeleton="true"

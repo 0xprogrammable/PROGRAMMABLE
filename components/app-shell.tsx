@@ -18,8 +18,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SiteHeader />
         <main id="main-content" tabIndex={-1}>
           <RouteTransition>{children}</RouteTransition>
-          <SiteFooter />
         </main>
+        <SiteFooter />
         <MobileNavigation />
       </div>
     </WalletProvider>

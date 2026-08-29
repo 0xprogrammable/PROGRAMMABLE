@@ -1169,6 +1169,7 @@
   font-weight: 540;
   height: 44px;
   letter-spacing: -0.04em;
+  line-height: 1;
   min-width: 0;
   outline: 0;
   padding: 0;
@@ -2022,7 +2023,7 @@
 /* Final token detail direction. */
 .page {
   max-width: 1280px;
-  min-height: calc(100svh - 88px);
+  min-height: calc(100svh - var(--header-height));
   padding-block: 18px 56px;
 }
 
@@ -2154,7 +2155,7 @@
 
 @media (max-width: 720px) {
   .page {
-    min-height: calc(100svh - 72px);
+    min-height: calc(100svh - var(--header-height));
     padding-block: 10px 68px;
   }
 

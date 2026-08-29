@@ -222,7 +222,9 @@ export function CustomMarketTrade({
         const reserve = balance.gasPriceWei * 750_000n * 150n / 100n;
         const maximum = balance.nativeBalanceWei > reserve
           ? balance.nativeBalanceWei - reserve : 0n;
-        if (maximum <= 0n) throw new Error("Not enough native balance after reserving gas");
+        if (maximum <= 0n) {
+          throw new Error("Not enough ETH is available after reserving network fees");
+        }
         setAmount(formatUnits(maximum, inputDecimals));
       } else {
         const balance = await readBalances(getAddress(inputAsset.identity.value));
@@ -249,7 +251,7 @@ export function CustomMarketTrade({
       return;
     }
     if (inputDecimals === undefined || outputDecimals === undefined) {
-      setError("Canonical token decimals are unavailable for this market");
+      setError("Token details are unavailable for this market. Try again later.");
       return;
     }
     let amountIn: bigint;
@@ -301,7 +303,7 @@ export function CustomMarketTrade({
       if (!response.ok) {
         const responseError = typeof value === "object" && value !== null
           && "error" in value && typeof value.error === "string"
-          ? value.error : "The Custom trade could not be prepared";
+          ? value.error : "This trade could not be prepared";
         throw new Error(responseError);
       }
       const preparation = validateCustomMarketTradePreparationV1({
@@ -313,7 +315,7 @@ export function CustomMarketTrade({
       setReview({ request, preparation });
     } catch (caught) {
       setError(caught instanceof Error
-        ? caught.message : "The Custom trade could not be prepared");
+        ? caught.message : "This trade could not be prepared");
     } finally {
       setPending(false);
     }
@@ -344,11 +346,11 @@ export function CustomMarketTrade({
     return (
       <div className={styles.tradeForm} aria-busy={pending}>
         <div className={styles.customTradeReviewHeader}>
-          <span>Capability-bound review</span>
+          <span>Transaction review</span>
           <h2>{review.preparation.status === "ready" ? "Review swap" : "Review approval"}</h2>
         </div>
         <dl className={styles.tradeFacts}>
-          <div><dt>Market</dt><dd>{market.marketId}</dd></div>
+          <div><dt>Pair</dt><dd>{inputSymbol} / {outputSymbol}</dd></div>
           <div><dt>Direction</dt><dd>{inputSymbol} → {outputSymbol}</dd></div>
           <div><dt>Minimum received</dt><dd>{displayAmount(
             review.preparation.quote.amountOutMinimum,
@@ -357,12 +359,18 @@ export function CustomMarketTrade({
           )}</dd></div>
           <div><dt>Recipient</dt><dd>{review.preparation.recipient.slice(0, 6)}…{review.preparation.recipient.slice(-4)}</dd></div>
         </dl>
-        <p className={styles.customTradeBinding}>Route {capability.tradeCapabilityBindingHash.slice(0, 18)}…</p>
+        <p className={styles.customTradeBinding}>
+          This transaction is bound to the verified market and connected wallet.
+        </p>
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
         <div className={styles.customTradeReviewActions}>
           <button className={styles.secondaryAction} type="button" disabled={pending} onClick={() => setReview(null)}>Back</button>
           <button className={styles.primaryAction} type="button" disabled={pending} onClick={() => void confirm()}>
-            {pending ? "Opening wallet" : review.preparation.status === "ready" ? "Submit swap" : "Submit approval"}
+            {pending
+              ? "Opening wallet"
+              : review.preparation.status === "ready"
+                ? "Confirm swap in wallet"
+                : "Confirm approval in wallet"}
           </button>
         </div>
       </div>

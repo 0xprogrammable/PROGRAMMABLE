@@ -581,7 +581,7 @@ export default function CreatorArticleEditor({
           <button ref={closeButtonRef} type="button" aria-label="Close article editor" onClick={requestClose}><X aria-hidden="true" /></button>
         </header>
 
-        <div className={styles.toolbar} role="toolbar" aria-label="Article formatting">
+        <div className={styles.toolbar}>
           <ToolbarButton label="Normal" active={editor?.isActive("paragraph") ?? false} onClick={() => editor?.chain().focus().unsetAllMarks().setParagraph().run()} />
           <ToolbarIcon label="Bold" active={editor?.isActive("bold") ?? false} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold /></ToolbarIcon>
           <ToolbarIcon label="Italic" active={editor?.isActive("italic") ?? false} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic /></ToolbarIcon>
@@ -601,9 +601,9 @@ export default function CreatorArticleEditor({
             <CreatorArticleLinkIcon href={linkValue} className={styles.linkProviderIcon} />
             <input
               value={linkValue}
-              aria-label="Social URL"
+              aria-label="Link URL"
               inputMode="url"
-              placeholder="Social or website URL"
+              placeholder="Website or social link"
               onChange={(event) => setLinkValue(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") { event.preventDefault(); applySocial(); }
@@ -613,7 +613,7 @@ export default function CreatorArticleEditor({
               type="button"
               disabled={!linkValue.trim()}
               onClick={applySocial}
-            >Add Socials</button>
+            >Add link</button>
           </div>
         </div>
 
@@ -671,7 +671,7 @@ export default function CreatorArticleEditor({
           ) : (
             <div>
               <button type="button" onClick={togglePreview}>{showPreview ? "Hide preview" : "Preview"}</button>
-              <button type="button" onClick={requestClose}>Discard</button>
+              <button type="button" onClick={requestClose}>Discard changes</button>
               <button className={styles.publish} type="button" disabled={saving || uploadingCount > 0 || !preview} onClick={() => void publish()}>
                 {saving ? "Publishing…" : uploadingCount > 0 ? "Uploading…" : "Publish article"}
               </button>

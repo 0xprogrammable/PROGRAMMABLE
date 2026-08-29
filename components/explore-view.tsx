@@ -85,7 +85,7 @@ type TokenCard = {
   imageUrl: string;
   links: readonly TokenLink[];
   valuation?: MarketCapMetric;
-  valuationMetric?: "Market cap";
+  valuationMetric?: "Fully diluted valuation";
   marketStatus?: ExploreMarketStatus;
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
@@ -563,6 +563,8 @@ function useExploreTokensPerPage() {
 }
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
+const DEFAULT_EXPLORE_VALUATION_SORT: ExploreValuationSort =
+  DEFAULT_EXPLORE_VIEW_SORT === "market-cap" ? "highest" : "none";
 const fallbackTokenImages = [
   "/brand/programmable-token-card-fallback-night-garden-01.webp",
   "/brand/programmable-token-card-fallback-night-garden-02.webp",
@@ -2225,6 +2227,17 @@ function compareExploreEntryValuation(
   return direction === "lowest" ? ascending : -ascending;
 }
 
+function compareExploreEntryIdentity(left: ExploreEntry, right: ExploreEntry) {
+  const leftIdentity =
+    left.tokenAddress?.toLowerCase() ?? left.id.toLowerCase();
+  const rightIdentity =
+    right.tokenAddress?.toLowerCase() ?? right.id.toLowerCase();
+  const identityComparison = leftIdentity.localeCompare(rightIdentity);
+  return identityComparison !== 0
+    ? identityComparison
+    : left.id.localeCompare(right.id);
+}
+
 export function sortExploreEntriesBySelections<T extends ExploreEntry>(
   tokens: T[],
   valuationSort: ExploreValuationSort,
@@ -2246,7 +2259,7 @@ export function sortExploreEntriesBySelections<T extends ExploreEntry>(
         return ageSort === "newest" ? -ageComparison : ageComparison;
       }
     }
-    return 0;
+    return compareExploreEntryIdentity(left, right);
   });
 }
 
@@ -2378,7 +2391,7 @@ export function getTokenCards(
       valuation: getExploreValuationMetric(token),
       ...(valuation.status === "available"
         ? {
-            valuationMetric: "Market cap" as const,
+            valuationMetric: "Fully diluted valuation" as const,
           }
         : {}),
       marketStatus: exploreMarketStatusLabel(token),
@@ -2508,7 +2521,7 @@ export function ExploreView({
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [valuationSort, setValuationSort] = useState<ExploreValuationSort>(
-    DEFAULT_EXPLORE_VIEW_SORT === "market-cap" ? "highest" : "none",
+    DEFAULT_EXPLORE_VALUATION_SORT,
   );
   const [ageSort, setAgeSort] = useState<ExploreAgeSort>("none");
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
@@ -2672,8 +2685,7 @@ export function ExploreView({
       );
     }
 
-    const initialValuationSort: ExploreValuationSort =
-      DEFAULT_EXPLORE_VIEW_SORT === "market-cap" ? "highest" : "none";
+    const initialValuationSort = DEFAULT_EXPLORE_VALUATION_SORT;
     const isInitialRequest =
       debouncedQuery === "" &&
       valuationSort === initialValuationSort &&
@@ -2775,7 +2787,7 @@ export function ExploreView({
         const message =
           error instanceof Error
             ? error.message
-            : "Tokens are temporarily unavailable";
+            : "Launches are temporarily unavailable";
         setState((current) =>
           preserveExplorePayloadOnRefreshFailure(current, {
             contentKey,
@@ -2822,7 +2834,9 @@ export function ExploreView({
     const paginated = paginateTokensByExploreSelections(
       filtered.map((entry) => ({
         ...entry,
-        valuation: exploreValuation(entry),
+        valuation: exploreValuation(entry, {
+          referenceBlock: entry.indexedValuationBlockNumber ?? null,
+        }),
       })),
       socialFilter,
       modelFilter,
@@ -2871,7 +2885,10 @@ export function ExploreView({
   const activeFilterCount =
     Number(socialFilter !== "all") +
     Number(modelFilter !== "all") +
-    Number(valuationSort !== "none") +
+    Number(
+      valuationSort !== "none" &&
+      valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT,
+    ) +
     Number(ageSort !== "none");
   const activeSelectionLabels = [
     modelFilter === "classic"
@@ -2879,20 +2896,21 @@ export function ExploreView({
       : modelFilter === "custom-hook"
         ? "Custom"
         : null,
-    valuationSort === "highest"
-      ? "Highest valuation"
-      : valuationSort === "lowest"
-        ? "Lowest valuation"
-        : null,
+    valuationSort !== "none" &&
+    valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT
+      ? valuationSort === "highest"
+        ? "Highest FDV"
+        : "Lowest FDV"
+      : null,
     ageSort === "newest" ? "Newest" : ageSort === "oldest" ? "Oldest" : null,
     socialFilter === "yes"
-      ? "With socials"
+      ? "With social links"
       : socialFilter === "no"
-        ? "Without socials"
+        ? "Without social links"
         : null,
   ].filter((label): label is string => label !== null);
   const activeSelectionSummary = activeSelectionLabels.length === 0
-    ? "No filters or sorts selected"
+    ? "Default sorting applied"
     : `${activeSelectionLabels.join(", ")} selected`;
   const hasPublicTokens =
     displayState.phase !== "ready" ||
@@ -2930,7 +2948,7 @@ export function ExploreView({
           <p className={styles.loadingStatus} role="status" aria-live="polite">
             Loading launches
           </p>
-          <ExploreGridSkeleton count={EXPLORE_TOKENS_PER_PAGE} />
+          <ExploreGridSkeleton count={pageSize} />
         </div>
       );
     }
@@ -2965,9 +2983,9 @@ export function ExploreView({
         const hasActiveFilter = socialFilter !== "all" || modelFilter !== "all";
         const noMatchMessage = debouncedQuery
           ? hasActiveFilter
-            ? "No tokens match this search and filters"
-            : "No tokens match this search"
-          : "No tokens match these filters";
+            ? "No launches match your search and filters."
+            : "No launches match your search."
+          : "No launches match these filters.";
         return (
           <div className={styles.messageState}>
             <div className={styles.messageCopy}>
@@ -3016,7 +3034,7 @@ export function ExploreView({
         <div className={`${styles.emptyState} liquid-glass-surface`}>
           <div>
             <h2>No launches yet</h2>
-            <p>Be the first to launch a token and it will appear here.</p>
+            <p>Start the first launch and it will appear here.</p>
           </div>
           <Link className={styles.emptyAction} href="/launch">
             Start a launch
@@ -3079,14 +3097,14 @@ export function ExploreView({
                   <h3 title={token.name}>{token.name}</h3>
                   {token.symbol ? <span>${token.symbol}</span> : null}
                 </header>
-                {valuationLabel ? (
-                  <div className={styles.runnerData}>
-                    <span>
-                      <small>Market cap</small>
-                      <strong>{valuationLabel}</strong>
-                    </span>
-                  </div>
-                ) : null}
+                <div className={styles.runnerData}>
+                  <span>
+                    <small title="Fully diluted valuation">FDV</small>
+                    <strong>
+                      {valuationLabel ?? token.marketStatus ?? "Unavailable"}
+                    </strong>
+                  </span>
+                </div>
               </div>
             </>
           );
@@ -3181,6 +3199,7 @@ export function ExploreView({
   }
 
   const Heading = embedded ? "h2" : "h1";
+  const ResultsHeading = embedded ? "h3" : "h2";
 
   return (
     <div className={`${styles.page} explore-page page-width`}>
@@ -3196,7 +3215,7 @@ export function ExploreView({
           <div className={styles.runnersIntro}>
             {hasPublicTokens ? (
               <div className="token-section-heading">
-                <h2 className="sr-only">Launches</h2>
+                <ResultsHeading className="sr-only">Launches</ResultsHeading>
                 <div
                   className="token-toolbar"
                   inert={loadingOnly ? true : undefined}
@@ -3207,7 +3226,7 @@ export function ExploreView({
                   >
                     <Search aria-hidden="true" size={17} />
                     <label className="sr-only" htmlFor="explore-token-search">
-                      Search by name, symbol or contract address
+                      Search launches by name, ticker or contract address
                     </label>
                     <input
                       ref={searchInputRef}
@@ -3216,14 +3235,14 @@ export function ExploreView({
                       autoComplete="off"
                       spellCheck={false}
                       value={query}
-                      placeholder="Search"
+                      placeholder="Name, ticker or address"
                       onChange={(event) => setQuery(event.target.value)}
                     />
                     {query ? (
                       <button
                         className={styles.searchClear}
                         type="button"
-                        aria-label="Clear token search"
+                        aria-label="Clear launch search"
                         onClick={() => {
                           setQuery("");
                           setCurrentPage(1);
@@ -3251,17 +3270,19 @@ export function ExploreView({
                     <summary
                       className="liquid-glass-control"
                       aria-controls="explore-filter-panel"
-                      aria-label={`Filter and sort tokens. ${activeSelectionSummary}. ${activeFilterCount} ${
+                      aria-label={`Filters. ${activeSelectionSummary}. ${activeFilterCount} ${
                         activeFilterCount === 1 ? "selection" : "selections"
                       } active.`}
                     >
                       <span>Filters</span>
-                      <span
-                        className={styles.activeFilterCount}
-                        aria-hidden="true"
-                      >
-                        {activeFilterCount}
-                      </span>
+                      {activeFilterCount > 0 ? (
+                        <span
+                          className={styles.activeFilterCount}
+                          aria-hidden="true"
+                        >
+                          {activeFilterCount}
+                        </span>
+                      ) : null}
                       <ChevronDown
                         className="token-filter-chevron"
                         aria-hidden="true"
@@ -3272,7 +3293,7 @@ export function ExploreView({
                       id="explore-filter-panel"
                       className={`token-filter-menu ${styles.filterMenu} liquid-glass-surface liquid-glass-popover`}
                       role="group"
-                      aria-label="Filter and sort tokens"
+                      aria-label="Filter and sort launches"
                     >
                       <div
                         className={styles.filterGroup}
@@ -3280,7 +3301,7 @@ export function ExploreView({
                         aria-labelledby="explore-model-label"
                       >
                         <p className={styles.filterLabel} id="explore-model-label">
-                          Hook Type
+                          Launch type
                         </p>
                         {modelFilterOptions.map((option) => (
                           <button
@@ -3314,7 +3335,7 @@ export function ExploreView({
                           id="explore-valuation-label"
                           title="Fully diluted valuation"
                         >
-                          Valuation
+                          FDV
                         </p>
                         {valuationSortOptions.map((option) => (
                           <button
@@ -3379,7 +3400,7 @@ export function ExploreView({
                           className={styles.filterLabel}
                           id="explore-socials-label"
                         >
-                          Socials
+                          Social links
                         </p>
                         {socialFilterOptions.map((option) => (
                           <button

@@ -188,21 +188,22 @@ export function CreateGuide() {
               <div>
                 <h3>Package, validate and submit</h3>
                 <p>
-                  Use the current installable CLI 3.3.9 with its live default
-                  profile 3.3.0 for production creation. Explicit profile 3.4.0
-                  output remains preparatory and is rejected until activation.
-                  Package and validate the exact project locally, then submit
-                  the byte-identical current V3.3 request and track its single
-                  resource. Local checks and preflight are preparation; the API
-                  server enforces objective static hard blocks and exact Router
-                  simulation before wallet handoff. Missing behavior execution
-                  leaves related product claims unverified; an authenticated
-                  executed failure blocks.
-                  EIP-3009 funding first requires a separate review and
-                  signature for the exact funding authorization. Only
-                  after backend verification and simulation does the wallet
-                  separately review and sign the exact Router transaction. An
-                  API key never authorizes, signs or broadcasts.
+                  Install CLI 3.3.9 and use its live default profile 3.3.0.
+                  Profile 3.4.0 is preparatory and remains blocked until public
+                  activation. Package and validate the exact source and build
+                  artifacts, then submit the byte-identical V3.3 request and
+                  track its single resource. Local checks prepare the request;
+                  the API server independently enforces static hard blocks and
+                  exact Router simulation. Missing behavior execution leaves
+                  related claims unverified, and an authenticated execution
+                  failure blocks the launch.
+                </p>
+                <p>
+                  If funding authorization is required, the wallet first
+                  reviews and signs the exact EIP-3009 authorization. This does
+                  not send a transaction. After backend verification and
+                  simulation, the wallet separately reviews and signs the exact
+                  Router transaction. An API key never signs or broadcasts.
                 </p>
                 <div className={styles.links}>
                   <Link href="/developers/api-keys">

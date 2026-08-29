@@ -7,6 +7,7 @@ import {
   getExplorePreviewProject,
 } from "../components/explore-preview-data";
 import { isInterfacePreviewHost } from "../components/interface-preview";
+import { exploreValuation } from "../lib/explore-financial-data";
 
 describe("Explore interface preview", () => {
   it("previews the exact Main-token example article only on its token page", () => {
@@ -36,6 +37,12 @@ describe("Explore interface preview", () => {
       expect(token.links).toContainEqual({
         kind: "x",
         url: "https://x.com/ProgrammableHQ",
+      });
+      expect(exploreValuation(token)).toMatchObject({
+        status: "available",
+        metric: "fdv",
+        currency: "usd",
+        valueWad: token.indexedMarketCapUsdWad,
       });
       expect(getExplorePreviewProject(token.tokenAddress)).toMatchObject({
         contributors: expect.any(Number),

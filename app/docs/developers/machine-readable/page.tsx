@@ -37,10 +37,10 @@ export default function MachineReadableDocsPage() {
     >
       <section id="documents">
         <div className={styles.sectionIntro}>
-          <h2>Documentation files</h2>
+          <h2>Start with the right file</h2>
           <p>
-            Choose the smallest document that contains the context your
-            integration needs.
+            Read the human guide first. Agents and integrations should then
+            fetch only the machine contract needed for their task.
           </p>
         </div>
 
@@ -59,9 +59,8 @@ export default function MachineReadableDocsPage() {
               <code>/openapi.json</code>
             </a>
             <span>
-              Combined developer contract. Public discovery and Registry reads
-              are unauthenticated; Custom launch routes use a wallet key,
-              partner root or bounded partner subkey.
+              Combined contract for public reads and authenticated Custom
+              launch routes.
             </span>
           </li>
           <li>
@@ -122,7 +121,7 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz">
+            <a href="https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz">
               <code>@programmable/launch 3.3.9</code>
             </a>
             <span>

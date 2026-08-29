@@ -48,9 +48,8 @@ describe("token detail layout", () => {
       "`${formatChartValue(activePoint.value, chart.unit, chartMetric)}, ${chartPointContext(activePoint)}`",
     );
     expect(chartSource).toContain('className={styles.context} aria-hidden="true"');
-    expect(chartSource).toContain(
-      "{activePoint ? chartPointContext(activePoint) : \"\\u00A0\"}",
-    );
+    expect(chartSource).toContain("singleObservation");
+    expect(chartSource).toContain("1 verified observation");
     expect(chartSource).not.toContain("className={styles.tooltip}");
     expect(activeValueIdIndex).toBeGreaterThan(-1);
     expect(liveRegion).toContain('className="sr-only"');
@@ -75,7 +74,7 @@ describe("token detail layout", () => {
     expect(chartSource).not.toContain("payload.points.length < 2");
     expect(chartSource).toContain("tabIndex={0}");
     expect(chartSource).toMatch(
-      /\{loading \? \([\s\S]*?styles\.waitingPlot[\s\S]*?aria-hidden="true"[\s\S]*?\) : chart \? \(/,
+      /\{loading \? \([\s\S]*?styles\.waitingPlot[\s\S]*?\) : singleObservation && chart \? \([\s\S]*?\) : chart \? \(/,
     );
     expect(chartSource).toContain("{emptyMessage ? <p>{emptyMessage}</p> : null}");
   });
@@ -107,7 +106,7 @@ describe("token detail layout", () => {
     expect(detailSource).toContain('className={styles.routerNotice} role="status"');
     expect(detailSource).toContain("market availability");
     expect(detailSource).toContain(
-      "Onsite trading is not enabled for this launch.",
+      "Trading is not available on this page for this launch.",
     );
     expect(detailSource).toContain("Launch details");
     expect(detailSource).toContain("routerTradeAvailable && routerTradeProject");

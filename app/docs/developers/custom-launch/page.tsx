@@ -96,11 +96,11 @@ const cliInstallCommands = [
     "Create an isolated download directory.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz',
     "Download the pinned release asset.",
   ],
   [
-    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256',
+    'curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256',
     "Download its checksum sidecar.",
   ],
   [
@@ -163,9 +163,9 @@ export default function CustomLaunchApiDocsPage() {
       title="Custom Launch API"
     >
       <p className={styles.bodyCopy}>
-        Public V3.3 is the current custom-hook creation contract. V2 and V1
-        history and schemas remain readable, while fresh creation is permanently
-        write fenced with nonretryable{" "}
+        Use public V3.3 for new custom-hook launches. V2 and V1 history and
+        schemas remain readable, but new requests are permanently write fenced
+        with nonretryable{" "}
         <code>CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
         <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new submissions.
       </p>
@@ -174,48 +174,47 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Quickstart</h2>
           <p>
-            Public V3.3 launch creation is live on Ethereum Mainnet. V2 and V1
-            history and schemas remain available, while their fresh POSTs stay read-only. Legacy
-            Registry and GitHub submission intake is closed. The source-tree{" "}
-            <a href="/openapi/custom-launch-v3.json">
-              profile 3.4 machine contract
-            </a>{" "}
-            is preparatory and does not activate a backend profile. CLI 3.3.9
-            is the current installable release and defaults to live profile
-            3.3.0; live capabilities reject explicit profile 3.4.0 output.
+            Build exact artifacts locally, let the API make the server-side
+            decision, then review and sign in the controller wallet. Public
+            V3.3 creation is live on Ethereum Mainnet.
           </p>
         </div>
 
         <ol className={styles.steps}>
           <li>
-            Build and test the hook and every launch component from one exact
-            source revision.
+            Build and test every launch component from one exact source
+            revision.
           </li>
           <li>
-            Install <code>@programmable/launch</code> 3.3.9 from the{" "}
-            <a href="https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz">
-              immutable GitHub Release asset
-            </a>
-            . The binary is{" "}
-            <code>programmable-launch</code>.
-          </li>
-          <li>
-            Run <code>pack</code> and <code>validate --remote</code> against exact
-            Standard JSON, compiler artifacts and evidence files. Never enter
-            derived hashes by hand. These checks prepare and classify the request;
-            they are not the server&apos;s launch decision.
-          </li>
-          <li>
-            For a wallet key, use <Link href="/developers/api-keys">API keys</Link>.
-            For a partner flow, use the root or bounded subkey issued to the
-            integration. Store the selected credential as{" "}
+            Create a wallet-bound key from{" "}
+            <Link href="/developers/api-keys">API keys</Link>, or use the
+            partner credential issued to your integration. Store it only as{" "}
             <code>PROGRAMMABLE_API_KEY</code>.
           </li>
           <li>
-            Run <code>submit ./launch.json --config programmable-launch.config.json</code>.
-            Follow <code>pack -&gt; validate --remote -&gt; submit -&gt; server decision -&gt; status --watch --until authorized -&gt; wallet -&gt; status --watch --until finalized</code>.
-            Authenticated CLI traffic is fixed to <code>https://api.programmable.market</code>. Wallet is a separate controller action, not a CLI command. At <code>authorized</code>, stop for exact wallet review and signing,
-            then run <code>status REQUEST_UUID --watch --until finalized</code>.
+            Install <code>@programmable/launch</code> 3.3.9 from the{" "}
+            <a href="https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz">
+              immutable GitHub Release asset
+            </a>
+            , verify its checksum, then use the <code>programmable-launch</code>{" "}
+            binary.
+          </li>
+          <li>
+            Run <code>pack</code>, then <code>validate --remote</code> against
+            the exact Standard JSON, artifacts and evidence. Never enter a
+            derived hash by hand. Local validation prepares the request; the
+            API server decides whether it may reach a wallet.
+          </li>
+          <li>
+            Run{" "}
+            <code>
+              programmable-launch submit ./launch.json --config
+              programmable-launch.config.json
+            </code>
+            , then watch status until <code>authorized</code>. Stop for
+            controller-wallet review and signing, then watch the same request
+            until <code>finalized</code>. The API and CLI never sign or
+            broadcast.
           </li>
         </ol>
 
@@ -234,6 +233,17 @@ export default function CustomLaunchApiDocsPage() {
             The CLI derives the sorted manifest, SourceDescriptor, graph,
             locators, CREATE2 addresses, canonical hashes and verification
             metadata. Do not copy test-only hashes or another project&apos;s file.
+          </p>
+        </aside>
+
+        <aside className={styles.callout}>
+          <strong>Follow live capabilities</strong>
+          <p>
+            CLI 3.3.9 defaults to live profile 3.3.0. Profile 3.4 in the{" "}
+            <a href="/openapi/custom-launch-v3.json">V3 machine contract</a>{" "}
+            is preparatory and is rejected until discovery and backend
+            capabilities activate it. V2 and V1 accept reads only, and legacy
+            Registry and GitHub submission intake is closed.
           </p>
         </aside>
 

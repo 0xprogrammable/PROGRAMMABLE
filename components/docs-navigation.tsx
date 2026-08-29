@@ -592,7 +592,13 @@ export function DocsNavigation({
                           !active && itemBranchActive ? "true" : undefined
                         }
                         data-depth={item.depth ?? 0}
-                        aria-current={active ? "page" : undefined}
+                        aria-current={
+                          active
+                            ? item.href.includes("#")
+                              ? "location"
+                              : "page"
+                            : undefined
+                        }
                         onClick={(event) => handleNavigation(event, item.href)}
                       >
                         {item.label}
@@ -662,7 +668,6 @@ export function DocsNavigation({
           aria-controls="docs-mobile-navigation"
           aria-expanded={mobileNavigationOpen}
           aria-haspopup="dialog"
-          aria-label={`Open documentation navigation, ${activeLabel}`}
           onClick={openMobileNavigation}
         >
           <Menu aria-hidden="true" size={18} strokeWidth={1.8} />
@@ -675,7 +680,7 @@ export function DocsNavigation({
             className={styles.mobilePageNav}
             ref={mobilePageNavigationRef}
           >
-            <summary aria-label="Open this page's sections">
+            <summary>
               <ListTree aria-hidden="true" size={18} strokeWidth={1.8} />
               <span>{activeSectionLabel ?? "On this page"}</span>
               <ChevronDown aria-hidden="true" size={15} strokeWidth={1.8} />

@@ -35,7 +35,7 @@ export function RouteTransition({ children }: { children: ReactNode }) {
         : [
             {
               opacity: 0,
-              transform: "translate3d(0, 12px, 0)",
+              transform: "translate3d(0, 6px, 0)",
             },
             {
               opacity: 1,
@@ -43,7 +43,7 @@ export function RouteTransition({ children }: { children: ReactNode }) {
             },
           ],
       {
-        duration: enteringDocs ? 420 : 720,
+        duration: enteringDocs ? 180 : 220,
         easing: "cubic-bezier(0.23, 1, 0.32, 1)",
       },
     );

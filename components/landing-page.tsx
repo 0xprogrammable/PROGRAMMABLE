@@ -153,11 +153,11 @@ export function LandingPage() {
             priority
           />
           <h1 id="landing-title">Programmable</h1>
-          <p>Shape what assets can do</p>
+          <p>Build and launch custom Uniswap v4 hooks</p>
         </div>
 
         <a className={styles.scrollCue} href="#what-is-programmable">
-          <span>Scroll to discover Programmable</span>
+          <span>Discover Programmable</span>
           <span aria-hidden="true">↓</span>
         </a>
       </section>
@@ -189,7 +189,7 @@ export function LandingPage() {
             </span>
           </h2>
           <Link className={styles.docsLink} href="/docs">
-            Read more in our docs
+            Read the Programmable overview
           </Link>
         </header>
 
@@ -201,8 +201,8 @@ export function LandingPage() {
           <p>
             Explore what each project does, how its hook changes the way its
             pool works, and the public information behind it. Our goal is
-            simple: if you can describe an idea, you should be able to turn it
-            into a Hook without writing Solidity.
+            simple: make it easier to turn a hook idea into a launchable
+            project.
           </p>
         </div>
       </section>
@@ -214,7 +214,7 @@ export function LandingPage() {
         data-reveal-section
       >
         <header className={styles.definitionHeader}>
-          <h2 id="hook-definition-title">What is a Hook?</h2>
+          <h2 id="hook-definition-title">What is a hook?</h2>
         </header>
 
         <div className={styles.definitionColumns}>
@@ -228,7 +228,7 @@ export function LandingPage() {
             >
               Uniswap v4
             </a>{" "}
-            pool is a market where two assets can be traded. A Hook is a smart
+            pool is a market where two assets can be traded. A hook is a smart
             contract connected to that pool. It adds rules for how that market
             works.
           </p>

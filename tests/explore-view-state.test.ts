@@ -889,7 +889,7 @@ describe("Explore refresh state", () => {
     ).toMatchObject({ total: 0, totalPages: 0, tokens: [] });
   });
 
-  it("combines Hook Type, valuation and age ordering without clearing a selection", () => {
+  it("combines launch type, valuation and age ordering without clearing a selection", () => {
     const valued = (
       index: number,
       valueWad: string,
@@ -1475,7 +1475,9 @@ describe("Explore refresh state", () => {
       kind: "usd",
       value: 125,
     });
-    expect(getTokenCards([entry])[0]?.valuationMetric).toBe("Market cap");
+    expect(getTokenCards([entry])[0]?.valuationMetric).toBe(
+      "Fully diluted valuation",
+    );
   });
 
   it("explains missing FDV without inventing a value", () => {

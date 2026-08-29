@@ -24,7 +24,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 const siteUrl = new URL("https://programmable.market");
-const siteDescription = "Shape what assets can do";
+const siteDescription =
+  "Build and launch custom Uniswap v4 hooks. Explore projects launched through Programmable.";
 const socialImageUrl = new URL(
   "/og/programmable-landing-preview-v2-1200x630.jpg",
   siteUrl,
@@ -32,7 +33,7 @@ const socialImageUrl = new URL(
 
 export const metadata: Metadata = {
   metadataBase: siteUrl,
-  title: "Programmable",
+  title: "Programmable · Custom Uniswap v4 hooks",
   description: siteDescription,
   applicationName: "Programmable",
   alternates: {
@@ -71,7 +72,7 @@ export const metadata: Metadata = {
     type: "website",
     url: siteUrl,
     siteName: "Programmable",
-    title: "Programmable",
+    title: "Programmable · Custom Uniswap v4 hooks",
     description: siteDescription,
     images: [
       {
@@ -80,19 +81,19 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/jpeg",
-        alt: "Programmable and Shape what assets can do over a vivid floral night garden",
+        alt: "Programmable over a vivid floral night garden",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Programmable",
+    title: "Programmable · Custom Uniswap v4 hooks",
     description: siteDescription,
     creator: "@ProgrammableHQ",
     images: [
       {
         url: socialImageUrl,
-        alt: "Programmable and Shape what assets can do over a vivid floral night garden",
+        alt: "Programmable over a vivid floral night garden",
       },
     ],
   },

@@ -2072,6 +2072,23 @@
   font-size: 12px;
 }
 
+.modelDescription {
+  block-size: auto;
+  clip: auto;
+  clip-path: none;
+  color: var(--webde-muted);
+  font-size: 14px;
+  height: auto;
+  line-height: 1.48;
+  margin: 5px 0 0;
+  max-width: 54ch;
+  min-height: 42px;
+  overflow: visible;
+  position: static;
+  white-space: normal;
+  width: auto;
+}
+
 .modelAction {
   color: var(--webde-muted);
   font-size: 13px;
@@ -2123,6 +2140,10 @@
 
   .modelBody.modelBody {
     padding: 18px;
+  }
+
+  .modelDescription {
+    min-height: 0;
   }
 }
 

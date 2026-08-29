@@ -216,9 +216,11 @@ describe("interaction state regressions", () => {
     expect(exploreSource).not.toContain("<dt>Market cap</dt>");
     expect(exploreSource).toContain("runnerMeta");
     expect(exploreSource).toContain("runnerData");
-    expect(exploreSource).toContain("<small>Market cap</small>");
+    expect(exploreSource).toContain(
+      '<small title="Fully diluted valuation">FDV</small>',
+    );
     expect(exploreSource).toMatch(
-      /\{valuationLabel \? \([\s\S]*?<small>Market cap<\/small>[\s\S]*?\) : null\}/,
+      /<small title="Fully diluted valuation">FDV<\/small>[\s\S]*?valuationLabel \?\? token\.marketStatus \?\? "Unavailable"/,
     );
     expect(exploreSource).not.toContain(
       "exploreUnavailableFdvLabel(token.marketStatus)",

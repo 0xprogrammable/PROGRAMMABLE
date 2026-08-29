@@ -159,6 +159,14 @@
   z-index: 1;
 }
 
+.singleObservationDot {
+  display: inline-block;
+  margin-inline-end: 8px;
+  position: static;
+  transform: none;
+  vertical-align: middle;
+}
+
 .placeholder {
   color: var(--muted);
   display: grid;
@@ -309,8 +317,8 @@
 
 .rangeButton {
   border-radius: 6px;
-  height: 40px;
-  min-width: 42px;
+  height: 44px;
+  min-width: 44px;
 }
 
 .rangeButton[aria-pressed="true"] {

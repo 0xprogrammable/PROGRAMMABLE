@@ -5,9 +5,9 @@ import { LaunchExperience } from "@/components/launch-entry";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Programmable",
+  title: "Create a launch · Programmable",
   description:
-    "Create a Classic coin or start a Custom launch through the API-first preparation path.",
+    "Choose Classic for a guided token launch or use the Custom Launch API for a custom Uniswap v4 hook.",
   alternates: {
     canonical: "/launch",
   },
