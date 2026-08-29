@@ -31,7 +31,7 @@ const ARTIFACT_DIGEST =
 const RUN_ID = 31_519_898_545;
 const RUN_ATTEMPT = 1;
 const WORKFLOW_ID = 321_772_273;
-const REPOSITORY_URL = "https://github.com/0xprogrammable/programmable-evm";
+const REPOSITORY_URL = "https://github.com/programmable-infra/programmable-evm";
 const NOW_MS = Date.parse("2026-08-11T18:10:00Z");
 
 function validProofInput() {
@@ -257,22 +257,22 @@ test("full production Verify proof is deterministic and exact", () => {
 
 test("GitHub display-case drift preserves the canonical production identity", () => {
   assert.equal(
-    canonicalProductionRepository("0xprogrammable/PROGRAMMABLE-EVM"),
+    canonicalProductionRepository("programmable-infra/PROGRAMMABLE-EVM"),
     PRODUCTION_REPOSITORY,
   );
   assert.equal(
     canonicalProductionWorkflowRef(
-      "0xprogrammable/PROGRAMMABLE-EVM/.github/workflows/verify.yml@refs/heads/production",
+      "programmable-infra/PROGRAMMABLE-EVM/.github/workflows/verify.yml@refs/heads/production",
     ),
     `${PRODUCTION_REPOSITORY}/${VERIFY_WORKFLOW_PATH}@${PRODUCTION_REF}`,
   );
   assert.throws(() =>
     canonicalProductionRepository("attacker/PROGRAMMABLE-EVM"));
   assert.throws(() =>
-    canonicalProductionRepository("0xprogrammable/PROGRAMMABLE-EVM "));
+    canonicalProductionRepository("programmable-infra/PROGRAMMABLE-EVM "));
   assert.throws(() =>
     canonicalProductionWorkflowRef(
-      "0xprogrammable/PROGRAMMABLE-EVM/.github/workflows/verify.yml@refs/heads/main",
+      "programmable-infra/PROGRAMMABLE-EVM/.github/workflows/verify.yml@refs/heads/main",
     ));
 });
 
@@ -414,9 +414,9 @@ test("resolver accepts only a fresh exact successful run and immutable artifact"
 test("resolver accepts GitHub repository display-case drift with the exact ID", async () => {
   const fixtures = validApiFixtures();
   const run = fixtures.runs.workflow_runs[0];
-  run.repository.full_name = "0xprogrammable/PROGRAMMABLE-EVM";
-  run.repository.html_url = "https://github.com/0xprogrammable/PROGRAMMABLE-EVM";
-  run.head_repository.full_name = "0xprogrammable/PROGRAMMABLE-EVM";
+  run.repository.full_name = "programmable-infra/PROGRAMMABLE-EVM";
+  run.repository.html_url = "https://github.com/programmable-infra/PROGRAMMABLE-EVM";
+  run.head_repository.full_name = "programmable-infra/PROGRAMMABLE-EVM";
   run.html_url = `${run.repository.html_url}/actions/runs/${RUN_ID}`;
   assert.equal((await resolveFixtures(fixtures)).runId, RUN_ID);
 });
