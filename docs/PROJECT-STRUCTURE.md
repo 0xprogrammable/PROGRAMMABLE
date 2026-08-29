@@ -1,6 +1,7 @@
 # Project structure
 
-Programmable is one repository with three product layers: the web application, the contract workspace, and release tooling.
+Programmable is one repository with the web application, the launch-model contract workspace, an isolated independent
+DEX implementation track, and release tooling.
 
 ```text
 Programmable/
@@ -9,6 +10,7 @@ Programmable/
 ├── lib/          Product logic, onchain readers, and integrations
 ├── public/       Runtime web assets, brand files, and social previews
 ├── contracts/    Foundry contracts, tests, scripts, specifications, and evidence
+├── packages/     Isolated product packages, including packages/dex-evm
 ├── config/       Shared application configuration
 ├── scripts/      Development, verification, and release utilities
 ├── ops/          Versioned operations configuration outside the web runtime
@@ -22,7 +24,10 @@ Programmable/
 
 ## Source directories
 
-`app/`, `components/`, `lib/`, `contracts/`, `config/`, `scripts/`, `ops/`, `tests/`, `docs/`, and referenced files in `public/` are product source. Changes in these paths belong in a scoped branch and must pass their relevant checks.
+`app/`, `components/`, `lib/`, `contracts/`, `packages/`, `config/`, `scripts/`, `ops/`, `tests/`, `docs/`, and referenced
+files in `public/` are product source. Changes in these paths belong in a scoped branch and must pass their relevant
+checks. `packages/dex-evm/` is an additive boundary: its Foundry configuration, binding artifacts, tests and SDK must
+not inherit the existing Uniswap launch-model settlement authority.
 
 ## Branch model
 

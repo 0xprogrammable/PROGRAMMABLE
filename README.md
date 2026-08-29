@@ -39,6 +39,11 @@
 Programmable is a launch platform for Uniswap v4 products. This repository contains the Next.js application, the
 contract workspace, the public read model and the evidence that binds what the product shows to deployed code.
 
+The repository also contains an isolated, additive implementation track for the independent Programmable DEX under
+[`packages/dex-evm/`](./packages/dex-evm). That track does not use Uniswap or the launch-model contracts as settlement
+authority. It is pinned to a Draft portable Protocol release, is currently `BLOCKED_BY_SPEC`, has no canonical-network
+deployment, and is not production eligible.
+
 Classic is the direct launch model for a fixed supply token, a permanently locked ETH pool and configurable creator
 rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or
 execution graph. Public V3.3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2
@@ -89,6 +94,7 @@ valuation, liquidity, provenance or provider support from a token name, ticker o
 | [`app/`](./app), [`components/`](./components)                  | Product routes, API handlers and shared interface components                      |
 | [`lib/`](./lib), [`indexer/`](./indexer)                        | Product logic, onchain readers, indexing and external integrations                |
 | [`contracts/`](./contracts)                                     | Foundry contracts, tests, deployment scripts, specifications and release evidence |
+| [`packages/dex-evm/`](./packages/dex-evm)                       | Isolated independent DEX EVM foundations, binding evidence and SDK                 |
 | [`config/`](./config), [`scripts/`](./scripts), [`ops/`](./ops) | Shared configuration, verification and production operations                      |
 | [`tests/`](./tests), [`docs/`](./docs)                          | Application tests and maintained product, security and operations documentation   |
 | [`public/`](./public), [`assets/`](./assets)                    | Runtime brand files, social previews and repository presentation assets           |
@@ -171,6 +177,11 @@ contract and release-evidence history. Feature branches merge through reviewed p
 Source verification, passing tests, a Registry record, a prepared action or a visible token page are not an external
 audit, a safety guarantee, proof of liquidity or wallet authorization. Deployment, activation, finality and public
 availability require separate evidence.
+
+The independent DEX release track has its own Protocol lock, native profiles, tests, deployment-status records and
+read-only pre-owner-gate preparation records. A local DEX build or testnet preparation does not change the status of
+the live launch platform and does not constitute a Binding Release, canonical-network deployment, canonical explorer
+source verification or production approval.
 
 The smart contracts in this repository have not undergone an external audit or public security contest.
 

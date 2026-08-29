@@ -1,0 +1,153 @@
+{
+  "schemaVersion": "programmable.dex-evm.evidence-catalog/v1",
+  "releaseId": "dex-evm/0.1.0-architecture-baseline.1",
+  "classification": "NON_PRODUCTION_ARCHITECTURE_BASELINE",
+  "entries": [
+    {
+      "id": "protocol-lock",
+      "path": "packages/dex-evm/binding/protocol-lock.json",
+      "status": "PRESENT",
+      "proves": "Exact selected Protocol commit, tree, specification, Constitution, vector-set identity and Draft eligibility state",
+      "doesNotProve": "Native implementation conformance"
+    },
+    {
+      "id": "protocol-lock-verification",
+      "path": "packages/dex-evm/binding/reports/protocol-lock-verification.json",
+      "status": "PROTOCOL_REPOSITORY_INTERNAL_CHECK_PASS",
+      "proves": "Read-only exact-checkout identity and successful Protocol repository make check",
+      "doesNotProve": "A Binding Release, Conformance Report, deployment or production eligibility"
+    },
+    {
+      "id": "protocol-gaps",
+      "path": "packages/dex-evm/binding/reports/protocol-gap-report.json",
+      "status": "BLOCKED_BY_SPEC",
+      "proves": "Twelve cited minimal ambiguity counterexamples and one separate release-eligibility gate were recorded without selecting native fixes",
+      "doesNotProve": "Resolution of any cited Protocol requirement"
+    },
+    {
+      "id": "conformance-status",
+      "path": "packages/dex-evm/binding/reports/conformance-status.json",
+      "status": "NO_BINDING_RELEASE_OR_CONFORMANCE_REPORT",
+      "proves": "The architecture baseline makes no portable profile or passing-conformance claim",
+      "doesNotProve": "Applicable-case completeness or portable conformance"
+    },
+    {
+      "id": "requirement-traceability",
+      "path": "packages/dex-evm/binding/reports/requirement-traceability.json",
+      "status": "FOUNDATION_ONLY_NON_CONFORMANCE_TRACEABILITY",
+      "proves": "Named foundation claims map to source, test-source and generated-evidence paths and all twelve gaps plus the separate Draft release gate map to exact requirement IDs",
+      "doesNotProve": "175-of-175 implementation coverage, test execution, applicable-case completeness or conformance"
+    },
+    {
+      "id": "binding-local-profiles",
+      "path": "packages/dex-evm/binding/profiles",
+      "status": "ARCHITECTURE_BASELINE_ONLY",
+      "proves": "The recorded native profile boundaries and explicit unsupported categories",
+      "doesNotProve": "Protected execution, portable profile conformance or lifetime asset behavior"
+    },
+    {
+      "id": "generated-foundations-abi",
+      "path": "packages/dex-evm/binding/abi/foundations.generated.json",
+      "status": "GENERATED_DRAFT_FOUNDATIONS_ONLY",
+      "proves": "Compiler-derived ABIs for the implemented foundation contracts at generation time",
+      "doesNotProve": "A frozen protected-execution ABI, Binding Release or implementation Git revision"
+    },
+    {
+      "id": "generated-foundations-build-inventory",
+      "path": "packages/dex-evm/binding/reports/build-artifacts.generated.json",
+      "status": "GENERATED_DRAFT_FOUNDATIONS_ONLY",
+      "proves": "Recorded compiler configuration, source-set digest, bytecode digests and size gates for the generated foundation build inventory",
+      "doesNotProve": "Reproducibility across a release commit, deployment, source verification or conformance"
+    },
+    {
+      "id": "binding-native-foundation-vectors",
+      "path": "packages/dex-evm/binding/vectors/foundations-v1.json",
+      "status": "PRESENT_NATIVE_FOUNDATION_FIXTURES",
+      "proves": "Exact binding-local constant, identity and assessment fixture expectations are recorded",
+      "doesNotProve": "Execution of those fixtures, protected execution or a portable profile claim"
+    },
+    {
+      "id": "binding-local-asset-foundation-vectors",
+      "path": "packages/dex-evm/binding/vectors/asset-foundations-v1.json",
+      "status": "PRESENT_POINT_IN_TIME_ASSET_FOUNDATION_FIXTURES",
+      "proves": "Exact binding-local native ETH and strict measured ERC-20 observation cases and resource boundaries are recorded",
+      "doesNotProve": "Asset Profile conformance, EVM-013, lifetime token behavior, protected execution or portable conformance"
+    },
+    {
+      "id": "portable-snapshot-subset",
+      "path": "packages/dex-evm/binding/vectors/portable-snapshot-lock.json",
+      "status": "INCOMPLETE_PORTABLE_EVALUATOR_SUBSET",
+      "proves": "The copied evaluator-input subset is content-addressed and explicitly incomplete",
+      "doesNotProve": "The complete locked vector-set digest or applicable-case completeness"
+    },
+    {
+      "id": "sdk-test-sources",
+      "path": "packages/dex-evm/sdk/test",
+      "status": "TEST_SOURCE_PRESENT_EXECUTION_EVIDENCE_SEPARATE",
+      "proves": "SDK unit, vector, differential, event-indexer and transaction-review test sources exist",
+      "doesNotProve": "That the tests passed for a revision-bound release"
+    },
+    {
+      "id": "solidity-test-sources",
+      "path": "packages/dex-evm/test",
+      "status": "TEST_SOURCE_PRESENT_EXECUTION_EVIDENCE_SEPARATE",
+      "proves": "Foundation unit, fuzz, invariant and adversarial test sources exist",
+      "doesNotProve": "That any campaign passed for a revision-bound release"
+    },
+    {
+      "id": "robinhood-mainnet-network",
+      "path": "config/networks/robinhood-chain/4663.json",
+      "status": "DATED_READ_ONLY_EVIDENCE",
+      "proves": "Stable network identity plus explicitly dated mutable observations and their limitations",
+      "doesNotProve": "Provider quorum, continuing endpoint state or DEX deployment"
+    },
+    {
+      "id": "robinhood-testnet-network",
+      "path": "config/networks/robinhood-chain/46630.json",
+      "status": "DATED_READ_ONLY_EVIDENCE",
+      "proves": "Stable network identity plus explicitly dated mutable observations and their limitations",
+      "doesNotProve": "Provider quorum, continuing endpoint state or DEX deployment"
+    },
+    {
+      "id": "robinhood-mainnet-deployment",
+      "path": "deployments/dex/robinhood/4663/deployment-status.json",
+      "status": "BLOCKED_BY_SPEC_NOT_DEPLOYED",
+      "proves": "No mainnet address, transaction, runtime or verification evidence is claimed",
+      "doesNotProve": "A deployment or owner authorization"
+    },
+    {
+      "id": "robinhood-testnet-preparation",
+      "path": "deployments/dex/robinhood/46630/preparation-status.json",
+      "status": "PRE_OWNER_GATE_READ_ONLY_PREPARATION_BLOCKED_BY_SPEC",
+      "proves": "Preparation stopped before an owner gate, owner signing, canonical-network broadcast or canonical-network deployment",
+      "doesNotProve": "A testnet candidate, owner authorization or deployment"
+    },
+    {
+      "id": "security-properties",
+      "path": "docs/security/DEX_EVM_PROPERTIES.md",
+      "status": "DOCUMENTED_NOT_AUDITED",
+      "proves": "The claimed foundation properties, threat assumptions and future verification obligations are stated",
+      "doesNotProve": "Independent review or absence of vulnerabilities"
+    }
+  ],
+  "absentEvidence": [
+    "implementation release commit and tree",
+    "revision-bound native test report",
+    "revision-bound SDK test report",
+    "Binding Release",
+    "Conformance Report",
+    "portable profile claims",
+    "independent audit",
+    "security contest",
+    "owner gate",
+    "owner-provided Robinhood or provider Terms acceptance record or click-through acceptance evidence",
+    "owner-signed or canonical-network-broadcast transaction",
+    "canonical testnet deployment",
+    "mainnet deployment",
+    "source verification",
+    "canonical deployment runtime readback",
+    "provider-quorum finality proof",
+    "production publication"
+  ],
+  "placeholderPolicy": "No unresolved placeholder, null/example address, invented digest or missing artifact is counted as evidence."
+}

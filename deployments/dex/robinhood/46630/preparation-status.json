@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "programmable.dex-evm.testnet-preparation-status/v1",
+  "network": {
+    "chainId": 46630,
+    "chainReference": "eip155:46630",
+    "configurationPath": "config/networks/robinhood-chain/46630.json",
+    "blockZeroHash": "0x829a42e6d68c872aafcef3abb2123fe371138fc415dd8b44381bbbf23049dd32",
+    "recordedFinalizedAnchor": {
+      "observedAt": "2026-08-29T13:48:50Z",
+      "blockNumber": 109367897,
+      "blockHash": "0xef655cee2f29492111f9f33af43fc625e0f99636b42f6e2b700ff3fb96a6fc98"
+    }
+  },
+  "preparationState": "PRE_OWNER_GATE_READ_ONLY_PREPARATION",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "classification": "NONE",
+  "ownerGateClaimed": false,
+  "ownerActionRequested": false,
+  "unsignedTransactionPackageCreated": false,
+  "ownerTransactionSigned": false,
+  "canonicalNetworkTransactionBroadcast": false,
+  "canonicalNetworkDeploymentOccurred": false,
+  "custodySafety": {
+    "deployForCustody": false,
+    "fundCanonicalVaults": false,
+    "reason": "The immutable foundations-only Core has no vault-command call site and executeProtected always reverts. Native ETH has no release path and ERC-20 balances have no Core-controlled release path; unsupported token or issuer behavior is outside this claim."
+  },
+  "canonicalExplorerSourceVerificationOccurred": false,
+  "canonicalDeploymentRuntimeReadbackOccurred": false,
+  "localForkSmoke": {
+    "classification": "DISPOSABLE_LOCAL_ONLY_SIMULATION",
+    "canonicalNetworkTransactionBroadcast": false,
+    "executionEvidence": "REVISION_BOUND_NATIVE_TEST_REPORT_REQUIRED",
+    "testPath": "packages/dex-evm/test/integration/RobinhoodTestnetForkFoundations.t.sol"
+  },
+  "externalTermsEvidence": {
+    "ownerAcceptanceRecordPresent": false,
+    "clickThroughAcceptanceAttempted": false,
+    "legalEffectOfReadOnlyAccess": "NOT_ASSESSED",
+    "evidenceBoundary": "No owner-provided acceptance record or click-through acceptance action is present. Whether access to official documentation, public RPC, testnet or explorer services has legal effect under applicable Terms is not assessed here."
+  },
+  "protocolLock": {
+    "path": "packages/dex-evm/binding/protocol-lock.json",
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "completedPreparation": [
+    "official network identity and bootstrap resources recorded",
+    "block-zero identity recorded from the official public RPC",
+    "dated finalized-tag and runtime observations recorded",
+    "public RPC production-suitability limitation recorded",
+    "post-deployment evidence axes and Blockscout verification requirement documented",
+    "owner-controlled signing and spending boundary documented"
+  ],
+  "blockersBeforeOwnerGate": [
+    {
+      "kind": "SPECIFICATION",
+      "status": "BLOCKED_BY_SPEC",
+      "reason": "The strict Binding Release and Conformance Report required by VER-009, VER-010, ARTIFACT-005 and ARTIFACT-006 cannot be completed until the portable gaps in packages/dex-evm/binding/reports/protocol-gap-report.json are resolved."
+    },
+    {
+      "kind": "OWNER_INPUT",
+      "status": "NOT_PROVIDED",
+      "reason": "No proposed Collector address exists, so its address type, code, dependencies and ultimate-beneficiary behavior cannot yet be reviewed. That reversible technical review must be completed before a future owner gate. The agent has not selected a beneficiary; irreversible selection for immutable construction occurs only through owner approval at that gate."
+    },
+    {
+      "kind": "OWNER_INPUT",
+      "status": "NOT_PROVIDED",
+      "reason": "The exact deployer address has not been selected."
+    },
+    {
+      "kind": "RELEASE_IDENTITY",
+      "status": "NOT_AVAILABLE",
+      "reason": "There is no completed Binding Release that binds an implementation commit, tree, ABI, creation bytecode, runtime bytecode, native profile vectors, reports and reproducible toolchain."
+    },
+    {
+      "kind": "TRANSACTION_PACKAGE",
+      "status": "NOT_CONSTRUCTIBLE",
+      "reason": "Expected created addresses, exact constructor arguments, unsigned payloads, gas estimate and maximum ETH cost depend on the unresolved Collector, deployer and release artifacts."
+    }
+  ],
+  "ownerGatePrerequisites": [
+    "resolved portable specification and exact updated Protocol lock",
+    "complete Binding Release and Conformance Report",
+    "exact reviewed implementation commit and tree",
+    "reproducible ABI, creation-bytecode and runtime-bytecode digests",
+    "selected deployer address",
+    "proposed Collector address plus completed pre-gate address-type, code, dependency and ultimate-beneficiary review; irreversible beneficiary selection occurs only through owner approval at the gate",
+    "exact constructor arguments and immutable configuration",
+    "fresh network and finalized-anchor observation",
+    "expected created addresses",
+    "gas estimate and maximum ETH cost",
+    "unsigned transaction payloads",
+    "post-deployment source-verification and runtime-readback procedure"
+  ],
+  "evidenceBoundary": "This record is preparation evidence only. It is not an owner gate, transaction authorization, testnet-candidate manifest, deployment record, source-verification record, or production evidence."
+}

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "programmable.dex-evm.deployment-status/v1",
+  "network": {
+    "chainId": 4663,
+    "chainReference": "eip155:4663",
+    "configurationPath": "config/networks/robinhood-chain/4663.json",
+    "blockZeroHash": "0xaad15f3d702aaea00caf3e9bb56395efe9127bc3b31b24921abf1eee3409305c"
+  },
+  "terminalState": "BLOCKED_BY_SPEC",
+  "classification": "NONE",
+  "canonicalNetworkDeploymentOccurred": false,
+  "custodySafety": {
+    "deployForCustody": false,
+    "fundCanonicalVaults": false,
+    "reason": "The immutable foundations-only Core has no vault-command call site and executeProtected always reverts. Native ETH has no release path and ERC-20 balances have no Core-controlled release path; unsupported token or issuer behavior is outside this claim."
+  },
+  "canonicalExplorerSourceVerificationOccurred": false,
+  "canonicalDeploymentRuntimeReadbackOccurred": false,
+  "externalTermsEvidence": {
+    "ownerAcceptanceRecordPresent": false,
+    "clickThroughAcceptanceAttempted": false,
+    "legalEffectOfReadOnlyAccess": "NOT_ASSESSED",
+    "evidenceBoundary": "No owner-provided acceptance record or click-through acceptance action is present. Whether access to official documentation, public RPC, testnet or explorer services has legal effect under applicable Terms is not assessed here."
+  },
+  "protocolLock": {
+    "path": "packages/dex-evm/binding/protocol-lock.json",
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "blockingRequirements": [
+    {
+      "requirement": "VER-011 and ARTIFACT-007",
+      "reason": "Production must resolve to an exact Protocol commit whose protocol-version.json is final and production eligible. The locked commit is draft and productionEligible=false."
+    },
+    {
+      "requirement": "VER-009 and ARTIFACT-005",
+      "reason": "A Binding Release and complete passing Conformance Report do not exist and cannot be completed against the unresolved portable gaps recorded in packages/dex-evm/binding/reports/protocol-gap-report.json."
+    },
+    {
+      "requirement": "Owner authorization",
+      "reason": "Technical address-type, code, dependency and ultimate-beneficiary review of any proposed Collector is reversible pre-gate work. Irreversible Collector beneficiary selection, mainnet deployment, transaction signing or broadcasting, spending and irreversible Production publication require explicit owner approval after every technical and specification gate is satisfied."
+    }
+  ],
+  "addressEvidencePolicy": "No Core, DomainVault, Collector, deployer, dependency, transaction, or created-address field is recorded because no mainnet deployment evidence exists.",
+  "permittedWork": [
+    "read-only network revalidation",
+    "architecture and implementation work that does not invent portable semantics",
+    "native testing and reproducible-build preparation",
+    "documentation and evidence-catalog maintenance"
+  ],
+  "prohibitedClaims": [
+    "binding release",
+    "conformance report",
+    "testnet candidate",
+    "production release candidate",
+    "production eligible",
+    "production deployed"
+  ]
+}

@@ -1,0 +1,154 @@
+{
+  "schemaVersion": "programmable.robinhood-network/v1",
+  "network": "testnet",
+  "identity": {
+    "name": "Robinhood Chain Sepolia",
+    "displayName": "Robinhood Chain Testnet",
+    "chainId": 46630,
+    "chainIdHex": "0xb626",
+    "caip2": "eip155:46630",
+    "nativeGasSymbol": "ETH",
+    "architecture": "ARBITRUM_NITRO_L2",
+    "dataAvailability": "ETHEREUM_BLOBS",
+    "parentChain": {
+      "name": "Sepolia",
+      "chainId": 11155111,
+      "caip2": "eip155:11155111"
+    },
+    "blockZero": {
+      "number": 0,
+      "hash": "0x829a42e6d68c872aafcef3abb2123fe371138fc415dd8b44381bbbf23049dd32",
+      "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "timestamp": 0
+    },
+    "l1RollupAddress": "0xdc5F8E399DBd8a9F5F87AeC4C23Beb12431b386D"
+  },
+  "operatorConfiguration": {
+    "publicRpcUrl": "https://rpc.testnet.chain.robinhood.com",
+    "publicRpcProductionSuitable": false,
+    "explorerUrl": "https://explorer.testnet.chain.robinhood.com",
+    "explorerApiUrl": "https://explorer.testnet.chain.robinhood.com/api/",
+    "sequencerFeedUrl": "wss://feed.testnet.chain.robinhood.com",
+    "sequencerUrl": "https://sequencer.testnet.chain.robinhood.com"
+  },
+  "bootstrap": {
+    "chainInfo": {
+      "url": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-testnet-info.json",
+      "digest": "sha256:0ad167c746c2aa9169c84a252f8c863140cdbd4fc23b571fa1041f94cabaf745",
+      "digestEvidenceClass": "LOCALLY_COMPUTED_SHA256_SNAPSHOT_OF_OFFICIAL_CDN_BYTES_NOT_AN_OFFICIAL_CHECKSUM"
+    },
+    "usesCustomGenesis": false
+  },
+  "observations": [
+    {
+      "kind": "FINALIZED_TAG_ANCHOR",
+      "observedAt": "2026-08-29T13:48:50Z",
+      "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
+      "methods": [
+        "eth_chainId",
+        "eth_getBlockByNumber(0x0,false)",
+        "eth_getBlockByNumber(finalized,false)"
+      ],
+      "blockNumber": 109367897,
+      "blockNumberHex": "0x684d259",
+      "blockHash": "0xef655cee2f29492111f9f33af43fc625e0f99636b42f6e2b700ff3fb96a6fc98",
+      "blockTimestamp": "2026-08-29T13:29:58Z",
+      "headerL1BlockNumber": 11592122,
+      "headerL1BlockNumberHex": "0xb0e1ba",
+      "evidenceClass": "SINGLE_OFFICIAL_PUBLIC_RPC_OBSERVATION",
+      "limitation": "The public RPC finalized tag was recorded without independent provider quorum or separate proof of the containing Sepolia batch and finalized L1 block."
+    },
+    {
+      "kind": "RUNTIME_OBSERVATION",
+      "observedAt": "2026-08-29T14:00:00.373Z",
+      "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
+      "methods": [
+        "eth_chainId",
+        "net_version",
+        "web3_clientVersion",
+        "eth_blockNumber",
+        "eth_getBlockByNumber(latest,false)",
+        "eth_syncing",
+        "eth_call(ArbSys.arbChainID)",
+        "eth_call(ArbSys.arbBlockNumber)",
+        "eth_call(ArbSys.arbOSVersion)"
+      ],
+      "clientVersion": "nitro/v3.11.3-rc.9-beb2108/linux-arm64/go1.25.12",
+      "head": {
+        "blockNumber": 109380316,
+        "blockNumberHex": "0x68502dc",
+        "blockHash": "0xe65673f673bb59efd06fd752e0a77a6dfd9293894d934bfd682ec6031386638d",
+        "blockTimestamp": "2026-08-29T13:59:59Z",
+        "headerL1BlockNumber": 11592265,
+        "headerL1BlockNumberHex": "0xb0e249"
+      },
+      "arbOS": {
+        "documentationVersion": 61,
+        "rawArbSysVersion": 116,
+        "normalizedVersion": 61,
+        "normalization": "rawArbSysVersion - 55",
+        "interpretation": "CONSISTENT_AFTER_ARBSYS_INTERFACE_NORMALIZATION"
+      },
+      "syncStatus": {
+        "status": "UNAVAILABLE_ON_PUBLIC_ENDPOINT",
+        "rpcErrorCode": -32601,
+        "rpcErrorMessage": "method eth_syncing does not exist/is not available"
+      }
+    }
+  ],
+  "corePortabilityPolicy": {
+    "requiresArbitrumPrecompile": false,
+    "treatsBlockNumberAsL2Counter": false,
+    "usesBlockEntropy": false,
+    "assumesFirstComeFirstServedEliminatesMev": false,
+    "treatsSequencerAcceptanceAsEthereumFinality": false,
+    "runtimeCodeLimitBytes": 24576,
+    "initCodeLimitBytes": 49152
+  },
+  "sources": [
+    {
+      "kind": "OFFICIAL_NETWORK_DOCUMENTATION",
+      "url": "https://docs.robinhood.com/chain/connecting/",
+      "accessedAt": "2026-08-29T13:48:50Z",
+      "retrievedOn": "2026-08-29"
+    },
+    {
+      "kind": "OFFICIAL_NODE_DOCUMENTATION",
+      "url": "https://docs.robinhood.com/chain/run-a-full-node/",
+      "accessedAt": "2026-08-29T13:48:50Z",
+      "retrievedOn": "2026-08-29"
+    },
+    {
+      "kind": "OFFICIAL_TRANSACTION_FINALITY_DOCUMENTATION",
+      "url": "https://docs.robinhood.com/chain/transaction-finality/",
+      "retrievedOn": "2026-08-29"
+    },
+    {
+      "kind": "OFFICIAL_ETHEREUM_DIFFERENCES_DOCUMENTATION",
+      "url": "https://docs.robinhood.com/chain/differences-from-ethereum/",
+      "retrievedOn": "2026-08-29"
+    },
+    {
+      "kind": "OFFICIAL_GAS_AND_FEES_DOCUMENTATION",
+      "url": "https://docs.robinhood.com/chain/gas-and-fees/",
+      "retrievedOn": "2026-08-29"
+    },
+    {
+      "kind": "OFFICIAL_TERMS_OF_SERVICE",
+      "url": "https://docs.robinhood.com/chain/terms-of-service/",
+      "retrievedOn": "2026-08-29"
+    },
+    {
+      "kind": "OFFICIAL_CHAIN_INFO",
+      "url": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-testnet-info.json",
+      "accessedAt": "2026-08-29T13:48:50Z",
+      "retrievedOn": "2026-08-29"
+    },
+    {
+      "kind": "CANONICAL_ARBSYS_INTERFACE",
+      "url": "https://github.com/OffchainLabs/nitro-precompile-interfaces/blob/main/ArbSys.sol",
+      "accessedAt": "2026-08-29T14:00:00.373Z",
+      "retrievedOn": "2026-08-29"
+    }
+  ]
+}

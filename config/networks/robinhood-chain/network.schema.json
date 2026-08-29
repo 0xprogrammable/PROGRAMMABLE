@@ -1,0 +1,422 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:programmable:network-config:robinhood-chain:v1",
+  "title": "Programmable Robinhood Chain network configuration V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "network",
+    "identity",
+    "operatorConfiguration",
+    "bootstrap",
+    "observations",
+    "corePortabilityPolicy",
+    "sources"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.robinhood-network/v1"
+    },
+    "network": {
+      "enum": ["mainnet", "testnet"]
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "operatorConfiguration": {
+      "$ref": "#/$defs/operatorConfiguration"
+    },
+    "bootstrap": {
+      "$ref": "#/$defs/bootstrap"
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/finalizedAnchorObservation"},
+          {"$ref": "#/$defs/runtimeObservation"}
+        ]
+      }
+    },
+    "corePortabilityPolicy": {
+      "$ref": "#/$defs/corePortabilityPolicy"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"network": {"const": "mainnet"}},
+        "required": ["network"]
+      },
+      "then": {
+        "properties": {
+          "identity": {
+            "type": "object",
+            "properties": {
+              "name": {"const": "Robinhood Chain"},
+              "displayName": {"const": "Robinhood Chain"},
+              "chainId": {"const": 4663},
+              "chainIdHex": {"const": "0x1237"},
+              "caip2": {"const": "eip155:4663"},
+              "parentChain": {
+                "type": "object",
+                "properties": {
+                  "name": {"const": "Ethereum"},
+                  "chainId": {"const": 1},
+                  "caip2": {"const": "eip155:1"}
+                }
+              },
+              "blockZero": {
+                "type": "object",
+                "properties": {
+                  "hash": {"const": "0xaad15f3d702aaea00caf3e9bb56395efe9127bc3b31b24921abf1eee3409305c"}
+                }
+              },
+              "l1RollupAddress": {"const": "0x23A19d23e89166adedbDcB432518AB01e4272D94"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"network": {"const": "testnet"}},
+        "required": ["network"]
+      },
+      "then": {
+        "properties": {
+          "identity": {
+            "type": "object",
+            "properties": {
+              "name": {"const": "Robinhood Chain Sepolia"},
+              "displayName": {"const": "Robinhood Chain Testnet"},
+              "chainId": {"const": 46630},
+              "chainIdHex": {"const": "0xb626"},
+              "caip2": {"const": "eip155:46630"},
+              "parentChain": {
+                "type": "object",
+                "properties": {
+                  "name": {"const": "Sepolia"},
+                  "chainId": {"const": 11155111},
+                  "caip2": {"const": "eip155:11155111"}
+                }
+              },
+              "blockZero": {
+                "type": "object",
+                "properties": {
+                  "hash": {"const": "0x829a42e6d68c872aafcef3abb2123fe371138fc415dd8b44381bbbf23049dd32"}
+                }
+              },
+              "l1RollupAddress": {"const": "0xdc5F8E399DBd8a9F5F87AeC4C23Beb12431b386D"}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hash32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9A-Fa-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hexQuantity": {
+      "type": "string",
+      "pattern": "^0x(?:0|[1-9a-f][0-9a-f]*)$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{3})?Z$"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "parentChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "chainId", "caip2"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "chainId": {"type": "integer", "minimum": 1},
+        "caip2": {"type": "string", "pattern": "^eip155:[1-9][0-9]*$"}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "displayName",
+        "chainId",
+        "chainIdHex",
+        "caip2",
+        "nativeGasSymbol",
+        "architecture",
+        "dataAvailability",
+        "parentChain",
+        "blockZero",
+        "l1RollupAddress"
+      ],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "displayName": {"type": "string", "minLength": 1},
+        "chainId": {"enum": [4663, 46630]},
+        "chainIdHex": {"enum": ["0x1237", "0xb626"]},
+        "caip2": {"enum": ["eip155:4663", "eip155:46630"]},
+        "nativeGasSymbol": {"const": "ETH"},
+        "architecture": {"const": "ARBITRUM_NITRO_L2"},
+        "dataAvailability": {"const": "ETHEREUM_BLOBS"},
+        "parentChain": {"$ref": "#/$defs/parentChain"},
+        "blockZero": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["number", "hash", "parentHash", "timestamp"],
+          "properties": {
+            "number": {"const": 0},
+            "hash": {"$ref": "#/$defs/hash32"},
+            "parentHash": {"const": "0x0000000000000000000000000000000000000000000000000000000000000000"},
+            "timestamp": {"const": 0}
+          }
+        },
+        "l1RollupAddress": {"$ref": "#/$defs/address"}
+      }
+    },
+    "operatorConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publicRpcUrl",
+        "publicRpcProductionSuitable",
+        "explorerUrl",
+        "explorerApiUrl",
+        "sequencerFeedUrl",
+        "sequencerUrl"
+      ],
+      "properties": {
+        "publicRpcUrl": {"type": "string", "pattern": "^https://"},
+        "publicRpcProductionSuitable": {"const": false},
+        "explorerUrl": {"type": "string", "pattern": "^https://"},
+        "explorerApiUrl": {"type": "string", "pattern": "^https://"},
+        "sequencerFeedUrl": {"type": "string", "pattern": "^wss://"},
+        "sequencerUrl": {"type": "string", "pattern": "^https://"}
+      }
+    },
+    "contentAddressedResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "digest", "digestEvidenceClass"],
+      "properties": {
+        "url": {"type": "string", "pattern": "^https://"},
+        "digest": {"$ref": "#/$defs/sha256"},
+        "digestEvidenceClass": {
+          "const": "LOCALLY_COMPUTED_SHA256_SNAPSHOT_OF_OFFICIAL_CDN_BYTES_NOT_AN_OFFICIAL_CHECKSUM"
+        }
+      }
+    },
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chainInfo", "usesCustomGenesis"],
+      "properties": {
+        "chainInfo": {"$ref": "#/$defs/contentAddressedResource"},
+        "usesCustomGenesis": {"type": "boolean"},
+        "customGenesis": {"$ref": "#/$defs/contentAddressedResource"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"usesCustomGenesis": {"const": true}},
+            "required": ["usesCustomGenesis"]
+          },
+          "then": {
+            "properties": {"customGenesis": {}},
+            "required": ["customGenesis"]
+          },
+          "else": {"not": {"required": ["customGenesis"]}}
+        }
+      ]
+    },
+    "finalizedAnchorObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "observedAt",
+        "rpcUrl",
+        "methods",
+        "blockNumber",
+        "blockNumberHex",
+        "blockHash",
+        "blockTimestamp",
+        "headerL1BlockNumber",
+        "headerL1BlockNumberHex",
+        "evidenceClass",
+        "limitation"
+      ],
+      "properties": {
+        "kind": {"const": "FINALIZED_TAG_ANCHOR"},
+        "observedAt": {"$ref": "#/$defs/timestamp"},
+        "rpcUrl": {"type": "string", "pattern": "^https://"},
+        "methods": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "blockNumber": {"type": "integer", "minimum": 1},
+        "blockNumberHex": {"$ref": "#/$defs/hexQuantity"},
+        "blockHash": {"$ref": "#/$defs/hash32"},
+        "blockTimestamp": {"$ref": "#/$defs/timestamp"},
+        "headerL1BlockNumber": {"type": "integer", "minimum": 1},
+        "headerL1BlockNumberHex": {"$ref": "#/$defs/hexQuantity"},
+        "evidenceClass": {"const": "SINGLE_OFFICIAL_PUBLIC_RPC_OBSERVATION"},
+        "limitation": {"type": "string", "minLength": 1}
+      }
+    },
+    "runtimeObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "observedAt",
+        "rpcUrl",
+        "methods",
+        "clientVersion",
+        "head",
+        "arbOS",
+        "syncStatus"
+      ],
+      "properties": {
+        "kind": {"const": "RUNTIME_OBSERVATION"},
+        "observedAt": {"$ref": "#/$defs/timestamp"},
+        "rpcUrl": {"type": "string", "pattern": "^https://"},
+        "methods": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "clientVersion": {"type": "string", "minLength": 1},
+        "head": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "blockNumber",
+            "blockNumberHex",
+            "blockHash",
+            "blockTimestamp",
+            "headerL1BlockNumber",
+            "headerL1BlockNumberHex"
+          ],
+          "properties": {
+            "blockNumber": {"type": "integer", "minimum": 1},
+            "blockNumberHex": {"$ref": "#/$defs/hexQuantity"},
+            "blockHash": {"$ref": "#/$defs/hash32"},
+            "blockTimestamp": {"$ref": "#/$defs/timestamp"},
+            "headerL1BlockNumber": {"type": "integer", "minimum": 1},
+            "headerL1BlockNumberHex": {"$ref": "#/$defs/hexQuantity"}
+          }
+        },
+        "arbOS": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "documentationVersion",
+            "rawArbSysVersion",
+            "normalizedVersion",
+            "normalization",
+            "interpretation"
+          ],
+          "properties": {
+            "documentationVersion": {"type": "integer", "minimum": 0},
+            "rawArbSysVersion": {"type": "integer", "minimum": 0},
+            "normalizedVersion": {"type": "integer", "minimum": 0},
+            "normalization": {"type": "string", "minLength": 1},
+            "interpretation": {
+              "enum": [
+                "CONSISTENT_AFTER_ARBSYS_INTERFACE_NORMALIZATION",
+                "UNRESOLVED_VERSION_MISMATCH",
+                "NOT_OBSERVED"
+              ]
+            }
+          }
+        },
+        "syncStatus": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "enum": ["SYNCED", "SYNCING", "UNAVAILABLE_ON_PUBLIC_ENDPOINT", "UNVERIFIED"]
+            },
+            "rpcErrorCode": {"type": "integer"},
+            "rpcErrorMessage": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "corePortabilityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiresArbitrumPrecompile",
+        "treatsBlockNumberAsL2Counter",
+        "usesBlockEntropy",
+        "assumesFirstComeFirstServedEliminatesMev",
+        "treatsSequencerAcceptanceAsEthereumFinality",
+        "runtimeCodeLimitBytes",
+        "initCodeLimitBytes"
+      ],
+      "properties": {
+        "requiresArbitrumPrecompile": {"const": false},
+        "treatsBlockNumberAsL2Counter": {"const": false},
+        "usesBlockEntropy": {"const": false},
+        "assumesFirstComeFirstServedEliminatesMev": {"const": false},
+        "treatsSequencerAcceptanceAsEthereumFinality": {"const": false},
+        "runtimeCodeLimitBytes": {"const": 24576},
+        "initCodeLimitBytes": {"const": 49152}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "url", "retrievedOn"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "OFFICIAL_NETWORK_DOCUMENTATION",
+            "OFFICIAL_NODE_DOCUMENTATION",
+            "OFFICIAL_TRANSACTION_FINALITY_DOCUMENTATION",
+            "OFFICIAL_ETHEREUM_DIFFERENCES_DOCUMENTATION",
+            "OFFICIAL_GAS_AND_FEES_DOCUMENTATION",
+            "OFFICIAL_TERMS_OF_SERVICE",
+            "OFFICIAL_CHAIN_INFO",
+            "OFFICIAL_GENESIS",
+            "CANONICAL_ARBSYS_INTERFACE"
+          ]
+        },
+        "url": {"type": "string", "pattern": "^https://"},
+        "accessedAt": {"$ref": "#/$defs/timestamp"},
+        "retrievedOn": {"$ref": "#/$defs/date"}
+      }
+    }
+  }
+}

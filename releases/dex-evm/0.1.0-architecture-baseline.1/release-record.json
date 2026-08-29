@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "programmable.dex-evm.architecture-baseline-release/v1",
+  "releaseId": "dex-evm/0.1.0-architecture-baseline.1",
+  "classification": "NON_PRODUCTION_ARCHITECTURE_BASELINE",
+  "terminalState": "BLOCKED_BY_SPEC",
+  "productionEligible": false,
+  "sourceRevision": {
+    "status": "INTENTIONALLY_UNBOUND_ARCHITECTURE_SNAPSHOT",
+    "reason": "This architecture-snapshot record makes no implementation Git commit or tree claim and must not be reclassified as a source release after later commits. A revision-bound artifact requires a separate release record."
+  },
+  "protocolLock": {
+    "path": "packages/dex-evm/binding/protocol-lock.json",
+    "commit": "334bb26703a4dab18ce0fca8485c6275a879933a",
+    "tree": "a0c4d7018eb810c35ac11cdd4e066cd92a6ee513",
+    "protocolSpecId": "programmable-protocol/0.1.0-draft.1",
+    "constitutionId": "sha256:2715d9770de7b327c054c413a99f7cbba0933f2eabc9639a53948706237cd301",
+    "portableVectorSetDigest": "sha256:d61a757f8d4c14d3e5ab0f92e77ab39bd54e7a91f4cc5d591819c58768481137",
+    "status": "draft",
+    "productionEligible": false
+  },
+  "scope": {
+    "describedFoundationPaths": [
+      "immutable Core deployment identity",
+      "Engine Revision descriptor registration and entry-runtime-codehash authentication",
+      "Market and Domain Revision immutable descriptor identities",
+      "deterministic isolated DomainVault creation",
+      "native ETH and strict measured ERC-20 point-in-time transfer primitives",
+      "uint128 cumulative-floor Protocol Assessment arithmetic",
+      "binding-local SDK identity, assessment, event and transaction-review utilities"
+    ],
+    "implementationClaim": "NONE_SOURCE_REVISION_UNBOUND",
+    "protectedExecution": "DESCRIBED_HARD_REVERT_SENTINEL_BLOCKED_BY_SPEC",
+    "domainVaultFundingDisposition": "NO_CORE_RELEASE_PATH_DO_NOT_FUND_OR_DEPLOY_FOR_CUSTODY_OR_CANONICAL_USE",
+    "registrationGrantsProtectedAuthority": false,
+    "engineEntryCodePolicyPermitsProxyShapedCode": true
+  },
+  "releaseArtifacts": {
+    "evidenceCatalog": "releases/dex-evm/0.1.0-architecture-baseline.1/evidence-catalog.json",
+    "generatedFoundationsAbi": "packages/dex-evm/binding/abi/foundations.generated.json",
+    "generatedFoundationsBuildInventory": "packages/dex-evm/binding/reports/build-artifacts.generated.json",
+    "bindingNativeFoundationVectors": "packages/dex-evm/binding/vectors/foundations-v1.json",
+    "bindingLocalAssetFoundationVectors": "packages/dex-evm/binding/vectors/asset-foundations-v1.json",
+    "conformanceStatus": "packages/dex-evm/binding/reports/conformance-status.json",
+    "requirementTraceability": "packages/dex-evm/binding/reports/requirement-traceability.json",
+    "protocolGapReport": "packages/dex-evm/binding/reports/protocol-gap-report.json"
+  },
+  "bindingReleasePublished": false,
+  "conformanceReportPublished": false,
+  "portableProfileClaims": [],
+  "independentAuditCompleted": false,
+  "securityContestCompleted": false,
+  "deployment": {
+    "robinhoodMainnet": "BLOCKED_BY_SPEC_NOT_DEPLOYED",
+    "robinhoodTestnet": "PRE_OWNER_GATE_READ_ONLY_PREPARATION_BLOCKED_BY_SPEC_NOT_DEPLOYED"
+  },
+  "prohibitedClaims": [
+    "Binding Release",
+    "Conformance Report",
+    "testnet candidate",
+    "production candidate",
+    "production eligible",
+    "deployed",
+    "audited"
+  ]
+}
