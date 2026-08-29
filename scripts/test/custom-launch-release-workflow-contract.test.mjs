@@ -12,6 +12,13 @@ const WORKFLOW_URL = new URL(
   import.meta.url,
 );
 
+function mutateWorkflowStep(source, startMarker, endMarker, mutate) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.ok(start >= 0 && end > start, `missing workflow step ${startMarker}`);
+  return `${source.slice(0, start)}${mutate(source.slice(start, end))}${source.slice(end)}`;
+}
+
 function workflowFailures(source) {
   const failures = [];
   const requireText = (id, text) => {
@@ -182,18 +189,51 @@ function workflowFailures(source) {
     "record-reachability",
     'git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"',
   );
-  requireText(
-    "record-github-provenance",
-    "commit.commit?.verification?.verified !== true",
+  const v3RecordGateStart = source.indexOf(
+    "      - name: Verify detached Custom Launch V3 release record",
   );
-  requireText(
-    "record-programmable-author",
-    'commit.author?.login !== "0xprogrammable"',
+  const v3RecordGateEnd = source.indexOf(
+    "      - name: Set up Fly CLI for read-only release verification",
+    v3RecordGateStart,
   );
-  requireText(
-    "record-programmable-committer",
-    'commit.committer?.login !== "0xprogrammable"',
-  );
+  const v3RecordGateBlock =
+    v3RecordGateStart >= 0 && v3RecordGateEnd > v3RecordGateStart
+      ? source.slice(v3RecordGateStart, v3RecordGateEnd)
+      : "";
+  const provenanceRequirements = [
+    ["programmable-author-id", "commit.author?.id !== 309941960"],
+    [
+      "programmable-author-login",
+      'commit.author?.login !== "programmable-infra"',
+    ],
+    ["programmable-committer-id", "commit.committer?.id !== 309941960"],
+    [
+      "programmable-committer-login",
+      'commit.committer?.login !== "programmable-infra"',
+    ],
+    [
+      "programmable-email-id",
+      "^309941960\\+[A-Za-z0-9-]+@users\\.noreply\\.github\\.com$",
+    ],
+  ];
+  for (const [lane, block] of [
+    ["v1", recordGateBlock],
+    ["v3", v3RecordGateBlock],
+  ]) {
+    for (const [id, text] of provenanceRequirements) {
+      if (!block.includes(text)) failures.push(`record-${lane}-${id}`);
+    }
+  }
+  if (!recordGateBlock.includes("commit.commit?.verification?.verified !== true")) {
+    failures.push("record-v1-github-provenance");
+  }
+  if (
+    !v3RecordGateBlock.includes(
+      "commit.commit?.verification?.verified !== Boolean(true)",
+    )
+  ) {
+    failures.push("record-v3-github-provenance");
+  }
   requireText(
     "record-fixed-path",
     'record_path="release-records/custom-launch-v1/release-record.json"',
@@ -592,6 +632,18 @@ test("the production workflow enforces the complete conditional detached-record 
 test("workflow contract detects weakened record and stage-only gates", async () => {
   const source = await readFile(WORKFLOW_URL, "utf8");
   const mutations = [
+    mutateWorkflowStep(
+      source,
+      "      - name: Verify detached Custom Launch release record",
+      "      - name: Preserve detached Custom Launch release record",
+      (step) => step.replaceAll("309941960", "0"),
+    ),
+    mutateWorkflowStep(
+      source,
+      "      - name: Verify detached Custom Launch V3 release record",
+      "      - name: Set up Fly CLI for read-only release verification",
+      (step) => step.replaceAll("309941960", "0"),
+    ),
     source.replace(
       "if: steps.custom-launch-policy.outputs.release_record_required == 'true'",
       "if: always()",

@@ -19,7 +19,7 @@ jobs:
   release:
     name: Build, attest, and publish exact CLI release
     if: >-
-      github.repository == '0xprogrammable/programmable' &&
+      github.repository_id == 1314365508 &&
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest

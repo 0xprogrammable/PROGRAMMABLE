@@ -449,12 +449,32 @@ describe("read-model operations source contract", () => {
   });
 
   it("binds the per-minute schedulers, activation gates and release workflow", () => {
+    const watchdogWorkflow = readFileSync(
+      resolve(ROOT, ".github/workflows/refresh-production-read-model.yml"),
+      "utf8",
+    );
+    expect(watchdogWorkflow).toContain("github.repository_id == 1314365508");
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: integratedOverrides(),
       expectedSha256Overrides: fixtureDigests(),
     });
     expect(result.failures).toEqual([]);
     expect(result.ok).toBe(true);
+  });
+
+  it("rejects scheduler workflow drift even when the repository guard remains", () => {
+    const workflowPath = ".github/workflows/refresh-production-read-model.yml";
+    const watchdogWorkflow = readFileSync(resolve(ROOT, workflowPath), "utf8");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        ...integratedOverrides(),
+        [workflowPath]: `${watchdogWorkflow}\n# unreviewed scheduler drift\n`,
+      },
+      expectedSha256Overrides: fixtureDigests(),
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-legacy-scheduler-watchdog",
+    );
   });
 
   it("rejects scheduler, authorization and activation drift", () => {

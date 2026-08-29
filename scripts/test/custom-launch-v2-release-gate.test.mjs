@@ -4,6 +4,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  BACKEND_REPOSITORY,
+  BACKEND_REPOSITORY_ID,
+  WEBSITE_REPOSITORY,
+  WEBSITE_REPOSITORY_ID,
   parseDeterministicCustomLaunchApiReleaseBindingV1,
   verifyCustomLaunchApiReleaseBindingV1,
 } from "../verify-custom-launch-api-release-binding-v1.mjs";
@@ -372,8 +376,8 @@ test("V2 staging fails closed on API drift, secrets and per-state overclaim", as
 function commitResponse(sha, tree) {
   return {
     sha,
-    author: { login: "0xprogrammable" },
-    committer: { login: "0xprogrammable" },
+    author: { id: 309_941_960, login: "programmable-infra" },
+    committer: { id: 309_941_960, login: "programmable-infra" },
     commit: { tree: { sha: tree }, verification: { verified: true } },
   };
 }
@@ -446,6 +450,13 @@ test("backend binding preserves historical revision 2 profile evidence", async (
   };
   const fetchImpl = async (input) => {
     const url = new URL(input);
+    assert.match(
+      url.pathname,
+      new RegExp(
+        `^/repositories/(?:${BACKEND_REPOSITORY_ID}|${WEBSITE_REPOSITORY_ID})/`,
+        "u",
+      ),
+    );
     let body;
     if (url.pathname.endsWith(`/commits/${hashes.d}`)) body = attestation;
     else if (url.pathname.endsWith(`/commits/${hashes.a}`)) body = commitResponse(hashes.a, hashes.b);
@@ -484,6 +495,11 @@ test("backend binding preserves historical revision 2 profile evidence", async (
   });
   assert.equal(result.api.publicProfileSha256, publicProfileSha256);
   assert.equal(result.commitSignatureVerified, true);
+  assert.equal(
+    BACKEND_REPOSITORY,
+    "programmablehq/programmable-open-hook-v2-internal",
+  );
+  assert.equal(WEBSITE_REPOSITORY, "programmablehq/programmable-evm");
 });
 
 test("Fly readback accepts the real tag-only release ref and exact machine digest", () => {
