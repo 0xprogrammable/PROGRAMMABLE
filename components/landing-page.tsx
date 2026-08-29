@@ -155,6 +155,10 @@ export function LandingPage() {
           />
           <h1 id="landing-title">Programmable</h1>
           <p>Build and launch custom Uniswap v4 hooks</p>
+          <Link className={styles.migrationCta} href="/migration">
+            <span>We are migrating</span>
+            <small>Ethereum → Robinhood Chain</small>
+          </Link>
         </div>
 
         <a className={styles.scrollCue} href="#what-is-programmable">

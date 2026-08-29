@@ -16,6 +16,7 @@ export type PreparedTransactionChainId =
 
 export type PreparedTransactionKind =
   | "launch"
+  | "main-token-migration"
   | "prediction-market-launch"
   | "prediction-market-action"
   | "token-to-permit2"
@@ -61,6 +62,12 @@ type PreparedLaunchTransaction = PreparedTransactionBase & {
   from?: never;
 };
 
+type PreparedMainTokenMigrationTransaction = PreparedTransactionBase & {
+  kind: "main-token-migration";
+  from: Address;
+  gasLimit?: string;
+};
+
 type PreparedPredictionMarketTransaction = PreparedTransactionBase & {
   kind: "prediction-market-launch" | "prediction-market-action";
   gasLimit: string;
@@ -96,6 +103,7 @@ type PreparedClaimTransaction =
 export type PreparedTransaction =
   | PreparedTradeTransaction
   | PreparedLaunchTransaction
+  | PreparedMainTokenMigrationTransaction
   | PreparedPredictionMarketTransaction
   | PreparedClaimTransaction;
 
@@ -109,6 +117,7 @@ const UINT256_MAX = (1n << 256n) - 1n;
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 const kinds = new Set<PreparedTransactionKind>([
   "launch",
+  "main-token-migration",
   "prediction-market-launch",
   "prediction-market-action",
   "token-to-permit2",
@@ -205,6 +214,7 @@ export function parsePreparedTransaction(
   }
   const kind = record.kind as PreparedTransactionKind;
   const allowedFields =
+    kind === "main-token-migration" ||
     kind === "claim-creator-fees" ||
     kind === "claim-classic-v3-rewards" ||
     kind === "update-classic-v3-payout" ||
@@ -223,6 +233,12 @@ export function parsePreparedTransaction(
     );
   }
   if (
+    kind === "main-token-migration"
+  ) {
+    if (record.chainId !== ETHEREUM_MAINNET_CHAIN_ID) {
+      throw new Error("Main token migration is limited to Ethereum Mainnet");
+    }
+  } else if (
     kind === "prediction-market-launch" ||
     kind === "prediction-market-action"
   ) {
@@ -252,6 +268,18 @@ export function parsePreparedTransaction(
       ...base,
       kind,
       gasLimit: readUintString(record.gasLimit, "gas limit", false),
+    };
+  }
+  if (
+    kind === "main-token-migration"
+  ) {
+    return {
+      ...base,
+      kind,
+      from: readAddress(record.from, "sender"),
+      ...(record.gasLimit === undefined
+        ? {}
+        : { gasLimit: readUintString(record.gasLimit, "gas limit", false) }),
     };
   }
   if (
@@ -300,7 +328,8 @@ export function parsePreparedTransactionForAccount(
   const transaction = parsePreparedTransaction(input);
   const connectedAccount = readAddress(account, "connected wallet");
   if (
-    (transaction.kind === "claim-creator-fees" ||
+    (transaction.kind === "main-token-migration" ||
+      transaction.kind === "claim-creator-fees" ||
       transaction.kind === "claim-classic-v3-rewards" ||
       transaction.kind === "update-classic-v3-payout" ||
       transaction.kind === "claim-deep-rewards" ||
@@ -310,7 +339,9 @@ export function parsePreparedTransactionForAccount(
     transaction.from.toLowerCase() !== connectedAccount.toLowerCase()
   ) {
     throw new Error(
-      "The creator fee claim does not match the connected wallet",
+      transaction.kind === "main-token-migration"
+        ? "The migration sender does not match the connected wallet"
+        : "The creator fee claim does not match the connected wallet",
     );
   }
   return transaction;
@@ -360,6 +391,13 @@ export function parseSubmittedTransactionHash(value: unknown): Hex {
 export function getPreparedTransactionReview(
   kind: PreparedTransactionKind,
 ): PreparedTransactionReview {
+  if (kind === "main-token-migration") {
+    return {
+      description: "Send V4 to the fixed migration wallet on Ethereum",
+      buttonText: "Send V4",
+      successHeader: "Migration transfer submitted",
+    };
+  }
   if (kind === "launch") {
     return {
       description: "Submit the prepared token launch on Ethereum",

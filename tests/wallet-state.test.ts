@@ -154,6 +154,7 @@ describe("wallet recovery state", () => {
     for (const pathname of [
       "/launch",
       "/launch/review",
+      "/migration",
       "/profile",
       "/profile/settings",
       "/token/0x7987f03462200b3d8a072e02c89a8a41dcb124ee",

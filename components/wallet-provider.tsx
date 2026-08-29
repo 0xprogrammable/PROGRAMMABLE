@@ -221,6 +221,7 @@ function loadWalletProviderRuntime() {
 export function shouldEagerLoadWalletRuntime(pathname: string) {
   return [
     "/launch",
+    "/migration",
     "/profile",
     "/token",
     "/developers/api-keys",
