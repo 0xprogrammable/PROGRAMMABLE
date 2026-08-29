@@ -22,4 +22,4 @@ Only assign a Programmable Classic or Programmable Custom label when the Router 
 
 A valid result proves canonical Router provenance. It does not prove present liquidity, audit status, sellability, quoting support or price quality.
 
-The complete implementation reference and conformance fixtures live in the [0xprogrammable developers repository](https://github.com/0xprogrammable/developers).
+The complete implementation reference and conformance fixtures live in the [Programmable Developers repository](https://github.com/programmablehq/Developers).

@@ -26,4 +26,4 @@ The Programmable contracts in the public product repository have not undergone a
 
 Token transactions can be irreversible. Tokens can be volatile, illiquid or lose all value. Verify the connected wallet, network, contract address, transaction destination and value before signing. Programmable does not provide financial advice or guarantee a token's quality, future price or trading activity.
 
-Security sensitive reports belong in the private reporting path of the affected [0xprogrammable repository](https://github.com/0xprogrammable). Do not post private keys, access tokens, signatures or unpublished exploit details in a public issue.
+Security sensitive reports belong in the private reporting path of the affected [Programmable repository](https://github.com/programmablehq). Do not post private keys, access tokens, signatures or unpublished exploit details in a public issue.

@@ -32,4 +32,4 @@ The public-read OpenAPI below describes the Developer API. The standalone V3 Cus
 [programmable-v2.yaml](../.gitbook/assets/programmable-v2.yaml)
 {% endopenapi %}
 
-The canonical OpenAPI source is maintained in the [developers repository](https://github.com/0xprogrammable/developers/blob/main/openapi/programmable-v2.yaml). This copy is included so GitBook can render the interactive reference together with the official product documentation.
+The canonical OpenAPI source is maintained in the [Developers repository](https://github.com/programmablehq/Developers/blob/main/openapi/programmable-v2.yaml). This copy is included so GitBook can render the interactive reference together with the official product documentation.
