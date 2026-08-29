@@ -63,7 +63,7 @@ const APPROVED_OPERATIONS = Object.freeze({
       workflow: Object.freeze({
         path: ".github/workflows/refresh-production-read-model.yml",
         sha256:
-          "778f68df03c9a66a17c5f58643940e0beb2e4090eacd5f126a5feb9a0ed6b616",
+          "6eb33f2cd54447b7ada4adc02341feb0d82f874e79358ceae166584a72ef836f",
       }),
       nodeRuntime: Object.freeze({
         setupAction: "actions/setup-node",
@@ -1645,8 +1645,15 @@ export function evaluateReadModelOperationsSourceContracts(
   const schedulerWatchdog = operations?.legacyIndexer?.schedulerWatchdog;
   check(
     "ops-legacy-scheduler-watchdog",
-    schedulerWatchdog?.workflow?.path ===
-      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow.path,
+    exactJson(
+      schedulerWatchdog?.workflow,
+      APPROVED_OPERATIONS.legacyIndexer.schedulerWatchdog.workflow,
+    ) &&
+      sourceBindingMatches(
+        source,
+        schedulerWatchdog?.workflow,
+        expectedSha256Overrides,
+      ),
     "the recurring durable refresh remains bound to its reviewed production workflow",
   );
   const closedLegacyAlias = APPROVED_OPERATIONS.legacyIndexer.closedAlias;

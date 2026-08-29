@@ -370,8 +370,11 @@ jobs:
           git cat-file -e "$RECORD_COMMIT_SHA^{commit}"
           git merge-base --is-ancestor \
             "$RECORD_COMMIT_SHA" "refs/remotes/origin/command-center-release-records"
-          test "$(git show -s --format=%ae "$RECORD_COMMIT_SHA")" = \
-            "309941960+0xprogrammable@users.noreply.github.com"
+          record_author_email="$(git show -s --format=%ae "$RECORD_COMMIT_SHA")"
+          if [[ ! "$record_author_email" =~ ^309941960\+[A-Za-z0-9-]+@users\.noreply\.github\.com$ ]]; then
+            echo "The detached record author is not the Programmable service account" >&2
+            exit 1
+          fi
           record_commit_json="$RUNNER_TEMP/custom-launch-release-record-commit.json"
           test ! -e "$record_commit_json"
           curl --fail --silent --show-error \
@@ -385,8 +388,10 @@ jobs:
           const commit = JSON.parse(readFileSync(process.env.RECORD_COMMIT_JSON, "utf8"));
           if (
             commit.sha !== process.env.RECORD_COMMIT_SHA ||
-            commit.author?.login !== "0xprogrammable" ||
-            commit.committer?.login !== "0xprogrammable" ||
+            commit.author?.id !== 309941960 ||
+            commit.author?.login !== "programmable-infra" ||
+            commit.committer?.id !== 309941960 ||
+            commit.committer?.login !== "programmable-infra" ||
             commit.commit?.verification?.verified !== true
           ) {
             throw new Error("detached record commit lacks verified Programmable provenance");
@@ -454,8 +459,11 @@ jobs:
             "+refs/heads/command-center-release-records:$record_ref"
           git cat-file -e "$RECORD_COMMIT_SHA^{commit}"
           git merge-base --is-ancestor "$RECORD_COMMIT_SHA" "$record_ref"
-          test "$(git show -s --format=%ae "$RECORD_COMMIT_SHA")" = \
-            "309941960+0xprogrammable@users.noreply.github.com"
+          record_author_email="$(git show -s --format=%ae "$RECORD_COMMIT_SHA")"
+          if [[ ! "$record_author_email" =~ ^309941960\+[A-Za-z0-9-]+@users\.noreply\.github\.com$ ]]; then
+            echo "The detached V3 record author is not the Programmable service account" >&2
+            exit 1
+          fi
           record_commit_json="$RUNNER_TEMP/custom-launch-v3-release-record-commit.json"
           test ! -e "$record_commit_json"
           curl --fail --silent --show-error \
@@ -469,8 +477,10 @@ jobs:
           const commit = JSON.parse(readFileSync(process.env.RECORD_COMMIT_JSON, "utf8"));
           if (
             commit.sha !== process.env.RECORD_COMMIT_SHA
-            || commit.author?.login !== "0xprogrammable"
-            || commit.committer?.login !== "0xprogrammable"
+            || commit.author?.id !== 309941960
+            || commit.author?.login !== "programmable-infra"
+            || commit.committer?.id !== 309941960
+            || commit.committer?.login !== "programmable-infra"
             || commit.commit?.verification?.verified !== Boolean(true)
           ) throw new Error("detached V3 record commit lacks verified Programmable provenance");
           NODE

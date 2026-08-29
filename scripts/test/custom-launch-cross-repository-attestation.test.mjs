@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   BACKEND_RELEASE_BINDING_PATH,
   BACKEND_RELEASE_REPOSITORY,
+  BACKEND_RELEASE_REPOSITORY_ID,
   verifyCrossRepositoryReleaseBindingFromGitHubV1,
 } from "../verify-custom-launch-cross-repository-attestation.mjs";
 
@@ -27,7 +28,7 @@ function releaseBinding() {
     disabledReason: null,
     pendingCandidates: null,
     backend: {
-      repositoryUrl: `https://github.com/${BACKEND_RELEASE_REPOSITORY}.git`,
+      repositoryUrl: "https://github.com/0xprogrammable/programmable-open-hook-v2-internal.git",
       candidateCommitSha: commits.backend,
       candidateTreeSha: "7".repeat(40),
       packedAttestationPath: "services/autonomous-approval-v1/release/production-packed-artifact.json",
@@ -60,7 +61,7 @@ function releaseBinding() {
       builderVendorReceiptSha256: digest("0"),
     },
     productionAuthority: {
-      repositoryUrl: `https://github.com/${BACKEND_RELEASE_REPOSITORY}.git`,
+      repositoryUrl: "https://github.com/0xprogrammable/programmable-open-hook-v2-internal.git",
       candidateCommitSha: commits.authority,
       candidateTreeSha: "b".repeat(40),
       subjectAgentPath: "services/production-authorities-v1/deploy/fly/fly-oidc-subject-agent.mjs",
@@ -86,8 +87,8 @@ function fixture(options = {}) {
   const blobSha = gitBlobSha1(bytes);
   const commit = {
     sha: commits.attestation,
-    author: { login: "0xprogrammable" },
-    committer: { login: "0xprogrammable" },
+    author: { id: 309_941_960, login: "programmable-infra" },
+    committer: { id: 309_941_960, login: "programmable-infra" },
     commit: { verification: { verified: true } },
     parents: [{ sha: commits.backend }],
     files: [{
@@ -107,6 +108,7 @@ function fixture(options = {}) {
   };
   options.mutateContents?.(contents);
   const fetchImpl = async (url, request) => {
+    assert.match(url.pathname, new RegExp(`^/repositories/${BACKEND_RELEASE_REPOSITORY_ID}/`, "u"));
     assert.equal(request.method, "GET");
     assert.equal(request.redirect, "error");
     assert.equal(request.headers.authorization, "Bearer test-token");
@@ -136,7 +138,7 @@ test("reads the exact signed Git blob and closes the five-component release set"
   const result = await verify(fixture());
   assert.deepEqual(result, {
     schemaVersion: "programmable.website-observed-cross-repository-release-binding.v1",
-    repository: BACKEND_RELEASE_REPOSITORY,
+    repository: "0xprogrammable/programmable-open-hook-v2-internal",
     attestationCommitSha: commits.attestation,
     parentCommitSha: commits.backend,
     documentPath: BACKEND_RELEASE_BINDING_PATH,
@@ -152,6 +154,10 @@ test("reads the exact signed Git blob and closes the five-component release set"
     commitSignatureVerified: true,
   });
   assert.match(result.documentBlobSha, /^[0-9a-f]{40}$/u);
+  assert.equal(
+    BACKEND_RELEASE_REPOSITORY,
+    "programmablehq/programmable-open-hook-v2-internal",
+  );
 });
 
 test("rejects an attestation commit that changes more than the binding", async () => {

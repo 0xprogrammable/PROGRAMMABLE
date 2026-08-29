@@ -303,6 +303,7 @@ test("Generic signer OIDC proof is one-shot, two-Machine and cleanup-attested", 
   );
   assert.match(standaloneReconcile, /^name: Reconcile Generic Signer Probes$/mu);
   assert.match(standaloneReconcile, /^  workflow_dispatch:$/mu);
+  assert.match(standaloneReconcile, /github\.repository_id == 1314365508/u);
   assert.match(standaloneReconcile, /group: programmable-production/u);
   assert.match(standaloneReconcile, /cancel-in-progress: false/u);
   assert.match(standaloneReconcile, /environment:[\s\S]*name: production/u);

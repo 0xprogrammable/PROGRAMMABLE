@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import Ajv2020 from "ajv/dist/2020.js";
 
 export const BACKEND_REPOSITORY =
-  "0xprogrammable/programmable-open-hook-v2-internal";
-export const WEBSITE_REPOSITORY = "0xprogrammable/programmable";
+  "programmablehq/programmable-open-hook-v2-internal";
+export const BACKEND_REPOSITORY_ID = 1_318_883_798;
+export const WEBSITE_REPOSITORY = "programmablehq/programmable-evm";
+export const WEBSITE_REPOSITORY_ID = 1_314_365_508;
 export const BINDING_PATH =
   "services/custom-launch-api-v1/release/public-v3-release-binding-v1.json";
 export const PUBLIC_OPENAPI_PATH = "public/openapi/custom-launch-v3.json";
@@ -16,6 +18,8 @@ export const OBSERVATION_SCHEMA_VERSION =
 const COMMIT = /^[0-9a-f]{40}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const MAXIMUM_GITHUB_BYTES = 2 * 1024 * 1024;
+const PROGRAMMABLE_OPERATOR_ID = 309_941_960;
+const PROGRAMMABLE_OPERATOR_LOGIN = "programmable-infra";
 const schema = JSON.parse(readFileSync(new URL(
   "../docs/operations/releases/custom-launch-v2/backend-release-binding.schema.json",
   import.meta.url,
@@ -94,8 +98,10 @@ function commitIdentity(value, expectedSha, label, { operator = false } = {}) {
     || value?.commit?.verification?.verified !== true
     || !COMMIT.test(value?.commit?.tree?.sha ?? "")
     || (operator && (
-      value?.author?.login !== "0xprogrammable"
-      || value?.committer?.login !== "0xprogrammable"
+      value?.author?.id !== PROGRAMMABLE_OPERATOR_ID
+      || value?.author?.login !== PROGRAMMABLE_OPERATOR_LOGIN
+      || value?.committer?.id !== PROGRAMMABLE_OPERATOR_ID
+      || value?.committer?.login !== PROGRAMMABLE_OPERATOR_LOGIN
     ))
   ) {
     throw new Error(`${label} lacks exact verified Programmable provenance`);
@@ -171,19 +177,19 @@ export async function verifyCustomLaunchApiReleaseBindingV1(input) {
   const fetchImpl = input.fetchImpl ?? fetch;
   const [attestationCommit, contents, websiteCommit] = await Promise.all([
     readGitHubJson(
-      githubUrl(`/repos/${BACKEND_REPOSITORY}/commits/${input.attestationCommitSha}?per_page=100`),
+      githubUrl(`/repositories/${BACKEND_REPOSITORY_ID}/commits/${input.attestationCommitSha}?per_page=100`),
       input.githubToken,
       fetchImpl,
       input.signal,
     ),
     readGitHubJson(
-      githubUrl(`/repos/${BACKEND_REPOSITORY}/contents/${encodedPath(BINDING_PATH)}?ref=${input.attestationCommitSha}`),
+      githubUrl(`/repositories/${BACKEND_REPOSITORY_ID}/contents/${encodedPath(BINDING_PATH)}?ref=${input.attestationCommitSha}`),
       input.githubToken,
       fetchImpl,
       input.signal,
     ),
     readGitHubJson(
-      githubUrl(`/repos/${WEBSITE_REPOSITORY}/commits/${input.expectedWebsiteCommitSha}`),
+      githubUrl(`/repositories/${WEBSITE_REPOSITORY_ID}/commits/${input.expectedWebsiteCommitSha}`),
       input.githubToken,
       fetchImpl,
       input.signal,
@@ -223,25 +229,25 @@ export async function verifyCustomLaunchApiReleaseBindingV1(input) {
     launchPackageManifestContents,
   ] = await Promise.all([
     readGitHubJson(
-      githubUrl(`/repos/${BACKEND_REPOSITORY}/commits/${binding.backend.candidateCommitSha}`),
+      githubUrl(`/repositories/${BACKEND_REPOSITORY_ID}/commits/${binding.backend.candidateCommitSha}`),
       input.githubToken,
       fetchImpl,
       input.signal,
     ),
     readGitHubJson(
-      githubUrl(`/repos/${BACKEND_REPOSITORY}/contents/${encodedPath(binding.api.publicProfilePath)}?ref=${binding.backend.candidateCommitSha}`),
+      githubUrl(`/repositories/${BACKEND_REPOSITORY_ID}/contents/${encodedPath(binding.api.publicProfilePath)}?ref=${binding.backend.candidateCommitSha}`),
       input.githubToken,
       fetchImpl,
       input.signal,
     ),
     readGitHubJson(
-      githubUrl(`/repos/${WEBSITE_REPOSITORY}/contents/${encodedPath(PUBLIC_OPENAPI_PATH)}?ref=${binding.website.candidateCommitSha}`),
+      githubUrl(`/repositories/${WEBSITE_REPOSITORY_ID}/contents/${encodedPath(PUBLIC_OPENAPI_PATH)}?ref=${binding.website.candidateCommitSha}`),
       input.githubToken,
       fetchImpl,
       input.signal,
     ),
     readGitHubJson(
-      githubUrl(`/repos/${WEBSITE_REPOSITORY}/contents/${encodedPath(LAUNCH_PACKAGE_MANIFEST_PATH)}?ref=${binding.website.candidateCommitSha}`),
+      githubUrl(`/repositories/${WEBSITE_REPOSITORY_ID}/contents/${encodedPath(LAUNCH_PACKAGE_MANIFEST_PATH)}?ref=${binding.website.candidateCommitSha}`),
       input.githubToken,
       fetchImpl,
       input.signal,
@@ -305,7 +311,7 @@ export async function verifyCustomLaunchApiReleaseBindingV1(input) {
   }
   return Object.freeze({
     schemaVersion: OBSERVATION_SCHEMA_VERSION,
-    repository: BACKEND_REPOSITORY,
+    repository: binding.backend.repository,
     attestationCommitSha: input.attestationCommitSha,
     bindingDocumentPath: BINDING_PATH,
     bindingDocumentSha256: documentSha256,

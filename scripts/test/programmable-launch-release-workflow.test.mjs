@@ -10,6 +10,7 @@ const source = readFileSync(workflowPath, "utf8");
 
 function failures(value) {
   const required = [
+    "github.repository_id == 1314365508",
     "github.ref == 'refs/heads/production'",
     "environment: production",
     "actions: read",

@@ -14,7 +14,7 @@ jobs:
   reconcile:
     name: Remove every residual one-shot signer probe
     if: >-
-      github.repository == '0xprogrammable/programmable' &&
+      github.repository_id == 1314365508 &&
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/production'
     permissions:

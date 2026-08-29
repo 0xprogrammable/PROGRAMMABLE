@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import Ajv2020 from "ajv/dist/2020.js";
 
 export const BACKEND_RELEASE_REPOSITORY =
-  "0xprogrammable/programmable-open-hook-v2-internal";
+  "programmablehq/programmable-open-hook-v2-internal";
+export const BACKEND_RELEASE_REPOSITORY_ID = 1_318_883_798;
 export const BACKEND_RELEASE_BINDING_PATH =
   "services/autonomous-approval-v1/release/cross-repository-release-binding-v1.json";
 export const CROSS_REPOSITORY_OBSERVATION_SCHEMA_VERSION =
@@ -14,6 +15,10 @@ const COMMIT = /^[0-9a-f]{40}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const MAX_GITHUB_RESPONSE_BYTES = 2 * 1024 * 1024;
 const GITHUB_REQUEST_TIMEOUT_MS = 10_000;
+const PROGRAMMABLE_OPERATOR_ID = 309_941_960;
+const PROGRAMMABLE_OPERATOR_LOGIN = "programmable-infra";
+const HISTORICAL_BACKEND_RELEASE_REPOSITORY =
+  "0xprogrammable/programmable-open-hook-v2-internal";
 const BACKEND_SCHEMA = JSON.parse(readFileSync(
   new URL(
     "../docs/operations/releases/custom-launch-v1/backend-cross-repository-release-binding-v1.schema.json",
@@ -43,10 +48,10 @@ export async function verifyCrossRepositoryReleaseBindingFromGitHubV1(input) {
 
   const fetchImpl = input.fetchImpl ?? fetch;
   const commitUrl = githubApiUrl(
-    `/repos/${BACKEND_RELEASE_REPOSITORY}/commits/${input.attestationCommitSha}?per_page=100`,
+    `/repositories/${BACKEND_RELEASE_REPOSITORY_ID}/commits/${input.attestationCommitSha}?per_page=100`,
   );
   const contentsUrl = githubApiUrl(
-    `/repos/${BACKEND_RELEASE_REPOSITORY}/contents/${encodePath(BACKEND_RELEASE_BINDING_PATH)}`
+    `/repositories/${BACKEND_RELEASE_REPOSITORY_ID}/contents/${encodePath(BACKEND_RELEASE_BINDING_PATH)}`
       + `?ref=${input.attestationCommitSha}`,
   );
   const [commit, contents] = await Promise.all([
@@ -77,7 +82,7 @@ export async function verifyCrossRepositoryReleaseBindingFromGitHubV1(input) {
 
   return Object.freeze({
     schemaVersion: CROSS_REPOSITORY_OBSERVATION_SCHEMA_VERSION,
-    repository: BACKEND_RELEASE_REPOSITORY,
+    repository: HISTORICAL_BACKEND_RELEASE_REPOSITORY,
     attestationCommitSha: input.attestationCommitSha,
     parentCommitSha,
     documentPath: BACKEND_RELEASE_BINDING_PATH,
@@ -139,8 +144,10 @@ function validateAttestationCommit(commit, expectedCommitSha) {
     throw new Error("Backend release attestation commit identity is invalid.");
   }
   if (
-    commit.author?.login !== "0xprogrammable"
-    || commit.committer?.login !== "0xprogrammable"
+    commit.author?.id !== PROGRAMMABLE_OPERATOR_ID
+    || commit.author?.login !== PROGRAMMABLE_OPERATOR_LOGIN
+    || commit.committer?.id !== PROGRAMMABLE_OPERATOR_ID
+    || commit.committer?.login !== PROGRAMMABLE_OPERATOR_LOGIN
     || commit.commit?.verification?.verified !== true
   ) {
     throw new Error("Backend release attestation lacks verified Programmable provenance.");

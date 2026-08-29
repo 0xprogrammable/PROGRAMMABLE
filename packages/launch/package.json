@@ -40,11 +40,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0xprogrammable/PROGRAMMABLE.git",
+    "url": "git+https://github.com/programmablehq/PROGRAMMABLE-EVM.git",
     "directory": "packages/launch"
   },
   "homepage": "https://programmable.market/docs/developers/custom-launch",
   "bugs": {
-    "url": "https://github.com/0xprogrammable/PROGRAMMABLE/issues"
+    "url": "https://github.com/programmablehq/PROGRAMMABLE-EVM/issues"
   }
 }
