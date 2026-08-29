@@ -95,7 +95,7 @@ const SCHEMAS = Object.freeze({
   source: "programmable.launch-cli-v4-source-closure.v1",
   finality: "programmable.launch-cli-v4-finality-evidence.v1",
 });
-const REQUIRED_SOURCES = Object.freeze([
+export const V4_RELEASE_REQUIRED_SOURCE_PATHS = Object.freeze([
   "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
   "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
   "contracts/src/ProgrammableCreate2GraphDeployerV1.sol",
@@ -294,7 +294,8 @@ function auditSource(root, value) {
     value.tree, "source Git tree");
   git(root, ["merge-base", "--is-ancestor", value.revision, "refs/heads/production"]);
   equal(value.foundationSourceCommitment, FOUNDATION, "source foundation commitment");
-  if (!Array.isArray(value.entries) || value.entries.length < REQUIRED_SOURCES.length) {
+  if (!Array.isArray(value.entries)
+    || value.entries.length < V4_RELEASE_REQUIRED_SOURCE_PATHS.length) {
     throw new Error("source closure is incomplete");
   }
   const paths = value.entries.map((entry, index) => {
@@ -315,7 +316,7 @@ function auditSource(root, value) {
     && Buffer.compare(Buffer.from(paths[index - 1]), Buffer.from(item)) >= 0)) {
     throw new Error("source paths are not unique UTF-8 order");
   }
-  for (const requiredPath of REQUIRED_SOURCES) {
+  for (const requiredPath of V4_RELEASE_REQUIRED_SOURCE_PATHS) {
     if (!paths.includes(requiredPath)) throw new Error(`source closure misses ${requiredPath}`);
   }
   required(value.sourceClosureDigest, SHA256, "source closure digest");
