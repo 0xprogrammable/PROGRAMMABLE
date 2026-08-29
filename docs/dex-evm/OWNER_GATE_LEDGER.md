@@ -12,7 +12,7 @@ complete. Mainnet is prohibited by the locked Draft and its
 | Twelve Protocol gaps resolved | No | No | `protocol-gap-report.json` is `BLOCKED_BY_SPEC` |
 | Binding Release | Absent | Absent | locked Protocol inventory has zero |
 | Passing Conformance Report | Absent | Absent | cannot be completed against current gaps |
-| Exact reviewed implementation release | Absent | Absent | architecture baseline only |
+| Exact reviewed deployment-ready implementation release | Absent | Absent | non-production architecture or revision-bound foundations evidence does not satisfy this gate |
 | Proposed Collector address supplied and reviewed | No | No | no owner-supplied proposal or address-type/code/dependency review recorded; selection occurs at owner approval |
 | Deployer selected | No | No | no address recorded |
 | Constructor arguments frozen | No | No | depend on Collector and release |
