@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "programmable.robinhood-custom-launch.deployment.v1",
+  "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
+  "chainId": "4663",
+  "caip2": "eip155:4663",
+  "state": "prepared-not-broadcast",
+  "chainProfile": "../spec/robinhood-custom-launch/chain-4663.v1.json",
+  "chainDeploymentDescriptorDigest": null,
+  "chainDeploymentDescriptorDigestState": "pending-finalized-deployment-evidence",
+  "foundationSourceCommitment": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
+  "atomicOwnerTransaction": {
+    "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+    "value": "0",
+    "function": "aggregate3((address,bool,bytes)[])",
+    "selector": "0x82ad56cb",
+    "dataHash": "0x3ba04469085b17e12843a94c154a335c9c384837f8f6531f179cb4915fd237d9",
+    "dataBytes": 33412,
+    "allSubcallsAllowFailure": false,
+    "componentCallOrder": [
+      "permitAuthority",
+      "graphFactory",
+      "programmableLaunchStampRouter"
+    ],
+    "ethEstimateGasLiveObservation": {
+      "value": "7169706",
+      "blockRange": ["49228085", "49228090"],
+      "observedAt": "2026-08-29T14:32:09Z"
+    }
+  },
+  "contracts": {
+    "permitAuthority": {
+      "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+      "expectedRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+      "constructor": null,
+      "initializer": "Safe.setup(exact observed owners,1,0x0,0x,compatibilityFallbackHandler,0x0,0,0x0)",
+      "expectedConfiguration": {
+        "owners": [
+          "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+          "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+        ],
+        "threshold": 1,
+        "modules": [],
+        "guard": "0x0000000000000000000000000000000000000000",
+        "fallbackHandler": "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99",
+        "nonce": "0"
+      },
+      "preparedComponentCallIndex": 0
+    },
+    "graphFactory": {
+      "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+      "expectedRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+      "creationCodeHash": "0x84f7cb8e9e445d3322249dbc2b9efc65bb9c7a8ba26902aafef9b0552f4bc208",
+      "constructor": [],
+      "create2Salt": "0x7d365f1aa1c69761337bf63b896eefcb81a5faedafad1b0b93e2ed7e132bc147",
+      "preparedComponentCallIndex": 1
+    },
+    "programmableLaunchStampRouter": {
+      "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+      "expectedRuntimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+      "creationCodeHash": "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
+      "constructor": [
+        "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+        "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+        "0x8366a39CC670B4001A1121B8F6A443A643e40951"
+      ],
+      "expectedGetters": {
+        "CHAIN_ID": "4663",
+        "PERMIT_AUTHORITY": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+        "PERMIT_AUTHORITY_RUNTIME_CODE_HASH": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+        "GRAPH_FACTORY": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+        "GRAPH_FACTORY_RUNTIME_CODE_HASH": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+        "POOL_MANAGER": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+        "POOL_MANAGER_RUNTIME_CODE_HASH": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
+      },
+      "create2Salt": "0x7060d5971187bebbb37323b740bfbc8f494833e6ac5f31a27fc6b3bf289f2c0d",
+      "preparedComponentCallIndex": 2
+    }
+  },
+  "deployment": {
+    "sender": null,
+    "transactionHash": null,
+    "transactionNonce": null,
+    "transactionGasLimit": null,
+    "transactionMaxFeePerGas": null,
+    "transactionMaxPriorityFeePerGas": null,
+    "blockNumber": null,
+    "blockHash": null,
+    "blockTimestamp": null,
+    "startBlock": null,
+    "finalityEvidence": null,
+    "sourceVerification": null
+  },
+  "ownerActionRequired": "Select one observed Safe owner as sender and separately sign/broadcast the exact one atomic zero-value Multicall3 transaction on Robinhood Chain; then replace every null only from finalized receipt and readbacks.",
+  "live": false
+}

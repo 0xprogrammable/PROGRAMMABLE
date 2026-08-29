@@ -1,0 +1,311 @@
+{
+  "schemaVersion": "programmable.robinhood-custom-launch.chain-profile.v1",
+  "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
+  "deploymentState": "prepared-not-broadcast",
+  "chainId": "4663",
+  "chainIdHex": "0x1237",
+  "caip2": "eip155:4663",
+  "network": "robinhood-mainnet",
+  "nativeCurrency": "ETH",
+  "explorer": "https://robinhoodchain.blockscout.com",
+  "rpc": {
+    "public": "https://rpc.mainnet.chain.robinhood.com",
+    "productionRequirement": "authenticated-distinct-primary-and-secondary-providers",
+    "publicRpcCountsTowardQuorum": false
+  },
+  "finality": {
+    "schemaVersion": "programmable.custom-launch-finality-policy-ref.v1",
+    "policyId": "robinhood-stage-finality-v1",
+    "policyRevision": 1,
+    "stages": [
+      "sequencer_soft_confirmation",
+      "ethereum_posted",
+      "ethereum_finalized"
+    ],
+    "terminalStage": "ethereum_finalized",
+    "promotableStage": "ethereum_finalized",
+    "arbitraryL2ConfirmationDepthIsFinality": false,
+    "policyDigest": "sha256:537d531423d1285a3808556a57303ec68f1e6bdeea3c9aaf6320f9e5a0e47153",
+    "policyDigestState": "byte-locked-provider-integration"
+  },
+  "sources": {
+    "uniswapRegistry": {
+      "repository": "https://github.com/Uniswap/contracts",
+      "commit": "4cfc406c8e34da3ce04e60657a7825075b64fd22",
+      "path": "deployments/json/4663.json",
+      "sha256": "0x21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15"
+    },
+    "safeDeployments": {
+      "repository": "https://github.com/safe-global/safe-deployments",
+      "commit": "0974182c16c57ca6fe2b9bba8cffb8a7e55fb83c",
+      "version": "1.4.1"
+    },
+    "multicall3": {
+      "repository": "https://github.com/mds1/multicall3",
+      "commit": "b667d67ecfa5361a81e8f110234ce242613b0012",
+      "path": "src/Multicall3.sol",
+      "sha256": "0x2054218939d3fa0f52f8ce1a33658d570a550671f63197356ee5744f7e188b1e",
+      "bindingEvidence": "Robinhood runtime is byte-identical to the canonical same-address Ethereum deployment; upstream deployments.json does not list chain 4663"
+    },
+    "router": {
+      "repository": "https://github.com/programmablehq/PROGRAMMABLE",
+      "commit": "0a7134bbb912222639627fb9078df2f8dd3a6c38",
+      "originalPath": "src/ProgrammableLaunchStampRouterV1.sol",
+      "currentPath": "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
+      "sha256": "0xef87aa9338c364634bffda64423bd3fb096c1630a45cc58ecf854d24959ff163",
+      "abiSha256": "0xab25262ce1cb907eba1cb820492754c0cd5d7278eb5fd6a024ba24c767323ac0",
+      "standardJsonInputSha256": "0x77c91af397be05dd277a04bd1357034b6b36bc302051b6274ec02453dc928b51",
+      "recovery": "byte-identical"
+    },
+    "graphFactory": {
+      "repository": "https://github.com/programmablehq/PROGRAMMABLE",
+      "commit": "518fd05066edeb6017db995af520819151173a3b",
+      "path": "contracts/src/ProgrammableCreate2GraphDeployerV1.sol",
+      "sha256": "0x06a3acaf9beeb68647af231f5524c5a34dc013d99611a1b2d0a6c80895f595e9",
+      "abiSha256": "0x2d253b16e76c43bc6736a6dadb28881c7f8d52a1c4b8cf8aa22a20b0c6aaa5f4",
+      "standardJsonInputSha256": "0x1c574930980dad4d98f9749f2b957a2f075c4ecc397bc77b46552736e4aa1bc0"
+    }
+  },
+  "observation": {
+    "blockNumber": "49220000",
+    "blockHash": "0xabc4e2a609516012bb7af14128a26a51a67012552f3e68b585a9c1814d120025",
+    "blockTimestamp": "1788013113",
+    "observedAt": "2026-08-29T14:18:33Z",
+    "l1BlockNumberHex": "0x18a9d4e",
+    "evidenceType": "code-presence-and-runtime-hash-not-source-verification"
+  },
+  "contracts": {
+    "uniswap": {
+      "poolManager": {
+        "address": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+        "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
+      },
+      "positionManager": {
+        "address": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+        "runtimeCodeHash": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2"
+      },
+      "v4Quoter": {
+        "address": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+        "runtimeCodeHash": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6"
+      },
+      "stateView": {
+        "address": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+        "runtimeCodeHash": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6"
+      },
+      "permit2": {
+        "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "runtimeCodeHash": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca"
+      },
+      "universalRouter": {
+        "address": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+        "runtimeCodeHash": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+        "supersededAddressRejected": "0x8876789976decbfcbbbe364623c63652db8c0904"
+      }
+    },
+    "safeInfrastructure": {
+      "safeSingleton": {
+        "address": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+        "runtimeCodeHash": "0x1fe2df852ba3299d6534ef416eefa406e56ced995bca886ab7a553e6d0c5e1c4"
+      },
+      "safeL2Singleton": {
+        "address": "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+        "runtimeCodeHash": "0xb1f926978a0f44a2c0ec8fe822418ae969bd8c3f18d61e5103100339894f81ff",
+        "selectedForPermitAuthority": false
+      },
+      "safeProxyFactory": {
+        "address": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+        "runtimeCodeHash": "0x50c3cdc4074750a7a974204a716c999edd37482f907608d960b2b025ee0b3317"
+      },
+      "compatibilityFallbackHandler": {
+        "address": "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99",
+        "runtimeCodeHash": "0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9"
+      },
+      "multiSend": {
+        "address": "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526",
+        "runtimeCodeHash": "0x0e4f7fc66550a322d1e7688e181b75e217e662a4f3f4d6a29b22bc61217c4b77"
+      },
+      "multiSendCallOnly": {
+        "address": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+        "runtimeCodeHash": "0xecd5bd14a08c5d2122379900b2f272bdf107a7e92423c10dd5fe3254386c9939"
+      }
+    },
+    "deploymentInfrastructure": {
+      "multicall3": {
+        "address": "0xcA11bde05977b3631167028862bE2a173976CA11",
+        "runtimeCodeHash": "0xd5c15df687b16f2ff992fc8d767b4216323184a2bbc6ee2f9c398c318e770891",
+        "runtimeBytes": 3808,
+        "role": "atomic-zero-value-owner-transaction"
+      },
+      "deterministicDeployer": {
+        "address": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+        "runtimeCodeHash": "0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989"
+      }
+    },
+    "programmable": {
+      "permitAuthority": {
+        "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+        "runtimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+        "deploymentState": "prepared-not-broadcast",
+        "preparedComponentCallIndex": 0
+      },
+      "graphFactory": {
+        "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+        "runtimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+        "creationCodeHash": "0x84f7cb8e9e445d3322249dbc2b9efc65bb9c7a8ba26902aafef9b0552f4bc208",
+        "deploymentState": "prepared-not-broadcast",
+        "preparedComponentCallIndex": 1
+      },
+      "programmableLaunchStampRouter": {
+        "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+        "runtimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+        "creationCodeHash": "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
+        "deploymentState": "prepared-not-broadcast",
+        "preparedComponentCallIndex": 2,
+        "launchAndStampV1Selector": "0xe5f6b8cd"
+      }
+    }
+  },
+  "permitAuthorityConfiguration": {
+    "safeVersion": "1.4.1",
+    "singleton": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+    "owners": [
+      "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+      "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+    ],
+    "threshold": 1,
+    "modules": [],
+    "guard": "0x0000000000000000000000000000000000000000",
+    "fallbackHandler": "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99",
+    "initialNonce": "0",
+    "sourceObservation": {
+      "chainId": "1",
+      "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+      "blockNumber": "25861371",
+      "blockHash": "0x6786356f10214c01c4ae5110b44b78d22188f2c0a5f1b9df0387c122574fd067",
+      "blockTimestamp": "1788012083",
+      "observedAt": "2026-08-29T14:01:23Z",
+      "independentRpcAgreement": 2,
+      "version": "1.4.1",
+      "masterCopy": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+      "runtimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+      "owners": [
+        "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+        "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+      ],
+      "threshold": 1,
+      "nonce": "2",
+      "modules": [],
+      "guard": "0x0000000000000000000000000000000000000000",
+      "fallbackHandler": "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99",
+      "ownerCodeState": {
+        "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3": "empty-code",
+        "0x2Bb333d48DFAF1596D9036671d2E43168994249E": "eip-7702-delegation-designator-0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b"
+      }
+    },
+    "safeSaltNonce": "0x64379301d86858c9c72eda110164ebe008411237ae7ec8c4b2391720fdedae45",
+    "identityNote": "This is a new Safe address initialized directly to the current Ethereum authority governance configuration with fresh nonce zero, not a historical replay at 0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b."
+  },
+  "preparedOwnerTransaction": {
+    "purpose": "atomically-deploy-safe-graph-factory-and-router",
+    "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+    "function": "aggregate3((address,bool,bytes)[])",
+    "selector": "0x82ad56cb",
+    "value": "0",
+    "dataHash": "0x3ba04469085b17e12843a94c154a335c9c384837f8f6531f179cb4915fd237d9",
+    "dataBytes": 33412,
+    "allowFailure": false,
+    "subcallOrder": [0, 1, 2],
+    "ethEstimateGasLiveObservation": {
+      "value": "7169706",
+      "blockRange": ["49228085", "49228090"],
+      "observedAt": "2026-08-29T14:32:09Z"
+    },
+    "preparedEnvelope": "exact-to-value-data; sender selection, nonce, fees and final gas limit remain wallet-time chain envelope fields"
+  },
+  "decodedComponentCalls": [
+    {
+      "index": 0,
+      "purpose": "deploy-and-initialize-safe-1.4.1-permit-authority",
+      "to": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+      "value": "0",
+      "dataHash": "0x3a9a3af8bfaab5ef893202e872e1a720874ef7cdbdd8d9c5d2a813b1eff596d2",
+      "dataBytes": 548
+    },
+    {
+      "index": 1,
+      "purpose": "deploy-current-create2-graph-factory",
+      "to": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+      "value": "0",
+      "dataHash": "0x46b864077a44a112678b7191405cb13ba431298c114d9d00a4d7be477b4c7d79",
+      "dataBytes": 7540
+    },
+    {
+      "index": 2,
+      "purpose": "deploy-canonical-launch-stamp-router-v1-with-robinhood-immutables",
+      "to": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+      "value": "0",
+      "dataHash": "0xedb1a8e23b81c8d71d65967333619d51893e4d0d35c2ae75cde091e47bc14b5e",
+      "dataBytes": 24714
+    }
+  ],
+  "compiler": {
+    "solc": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 1000,
+    "bytecodeHash": "none",
+    "cborMetadata": false,
+    "binaryLabel": "solc-0.8.26+commit.8a97fa7a.Darwin.appleclang",
+    "binarySha256": "0x24b06eb31fd9db8edf3a57bdf7468d7360d6fc2fb202a6bb577bda089193ef31"
+  },
+  "operationalCapacity": {
+    "admissionTargetRange": {
+      "minimum": 3,
+      "maximum": 16
+    },
+    "graphFactoryProtocolRange": {
+      "minimum": 1,
+      "maximum": 16
+    },
+    "measuredMinimalTargetBenchmarks": {
+      "threeTargets": {
+        "deployGraphCalldataBytes": 2084,
+        "executionGas": "433479"
+      },
+      "sixteenTargets": {
+        "deployGraphCalldataBytes": 9988,
+        "executionGas": "2091212"
+      }
+    },
+    "qualification": "Target-count benchmark with minimal test contracts; every real graph still requires request-specific fork simulation under the byte caps."
+  },
+  "sourceCommitment": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
+  "deploymentEvidence": {
+    "sender": null,
+    "transactionHash": null,
+    "transactionNonce": null,
+    "transactionGasLimit": null,
+    "transactionMaxFeePerGas": null,
+    "transactionMaxPriorityFeePerGas": null,
+    "blockNumber": null,
+    "blockHash": null,
+    "blockTimestamp": null,
+    "startBlock": null,
+    "explorerUrl": null,
+    "sourceVerification": {
+      "permitAuthority": "official-safe-source-pinned-predeployment",
+      "graphFactory": "exact-source-prepared-not-submitted",
+      "programmableLaunchStampRouter": "exact-source-prepared-not-submitted"
+    }
+  },
+  "externalBoundary": {
+    "field": "sender",
+    "allowedValues": [
+      "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+      "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+    ],
+    "action": "one observed Safe owner must select its sender account, review and separately sign/broadcast the one exact zero-value Multicall3 transaction on chain 4663",
+    "automaticSigningOrBroadcast": false
+  },
+  "notice": "This is deterministic predeployment preparation. It is not deployment, source verification, finality, indexing or public availability evidence."
+}
