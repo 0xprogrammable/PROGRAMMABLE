@@ -11,8 +11,8 @@ const footerStyles = readFileSync(
 );
 
 describe("Site footer", () => {
-  it("keeps the landing footer frameless and links Explore to the landing chapter", () => {
-    expect(footerSource).toContain('href: "/#explore"');
+  it("keeps the landing footer frameless and links Explore to the directory", () => {
+    expect(footerSource).toContain('href: "/explore"');
     expect(footerSource).toContain("data-site-footer");
     expect(footerSource).not.toContain("liquid-glass-surface");
   });
@@ -36,7 +36,7 @@ describe("Site footer", () => {
     expect(footerSource).toContain('label: "X"');
   });
 
-  it("places the Dune dashboard between Dexscreener and Discord", () => {
+  it("places Dune analytics between DEX Screener and Discord", () => {
     const dexscreener = footerSource.indexOf("https://dexscreener.com/");
     const dune = footerSource.indexOf(
       "https://dune.com/0xprogrammable6098/programmable-analytics",
@@ -48,7 +48,8 @@ describe("Site footer", () => {
     expect(dexscreener).toBeGreaterThan(-1);
     expect(dune).toBeGreaterThan(dexscreener);
     expect(discord).toBeGreaterThan(dune);
-    expect(footerSource).toContain('label: "Dune"');
+    expect(footerSource).toContain('label: "DEX Screener"');
+    expect(footerSource).toContain('label: "Dune analytics"');
   });
 
   it("stacks evenly aligned link groups on narrow screens", () => {

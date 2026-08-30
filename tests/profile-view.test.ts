@@ -338,8 +338,8 @@ describe("profile workspace loading state", () => {
 
   it("keeps the public profile surface read-only", () => {
     expect(profileViewSource).toContain("<PublicCreatorProfile");
-    expect(profileViewSource).toContain(
-      "Finalized launches are public. Connect this wallet to manage the",
+    expect(profileViewSource).toMatch(
+      /Finalized launches are public\. If this is your wallet, connect it\s+to manage the profile and rewards\./u,
     );
     expect(profileViewSource).toContain(
       "<ProfileRouterLaunches entries={entries}",

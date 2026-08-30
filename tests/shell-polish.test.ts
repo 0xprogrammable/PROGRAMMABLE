@@ -26,7 +26,8 @@ describe("public shell polish", () => {
     expect(source).toContain('label: "Discord"');
     expect(source).toContain('label: "X"');
     expect(source).toContain('href: "https://x.com/ProgrammableHQ"');
-    expect(source).toContain('label: "Token"');
+    expect(source).toContain('label: "DEX Screener"');
+    expect(source).toContain('label: "Dune analytics"');
     expect(source).not.toContain("XBrandIcon");
     expect(source).not.toContain("GitHubBrandIcon");
   });
@@ -82,12 +83,12 @@ describe("public shell polish", () => {
 
     expect(source).toContain('"(prefers-reduced-motion: reduce)"');
     expect(source).toContain("routeAnimationRef.current?.cancel()");
-    expect(source).toContain("translate3d(0, 12px, 0)");
-    expect(source).toContain("duration: enteringDocs ? 420 : 720");
+    expect(source).toContain("translate3d(0, 6px, 0)");
+    expect(source).toContain("duration: enteringDocs ? 180 : 220");
     expect(source).not.toContain("key={pathname}");
     expect(source).toContain('heading.dataset.routeAnnouncementFocus = "true"');
     expect(interfaceStyles).toMatch(
-      /h1\[data-route-announcement-focus="true"\]:focus\s*\{[^}]*outline:\s*0;/s,
+      /\.route-transition h1\[tabindex="-1"\]:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--brand-ivory\);/s,
     );
   });
 
@@ -105,7 +106,7 @@ describe("public shell polish", () => {
     expect(explore).not.toContain("<SiteFooter />");
     expect(docsLayout).not.toContain("<SiteFooter />");
     expect(finalStyles).toMatch(
-      /\.route-transition\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);/s,
+      /\.route-transition\s*\{[^}]*min-height:\s*calc\(100svh - var\(--header-height\)\);/s,
     );
   });
 

@@ -46,6 +46,27 @@ describe("Custom market selector UI", () => {
     );
   });
 
+  it("keeps the wallet review bound to the canonical pair and exact route", () => {
+    expect(tradeSource).toContain(
+      "<dt>Base / quote</dt><dd>{customMarketLabel(activeMarket)}</dd>",
+    );
+    expect(tradeSource).toContain(
+      "<dt>Market ID</dt><dd>{review.request.marketId}</dd>",
+    );
+    expect(tradeSource).toContain(
+      "<dt>Trade direction</dt><dd>{inputSymbol} → {outputSymbol}</dd>",
+    );
+    expect(tradeSource).toContain(
+      "Route binding: {review.request.tradeCapabilityBindingHash}",
+    );
+    expect(tradeSource).not.toContain(
+      "<dt>Pair</dt><dd>{inputSymbol} / {outputSymbol}</dd>",
+    );
+    expect(tradeSource).not.toContain(
+      "tradeCapabilityBindingHash.slice(",
+    );
+  });
+
   it("keeps the branded options touch-sized with visible keyboard focus", () => {
     expect(tradeStyles).toMatch(
       /\.customMarketOption\s*\{[^}]*min-height:\s*44px;/s,

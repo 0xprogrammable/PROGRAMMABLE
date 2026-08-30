@@ -350,8 +350,9 @@ export function CustomMarketTrade({
           <h2>{review.preparation.status === "ready" ? "Review swap" : "Review approval"}</h2>
         </div>
         <dl className={styles.tradeFacts}>
-          <div><dt>Pair</dt><dd>{inputSymbol} / {outputSymbol}</dd></div>
-          <div><dt>Direction</dt><dd>{inputSymbol} → {outputSymbol}</dd></div>
+          <div><dt>Base / quote</dt><dd>{customMarketLabel(activeMarket)}</dd></div>
+          <div><dt>Market ID</dt><dd>{review.request.marketId}</dd></div>
+          <div><dt>Trade direction</dt><dd>{inputSymbol} → {outputSymbol}</dd></div>
           <div><dt>Minimum received</dt><dd>{displayAmount(
             review.preparation.quote.amountOutMinimum,
             outputDecimals,
@@ -360,7 +361,9 @@ export function CustomMarketTrade({
           <div><dt>Recipient</dt><dd>{review.preparation.recipient.slice(0, 6)}…{review.preparation.recipient.slice(-4)}</dd></div>
         </dl>
         <p className={styles.customTradeBinding}>
-          This transaction is bound to the verified market and connected wallet.
+          Route binding: {review.request.tradeCapabilityBindingHash}
+          <br />
+          Programmable validates this market, route, and recipient before opening your wallet.
         </p>
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
         <div className={styles.customTradeReviewActions}>

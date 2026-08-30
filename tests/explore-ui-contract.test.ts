@@ -144,7 +144,8 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       'valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT',
     );
-    expect(source).toContain('Number(ageSort !== "none")');
+    expect(source).toContain("const newestLaunchOrderApplied =");
+    expect(source).toContain("exploreActiveSelectionState({");
     expect(source).toContain("<span>Filters</span>");
     expect(source).toContain("activeFilterCount > 0");
     expect(source.indexOf('id="explore-model-label"')).toBeLessThan(

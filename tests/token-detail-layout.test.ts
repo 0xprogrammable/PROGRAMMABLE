@@ -172,6 +172,14 @@ describe("token detail layout", () => {
     expect(detailSource).not.toMatch(/<h2>\s*Trade \$/i);
   });
 
+  it("keeps Custom market rows machine-identifiable while abbreviating long IDs", () => {
+    expect(detailSource).toContain("data-market-id={market.marketId}");
+    expect(detailSource).toContain("data-market-kind={market.kind}");
+    expect(detailSource).toContain("data-pool-id={market.poolId}");
+    expect(detailSource).toContain("customMarketIdentityDescription(market)");
+    expect(detailSource).toContain("customMarketIdentityLabel(market)");
+  });
+
   it("keeps canonical detail valuation independent from chart history", () => {
     expect(detailSource).toContain('return "Market cap";');
     expect(detailSource).not.toContain("fdvEthWei={");

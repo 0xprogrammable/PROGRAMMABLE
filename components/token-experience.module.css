@@ -508,6 +508,16 @@
   font-size: 11px;
 }
 
+.customFacts dt > code,
+.customFacts dd > code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 .customWideFact {
   grid-column: 1 / -1;
 }

@@ -2307,16 +2307,69 @@ function customMarketStatus(project: CustomProjectExploreEntry): string {
         : "Closed";
 }
 
-function customMarketPairLabel(
-  market: CustomProjectExploreEntry["markets"][number],
+type CustomMarket = CustomProjectExploreEntry["markets"][number];
+type CustomMarketAsset = CustomMarket["baseAsset"];
+
+function preferredCustomMarketAssetLabel(
+  asset: CustomMarketAsset,
+): string | null {
+  return asset.symbol?.trim() || asset.name?.trim() || null;
+}
+
+function normalizedCustomMarketAssetLabel(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function customMarketAssetLabel(
+  asset: CustomMarketAsset,
+  markets: readonly CustomMarket[],
 ): string {
-  const base = market.baseAsset.symbol?.trim()
-    || market.baseAsset.name?.trim()
-    || "Base asset";
-  const quote = market.quoteAsset.symbol?.trim()
-    || market.quoteAsset.name?.trim()
-    || "Quote asset";
+  const preferredLabel = preferredCustomMarketAssetLabel(asset);
+  if (!preferredLabel) return asset.assetId.trim();
+  const normalizedLabel = normalizedCustomMarketAssetLabel(preferredLabel);
+  const ambiguous = markets.some((market) =>
+    [market.baseAsset, market.quoteAsset].some((candidate) => {
+      const candidateLabel = preferredCustomMarketAssetLabel(candidate);
+      return candidate.assetId !== asset.assetId
+        && candidateLabel !== null
+        && normalizedCustomMarketAssetLabel(candidateLabel) === normalizedLabel;
+    })
+  );
+  return ambiguous
+    ? `${preferredLabel} (${asset.assetId.trim()})`
+    : preferredLabel;
+}
+
+export function customMarketPairLabel(
+  market: CustomMarket,
+  markets: readonly CustomMarket[] = [market],
+): string {
+  const base = customMarketAssetLabel(market.baseAsset, markets);
+  const quote = customMarketAssetLabel(market.quoteAsset, markets);
   return `${base} / ${quote}`;
+}
+
+function conciseCustomMarketId(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= 28) return normalized;
+  return `${normalized.slice(0, 12)}…${normalized.slice(-8)}`;
+}
+
+export function customMarketIdentityLabel(market: CustomMarket): string {
+  const marketId = market.marketId.trim();
+  const poolId = market.poolId?.trim();
+  const identity = marketId
+    ? `Market ${conciseCustomMarketId(marketId)}`
+    : poolId
+      ? `Pool ${conciseCustomMarketId(poolId)}`
+      : `${market.baseAsset.assetId.trim()} / ${market.quoteAsset.assetId.trim()}`;
+  return `${market.kind.trim() || "Custom market"} · ${identity}`;
+}
+
+function customMarketIdentityDescription(market: CustomMarket): string {
+  return `${market.kind}; market ID ${market.marketId}${
+    market.poolId ? `; pool ID ${market.poolId}` : ""
+  }`;
 }
 
 function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
@@ -2540,12 +2593,25 @@ function CustomProjectDetailContent({
             <div><dt>Chain</dt><dd>{getNetworkLabel(chainId)}</dd></div>
             <div><dt>Markets</dt><dd>{project.markets.length}</dd></div>
             {project.markets.map((market) => (
-              <div className={styles.customWideFact} key={market.marketId}>
-                <dt>{customMarketPairLabel(market)}</dt>
+              <div
+                className={styles.customWideFact}
+                data-market-id={market.marketId}
+                data-market-kind={market.kind}
+                data-pool-id={market.poolId}
+                key={market.marketId}
+              >
+                <dt>{customMarketPairLabel(market, project.markets)}</dt>
                 <dd>
                   {market.status === "verification_pending"
                     ? "Verification in progress"
                     : market.status.charAt(0).toUpperCase() + market.status.slice(1)}
+                  <br />
+                  <code
+                    aria-label={customMarketIdentityDescription(market)}
+                    title={customMarketIdentityDescription(market)}
+                  >
+                    {customMarketIdentityLabel(market)}
+                  </code>
                 </dd>
               </div>
             ))}

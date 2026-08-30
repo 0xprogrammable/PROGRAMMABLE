@@ -2,6 +2,8 @@
   margin-bottom: 28px;
   margin-top: clamp(52px, 7vw, 86px);
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .surface {

@@ -40,17 +40,20 @@ async function alphaBounds(path: string, threshold = 16) {
 describe("Programmable branding assets", () => {
   it("keeps product routes branded and gives Docs pages descriptive titles", () => {
     const metadataSources = [
-      "app/layout.tsx",
-      "app/page.tsx",
-      "app/explore/page.tsx",
-      "app/launch/page.tsx",
-    ].map(read);
+      [
+        "app/layout.tsx",
+        'title: "Programmable · Custom Uniswap v4 hooks"',
+      ],
+      ["app/page.tsx", 'title: "Programmable · Custom Uniswap v4 hooks"'],
+      ["app/explore/page.tsx", 'title: "Explore launches · Programmable"'],
+      ["app/launch/page.tsx", 'title: "Create a launch · Programmable"'],
+    ] as const;
 
-    for (const source of metadataSources) {
-      expect(source).toContain('title: "Programmable"');
+    for (const [path, title] of metadataSources) {
+      expect(read(path)).toContain(title);
     }
 
-    const combinedSources = metadataSources.join("\n");
+    const combinedSources = metadataSources.map(([path]) => read(path)).join("\n");
     expect(read("app/docs/layout.tsx")).toContain(
       'title: "Documentation · Programmable"',
     );
@@ -143,6 +146,8 @@ describe("Programmable branding assets", () => {
   it("uses the black-sky floral link preview and exact product description", async () => {
     const layout = read("app/layout.tsx");
     const homePage = read("app/page.tsx");
+    const productDescription =
+      "Build and launch custom Uniswap v4 hooks. Explore projects launched through Programmable.";
     const path = "public/og/programmable-landing-preview-v2-1200x630.jpg";
     const metadata = await sharp(join(root, path)).metadata();
     const topCenter = await sharp(join(root, path))
@@ -151,20 +156,19 @@ describe("Programmable branding assets", () => {
       .raw()
       .toBuffer();
 
-    expect(layout).toContain(
-      'const siteDescription = "Shape what assets can do"',
-    );
+    expect(layout).toContain(productDescription);
+    expect(homePage).toContain(productDescription);
     expect(layout).not.toContain("Create tokens with a clear launch model");
     expect(layout).toContain(
       '"/og/programmable-landing-preview-v2-1200x630.jpg"',
     );
     expect(layout).toContain('type: "image/jpeg"');
     expect(layout).toContain(
-      'alt: "Programmable and Shape what assets can do over a vivid floral night garden"',
+      'alt: "Programmable over a vivid floral night garden"',
     );
     expect(homePage).toContain("programmable-landing-preview-v2-1200x630.jpg");
     expect(homePage).toContain(
-      'alt: "Programmable and Shape what assets can do over a vivid floral night garden"',
+      'alt: "Programmable over a vivid floral night garden"',
     );
     expect(homePage).toContain('card: "summary_large_image"');
     expect(metadata.format).toBe("jpeg");

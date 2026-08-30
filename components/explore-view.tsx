@@ -601,6 +601,53 @@ const modelFilterOptions: {
   { id: "classic", label: "Classic" },
   { id: "custom-hook", label: "Custom" },
 ];
+
+export function exploreActiveSelectionState({
+  valuationSort,
+  ageSort,
+  socialFilter,
+  modelFilter,
+}: Readonly<{
+  valuationSort: ExploreValuationSort;
+  ageSort: ExploreAgeSort;
+  socialFilter: ExploreSocialFilter;
+  modelFilter: ExploreModelFilter;
+}>) {
+  const defaultSortingApplied =
+    valuationSort === DEFAULT_EXPLORE_VALUATION_SORT && ageSort === "none";
+  const newestLaunchOrderApplied =
+    !defaultSortingApplied &&
+    valuationSort === "none" &&
+    ageSort === "none";
+  const labels = [
+    modelFilter === "classic"
+      ? "Classic"
+      : modelFilter === "custom-hook"
+        ? "Custom"
+        : null,
+    valuationSort !== "none" &&
+    valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT
+      ? valuationSort === "highest"
+        ? "Highest FDV"
+        : "Lowest FDV"
+      : newestLaunchOrderApplied
+        ? "Newest launch order"
+        : null,
+    ageSort === "newest" ? "Newest" : ageSort === "oldest" ? "Oldest" : null,
+    socialFilter === "yes"
+      ? "With social links"
+      : socialFilter === "no"
+        ? "Without social links"
+        : null,
+  ].filter((label): label is string => label !== null);
+
+  return {
+    count: labels.length,
+    summary: labels.length === 0
+      ? "Default sorting applied"
+      : `${labels.join(", ")} selected`,
+  } as const;
+}
 const tokenLinkOrder: Record<TokenLink["kind"], number> = {
   website: 0,
   x: 1,
@@ -2882,36 +2929,15 @@ export function ExploreView({
     !preview &&
     (displayState.phase === "loading" ||
       displayState.requestKey !== requestKey);
-  const activeFilterCount =
-    Number(socialFilter !== "all") +
-    Number(modelFilter !== "all") +
-    Number(
-      valuationSort !== "none" &&
-      valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT,
-    ) +
-    Number(ageSort !== "none");
-  const activeSelectionLabels = [
-    modelFilter === "classic"
-      ? "Classic"
-      : modelFilter === "custom-hook"
-        ? "Custom"
-        : null,
-    valuationSort !== "none" &&
-    valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT
-      ? valuationSort === "highest"
-        ? "Highest FDV"
-        : "Lowest FDV"
-      : null,
-    ageSort === "newest" ? "Newest" : ageSort === "oldest" ? "Oldest" : null,
-    socialFilter === "yes"
-      ? "With social links"
-      : socialFilter === "no"
-        ? "Without social links"
-        : null,
-  ].filter((label): label is string => label !== null);
-  const activeSelectionSummary = activeSelectionLabels.length === 0
-    ? "Default sorting applied"
-    : `${activeSelectionLabels.join(", ")} selected`;
+  const {
+    count: activeFilterCount,
+    summary: activeSelectionSummary,
+  } = exploreActiveSelectionState({
+    valuationSort,
+    ageSort,
+    socialFilter,
+    modelFilter,
+  });
   const hasPublicTokens =
     displayState.phase !== "ready" ||
     displayState.payload.total > 0 ||
