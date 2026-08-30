@@ -901,10 +901,11 @@ assertV4ListEnvelope(
   "CustomLaunchFinalizedListV4",
 );
 
-const [packageManifestSource, shrinkwrapSource, licenseSource] = await Promise.all([
+const [packageManifestSource, shrinkwrapSource, licenseSource, readmeSource] = await Promise.all([
   readFile(path.join(packageRoot, "package.json"), "utf8"),
   readFile(path.join(packageRoot, "npm-shrinkwrap.json"), "utf8"),
   readFile(path.join(packageRoot, "LICENSE"), "utf8"),
+  readFile(path.join(packageRoot, "README.md"), "utf8"),
 ]);
 const packageManifest = parseStrictJson(packageManifestSource);
 const shrinkwrap = parseStrictJson(shrinkwrapSource, { maximumBytes: 5_000_000 });
@@ -913,6 +914,10 @@ assert.equal(packageManifest.license, "MIT", "public CLI package must declare MI
 assert.ok(
   Array.isArray(packageManifest.files) && packageManifest.files.includes("npm-shrinkwrap.json"),
   "package must ship npm-shrinkwrap.json",
+);
+assert.ok(
+  packageManifest.files.includes("README.md"),
+  "package must ship the version-status README",
 );
 assert.equal(typeof packageManifest.scripts?.sbom, "string", "package must expose an SBOM command");
 assert.equal(shrinkwrap.version, PACKAGE_VERSION, "shrinkwrap version must match CLI version");
@@ -923,6 +928,41 @@ assertJsonEqual(
   "shrinkwrap runtime dependencies",
 );
 assert.match(licenseSource, /^MIT License\n/u, "CLI license file must contain the MIT grant");
+assert.match(
+  readmeSource,
+  /## Install the current public Ethereum V3 release/u,
+  "packaged README must scope public installation to Ethereum V3",
+);
+assert.match(
+  readmeSource,
+  /published CLI `3\.3\.9`/u,
+  "packaged README must identify the exact published V3 CLI",
+);
+assert.match(
+  readmeSource,
+  /Package version `4\.0\.0`[\s\S]{0,180}planned pre-release source\s+candidate/u,
+  "packaged README must identify V4 as a planned pre-release source candidate",
+);
+assert.match(
+  readmeSource,
+  /`releaseReady: false`/u,
+  "packaged README must retain the negative V4 release binding",
+);
+assert.doesNotMatch(
+  readmeSource,
+  /releases\/download\/programmable-launch-v4\.0\.0/u,
+  "packaged README must not invent a V4 release asset",
+);
+assert.doesNotMatch(
+  readmeSource,
+  /github\.com\/0xprogrammable(?:\/|$)/iu,
+  "packaged README must not link the retired GitHub organization",
+);
+assert.match(
+  readmeSource,
+  /github\.com\/programmablehq\/PROGRAMMABLE\/releases\/download\/programmable-launch-v3\.3\.9/u,
+  "packaged README must retain the canonical published V3 release URL",
+);
 
 const forbiddenOriginFlag = "--api-origin";
 for (const relativePath of [

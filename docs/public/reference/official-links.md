@@ -17,6 +17,8 @@ description: Official Programmable product, source, community and analytics link
 | Custom Launch V3 OpenAPI | [preparatory profile 3.4 contract; live/default remains discovery-bound profile 3.3](https://programmable.market/openapi/custom-launch-v3.json) |
 | Custom Launch V4 OpenAPI | [planned Robinhood Chain contract; public writes disabled](https://programmable.market/openapi/custom-launch-v4.json) |
 | Custom Launch V4 schema | [planned Robinhood Chain pack config](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
+| Custom Launch V4 source status | [planned post-finality source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json) |
+| Custom Launch CLI 4.0.0 | [Robinhood V4 source candidate at the verified public source commit; not installable or released](https://github.com/programmablehq/PROGRAMMABLE/tree/53926119030772040eca34b4796a36353c9da2d2/packages/launch) |
 | Custom Launch API      | [api.programmable.market](https://api.programmable.market)                                                         |
 | Custom API readiness    | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                           |
 | Custom Launch CLI 3.3.9 | [public V3 GitHub Release asset](https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz) |
@@ -41,4 +43,6 @@ and analytics are useful context but do not replace the contract address, canoni
 Robinhood Chain V4 remains planned and not deployed. Its stable V4 links are integration pointers, not evidence that
 writes, deployed trust roots, trading, generic fee claiming, buyback management or external indexing are live. API-key
 handoff uses only `$PROGRAMMABLE_API_KEY`, while wallet authorization remains separate and server-selected policy
-profiles cannot be chosen by clients.
+profiles cannot be chosen by clients. CLI `3.3.9` remains the installable live Ethereum V3 release. The V4 `4.0.0`
+source candidate is not installable, `publicWrites` and `publicAuthorization` remain false, and `releaseReady` remains
+false.

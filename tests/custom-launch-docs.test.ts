@@ -17,7 +17,9 @@ const summary = read("docs/public/SUMMARY.md");
 const createGuide = read("components/create-guide.tsx");
 const rawGuide = read("public/developers/custom-launch-api-v1.md");
 const cliGuide = read("packages/launch/README.md");
+const officialLinks = read("docs/public/reference/official-links.md");
 const v3OpenApi = JSON.parse(read("public/openapi/custom-launch-v3.json"));
+const v4OpenApi = JSON.parse(read("public/openapi/custom-launch-v4.json"));
 const machineReadableGuide = read(
   "app/docs/developers/machine-readable/page.tsx",
 );
@@ -72,6 +74,80 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/action_required[\s\S]{0,300}not a wallet/i);
       expect(source).not.toMatch(/platform review (?:supplies|provides)/i);
     }
+  });
+
+  it("keeps planned Robinhood V4 distinct from the live Ethereum release", () => {
+    const v4Sources = [
+      gitBookGuide,
+      websiteGuide,
+      rawGuide,
+      cliGuide,
+      developerDocsMarkdown,
+      machineReadableGuide,
+      read("docs/public/developers/machine-readable.md"),
+      read("docs/public/developers/README.md"),
+      read("docs/public/status.md"),
+    ];
+
+    for (const source of v4Sources) {
+      expect(source).toContain("4.0.0");
+      expect(source).toMatch(/source candidate|source-candidate/iu);
+      expect(source).toContain("3.3.9");
+      expect(source).toContain("publicWrites");
+      expect(source).toContain("releaseReady");
+      expect(source).toContain("--api-version 4");
+      expect(source).toContain("--chain-id 4663");
+      expect(source).toMatch(/action_required[\s\S]{0,360}(?:not a wallet|remediation)/iu);
+      expect(source).toMatch(/never\s+sign(?:s)?\s+or\s+broadcasts?/iu);
+      expect(source).toMatch(/source verification[\s\S]{0,260}(?:after finality|after `finalized`|starts after|starts only after)/iu);
+    }
+
+    const statuses = [
+      "received",
+      "validating",
+      "action_required",
+      "authorized",
+      "awaiting_wallet_signature",
+      "wallet_action_required",
+      "submitted",
+      "sequencer_soft_confirmed",
+      "ethereum_posted",
+      "finalized",
+      "failed",
+    ];
+    for (const status of statuses) {
+      for (const source of v4Sources) expect(source).toContain(status);
+    }
+    expect(v4OpenApi.components.schemas.CustomLaunchResourceV4.properties.status.enum)
+      .toEqual(statuses);
+    expect(programmablePublicOpenApi["x-programmable-availability"].v4)
+      .toMatchObject({
+        status: "planned",
+        activationStage: "planned-not-deployed",
+        profileVersion: "4.0.0",
+        released: false,
+        installable: false,
+        releaseReady: false,
+        publicAuthorization: false,
+        publicWrites: false,
+      });
+    expect(officialLinks).toContain(
+      "https://github.com/programmablehq/PROGRAMMABLE/tree/53926119030772040eca34b4796a36353c9da2d2/packages/launch",
+    );
+    expect(officialLinks).not.toContain(
+      "https://github.com/programmablehq/PROGRAMMABLE/tree/7fd1a327577517d628cd529ec84862f1ae43eb08/packages/launch",
+    );
+    expect(cliGuide).toContain(
+      "## Install the current public Ethereum V3 release",
+    );
+    expect(cliGuide).toContain(
+      "No `programmable-launch-v4.0.0` GitHub Release",
+    );
+    expect(cliGuide).toMatch(/planned pre-release source\s+candidate/iu);
+    expect(cliGuide).not.toContain(
+      "releases/download/programmable-launch-v4.0.0",
+    );
+    expect(cliGuide).not.toContain("github.com/0xprogrammable");
   });
 
   it("documents the real packager and schema boundary without invented checks", () => {

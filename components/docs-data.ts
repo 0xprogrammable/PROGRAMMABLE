@@ -246,13 +246,13 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Developer overview",
     description:
-      "Read existing Custom launch history or choose a verification and indexing path.",
+      "Use live Ethereum V3, inspect planned Robinhood V4, or choose a verification and indexing path.",
     href: "/docs/developers",
   },
   {
     title: "Custom Launch API",
     description:
-      "Submit current V3.3 requests or read V2 and V1 compatibility history and write fences.",
+      "Submit live Ethereum V3.3 requests, inspect planned Robinhood V4, or read V2 and V1 compatibility history.",
     href: "/docs/developers/custom-launch",
     keywords: [
       "custom API",
@@ -260,6 +260,11 @@ export const docsSearchItems: DocsSearchItem[] = [
       "idempotency",
       "agent attestation",
       "authorized wallet transaction",
+      "Robinhood Chain",
+      "chain 4663",
+      "source candidate 4.0.0",
+      "sequencer soft confirmed",
+      "ethereum posted",
     ],
   },
   {
@@ -277,9 +282,9 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Machine-readable docs",
     description:
-      "Use the concise Markdown guide and complete machine-readable reference.",
+      "Use live V3 and planned V4 OpenAPI, contracts, Markdown and agent context.",
     href: "/docs/developers/machine-readable",
-    keywords: ["agent", "AI agent", "LLM"],
+    keywords: ["agent", "AI agent", "LLM", "V4 OpenAPI", "source verification"],
   },
   {
     title: "Router trust root",

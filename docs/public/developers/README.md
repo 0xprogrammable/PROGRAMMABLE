@@ -20,6 +20,17 @@ The foundation source closure is pinned to
 deployment evidence. Sourcify v2 exact match is required. Robinhood Blockscout remains optional, unproven and
 degraded; it cannot support an exact-source claim or block or revise finality.
 
+CLI `3.3.9` remains the installable release for live Ethereum V3. Package `4.0.0` is a Robinhood V4 source candidate,
+not a published release; discovery keeps `publicWrites: false`, `publicAuthorization: false` and
+`releaseReady: false`. Guard V4 status reads with
+`programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized`, stop for the
+controller to review, sign and broadcast the exact transaction, then poll the same command with `--until finalized`.
+The CLI never signs or broadcasts. V4 resources use `received`, `validating`, `action_required`, `authorized`,
+`awaiting_wallet_signature`, `wallet_action_required`, `submitted`, `sequencer_soft_confirmed`, `ethereum_posted`,
+`finalized` and `failed`. `action_required` is server-authored remediation, not a wallet action. Source verification
+starts after finality and remains independent from Programmable indexing, third-party indexing, trading readiness and
+publication.
+
 ## Package locally and read existing launches
 
 Start at [Programmable discovery](https://programmable.market/.well-known/programmable.json), read

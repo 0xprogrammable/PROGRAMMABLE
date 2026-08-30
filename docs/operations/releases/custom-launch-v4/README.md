@@ -10,7 +10,8 @@ The committed binding is intentionally blocked:
 - `releaseReady` is `false`.
 - `chainDeploymentEvidence`, `profileEvidence`, `releaseManifestEvidence`,
   `sourceClosureEvidence`, and `finalityEvidence` are all required blockers.
-- The corresponding five evidence values remain `null`.
+- The five evidence values remain `null`; together with the separate backend gate they produce the six audit
+  blockers listed below.
 
 A digest-shaped placeholder does not remove a blocker. `releaseReady` may become `true` only in the
 same reviewed commit that supplies all five closed evidence objects, recomputes every

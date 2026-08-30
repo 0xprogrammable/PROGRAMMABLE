@@ -11,14 +11,19 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
   description:
-    "Public-read contracts, credential-principal V3 resources, compatibility history, Markdown guides, manifests and canonical verification files.",
+    "Live Ethereum V3 resources, planned Robinhood V4 contracts, compatibility history, manifests and verification files.",
   alternates: { canonical: "/docs/developers/machine-readable" },
 };
 
 const router = PROGRAMMABLE_LAUNCH_STAMP_MANIFEST.launchStampRouter;
+const robinhoodV4WalletStatusCommand =
+  "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized";
+const robinhoodV4FinalityStatusCommand =
+  "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized";
 
 const machineSections = [
   { id: "documents", label: "Documentation files" },
+  { id: "robinhood-v4", label: "Robinhood V4" },
   { id: "artifacts", label: "Contract artifacts" },
   { id: "authority", label: "Source authority" },
   { id: "access", label: "Access" },
@@ -93,6 +98,16 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
+            <a href="/openapi/custom-launch-v4.json">
+              <code>/openapi/custom-launch-v4.json</code>
+            </a>
+            <span>
+              Planned Robinhood Chain Mainnet V4 contract. Public writes and
+              authorization remain disabled; this pointer is not deployment
+              evidence.
+            </span>
+          </li>
+          <li>
             <a href="/policies/custom-launch-agent-remediation-v1.json">
               <code>/policies/custom-launch-agent-remediation-v1.json</code>
             </a>
@@ -110,6 +125,26 @@ export default function MachineReadableDocsPage() {
               Source-tree JSON Schema for{" "}
               <code>programmable.launch-pack-config.v3</code>, including pending
               profile 3.4 inputs. Check live discovery before submission.
+            </span>
+          </li>
+          <li>
+            <a href="/schemas/custom-launch/v4/pack-config.json">
+              <code>/schemas/custom-launch/v4/pack-config.json</code>
+            </a>
+            <span>
+              Source-candidate V4 pack-config schema for chain 4663. Check
+              discovery before any network action.
+            </span>
+          </li>
+          <li>
+            <a href="/schemas/custom-launch/v4/source-verification-status.json">
+              <code>
+                /schemas/custom-launch/v4/source-verification-status.json
+              </code>
+            </a>
+            <span>
+              Server-authored post-finality source-verification status. It does
+              not determine chain finality, indexing, trading or publication.
             </span>
           </li>
           <li>
@@ -152,6 +187,52 @@ export default function MachineReadableDocsPage() {
               Expanded context for readers that need the complete overview in
               one response.
             </span>
+          </li>
+        </ul>
+      </section>
+
+      <section id="robinhood-v4">
+        <div className={styles.sectionIntro}>
+          <h2>Read Robinhood V4 as a planned contract</h2>
+          <p>
+            CLI <code>3.3.9</code> remains the installable live Ethereum V3
+            release. Package <code>4.0.0</code> is a Robinhood V4 source candidate,
+            not a published release or live service.
+          </p>
+        </div>
+
+        <ul className={styles.checkList}>
+          <li>
+            Discovery remains <code>planned</code> and{" "}
+            <code>planned-not-deployed</code>, with{" "}
+            <code>publicWrites: false</code>,{" "}
+            <code>publicAuthorization: false</code> and{" "}
+            <code>releaseReady: false</code>.
+          </li>
+          <li>
+            V4 uses <code>received</code>, <code>validating</code>,{" "}
+            <code>action_required</code>, <code>authorized</code>,{" "}
+            <code>awaiting_wallet_signature</code>,{" "}
+            <code>wallet_action_required</code>, <code>submitted</code>,{" "}
+            <code>sequencer_soft_confirmed</code>,{" "}
+            <code>ethereum_posted</code>, <code>finalized</code> and{" "}
+            <code>failed</code>. <code>action_required</code> is remediation, not a
+            wallet action.
+          </li>
+          <li>
+            Poll the wallet stage with{" "}
+            <code>{robinhoodV4WalletStatusCommand}</code>
+            . Stop for separate controller-wallet review, signing and broadcast,
+            then poll <code>{robinhoodV4FinalityStatusCommand}</code>.
+          </li>
+          <li>
+            The CLI can prepare and display the exact transaction. It never signs
+            or broadcasts.
+          </li>
+          <li>
+            Source verification starts after finality and remains independent.
+            Indexing, trading readiness, Explore visibility and publication are
+            separate outcomes.
           </li>
         </ul>
       </section>

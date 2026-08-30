@@ -7,6 +7,10 @@ and `POST /v1/custom-launches` are permanently read only with non-retryable `409
 `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is
 closed.
 
+The public installable CLI is `@programmable/launch` `3.3.9` for the live Ethereum V3 contract. The repository's
+`4.0.0` package is a Robinhood V4 source candidate only. It has no published installable release and does not change
+V4 `publicWrites: false` or `releaseReady: false`.
+
 V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
 simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
 reconciliation and finalized reads remain available.
@@ -64,6 +68,38 @@ Planned discovery keeps the complete V4 `deploymentEvidence` record null, includ
 requires the exact deployment ID and descriptor digest, foundation source commitment, finality-policy digest,
 finalized block, pinned finalized-evidence reference, and address/runtime-hash/start-block tuples for the Programmable
 Router, GraphFactory, PermitAuthority Safe and relevant Uniswap roots. Partial evidence cannot promote the lane.
+
+### V4 lifecycle and wallet handoff
+
+The planned V4 resource uses these exact statuses:
+
+| Status | Meaning |
+| --- | --- |
+| `received` | The immutable request is durably accepted. No wallet action exists. |
+| `validating` | Server validation, admission, reference checks and exact Router simulation bindings are running. |
+| `action_required` | Fix the server-authored remediation, rebuild and submit a new immutable request. This is not a wallet action or manual approval stage. |
+| `authorized` | The server gates passed and the exact wallet transaction is bound. It is not signed or broadcast. |
+| `awaiting_wallet_signature` | The controller must review and sign the exact transaction through the separate wallet handoff. |
+| `wallet_action_required` | The controller must verify chain `4663`, sender, Router, value and calldata, then submit through the wallet. |
+| `submitted` | The exact wallet transaction was submitted; no chain checkpoint is implied. |
+| `sequencer_soft_confirmed` | Robinhood sequencer evidence exists but remains reversible. |
+| `ethereum_posted` | The Robinhood batch is posted to Ethereum but has not satisfied the finality policy. |
+| `finalized` | The exact launch evidence satisfies the published Robinhood-to-Ethereum finality policy. |
+| `failed` | Processing is terminal. Read the bound failure and remediation before creating a new request. |
+
+The CLI only prepares, validates, submits request bytes, polls status and displays the exact transaction. It never
+signs or broadcasts. Guard V4 polling with the explicit API version and chain:
+
+```sh
+programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized
+# Stop for separate controller-wallet review, signing and broadcast.
+programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized
+```
+
+Provider source verification starts after `finalized` and remains independent. Finality does not imply
+`sourceVerification.status: exact_match`; verification retries or failures do not revise finality. Programmable
+indexing, third-party indexing, trading readiness, publication and public announcements are separate outcomes. The
+planned V4 routes and source candidate prove none of them is live.
 
 The live unauthenticated `GET /v3/finalized-custom-launches` response uses top-level `launches` and required top-level
 `quality`. Quality contains `status` (`complete` or `partial`), `sourceRowCount`, `publishedRowCount`,

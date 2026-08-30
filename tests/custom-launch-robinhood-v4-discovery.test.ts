@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1 } from "../lib/custom-launch/registry-public-manifest-v1";
+import { developerDocsMarkdown } from "../lib/developer-docs-content";
+import { programmablePublicOpenApi } from "../lib/public-openapi";
 import {
   createProgrammableWellKnownHandlerV1,
   programmableWellKnownDocumentV1,
@@ -26,6 +28,9 @@ describe("planned Robinhood Chain V4 discovery", () => {
       activationStage: "planned-not-deployed",
       publicAuthorization: false,
       publicWrites: false,
+      releaseReady: false,
+      apiVersion: "4",
+      profileVersion: "4.0.0",
       chainId: 4663,
       caip2: "eip155:4663",
       network: "Robinhood Chain Mainnet",
@@ -37,10 +42,47 @@ describe("planned Robinhood Chain V4 discovery", () => {
       openApiUrl: "https://programmable.market/openapi/custom-launch-v4.json",
       packConfigSchemaUrl:
         "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
+      sourceVerificationSchemaUrl:
+        "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json",
+      guideUrl:
+        "https://programmable.market/docs/developers/custom-launch#robinhood-v4",
       admissionDescriptorUrl:
         "https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json",
       sourceRepository: "https://github.com/programmablehq/PROGRAMMABLE",
       launchPolicyRepository: "https://github.com/programmablehq/Launch-Policy",
+      cli: {
+        sourceCandidateVersion: "4.0.0",
+        sourceCandidate: true,
+        released: false,
+        installable: false,
+        liveEthereumVersion: "3.3.9",
+        signsWalletTransactions: false,
+        broadcastsWalletTransactions: false,
+      },
+      lifecycle: {
+        statuses: [
+          "received",
+          "validating",
+          "action_required",
+          "authorized",
+          "awaiting_wallet_signature",
+          "wallet_action_required",
+          "submitted",
+          "sequencer_soft_confirmed",
+          "ethereum_posted",
+          "finalized",
+          "failed",
+        ],
+        actionRequiredMeaning:
+          "server-authored-remediation-not-wallet-action",
+        walletStageStatusCommand:
+          "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized",
+        finalityStatusCommand:
+          "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized",
+        sourceVerificationStartsAfter: "finalized",
+        sourceVerificationIndependentFromFinality: true,
+        indexingTradingAndPublicationIndependent: true,
+      },
       foundationSourceCommitment:
         "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
       sourceVerification: {
@@ -112,6 +154,7 @@ describe("planned Robinhood Chain V4 discovery", () => {
       customLaunchApiVersion: "4",
       activationStage: "planned-not-deployed",
       publicWrites: false,
+      releaseReady: false,
       externalIndexingGuaranteed: false,
     });
     const { foundationSourceCommitment, ...withoutSourceCommitment } = v4;
@@ -133,10 +176,28 @@ describe("planned Robinhood Chain V4 discovery", () => {
       activationStage: "planned-not-deployed",
       publicAuthorization: false,
       publicWrites: false,
+      releaseReady: false,
+      apiVersion: "4",
+      profileVersion: "4.0.0",
       clientSelectableProfile: false,
       apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY",
       feeBehaviorClaim: false,
       externalIndexingGuaranteed: false,
+      cli: {
+        sourceCandidateVersion: "4.0.0",
+        released: false,
+        installable: false,
+        liveEthereumVersion: "3.3.9",
+        signsWalletTransactions: false,
+        broadcastsWalletTransactions: false,
+      },
+      lifecycle: {
+        actionRequiredMeaning:
+          "server-authored-remediation-not-wallet-action",
+        sourceVerificationStartsAfter: "finalized",
+        sourceVerificationIndependentFromFinality: true,
+        indexingTradingAndPublicationIndependent: true,
+      },
       foundationSourceCommitment:
         "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
       sourceVerification: {
@@ -161,6 +222,10 @@ describe("planned Robinhood Chain V4 discovery", () => {
   it("keeps public guides aligned with the planned and non-authorizing boundary", () => {
     const developerGuide = read("docs/public/developers/custom-launch.md");
     const rawGuide = read("public/developers/custom-launch-api-v1.md");
+    const websiteGuide = read("app/docs/developers/custom-launch/page.tsx");
+    const machineReadablePage = read(
+      "app/docs/developers/machine-readable/page.tsx",
+    );
     const publicDocs = [
       read("README.md"),
       read("docs/public/README.md"),
@@ -170,6 +235,10 @@ describe("planned Robinhood Chain V4 discovery", () => {
       read("docs/public/reference/official-links.md"),
       read("docs/public/status.md"),
       rawGuide,
+      read("packages/launch/README.md"),
+      websiteGuide,
+      machineReadablePage,
+      developerDocsMarkdown,
     ].join("\n");
 
     expect(publicDocs).toMatch(/Robinhood Chain V4/iu);
@@ -206,8 +275,50 @@ describe("planned Robinhood Chain V4 discovery", () => {
     expect(publicDocs).toContain(
       "https://github.com/programmablehq/PROGRAMMABLE",
     );
+    expect(publicDocs).toContain("source candidate");
+    expect(publicDocs).toContain("4.0.0");
+    expect(publicDocs).toContain("releaseReady: false");
+    expect(publicDocs).toContain(
+      "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663",
+    );
+    for (const status of [
+      "received",
+      "validating",
+      "action_required",
+      "authorized",
+      "awaiting_wallet_signature",
+      "wallet_action_required",
+      "submitted",
+      "sequencer_soft_confirmed",
+      "ethereum_posted",
+      "finalized",
+      "failed",
+    ]) {
+      expect(publicDocs).toContain(status);
+    }
+    expect(publicDocs).toMatch(/action_required[\s\S]{0,260}(?:not a wallet|remediation)/iu);
+    expect(publicDocs).toMatch(/source verification[\s\S]{0,180}(?:after finality|starts after|starts only after)/iu);
+    expect(publicDocs).toMatch(/(?:never signs or broadcasts|never sign or broadcast)/iu);
     expect(publicDocs).not.toContain(
       "https://github.com/0xprogrammable/PROGRAMMABLE/releases",
     );
+
+    expect(programmablePublicOpenApi["x-programmable-availability"].v4)
+      .toMatchObject({
+        status: "planned",
+        activationStage: "planned-not-deployed",
+        profileVersion: "4.0.0",
+        released: false,
+        installable: false,
+        releaseReady: false,
+        publicAuthorization: false,
+        publicWrites: false,
+        chainId: 4663,
+        caip2: "eip155:4663",
+        cliWalletAuthority: false,
+        sourceVerificationStartsAfter: "finalized",
+        sourceVerificationIndependentFromFinality: true,
+        indexingTradingAndPublicationIndependent: true,
+      });
   });
 });
