@@ -88,16 +88,10 @@ describe("main token migration transfer", () => {
       ),
     ).toThrow("Ethereum Mainnet");
     expect(() =>
-      assertMainTokenMigrationTransaction(
-        { ...prepared, to: other },
-        sender,
-      ),
+      assertMainTokenMigrationTransaction({ ...prepared, to: other }, sender),
     ).toThrow("binding");
     expect(() =>
-      assertMainTokenMigrationTransaction(
-        { ...prepared, value: "1" },
-        sender,
-      ),
+      assertMainTokenMigrationTransaction({ ...prepared, value: "1" }, sender),
     ).toThrow("binding");
 
     const redirected = buildMainTokenMigrationTransaction({
@@ -156,7 +150,8 @@ describe("main token migration transfer", () => {
 });
 
 describe("main token migration page contract", () => {
-  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const read = (path: string) =>
+    readFileSync(join(process.cwd(), path), "utf8");
   const page = read("components/main-token-migration.tsx");
 
   it("derives the countdown from one absolute window across reloads", () => {
@@ -171,16 +166,16 @@ describe("main token migration page contract", () => {
     expect(page).toContain("trustedClockEndpoint");
     expect(page).toContain("performance.now()");
     expect(page).toContain("setNow(readTrustedNow())");
-    expect(page).toContain("phase === \"upcoming\"");
+    expect(page).toContain('phase === "upcoming"');
     expect(page).toContain("migrationWindow.startAt");
     expect(page).toContain("migrationWindow.deadlineAt");
     expect(page).not.toMatch(
       /Date\.now\(\)\s*\+\s*MAIN_TOKEN_MIGRATION_WINDOW_SECONDS/u,
     );
     expect(page).toContain("const hours = Math.floor(totalSeconds / 3_600)");
-    expect(page).toContain('<small>Hours</small>');
-    expect(page).toContain('<small>Minutes</small>');
-    expect(page).toContain('<small>Seconds</small>');
+    expect(page).toContain("<small>Hours</small>");
+    expect(page).toContain("<small>Minutes</small>");
+    expect(page).toContain("<small>Seconds</small>");
     expect(page).not.toContain("<small>Days</small>");
   });
 
@@ -218,18 +213,24 @@ describe("main token migration page contract", () => {
     expect(transferWindowOpenAt(startAt + 250, 250, false)).toBe(false);
     expect(page).toContain("const migrationTransferSafetyMs = 5 * 60 * 1_000;");
     expect(page).toContain("!migrationWindow.enabled ||");
-    expect(page).toContain("transferWindowOpenAt(trustedNow, clock.uncertaintyMs)");
-    const firstFinalWindowCheck = page.indexOf("const finalCheckTime = readTrustedNow()");
-    const finalWindowCheck = page.indexOf("const walletReviewTime = readTrustedNow()");
+    expect(page).toContain(
+      "transferWindowOpenAt(trustedNow, clock.uncertaintyMs)",
+    );
+    const firstFinalWindowCheck = page.indexOf(
+      "const finalCheckTime = readTrustedNow()",
+    );
+    const finalWindowCheck = page.indexOf(
+      "const walletReviewTime = readTrustedNow()",
+    );
     const finalTransactionBinding = page.indexOf(
       "const checked = assertMainTokenMigrationTransaction",
     );
     const walletPrompt = page.indexOf("const hash = await sendTransaction");
     expect(firstFinalWindowCheck).toBeGreaterThan(0);
     expect(finalWindowCheck).toBeGreaterThan(firstFinalWindowCheck);
-    expect(page.slice(firstFinalWindowCheck, finalTransactionBinding)).toContain(
-      "!trustedTransferWindowOpen()",
-    );
+    expect(
+      page.slice(firstFinalWindowCheck, finalTransactionBinding),
+    ).toContain("!trustedTransferWindowOpen()");
     expect(page.slice(finalWindowCheck, walletPrompt)).toContain(
       "!trustedTransferWindowOpen()",
     );
@@ -248,9 +249,7 @@ describe("main token migration page contract", () => {
   });
 
   it("reveals the fixed destination only during the active window or for a tracked transfer", () => {
-    expect(page).toContain(
-      "transferWindowOpenAt(now, clockUncertaintyMs)",
-    );
+    expect(page).toContain("transferWindowOpenAt(now, clockUncertaintyMs)");
     expect(page).toContain(
       "const canRevealDestination = transferWindowOpen || hasTrackedTransfer;",
     );
@@ -259,7 +258,7 @@ describe("main token migration page contract", () => {
     expect(page).toContain("Copy address");
     expect(page).toContain("disabled={!canCopyDestination}");
     expect(page).toContain(
-      "The address and copy action unlock only during the published",
+      "The migration address is available only while the window is",
     );
   });
 
@@ -368,21 +367,21 @@ describe("main token migration page contract", () => {
     expect(page).toContain("deadlineAt - startAt ===");
     expect(page).toContain("startBlock !== null");
     expect(page).toContain("Local preview · transfers disabled");
-    expect(page).toContain("96-hour");
-    expect(page).toContain("<strong>96 hours</strong>");
     expect(page).toContain(
-      "Nothing is sent until you confirm the transfer in your wallet.",
+      "Nothing is sent until you approve the V4 transfer in your wallet.",
     );
-    expect(page).toContain("1:1 V4 amount");
-    expect(page).toContain("Do not send from an exchange, custodian or router");
+    expect(page).toContain("Connect wallet and send V4");
+    expect(page).toContain("Prefer not to connect?");
+    expect(page).toContain("Do not send ETH or use an exchange or router.");
+    expect(page).not.toContain("Smart-contract wallet detected");
+    expect(page).not.toContain("How it works");
+    expect(read("components/main-token-migration.module.css")).not.toContain(
+      "min-height: calc(100svh - 88px)",
+    );
     expect(route).toContain("index: false");
     expect(route).toContain("follow: false");
-    expect(route).toContain(
-      "PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_ENABLED",
-    );
-    expect(route).toContain(
-      "PROGRAMMABLE_MAIN_TOKEN_MIGRATION_LOCAL_PREVIEW",
-    );
+    expect(route).toContain("PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_ENABLED");
+    expect(route).toContain("PROGRAMMABLE_MAIN_TOKEN_MIGRATION_LOCAL_PREVIEW");
     expect(route).toContain("migrationActivationManifest.enabled");
     expect(route).toContain("notFound()");
     expect(landing).toContain('href="/migration"');

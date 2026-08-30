@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -36,12 +35,7 @@ const decimalIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
 const positiveIntegerPattern = /^[1-9][0-9]*$/u;
 const bytes32Pattern = /^0x[0-9a-fA-F]{64}$/u;
 
-type MigrationPhase =
-  | "checking"
-  | "preview"
-  | "upcoming"
-  | "active"
-  | "closed";
+type MigrationPhase = "checking" | "preview" | "upcoming" | "active" | "closed";
 
 type MigrationWindow = Readonly<{
   enabled: boolean;
@@ -87,8 +81,7 @@ const migrationTransferGasReserve = 100_000n;
 const trustedClockMaximumAgeMs = 90_000;
 const trustedClockRequestTimeoutMs = 8_000;
 const migrationTransferSafetyMs = 5 * 60 * 1_000;
-const trustedClockEndpoint =
-  "/api/main-token-migration/window-time" as const;
+const trustedClockEndpoint = "/api/main-token-migration/window-time" as const;
 
 export function hasEnoughMigrationGas(
   nativeBalanceWei: bigint,
@@ -99,11 +92,7 @@ export function hasEnoughMigrationGas(
 }
 
 export type MainTokenGasSponsorshipStatus =
-  | "eligible"
-  | "submitted"
-  | "pending"
-  | "confirmed"
-  | "not_needed";
+  "eligible" | "submitted" | "pending" | "confirmed" | "not_needed";
 
 export type MainTokenGasSponsorshipRequest = Readonly<{
   walletAddress: string;
@@ -155,14 +144,16 @@ export type GasSponsorshipFailure = Readonly<{
 }>;
 
 class GasSponsorshipEndpointError extends Error {
-  constructor(message: string, readonly retryable: boolean) {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
     super(message);
     this.name = "GasSponsorshipEndpointError";
   }
 }
 
-const migrationTransferStorageKey =
-  `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_WALLET.toLowerCase()}`;
+const migrationTransferStorageKey = `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_WALLET.toLowerCase()}`;
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
 const sponsorshipIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
 
@@ -211,11 +202,14 @@ export function parseGasSponsorshipResponse(
   const transactionHashIsValid =
     typeof value.transactionHash === "string" &&
     transactionHashPattern.test(value.transactionHash);
-  const statusFieldsAreValid = status === "not_needed"
-    ? value.topUpWei === "0" && value.transactionHash === null
-    : status === "eligible"
-      ? topUpIsInteger && value.topUpWei !== "0" && value.transactionHash === null
-      : topUpIsInteger && value.topUpWei !== "0" && transactionHashIsValid;
+  const statusFieldsAreValid =
+    status === "not_needed"
+      ? value.topUpWei === "0" && value.transactionHash === null
+      : status === "eligible"
+        ? topUpIsInteger &&
+          value.topUpWei !== "0" &&
+          value.transactionHash === null
+        : topUpIsInteger && value.topUpWei !== "0" && transactionHashIsValid;
   if (
     Object.keys(value).sort().join("\0") !== exactKeys.sort().join("\0") ||
     value.schema !== gasSponsorshipSchema ||
@@ -238,7 +232,7 @@ export function parseGasSponsorshipResponse(
     transactionHash:
       value.transactionHash === null
         ? null
-        : (value.transactionHash as string).toLowerCase() as Hex,
+        : ((value.transactionHash as string).toLowerCase() as Hex),
     estimatedTransferGas: value.estimatedTransferGas as string,
   });
 }
@@ -250,18 +244,18 @@ export async function gasSponsorshipFailure(
   let message = "";
   let requestId = "";
   try {
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       error?: unknown;
       message?: unknown;
       requestId?: unknown;
     };
     const nestedError =
       body.error && typeof body.error === "object" && !Array.isArray(body.error)
-        ? body.error as {
+        ? (body.error as {
             code?: unknown;
             message?: unknown;
             requestId?: unknown;
-          }
+          })
         : null;
     const responseMessage =
       typeof body.error === "string"
@@ -270,14 +264,15 @@ export async function gasSponsorshipFailure(
           ? body.message
           : typeof nestedError?.message === "string"
             ? nestedError.message
-          : "";
+            : "";
     code = typeof nestedError?.code === "string" ? nestedError.code : "";
     message = responseMessage.length <= 240 ? responseMessage : "";
     const responseRequestId = nestedError?.requestId ?? body.requestId;
     requestId =
       typeof responseRequestId === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
-        .test(responseRequestId)
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(
+        responseRequestId,
+      )
         ? responseRequestId
         : "";
   } catch {
@@ -289,17 +284,18 @@ export async function gasSponsorshipFailure(
     "sponsorship_closed",
     "sponsorship_failed",
   ].includes(code);
-  const fallback = response.status === 401 || response.status === 403
-    ? "Reconnect this wallet before requesting sponsored gas."
-    : response.status === 429
-      ? "Gas sponsorship is temporarily rate limited. Wait a moment and try again."
-      : code === "submission_unknown"
-        ? "The gas top-up needs a status review. No second top-up was sent."
-        : code === "sponsorship_closed"
-          ? "Gas sponsorship is closed for this migration window."
-          : code === "sponsorship_failed"
-            ? "The gas top-up could not be confirmed. Contact migration support before trying again."
-            : "Unable to request sponsored gas. Check your connection and try again.";
+  const fallback =
+    response.status === 401 || response.status === 403
+      ? "Reconnect this wallet before requesting sponsored gas."
+      : response.status === 429
+        ? "Gas sponsorship is temporarily rate limited. Wait a moment and try again."
+        : code === "submission_unknown"
+          ? "The gas top-up needs a status review. No second top-up was sent."
+          : code === "sponsorship_closed"
+            ? "Gas sponsorship is closed for this migration window."
+            : code === "sponsorship_failed"
+              ? "The gas top-up could not be confirmed. Contact migration support before trying again."
+              : "Unable to request sponsored gas. Check your connection and try again.";
   const publicMessage = message || fallback;
   return {
     message: requestId
@@ -313,7 +309,10 @@ export async function gasSponsorshipErrorMessage(response: Response) {
   return (await gasSponsorshipFailure(response)).message;
 }
 
-function gasSponsorshipError(error: unknown, account: string): GasSponsorshipState {
+function gasSponsorshipError(
+  error: unknown,
+  account: string,
+): GasSponsorshipState {
   return {
     kind: "error",
     account,
@@ -367,8 +366,7 @@ export function gasSponsorshipDisplayKind(
 
 function gasSponsorshipIdempotencyKey(account: string) {
   const normalizedAccount = getAddress(account).toLowerCase();
-  const storageKey =
-    `programmable:main-token-migration:gas-sponsor:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${normalizedAccount}`;
+  const storageKey = `programmable:main-token-migration:gas-sponsor:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${normalizedAccount}`;
   try {
     const stored = window.localStorage.getItem(storageKey);
     if (stored && /^[a-zA-Z0-9:_-]{16,200}$/u.test(stored)) return stored;
@@ -507,20 +505,23 @@ function parseMigrationWindow(): MigrationWindow {
     manifest.startBlockNumber !== null &&
     positiveIntegerPattern.test(manifest.startBlockNumber)
       ? BigInt(manifest.startBlockNumber)
-    : null;
+      : null;
   const startBlockHash =
-    manifest.startBlockHash !== null && bytes32Pattern.test(manifest.startBlockHash)
-      ? manifest.startBlockHash.toLowerCase() as Hex
+    manifest.startBlockHash !== null &&
+    bytes32Pattern.test(manifest.startBlockHash)
+      ? (manifest.startBlockHash.toLowerCase() as Hex)
       : null;
   const exactPolicy =
     manifest.schema === "programmable-main-token-migration-activation/v1" &&
     manifest.releaseId === MAIN_TOKEN_MIGRATION_RELEASE_ID &&
     manifest.sourceChainId === String(MAIN_TOKEN_MIGRATION_CHAIN_ID) &&
-    manifest.sourceTokenAddress.toLowerCase() === MAIN_TOKEN_ADDRESS.toLowerCase() &&
+    manifest.sourceTokenAddress.toLowerCase() ===
+      MAIN_TOKEN_ADDRESS.toLowerCase() &&
     manifest.sourceTokenRuntimeCodeKeccak256.toLowerCase() ===
       MAIN_TOKEN_RUNTIME_CODE_KECCAK256 &&
     manifest.sourceTokenDecimals === String(MAIN_TOKEN_DECIMALS) &&
-    manifest.sourceTokenTotalSupplyRaw === MAIN_TOKEN_TOTAL_SUPPLY_RAW.toString() &&
+    manifest.sourceTokenTotalSupplyRaw ===
+      MAIN_TOKEN_TOTAL_SUPPLY_RAW.toString() &&
     manifest.migrationWallet.toLowerCase() ===
       MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
     manifest.windowDurationSeconds ===
@@ -579,20 +580,18 @@ function transferWindowOpenAt(now: number, uncertaintyMs = 0) {
     migrationWindow.deadlineAt === null ||
     !Number.isFinite(uncertaintyMs) ||
     uncertaintyMs < 0
-  ) return false;
+  )
+    return false;
   return (
     now - uncertaintyMs >= migrationWindow.startAt &&
-    now + uncertaintyMs <
-      migrationWindow.deadlineAt - migrationTransferSafetyMs
+    now + uncertaintyMs < migrationWindow.deadlineAt - migrationTransferSafetyMs
   );
 }
 
 function remainingAt(now: number, phase: MigrationPhase) {
   if (phase === "preview") return MAIN_TOKEN_MIGRATION_WINDOW_SECONDS;
   const target =
-    phase === "upcoming"
-      ? migrationWindow.startAt
-      : migrationWindow.deadlineAt;
+    phase === "upcoming" ? migrationWindow.startAt : migrationWindow.deadlineAt;
   if (target === null) return 0;
   return Math.max(0, Math.ceil((target - now) / 1_000));
 }
@@ -610,11 +609,13 @@ function clockParts(totalSeconds: number) {
 
 function formatUtc(value: number | null) {
   if (value === null) return "Set before activation";
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(value) + " UTC";
+  return (
+    new Intl.DateTimeFormat("en", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(value) + " UTC"
+  );
 }
 
 function shortenAddress(address: string) {
@@ -637,10 +638,16 @@ function migrationErrorMessage(error: unknown) {
   if (/rejected|denied|cancelled|canceled/u.test(message.toLowerCase())) {
     return "Wallet request rejected. No tokens were sent.";
   }
-  return message || "Unable to prepare the transfer. Check your wallet and try again.";
+  return (
+    message ||
+    "Unable to prepare the transfer. Check your wallet and try again."
+  );
 }
 
-function Countdown({ phase, remaining }: Readonly<{
+function Countdown({
+  phase,
+  remaining,
+}: Readonly<{
   phase: MigrationPhase;
   remaining: number | null;
 }>) {
@@ -649,12 +656,12 @@ function Countdown({ phase, remaining }: Readonly<{
     phase === "checking"
       ? "Checking migration window"
       : phase === "closed"
-      ? "Migration closed"
-      : phase === "upcoming"
-        ? "Migration opens in"
-        : phase === "preview"
-          ? "Planned migration window"
-          : "Migration closes in";
+        ? "Migration closed"
+        : phase === "upcoming"
+          ? "Migration opens in"
+          : phase === "preview"
+            ? "Planned migration window"
+            : "Migration closes in";
 
   return (
     <div
@@ -667,22 +674,31 @@ function Countdown({ phase, remaining }: Readonly<{
     >
       <span className={styles.countdownLabel}>{label}</span>
       <div className={styles.clock} aria-hidden="true">
-        <span><strong>{parts?.hours ?? "––"}</strong><small>Hours</small></span>
+        <span>
+          <strong>{parts?.hours ?? "––"}</strong>
+          <small>Hours</small>
+        </span>
         <i>:</i>
-        <span><strong>{parts?.minutes ?? "––"}</strong><small>Minutes</small></span>
+        <span>
+          <strong>{parts?.minutes ?? "––"}</strong>
+          <small>Minutes</small>
+        </span>
         <i>:</i>
-        <span><strong>{parts?.seconds ?? "––"}</strong><small>Seconds</small></span>
+        <span>
+          <strong>{parts?.seconds ?? "––"}</strong>
+          <small>Seconds</small>
+        </span>
       </div>
       <span className={styles.absoluteDeadline}>
         {phase === "checking"
           ? "Verifying the published UTC window"
           : phase === "preview"
-          ? "96-hour transfer window"
-          : `${phase === "upcoming" ? "Opens" : "Closes"} ${formatUtc(
-              phase === "upcoming"
-                ? migrationWindow.startAt
-                : migrationWindow.deadlineAt,
-            )}`}
+            ? "96-hour transfer window"
+            : `${phase === "upcoming" ? "Opens" : "Closes"} ${formatUtc(
+                phase === "upcoming"
+                  ? migrationWindow.startAt
+                  : migrationWindow.deadlineAt,
+              )}`}
       </span>
     </div>
   );
@@ -715,9 +731,12 @@ export function MainTokenMigration() {
   const [copyStatus, setCopyStatus] = useState("");
   const [clockIssue, setClockIssue] = useState("");
   const [confirmationIssue, setConfirmationIssue] = useState("");
-  const [submission, setSubmission] = useState<SubmissionState>({ kind: "idle" });
-  const [gasSponsorship, setGasSponsorship] =
-    useState<GasSponsorshipState>({ kind: "idle" });
+  const [submission, setSubmission] = useState<SubmissionState>({
+    kind: "idle",
+  });
+  const [gasSponsorship, setGasSponsorship] = useState<GasSponsorshipState>({
+    kind: "idle",
+  });
   const [accountCodeObservation, setAccountCodeObservation] =
     useState<AccountCodeObservation | null>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
@@ -749,16 +768,16 @@ export function MainTokenMigration() {
   }, []);
 
   const phase = now === null ? "checking" : phaseAt(now);
-  const remaining = now === null
-    ? null
-    : remainingAt(now, phase);
-  const onMainnet = wallet !== null &&
+  const remaining = now === null ? null : remainingAt(now, phase);
+  const onMainnet =
+    wallet !== null &&
     normalizeChainId(wallet.chainId) === MAIN_TOKEN_MIGRATION_CHAIN_ID;
-  const accountCodeStatus = !wallet || !onMainnet
-    ? "idle"
-    : accountCodeObservation?.account === wallet.account.toLowerCase()
-      ? accountCodeObservation.status
-      : "checking";
+  const accountCodeStatus =
+    !wallet || !onMainnet
+      ? "idle"
+      : accountCodeObservation?.account === wallet.account.toLowerCase()
+        ? accountCodeObservation.status
+        : "checking";
   const hasTrackedTransfer =
     submission.kind === "submitted" || submission.kind === "confirmed";
   const transferWindowOpen =
@@ -767,10 +786,6 @@ export function MainTokenMigration() {
     transferWindowOpenAt(now, clockUncertaintyMs);
   const canRevealDestination = transferWindowOpen || hasTrackedTransfer;
   const canCopyDestination = transferWindowOpen;
-  const transferSender =
-    submission.kind === "submitted" || submission.kind === "confirmed"
-    ? submission.account
-    : wallet?.account ?? null;
   const connectedAccount = wallet?.account.toLowerCase() ?? null;
   const hasEnoughObservedGas =
     nativeBalance !== null &&
@@ -847,7 +862,7 @@ export function MainTokenMigration() {
           headers: { accept: "application/json" },
           signal: controller.signal,
         });
-        const body = await response.json() as Record<string, unknown>;
+        const body = (await response.json()) as Record<string, unknown>;
         const requestFinishedAt = performance.now();
         if (
           !response.ok ||
@@ -967,38 +982,43 @@ export function MainTokenMigration() {
     return () => window.clearTimeout(pendingRefresh);
   }, [refreshBalance]);
 
-  const readGasSponsorship = useCallback(async (
-    account: string,
-    signal: AbortSignal,
-  ): Promise<GasSponsorshipEndpointResult> => {
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
-      throw new GasSponsorshipEndpointError(
-        "Reconnect this wallet before requesting sponsored gas.",
-        true,
-      );
-    }
-    const search = new URLSearchParams({ walletAddress: getAddress(account) });
-    const response = await fetch(`${gasSponsorshipEndpoint}?${search}`, {
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      signal,
-    });
-    if (!response.ok) {
-      const failure = await gasSponsorshipFailure(response);
-      throw new GasSponsorshipEndpointError(
-        failure.message,
-        failure.retryable,
-      );
-    }
-    return {
-      body: parseGasSponsorshipResponse(await response.json(), account),
-      retryAfterMs: sponsorshipRetryAfterMs(response),
-    };
-  }, [getAccessToken]);
+  const readGasSponsorship = useCallback(
+    async (
+      account: string,
+      signal: AbortSignal,
+    ): Promise<GasSponsorshipEndpointResult> => {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        throw new GasSponsorshipEndpointError(
+          "Reconnect this wallet before requesting sponsored gas.",
+          true,
+        );
+      }
+      const search = new URLSearchParams({
+        walletAddress: getAddress(account),
+      });
+      const response = await fetch(`${gasSponsorshipEndpoint}?${search}`, {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        signal,
+      });
+      if (!response.ok) {
+        const failure = await gasSponsorshipFailure(response);
+        throw new GasSponsorshipEndpointError(
+          failure.message,
+          failure.retryable,
+        );
+      }
+      return {
+        body: parseGasSponsorshipResponse(await response.json(), account),
+        retryAfterMs: sponsorshipRetryAfterMs(response),
+      };
+    },
+    [getAccessToken],
+  );
 
   useEffect(() => {
     if (
@@ -1093,7 +1113,10 @@ export function MainTokenMigration() {
           result.body.status === "submitted" ||
           result.body.status === "pending"
         ) {
-          retryTimer = window.setTimeout(() => void poll(), result.retryAfterMs);
+          retryTimer = window.setTimeout(
+            () => void poll(),
+            result.retryAfterMs,
+          );
         }
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -1347,7 +1370,10 @@ export function MainTokenMigration() {
           failure.retryable,
         );
       }
-      const result = parseGasSponsorshipResponse(await response.json(), account);
+      const result = parseGasSponsorshipResponse(
+        await response.json(),
+        account,
+      );
       setGasSponsorship(gasSponsorshipState(result));
       if (result.status === "confirmed" || result.status === "not_needed") {
         void refreshBalance();
@@ -1363,7 +1389,8 @@ export function MainTokenMigration() {
     if (!wallet || !onMainnet) {
       setSubmission({
         kind: "error",
-        message: "Connect this wallet on Ethereum before checking sponsored gas.",
+        message:
+          "Connect this wallet on Ethereum before checking sponsored gas.",
       });
       return;
     }
@@ -1537,57 +1564,60 @@ export function MainTokenMigration() {
     }
   }
 
-  const primaryLabel = phase === "checking"
-    ? "Checking migration window"
-    : phase === "preview"
-      ? "Migration not open"
-      : phase === "upcoming"
-        ? "Migration opens soon"
-        : phase === "closed"
-    ? "Migration closed"
-    : !transferWindowOpen
-      ? "New transfers closed"
-    : submission.kind === "submitted"
-      ? "Waiting for Ethereum confirmation"
-      : submission.kind === "confirmed"
-        ? "Transfer confirmed"
-    : !wallet
-    ? connecting
-      ? "Opening wallet"
-      : "Connect wallet"
-    : !onMainnet
-      ? switchingNetwork
-        ? "Switching network"
-        : "Switch to Ethereum"
-      : submission.kind === "submitting"
-        ? "Confirm in your wallet"
-        : accountCodeStatus === "checking"
-          ? "Checking wallet type"
-          : accountCodeStatus === "contract"
-            ? "Manual review required"
-            : !amount.trim()
-              ? "Enter amount"
-              : amountError
-                ? "Check amount"
-                : balance === null
-                  ? "Balance unavailable"
-                  : !acknowledged
-                    ? "Confirm address control"
-                    : !sponsoredGasReady
-                      ? sponsorshipKind === "eligible"
-                        ? "Request sponsored gas first"
-                        : sponsorshipKind === "requesting"
-                          ? "Requesting sponsored gas"
-                          : sponsorshipKind === "requested" ||
-                              sponsorshipKind === "funding-confirming" ||
-                              sponsorshipKind === "balance-confirming"
-                            ? "Waiting for sponsored gas"
-                            : sponsorshipKind === "error"
-                              ? terminalSponsorshipFailure
-                                ? "Check ETH and continue"
-                                : "Check gas sponsorship"
-                              : "Checking gas balance"
-                    : "Review transfer in wallet";
+  const primaryLabel =
+    phase === "checking"
+      ? "Checking migration window"
+      : phase === "preview"
+        ? "Migration not open"
+        : phase === "upcoming"
+          ? "Migration opens soon"
+          : phase === "closed"
+            ? "Migration closed"
+            : !transferWindowOpen
+              ? "New transfers closed"
+              : submission.kind === "submitted"
+                ? "Waiting for Ethereum confirmation"
+                : submission.kind === "confirmed"
+                  ? "Transfer confirmed"
+                  : !wallet
+                    ? connecting
+                      ? "Opening wallet"
+                      : "Connect wallet"
+                    : !onMainnet
+                      ? switchingNetwork
+                        ? "Switching network"
+                        : "Switch to Ethereum"
+                      : submission.kind === "submitting"
+                        ? "Confirm in your wallet"
+                        : accountCodeStatus === "checking"
+                          ? "Checking wallet type"
+                          : accountCodeStatus === "contract"
+                            ? "Use manual transfer"
+                            : !amount.trim()
+                              ? "Enter amount"
+                              : amountError
+                                ? "Check amount"
+                                : balance === null
+                                  ? "Balance unavailable"
+                                  : !acknowledged
+                                    ? "Confirm address control"
+                                    : !sponsoredGasReady
+                                      ? sponsorshipKind === "eligible"
+                                        ? "Request sponsored gas first"
+                                        : sponsorshipKind === "requesting"
+                                          ? "Requesting sponsored gas"
+                                          : sponsorshipKind === "requested" ||
+                                              sponsorshipKind ===
+                                                "funding-confirming" ||
+                                              sponsorshipKind ===
+                                                "balance-confirming"
+                                            ? "Waiting for sponsored gas"
+                                            : sponsorshipKind === "error"
+                                              ? terminalSponsorshipFailure
+                                                ? "Check ETH and continue"
+                                                : "Check gas sponsorship"
+                                              : "Checking gas balance"
+                                      : "Review transfer in wallet";
 
   return (
     <article className={styles.page}>
@@ -1617,20 +1647,20 @@ export function MainTokenMigration() {
             </svg>
             Ethereum
           </span>
-          <span className={styles.chainArrow} aria-hidden="true">→</span>
+          <span className={styles.chainArrow} aria-hidden="true">
+            →
+          </span>
           <span className={styles.chainName}>Robinhood</span>
         </div>
         <Countdown phase={phase} remaining={remaining} />
         {clockIssue ? (
-          <p className={styles.clockIssue} role="status">{clockIssue}</p>
+          <p className={styles.clockIssue} role="status">
+            {clockIssue}
+          </p>
         ) : null}
         <p className={styles.heroCopy}>
-          Send your V4 during the 96-hour window. You get the same number of V4
-          tokens sent to the same wallet when V4 launches on Robinhood.
-        </p>
-        <p className={styles.criticalCopy}>
-          V4 launched with a total supply of 1 billion on Ethereum. V4 on
-          Robinhood will also have a total supply of 1 billion.
+          Send V4 during the active window. The same token amount will be sent
+          to the same wallet on Robinhood.
         </p>
         <p className={styles.officialNotice}>
           Use only <strong>programmable.market/migration</strong>. Programmable
@@ -1638,7 +1668,10 @@ export function MainTokenMigration() {
         </p>
       </section>
 
-      <section className={styles.migrationPanel} aria-labelledby="send-v4-title">
+      <section
+        className={styles.migrationPanel}
+        aria-labelledby="send-v4-title"
+      >
         {phase === "closed" ? (
           <div className={styles.closedNotice} role="alert">
             <strong>Migration closed</strong>
@@ -1648,18 +1681,11 @@ export function MainTokenMigration() {
             </span>
           </div>
         ) : null}
-        <div className={styles.summary} aria-label="Migration terms">
-          <div><span>Window</span><strong>96 hours</strong></div>
-          <div><span>You receive</span><strong>The same V4 amount</strong></div>
-          <div><span>Robinhood wallet</span><strong>The same address</strong></div>
-          <div><span>Total supply</span><strong>1 billion V4</strong></div>
-        </div>
-
         <div className={styles.panelGrid}>
           <div className={styles.transferColumn}>
             <header className={styles.panelHeader}>
-              <p>Send with your wallet</p>
-              <h2 id="send-v4-title">Send V4 for migration</h2>
+              <p>Wallet transfer</p>
+              <h2 id="send-v4-title">Connect wallet and send V4</h2>
             </header>
 
             {wallet ? (
@@ -1669,40 +1695,26 @@ export function MainTokenMigration() {
               </div>
             ) : (
               <p className={styles.connectPrompt}>
-                Connect the wallet that holds your V4.
+                Connect the Ethereum wallet that holds your V4.
               </p>
             )}
 
-            {wallet && onMainnet ? (
-              <div
-                className={styles.walletTypeStatus}
-                data-status={accountCodeStatus}
-                role="status"
+            {!wallet ? (
+              <button
+                className={styles.primaryAction}
+                type="button"
+                onClick={() => void reviewTransfer()}
+                disabled={!transferWindowOpen || connecting}
               >
-                <strong>
-                  {accountCodeStatus === "eoa"
-                    ? "Wallet ready"
-                    : accountCodeStatus === "contract"
-                      ? "Smart-contract wallet detected"
-                      : accountCodeStatus === "unavailable"
-                        ? "Wallet type unavailable"
-                        : "Checking wallet type"}
-                </strong>
-                <span>
-                  {accountCodeStatus === "eoa"
-                    ? "This address can use the automatic migration path. It is checked again before sending."
-                    : accountCodeStatus === "contract"
-                      ? "Do not send. Multisigs and smart-contract wallets require manual review and are not guaranteed an automatic allocation."
-                      : accountCodeStatus === "unavailable"
-                        ? "The automatic path remains blocked until the wallet type can be checked."
-                        : "Checking whether this address can use the automatic migration path."}
-                </span>
-              </div>
+                {primaryLabel}
+              </button>
             ) : null}
 
             <div className={styles.balanceRow} aria-live="polite">
               <span>Available balance</span>
-              <strong className={balanceLoading ? styles.balanceLoading : undefined}>
+              <strong
+                className={balanceLoading ? styles.balanceLoading : undefined}
+              >
                 {balanceLoading
                   ? "Reading balance"
                   : balance === null
@@ -1710,7 +1722,9 @@ export function MainTokenMigration() {
                     : `${formatTokenAmount(balance)} ${MAIN_TOKEN_SYMBOL}`}
               </strong>
             </div>
-            {balanceError ? <p className={styles.inlineError}>{balanceError}</p> : null}
+            {balanceError ? (
+              <p className={styles.inlineError}>{balanceError}</p>
+            ) : null}
 
             <div className={styles.amountGroup}>
               <label htmlFor="migration-amount">Amount to send</label>
@@ -1726,6 +1740,7 @@ export function MainTokenMigration() {
                   value={amount}
                   onChange={onAmountChange}
                   disabled={
+                    !wallet ||
                     !transferWindowOpen ||
                     hasTrackedTransfer ||
                     submission.kind === "submitting"
@@ -1754,8 +1769,7 @@ export function MainTokenMigration() {
                 </button>
               </div>
               <p id="migration-amount-help">
-                Max selects your full V4 balance. If this wallet needs ETH for
-                gas, a one-time sponsorship option appears below.
+                Max selects the full V4 balance in your connected wallet.
               </p>
               {amountError ? (
                 <p className={styles.inlineError} id="migration-amount-error">
@@ -1808,8 +1822,8 @@ export function MainTokenMigration() {
                     <strong>Sponsored gas available</strong>
                     <span>
                       This wallet needs ETH for gas. Request a one-time top-up,
-                      wait for confirmation, then sign the normal V4 transfer
-                      in your wallet.
+                      wait for confirmation, then sign the normal V4 transfer in
+                      your wallet.
                     </span>
                     <button
                       ref={sponsorButtonRef}
@@ -1838,8 +1852,8 @@ export function MainTokenMigration() {
                   >
                     <strong>Gas top-up requested</strong>
                     <p>
-                      The sponsor transaction was submitted. Your V4 remains
-                      in this wallet while Ethereum confirms the top-up.
+                      The sponsor transaction was submitted. Your V4 remains in
+                      this wallet while Ethereum confirms the top-up.
                     </p>
                     {sponsorshipTransactionHash ? (
                       <a
@@ -1935,87 +1949,62 @@ export function MainTokenMigration() {
               </div>
             ) : null}
 
-            <label className={styles.acknowledgement}>
-              <input
-                ref={acknowledgementRef}
-                type="checkbox"
-                checked={acknowledged}
-                onChange={(event) => setAcknowledged(event.target.checked)}
+            {wallet ? (
+              <label className={styles.acknowledgement}>
+                <input
+                  ref={acknowledgementRef}
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(event) => setAcknowledged(event.target.checked)}
+                  disabled={
+                    !transferWindowOpen ||
+                    hasTrackedTransfer ||
+                    submission.kind === "submitting"
+                  }
+                />
+                <span>
+                  I control this wallet on Ethereum and will use the same
+                  address on Robinhood. I understand the allocation cannot be
+                  redirected.
+                </span>
+              </label>
+            ) : null}
+
+            {wallet ? (
+              <button
+                className={styles.primaryAction}
+                type="button"
+                onClick={() => void reviewTransfer()}
                 disabled={
                   !transferWindowOpen ||
+                  connecting ||
+                  switchingNetwork ||
+                  submission.kind === "submitting" ||
                   hasTrackedTransfer ||
-                  submission.kind === "submitting"
+                  accountCodeStatus === "checking" ||
+                  accountCodeStatus === "contract"
                 }
-              />
-              <span>
-                I control this wallet on Ethereum and will use the same address
-                on Robinhood. I understand the allocation cannot be redirected.
-              </span>
-            </label>
-
-            {canRevealDestination ? (
-              <div className={styles.transferReview}>
-                <div>
-                  <span>From</span>
-                  <strong>
-                    {transferSender
-                      ? shortenAddress(transferSender)
-                      : "Connected sender"}
-                  </strong>
-                </div>
-                <div className={styles.addressReviewRow}>
-                  <span>Ethereum recipient</span>
-                  <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>
-                </div>
-                <div>
-                  <span>You send</span>
-                  <strong>{parsedAmount === null ? "Enter amount" : `${formatUnits(parsedAmount, MAIN_TOKEN_DECIMALS)} ${MAIN_TOKEN_SYMBOL}`}</strong>
-                </div>
-                <div>
-                  <span>Robinhood allocation</span>
-                  <strong>{parsedAmount === null ? "1:1 V4 amount" : `${formatUnits(parsedAmount, MAIN_TOKEN_DECIMALS)} ${MAIN_TOKEN_SYMBOL}`}</strong>
-                </div>
-              </div>
-            ) : (
-              <div className={styles.destinationUnavailable}>
-                <strong>Transfer destination is not available yet</strong>
-                <span>
-                  The full migration wallet appears here only while the
-                  published window is active. Do not use an address from a DM.
-                </span>
-              </div>
-            )}
-
-            <button
-              className={styles.primaryAction}
-              type="button"
-              onClick={() => void reviewTransfer()}
-              disabled={
-                !transferWindowOpen ||
-                connecting ||
-                switchingNetwork ||
-                submission.kind === "submitting" ||
-                hasTrackedTransfer ||
-                accountCodeStatus === "checking" ||
-                accountCodeStatus === "contract"
-              }
-            >
-              {primaryLabel}
-            </button>
+              >
+                {primaryLabel}
+              </button>
+            ) : null}
             <p className={styles.walletBoundary}>
-              This is an irreversible ERC-20 transfer on Ethereum, not a
-              bridge. Nothing is sent until you confirm the transfer in your wallet.
-              The optional gas sponsor only sends ETH to this wallet and never
-              initiates the V4 transfer. Verify the network, V4 token contract,
-              full recipient and amount.
+              Nothing is sent until you approve the V4 transfer in your wallet.
             </p>
 
-            <div className={styles.status} role="status" aria-live="polite" aria-atomic="true">
+            <div
+              className={styles.status}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               {submission.kind === "error" ? (
                 <p className={styles.inlineError}>{submission.message}</p>
               ) : null}
               {submission.kind === "submitted" ? (
-                <div className={`${styles.transactionStatus} ${styles.pendingStatus}`}>
+                <div
+                  className={`${styles.transactionStatus} ${styles.pendingStatus}`}
+                >
                   <strong>Transaction submitted — not confirmed</strong>
                   <p>
                     Waiting for Ethereum confirmation. Do not send again. The
@@ -2032,13 +2021,15 @@ export function MainTokenMigration() {
                 </div>
               ) : null}
               {submission.kind === "confirmed" ? (
-                <div className={`${styles.transactionStatus} ${styles.confirmedStatus}`}>
+                <div
+                  className={`${styles.transactionStatus} ${styles.confirmedStatus}`}
+                >
                   <strong>Wallet transaction confirmed on Ethereum</strong>
                   <p>
-                    The transaction was confirmed in block {submission.blockNumber}.
-                    After the window closes, we will verify the transfer,
-                    amount, sender, recipient and block timestamp before the
-                    Robinhood allocation is sent.
+                    The transaction was confirmed in block{" "}
+                    {submission.blockNumber}. After the window closes, we will
+                    verify the transfer, amount, sender, recipient and block
+                    timestamp before the Robinhood allocation is sent.
                   </p>
                   <a
                     href={`https://etherscan.io/tx/${submission.hash}`}
@@ -2059,7 +2050,9 @@ export function MainTokenMigration() {
                 </div>
               ) : null}
               {submission.kind === "reverted" ? (
-                <div className={`${styles.transactionStatus} ${styles.revertedStatus}`}>
+                <div
+                  className={`${styles.transactionStatus} ${styles.revertedStatus}`}
+                >
                   <strong>Transaction reverted</strong>
                   <p>
                     No V4 was transferred. Review the transaction before trying
@@ -2080,18 +2073,17 @@ export function MainTokenMigration() {
             </div>
           </div>
 
-          <aside className={styles.destinationColumn} aria-labelledby="migration-wallet-title">
+          <aside
+            className={styles.destinationColumn}
+            aria-labelledby="migration-wallet-title"
+          >
             <header className={styles.panelHeader}>
-              <p>Fixed destination</p>
-              <h2 id="migration-wallet-title">Migration wallet</h2>
+              <p>Manual transfer</p>
+              <h2 id="migration-wallet-title">Send V4 directly</h2>
             </header>
-            <>
-              <p>
-                Send only V4 from the wallet that should receive the Robinhood
-                allocation. This address is fixed for the migration.
-              </p>
-              {canRevealDestination ? (
-                <>
+            <p>Prefer not to connect? Send V4 directly to this address.</p>
+            {canRevealDestination ? (
+              <>
                 <div className={styles.addressBlock}>
                   <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>
                   <button
@@ -2105,69 +2097,19 @@ export function MainTokenMigration() {
                     {copyStatus}
                   </p>
                 </div>
-                <dl className={styles.contractFacts}>
-                  <div>
-                    <dt>Eligible token contract</dt>
-                    <dd><code>{MAIN_TOKEN_ADDRESS}</code></dd>
-                  </div>
-                  <div>
-                    <dt>Network</dt>
-                    <dd>Ethereum Mainnet</dd>
-                  </div>
-                  <div>
-                    <dt>Allocation identity</dt>
-                    <dd>Ethereum Transfer event sender</dd>
-                  </div>
-                  <div>
-                    <dt>Eligibility cutoff</dt>
-                    <dd>
-                      Ethereum block timestamp at or after opening and before
-                      the deadline
-                    </dd>
-                  </div>
-                </dl>
-                <div className={styles.warning}>
-                  <strong>Before you send</strong>
-                  <p>Do not send ETH or another token.</p>
-                  <p>
-                    Do not send from an exchange, custodian or router. The
-                    Transfer event sender would receive the record, not your
-                    wallet.
-                  </p>
-                  <p>
-                    Multisigs and smart-contract wallets require manual review
-                    and have no automatic allocation guarantee.
-                  </p>
-                </div>
-                </>
-              ) : (
-                <p className={styles.closedAddressNote}>
-                  The address and copy action unlock only during the published
-                  96-hour window. Do not send before it opens or after it closes.
+                <p className={styles.manualWarning}>
+                  Send only V4 from the wallet that should receive the Robinhood
+                  allocation. Do not send ETH or use an exchange or router.
                 </p>
-              )}
-            </>
+              </>
+            ) : (
+              <p className={styles.closedAddressNote}>
+                The migration address is available only while the window is
+                active.
+              </p>
+            )}
           </aside>
         </div>
-      </section>
-
-      <section className={styles.process} aria-labelledby="migration-process-title">
-        <header>
-          <p>One address. One allocation.</p>
-          <h2 id="migration-process-title">How it works</h2>
-        </header>
-        <ol>
-          <li><strong>Send while active</strong><span>If needed, request sponsored gas first. Then transfer V4 directly from your wallet during the published window.</span></li>
-          <li><strong>Confirm on Ethereum</strong><span>Only confirmed transfers inside the window can enter the migration list.</span></li>
-          <li><strong>We verify the list</strong><span>After 96 hours, confirmed amounts are totaled by exact sender address before the Robinhood allocation is sent.</span></li>
-        </ol>
-        <p className={styles.finalNote}>
-          Your Robinhood allocation matches the exact V4 token amount recorded
-          from your Ethereum wallet.
-        </p>
-        <Link className={styles.backLink} href="/">
-          Back to Programmable
-        </Link>
       </section>
     </article>
   );
