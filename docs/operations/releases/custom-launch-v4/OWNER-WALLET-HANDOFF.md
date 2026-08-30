@@ -1,9 +1,10 @@
 # Robinhood foundation owner-wallet handoff
 
-This handoff prepares and verifies one chain-4663 EIP-1559 wallet request. It
-does not read a balance, select an owner, open a wallet, sign, broadcast, bridge
-funds, or retry a transaction. The owner remains responsible for the final
-wallet review and authorization.
+This handoff prepares and verifies one chain-4663 EIP-1559 wallet request.
+Envelope preparation does not read a balance; the final read-only action-time
+verifier does. The handoff does not select an owner, open a wallet, sign,
+broadcast, bridge funds, or retry a transaction. The owner remains responsible
+for the final wallet review and authorization.
 
 Run every command below from the repository root at the exact reviewed
 `production` commit. The checkout must be clean, its canonical `origin` must be
@@ -103,9 +104,10 @@ pending-state, simulation and closing-state inventory. Robinhood produces blocks
 fast enough that authenticated providers can legitimately observe different
 pending parents or fees during one bounded preflight. The guard therefore
 requires two identical state-relevant snapshots (runtime code, target vacancy,
-owner nonce, simulation return and gas estimate) while recording both pending
-observations. Fee fields use the highest base fee, gas price and priority fee
-reported by either provider and remain bounded by the owner's explicit ceilings.
+owner nonce, owner balance, simulation return and gas estimate) while recording
+both pending observations. Fee fields use the highest base fee, gas price and
+priority fee reported by either provider and remain bounded by the owner's
+explicit ceilings.
 
 ## Fresh envelope
 
@@ -132,8 +134,10 @@ contains a provider URL or token.
 The signing interface must export the exact request it is about to open as the
 canonical one-LF JSON shape below. `request.params` contains exactly one
 type-`0x2` transaction with exactly these keys: `chainId`, `from`, `to`,
-`value`, `data`, `nonce`, `gas`, `maxFeePerGas`, `maxPriorityFeePerGas`, and
-`type`. No `gasPrice`, access list, signature or extra key is accepted.
+`value`, `data`, `nonce`, `gas`, `maxFeePerGas`, `maxPriorityFeePerGas`,
+`accessList`, and `type`. `accessList` is required and must be exactly `[]`;
+no missing, non-empty or differently shaped access list, `gasPrice`, signature
+or extra key is accepted.
 
 An integration that needs a deterministic candidate may derive it from the
 protected envelope without printing the calldata:
@@ -154,6 +158,7 @@ jq '{
       gas: .transaction.gasQuantity,
       maxFeePerGas: .transaction.maxFeePerGasQuantity,
       maxPriorityFeePerGas: .transaction.maxPriorityFeePerGasQuantity,
+      accessList: [],
       type: .transaction.type
     }]
   }
@@ -164,11 +169,19 @@ chmod 600 "$ROBINHOOD_OWNER_ENVELOPE_ROOT/wallet-request-<unique-id>.json"
 
 Immediately before the owner opens the wallet, run the strictly read-only
 verifier. It rechecks freshness, the protected source and production ref, the
-exact hosted Verify proof, provider commitments and every wallet field. It then
-uses both frozen credentialed providers to re-read chain ID, owner `latest` and
-`pending` nonce, pending code and nonce vacancy for all three targets, the exact
-pending simulation and gas estimate, and a second closing
-nonce/code/vacancy/simulation/gas snapshot.
+exact hosted Verify proof, provider commitments and every wallet field,
+including exact `accessList: []`. It then uses both frozen credentialed
+providers to re-read chain ID; owner `latest` and `pending` nonce; owner pending
+balance; pending base fee, gas price and maximum priority fee; pending code and
+nonce vacancy for all three targets; and the exact pending simulation and gas
+estimate. It repeats a second closing
+nonce/balance/fee/code/vacancy/simulation/gas snapshot immediately before wallet
+delivery. Both providers must agree on the owner balance, and the opening and
+closing balance must remain identical. The balance must cover the maximum debit
+`gasLimit * maxFeePerGas`; the transaction fee caps must cover the highest
+opening-or-closing provider gas price and the conservative
+`2 * pendingBaseFee + maxPriorityFeePerGas` formula without exceeding the
+owner-reviewed envelope ceilings. Any funding, fee or state drift fails closed.
 It then re-reads the canonical GitHub `production` ref and revalidates the same
 persisted immutable Verify run, attempt and artifact before one final local
 source/freshness guard. Its output contains only a bounded safe summary, never

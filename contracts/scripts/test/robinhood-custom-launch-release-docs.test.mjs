@@ -121,10 +121,18 @@ test("operator runbooks use repo-root commands and independently frozen provider
   );
   assert.match(
     handoff,
-    /second closing\s+nonce\/code\/vacancy\/simulation\/gas snapshot/u,
+    /second closing\s+nonce\/balance\/fee\/code\/vacancy\/simulation\/gas snapshot/u,
   );
   assert.match(handoff, /two identical state-relevant snapshots/u);
-  assert.match(handoff, /highest base fee, gas price and priority fee/u);
+  assert.match(handoff, /highest base fee, gas price and\s+priority fee/u);
+  assert.match(handoff, /including exact `accessList: \[\]`/u);
+  assert.match(handoff, /`accessList` is required and must be exactly `\[\]`/u);
+  assert.match(handoff, /balance must cover the maximum debit/u);
+  assert.match(
+    handoff,
+    /`2 \* pendingBaseFee \+ maxPriorityFeePerGas` formula/u,
+  );
+  assert.match(handoff, /Any funding, fee or state drift fails closed/u);
   assert.doesNotMatch(
     security,
     /contracts:robinhood:postdeploy:(?:assemble|verify)\s/u,

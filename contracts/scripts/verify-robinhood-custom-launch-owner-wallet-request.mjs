@@ -154,6 +154,7 @@ export function assertCanonicalRobinhoodOwnerWalletRequest(receipt, value) {
       "gas",
       "maxFeePerGas",
       "maxPriorityFeePerGas",
+      "accessList",
       "type",
     ],
     "wallet transaction",
@@ -168,6 +169,7 @@ export function assertCanonicalRobinhoodOwnerWalletRequest(receipt, value) {
     gas: receipt.transaction.gasQuantity,
     maxFeePerGas: receipt.transaction.maxFeePerGasQuantity,
     maxPriorityFeePerGas: receipt.transaction.maxPriorityFeePerGasQuantity,
+    accessList: [],
     type: receipt.transaction.type,
   };
   if (JSON.stringify(transaction) !== JSON.stringify(expected)) {
@@ -189,6 +191,7 @@ export function assertCanonicalRobinhoodOwnerWalletRequest(receipt, value) {
     gasLimit: receipt.transaction.gasLimit,
     maxFeePerGas: receipt.transaction.maxFeePerGas,
     maxPriorityFeePerGas: receipt.transaction.maxPriorityFeePerGas,
+    accessList: [],
     reviewedMaximumGasCostWei: receipt.gasPolicy.maximumGasCostWei,
     ownerMaximumGasCostWei: receipt.gasPolicy.ownerMaximumGasCostWei,
   });
