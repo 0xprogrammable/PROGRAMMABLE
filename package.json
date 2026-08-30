@@ -31,6 +31,7 @@
     "verify:uniswap-launcher-sdk": "node scripts/verify-uniswap-liquidity-launcher-sdk.mjs",
     "brand:favicons": "node scripts/generate-programmable-favicons.mjs",
     "creator-article:programmable:seed": "node scripts/seed-programmable-creator-article.mjs",
+    "migration:main-token:test": "vitest run tests/main-token-migration.test.ts tests/main-token-migration-gas-sponsor-contract.test.ts tests/main-token-migration-gas-sponsor-v1.test.ts tests/main-token-migration-gas-sponsorship-ui.test.ts",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "release:custom-launch:record:verify": "node scripts/verify-custom-launch-release-record.mjs",
     "release:custom-launch:v2:record:verify": "node scripts/verify-custom-launch-release-record-v2.mjs",

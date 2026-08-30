@@ -56,6 +56,7 @@ import {
 } from "@/lib/custom-launch/wallet-handoff-v4";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
+import { assertMainTokenMigrationTransaction } from "@/lib/main-token-migration";
 import {
   buildPredictionPermitTypedData,
   buildUsdgPermitTypedData,
@@ -199,6 +200,7 @@ type WalletContextValue = {
     transaction: ParsedPredictionV2PreparedTransactionV2,
   ) => Promise<Hex>;
   readNativeBalance: () => Promise<WalletNativeBalance>;
+  readConnectedAccountCode: () => Promise<Hex>;
   readTradeBalances: (token: `0x${string}`) => Promise<WalletTradeBalances>;
 };
 
@@ -221,6 +223,7 @@ function loadWalletProviderRuntime() {
 export function shouldEagerLoadWalletRuntime(pathname: string) {
   return [
     "/launch",
+    "/migration",
     "/profile",
     "/token",
     "/developers/api-keys",
@@ -1045,6 +1048,9 @@ function DeferredWalletProvider({
       readNativeBalance: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
+      readConnectedAccountCode: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
       readTradeBalances: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
@@ -1728,6 +1734,9 @@ function PrivyWalletBridge({
         transaction,
         wallet.account,
       );
+      if (prepared.kind === "main-token-migration") {
+        assertMainTokenMigrationTransaction(prepared, wallet.account);
+      }
       const target =
         prepared.kind === "prediction-market-launch" ||
         prepared.kind === "prediction-market-action"
@@ -2456,6 +2465,35 @@ function PrivyWalletBridge({
     };
   }, [connectedWallet, wallet]);
 
+  const readConnectedAccountCode = useCallback(async () => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+
+    const provider = await connectedWallet.getEthereumProvider();
+    const providerChainId = await provider.request({
+      method: "eth_chainId",
+    });
+    if (
+      typeof providerChainId !== "string" ||
+      normalizeChainId(providerChainId) !== appChainHex
+    ) {
+      throw new Error(`Switch your wallet to ${appNetworkName}`);
+    }
+
+    const code = await provider.request({
+      method: "eth_getCode",
+      params: [wallet.account, "latest"],
+    });
+    if (
+      typeof code !== "string" ||
+      !/^0x(?:[0-9a-fA-F]{2})*$/u.test(code)
+    ) {
+      throw new Error("The wallet account type could not be verified");
+    }
+    return code.toLowerCase() as Hex;
+  }, [connectedWallet, wallet]);
+
   const value = useMemo<WalletContextValue>(
     () => ({
       wallet,
@@ -2494,6 +2532,7 @@ function PrivyWalletBridge({
       sendTransaction,
       sendPredictionV2Transaction,
       readNativeBalance,
+      readConnectedAccountCode,
       readTradeBalances,
     }),
     [
@@ -2513,6 +2552,7 @@ function PrivyWalletBridge({
       openWallet,
       openWalletWithError,
       providerTimedOut,
+      readConnectedAccountCode,
       readNativeBalance,
       readTradeBalances,
       ready,
@@ -2641,6 +2681,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       readNativeBalance: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      readConnectedAccountCode: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       readTradeBalances: async () => {

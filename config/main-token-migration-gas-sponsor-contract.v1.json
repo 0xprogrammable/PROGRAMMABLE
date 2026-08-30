@@ -1,0 +1,72 @@
+{
+  "schema": "programmable-main-token-migration-gas-sponsor-activation-contract/v1",
+  "releaseId": "v4-ethereum-to-robinhood-96h-2026-v1",
+  "activationManifestPath": "config/main-token-migration-activation.v1.json",
+  "route": "/api/main-token-migration/gas-sponsorship",
+  "serverOnly": true,
+  "chainId": "1",
+  "caip2": "eip155:1",
+  "environment": {
+    "enabled": {
+      "name": "MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED",
+      "disabledValue": "false",
+      "activationValue": "true"
+    },
+    "privyWalletId": "MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_WALLET_ID",
+    "privyPolicyId": "MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_POLICY_ID",
+    "walletAddress": "MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ADDRESS",
+    "maximumTopUpWei": "MAIN_TOKEN_MIGRATION_GAS_SPONSOR_MAX_TOP_UP_WEI",
+    "totalBudgetWei": "MAIN_TOKEN_MIGRATION_GAS_SPONSOR_TOTAL_BUDGET_WEI"
+  },
+  "walletBinding": {
+    "chainType": "ethereum",
+    "attachedPolicyCount": "1",
+    "transactionMethod": "eth_sendTransaction",
+    "transactionType": "2",
+    "transactionData": "0x",
+    "sponsorGasLimit": "21000",
+    "providerPolicyEnforces": [
+      "method",
+      "chainId",
+      "maximumValue"
+    ],
+    "serverEnforces": [
+      "holderRecipient",
+      "emptyCalldata",
+      "sender",
+      "transactionType",
+      "gasAndFeeBounds",
+      "exactValue"
+    ]
+  },
+  "limits": {
+    "estimatedTokenTransferGasCeiling": "100000",
+    "gasQuoteMultiplierBps": "12500",
+    "maximumFeePerGasWei": "20000000000",
+    "absoluteMaximumTopUpWei": "2000000000000000",
+    "absoluteMaximumTotalBudgetWei": "1000000000000000000",
+    "deadlineSafetySeconds": "300"
+  },
+  "feeRules": {
+    "useHigherIndependentProviderQuote": true,
+    "maximumPriorityFeeMustNotExceedMaximumFee": true
+  },
+  "budgetRules": {
+    "maximumTopUpMustBePositive": true,
+    "totalBudgetMustCoverMaximumTopUp": true,
+    "reservationIncludesSponsorTransactionFee": true
+  },
+  "runtimeDependencies": [
+    "NEXT_PUBLIC_PRIVY_APP_ID",
+    "PRIVY_APP_SECRET",
+    "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL",
+    "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_CA_PEM",
+    "PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_ROLE",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL",
+    "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT"
+  ]
+}

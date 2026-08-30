@@ -54,6 +54,16 @@ regexes = [
 ]
 
 [[allowlists]]
+description = "Migration activation pins the public V4 token address and runtime code hash"
+condition = "AND"
+regexTarget = "match"
+paths = ['''config/main-token-migration-activation\.v1\.json''']
+regexes = [
+  '''(?i)0x7987f03462200b3d8a072e02c89a8a41dcb124ee''',
+  '''(?i)0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad''',
+]
+
+[[allowlists]]
 description = "Public documentation pins the public V4 token address"
 condition = "AND"
 regexTarget = "match"
