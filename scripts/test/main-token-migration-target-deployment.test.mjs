@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   chmod,
   mkdtemp,
@@ -643,6 +644,17 @@ test("operator is read-only by default and protected receipts are exclusive 0600
       }),
     /already exists/u,
   );
+});
+
+test("operator direct entry prints help without requiring deployment settings", () => {
+  const result = spawnSync(
+    process.execPath,
+    [join(ROOT, "scripts/serve-main-token-migration-target-deployment.mjs"), "--help"],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Usage:/u);
+  assert.equal(result.stderr, "");
 });
 
 test("authorized envelope and submitted hash survive restart in protected recovery files", async () => {

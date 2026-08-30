@@ -589,7 +589,7 @@ export async function runMainTokenMigrationTargetOperator({
   repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url))),
   rpcClient,
   createHttpServer = createServer,
-}) {
+} = {}) {
   const options = parseMainTokenMigrationTargetOperatorArguments(
     argv,
     environment,
