@@ -379,7 +379,7 @@ export function PartnerAdminConsole() {
     if (invalidBudget) {
       setFieldError(
         invalidBudget.field,
-        "Use a whole-number budget within the limit shown for this field.",
+        `Use a whole number from 1 to ${invalidBudget.maximum}.`,
       );
       return;
     }

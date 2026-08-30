@@ -65,6 +65,12 @@ describe("Custom market selector UI", () => {
     expect(tradeSource).not.toContain(
       "tradeCapabilityBindingHash.slice(",
     );
+    expect(tradeStyles).toMatch(
+      /\.customTradeBindingHash\s*\{[^}]*font-size:\s*10px;/s,
+    );
+    expect(tradeStyles).toMatch(
+      /\.customTradeBindingNote\s*\{[^}]*font-size:\s*13px;/s,
+    );
   });
 
   it("keeps the branded options touch-sized with visible keyboard focus", () => {

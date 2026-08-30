@@ -243,6 +243,9 @@ describe("partner attribution UI", () => {
     expect(source).toContain("This cannot be undone");
     expect(source).toContain('aria-label="Partner pages"');
     expect(source).toContain("ROOT_KEYS_PER_PAGE");
+    expect(source).toContain(
+      "`Use a whole number from 1 to ${invalidBudget.maximum}.`",
+    );
   });
 
   it("recovers an unlinked partner-admin wallet without retrying the request", () => {

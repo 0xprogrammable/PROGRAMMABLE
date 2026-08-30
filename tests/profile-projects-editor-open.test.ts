@@ -257,6 +257,9 @@ describe("My projects editor opening", () => {
     expect(styles).toMatch(
       /@media \(prefers-reduced-motion: no-preference\) \{[\s\S]*\.refresh\[data-loading="true"\] \.refreshIcon/u,
     );
+    expect(styles).toMatch(
+      /\.loading,\s*\.empty,\s*\.error\s*\{[^}]*font-size:\s*13px;/s,
+    );
   });
 
   it("returns a stalled launch refresh to an actionable error state", () => {

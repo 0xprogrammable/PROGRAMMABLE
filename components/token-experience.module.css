@@ -647,10 +647,21 @@
 
 .customTradeBinding {
   color: var(--muted);
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.customTradeBindingHash {
   font-family: var(--font-plex-mono), monospace;
   font-size: 10px;
-  margin: 0;
   overflow-wrap: anywhere;
+}
+
+.customTradeBindingNote {
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .customTradeReviewActions {

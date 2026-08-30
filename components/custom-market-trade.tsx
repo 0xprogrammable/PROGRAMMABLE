@@ -361,9 +361,12 @@ export function CustomMarketTrade({
           <div><dt>Recipient</dt><dd>{review.preparation.recipient.slice(0, 6)}…{review.preparation.recipient.slice(-4)}</dd></div>
         </dl>
         <p className={styles.customTradeBinding}>
-          Route binding: {review.request.tradeCapabilityBindingHash}
-          <br />
-          Programmable validates this market, route, and recipient before opening your wallet.
+          <span className={styles.customTradeBindingHash}>
+            Route binding: {review.request.tradeCapabilityBindingHash}
+          </span>
+          <span className={styles.customTradeBindingNote}>
+            Programmable validates this market, route, and recipient before opening your wallet.
+          </span>
         </p>
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
         <div className={styles.customTradeReviewActions}>
