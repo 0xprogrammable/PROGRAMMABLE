@@ -14,6 +14,7 @@ import {
   MAIN_TOKEN_MIGRATION_RELEASE_ID,
   MAIN_TOKEN_MIGRATION_WALLET,
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
+  isMainTokenMigrationWalletCodeEligible,
   parseMainTokenMigrationAmount,
 } from "../lib/main-token-migration";
 import {
@@ -30,6 +31,23 @@ const migrationWallet = "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D";
 const migrationWindowSeconds = 96 * 60 * 60;
 
 describe("main token migration transfer", () => {
+  it("accepts empty or exact EIP-7702 delegated EOA code only", () => {
+    expect(isMainTokenMigrationWalletCodeEligible("0x")).toBe(true);
+    expect(isMainTokenMigrationWalletCodeEligible(
+      "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b",
+    )).toBe(true);
+
+    for (const code of [
+      undefined,
+      "0x60006000",
+      "0xef0100",
+      "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b00",
+      "0xef020063c0c19a282a1b52b07dd5a65b58948a07dae32b",
+    ] as const) {
+      expect(isMainTokenMigrationWalletCodeEligible(code)).toBe(false);
+    }
+  });
+
   it("freezes the 96-hour Ethereum migration identities", () => {
     expect(MAIN_TOKEN_MIGRATION_CHAIN_ID).toBe(1);
     expect(MAIN_TOKEN_ADDRESS).toBe(

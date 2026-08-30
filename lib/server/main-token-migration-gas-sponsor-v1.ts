@@ -26,6 +26,7 @@ import {
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
   MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
   MAIN_TOKEN_TOTAL_SUPPLY_RAW,
+  isMainTokenMigrationWalletCodeEligible,
 } from "@/lib/main-token-migration";
 import {
   createPrivyWalletPrincipalAuthenticatorV1,
@@ -887,8 +888,10 @@ export function createMainTokenMigrationGasSponsorChainV1(
             "rpc_quorum_unavailable",
           );
         }
-        if (left.holderCode !== "0x" || right.holderCode !== "0x"
-          || left.startHolderCode !== "0x" || right.startHolderCode !== "0x"
+        if (!isMainTokenMigrationWalletCodeEligible(left.holderCode)
+          || !isMainTokenMigrationWalletCodeEligible(right.holderCode)
+          || !isMainTokenMigrationWalletCodeEligible(left.startHolderCode)
+          || !isMainTokenMigrationWalletCodeEligible(right.startHolderCode)
           || left.sponsorCode !== "0x" || right.sponsorCode !== "0x"
           || left.currentBalance < request.amountRaw || right.currentBalance < request.amountRaw
           || left.openingBalance < request.amountRaw || right.openingBalance < request.amountRaw) {

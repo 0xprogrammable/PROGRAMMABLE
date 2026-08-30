@@ -5,6 +5,7 @@ import {
   parseAbi,
   parseUnits,
   type Address,
+  type Hex,
 } from "viem";
 
 import {
@@ -30,6 +31,7 @@ export const MAIN_TOKEN_MIGRATION_WALLET = getAddress(
 );
 
 const UINT256_MAX = (1n << 256n) - 1n;
+const EIP_7702_DELEGATION_INDICATOR = /^0xef0100[0-9a-f]{40}$/iu;
 const erc20TransferAbi = parseAbi([
   "function transfer(address to,uint256 amount) returns (bool)",
 ]);
@@ -38,6 +40,13 @@ export type MainTokenMigrationTransaction = Extract<
   PreparedTransaction,
   { kind: "main-token-migration" }
 >;
+
+export function isMainTokenMigrationWalletCodeEligible(
+  code: Hex | undefined,
+) {
+  return code === "0x" ||
+    (code !== undefined && EIP_7702_DELEGATION_INDICATOR.test(code));
+}
 
 export function parseMainTokenMigrationAmount(value: string): bigint {
   const normalized = value.trim();
