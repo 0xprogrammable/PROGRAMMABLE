@@ -38,10 +38,12 @@ describe("view chain", () => {
     expect(serializeViewChainCookie(4663)).toContain("SameSite=Lax");
   });
 
-  it("keeps view persistence outside the wallet provider without making the root layout dynamic", () => {
+  it("resolves the server cookie only inside chain-bound product routes", () => {
     const provider = read("components/view-chain.tsx");
     const shell = read("components/app-shell.tsx");
     const layout = read("app/layout.tsx");
+    const resolvedLayout = read("components/resolved-view-chain-layout.tsx");
+    const routeBoundary = read("components/view-chain-route-boundary.tsx");
 
     expect(provider).toContain("window.localStorage.getItem");
     expect(provider).toContain(
@@ -64,12 +66,27 @@ describe("view chain", () => {
     expect(provider).toContain(
       "const hydrated = resolvedViewChainId !== null",
     );
-    expect(provider).toContain(
-      "const viewChainId = resolvedViewChainId ?? initialViewChainId",
-    );
     expect(provider).toContain("persistViewChain(viewChainId)");
     expect(layout).not.toContain('from "next/headers"');
     expect(layout).not.toContain("cookies()");
+    expect(resolvedLayout).toContain('import { cookies } from "next/headers"');
+    expect(resolvedLayout).toContain("const requestCookies = await cookies()");
+    expect(resolvedLayout).toContain(
+      "requestCookies.get(VIEW_CHAIN_COOKIE_NAME)?.value",
+    );
+    expect(routeBoundary).toContain(
+      "const resolvedViewChainId = hydrated ? viewChainId : initialViewChainId",
+    );
+    expect(routeBoundary).toContain("resolvedViewChainId === 4663");
+    for (const routeLayout of [
+      "app/profile/layout.tsx",
+      "app/launch/layout.tsx",
+      "app/token/layout.tsx",
+    ]) {
+      expect(read(routeLayout)).toContain(
+        "ResolvedViewChainLayout as default",
+      );
+    }
   });
 
   it("renders one alternate-chain option before the hamburger as an accessible disclosure", () => {

@@ -24,14 +24,17 @@ describe("Robinhood view-chain scope gate", () => {
 
   it("switches only the view preference and leaves wallet state untouched", () => {
     const component = read("components/view-chain-unavailable.tsx");
+    const boundary = read("components/view-chain-route-boundary.tsx");
+    const resolvedLayout = read("components/resolved-view-chain-layout.tsx");
     const transition = read("components/route-transition.tsx");
     const navigation = read("components/site-navigation.tsx");
     const styles = read("components/view-chain-unavailable.module.css");
 
-    expect(transition).toContain("viewChainId === 4663");
-    expect(transition).toContain("isRobinhoodUnavailableRoute(pathname)");
-    expect(transition).toMatch(/showChainPending\s*\? "pending"/);
-    expect(transition).toContain("<ViewChainPending />");
+    expect(boundary).toContain("resolvedViewChainId === 4663");
+    expect(boundary).toContain("<ViewChainUnavailable />");
+    expect(resolvedLayout).toContain("VIEW_CHAIN_COOKIE_NAME");
+    expect(transition).not.toContain("<ViewChainPending />");
+    expect(transition).not.toContain("<ViewChainUnavailable />");
     expect(transition).toContain(
       "const resolvedInitialChain = !previousHydrated.current && hydrated",
     );

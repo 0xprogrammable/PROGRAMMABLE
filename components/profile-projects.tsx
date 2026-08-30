@@ -594,7 +594,21 @@ export function ProfileProjects({
                     Market cap {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label}
                   </small>
                 ) : null}
-                {project.article ? <small>Updated {formatDate(project.article.updatedAt)}</small> : null}
+                <small
+                  aria-hidden={project.article ? undefined : true}
+                  className={styles.articleSummarySlot}
+                  data-state={
+                    project.article
+                      ? "ready"
+                      : phase === "loading"
+                        ? "loading"
+                        : "empty"
+                  }
+                >
+                  {project.article
+                    ? `Updated ${formatDate(project.article.updatedAt)}`
+                    : "Article details"}
+                </small>
                 {project.partnerAttribution ? (
                   <PartnerLaunchAttribution
                     attribution={project.partnerAttribution}

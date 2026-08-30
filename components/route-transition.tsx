@@ -3,27 +3,12 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useViewChain } from "@/components/view-chain";
-import {
-  isRobinhoodUnavailableRoute,
-  ViewChainPending,
-  ViewChainUnavailable,
-} from "@/components/view-chain-unavailable";
 
 export function RouteTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { hydrated, viewChainId } = useViewChain();
   const contentRef = useRef<HTMLDivElement>(null);
-  const routeRequiresResolvedChain = isRobinhoodUnavailableRoute(pathname);
-  const showChainPending = routeRequiresResolvedChain && !hydrated;
-  const showRobinhoodUnavailable =
-    hydrated && viewChainId === 4663 && routeRequiresResolvedChain;
-  const focusContext = `${pathname}\u0000${
-    showChainPending
-      ? "pending"
-      : showRobinhoodUnavailable
-        ? "unavailable"
-        : "route"
-  }`;
+  const focusContext = `${pathname}\u0000${hydrated ? viewChainId : "pending"}`;
   const previousFocusContext = useRef(focusContext);
   const previousHydrated = useRef(hydrated);
   const previousMotionPathname = useRef(pathname);
@@ -108,13 +93,7 @@ export function RouteTransition({ children }: { children: ReactNode }) {
       className={`route-transition${isDocsPath ? " route-transition-docs" : ""}`}
       ref={contentRef}
     >
-      {showChainPending ? (
-        <ViewChainPending />
-      ) : showRobinhoodUnavailable ? (
-        <ViewChainUnavailable />
-      ) : (
-        children
-      )}
+      {children}
     </div>
   );
 }
