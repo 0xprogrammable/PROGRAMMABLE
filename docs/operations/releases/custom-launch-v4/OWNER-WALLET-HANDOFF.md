@@ -102,12 +102,13 @@ the current owner action-time pair. A public endpoint may return
 block. The credentialed providers must pass the exact fixed-block code, nonce,
 pending-state, simulation and closing-state inventory. Robinhood produces blocks
 fast enough that authenticated providers can legitimately observe different
-pending parents or fees during one bounded preflight. The guard therefore
-requires two identical state-relevant snapshots (runtime code, target vacancy,
-owner nonce, owner balance, simulation return and gas estimate) while recording
-both pending observations. Fee fields use the highest base fee, gas price and
-priority fee reported by either provider and remain bounded by the owner's
-explicit ceilings.
+pending parents or fees during one bounded preflight. The preparation guard
+therefore requires two identical state-relevant snapshots (runtime code, target
+vacancy, owner nonce, simulation return and gas estimate) while recording both
+pending observations. The final action-time guard additionally requires a
+provider-agreed owner balance that remains unchanged through its closing read.
+Fee fields use the highest base fee, gas price and priority fee reported by
+either provider and remain bounded by the owner's explicit ceilings.
 
 ## Fresh envelope
 
@@ -181,7 +182,8 @@ closing balance must remain identical. The balance must cover the maximum debit
 `gasLimit * maxFeePerGas`; the transaction fee caps must cover the highest
 opening-or-closing provider gas price and the conservative
 `2 * pendingBaseFee + maxPriorityFeePerGas` formula without exceeding the
-owner-reviewed envelope ceilings. Any funding, fee or state drift fails closed.
+owner-reviewed envelope ceilings. Any funding insufficiency, fee-cap violation,
+or state drift fails closed.
 It then re-reads the canonical GitHub `production` ref and revalidates the same
 persisted immutable Verify run, attempt and artifact before one final local
 source/freshness guard. Its output contains only a bounded safe summary, never

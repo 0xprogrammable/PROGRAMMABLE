@@ -132,7 +132,10 @@ test("operator runbooks use repo-root commands and independently frozen provider
     handoff,
     /`2 \* pendingBaseFee \+ maxPriorityFeePerGas` formula/u,
   );
-  assert.match(handoff, /Any funding, fee or state drift fails closed/u);
+  assert.match(
+    handoff,
+    /Any funding insufficiency, fee-cap violation,\s+or state drift fails closed/u,
+  );
   assert.doesNotMatch(
     security,
     /contracts:robinhood:postdeploy:(?:assemble|verify)\s/u,
