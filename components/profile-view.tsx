@@ -1318,6 +1318,20 @@ function getServerHydrationSnapshot() {
   return false;
 }
 
+export function readProfileForEditor(
+  storage: Parameters<typeof readLocalProfile>[0],
+  address: string | undefined,
+  fallback: ReturnType<typeof readLocalProfile>,
+) {
+  if (!address) return fallback;
+
+  try {
+    return readLocalProfile(storage, address);
+  } catch {
+    return fallback;
+  }
+}
+
 export function withoutClosedDeepProfileData(
   data: ProfileOnchainData,
 ): ProfileOnchainData {
@@ -1998,12 +2012,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   function latestProfileForEditor() {
     if (!account || typeof window === "undefined") return savedProfile;
-
-    try {
-      return readLocalProfile(window.localStorage, account);
-    } catch {
-      return savedProfile;
-    }
+    return readProfileForEditor(window.localStorage, account, savedProfile);
   }
 
   function beginEditingProfile() {
