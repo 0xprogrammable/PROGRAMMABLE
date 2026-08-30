@@ -1,5 +1,49 @@
 openapi: 3.1.1
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+x-programmable-partner-credentials:
+  schemaVersion: programmable.partner-public-contract.v1
+  status: live
+  environmentVariable: PROGRAMMABLE_API_KEY
+  credentialKinds:
+    - root
+    - subkey
+  canonicalV3LaunchRoutes: true
+  launchScopes:
+    - custom-launch:create
+    - custom-launch:read
+  rootOnlyScope: partner-subkeys:manage
+  subkeyAdminRoutes:
+    - GET /v1/partner/subkeys
+    - POST /v1/partner/subkeys
+    - POST /v1/partner/subkeys/{subkeyId}/rotate
+    - DELETE /v1/partner/subkeys/{subkeyId}
+  maximumSubkeyDepth: 1
+  subkeyScopesAndBudgetsCannotExceedRoot: true
+  subkeyExpiryCannotExceedRoot: true
+  permitReissueDispositionCredentialKind: wallet-only
+  metadataPolicySameAsWalletKeys: true
+  controllerWallet:
+    walletKey: must-equal-key-wallet-binding
+    partnerCredential: selected-by-exact-request
+    mustReviewSignAndBroadcast: true
+  launchHistoryVisibility:
+    root: all-partner-attributed-root-and-subkey-launches
+    subkey: stable-subkey-lineage-only
+    rootAggregatesSubkeys: true
+    rotationPreservesLineageHistory: true
+    newDistinctSubkeyStartsIsolatedLineage: true
+    revokedCredentialCanAuthenticate: false
+  secretDelivery: issue-and-rotation-response-only
+  callerSuppliedAttributionAccepted: false
+  attributionSource: authenticated-partner-api-key
+  attributionIsVerificationOrSafetyClaim: false
+  walletSigningAuthority: false
+  walletBroadcastAuthority: false
+  gateBypassAuthority: false
+  adminProvisioning:
+    authentication: website-bff-assertion-v2
+    authorization: server-configured-privy-user-wallet-pair-allowlist
+    clientMaySelfAuthorize: false
 info:
   title: Programmable Developer API
   version: 2.0.0
@@ -7,12 +51,47 @@ info:
   description: |
     Read-only discovery for terminals, scanners, explorers, bots, wallets and apps.
 
-    Classic is live on Ethereum. Custom discovery includes Registry-verified and
-    finalized Router-stamped launches. The separate authenticated Custom Launch
-    API at `https://api.programmable.market` is the API-first write path; this v2
-    service remains read only. Its `publicSubmissionStatus` field describes only
-    the legacy Registry intake, which remains prelaunch. Historical Stock-Paired
-    launches are not part of the version 2 Programmable Custom classification.
+    Classic discovery is live on Ethereum for historical V3 and current V4 only.
+    Classic V1 and V2 remain inactive manifest history and are not scanned.
+    Manifest-following consumers receive V4 through a normal refresh without a
+    client code or address change. The hosted Classic baseline is the complete
+    paginated `https://programmable.market/api/explore` catalog, validated
+    through schema, scope, evidence and identity commitments. It currently
+    reports Envio deployment `production-6157d22`; legitimate deployment
+    revisions do not require code changes. The retired HTTP 410 legacy source
+    is not used. Custom discovery remains separate and includes Registry-verified and
+    finalized Router-stamped launches. The Router is provenance and transport,
+    not a public category. The separate authenticated Custom Launch
+    API V1 at `https://api.programmable.market` keeps provenance reads and status
+    live, but POST is read-only and returns nonretryable
+    `409 CUSTOM_LAUNCH_V1_READ_ONLY`; this Developer v2 service also remains read
+    only. Custom Launch API V2 retains authenticated historical reads, but POST
+    is read-only and returns nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY`.
+    Custom Launch API V3 profile `3.3.0` is the sole fresh-submission route for
+    exact project-owned token and hook artifacts. It accepts existing
+    wallet keys plus approved partner roots and bounded one-level subkeys on the
+    same V3 routes and under the same server-side policy. A root alone manages
+    subkeys; a child cannot manage credentials, exceed root scopes, budgets, or
+    expiry, supply its own attribution, or bypass admission. Root history
+    aggregates its attributed child launches; child history is lineage-bound,
+    rotation preserves lineage, and a distinct child starts a separate lineage.
+    The API server, not a CLI, LLM, or client, decides authorization after the
+    exact static admission baseline and pinned Router simulation. Missing or
+    unavailable runtime behavior evidence leaves related claims unverified;
+    an authenticated executed negative blocks wallet handoff.
+    This is not an arbitrary-hook safety or universal fee-enforcement claim.
+    Its existing `publicSubmissionStatus` field continues to describe the
+    closed legacy intake; `customLaunchApiStatus` describes the retained
+    V1/V2 reads plus the active V3 launch API. Status keeps `customLaunchApi` as the V1 compatibility
+    object and publishes `currentCustomLaunchCreate` as the unambiguous active
+    V3 create pointer.
+    Stock-Paired launches are excluded from active API v2 Developer discovery
+    and scanning. The immutable v1 compatibility snapshot retains frozen
+    Stock-Paired history without reactivating Stock scanning.
+    `category: custom` is the stable product taxonomy, not a claim of Registry
+    acceptance. Consumers must inspect
+    `extensions["programmable/classification"].basis` and verify the Registry
+    or canonical-Router evidence named by that basis.
 
     Within v2, existing fields keep their type and meaning. New deployments,
     capabilities and market kinds are additive. Consumers must ignore unknown
@@ -68,6 +147,86 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /v3/finalized-custom-launches:
+    get:
+      servers:
+        - url: https://api.programmable.market
+          description: Production Custom Launch API read surface
+      tags: [Launches]
+      operationId: listFinalizedCustomLaunchMetadataV3
+      summary: List finalized V3 project metadata
+      description: |
+        Returns the bounded, unauthenticated
+        `finalized-v3-project-metadata-ledger` snapshot. It contains finalized
+        metadata-bearing V3 rows under their original contracts, including
+        retained `3.2.0` and current `3.3.0` rows. This route belongs to the separate Custom
+        Launch API host, not the Developer read API host. Follow every opaque
+        cursor to complete one snapshot. Items exclude pending requests,
+        metadata-absent historical resources, controller addresses, credentials,
+        and request bytes. Every successful page requires `schemaVersion`,
+        `generatedAt`, `launches`, `nextCursor`, and `quality`. A `complete`
+        quality status means every source row was published; `partial` means
+        one or more invalid finalized rows were quarantined. Published plus
+        quarantined rows equals the source row count, with one row-indexed
+        `FINALIZED_ROW_QUARANTINED` diagnostic per quarantined row.
+        `resourceId` is not Router identity; bind `routerLaunchId` to the
+        matching canonical Router event token, hook, PoolManager, and pool ID.
+        Read each item's immutable `launchProfileVersion` before interpreting
+        its metadata contract; never infer the originating profile from null or
+        present presentation fields.
+        Read canonical display fields from `projectMetadata`: declared token
+        name and symbol, presentation description, image, website, and X link.
+        Treat name and symbol as matching onchain token metadata only when
+        `tokenMetadataReadback.status` reports the exact matching state; retain
+        mismatch and unavailable states. New current-profile submissions must
+        provide complete description, image, website, and X metadata, while
+        historical finalized records remain visible when an older snapshot is
+        incomplete.
+
+        An optional `launches[].partnerAttribution` is the immutable server-owned
+        `programmable.launch-partner-attribution.v1` snapshot derived from the
+        authenticated partner API principal. A Developer launch projection may
+        expose the same object as `launchedVia`; clients cannot set either field
+        in a create request. This is display attribution, not the economic
+        `partner` object or Registry `provider` evidence. Creator presentation
+        remains untrusted display data and is not onchain token identity,
+        safety, liquidity, tradeability, provider indexing, or external
+        verification evidence. Publication cannot guarantee GMGN, Dexscreener,
+        or another third party will ingest the item or assign a safe label.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Page size. Defaults to 10. Duplicate parameters are rejected.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 25
+            default: 10
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor from the previous page. Duplicate parameters are rejected.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Finalized Custom launch metadata, newest first.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                const: public, max-age=15, stale-while-revalidate=300
+          content:
+            application/json:
+              schema:
+                $ref: https://programmable.market/openapi/custom-launch-v3.json#/components/schemas/FinalizedCustomLaunchMetadataListV1
+        "400":
+          description: Invalid or duplicated pagination parameter (`INVALID_PAGINATION`).
+        "503":
+          description: Finalized V3 metadata source is unavailable (`CUSTOM_LAUNCH_V3_UNAVAILABLE`).
+
   /api/v2/status:
     get:
       tags: [Discovery]
@@ -75,8 +234,16 @@ paths:
       summary: Read API and data-pipeline status
       description: |
         Reports service availability separately from Classic discovery,
-        Custom public-submission readiness and feed freshness. A successful
-        HTTP response is not itself proof that indexed data is current.
+        feed freshness, the Custom Launch API V1 compatibility state, the
+        additive `currentCustomLaunchCreate` V3 write pointer, and the
+        exact retained Fee-Enforced V2 historical profile, the retained gated
+        Direct Native Hook Graph V1 preview, the retained historical V2 descriptor,
+        and the active additive V3 general-lane descriptor for the public Custom
+        Launch API V3 route. A successful HTTP response is not itself proof that indexed
+        data is current, that a fee is enforced, that source is an exact match,
+        or that a contract was audited.
+      parameters:
+        - $ref: "#/components/parameters/ChainIdQuery"
       responses:
         "200":
           description: Current service and feed status.
@@ -102,35 +269,92 @@ paths:
     get:
       tags: [Discovery]
       operationId: getDeploymentManifest
-      summary: Resolve current and historical deployments
+      summary: Resolve Ethereum current and historical deployments
       description: |
-        Returns active, historical and prelaunch chain/deployment profiles.
-        Historical deployments remain present for backfills. New EVM chains
-        and Registry generations are added here so clients do not need a code
-        change. A prelaunch Registry carries null address and start-block
+        Compatibility alias for `/api/v2/manifests/1`. New integrations should
+        resolve the selected chain through the per-chain manifest route.
+        Returns active, inactive historical and prelaunch chain/deployment profiles.
+        Active Classic discovery uses only the enabled V3 and V4 entries. V1 and
+        V2 remain inactive compatibility history and are not scanned; Stock is
+        excluded. Generic manifest- and Router-first consumers discover V4
+        through a manifest refresh without a client code or address change.
+        New EVM chains and Registry generations are added here so clients do not
+        need a code change. A prelaunch Registry carries null address and start-block
         fields; clients must never replace those nulls with guessed values.
         `launchStampRouter` is the independent provenance-only trust root for
-        future Router-stamped Classic and Custom launches. The frozen ABI,
+        Router-stamped Classic and Custom launches, not a public category. The frozen ABI,
         its hosted URL and published ABI-file hash, pinned source/extraction reference, events,
         indexed layouts, getter selectors, enum values and sole atomic selector are published. Its
         separate `deploymentEvidence` object publishes the finalized Ethereum
-        deployment, runtime identities and observed immutable getters. Router V1
-        is live at `0x8622DD5bAb44185f2A458ac90384Ac99248f8d56` from block
-        `25717612`, with runtime Keccak-256
-        `0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546`,
-        exact production bindings and `64` finality confirmations. Its approved
-        `/launchStampRouter/canaryEvidence` object is the finalized PCAN test
-        vector. It covers `CustomGraph`; no separate Classic onchain canary is
-        published and no additional canary ID is implied. Direct verification uses only the
+        deployment, runtime identities and observed immutable getters. Resolve
+        every address, start block, runtime identity and finality requirement from
+        the manifest. `/launchStampRouter/canaryEvidence` publishes the finalized
+        `CustomGraph` vector, while `/launchStampRouter/classicCanaryEvidence`
+        publishes separate exact finalized Classic V4 evidence.
+        `canaryEvidence.routeCoverage.classicOnchainCanary` is true. Direct verification uses only the
         manifest-listed chain and Router through Ethereum JSON-RPC; historical
         launches are outside Router V1.
         Universal detection uses token or `(PoolManager, PoolId)` and then the
         record's `LaunchKindV1` value. The shared Classic hook is not a launch
         identity and must not classify a Classic launch. Only a consistent
         record from the exact canonical Router qualifies through Router V1.
-        Publication does not imply named-terminal adoption. Launch submission is
-        not part of this read-only API; use the separate authenticated Custom
-        Launch API for API-first preparation and wallet handoff.
+        `customFeeEnforcedLaunchProfileV2` is a separate retained historical
+        launch profile, not Custom Registry Generation 2 and not a third public
+        category. Its exact revision and hash are authoritative. Publication
+        does not imply named-terminal adoption. Launch submission is not part of
+        this read-only API. Custom Launch API V1 POST is also read-only and returns
+        nonretryable `409 CUSTOM_LAUNCH_V1_READ_ONLY`; V2 authenticated POST is
+        also read-only and returns nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY`.
+        Only metadata-bound V3 profile `3.3.0` accepts fresh submissions.
+        The gated Direct Native Hook Graph V1 preview remains available as
+        optional `directNativeHookGraphProfileV1` contract data for compatibility.
+        The additive `directNativeHookGraphProfileV2` descriptor is the retained
+        historical Custom Launch API V3 contract for project-owned token and hook
+        artifacts in exact 3–16-target graphs. It supports every valid Uniswap v4
+        permission mask and the `none`, exact wallet transaction value, and
+        EIP-3009 funding modes. Each accepted launch still requires its own exact
+        graph conformance receipt. The additive `directNativeHookGraphProfileV3`
+        descriptor publishes the active general lane. Its deterministic exact-source,
+        compiler and graph baseline applies role-aware blocking rules; every
+        unmatched finding remains a bound visible warning without a project exception.
+        No blocking finding makes the exact request eligible for mandatory Router
+        simulation; it does not authorize a launch. A blocking finding returns
+        `action_required`. The API server, never a CLI, LLM, or client, decides
+        authorization after the exact static admission baseline and pinned
+        Router simulation. Not-configured or unavailable runtime behavior
+        evidence leaves related claims unverified and does not itself block
+        handoff. An authenticated executed negative returns
+        `BEHAVIOR_EVIDENCE_NOT_VERIFIED` and blocks wallet handoff. A
+        worker-private exact permit may exist only for pinned simulation. Public `simulating`
+        and `failed` output keeps permit and wallet-transaction fields null. Its
+        `api.agentIntegration` object links the canonical
+        machine-readable remediation catalog and existing-project guide. Agents
+        resolve returned finding codes there, repair and rebuild the exact
+        project, then submit a new exact request; there is no project allowlist
+        or legacy GitHub fallback. The linked pack-config schema defines
+        `programmable.eip3009-authorization-patch.v2` with static
+        `nonceArgumentPath`, `rArgumentPath`, `sArgumentPath`, and
+        `vArgumentPath`; v1 remains compatible for exact retries. New profile
+        `3.3.0` requests require
+        `programmable.project-metadata.v1`; the declaration hash is bound into
+        the graph hash, prepared resource, launch ID, and wallet-reviewed Router
+        transaction. `programmable.project-token-metadata-binding.v1` records
+        deterministic name and symbol extraction, but finalized token metadata
+        still requires post-deployment readback. Descriptions, images, and links
+        remain untrusted display data and never authorize execution. The
+        canonical V3 resource always carries immutable `launchProfileVersion`;
+        `projectMetadata` and `projectMetadataHash` are non-null for metadata-bound
+        `3.2.0` and `3.3.0`, and null for retained `2.0.0`, `3.0.0`, and `3.1.0`
+        resources. Profile `3.2.0` retains its legacy nullable-image metadata
+        contract; fresh `3.3.0` packs use the stricter complete policy.
+        The canonical conditional schema remains in the linked Custom Launch V3
+        OpenAPI rather than being redefined here. Admission is
+        not an audit or a safety, honeypot, liquidity,
+        tradeability, or fee-behavior guarantee. Finalized consistent Router launches may enter
+        the launch feed; token-list projection additionally requires a token
+        identity. Neither descriptor is a third public category, and this
+        Developer V2 OpenAPI remains read-only: it describes but does not expose
+        the authenticated V3 write routes or executable wallet calldata.
       responses:
         "200":
           description: Current deployment manifest.
@@ -152,6 +376,44 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /api/v2/manifests/{chainId}:
+    get:
+      tags: [Discovery]
+      operationId: getChainDeploymentManifest
+      summary: Resolve one chain-bound deployment manifest
+      description: |
+        Returns a manifest whose root `chainId` and `caip2` match the path.
+        Ethereum remains live through chain 1. Robinhood Chain 4663 is published
+        as `planned` until exact Programmable Router deployment, runtime, start
+        block, finalized canary, backend quality, CLI and OpenAPI release evidence
+        is available. Planned null deployment fields must never be replaced with
+        guessed addresses. A listed chain is discoverable; its feed quality and
+        promotion status determine whether absence is authoritative.
+      parameters:
+        - $ref: "#/components/parameters/ChainIdPath"
+      responses:
+        "200":
+          description: Exact chain-bound deployment manifest.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Manifest"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "404":
+          description: No manifest is published for the requested chain (`CHAIN_NOT_SUPPORTED`).
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
   /api/v2/launches:
     get:
       tags: [Launches]
@@ -159,12 +421,49 @@ paths:
       summary: List normalized Programmable launches
       description: |
         Returns Classic and Custom launches through one cursor-paginated
-        envelope. A launch can contain zero, one or several markets. The API
+        envelope. Classic covers manifest-enabled V3 and V4 only. Its hosted
+        baseline is the fully traversed paginated
+        `https://programmable.market/api/explore` catalog, validated through
+        schema, scope, evidence and identity commitments and currently reporting
+        Envio deployment `production-6157d22`; the retired HTTP 410 legacy source
+        is not queried.
+        A launch can contain zero, one or several markets. The API
         never fabricates a pool for a token without one. Token amounts are raw
         decimal integer strings. Persist `page.resumeCursor` after processing a
         completed poll and pass it back as `after`. `page.nextCursor` is only
         for continuing the current page traversal. `after` and `cursor` must
-        not be sent together.
+        not be sent together. Coverage gaps do not hide recognized records:
+        the response remains HTTP 200 with `status: degraded` or `unavailable`.
+        Finalized canonical-Router Custom records are an independent provenance
+        lane from the Custom Registry. Their token and pool identities remain
+        present through a bounded source whose canonical commitment is
+        recomputed before publication, plus a digest-pinned last-known-good
+        fallback for source outages. Absent fee or supply evidence stays
+        explicitly unavailable. The feed remains degraded and absence is not
+        authoritative until Router coverage is current. A Router record's
+        absent Registry fee policy is semantically valid only when its exact
+        entry and source-boundary digests are members of the accepted source
+        snapshot; source-shaped JSON alone is never sufficient. Finalized
+        Router identities are joined to the Custom Launch API finalized
+        metadata ledger only when launch ID, Router, token, hook, PoolManager,
+        pool ID, transaction, block and log index all match and the declared
+        metadata hash recomputes exactly. The resulting `token.metadata` stays
+        `creator-declared`; its immutable source binding is retained in
+        `extensions["programmable/finalized-project-metadata-v1"]`. A metadata
+        source outage or mismatch leaves those display fields unavailable and
+        never removes the recognized Router identity. Finalized
+        partner-launched Custom records may add `launchedVia`, an exact
+        read-only projection of the Custom Launch API's server-owned
+        `partnerAttribution` snapshot. It never changes `category`, economic
+        fee policy, provider evidence, review, safety, or index status.
+        Promoted Robinhood V4 records also retain the backend's complete
+        source-verification status in
+        `extensions["programmable/backend-finalized-v4"].sourceVerification`.
+        This status is independent from Router provenance and launch finality.
+        Only a durable Sourcify V2 exact result may name `sourcify-v2` and carry
+        an evidence digest; Blockscout observations alone never establish an
+        exact match. Aggregate precedence is `needs_attention`, then `retrying`,
+        then `queued`, unless every component is `exact_match`.
       parameters:
         - $ref: "#/components/parameters/ChainIdQuery"
         - $ref: "#/components/parameters/CategoryQuery"
@@ -173,7 +472,7 @@ paths:
         - $ref: "#/components/parameters/LimitQuery"
       responses:
         "200":
-          description: Cursor-paginated launch feed.
+          description: Cursor-paginated launch feed, including bounded recognized records when quality is degraded or unavailable.
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
@@ -272,14 +571,19 @@ paths:
       summary: Read the token-list compatibility projection
       description: |
         Returns a token-list-compatible projection for integrations that need
-        token identity and metadata. Use the launch feed for markets,
-        capabilities, provenance, finality and complete fee disclosure.
+        token identity and metadata. The top-level `status` reports projection
+        quality, and recognized complete token identities remain present when
+        unrelated coverage or market enrichment is incomplete. This includes
+        finalized canonical-Router Custom tokens with complete token identity.
+        Use the launch feed for markets, capabilities, provenance, finality and
+        complete fee disclosure; the compatibility projection does not infer a
+        fee from category or Router provenance.
       parameters:
         - $ref: "#/components/parameters/ChainIdQuery"
         - $ref: "#/components/parameters/CategoryQuery"
       responses:
         "200":
-          description: Token-list compatibility document.
+          description: Token-list compatibility document with explicit ready, degraded or unavailable quality.
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
@@ -310,10 +614,20 @@ components:
       $ref: ../schemas/v2/launch-feed.schema.json
     Launch:
       $ref: ../schemas/v2/launch.schema.json
+    LaunchPartnerAttributionV1:
+      $ref: ../schemas/v2/launch-partner-attribution-v1.schema.json
     CanonicalCustomRegistryRecordV3:
       $ref: ../schemas/v2/custom-launch-registry-record-v3.schema.json
     CanonicalCustomRegistryRecordV4:
       $ref: ../schemas/v2/custom-launch-registry-record-v4.schema.json
+    CustomFeeEnforcedLaunchProfileV2:
+      $ref: ../schemas/v2/custom-fee-enforced-launch-profile-v2.schema.json
+    DirectNativeHookGraphProfileDiscoveryV1:
+      $ref: ../schemas/v2/direct-native-hook-graph-profile-discovery-v1.schema.json
+    DirectNativeHookGraphProfileDiscoveryV2:
+      $ref: ../schemas/v2/direct-native-hook-graph-profile-discovery-v2.schema.json
+    DirectNativeHookGraphProfileDiscoveryV3:
+      $ref: ../schemas/v2/direct-native-hook-graph-profile-discovery-v3.schema.json
     TokenList:
       $ref: ../schemas/v2/token-list.schema.json
     Problem:
@@ -414,13 +728,31 @@ components:
             custom:
               type: object
               additionalProperties: false
-              required: [discoveryStatus, publicSubmissionStatus, registryAddress, registryStartBlock, registryGeneration, note]
+              required:
+                - discoveryStatus
+                - publicSubmissionStatus
+                - customLaunchApiStatus
+                - legacyRegistrySubmissionStatus
+                - legacyGithubSubmissionStatus
+                - registryAddress
+                - registryStartBlock
+                - registryGeneration
+                - note
               properties:
                 discoveryStatus:
                   const: live
                 publicSubmissionStatus:
-                  const: prelaunch
-                  description: Legacy Custom Registry intake status. This does not describe the separate authenticated API-first Custom Launch route.
+                  const: closed
+                  description: Backward-compatible legacy Registry and GitHub submission intake status. V1 and V2 historical reads remain compatible, but authenticated POST returns nonretryable 409 CUSTOM_LAUNCH_V1_READ_ONLY or 409 CUSTOM_LAUNCH_V2_READ_ONLY. Only V3 profile 3.3.0 accepts fresh submissions.
+                customLaunchApiStatus:
+                  const: live
+                  description: Retained V1/V2 historical read status plus active V3 profile 3.3.0 fresh-submission status. Resolve the current V3 create pointer from the custom-launch-api extension or v2 status.
+                legacyRegistrySubmissionStatus:
+                  const: closed
+                  description: Legacy Custom Registry submission intake status.
+                legacyGithubSubmissionStatus:
+                  const: closed
+                  description: Legacy GitHub submission intake status.
                 registryAddress:
                   type: string
                   pattern: ^0x[0-9a-fA-F]{40}$
@@ -468,7 +800,7 @@ components:
       name: chainId
       in: query
       required: false
-      description: Optional EIP-155 chain ID from the manifest. Omit to read every active chain.
+      description: Optional EIP-155 chain ID from `supportedChainIds`. Omit for the Ethereum compatibility lane.
       schema:
         type: integer
         minimum: 1
@@ -514,7 +846,7 @@ components:
       name: chainId
       in: path
       required: true
-      description: Active EIP-155 chain ID from the manifest.
+      description: Published EIP-155 chain ID from `supportedChainIds`; planned chains remain explicitly non-authoritative.
       schema:
         type: integer
         minimum: 1

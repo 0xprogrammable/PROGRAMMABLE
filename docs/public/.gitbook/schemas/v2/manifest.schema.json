@@ -1,0 +1,2995 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/manifest.schema.json",
+  "title": "Programmable integration manifest",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "manifestVersion",
+    "generatedAt",
+    "chainId",
+    "caip2",
+    "supportedChainIds",
+    "chains",
+    "network",
+    "publicCategories",
+    "deployments",
+    "customRegistry",
+    "launchStampRouter",
+    "endpoints",
+    "compatibility"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://developers.programmable.family/schemas/v2/manifest.schema.json"
+    },
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "platformId": {
+      "const": "programmable"
+    },
+    "manifestVersion": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "generatedAt": {
+      "$ref": "common.schema.json#/$defs/isoDateTime"
+    },
+    "chainId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "caip2": {
+      "type": "string",
+      "pattern": "^eip155:[1-9][0-9]*$"
+    },
+    "supportedChainIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      }
+    },
+    "chains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/chainProfile"
+      }
+    },
+    "network": {
+      "type": "object",
+      "required": [
+        "name",
+        "caip2"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "caip2": {
+          "type": "string",
+          "pattern": "^eip155:[1-9][0-9]*$"
+        },
+        "explorerUrl": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        }
+      },
+      "additionalProperties": false
+    },
+    "publicCategories": {
+      "type": "object",
+      "required": [
+        "classic",
+        "custom"
+      ],
+      "properties": {
+        "classic": {
+          "$ref": "#/$defs/categoryState"
+        },
+        "custom": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/categoryState"
+            },
+            {
+              "type": "object",
+              "required": [
+                "note"
+              ],
+              "properties": {
+                "note": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "deployments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/deployment"
+      }
+    },
+    "customRegistry": {
+      "$ref": "#/$defs/customRegistry"
+    },
+    "launchStampRouter": {
+      "$ref": "#/$defs/launchStampRouter"
+    },
+    "customFeeEnforcedLaunchProfileV2": {
+      "$ref": "custom-fee-enforced-launch-profile-v2.schema.json"
+    },
+    "directNativeHookGraphProfileV1": {
+      "$ref": "direct-native-hook-graph-profile-discovery-v1.schema.json"
+    },
+    "directNativeHookGraphProfileV2": {
+      "$ref": "direct-native-hook-graph-profile-discovery-v2.schema.json"
+    },
+    "directNativeHookGraphProfileV3": {
+      "$ref": "direct-native-hook-graph-profile-discovery-v3.schema.json"
+    },
+    "customLaunchV4": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "status",
+        "chainId",
+        "caip2",
+        "chainDeploymentId",
+        "chainDeploymentDescriptorDigest",
+        "foundationSourceCommitment",
+        "releaseIdentity",
+        "profile",
+        "finalityPolicy",
+        "api",
+        "cli",
+        "walletBoundary"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-capabilities.v2"
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "canary",
+            "live",
+            "degraded"
+          ]
+        },
+        "chainId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "caip2": {
+          "type": "string",
+          "pattern": "^eip155:[1-9][0-9]*$"
+        },
+        "chainDeploymentId": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "chainDeploymentDescriptorDigest": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/hash32"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "foundationSourceCommitment": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "releaseIdentity": {
+          "const": {
+            "policySource": {
+              "schemaVersion": "programmable.custom-launch-policy-source.v1",
+              "repository": "programmablehq/Launch-Policy",
+              "repositoryId": 1320171831,
+              "protectedBranch": "main",
+              "verifiedMergeCommit": "987215867472229690e30e11000c626d58f46e16",
+              "verifiedTree": "284fb19f05cdf9b5b60b8bacfbd480f6b98decd3",
+              "artifacts": {
+                "descriptor": {
+                  "path": "policy/custom-launch-admission-v4.json",
+                  "digest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948"
+                },
+                "businessPolicy": {
+                  "path": "policy/launch-policy.v1.json",
+                  "digest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216"
+                },
+                "generatedBinding": {
+                  "path": ".programmable/custom-launch-admission.v4.json",
+                  "digest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2"
+                },
+                "schema": {
+                  "path": "policy/schemas/custom-launch-admission-v4.schema.json",
+                  "digest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7"
+                }
+              }
+            }
+          }
+        },
+        "profile": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "schemaVersion",
+                "structuralProfileId",
+                "businessProfileId",
+                "admissionDescriptorDigest",
+                "admissionPolicyDigest",
+                "admissionSchemaDigest",
+                "admissionBindingDigest",
+                "profileRevision",
+                "profileVersion",
+                "profileDigest"
+              ],
+              "properties": {
+                "schemaVersion": {
+                  "const": "programmable.custom-launch-profile-ref.v4"
+                },
+                "structuralProfileId": {
+                  "const": "programmable.custom-launch.robinhood-mainnet.v1"
+                },
+                "businessProfileId": {
+                  "const": "robinhood-production-launch"
+                },
+                "admissionDescriptorDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "admissionPolicyDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "admissionSchemaDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "admissionBindingDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "profileRevision": {
+                  "const": 1
+                },
+                "profileVersion": {
+                  "const": "4.0.0"
+                },
+                "profileDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalityPolicy": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "schemaVersion",
+                "policyId",
+                "policyRevision",
+                "policyDigest"
+              ],
+              "properties": {
+                "schemaVersion": {
+                  "const": "programmable.custom-launch-finality-policy-ref.v1"
+                },
+                "policyId": {
+                  "$ref": "common.schema.json#/$defs/openIdentifier"
+                },
+                "policyRevision": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "policyDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "api": {
+          "type": "object",
+          "required": [
+            "version",
+            "status",
+            "baseUrl",
+            "capabilitiesPath",
+            "preflightPath",
+            "collectionPath",
+            "resourcePath",
+            "finalizedLaunchesPath",
+            "openApiUrl",
+            "openApiStatus",
+            "packConfigSchemaUrl"
+          ],
+          "properties": {
+            "version": {
+              "const": "4.0.0"
+            },
+            "status": {
+              "enum": [
+                "planned",
+                "canary",
+                "live",
+                "degraded"
+              ]
+            },
+            "baseUrl": {
+              "$ref": "common.schema.json#/$defs/httpsUrl"
+            },
+            "capabilitiesPath": {
+              "type": "string",
+              "pattern": "^/v4/chains/[1-9][0-9]*/capabilities$"
+            },
+            "preflightPath": {
+              "type": "string",
+              "pattern": "^/v4/chains/[1-9][0-9]*/custom-launches/preflight$"
+            },
+            "collectionPath": {
+              "type": "string",
+              "pattern": "^/v4/chains/[1-9][0-9]*/custom-launches$"
+            },
+            "resourcePath": {
+              "type": "string",
+              "pattern": "^/v4/chains/[1-9][0-9]*/custom-launches/\\{launchId\\}$"
+            },
+            "finalizedLaunchesPath": {
+              "type": "string",
+              "pattern": "^/v4/chains/[1-9][0-9]*/finalized-custom-launches$"
+            },
+            "openApiUrl": {
+              "const": "https://programmable.market/openapi/custom-launch-v4.json"
+            },
+            "openApiStatus": {
+              "enum": [
+                "planned",
+                "canary",
+                "live",
+                "degraded"
+              ]
+            },
+            "packConfigSchemaUrl": {
+              "const": "https://programmable.market/schemas/custom-launch/v4/pack-config.json"
+            }
+          },
+          "additionalProperties": false
+        },
+        "cli": {
+          "type": "object",
+          "required": [
+            "packageName",
+            "version",
+            "status",
+            "releaseUrl",
+            "commands"
+          ],
+          "properties": {
+            "packageName": {
+              "const": "@programmable/launch"
+            },
+            "version": {
+              "const": "4.0.0"
+            },
+            "status": {
+              "enum": [
+                "planned",
+                "canary",
+                "live",
+                "degraded"
+              ]
+            },
+            "releaseUrl": {
+              "const": "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v4.0.0"
+            },
+            "commands": {
+              "const": [
+                "pack",
+                "validate",
+                "submit",
+                "status"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "walletBoundary": {
+          "const": "wallet-reviews-signs-and-broadcasts-separately"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "planned"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "chainDeploymentDescriptorDigest": {
+                "type": "null"
+              },
+              "profile": {
+                "type": "null"
+              },
+              "finalityPolicy": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "live"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "chainDeploymentDescriptorDigest": {
+                "$ref": "common.schema.json#/$defs/hash32"
+              },
+              "profile": {
+                "type": "object"
+              },
+              "finalityPolicy": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "robinhoodCustomLaunchBinding": {
+      "$ref": "robinhood-custom-launch-binding.schema.json"
+    },
+    "registryGenerations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/registryGeneration"
+      }
+    },
+    "partnerTemplates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/partnerTemplate"
+      }
+    },
+    "platformFee": {
+      "$ref": "#/$defs/platformFee"
+    },
+    "endpoints": {
+      "type": "object",
+      "required": [
+        "wellKnown",
+        "status",
+        "manifest",
+        "launches",
+        "tokenList",
+        "openApi"
+      ],
+      "properties": {
+        "wellKnown": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "manifest": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "launches": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "tokenList": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "openApi": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        }
+      },
+      "additionalProperties": false
+    },
+    "compatibility": {
+      "type": "object",
+      "required": [
+        "majorVersion",
+        "additiveChangesOnly",
+        "noMandatoryClientChangesWithinMajorVersion",
+        "unknownFields",
+        "unknownCapabilities",
+        "unknownMarketKinds",
+        "deploymentDiscovery",
+        "hardcodeDeploymentAddresses"
+      ],
+      "properties": {
+        "majorVersion": {
+          "const": 2
+        },
+        "additiveChangesOnly": {
+          "const": true
+        },
+        "noMandatoryClientChangesWithinMajorVersion": {
+          "const": true
+        },
+        "unknownFields": {
+          "const": "ignore"
+        },
+        "unknownCapabilities": {
+          "const": "preserve"
+        },
+        "unknownMarketKinds": {
+          "const": "display-as-unsupported"
+        },
+        "deploymentDiscovery": {
+          "const": "refresh-manifest"
+        },
+        "hardcodeDeploymentAddresses": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "chainId": {
+            "const": 1
+          }
+        },
+        "required": [
+          "chainId"
+        ]
+      },
+      "then": {
+        "properties": {
+          "customFeeEnforcedLaunchProfileV2": true,
+          "platformFee": true
+        },
+        "required": [
+          "customFeeEnforcedLaunchProfileV2",
+          "platformFee"
+        ]
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "chainId",
+            "launchStampRouter"
+          ],
+          "properties": {
+            "chainId": {
+              "const": 1
+            },
+            "launchStampRouter": {
+              "$ref": "#/$defs/ethereumLaunchStampRouterChainBinding"
+            },
+            "robinhoodCustomLaunchBinding": false
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "chainId",
+            "launchStampRouter",
+            "robinhoodCustomLaunchBinding"
+          ],
+          "properties": {
+            "chainId": {
+              "const": 4663
+            },
+            "launchStampRouter": {
+              "$ref": "#/$defs/robinhoodLaunchStampRouterChainBinding"
+            },
+            "robinhoodCustomLaunchBinding": {
+              "$ref": "robinhood-custom-launch-binding.schema.json"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "launchStampRouter": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "enum": [
+                          "live",
+                          "retired"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                },
+                "required": [
+                  "launchStampRouter"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "robinhoodCustomLaunchBinding": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "const": "finalized-live"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "launchStampRouter": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "enum": [
+                          "planned",
+                          "prelaunch"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                },
+                "required": [
+                  "launchStampRouter"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "robinhoodCustomLaunchBinding": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "const": "prepared-not-broadcast"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "customLaunchV4": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "const": "live"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                },
+                "required": [
+                  "customLaunchV4"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "robinhoodCustomLaunchBinding": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "const": "finalized-live"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "chainProfile": {
+      "type": "object",
+      "required": [
+        "chainId",
+        "caip2",
+        "name",
+        "status",
+        "manifestUrl"
+      ],
+      "properties": {
+        "chainId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "caip2": {
+          "type": "string",
+          "pattern": "^eip155:[1-9][0-9]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "canary",
+            "live",
+            "degraded",
+            "prelaunch",
+            "retired"
+          ]
+        },
+        "manifestUrl": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "readModelStatus": {
+          "enum": [
+            "ready",
+            "planned",
+            "canary",
+            "degraded",
+            "prelaunch",
+            "unavailable",
+            "retired"
+          ]
+        },
+        "finalizedFeedUrl": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        }
+      },
+      "additionalProperties": false
+    },
+    "registryGeneration": {
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": [
+              "generation"
+            ],
+            "properties": {
+              "generation": {
+                "const": "2"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "contractSet"
+            ],
+            "properties": {
+              "contractSet": {
+                "$ref": "#/$defs/registryContractSet"
+              },
+              "events": {
+                "type": "object",
+                "required": [
+                  "registered",
+                  "approvalAuthorized",
+                  "partnerFactoryAuthorized",
+                  "partnerFactorySourceBound",
+                  "partnerFactoryRevoked",
+                  "provenance",
+                  "review",
+                  "attribution",
+                  "feePolicy",
+                  "feeScope",
+                  "feeEvidence",
+                  "atomicExecuted",
+                  "finalized",
+                  "corrected",
+                  "revoked"
+                ],
+                "properties": {
+                  "registered": true,
+                  "approvalAuthorized": true,
+                  "partnerFactoryAuthorized": true,
+                  "partnerFactorySourceBound": true,
+                  "partnerFactoryRevoked": true,
+                  "provenance": true,
+                  "review": true,
+                  "attribution": true,
+                  "feePolicy": true,
+                  "feeScope": true,
+                  "feeEvidence": true,
+                  "atomicExecuted": true,
+                  "finalized": true,
+                  "corrected": true,
+                  "revoked": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": [
+              "generation"
+            ],
+            "properties": {
+              "generation": {
+                "const": "1"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "operationAuthorities"
+            ],
+            "properties": {
+              "operationAuthorities": true
+            }
+          }
+        }
+      ],
+      "required": [
+        "chainId",
+        "caip2",
+        "generation",
+        "status",
+        "address",
+        "runtimeCodeKeccak256",
+        "startBlock",
+        "endBlock",
+        "authorizedWriters",
+        "registryEventSetHash",
+        "events",
+        "abiUrl",
+        "finalityConfirmations"
+      ],
+      "properties": {
+        "chainId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "caip2": {
+          "type": "string",
+          "pattern": "^eip155:[1-9][0-9]*$"
+        },
+        "generation": {
+          "$ref": "common.schema.json#/$defs/decimalString"
+        },
+        "status": {
+          "enum": [
+            "live",
+            "paused",
+            "retired"
+          ]
+        },
+        "address": {
+          "$ref": "common.schema.json#/$defs/evmAddress"
+        },
+        "runtimeCodeKeccak256": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "startBlock": {
+          "$ref": "common.schema.json#/$defs/decimalString"
+        },
+        "endBlock": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "authorizedWriters": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/evmAddress"
+          }
+        },
+        "operationAuthorities": {
+          "type": "object",
+          "required": [
+            "registered",
+            "finalized"
+          ],
+          "properties": {
+            "registered": {
+              "$ref": "#/$defs/registryOperationAuthority"
+            },
+            "finalized": {
+              "$ref": "#/$defs/registryOperationAuthority"
+            },
+            "corrected": {
+              "$ref": "#/$defs/registryOperationAuthority"
+            },
+            "revoked": {
+              "$ref": "#/$defs/registryOperationAuthority"
+            }
+          },
+          "additionalProperties": false
+        },
+        "registryEventSetHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "events": {
+          "type": "object",
+          "required": [
+            "registered",
+            "approvalAuthorized",
+            "provenance",
+            "review",
+            "attribution",
+            "feePolicy",
+            "feeScope",
+            "feeEvidence",
+            "finalized",
+            "corrected",
+            "revoked"
+          ],
+          "properties": {
+            "registered": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "approvalAuthorized": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "provenance": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "review": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "attribution": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "feePolicy": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "feeScope": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "feeEvidence": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "partnerFactoryAuthorized": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "partnerFactorySourceBound": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "partnerFactoryRevoked": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "atomicExecuted": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "finalized": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "corrected": {
+              "$ref": "#/$defs/registryEvent"
+            },
+            "revoked": {
+              "$ref": "#/$defs/registryEvent"
+            }
+          },
+          "additionalProperties": false
+        },
+        "abiUrl": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "contractSet": {
+          "$ref": "#/$defs/registryContractSet"
+        },
+        "finalityConfirmations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "registryEvent": {
+      "type": "object",
+      "required": [
+        "signature",
+        "topic0"
+      ],
+      "properties": {
+        "signature": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "topic0": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "emitterRole": {
+          "enum": [
+            "registry",
+            "partnerFactoryRegistry",
+            "atomicRegistrar"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "registryOperationAuthority": {
+      "type": "object",
+      "required": [
+        "role",
+        "roleHash",
+        "addresses"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "writer",
+            "finalizer",
+            "corrector",
+            "revoker"
+          ]
+        },
+        "roleHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "addresses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/evmAddress"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "registryContractSet": {
+      "type": "object",
+      "required": [
+        "registry",
+        "partnerFactoryRegistry",
+        "feePolicyVerifier",
+        "atomicRegistrar"
+      ],
+      "properties": {
+        "registry": {
+          "$ref": "#/$defs/registryContractIdentity"
+        },
+        "partnerFactoryRegistry": {
+          "$ref": "#/$defs/registryContractIdentity"
+        },
+        "feePolicyVerifier": {
+          "$ref": "#/$defs/registryContractIdentity"
+        },
+        "atomicRegistrar": {
+          "$ref": "#/$defs/registryContractIdentity"
+        }
+      },
+      "additionalProperties": false
+    },
+    "registryContractIdentity": {
+      "type": "object",
+      "required": [
+        "address",
+        "runtimeCodeKeccak256",
+        "abiUrl"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "common.schema.json#/$defs/evmAddress"
+        },
+        "runtimeCodeKeccak256": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "abiUrl": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        }
+      },
+      "additionalProperties": false
+    },
+    "partnerTemplate": {
+      "type": "object",
+      "required": [
+        "partnerId",
+        "partnerName",
+        "status",
+        "recipient",
+        "chainId",
+        "templateId",
+        "templateVersion",
+        "repository",
+        "commit",
+        "runtimeHashes",
+        "totalPartnershipFeeBps",
+        "partnerShareBps",
+        "programmableShareBps",
+        "programmableRecipient",
+        "chargeMode",
+        "basis",
+        "currency",
+        "accrual",
+        "claim",
+        "activationBlock",
+        "paused",
+        "retired",
+        "verificationEvidenceHash"
+      ],
+      "properties": {
+        "partnerId": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "partnerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "status": {
+          "enum": [
+            "active",
+            "paused",
+            "retired"
+          ]
+        },
+        "recipient": {
+          "$ref": "common.schema.json#/$defs/evmAddress"
+        },
+        "chainId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "templateId": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "templateVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "repository": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "runtimeHashes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "common.schema.json#/$defs/hash32"
+          }
+        },
+        "totalPartnershipFeeBps": {
+          "const": 20
+        },
+        "partnerShareBps": {
+          "const": 15
+        },
+        "programmableShareBps": {
+          "const": 5
+        },
+        "programmableRecipient": {
+          "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        },
+        "chargeMode": {
+          "const": "partner-template-enforced"
+        },
+        "basis": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "currency": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "accrual": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "claim": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "activationBlock": {
+          "$ref": "common.schema.json#/$defs/decimalString"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "retired": {
+          "type": "boolean"
+        },
+        "verificationEvidenceHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "categoryState": {
+      "type": "object",
+      "required": [
+        "discoveryStatus",
+        "publicSubmissionStatus"
+      ],
+      "properties": {
+        "discoveryStatus": {
+          "enum": [
+            "planned",
+            "canary",
+            "live",
+            "degraded",
+            "prelaunch",
+            "unavailable"
+          ]
+        },
+        "publicSubmissionStatus": {
+          "enum": [
+            "open",
+            "planned",
+            "canary",
+            "live",
+            "degraded",
+            "prelaunch",
+            "closed",
+            "not-applicable"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "deployment": {
+      "type": "object",
+      "required": [
+        "deploymentId",
+        "category",
+        "modelId",
+        "modelVersion",
+        "origin",
+        "publicSubmission",
+        "lifecycle",
+        "discovery",
+        "startBlock",
+        "endBlock",
+        "contracts"
+      ],
+      "properties": {
+        "deploymentId": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "category": {
+          "$ref": "common.schema.json#/$defs/category"
+        },
+        "modelId": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "modelVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "origin": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "publicSubmission": {
+          "type": "boolean"
+        },
+        "lifecycle": {
+          "enum": [
+            "retired",
+            "legacy",
+            "current"
+          ]
+        },
+        "discovery": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "startBlock": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "endBlock": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "contracts": {
+          "type": "object",
+          "required": [
+            "launcher"
+          ],
+          "properties": {
+            "launcher": {
+              "$ref": "common.schema.json#/$defs/evmAddress"
+            },
+            "coordinator": {
+              "$ref": "common.schema.json#/$defs/evmAddress"
+            },
+            "hook": {
+              "$ref": "common.schema.json#/$defs/evmAddress"
+            }
+          },
+          "additionalProperties": false
+        },
+        "evidence": {
+          "$ref": "#/$defs/deploymentEvidence"
+        }
+      },
+      "additionalProperties": false
+    },
+    "deploymentEvidence": {
+      "type": "object",
+      "required": [
+        "sourceRepository",
+        "sourceCommit",
+        "sourcePath",
+        "sourceCommitment",
+        "launcherRuntimeCodeHash",
+        "launcherDeploymentTransaction"
+      ],
+      "properties": {
+        "sourceRepository": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourcePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sourceCommitment": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "launcherRuntimeCodeHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "launcherDeploymentTransaction": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "explorerUrl": {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        }
+      },
+      "additionalProperties": false
+    },
+    "customRegistry": {
+      "type": "object",
+      "required": [
+        "category",
+        "modelId",
+        "status",
+        "publicSubmissionsEnabled",
+        "address",
+        "startBlock",
+        "note"
+      ],
+      "properties": {
+        "category": {
+          "const": "custom"
+        },
+        "modelId": {
+          "$ref": "common.schema.json#/$defs/openIdentifier"
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "canary",
+            "prelaunch",
+            "live",
+            "degraded",
+            "retired"
+          ]
+        },
+        "publicSubmissionsEnabled": {
+          "type": "boolean"
+        },
+        "address": {
+          "$ref": "common.schema.json#/$defs/nullableEvmAddress"
+        },
+        "startBlock": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "generation": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "eventSignature": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
+        },
+        "eventTopic": {
+          "$ref": "common.schema.json#/$defs/nullableHash32"
+        },
+        "abiUrl": {
+          "$ref": "common.schema.json#/$defs/nullableHttpsUrl"
+        },
+        "finalityConfirmations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchStampRouter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/launchStampRouterActivation"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "version",
+        "generation",
+        "status",
+        "scope",
+        "supportsFutureClassic",
+        "supportsFutureCustom",
+        "supportsHistoricalLaunches",
+        "provenanceClaim",
+        "provenanceOnly",
+        "verificationMode",
+        "launchIdentityScope",
+        "address",
+        "startBlock",
+        "endBlock",
+        "runtimeCodeHash",
+        "abiUrl",
+        "abiSha256",
+        "contractName",
+        "artifact",
+        "deploymentEvidence",
+        "canaryEvidence",
+        "classicCanaryEvidence",
+        "finalityConfirmations",
+        "canonicalReadBlock",
+        "authorityMode",
+        "enumValues",
+        "eip712",
+        "bindings",
+        "atomicSignature",
+        "atomicSelector",
+        "events",
+        "getters"
+      ],
+      "properties": {
+        "version": {
+          "const": "1"
+        },
+        "generation": {
+          "const": "1"
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "canary",
+            "prelaunch",
+            "live",
+            "degraded",
+            "retired"
+          ]
+        },
+        "scope": {
+          "const": "future-launches-only"
+        },
+        "supportsFutureClassic": {
+          "type": "boolean"
+        },
+        "supportsFutureCustom": {
+          "const": true
+        },
+        "supportsHistoricalLaunches": {
+          "const": false
+        },
+        "provenanceClaim": {
+          "const": "launched-on-programmable"
+        },
+        "provenanceOnly": {
+          "const": true
+        },
+        "verificationMode": {
+          "const": "canonical-router"
+        },
+        "launchIdentityScope": {
+          "const": "chain-id+router-address+launch-id"
+        },
+        "address": {
+          "$ref": "common.schema.json#/$defs/nullableEvmAddress"
+        },
+        "startBlock": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "endBlock": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "runtimeCodeHash": {
+          "$ref": "common.schema.json#/$defs/nullableHash32"
+        },
+        "abiUrl": {
+          "enum": [
+            "https://developers.programmable.family/abis/programmable-launch-stamp-router-v1.json",
+            "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json"
+          ]
+        },
+        "abiSha256": {
+          "const": "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86"
+        },
+        "contractName": {
+          "const": "ProgrammableLaunchStampRouterV1"
+        },
+        "artifact": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/launchStampRouterArtifact"
+            },
+            {
+              "$ref": "#/$defs/robinhoodLaunchStampRouterArtifact"
+            }
+          ]
+        },
+        "deploymentEvidence": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/launchStampRouterDeploymentEvidence"
+            },
+            {
+              "$ref": "#/$defs/robinhoodLaunchStampRouterDeploymentEvidence"
+            }
+          ]
+        },
+        "canaryEvidence": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/launchStampRouterCanaryEvidence"
+            },
+            {
+              "$ref": "#/$defs/robinhoodLaunchStampRouterCanaryEvidence"
+            }
+          ]
+        },
+        "classicCanaryEvidence": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/launchStampRouterClassicCanaryEvidence"
+            }
+          ]
+        },
+        "enumValues": {
+          "$ref": "#/$defs/launchStampRouterEnumValues"
+        },
+        "eip712": {
+          "$ref": "#/$defs/launchStampRouterEip712"
+        },
+        "atomicSignature": {
+          "const": "launchAndStampV1((uint256,address,address,uint8,bytes32,bytes32,bytes32,bytes32,uint64,uint64,uint256),(bytes32,address,bytes32,(address,address,uint24,int24,address),bytes32,(uint8,address,bytes32,uint8,uint8)[]),bytes,bytes)"
+        },
+        "finalityConfirmations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "canonicalReadBlock": {
+          "const": "finalized-or-explicit-canonical-block"
+        },
+        "authorityMode": {
+          "const": "eip-1271-contract-only"
+        },
+        "bindings": {
+          "$ref": "#/$defs/launchStampRouterBindings"
+        },
+        "atomicSelector": {
+          "const": "0xe5f6b8cd"
+        },
+        "events": {
+          "const": {
+            "launchStamped": {
+              "name": "ProgrammableLaunchStampedV1",
+              "signature": "ProgrammableLaunchStampedV1(bytes32,address,address,address,bytes32,bytes32)",
+              "topic0": "0x6cf479a102f1eebc9244f48f8d68f6aa52b4c5a4516318df58ba46614a5b14f2",
+              "indexedInputs": [
+                "launchId",
+                "token",
+                "hook"
+              ]
+            },
+            "launchRouteStamped": {
+              "name": "ProgrammableLaunchRouteStampedV1",
+              "signature": "ProgrammableLaunchRouteStampedV1(bytes32,uint8,bytes32,bytes32,bytes32)",
+              "topic0": "0x45e7cc355b63ca67d6278a0d8d23470ce2a0741a9c60283d7dee712df7a877a5",
+              "indexedInputs": [
+                "launchId",
+                "kind",
+                "routePayloadHash"
+              ]
+            },
+            "componentStamped": {
+              "name": "ProgrammableComponentStampedV1",
+              "signature": "ProgrammableComponentStampedV1(bytes32,address,uint8,bytes32)",
+              "topic0": "0x8147265e7396d6400cee8d049456a1f7438fdfbe2a7c81c976d51ba67e52ff4b",
+              "indexedInputs": [
+                "launchId",
+                "component",
+                "kind"
+              ]
+            }
+          }
+        },
+        "getters": {
+          "oneOf": [
+            {
+              "const": {
+                "chainId": {
+                  "signature": "CHAIN_ID()",
+                  "selector": "0x85e1f4d0",
+                  "result": "chain-id"
+                },
+                "permitAuthority": {
+                  "signature": "PERMIT_AUTHORITY()",
+                  "selector": "0xc3a3d03c",
+                  "result": "address"
+                },
+                "permitAuthorityRuntimeCodeHash": {
+                  "signature": "PERMIT_AUTHORITY_RUNTIME_CODE_HASH()",
+                  "selector": "0xa497c61c",
+                  "result": "runtime-code-hash"
+                },
+                "graphFactory": {
+                  "signature": "GRAPH_FACTORY()",
+                  "selector": "0x1cc9e5ce",
+                  "result": "address"
+                },
+                "graphFactoryRuntimeCodeHash": {
+                  "signature": "GRAPH_FACTORY_RUNTIME_CODE_HASH()",
+                  "selector": "0x92989a00",
+                  "result": "runtime-code-hash"
+                },
+                "poolManager": {
+                  "signature": "POOL_MANAGER()",
+                  "selector": "0x62308e85",
+                  "result": "address"
+                },
+                "poolManagerRuntimeCodeHash": {
+                  "signature": "POOL_MANAGER_RUNTIME_CODE_HASH()",
+                  "selector": "0x38d831c4",
+                  "result": "runtime-code-hash"
+                },
+                "token": {
+                  "signature": "launchIdByToken(address)",
+                  "selector": "0x1dad847c",
+                  "result": "launch-id"
+                },
+                "pool": {
+                  "signature": "launchIdByPool(address,bytes32)",
+                  "selector": "0x361df6f3",
+                  "result": "launch-id"
+                },
+                "component": {
+                  "signature": "launchIdByComponent(address)",
+                  "selector": "0x58c5e373",
+                  "result": "launch-id"
+                },
+                "componentRuntimeCodeHash": {
+                  "signature": "componentRuntimeCodeHash(address)",
+                  "selector": "0xc892d353",
+                  "result": "runtime-code-hash"
+                },
+                "record": {
+                  "signature": "launchStamp(bytes32)",
+                  "selector": "0x4c9e4764",
+                  "result": "stamp-record"
+                },
+                "stampProof": {
+                  "signature": "stampProof(address)",
+                  "selector": "0x174b9f9d",
+                  "result": "stamp-proof"
+                }
+              }
+            },
+            {
+              "const": {
+                "chainId": {
+                  "signature": "CHAIN_ID()",
+                  "selector": "0x85e1f4d0",
+                  "result": "chain-id"
+                },
+                "permitAuthority": {
+                  "signature": "PERMIT_AUTHORITY()",
+                  "selector": "0xc3a3d03c",
+                  "result": "address"
+                },
+                "permitAuthorityRuntimeCodeHash": {
+                  "signature": "PERMIT_AUTHORITY_RUNTIME_CODE_HASH()",
+                  "selector": "0xa497c61c",
+                  "result": "runtime-code-hash"
+                },
+                "graphFactory": {
+                  "signature": "GRAPH_FACTORY()",
+                  "selector": "0x1cc9e5ce",
+                  "result": "address"
+                },
+                "graphFactoryRuntimeCodeHash": {
+                  "signature": "GRAPH_FACTORY_RUNTIME_CODE_HASH()",
+                  "selector": "0x92989a00",
+                  "result": "runtime-code-hash"
+                },
+                "poolManager": {
+                  "signature": "POOL_MANAGER()",
+                  "selector": "0x62308e85",
+                  "result": "address"
+                },
+                "poolManagerRuntimeCodeHash": {
+                  "signature": "POOL_MANAGER_RUNTIME_CODE_HASH()",
+                  "selector": "0x38d831c4",
+                  "result": "runtime-code-hash"
+                },
+                "token": {
+                  "signature": "launchIdByToken(address)",
+                  "selector": "0x1dad847c",
+                  "result": "launch-id"
+                },
+                "pool": {
+                  "signature": "launchIdByPool(address,bytes32)",
+                  "selector": "0x361df6f3",
+                  "result": "launch-id"
+                },
+                "component": {
+                  "signature": "launchIdByComponent(address)",
+                  "selector": "0x58c5e373",
+                  "result": "launch-id"
+                },
+                "componentRuntimeCodeHash": {
+                  "signature": "componentRuntimeCodeHash(address)",
+                  "selector": "0xc892d353",
+                  "result": "runtime-code-hash"
+                },
+                "record": {
+                  "signature": "launchStamp(bytes32)",
+                  "selector": "0x4c9e4764",
+                  "result": "stamp-record"
+                },
+                "launchWallet": {
+                  "signature": "launchStamp(bytes32)",
+                  "selector": "0x4c9e4764",
+                  "result": "stamp-record.launchWallet"
+                },
+                "stampProof": {
+                  "signature": "stampProof(address)",
+                  "selector": "0x174b9f9d",
+                  "result": "stamp-proof"
+                },
+                "stampRequestHash": {
+                  "signature": "computeStampRequestHash((bytes32,address,bytes32,(address,address,uint24,int24,address),bytes32,(uint8,address,bytes32,uint8,uint8)[]))",
+                  "selector": "0x1f2efd85",
+                  "result": "bytes32"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchStampRouterArtifact": {
+      "type": "object",
+      "required": [
+        "sourceRepository",
+        "sourceCommit",
+        "sourceTree",
+        "sourcePath",
+        "artifactPath"
+      ],
+      "properties": {
+        "sourceRepository": {
+          "const": "https://github.com/programmablehq/programmable"
+        },
+        "sourceCommit": {
+          "const": "0a7134bbb912222639627fb9078df2f8dd3a6c38"
+        },
+        "sourceTree": {
+          "const": "24ffb0c6b04af7993254560b4f03608de8f52231"
+        },
+        "sourcePath": {
+          "const": "src/ProgrammableLaunchStampRouterV1.sol"
+        },
+        "artifactPath": {
+          "const": "out/ProgrammableLaunchStampRouterV1.sol/ProgrammableLaunchStampRouterV1.json"
+        }
+      },
+      "additionalProperties": false
+    },
+    "robinhoodLaunchStampRouterArtifact": {
+      "type": "object",
+      "required": [
+        "sourceRepository",
+        "sourceCommit",
+        "sourceTree",
+        "sourcePath",
+        "artifactPath"
+      ],
+      "properties": {
+        "sourceRepository": {
+          "const": "https://github.com/programmablehq/PROGRAMMABLE"
+        },
+        "sourceCommit": {
+          "const": "53926119030772040eca34b4796a36353c9da2d2"
+        },
+        "sourceTree": {
+          "const": "d9118605665cf047ec32214c7dc51608e9a362f0"
+        },
+        "sourcePath": {
+          "const": "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol"
+        },
+        "artifactPath": {
+          "const": "contracts/out/ProgrammableLaunchStampRouterV1.sol/ProgrammableLaunchStampRouterV1.json"
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchStampRouterDeploymentEvidence": {
+      "type": "object",
+      "required": [
+        "verificationStatus",
+        "address",
+        "deploymentTransactionHash",
+        "deploymentBlockNumber",
+        "deploymentBlockHash",
+        "finalizedBlockNumber",
+        "finalizedBlockHash",
+        "finalityDepth",
+        "runtimeCodeBytes",
+        "runtimeCodeKeccak256",
+        "runtimeCodeSha256",
+        "observedBindings",
+        "getterBundleSha256",
+        "evidenceSha256"
+      ],
+      "properties": {
+        "verificationStatus": {
+          "const": "finalized-verified",
+          "description": "Finalized deployment receipt, runtime and immutable-getter evidence; not an Explorer source-publication status."
+        },
+        "address": {
+          "const": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56"
+        },
+        "deploymentTransactionHash": {
+          "const": "0x3bc086661555c10040feb3fceb23d33003e22ca033e65cfae72592119ee8d486"
+        },
+        "deploymentBlockNumber": {
+          "const": "25717612"
+        },
+        "deploymentBlockHash": {
+          "const": "0x8e4512193217c2171624657717d32dbfe9896455e553cadc192fbfe32d3278bc"
+        },
+        "finalizedBlockNumber": {
+          "const": "25717634"
+        },
+        "finalizedBlockHash": {
+          "const": "0x4177a280cd7e43da181bf1d73900eb2431c26d5fe933a5ed0e583370064cbd6e"
+        },
+        "finalityDepth": {
+          "const": 22
+        },
+        "runtimeCodeBytes": {
+          "const": 23013
+        },
+        "runtimeCodeKeccak256": {
+          "const": "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546"
+        },
+        "runtimeCodeSha256": {
+          "const": "sha256:0b0e89074bff270bd5bf80ca9642f748dca1857d1ab643cbce65f4f663937ec7"
+        },
+        "observedBindings": {
+          "$ref": "#/$defs/launchStampRouterObservedBindings"
+        },
+        "getterBundleSha256": {
+          "const": "sha256:6e6e8a93193bbe2f79f98594a1af32c27bae0746f8297dd13592d9608e2feb20"
+        },
+        "evidenceSha256": {
+          "const": "sha256:f9786ebfb74c96a3c225567ad324f0fbecfd8520b8d8addec85ba58cd67e19ff"
+        }
+      },
+      "additionalProperties": false
+    },
+    "robinhoodLaunchStampRouterObservedBindings": {
+      "type": "object",
+      "required": [
+        "chainId",
+        "permitAuthority",
+        "permitAuthorityRuntimeCodeHash",
+        "graphFactory",
+        "graphFactoryRuntimeCodeHash",
+        "poolManager",
+        "poolManagerRuntimeCodeHash"
+      ],
+      "properties": {
+        "chainId": {
+          "const": 4663
+        },
+        "permitAuthority": {
+          "const": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06"
+        },
+        "permitAuthorityRuntimeCodeHash": {
+          "const": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+        },
+        "graphFactory": {
+          "const": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd"
+        },
+        "graphFactoryRuntimeCodeHash": {
+          "const": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+        },
+        "poolManager": {
+          "const": "0x8366a39CC670B4001A1121B8F6A443A643e40951"
+        },
+        "poolManagerRuntimeCodeHash": {
+          "const": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
+        }
+      },
+      "additionalProperties": false
+    },
+    "robinhoodLaunchStampRouterDeploymentEvidence": {
+      "type": "object",
+      "required": [
+        "verificationStatus",
+        "address",
+        "deploymentTransactionHash",
+        "deploymentBlockNumber",
+        "deploymentBlockHash",
+        "finalizedBlockNumber",
+        "finalizedBlockHash",
+        "finalityDepth",
+        "runtimeCodeBytes",
+        "runtimeCodeKeccak256",
+        "runtimeCodeSha256",
+        "observedBindings",
+        "getterBundleSha256",
+        "evidenceSha256"
+      ],
+      "properties": {
+        "verificationStatus": {
+          "const": "finalized-verified"
+        },
+        "address": {
+          "const": "0x34965F2A2ee9254522232C32F02056E92BE0C98a"
+        },
+        "deploymentTransactionHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "deploymentBlockNumber": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "deploymentBlockHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "finalizedBlockNumber": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "finalizedBlockHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "finalityDepth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runtimeCodeBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runtimeCodeKeccak256": {
+          "const": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388"
+        },
+        "runtimeCodeSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observedBindings": {
+          "$ref": "#/$defs/robinhoodLaunchStampRouterObservedBindings"
+        },
+        "getterBundleSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidenceSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "robinhoodLaunchStampRouterCanaryEvidence": {
+      "type": "object",
+      "required": [
+        "finality",
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "launchId"
+      ],
+      "properties": {
+        "finality": {
+          "const": "finalized"
+        },
+        "transactionHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "blockNumber": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "blockHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "launchId": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchStampRouterCanaryEvidence": {
+      "const": {
+        "finality": "finalized",
+        "routeCoverage": {
+          "customGraphOnchainCanary": true,
+          "classicOnchainCanary": true
+        },
+        "source": {
+          "sourceRepository": "https://github.com/programmablehq/programmable",
+          "sourceCommit": "b3cfed41bb841ae8d6188dbb815eddb5e1440218",
+          "commitSubject": "Add graph launch stamp canary"
+        },
+        "transactionHash": "0xc07b4e70233534a1d4f435ffc9a636ed5f542f4aedcde35052c58224f378b612",
+        "blockNumber": "25717953",
+        "blockHash": "0x97827b6586f0dca00e44801acc529c3961b4c693988dfc9f4b2bb4c3d94632ba",
+        "launchId": "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+        "stampHash": "0x06cb71b38d9b8b1dd1ffcdb00f31c774be36f5473979c3831d5fd0c96cdaa579",
+        "launchKind": 1,
+        "components": {
+          "initializer": "0x87B108848B444bC44A01734D62C7be4a2fA64983",
+          "token": "0x9DEeB39D2590b0cAD5fc473F755C5F97Dcc8f7cE",
+          "hook": "0xEBa46f25DfF528141dE5317109Acb5A989296044"
+        },
+        "pool": {
+          "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+          "poolId": "0x5c5a3ebee6840640642ba2bea526621a4962d2c89c388c36a2edb4725802a229",
+          "activeLiquidity": "31618002430832353916"
+        },
+        "lpPosition": {
+          "positionManager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+          "tokenId": "367610",
+          "owner": "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+        },
+        "platformFee": {
+          "feePips": 1000,
+          "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        },
+        "tokenTotalSupply": "1000000000000000000000000",
+        "stampProofs": [
+          {
+            "component": "0x87B108848B444bC44A01734D62C7be4a2fA64983",
+            "launchId": "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+            "stampHash": "0x06cb71b38d9b8b1dd1ffcdb00f31c774be36f5473979c3831d5fd0c96cdaa579"
+          },
+          {
+            "component": "0x9DEeB39D2590b0cAD5fc473F755C5F97Dcc8f7cE",
+            "launchId": "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+            "stampHash": "0x06cb71b38d9b8b1dd1ffcdb00f31c774be36f5473979c3831d5fd0c96cdaa579"
+          },
+          {
+            "component": "0xEBa46f25DfF528141dE5317109Acb5A989296044",
+            "launchId": "0x5a52180427785716bff0a36218dde89f0459db265d0c2bdfcfde81a8fe733c92",
+            "stampHash": "0x06cb71b38d9b8b1dd1ffcdb00f31c774be36f5473979c3831d5fd0c96cdaa579"
+          }
+        ],
+        "evidenceFileSha256": "sha256:1325d1333b6df9545cb87048e2b8d1c57a63af5b6790c329c0e95157a0d16d2c",
+        "evidenceLineSha256": "sha256:615a20b31f454afb020a8fa83653c7685328e3f12ad58d3ac11ddab2d02968b5"
+      }
+    },
+    "launchStampRouterClassicCanaryEvidence": {
+      "const": {
+        "finality": "finalized",
+        "source": {
+          "sourceRepository": "https://github.com/programmablehq/PROGRAMMABLE-EVM",
+          "releaseCommit": "707d438576dcf47dc2667125789fd35eb1c3de50",
+          "releaseTree": "789161bc206ea145f12b809f9d1746bd1a83468a",
+          "manifestPublication": {
+            "commit": "ff51e713feb52e4e13f3c553d1c726f3c8f2858c",
+            "tree": "53a8ce252d98703008ba17408f6c24555b8be45e",
+            "path": "contracts/deployments/mainnet-classic-v4.json",
+            "url": "https://raw.githubusercontent.com/programmablehq/PROGRAMMABLE-EVM/ff51e713feb52e4e13f3c553d1c726f3c8f2858c/contracts/deployments/mainnet-classic-v4.json",
+            "sha256": "sha256:5005df478e1298bbf9c2f1ff9256192290c5ca3652ee7cae13c0326a62893fc6"
+          }
+        },
+        "transactionHash": "0xbb6b4c9fc70600e4d5dd394314a49630bf9f837a82065013c397ebebd978aa7c",
+        "blockNumber": "25854486",
+        "blockHash": "0x66d7201c8274251f7e94960edad2570e9121f7a0209f4528c09c41c5ea9cdb7c",
+        "transactionIndex": 188,
+        "launchId": "0x75503436c39192ea7f165d1c0140724fed5dbd73c9b4816de713e34fe5a3fc87",
+        "stampHash": "0xd173468420cfa5159890896d34746c9c2fc9bb5e3960a1062aa82d1c3ffb5941",
+        "launchKind": 2,
+        "route": {
+          "launcher": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+          "launcherRuntimeCodeHash": "0xc80a1d3b6b3f196a54cea46fc94913d59aec2937e94e70b53fe5c5fd7f5c4b12",
+          "routePayloadHash": "0x344818154572f460bc3fa598678f37fc8f4853e9785ca723419511e5179dab40",
+          "expectedResultHash": "0x44e56f4408bee94e5179b10ee30574f740b6bf0e3d47b202b1c0a0e0179403ab",
+          "permitDigest": "0xfe2e718590739692dfe500000a18d62c07cb11d44cf5035febb12cac6c4466df"
+        },
+        "components": [
+          {
+            "role": "positionRecipient",
+            "kind": 0,
+            "address": "0x0EC0ac6aA9724928aA678c407039D5b2d65cB7Ed",
+            "runtimeCodeHash": "0xbfcf00b05d7092f0e47d9dc8ed24cdfab992dfe82da0ac1c1ff8e2c3c2dbc7d7"
+          },
+          {
+            "role": "rewardVault",
+            "kind": 0,
+            "address": "0x541034C6613154e81a64F9A9Ca1A572819E426E3",
+            "runtimeCodeHash": "0x263080da69f045205235451b41e17da8f03955ece962f4589ee604ccc3c36625"
+          },
+          {
+            "role": "hook",
+            "kind": 2,
+            "address": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+            "runtimeCodeHash": "0xf3a1a628ce898c527f24569b426aa795ec65ff9d97afa2b89e8ea5a2b99ad280"
+          },
+          {
+            "role": "token",
+            "kind": 1,
+            "address": "0xB382f738a99820276FD66EfB94b75Eca104c2B4D",
+            "runtimeCodeHash": "0x554847de232eb1242cae2befefb8882eb05947e2b103220baaebb3e2ab59b132"
+          }
+        ],
+        "pool": {
+          "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+          "poolId": "0xef513a3234ab2eb561aa0a7ee55619ace1624a900e5f7b55156ba6d0cc86334a",
+          "activeLiquidity": "47813640512503339560210"
+        },
+        "lpPosition": {
+          "positionManager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+          "tokenId": "386488",
+          "owner": "0x0EC0ac6aA9724928aA678c407039D5b2d65cB7Ed"
+        },
+        "platformFee": {
+          "rateBps": 10,
+          "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        },
+        "tokenTotalSupply": "1000000000000000000000000000",
+        "verification": {
+          "verificationBlock": "25855200",
+          "verificationBlockHash": "0x3de5eeb594e8431be0d090f65fe2ddfc38900f0c4bce9320f4a46bb280b9d905",
+          "releaseManifestDigest": "0xb08e7032c801ddc3d5ba958eb389d2728bb439e4105aef4e7706969f7426ee00",
+          "releaseBindingDigest": "0xf4bd9a33728b62deca13a68b3b5ceedab9504930bf4c1676f3abaa4fc4f8cb13",
+          "deploymentEvidenceDigest": "0xd21105b4d7e1a4104457a96cdea9054d027ec46142cc82da858ffb69730fdc7f",
+          "sourceEvidenceDigest": "0x8b0d405e1a05ca41b1ff7dee774b9795d0ee4465c7ab505cd26e77c7a7b3c005",
+          "lifecycleEvidenceDigest": "0x8cebe98625569273cb3612deb6ea14621ef124c9197418923e034a39db1c316a"
+        }
+      }
+    },
+    "launchStampRouterObservedBindings": {
+      "type": "object",
+      "required": [
+        "chainId",
+        "permitAuthority",
+        "permitAuthorityRuntimeCodeHash",
+        "graphFactory",
+        "graphFactoryRuntimeCodeHash",
+        "poolManager",
+        "poolManagerRuntimeCodeHash"
+      ],
+      "properties": {
+        "chainId": {
+          "const": 1
+        },
+        "permitAuthority": {
+          "const": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b"
+        },
+        "permitAuthorityRuntimeCodeHash": {
+          "const": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+        },
+        "graphFactory": {
+          "const": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887"
+        },
+        "graphFactoryRuntimeCodeHash": {
+          "const": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+        },
+        "poolManager": {
+          "const": "0x000000000004444c5dc75cB358380D2e3dE08A90"
+        },
+        "poolManagerRuntimeCodeHash": {
+          "const": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchStampRouterEnumValues": {
+      "type": "object",
+      "required": [
+        "launchKind",
+        "componentKind",
+        "componentScope"
+      ],
+      "properties": {
+        "launchKind": {
+          "type": "object",
+          "required": [
+            "invalid",
+            "customGraph",
+            "classic"
+          ],
+          "properties": {
+            "invalid": {
+              "const": 0
+            },
+            "customGraph": {
+              "const": 1
+            },
+            "classic": {
+              "const": 2
+            }
+          },
+          "additionalProperties": false
+        },
+        "componentKind": {
+          "type": "object",
+          "required": [
+            "other",
+            "token",
+            "hook"
+          ],
+          "properties": {
+            "other": {
+              "const": 0
+            },
+            "token": {
+              "const": 1
+            },
+            "hook": {
+              "const": 2
+            }
+          },
+          "additionalProperties": false
+        },
+        "componentScope": {
+          "type": "object",
+          "required": [
+            "invalid",
+            "exclusive",
+            "sharedInfrastructure"
+          ],
+          "properties": {
+            "invalid": {
+              "const": 0
+            },
+            "exclusive": {
+              "const": 1
+            },
+            "sharedInfrastructure": {
+              "const": 2
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchStampRouterEip712": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "primaryType",
+        "permitType",
+        "permitTypeHash"
+      ],
+      "properties": {
+        "name": {
+          "const": "ProgrammableLaunchStampRouter"
+        },
+        "version": {
+          "const": "1"
+        },
+        "primaryType": {
+          "const": "ProgrammableLaunchPermitV1"
+        },
+        "permitType": {
+          "const": "ProgrammableLaunchPermitV1(uint256 chainId,address router,address launchWallet,uint8 kind,bytes32 routePayloadHash,bytes32 expectedResultHash,bytes32 stampRequestHash,bytes32 nonce,uint64 validAfter,uint64 deadline,uint256 value)"
+        },
+        "permitTypeHash": {
+          "const": "0x5147473bd302ad67f9ef14ef9262d1b0f8d4f7155081bc8c508195b647413761"
+        }
+      },
+      "additionalProperties": false
+    },
+    "launchStampRouterBindings": {
+      "type": "object",
+      "required": [
+        "permitAuthority",
+        "permitAuthorityRuntimeCodeHash",
+        "graphFactory",
+        "graphFactoryRuntimeCodeHash",
+        "poolManager",
+        "poolManagerRuntimeCodeHash"
+      ],
+      "properties": {
+        "permitAuthority": {
+          "$ref": "common.schema.json#/$defs/nullableEvmAddress"
+        },
+        "permitAuthorityRuntimeCodeHash": {
+          "$ref": "common.schema.json#/$defs/nullableHash32"
+        },
+        "graphFactory": {
+          "$ref": "common.schema.json#/$defs/nullableEvmAddress"
+        },
+        "graphFactoryRuntimeCodeHash": {
+          "$ref": "common.schema.json#/$defs/nullableHash32"
+        },
+        "poolManager": {
+          "$ref": "common.schema.json#/$defs/nullableEvmAddress"
+        },
+        "poolManagerRuntimeCodeHash": {
+          "$ref": "common.schema.json#/$defs/nullableHash32"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ethereumLaunchStampRouterChainBinding": {
+      "type": "object",
+      "properties": {
+        "supportsFutureClassic": {
+          "const": true
+        },
+        "abiUrl": {
+          "const": "https://developers.programmable.family/abis/ethereum/programmable-launch-stamp-router-v1.json"
+        },
+        "getters": {
+          "type": "object",
+          "not": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "launchWallet": true
+                },
+                "required": [
+                  "launchWallet"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "stampRequestHash": true
+                },
+                "required": [
+                  "stampRequestHash"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "live",
+                  "retired"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "address": {
+                "const": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56"
+              },
+              "startBlock": {
+                "const": "25717612"
+              },
+              "runtimeCodeHash": {
+                "const": "0x40e27ecf201761d5eb66bc4f2d5c6124831ef078d7baf458ca5f41b1a8108546"
+              },
+              "artifact": {
+                "$ref": "#/$defs/launchStampRouterArtifact"
+              },
+              "deploymentEvidence": {
+                "$ref": "#/$defs/launchStampRouterDeploymentEvidence"
+              },
+              "canaryEvidence": {
+                "$ref": "#/$defs/launchStampRouterCanaryEvidence"
+              },
+              "classicCanaryEvidence": {
+                "$ref": "#/$defs/launchStampRouterClassicCanaryEvidence"
+              },
+              "finalityConfirmations": {
+                "const": 64
+              },
+              "bindings": {
+                "const": {
+                  "permitAuthority": "0x755509eA6e3F5Ec1aA2E797bb68f1B87DD8b886b",
+                  "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+                  "graphFactory": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+                  "graphFactoryRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+                  "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+                  "poolManagerRuntimeCodeHash": "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "robinhoodLaunchStampRouterChainBinding": {
+      "type": "object",
+      "properties": {
+        "supportsFutureClassic": {
+          "const": false
+        },
+        "abiUrl": {
+          "const": "https://developers.programmable.family/abis/programmable-launch-stamp-router-v1.json"
+        },
+        "getters": {
+          "type": "object",
+          "properties": {
+            "launchWallet": true,
+            "stampRequestHash": true
+          },
+          "required": [
+            "launchWallet",
+            "stampRequestHash"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "live",
+                  "retired"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "address": {
+                "const": "0x34965F2A2ee9254522232C32F02056E92BE0C98a"
+              },
+              "runtimeCodeHash": {
+                "const": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388"
+              },
+              "artifact": {
+                "$ref": "#/$defs/robinhoodLaunchStampRouterArtifact"
+              },
+              "deploymentEvidence": {
+                "$ref": "#/$defs/robinhoodLaunchStampRouterDeploymentEvidence"
+              },
+              "canaryEvidence": {
+                "$ref": "#/$defs/robinhoodLaunchStampRouterCanaryEvidence"
+              },
+              "classicCanaryEvidence": {
+                "type": "null"
+              },
+              "bindings": {
+                "const": {
+                  "permitAuthority": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+                  "permitAuthorityRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+                  "graphFactory": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+                  "graphFactoryRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+                  "poolManager": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+                  "poolManagerRuntimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "launchStampRouterActivation": {
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "prelaunch"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "address": {
+                "type": "null"
+              },
+              "startBlock": {
+                "type": "null"
+              },
+              "endBlock": {
+                "type": "null"
+              },
+              "runtimeCodeHash": {
+                "type": "null"
+              },
+              "canaryEvidence": {
+                "type": "null"
+              },
+              "classicCanaryEvidence": {
+                "type": "null"
+              },
+              "finalityConfirmations": {
+                "type": "null"
+              },
+              "bindings": {
+                "type": "object",
+                "properties": {
+                  "permitAuthority": {
+                    "type": "null"
+                  },
+                  "permitAuthorityRuntimeCodeHash": {
+                    "type": "null"
+                  },
+                  "graphFactory": {
+                    "type": "null"
+                  },
+                  "graphFactoryRuntimeCodeHash": {
+                    "type": "null"
+                  },
+                  "poolManager": {
+                    "type": "null"
+                  },
+                  "poolManagerRuntimeCodeHash": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "planned"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "address": {
+                "type": "null"
+              },
+              "startBlock": {
+                "type": "null"
+              },
+              "endBlock": {
+                "type": "null"
+              },
+              "runtimeCodeHash": {
+                "type": "null"
+              },
+              "artifact": {
+                "type": "null"
+              },
+              "deploymentEvidence": {
+                "type": "null"
+              },
+              "canaryEvidence": {
+                "type": "null"
+              },
+              "classicCanaryEvidence": {
+                "type": "null"
+              },
+              "finalityConfirmations": {
+                "type": "null"
+              },
+              "bindings": {
+                "type": "object",
+                "properties": {
+                  "permitAuthority": {
+                    "type": "null"
+                  },
+                  "permitAuthorityRuntimeCodeHash": {
+                    "type": "null"
+                  },
+                  "graphFactory": {
+                    "type": "null"
+                  },
+                  "graphFactoryRuntimeCodeHash": {
+                    "type": "null"
+                  },
+                  "poolManager": {
+                    "type": "null"
+                  },
+                  "poolManagerRuntimeCodeHash": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "live",
+                  "retired"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "address": {
+                "$ref": "common.schema.json#/$defs/evmAddress"
+              },
+              "startBlock": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "runtimeCodeHash": {
+                "$ref": "common.schema.json#/$defs/hash32"
+              },
+              "artifact": {
+                "type": "object"
+              },
+              "deploymentEvidence": {
+                "type": "object"
+              },
+              "canaryEvidence": {
+                "type": "object"
+              },
+              "finalityConfirmations": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "bindings": {
+                "type": "object",
+                "properties": {
+                  "permitAuthority": {
+                    "$ref": "common.schema.json#/$defs/evmAddress"
+                  },
+                  "permitAuthorityRuntimeCodeHash": {
+                    "$ref": "common.schema.json#/$defs/hash32"
+                  },
+                  "graphFactory": {
+                    "$ref": "common.schema.json#/$defs/evmAddress"
+                  },
+                  "graphFactoryRuntimeCodeHash": {
+                    "$ref": "common.schema.json#/$defs/hash32"
+                  },
+                  "poolManager": {
+                    "$ref": "common.schema.json#/$defs/evmAddress"
+                  },
+                  "poolManagerRuntimeCodeHash": {
+                    "$ref": "common.schema.json#/$defs/hash32"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "live"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "endBlock": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "retired"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "endBlock": {
+                "$ref": "common.schema.json#/$defs/decimalString"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "platformFee": {
+      "type": "object",
+      "required": [
+        "ratePpm",
+        "rateBps",
+        "recipient",
+        "scope",
+        "classic",
+        "customPublicSubmissions"
+      ],
+      "properties": {
+        "ratePpm": {
+          "const": "1000"
+        },
+        "rateBps": {
+          "const": "10"
+        },
+        "recipient": {
+          "$ref": "common.schema.json#/$defs/evmAddress"
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classic": {
+          "$ref": "#/$defs/feeState"
+        },
+        "customPublicSubmissions": {
+          "$ref": "#/$defs/customPublicSubmissionFeeState"
+        },
+        "nativeCustom": {
+          "type": "object",
+          "required": [
+            "status",
+            "activationStatus",
+            "totalFeeBps",
+            "programmableShareBps",
+            "scope",
+            "universalFeeBehaviorClaim"
+          ],
+          "properties": {
+            "status": {
+              "const": "conditional"
+            },
+            "activationStatus": {
+              "const": "per-launch-exact-fee-evidence-required"
+            },
+            "totalFeeBps": {
+              "const": 10
+            },
+            "programmableShareBps": {
+              "const": 10
+            },
+            "scope": {
+              "const": "exact-fee-certified-official-market-path-only"
+            },
+            "universalFeeBehaviorClaim": {
+              "const": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "partnerTemplate": {
+          "type": "object",
+          "required": [
+            "status",
+            "activationStatus",
+            "totalFeeBps",
+            "partnerShareBps",
+            "programmableShareBps",
+            "programmableRecipient",
+            "chargeMode",
+            "additionalNativeFeeBps"
+          ],
+          "properties": {
+            "status": {
+              "const": "unavailable"
+            },
+            "activationStatus": {
+              "const": "no-verified-path"
+            },
+            "totalFeeBps": {
+              "const": 20
+            },
+            "partnerShareBps": {
+              "const": 15
+            },
+            "programmableShareBps": {
+              "const": 5
+            },
+            "programmableRecipient": {
+              "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+            },
+            "chargeMode": {
+              "const": "partner-template-enforced"
+            },
+            "additionalNativeFeeBps": {
+              "const": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "feeState": {
+      "type": "object",
+      "required": [
+        "status",
+        "chargeMode"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "live",
+            "prelaunch",
+            "verified",
+            "revoked"
+          ]
+        },
+        "chargeMode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "included",
+            "added-on-top",
+            "policy-specific-no-overlay",
+            null
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "customPublicSubmissionFeeState": {
+      "type": "object",
+      "required": [
+        "status",
+        "chargeMode",
+        "scope",
+        "profileId",
+        "profileRevision"
+      ],
+      "properties": {
+        "status": {
+          "const": "live"
+        },
+        "chargeMode": {
+          "const": "added-on-top"
+        },
+        "scope": {
+          "const": "legacy-fee-enforced-isolated-after-swap-profile-only"
+        },
+        "profileId": {
+          "const": "programmable.fee-enforced-isolated-after-swap.zero-delta.v1"
+        },
+        "profileRevision": {
+          "const": 3
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

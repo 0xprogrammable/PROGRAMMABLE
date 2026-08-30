@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/problem.schema.json",
+  "title": "Programmable API problem",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "type",
+    "title",
+    "status",
+    "detail",
+    "code",
+    "requestId",
+    "timestamp"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "type": {
+      "$ref": "common.schema.json#/$defs/httpsUrl"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "integer",
+      "minimum": 400,
+      "maximum": 599
+    },
+    "detail": {
+      "type": "string",
+      "minLength": 1
+    },
+    "instance": {
+      "type": "string"
+    },
+    "code": {
+      "$ref": "common.schema.json#/$defs/openIdentifier"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "timestamp": {
+      "$ref": "common.schema.json#/$defs/isoDateTime"
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/launch-partner-attribution-v1.schema.json",
+  "title": "Programmable launch partner attribution v1",
+  "description": "Immutable display attribution derived by the launch service from the authenticated partner API principal. It is not creator input and does not establish a partnership fee, review, safety, liquidity, tradeability, or third-party index status.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "partnerId",
+    "name",
+    "website",
+    "attributionSource",
+    "attributionVersion",
+    "snapshotDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.launch-partner-attribution.v1"
+    },
+    "partnerId": {
+      "$ref": "common.schema.json#/$defs/openIdentifier"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001F\\u007F\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF]+$"
+    },
+    "website": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/httpsUrl"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Canonical HTTPS partner website, or null when the partner has no published website."
+    },
+    "attributionSource": {
+      "const": "authenticated-partner-api-key"
+    },
+    "attributionVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "snapshotDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 over the schema-version domain, a zero byte, and JCS of the six preceding fields. The digest field is excluded from its own preimage."
+    }
+  },
+  "additionalProperties": false
+}

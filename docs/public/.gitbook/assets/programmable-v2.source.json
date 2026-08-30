@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "programmable.gitbook-openapi-source-receipt.v1",
+  "canonicalSource": {
+    "repository": "programmablehq/Developers",
+    "commit": "5641d2c75d58239864f4827c9bb054abc170af18",
+    "entrypoint": "openapi/programmable-v2.yaml",
+    "entrypointDigest": "sha256:b7925914d450d0a10cc73cd85fcc36418ac0238b9f3d9f46a15499d5483a405e",
+    "upstreamStrictGraph": {
+      "documentCount": 21,
+      "referenceDocumentCount": 20
+    }
+  },
+  "mirror": {
+    "entrypoint": "docs/public/.gitbook/assets/programmable-v2.yaml",
+    "schemaRoot": "docs/public/.gitbook/schemas/v2",
+    "localDocumentCount": 18,
+    "localReferenceDocumentCount": 17,
+    "closureDigest": "sha256:861b55bd07fe721ca9abbda98812a8adb5ba34191b7d1cc123a032db24cb4e79",
+    "allowedExternalReferences": [
+      "https://programmable.market/openapi/custom-launch-v3.json#/components/schemas/FinalizedCustomLaunchMetadataListV1"
+    ],
+    "documents": [
+      {
+        "sourcePath": "openapi/programmable-v2.yaml",
+        "destinationPath": "docs/public/.gitbook/assets/programmable-v2.yaml",
+        "bytes": 40803,
+        "digest": "sha256:b7925914d450d0a10cc73cd85fcc36418ac0238b9f3d9f46a15499d5483a405e"
+      },
+      {
+        "sourcePath": "schemas/v2/common.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/common.schema.json",
+        "bytes": 2359,
+        "digest": "sha256:a83a76f27403ff038b3f108615daef95fa46b8c32b01da5f4845b4c7146ae6f9"
+      },
+      {
+        "sourcePath": "schemas/v2/custom-fee-enforced-launch-profile-v2.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/custom-fee-enforced-launch-profile-v2.schema.json",
+        "bytes": 14915,
+        "digest": "sha256:1b91510ff39a1e49b24c2f096912b03f4c83189f2623e31bb572ef811df3b175"
+      },
+      {
+        "sourcePath": "schemas/v2/custom-launch-chain-deployment-v4.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/custom-launch-chain-deployment-v4.schema.json",
+        "bytes": 38718,
+        "digest": "sha256:6969a26df1aadc0fd9ed5eeafbc40b9f45a45284af804adc738ba122d69d7fb1"
+      },
+      {
+        "sourcePath": "schemas/v2/custom-launch-registry-record-v3.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/custom-launch-registry-record-v3.schema.json",
+        "bytes": 47665,
+        "digest": "sha256:a12b1b0f5c69a9e743120224383fbfa31054d31ab3a7c47ee686f08ae6bcf3d5"
+      },
+      {
+        "sourcePath": "schemas/v2/custom-launch-registry-record-v4.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/custom-launch-registry-record-v4.schema.json",
+        "bytes": 64170,
+        "digest": "sha256:207c5d1100f8153be7b4833457ffe2f4e665e658ce10b40d0a1434031304aa32"
+      },
+      {
+        "sourcePath": "schemas/v2/custom-launch-source-verification-v4.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/custom-launch-source-verification-v4.schema.json",
+        "bytes": 7084,
+        "digest": "sha256:fd9e7eb9583157079bba35a898307940a69195d55e15316a979085e38a96dc2d"
+      },
+      {
+        "sourcePath": "schemas/v2/direct-native-hook-graph-profile-discovery-v1.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/direct-native-hook-graph-profile-discovery-v1.schema.json",
+        "bytes": 17616,
+        "digest": "sha256:1b55c779a2d47b91feeb9a617a7659cc55984aef015b50efde7caf1d180fc77a"
+      },
+      {
+        "sourcePath": "schemas/v2/direct-native-hook-graph-profile-discovery-v2.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/direct-native-hook-graph-profile-discovery-v2.schema.json",
+        "bytes": 20981,
+        "digest": "sha256:79c5c3374adb54076c87ca115ffcd7b2582ee2823a017331251263bdc6b25dc7"
+      },
+      {
+        "sourcePath": "schemas/v2/direct-native-hook-graph-profile-discovery-v3.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/direct-native-hook-graph-profile-discovery-v3.schema.json",
+        "bytes": 22721,
+        "digest": "sha256:450c9badb1fed0abef929cfae4dbdf31019c6af656ffc37cc27ff00b7b04efae"
+      },
+      {
+        "sourcePath": "schemas/v2/launch-feed.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/launch-feed.schema.json",
+        "bytes": 5239,
+        "digest": "sha256:3c2f745a4a53ccc3b63c349be76633412d2ccc1f84d13a73dac6ddd3784ada01"
+      },
+      {
+        "sourcePath": "schemas/v2/launch-partner-attribution-v1.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/launch-partner-attribution-v1.schema.json",
+        "bytes": 1799,
+        "digest": "sha256:e2be19c239a7ebf683b3bfa25918b7cdd9025d4f3daae349d4f5cc4adc80747e"
+      },
+      {
+        "sourcePath": "schemas/v2/launch.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/launch.schema.json",
+        "bytes": 100637,
+        "digest": "sha256:d47618dbe35ded3ee00517e47988a712faf6927790d72ea4b20a5fd26bd3e59b"
+      },
+      {
+        "sourcePath": "schemas/v2/manifest.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/manifest.schema.json",
+        "bytes": 86885,
+        "digest": "sha256:54d9cb891dfb2cfe6963b18ea4c3e67f8786b2a87b2c01d970777a79423298a3"
+      },
+      {
+        "sourcePath": "schemas/v2/problem.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/problem.schema.json",
+        "bytes": 1164,
+        "digest": "sha256:c465eb8194652c211533d884cfe8e64aa67440d52d6ffa8661c36ac70591a80a"
+      },
+      {
+        "sourcePath": "schemas/v2/robinhood-custom-launch-binding.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/robinhood-custom-launch-binding.schema.json",
+        "bytes": 18480,
+        "digest": "sha256:3aef9c6a23706a7ab9ee06c61d2f479ff5badf215c3c617b7c389ecb35a64dd2"
+      },
+      {
+        "sourcePath": "schemas/v2/status.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/status.schema.json",
+        "bytes": 14480,
+        "digest": "sha256:445458dbdadbc12b308b01440b67b7b51ce9893a56f7f98cc5c8e8a103d855e7"
+      },
+      {
+        "sourcePath": "schemas/v2/token-list.schema.json",
+        "destinationPath": "docs/public/.gitbook/schemas/v2/token-list.schema.json",
+        "bytes": 3453,
+        "digest": "sha256:3fbd507bab47492c92c4d2d748ac9195695122c0c2b171b08a92a737af897623"
+      }
+    ]
+  }
+}
