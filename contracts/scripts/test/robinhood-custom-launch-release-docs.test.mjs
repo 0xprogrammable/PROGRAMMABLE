@@ -119,7 +119,12 @@ test("operator runbooks use repo-root commands and independently frozen provider
     security,
     /contracts\/spec\/robinhood-custom-launch\/standard-json\//u,
   );
-  assert.match(handoff, /second closing nonce\/vacancy snapshot/u);
+  assert.match(
+    handoff,
+    /second closing\s+nonce\/code\/vacancy\/simulation\/gas snapshot/u,
+  );
+  assert.match(handoff, /two identical state-relevant snapshots/u);
+  assert.match(handoff, /highest base fee, gas price and priority fee/u);
   assert.doesNotMatch(
     security,
     /contracts:robinhood:postdeploy:(?:assemble|verify)\s/u,

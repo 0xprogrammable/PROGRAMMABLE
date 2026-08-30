@@ -99,7 +99,13 @@ Public Robinhood RPC, dRPC and provider demo endpoints are not substitutes for
 the current owner action-time pair. A public endpoint may return
 `safe`/`finalized` headers while failing historical state reads at that same
 block. The credentialed providers must pass the exact fixed-block code, nonce,
-pending-state, simulation and closing-state inventory.
+pending-state, simulation and closing-state inventory. Robinhood produces blocks
+fast enough that authenticated providers can legitimately observe different
+pending parents or fees during one bounded preflight. The guard therefore
+requires two identical state-relevant snapshots (runtime code, target vacancy,
+owner nonce, simulation return and gas estimate) while recording both pending
+observations. Fee fields use the highest base fee, gas price and priority fee
+reported by either provider and remain bounded by the owner's explicit ceilings.
 
 ## Fresh envelope
 
@@ -161,7 +167,8 @@ verifier. It rechecks freshness, the protected source and production ref, the
 exact hosted Verify proof, provider commitments and every wallet field. It then
 uses both frozen credentialed providers to re-read chain ID, owner `latest` and
 `pending` nonce, pending code and nonce vacancy for all three targets, the exact
-pending simulation and gas estimate, and a second closing nonce/vacancy snapshot.
+pending simulation and gas estimate, and a second closing
+nonce/code/vacancy/simulation/gas snapshot.
 It then re-reads the canonical GitHub `production` ref and revalidates the same
 persisted immutable Verify run, attempt and artifact before one final local
 source/freshness guard. Its output contains only a bounded safe summary, never

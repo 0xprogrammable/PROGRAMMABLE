@@ -1216,8 +1216,14 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
 
   const closings = await Promise.all(
     providers.map(async (provider) => {
-      const [latestNonceValue, pendingNonceValue, codes, vacancyNonces] =
-        await Promise.all([
+      const [
+        latestNonceValue,
+        pendingNonceValue,
+        codes,
+        vacancyNonces,
+        callResultValue,
+        estimateValue,
+      ] = await Promise.all([
           rpc(
             provider,
             "eth_getTransactionCount",
@@ -1246,6 +1252,20 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
             rpcClient,
             requestTimeoutMs,
           }),
+          rpc(
+            provider,
+            "eth_call",
+            [simulationRequest, "pending"],
+            rpcClient,
+            requestTimeoutMs,
+          ),
+          rpc(
+            provider,
+            "eth_estimateGas",
+            [simulationRequest, "pending"],
+            rpcClient,
+            requestTimeoutMs,
+          ),
         ]);
       return {
         latestNonce: parseQuantity(
@@ -1258,6 +1278,14 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
         ),
         codes,
         vacancyNonces,
+        callResult: exactCode(
+          callResultValue,
+          `${provider.providerId} action-time closing simulation result`,
+        ),
+        estimatedGas: parseQuantity(
+          estimateValue,
+          `${provider.providerId} action-time closing gas estimate`,
+        ),
       };
     }),
   );
@@ -1270,7 +1298,12 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
       closing.pendingNonce !== snapshots[index].pendingNonce ||
       JSON.stringify(closing.codes) !== JSON.stringify(snapshots[index].codes) ||
       JSON.stringify(closing.vacancyNonces) !==
-        JSON.stringify(snapshots[index].vacancyNonces)
+        JSON.stringify(snapshots[index].vacancyNonces) ||
+      closing.callResult !== snapshots[index].callResult ||
+      closing.callResult !== snapshots[0].callResult ||
+      closing.estimatedGas !== snapshots[index].estimatedGas ||
+      closing.estimatedGas !== expectedGasEstimate ||
+      closing.estimatedGas > reviewedGasLimit
     ) {
       fail(`${providerId} action-time state changed during wallet verification`);
     }
@@ -1292,7 +1325,9 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     closings[0].pendingNonce !== closings[1].pendingNonce ||
     JSON.stringify(closings[0].codes) !== JSON.stringify(closings[1].codes) ||
     JSON.stringify(closings[0].vacancyNonces) !==
-      JSON.stringify(closings[1].vacancyNonces)
+      JSON.stringify(closings[1].vacancyNonces) ||
+    closings[0].callResult !== closings[1].callResult ||
+    closings[0].estimatedGas !== closings[1].estimatedGas
   ) {
     fail("Robinhood RPCs disagree on action-time closing owner-wallet state");
   }
@@ -1304,6 +1339,8 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     preparedAddressCount: Object.keys(preparedBindings).length,
     pendingSimulationVerified: true,
     pendingGasEstimate: expectedGasEstimate.toString(),
+    closingSimulationVerified: true,
+    closingGasEstimate: expectedGasEstimate.toString(),
     closingVacancyVerified: true,
     rpcResponseBytesConsumed: responseBudget.consumed,
   });
@@ -1629,17 +1666,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       };
     }),
   );
-  const pendingBlockAgreement =
-    pendingSnapshots[0].pendingBlock.parentHash ===
-      pendingSnapshots[1].pendingBlock.parentHash &&
-    pendingSnapshots[0].pendingBlock.timestamp ===
-      pendingSnapshots[1].pendingBlock.timestamp &&
-    pendingSnapshots[0].pendingBlock.gasLimit ===
-      pendingSnapshots[1].pendingBlock.gasLimit &&
-    pendingSnapshots[0].pendingBlock.baseFeePerGas ===
-      pendingSnapshots[1].pendingBlock.baseFeePerGas;
   if (
-    !pendingBlockAgreement ||
     JSON.stringify(pendingSnapshots[0].codes) !==
       JSON.stringify(pendingSnapshots[1].codes) ||
     JSON.stringify(pendingSnapshots[0].vacancyNonces) !==
@@ -1673,6 +1700,8 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         priorityFeeValue,
         codes,
         vacancyNonces,
+        callResult,
+        estimateValue,
       ] = await Promise.all([
         rpc(
           provider,
@@ -1705,7 +1734,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         ),
         readCodes({
           provider,
-          bindings: release.preparedBindings,
+          bindings: allBindings,
           blockTag: "pending",
           rpcClient,
           requestTimeoutMs,
@@ -1717,6 +1746,36 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
           rpcClient,
           requestTimeoutMs,
         }),
+        rpc(
+          provider,
+          "eth_call",
+          [
+            {
+              from: transaction.owner,
+              to: transaction.to,
+              value: "0x0",
+              data: transaction.data,
+            },
+            "pending",
+          ],
+          rpcClient,
+          requestTimeoutMs,
+        ),
+        rpc(
+          provider,
+          "eth_estimateGas",
+          [
+            {
+              from: transaction.owner,
+              to: transaction.to,
+              value: "0x0",
+              data: transaction.data,
+            },
+            "pending",
+          ],
+          rpcClient,
+          requestTimeoutMs,
+        ),
       ]);
       return {
         anchor: exactBlock(
@@ -1741,6 +1800,14 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         ),
         codes,
         vacancyNonces,
+        callResult: exactCode(
+          callResult,
+          `${provider.providerId} closing simulation result`,
+        ),
+        estimatedGas: parseQuantity(
+          estimateValue,
+          `${provider.providerId} closing gas estimate`,
+        ),
       };
     }),
   );
@@ -1749,18 +1816,20 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       closing.anchor.number !== commonBlockNumber ||
       closing.anchor.hash !== commonBlocks[0].hash ||
       closing.pendingNonce !== nonce ||
-      closing.pendingBlock.parentHash !==
-        pendingSnapshots[0].pendingBlock.parentHash ||
-      closing.pendingBlock.baseFeePerGas !==
-        pendingSnapshots[0].pendingBlock.baseFeePerGas ||
-      closing.pendingBlock.gasLimit !==
-        pendingSnapshots[0].pendingBlock.gasLimit
+      JSON.stringify(closing.codes) !==
+        JSON.stringify(pendingSnapshots[index].codes) ||
+      JSON.stringify(closing.vacancyNonces) !==
+        JSON.stringify(pendingSnapshots[index].vacancyNonces) ||
+      closing.callResult !== pendingSnapshots[index].callResult ||
+      closing.estimatedGas !== pendingSnapshots[index].estimatedGas ||
+      closing.estimatedGas !== estimatedGas ||
+      gasLimit > closing.pendingBlock.gasLimit
     ) {
       fail(`${providers[index].providerId} state changed during preflight`);
     }
     verifyCodeSnapshot({
       snapshot: closing.codes,
-      dependencies: {},
+      dependencies: release.dependencyBindings,
       prepared: release.preparedBindings,
       label: `${providers[index].providerId} closing`,
       runtimeCodeHash,
@@ -1773,26 +1842,36 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
   }
   if (
     closings[0].pendingNonce !== closings[1].pendingNonce ||
-    closings[0].gasPrice !== closings[1].gasPrice ||
-    closings[0].priorityFee !== closings[1].priorityFee ||
-    closings[0].pendingBlock.parentHash !==
-      closings[1].pendingBlock.parentHash ||
-    closings[0].pendingBlock.timestamp !== closings[1].pendingBlock.timestamp ||
-    closings[0].pendingBlock.baseFeePerGas !==
-      closings[1].pendingBlock.baseFeePerGas ||
-    closings[0].pendingBlock.gasLimit !== closings[1].pendingBlock.gasLimit ||
     JSON.stringify(closings[0].codes) !== JSON.stringify(closings[1].codes) ||
     JSON.stringify(closings[0].vacancyNonces) !==
-      JSON.stringify(closings[1].vacancyNonces)
+      JSON.stringify(closings[1].vacancyNonces) ||
+    closings[0].callResult !== closings[1].callResult ||
+    closings[0].estimatedGas !== closings[1].estimatedGas
   ) {
-    fail("Robinhood RPCs disagree on closing nonce, fees, or vacancy");
+    fail(
+      "Robinhood RPCs disagree on closing nonce, code, vacancy, simulation, or gas",
+    );
   }
-  const maxPriorityFeePerGas = closings[0].priorityFee;
-  const baseFeePerGas = closings[0].pendingBlock.baseFeePerGas;
+  const maxPriorityFeePerGas = closings.reduce(
+    (maximum, { priorityFee }) =>
+      priorityFee > maximum ? priorityFee : maximum,
+    0n,
+  );
+  const baseFeePerGas = closings.reduce(
+    (maximum, { pendingBlock }) =>
+      pendingBlock.baseFeePerGas > maximum
+        ? pendingBlock.baseFeePerGas
+        : maximum,
+    0n,
+  );
+  const observedGasPrice = closings.reduce(
+    (maximum, { gasPrice }) => (gasPrice > maximum ? gasPrice : maximum),
+    0n,
+  );
   const doubledBaseFeeEnvelope = 2n * baseFeePerGas + maxPriorityFeePerGas;
   const maxFeePerGas =
-    closings[0].gasPrice > doubledBaseFeeEnvelope
-      ? closings[0].gasPrice
+    observedGasPrice > doubledBaseFeeEnvelope
+      ? observedGasPrice
       : doubledBaseFeeEnvelope;
   if (
     maxFeePerGas <= 0n ||
@@ -1872,13 +1951,20 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         blockHash: commonBlocks[0].hash,
         blockTimestamp: commonBlocks[0].timestamp.toString(),
       },
-      pendingBlock: {
-        parentHash: pendingSnapshots[0].pendingBlock.parentHash,
-        blockTimestamp: pendingSnapshots[0].pendingBlock.timestamp.toString(),
-        gasLimit: pendingSnapshots[0].pendingBlock.gasLimit.toString(),
-        baseFeePerGas:
-          pendingSnapshots[0].pendingBlock.baseFeePerGas.toString(),
-      },
+      openingPendingBlocks: pendingSnapshots.map(({ pendingBlock }, index) => ({
+        providerId: providerBindings[index].providerId,
+        parentHash: pendingBlock.parentHash,
+        blockTimestamp: pendingBlock.timestamp.toString(),
+        gasLimit: pendingBlock.gasLimit.toString(),
+        baseFeePerGas: pendingBlock.baseFeePerGas.toString(),
+      })),
+      closingPendingBlocks: closings.map(({ pendingBlock }, index) => ({
+        providerId: providerBindings[index].providerId,
+        parentHash: pendingBlock.parentHash,
+        blockTimestamp: pendingBlock.timestamp.toString(),
+        gasLimit: pendingBlock.gasLimit.toString(),
+        baseFeePerGas: pendingBlock.baseFeePerGas.toString(),
+      })),
     },
     preparedAddresses: EXPECTED_PREPARED_ADDRESSES,
     transaction: {
@@ -1908,6 +1994,9 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       gasEstimates: pendingSnapshots.map(({ estimatedGas: value }) =>
         value.toString(),
       ),
+      closingGasEstimates: closings.map(({ estimatedGas: value }) =>
+        value.toString(),
+      ),
       agreedGasEstimate: estimatedGas.toString(),
     },
     gasPolicy: {
@@ -1919,7 +2008,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_GAS_LIMIT.toString(),
       reviewedGasLimit: gasLimit.toString(),
       observedPendingBaseFeePerGasWei: baseFeePerGas.toString(),
-      observedGasPriceWei: closings[0].gasPrice.toString(),
+      observedGasPriceWei: observedGasPrice.toString(),
       observedMaxPriorityFeePerGasWei: maxPriorityFeePerGas.toString(),
       reviewedMaxFeePerGasWei: maxFeePerGas.toString(),
       maximumGasCostWei: reviewedMaximumGasCostWei.toString(),
@@ -1936,14 +2025,18 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       exactFreshDeterministicCompilation: true,
       independentAuthenticatedRpcCount: 2,
       commonBlockAgreement: true,
-      pendingBlockAgreement: true,
+      movingPendingHeadsTolerated: true,
+      stateRelevantOpeningAgreement: true,
+      stateRelevantClosingAgreement: true,
       dependencyRuntimePinsVerified: true,
       fixedAndPendingCodeAndNonceVacancyVerified: true,
       pendingSimulationAgreement: true,
       pendingGasAgreement: true,
       pendingNonceAgreement: true,
       noPendingOwnerTransaction: true,
-      closingFeeAgreement: true,
+      closingSimulationAgreement: true,
+      closingGasAgreement: true,
+      closingFeeCeilingUsesProviderMaxima: true,
       closingVacancyVerified: true,
       boundedTimeout: true,
       rpcResponseBudgetBytes: RPC_AGGREGATE_RESPONSE_LIMIT_BYTES,

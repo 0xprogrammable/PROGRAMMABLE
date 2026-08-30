@@ -157,6 +157,8 @@ function mockRpc(options = {}) {
   const requestInventory = [];
   const pendingOwnerNonceReads = new Map();
   const pendingBlockReads = new Map();
+  const callReads = new Map();
+  const estimateReads = new Map();
   const codeByAddress = new Map();
   const hashByCode = new Map();
   Object.entries(dependencyBindings()).forEach(([key, binding], index) => {
@@ -183,9 +185,18 @@ function mockRpc(options = {}) {
         count > 1 && provider.closingParentHash
           ? provider.closingParentHash
           : (provider.pendingParentHash ?? `0x${"aa".repeat(32)}`),
-      timestamp: `0x${FIXED_TIMESTAMP.toString(16)}`,
-      gasLimit: provider.pendingGasLimit ?? "0x1c9c380",
-      baseFeePerGas: provider.baseFeePerGas ?? "0x3b9aca00",
+      timestamp:
+        count > 1 && provider.closingPendingTimestamp
+          ? provider.closingPendingTimestamp
+          : (provider.pendingTimestamp ?? `0x${FIXED_TIMESTAMP.toString(16)}`),
+      gasLimit:
+        count > 1 && provider.closingPendingGasLimit
+          ? provider.closingPendingGasLimit
+          : (provider.pendingGasLimit ?? "0x1c9c380"),
+      baseFeePerGas:
+        count > 1 && provider.closingBaseFeePerGas
+          ? provider.closingBaseFeePerGas
+          : (provider.baseFeePerGas ?? "0x3b9aca00"),
     };
   };
   const rpcClient = async ({ providerId, method, params }) => {
@@ -231,10 +242,19 @@ function mockRpc(options = {}) {
       if (provider.occupiedCodeKey === entry.key) return "0x6001";
       return entry.code;
     }
-    if (method === "eth_call")
-      return provider.callResult ?? EXPECTED_SIMULATION;
+    if (method === "eth_call") {
+      const count = (callReads.get(providerId) ?? 0) + 1;
+      callReads.set(providerId, count);
+      return count > 1 && provider.closingCallResult !== undefined
+        ? provider.closingCallResult
+        : (provider.callResult ?? EXPECTED_SIMULATION);
+    }
     if (method === "eth_estimateGas") {
-      return provider.estimate ?? "0x6d66aa";
+      const count = (estimateReads.get(providerId) ?? 0) + 1;
+      estimateReads.set(providerId, count);
+      return count > 1 && provider.closingEstimate !== undefined
+        ? provider.closingEstimate
+        : (provider.estimate ?? "0x6d66aa");
     }
     if (method === "eth_gasPrice") return provider.gasPrice ?? "0x77359400";
     if (method === "eth_maxPriorityFeePerGas") {
@@ -318,6 +338,95 @@ test("both reviewed owners produce a protected, digest-bound envelope", async ()
     assert.ok(!rendered.includes("0123456789abcdef"));
     assert.ok(!rendered.includes("abcdef0123456789"));
   }
+});
+
+test("moving pending heads and provider fee differences use conservative maxima", async () => {
+  const openingParents = [
+    `0x${"a1".repeat(32)}`,
+    `0x${"b2".repeat(32)}`,
+  ];
+  const closingParents = [
+    `0x${"c3".repeat(32)}`,
+    `0x${"d4".repeat(32)}`,
+  ];
+  const { receipt } = await prepareEnvelope({
+    ceilings: { maximumFeePerGasWei: "4000000000" },
+    options: {
+      providers: {
+        quicknode: {
+          pendingParentHash: openingParents[0],
+          pendingTimestamp: `0x${FIXED_TIMESTAMP.toString(16)}`,
+          baseFeePerGas: "0x3b9aca00",
+          closingParentHash: closingParents[0],
+          closingPendingTimestamp: `0x${(FIXED_TIMESTAMP + 2).toString(16)}`,
+          closingBaseFeePerGas: "0x4190ab00",
+          gasPrice: "0xcaa7e200",
+          priorityFee: "0x5f5e100",
+        },
+        alchemy: {
+          pendingParentHash: openingParents[1],
+          pendingTimestamp: `0x${(FIXED_TIMESTAMP + 1).toString(16)}`,
+          baseFeePerGas: "0x47868c00",
+          closingParentHash: closingParents[1],
+          closingPendingTimestamp: `0x${(FIXED_TIMESTAMP + 3).toString(16)}`,
+          closingBaseFeePerGas: "0x53724e00",
+          gasPrice: "0xa0eebb00",
+          priorityFee: "0x1dcd6500",
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(receipt.observation.openingPendingBlocks, [
+    {
+      providerId: "quicknode",
+      parentHash: openingParents[0],
+      blockTimestamp: FIXED_TIMESTAMP.toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1000000000",
+    },
+    {
+      providerId: "alchemy",
+      parentHash: openingParents[1],
+      blockTimestamp: (FIXED_TIMESTAMP + 1).toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1200000000",
+    },
+  ]);
+  assert.deepEqual(receipt.observation.closingPendingBlocks, [
+    {
+      providerId: "quicknode",
+      parentHash: closingParents[0],
+      blockTimestamp: (FIXED_TIMESTAMP + 2).toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1100000000",
+    },
+    {
+      providerId: "alchemy",
+      parentHash: closingParents[1],
+      blockTimestamp: (FIXED_TIMESTAMP + 3).toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1400000000",
+    },
+  ]);
+  assert.ok(!Object.hasOwn(receipt.observation, "pendingBlock"));
+  assert.deepEqual(receipt.simulation.closingGasEstimates, [
+    "7169706",
+    "7169706",
+  ]);
+  assert.equal(receipt.gasPolicy.observedPendingBaseFeePerGasWei, "1400000000");
+  assert.equal(receipt.gasPolicy.observedGasPriceWei, "3400000000");
+  assert.equal(receipt.gasPolicy.observedMaxPriorityFeePerGasWei, "500000000");
+  assert.equal(receipt.transaction.maxPriorityFeePerGas, "500000000");
+  assert.equal(receipt.transaction.maxFeePerGas, "3400000000");
+  assert.equal(receipt.checks.movingPendingHeadsTolerated, true);
+  assert.equal(receipt.checks.stateRelevantOpeningAgreement, true);
+  assert.equal(receipt.checks.stateRelevantClosingAgreement, true);
+  assert.equal(receipt.checks.closingSimulationAgreement, true);
+  assert.equal(receipt.checks.closingGasAgreement, true);
+  assert.equal(receipt.checks.closingFeeCeilingUsesProviderMaxima, true);
+  assert.ok(!Object.hasOwn(receipt.checks, "pendingBlockAgreement"));
+  assert.ok(!Object.hasOwn(receipt.checks, "closingFeeAgreement"));
 });
 
 test("implementation inventory contains no balance, signing, or broadcast primitive", async () => {
@@ -548,7 +657,7 @@ test("provider commitment helper separates review derivation from live exact mat
   assert.doesNotMatch(substituted.stderr, /0123456789abcdef|abcdef0123456789/u);
 });
 
-test("preflight fails closed on provider, pin, vacancy, nonce, simulation, gas, and fee drift", async (t) => {
+test("preflight fails closed on provider, pin, vacancy, nonce, simulation, and gas drift", async (t) => {
   const cases = [
     ["chain", { providers: { alchemy: { chainId: "0x1" } } }, /not Robinhood/u],
     [
@@ -597,18 +706,14 @@ test("preflight fails closed on provider, pin, vacancy, nonce, simulation, gas, 
       /state changed/u,
     ],
     [
-      "closing parent",
-      {
-        providers: {
-          quicknode: { closingParentHash: `0x${"bb".repeat(32)}` },
-        },
-      },
-      /state changed/u,
+      "closing simulation",
+      { providers: { quicknode: { closingCallResult: "0x" } } },
+      /simulation|state changed/u,
     ],
     [
-      "fee",
-      { providers: { alchemy: { gasPrice: "0x77359401" } } },
-      /disagree on closing/u,
+      "closing gas estimate",
+      { providers: { quicknode: { closingEstimate: "0x6d66ab" } } },
+      /gas|state changed/u,
     ],
   ];
   for (const [name, options, pattern] of cases) {
@@ -809,6 +914,8 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
       preparedAddressCount: 3,
       pendingSimulationVerified: true,
       pendingGasEstimate: receipt.simulation.agreedGasEstimate,
+      closingSimulationVerified: true,
+      closingGasEstimate: receipt.simulation.agreedGasEstimate,
       closingVacancyVerified: true,
       rpcResponseBytesConsumed: 0,
     });
@@ -833,7 +940,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
           .map(({ method, params }) => ({ method, params })),
       ]),
     );
-    assert.equal(requestsByProvider.quicknode.length, 19);
+    assert.equal(requestsByProvider.quicknode.length, 21);
     assert.deepEqual(requestsByProvider.quicknode, requestsByProvider.alchemy);
     assert.ok(
       actionTimeMock.requestInventory.every(
@@ -1023,6 +1130,72 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
       /source changed during hosted Verify revalidation/u,
     );
     assert.equal(finalSourceReads, 3);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("action-time closing simulation and gas drift fail closed", async (t) => {
+  const { receipt } = await prepareEnvelope();
+  const root = await mkdtemp(
+    path.join(os.homedir(), ".robinhood-wallet-closing-test-"),
+  );
+  await chmod(root, 0o700);
+  const envelopePath = path.join(root, "envelope.json");
+  const walletRequestPath = path.join(root, "wallet-request.json");
+  const env = {
+    ROBINHOOD_OWNER_ENVELOPE_ROOT: root,
+    ROBINHOOD_MAINNET_RPC_URL_PRIMARY: RPC_URLS[0],
+    ROBINHOOD_MAINNET_RPC_URL_SECONDARY: RPC_URLS[1],
+    ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY: RPC_COMMITMENTS[0],
+    ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY: RPC_COMMITMENTS[1],
+  };
+  try {
+    await Promise.all([
+      writeFile(envelopePath, `${JSON.stringify(receipt, null, 2)}\n`, {
+        mode: 0o600,
+        flag: "wx",
+      }),
+      writeFile(
+        walletRequestPath,
+        `${JSON.stringify(walletRequest(receipt), null, 2)}\n`,
+        { mode: 0o600, flag: "wx" },
+      ),
+    ]);
+    const cases = [
+      [
+        "closing eth_call drift",
+        { providers: { quicknode: { closingCallResult: "0x" } } },
+        /simulation|state changed during wallet verification/u,
+      ],
+      [
+        "closing eth_estimateGas drift",
+        { providers: { quicknode: { closingEstimate: "0x6d66ab" } } },
+        /gas|state changed during wallet verification/u,
+      ],
+    ];
+    for (const [name, rpcOptions, pattern] of cases) {
+      await t.test(name, async () => {
+        await assert.rejects(
+          () =>
+            verifyRobinhoodOwnerWalletRequest({
+              envelopePath,
+              walletRequestPath,
+              env,
+              nowMilliseconds: FIXED_TIMESTAMP * 1_000,
+              sourceIdentity: () => ({
+                commit: receipt.source.commit,
+                tree: receipt.source.tree,
+                clean: true,
+              }),
+              hostedVerifyResolver: async () => receipt.hostedVerify,
+              rpcClient: mockRpc(rpcOptions).rpcClient,
+              clock: () => FIXED_TIMESTAMP * 1_000,
+            }),
+          pattern,
+        );
+      });
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
