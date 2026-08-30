@@ -11,7 +11,7 @@ import {
 import { canonicalizeJson } from "../../packages/launch/src/canonical-json.mjs";
 
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_SCHEMA =
-  "programmable.robinhood-custom-launch.owner-envelope.v1";
+  "programmable.robinhood-custom-launch.owner-envelope.v2";
 export const ROBINHOOD_FOUNDATION_HOSTED_VERIFY_SCHEMA =
   "programmable.robinhood-custom-launch.hosted-verify-binding.v1";
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_TTL_SECONDS = 300;
@@ -153,6 +153,125 @@ const EXPECTED_RECEIPT_TOP_LEVEL_KEYS = Object.freeze([
   "status",
   "transaction",
 ]);
+const EXPECTED_SOURCE_KEYS = Object.freeze([
+  "chainProfileSha256",
+  "clean",
+  "commit",
+  "foundationSourceCommitment",
+  "predeploymentSha256",
+  "productionBaseCommit",
+  "productionBaseTree",
+  "tree",
+]);
+const EXPECTED_PREPARED_ARTIFACT_KEYS = Object.freeze([
+  "foundationSourceCommitment",
+  "path",
+  "sha256",
+]);
+const EXPECTED_OBSERVATION_KEYS = Object.freeze([
+  "closingFeeObservations",
+  "closingPendingBlocks",
+  "commonAnchor",
+  "createdAtTimestamp",
+  "elapsedMilliseconds",
+  "expiresAtTimestamp",
+  "minimumRemainingTtlSeconds",
+  "openingHeads",
+  "openingPendingBlocks",
+  "operationStartedAtTimestamp",
+  "ttlSeconds",
+]);
+const EXPECTED_PENDING_OBSERVATION_KEYS = Object.freeze([
+  "baseFeePerGas",
+  "blockTimestamp",
+  "gasLimit",
+  "parentHash",
+  "providerId",
+]);
+const EXPECTED_OPENING_HEAD_KEYS = Object.freeze([
+  "blockHash",
+  "blockNumber",
+  "blockTimestamp",
+  "providerId",
+]);
+const EXPECTED_COMMON_ANCHOR_KEYS = Object.freeze([
+  "blockHash",
+  "blockNumber",
+  "blockTimestamp",
+]);
+const EXPECTED_FEE_OBSERVATION_KEYS = Object.freeze([
+  "gasPrice",
+  "maxPriorityFeePerGas",
+  "providerId",
+]);
+const EXPECTED_SIMULATION_KEYS = Object.freeze([
+  "agreedGasEstimate",
+  "allComponentsSucceeded",
+  "blockTag",
+  "closingGasEstimates",
+  "gasEstimates",
+  "returnDataKeccak256",
+  "returnedAddresses",
+]);
+const EXPECTED_CHECK_KEYS = Object.freeze([
+  "boundedTimeout",
+  "closingFeeCeilingUsesProviderMaxima",
+  "closingGasAgreement",
+  "closingSimulationAgreement",
+  "closingVacancyVerified",
+  "commonBlockAgreement",
+  "dependencyRuntimePinsVerified",
+  "exactCleanSource",
+  "exactFreshDeterministicCompilation",
+  "exactPreparedArtifact",
+  "fixedAndPendingCodeAndNonceVacancyVerified",
+  "independentAuthenticatedRpcCount",
+  "movingPendingHeadsTolerated",
+  "noPendingOwnerTransaction",
+  "pendingGasAgreement",
+  "pendingNonceAgreement",
+  "pendingSimulationAgreement",
+  "rpcMethodInventory",
+  "rpcResponseBudgetBytes",
+  "rpcResponseBytesConsumed",
+  "stateRelevantClosingAgreement",
+  "stateRelevantOpeningAgreement",
+]);
+const EXPECTED_GAS_POLICY_KEYS = Object.freeze([
+  "balanceReadPerformed",
+  "fixedHeadroomGas",
+  "fundingVerified",
+  "headroomBasisPoints",
+  "maximumGasCostWei",
+  "maximumGasLimit",
+  "observedGasPriceWei",
+  "observedMaxPriorityFeePerGasWei",
+  "observedPendingBaseFeePerGasWei",
+  "ownerMaximumFeePerGasWei",
+  "ownerMaximumGasCostWei",
+  "ownerMaximumPriorityFeePerGasWei",
+  "reviewedGasLimit",
+  "reviewedMaxFeePerGasWei",
+]);
+const EXPECTED_TRANSACTION_KEYS = Object.freeze([
+  "chainId",
+  "from",
+  "gasLimit",
+  "gasQuantity",
+  "input",
+  "inputBytes",
+  "inputKeccak256",
+  "maxFeePerGas",
+  "maxFeePerGasQuantity",
+  "maxPriorityFeePerGas",
+  "maxPriorityFeePerGasQuantity",
+  "nonce",
+  "nonceQuantity",
+  "selector",
+  "to",
+  "type",
+  "valueWei",
+]);
 const RPC_RESPONSE_LIMIT_BYTES = Object.freeze({
   eth_chainId: 8 * 1024,
   eth_getBlockByNumber: 128 * 1024,
@@ -173,11 +292,21 @@ function sha256(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+function hasExactKeys(value, expectedKeys) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).sort().join("\0") ===
+      [...expectedKeys].sort().join("\0")
+  );
+}
+
 function ownerEnvelopeReceiptDigest(receipt) {
   return sha256(
     Buffer.concat([
       Buffer.from(
-        "programmable.robinhood-custom-launch.owner-envelope.receipt.v1",
+        "programmable.robinhood-custom-launch.owner-envelope.receipt.v2",
         "utf8",
       ),
       Buffer.from([0]),
@@ -253,6 +382,7 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
   const nowTimestamp = Math.floor(nowMilliseconds / 1_000);
   let transactionIsExact = false;
   const releaseIsExact =
+    hasExactKeys(receipt.source, EXPECTED_SOURCE_KEYS) &&
     /^[0-9a-f]{40}$/u.test(receipt.source?.commit ?? "") &&
     /^[0-9a-f]{40}$/u.test(receipt.source?.tree ?? "") &&
     receipt.source?.clean === true &&
@@ -262,6 +392,12 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
     receipt.source?.predeploymentSha256 === PREDEPLOYMENT_SHA256 &&
     receipt.source?.foundationSourceCommitment ===
       FOUNDATION_SOURCE_COMMITMENT &&
+    hasExactKeys(
+      receipt.preparedArtifact,
+      EXPECTED_PREPARED_ARTIFACT_KEYS,
+    ) &&
+    receipt.preparedArtifact?.path ===
+      "contracts/deployments/robinhood-custom-launch-v1.predeployment.json" &&
     receipt.preparedArtifact?.sha256 === PREDEPLOYMENT_SHA256 &&
     receipt.preparedArtifact?.foundationSourceCommitment ===
       FOUNDATION_SOURCE_COMMITMENT &&
@@ -294,6 +430,276 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
   } catch {
     hostedVerifyIsExact = false;
   }
+  let evidenceIsExact = false;
+  try {
+    const providerIds = EXPECTED_PROVIDER_PINS.map(({ providerId }) => providerId);
+    const observation = receipt.observation;
+    const openingHeads = observation.openingHeads.map((head, index) => {
+      if (
+        !hasExactKeys(head, EXPECTED_OPENING_HEAD_KEYS) ||
+        head.providerId !== providerIds[index]
+      ) {
+        fail("receipt opening head is invalid");
+      }
+      return {
+        number: parseDecimalWei(head.blockNumber, "receipt opening block"),
+        hash: exactHash(head.blockHash, "receipt opening block hash"),
+        timestamp: parseDecimalWei(
+          head.blockTimestamp,
+          "receipt opening block timestamp",
+        ),
+      };
+    });
+    if (openingHeads.length !== providerIds.length) {
+      fail("receipt opening head count is invalid");
+    }
+    if (!hasExactKeys(observation.commonAnchor, EXPECTED_COMMON_ANCHOR_KEYS)) {
+      fail("receipt common anchor is invalid");
+    }
+    const commonAnchor = {
+      number: parseDecimalWei(
+        observation.commonAnchor.blockNumber,
+        "receipt common block",
+      ),
+      hash: exactHash(
+        observation.commonAnchor.blockHash,
+        "receipt common block hash",
+      ),
+      timestamp: parseDecimalWei(
+        observation.commonAnchor.blockTimestamp,
+        "receipt common block timestamp",
+      ),
+    };
+    const openingMinimum = openingHeads.reduce(
+      (minimum, { number }) => (number < minimum ? number : minimum),
+      openingHeads[0].number,
+    );
+    if (
+      commonAnchor.number !== openingMinimum ||
+      openingHeads.some(
+        ({ number, hash, timestamp }) =>
+          number === commonAnchor.number &&
+          (hash !== commonAnchor.hash || timestamp !== commonAnchor.timestamp),
+      )
+    ) {
+      fail("receipt common anchor differs from the opening heads");
+    }
+    const normalizePendingObservations = (values, label) => {
+      if (!Array.isArray(values) || values.length !== providerIds.length) {
+        fail(`receipt ${label} pending observation count is invalid`);
+      }
+      return values.map((value, index) => {
+        if (
+          !hasExactKeys(value, EXPECTED_PENDING_OBSERVATION_KEYS) ||
+          value.providerId !== providerIds[index]
+        ) {
+          fail(`receipt ${label} pending observation is invalid`);
+        }
+        return {
+          parentHash: exactHash(
+            value.parentHash,
+            `receipt ${label} pending parent hash`,
+          ),
+          timestamp: parseDecimalWei(
+            value.blockTimestamp,
+            `receipt ${label} pending timestamp`,
+          ),
+          gasLimit: parseDecimalWei(
+            value.gasLimit,
+            `receipt ${label} pending gas limit`,
+          ),
+          baseFeePerGas: parseDecimalWei(
+            value.baseFeePerGas,
+            `receipt ${label} pending base fee`,
+            { positive: false },
+          ),
+        };
+      });
+    };
+    const openingPendingBlocks = normalizePendingObservations(
+      observation.openingPendingBlocks,
+      "opening",
+    );
+    const closingPendingBlocks = normalizePendingObservations(
+      observation.closingPendingBlocks,
+      "closing",
+    );
+    if (
+      !Array.isArray(observation.closingFeeObservations) ||
+      observation.closingFeeObservations.length !== providerIds.length
+    ) {
+      fail("receipt closing fee observation count is invalid");
+    }
+    const closingFees = observation.closingFeeObservations.map(
+      (value, index) => {
+        if (
+          !hasExactKeys(value, EXPECTED_FEE_OBSERVATION_KEYS) ||
+          value.providerId !== providerIds[index]
+        ) {
+          fail("receipt closing fee observation is invalid");
+        }
+        return {
+          gasPrice: parseDecimalWei(
+            value.gasPrice,
+            "receipt closing gas price",
+          ),
+          priorityFee: parseDecimalWei(
+            value.maxPriorityFeePerGas,
+            "receipt closing priority fee",
+            { positive: false },
+          ),
+        };
+      },
+    );
+    const simulation = receipt.simulation;
+    const agreedGasEstimate = parseDecimalWei(
+      simulation.agreedGasEstimate,
+      "receipt agreed gas estimate",
+    );
+    const reviewedGasLimit = parseDecimalWei(
+      receipt.transaction?.gasLimit,
+      "receipt reviewed gas limit",
+    );
+    const gasEstimateArrays = [
+      simulation.gasEstimates,
+      simulation.closingGasEstimates,
+    ];
+    const expectedReturnedAddresses = Object.values(EXPECTED_PREPARED_ADDRESSES);
+    const pendingBaseFeeMaximum = [
+      ...openingPendingBlocks,
+      ...closingPendingBlocks,
+    ].reduce(
+      (maximum, { baseFeePerGas }) =>
+        baseFeePerGas > maximum ? baseFeePerGas : maximum,
+      0n,
+    );
+    const gasPriceMaximum = closingFees.reduce(
+      (maximum, { gasPrice }) => (gasPrice > maximum ? gasPrice : maximum),
+      0n,
+    );
+    const priorityFeeMaximum = closingFees.reduce(
+      (maximum, { priorityFee }) =>
+        priorityFee > maximum ? priorityFee : maximum,
+      0n,
+    );
+    const observedBaseFee = parseDecimalWei(
+      receipt.gasPolicy?.observedPendingBaseFeePerGasWei,
+      "receipt observed pending base fee",
+      { positive: false },
+    );
+    const observedGasPrice = parseDecimalWei(
+      receipt.gasPolicy?.observedGasPriceWei,
+      "receipt observed gas price",
+    );
+    const observedPriorityFee = parseDecimalWei(
+      receipt.gasPolicy?.observedMaxPriorityFeePerGasWei,
+      "receipt observed priority fee",
+      { positive: false },
+    );
+    const reviewedMaxFee = parseDecimalWei(
+      receipt.gasPolicy?.reviewedMaxFeePerGasWei,
+      "receipt reviewed maximum fee",
+    );
+    const expectedMaxFee =
+      observedGasPrice > 2n * observedBaseFee + observedPriorityFee
+        ? observedGasPrice
+        : 2n * observedBaseFee + observedPriorityFee;
+    const ownerMaximumFee = parseDecimalWei(
+      receipt.gasPolicy?.ownerMaximumFeePerGasWei,
+      "receipt owner maximum fee",
+    );
+    const ownerMaximumPriorityFee = parseDecimalWei(
+      receipt.gasPolicy?.ownerMaximumPriorityFeePerGasWei,
+      "receipt owner maximum priority fee",
+      { positive: false },
+    );
+    const ownerMaximumGasCost = parseDecimalWei(
+      receipt.gasPolicy?.ownerMaximumGasCostWei,
+      "receipt owner maximum gas cost",
+    );
+    const checks = receipt.checks;
+    const booleanCheckKeys = EXPECTED_CHECK_KEYS.filter(
+      (key) =>
+        ![
+          "independentAuthenticatedRpcCount",
+          "rpcMethodInventory",
+          "rpcResponseBudgetBytes",
+          "rpcResponseBytesConsumed",
+        ].includes(key),
+    );
+    evidenceIsExact =
+      hasExactKeys(observation, EXPECTED_OBSERVATION_KEYS) &&
+      Number.isSafeInteger(observation.operationStartedAtTimestamp) &&
+      observation.operationStartedAtTimestamp >= 0 &&
+      Number.isSafeInteger(observation.createdAtTimestamp) &&
+      observation.createdAtTimestamp >= observation.operationStartedAtTimestamp &&
+      observation.createdAtTimestamp -
+        observation.operationStartedAtTimestamp <=
+        Math.ceil(ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_OPERATION_MS / 1_000) &&
+      Math.abs(
+        observation.createdAtTimestamp - Number(commonAnchor.timestamp),
+      ) <= 120 &&
+      Number.isSafeInteger(observation.expiresAtTimestamp) &&
+      observation.ttlSeconds ===
+        ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_TTL_SECONDS &&
+      observation.minimumRemainingTtlSeconds ===
+        ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MINIMUM_REMAINING_TTL_SECONDS &&
+      Number.isSafeInteger(observation.elapsedMilliseconds) &&
+      observation.elapsedMilliseconds >= 0 &&
+      observation.elapsedMilliseconds <=
+        ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_OPERATION_MS &&
+      hasExactKeys(simulation, EXPECTED_SIMULATION_KEYS) &&
+      simulation.blockTag === "pending" &&
+      simulation.returnDataKeccak256 === EXPECTED_CALL_RETURN_HASH &&
+      simulation.allComponentsSucceeded === true &&
+      Array.isArray(simulation.returnedAddresses) &&
+      simulation.returnedAddresses.length ===
+        expectedReturnedAddresses.length &&
+      simulation.returnedAddresses.every((address, index) =>
+        sameAddress(address, expectedReturnedAddresses[index]),
+      ) &&
+      gasEstimateArrays.every(
+        (values) =>
+          Array.isArray(values) &&
+          values.length === providerIds.length &&
+          values.every((value) => value === agreedGasEstimate.toString()),
+      ) &&
+      reviewedRobinhoodFoundationGasLimit(agreedGasEstimate) ===
+        reviewedGasLimit &&
+      [...openingPendingBlocks, ...closingPendingBlocks].every(
+        ({ gasLimit }) => reviewedGasLimit <= gasLimit,
+      ) &&
+      hasExactKeys(receipt.gasPolicy, EXPECTED_GAS_POLICY_KEYS) &&
+      receipt.gasPolicy.headroomBasisPoints ===
+        ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_GAS_HEADROOM_BPS.toString() &&
+      receipt.gasPolicy.fixedHeadroomGas ===
+        ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_FIXED_GAS_HEADROOM.toString() &&
+      receipt.gasPolicy.maximumGasLimit ===
+        ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_GAS_LIMIT.toString() &&
+      receipt.gasPolicy.reviewedGasLimit === reviewedGasLimit.toString() &&
+      observedBaseFee === pendingBaseFeeMaximum &&
+      observedGasPrice === gasPriceMaximum &&
+      observedPriorityFee === priorityFeeMaximum &&
+      reviewedMaxFee === expectedMaxFee &&
+      ownerMaximumFee >= reviewedMaxFee &&
+      ownerMaximumPriorityFee >= observedPriorityFee &&
+      ownerMaximumGasCost >= reviewedGasLimit * reviewedMaxFee &&
+      receipt.gasPolicy.maximumGasCostWei ===
+        (reviewedGasLimit * reviewedMaxFee).toString() &&
+      receipt.gasPolicy.balanceReadPerformed === false &&
+      receipt.gasPolicy.fundingVerified === false &&
+      hasExactKeys(checks, EXPECTED_CHECK_KEYS) &&
+      booleanCheckKeys.every((key) => checks[key] === true) &&
+      checks.independentAuthenticatedRpcCount === providerIds.length &&
+      checks.rpcResponseBudgetBytes === RPC_AGGREGATE_RESPONSE_LIMIT_BYTES &&
+      Number.isSafeInteger(checks.rpcResponseBytesConsumed) &&
+      checks.rpcResponseBytesConsumed >= 0 &&
+      checks.rpcResponseBytesConsumed <= RPC_AGGREGATE_RESPONSE_LIMIT_BYTES &&
+      JSON.stringify(checks.rpcMethodInventory) ===
+        JSON.stringify(Object.keys(RPC_RESPONSE_LIMIT_BYTES));
+  } catch {
+    evidenceIsExact = false;
+  }
   try {
     const input = exactCode(receipt.transaction?.input, "receipt input");
     const from = exactAddress(receipt.transaction?.from, "receipt sender");
@@ -314,6 +720,7 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
       { positive: false },
     );
     transactionIsExact =
+      hasExactKeys(receipt.transaction, EXPECTED_TRANSACTION_KEYS) &&
       ALLOWED_OWNERS.includes(from.toLowerCase()) &&
       receipt.transaction?.type === "0x2" &&
       receipt.transaction?.chainId === CHAIN_ID_HEX &&
@@ -354,8 +761,7 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
     transactionIsExact = false;
   }
   if (
-    Object.keys(receipt).sort().join("\0") !==
-      EXPECTED_RECEIPT_TOP_LEVEL_KEYS.join("\0") ||
+    !hasExactKeys(receipt, EXPECTED_RECEIPT_TOP_LEVEL_KEYS) ||
     receipt.schemaVersion !== ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_SCHEMA ||
     receipt.state !== "prepared-not-signed-not-broadcast" ||
     receipt.status !==
@@ -378,6 +784,7 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
     receipt.checks?.boundedTimeout !== true ||
     !releaseIsExact ||
     !hostedVerifyIsExact ||
+    !evidenceIsExact ||
     !transactionIsExact ||
     !Number.isSafeInteger(issuedAtTimestamp) ||
     !Number.isSafeInteger(expiresAtTimestamp) ||
@@ -1217,6 +1624,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
   const closings = await Promise.all(
     providers.map(async (provider) => {
       const [
+        chainIdValue,
         latestNonceValue,
         pendingNonceValue,
         codes,
@@ -1224,6 +1632,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
         callResultValue,
         estimateValue,
       ] = await Promise.all([
+          rpc(provider, "eth_chainId", [], rpcClient, requestTimeoutMs),
           rpc(
             provider,
             "eth_getTransactionCount",
@@ -1268,6 +1677,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
           ),
         ]);
       return {
+        chainId: parseQuantity(
+          chainIdValue,
+          `${provider.providerId} action-time closing chain ID`,
+        ),
         latestNonce: parseQuantity(
           latestNonceValue,
           `${provider.providerId} action-time closing latest nonce`,
@@ -1292,6 +1705,8 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
   for (const [index, closing] of closings.entries()) {
     const providerId = providers[index].providerId;
     if (
+      closing.chainId !== CHAIN_ID ||
+      closing.chainId !== snapshots[index].chainId ||
       closing.latestNonce !== expectedNonce ||
       closing.pendingNonce !== expectedNonce ||
       closing.latestNonce !== snapshots[index].latestNonce ||
@@ -1321,6 +1736,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     });
   }
   if (
+    closings[0].chainId !== closings[1].chainId ||
     closings[0].latestNonce !== closings[1].latestNonce ||
     closings[0].pendingNonce !== closings[1].pendingNonce ||
     JSON.stringify(closings[0].codes) !== JSON.stringify(closings[1].codes) ||
@@ -1857,11 +2273,11 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       priorityFee > maximum ? priorityFee : maximum,
     0n,
   );
-  const baseFeePerGas = closings.reduce(
-    (maximum, { pendingBlock }) =>
-      pendingBlock.baseFeePerGas > maximum
-        ? pendingBlock.baseFeePerGas
-        : maximum,
+  const baseFeePerGas = [
+    ...pendingSnapshots.map(({ pendingBlock }) => pendingBlock.baseFeePerGas),
+    ...closings.map(({ pendingBlock }) => pendingBlock.baseFeePerGas),
+  ].reduce(
+    (maximum, value) => (value > maximum ? value : maximum),
     0n,
   );
   const observedGasPrice = closings.reduce(
@@ -1965,6 +2381,13 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         gasLimit: pendingBlock.gasLimit.toString(),
         baseFeePerGas: pendingBlock.baseFeePerGas.toString(),
       })),
+      closingFeeObservations: closings.map(
+        ({ gasPrice, priorityFee }, index) => ({
+          providerId: providerBindings[index].providerId,
+          gasPrice: gasPrice.toString(),
+          maxPriorityFeePerGas: priorityFee.toString(),
+        }),
+      ),
     },
     preparedAddresses: EXPECTED_PREPARED_ADDRESSES,
     transaction: {
