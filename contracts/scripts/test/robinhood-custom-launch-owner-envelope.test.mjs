@@ -312,6 +312,9 @@ function mockRpc(options = {}) {
       return entry.code;
     }
     if (method === "eth_call") {
+      if (provider.rejectGasCappedCall && params[0].gas !== undefined) {
+        throw new Error("gas-capped simulation rejected");
+      }
       const count = (callReads.get(providerId) ?? 0) + 1;
       callReads.set(providerId, count);
       return count > 1 && provider.closingCallResult !== undefined
@@ -390,9 +393,10 @@ async function prepareEnvelope({
 }
 
 test("reviewed gas headroom is exact and fails instead of clamping", () => {
-  assert.equal(reviewedRobinhoodFoundationGasLimit(7_169_706n), 8_653_648n);
+  assert.equal(reviewedRobinhoodFoundationGasLimit(7_169_706n), 7_553_192n);
+  assert.equal(reviewedRobinhoodFoundationGasLimit(9_500_000n), 10_000_000n);
   assert.throws(
-    () => reviewedRobinhoodFoundationGasLimit(9_000_000n),
+    () => reviewedRobinhoodFoundationGasLimit(9_500_001n),
     /10,000,000 gas cap/u,
   );
   assert.throws(
@@ -416,7 +420,7 @@ test("both reviewed owners produce a protected, digest-bound envelope", async ()
       receipt.transaction.inputKeccak256,
       deployment.atomicOwnerTransaction.dataHash,
     );
-    assert.equal(receipt.transaction.gasLimit, "8653648");
+    assert.equal(receipt.transaction.gasLimit, "7553192");
     assert.equal(receipt.observation.ttlSeconds, 300);
     assert.equal(receipt.gasPolicy.balanceReadPerformed, false);
     assert.equal(receipt.gasPolicy.fundingVerified, false);
@@ -1166,6 +1170,25 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
     assert.equal(requestsByProvider.quicknode.length, 42);
     assert.deepEqual(requestsByProvider.quicknode, requestsByProvider.alchemy);
     assert.ok(
+      actionTimeMock.requestInventory
+        .filter(({ method }) => method === "eth_call")
+        .every(
+          ({ params }) =>
+            params[0].gas === receipt.transaction.gasQuantity &&
+            params[1] === "pending",
+        ),
+      "every action-time simulation must execute under the exact proposed gas limit",
+    );
+    assert.ok(
+      actionTimeMock.requestInventory
+        .filter(({ method }) => method === "eth_estimateGas")
+        .every(
+          ({ params }) =>
+            params[0].gas === undefined && params[1] === "pending",
+        ),
+      "every action-time estimate must independently reproduce the uncapped envelope estimate",
+    );
+    assert.ok(
       actionTimeMock.requestInventory.every(
         ({ method }) =>
           !/eth_send|wallet_|personal_|sign/iu.test(method),
@@ -1249,6 +1272,11 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
         "simulation",
         { providers: { alchemy: { callResult: "0x" } } },
         /simulation return commitment/u,
+      ],
+      [
+        "gas-capped simulation rejection",
+        { providers: { alchemy: { rejectGasCappedCall: true } } },
+        /gas-capped simulation rejected/u,
       ],
       [
         "gas estimate",
