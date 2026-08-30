@@ -217,7 +217,7 @@ async function readActivationManifest(options) {
     windowDurationSeconds !== MAIN_TOKEN_MIGRATION_POLICY.windowSeconds ||
     windowStartTimestamp + windowDurationSeconds !== deadlineTimestamp
   ) {
-    reject("activation manifest window is not the frozen 48-hour interval");
+    reject("activation manifest window is not the frozen 96-hour interval");
   }
   if (
     options.startBlock !== startBlock ||

@@ -7,7 +7,7 @@ address or release budget.
 ## Purpose
 
 This runbook defines the server-only activation contract for one bounded Ethereum Mainnet gas top-up per eligible
-V4 holder during the exact 48-hour migration window. The sponsor sends native ETH only to the authenticated holder
+V4 holder during the exact 96-hour migration window. The sponsor sends native ETH only to the authenticated holder
 wallet so that the holder can separately approve the exact V4 token transfer in their own wallet. It never sends V4,
 never submits the holder's token transfer, and never uses the migration recipient wallet as the sponsor.
 
@@ -47,7 +47,7 @@ Activation additionally requires the normal runtime dependencies:
 | `PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT` | Commitment to the secondary endpoint |
 
 The root migration manifest must independently bind the exact release, token, runtime-code hash, migration wallet,
-48-hour timestamps, opening block number and opening block hash. Sponsor configuration is accepted only while that
+96-hour timestamps, opening block number and opening block hash. Sponsor configuration is accepted only while that
 manifest has `enabled: true`, the current time is inside the window, and at least five minutes remain. In this branch
 the manifest deliberately remains `enabled: false` with null timing and block fields.
 
@@ -114,7 +114,7 @@ empty calldata and successful receipt on the same block.
 5. Configure the Privy secret, projection database bindings and exact independent RPC commitments on the immutable
    deployment candidate.
 6. At the migration opening block, record the exact block number/hash and calculate timestamps whose exclusive
-   deadline is exactly 172,800 seconds after the start.
+   deadline is exactly 345,600 seconds after the start.
 7. Only the integration owner may change the reviewed activation manifest to `enabled: true`, inject all six sponsor
    values with `MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED=true`, and deploy the exact reviewed `production` commit.
 8. Run the separate readiness checklist before exposing the migration entry point.

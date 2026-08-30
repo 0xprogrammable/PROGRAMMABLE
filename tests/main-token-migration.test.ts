@@ -27,7 +27,7 @@ const transferAbi = parseAbi([
   "function transfer(address to,uint256 amount) returns (bool)",
 ]);
 const migrationWallet = "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D";
-const migrationWindowSeconds = 48 * 60 * 60;
+const migrationWindowSeconds = 96 * 60 * 60;
 
 function readScannerString(source: string, key: string) {
   const match = source.match(new RegExp(`${key}:\\s*"([^"]+)"`, "u"));
@@ -50,7 +50,7 @@ function readScannerBigIntProduct(source: string, key: string) {
 }
 
 describe("main token migration transfer", () => {
-  it("freezes the 48-hour Ethereum migration identities across UI and scanner", () => {
+  it("freezes the 96-hour Ethereum migration identities across UI and scanner", () => {
     const scanner = readFileSync(
       join(process.cwd(), "scripts/main-token-migration-snapshot-core.mjs"),
       "utf8",
@@ -195,8 +195,8 @@ describe("main token migration page contract", () => {
       Math.max(0, Math.ceil((deadlineAt - now) / 1_000));
 
     expect(remainingAt(startAt)).toBe(migrationWindowSeconds);
-    expect(remainingAt(startAt + 12 * 60 * 60 * 1_000)).toBe(36 * 60 * 60);
-    expect(remainingAt(startAt + 37 * 60 * 60 * 1_000)).toBe(11 * 60 * 60);
+    expect(remainingAt(startAt + 12 * 60 * 60 * 1_000)).toBe(84 * 60 * 60);
+    expect(remainingAt(startAt + 85 * 60 * 60 * 1_000)).toBe(11 * 60 * 60);
     expect(page).toContain("setNow(Date.now())");
     expect(page).toContain("phase === \"upcoming\"");
     expect(page).toContain("migrationWindow.startAt");
@@ -204,6 +204,11 @@ describe("main token migration page contract", () => {
     expect(page).not.toMatch(
       /Date\.now\(\)\s*\+\s*MAIN_TOKEN_MIGRATION_WINDOW_SECONDS/u,
     );
+    expect(page).toContain("const hours = Math.floor(totalSeconds / 3_600)");
+    expect(page).toContain('<small>Hours</small>');
+    expect(page).toContain('<small>Minutes</small>');
+    expect(page).toContain('<small>Seconds</small>');
+    expect(page).not.toContain("<small>Days</small>");
   });
 
   it("stays active through the final millisecond and closes at the deadline", () => {
@@ -250,7 +255,7 @@ describe("main token migration page contract", () => {
     );
   });
 
-  it("activates only with the exact 48-hour window, start block and release", () => {
+  it("activates only with the exact 96-hour window, start block and release", () => {
     const startAt = Date.parse("2026-08-30T12:00:00.000Z");
     const activation = (
       requested: boolean,
@@ -355,7 +360,8 @@ describe("main token migration page contract", () => {
     expect(page).toContain("deadlineAt - startAt ===");
     expect(page).toContain("startBlock !== null");
     expect(page).toContain("Local preview · transfers disabled");
-    expect(page).toContain("48-hour");
+    expect(page).toContain("96-hour");
+    expect(page).toContain("<strong>96 hours</strong>");
     expect(page).toContain(
       "Nothing is sent until you approve it in your wallet.",
     );

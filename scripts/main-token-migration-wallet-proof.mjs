@@ -15,11 +15,11 @@ import {
 export const MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY = Object.freeze({
   challengeSchema: "programmable-main-token-migration-wallet-challenge/v1",
   proofSchema: "programmable-main-token-migration-wallet-proof/v1",
-  releaseId: "v4-ethereum-to-robinhood-48h-2026-v1",
+  releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
   chainId: 1,
   sourceChain: "Ethereum Mainnet",
   destinationChain: "Robinhood Chain",
-  migrationWindowSeconds: 48 * 60 * 60,
+  migrationWindowSeconds: 96 * 60 * 60,
   migrationWallet: "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
   tokenAddress: "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
   signingMethod: "EIP-191 personal_sign",
@@ -76,7 +76,7 @@ export const MAIN_TOKEN_MIGRATION_WALLET_CHALLENGE = Object.freeze([
   `Source chain: ${MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.sourceChain}`,
   `Source chain ID: ${MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.chainId}`,
   `Destination chain: ${MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.destinationChain}`,
-  "Migration window: 48 hours",
+  "Migration window: 96 hours",
   "Purpose: Prove control of the migration receiving wallet.",
   "Safety: This signature does not authorize a transaction, token transfer, approval, or spending.",
 ].join("\n"));
@@ -169,7 +169,7 @@ const USAGE = `Usage:
   node scripts/main-token-migration-wallet-proof.mjs challenge
   node scripts/main-token-migration-wallet-proof.mjs verify --signature <0x-signature>
 
-The challenge is deterministic and scoped to the frozen 48-hour Ethereum-to-
+The challenge is deterministic and scoped to the frozen 96-hour Ethereum-to-
 Robinhood migration wallet. The command never connects to a wallet, requests a
 signature, writes a file, signs, broadcasts, approves, or sends a transaction.`;
 

@@ -7,7 +7,7 @@ and private release evidence.
 ## Candidate identity
 
 - [ ] The candidate is an immutable build from the exact reviewed `production` commit.
-- [ ] `config/main-token-migration-activation.v1.json` binds the reviewed release and has a 172,800-second window,
+- [ ] `config/main-token-migration-activation.v1.json` binds the reviewed release and has a 345,600-second window,
       exact opening block number and exact opening block hash.
 - [ ] The sponsor contract matches
       `config/main-token-migration-gas-sponsor-contract.v1.json` byte-for-byte in the candidate.

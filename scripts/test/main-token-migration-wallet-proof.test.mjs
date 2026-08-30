@@ -18,7 +18,7 @@ const SCRIPT_PATH = fileURLToPath(
   new URL("../main-token-migration-wallet-proof.mjs", import.meta.url),
 );
 
-test("freezes the exact wallet, Ethereum chain, token, and 48-hour release scope", () => {
+test("freezes the exact wallet, Ethereum chain, token, and 96-hour release scope", () => {
   assert.equal(MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.chainId, 1);
   assert.equal(
     MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.migrationWallet,
@@ -28,11 +28,16 @@ test("freezes the exact wallet, Ethereum chain, token, and 48-hour release scope
     MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.tokenAddress,
     "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
   );
-  assert.equal(MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.migrationWindowSeconds, 172_800);
+  assert.equal(
+    MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.releaseId,
+    "v4-ethereum-to-robinhood-96h-2026-v1",
+  );
+  assert.equal(MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.migrationWindowSeconds, 345_600);
   assert.equal(MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.sourceChain, "Ethereum Mainnet");
   assert.equal(MAIN_TOKEN_MIGRATION_WALLET_PROOF_POLICY.destinationChain, "Robinhood Chain");
   assert.match(MAIN_TOKEN_MIGRATION_WALLET_CHALLENGE, /does not authorize a transaction/u);
   assert.match(MAIN_TOKEN_MIGRATION_WALLET_CHALLENGE, /Source chain ID: 1/u);
+  assert.match(MAIN_TOKEN_MIGRATION_WALLET_CHALLENGE, /Migration window: 96 hours/u);
 });
 
 test("challenge artifact and canonical digests are byte deterministic", () => {

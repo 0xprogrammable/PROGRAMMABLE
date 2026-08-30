@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 export const MAIN_TOKEN_MIGRATION_POLICY = Object.freeze({
   schema: "programmable-main-token-migration-snapshot/v2",
-  releaseId: "v4-ethereum-to-robinhood-48h-2026-v1",
+  releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
   chainId: 1n,
   ethereumGenesisHash:
     "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
@@ -13,7 +13,7 @@ export const MAIN_TOKEN_MIGRATION_POLICY = Object.freeze({
   tokenSymbol: "V4",
   tokenDecimals: 18n,
   tokenTotalSupplyRaw: 1_000_000_000_000_000_000_000_000_000n,
-  windowSeconds: 48n * 60n * 60n,
+  windowSeconds: 96n * 60n * 60n,
   transferTopic:
     "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
   cutoffRule: "block.timestamp >= windowStart && block.timestamp < deadline",
@@ -323,7 +323,7 @@ function validateWindow({
   deadlineTimestamp,
 }) {
   if (windowStartTimestamp + MAIN_TOKEN_MIGRATION_POLICY.windowSeconds !== deadlineTimestamp) {
-    fail("deadline is not exactly 48 hours after the window start");
+    fail("deadline is not exactly 96 hours after the window start");
   }
   if (previousBlock.number + 1n !== startBlock.number) {
     fail("start block is not immediately after the opening-balance block");

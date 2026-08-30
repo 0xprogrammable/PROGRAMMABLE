@@ -56,10 +56,14 @@ describe("main token migration gas sponsor activation contract", () => {
   );
 
   it("keeps the checked-in release disabled and operational sponsor values blank", () => {
+    expect(contract.releaseId).toBe(
+      "v4-ethereum-to-robinhood-96h-2026-v1",
+    );
     expect(manifest).toMatchObject({
       schema: "programmable-main-token-migration-activation/v1",
       releaseId: contract.releaseId,
       enabled: false,
+      windowDurationSeconds: "345600",
       windowStartTimestamp: null,
       deadlineTimestampExclusive: null,
       startBlockNumber: null,
@@ -103,6 +107,9 @@ describe("main token migration gas sponsor activation contract", () => {
       expect(runbook).toContain(`\`${name}\``);
     }
     expect(readiness).toContain("If any item is false or unknown");
+    expect(runbook).toContain("exact 96-hour migration window");
+    expect(runbook).toContain("exactly 345,600 seconds after the start");
+    expect(readiness).toContain("has a 345,600-second window");
   });
 
   it("binds the documented wallet, fee, budget and deadline limits to code", () => {

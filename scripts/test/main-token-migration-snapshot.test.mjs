@@ -11,7 +11,7 @@ import {
 } from "../main-token-migration-snapshot-core.mjs";
 
 const WINDOW_START = 1_800_000_000n;
-const DEADLINE = WINDOW_START + 172_800n;
+const DEADLINE = WINDOW_START + 345_600n;
 const SENDER_A = "0x1111111111111111111111111111111111111111";
 const SENDER_B = "0x2222222222222222222222222222222222222222";
 const CONTRACT_SENDER = "0x3333333333333333333333333333333333333333";
@@ -310,7 +310,7 @@ function baseInput(overrides = {}) {
   };
 }
 
-test("freezes the exact Ethereum V4 migration identities and 48-hour rule", () => {
+test("freezes the exact Ethereum V4 migration identities and 96-hour rule", () => {
   assert.equal(MAIN_TOKEN_MIGRATION_POLICY.chainId, 1n);
   assert.equal(
     MAIN_TOKEN_MIGRATION_POLICY.tokenAddress,
@@ -325,14 +325,14 @@ test("freezes the exact Ethereum V4 migration identities and 48-hour rule", () =
     MAIN_TOKEN_MIGRATION_POLICY.tokenRuntimeCodeKeccak256,
     "0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad",
   );
-  assert.equal(MAIN_TOKEN_MIGRATION_POLICY.windowSeconds, 172_800n);
+  assert.equal(MAIN_TOKEN_MIGRATION_POLICY.windowSeconds, 345_600n);
   assert.equal(
     MAIN_TOKEN_MIGRATION_POLICY.schema,
     "programmable-main-token-migration-snapshot/v2",
   );
   assert.equal(
     MAIN_TOKEN_MIGRATION_POLICY.releaseId,
-    "v4-ethereum-to-robinhood-48h-2026-v1",
+    "v4-ethereum-to-robinhood-96h-2026-v1",
   );
   assert.equal(
     MAIN_TOKEN_MIGRATION_POLICY.cutoffRule,
@@ -464,10 +464,10 @@ test("emits byte-identical canonical JSON and a stable SHA-256 digest", () => {
   );
 });
 
-test("rejects any deadline that is not exactly 48 hours", () => {
+test("rejects any deadline that is not exactly 96 hours", () => {
   assert.throws(
     () => buildMainTokenMigrationSnapshot(baseInput({ deadlineTimestamp: DEADLINE + 1n })),
-    /deadline is not exactly 48 hours/u,
+    /deadline is not exactly 96 hours/u,
   );
 });
 

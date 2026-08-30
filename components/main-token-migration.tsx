@@ -1495,7 +1495,7 @@ export function MainTokenMigration() {
         <p className={styles.eyebrow}>Ethereum → Robinhood Chain</p>
         <h1 id="migration-title">We are migrating</h1>
         <p className={styles.heroCopy}>
-          Send V4 from your self-custody Ethereum wallet during the 48-hour
+          Send V4 from your self-custody Ethereum wallet during the 96-hour
           window. Confirmed transfers are used to calculate an equal V4
           allocation to the exact same address on Robinhood Chain.
         </p>
@@ -1521,7 +1521,7 @@ export function MainTokenMigration() {
           </div>
         ) : null}
         <div className={styles.summary} aria-label="Migration terms">
-          <div><span>Window</span><strong>48 hours</strong></div>
+          <div><span>Window</span><strong>96 hours</strong></div>
           <div><span>Allocation basis</span><strong>1:1 V4 amount</strong></div>
           <div><span>Recipient</span><strong>Same EVM address</strong></div>
           <div><span>Automatic path</span><strong>Self-custody EOA</strong></div>

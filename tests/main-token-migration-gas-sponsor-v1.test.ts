@@ -11,6 +11,7 @@ import {
   deriveMainTokenMigrationSponsorBindingsV1,
   deriveMainTokenMigrationSponsorPrincipalBindingV1,
   parseMainTokenMigrationSponsorRequestV1,
+  readMainTokenMigrationGasSponsorConfigurationV1,
   type MainTokenMigrationGasSponsorChainV1,
   type MainTokenMigrationGasSponsorConfigurationV1,
   type MainTokenMigrationGasSponsorSenderV1,
@@ -23,6 +24,14 @@ import {
   type MainTokenMigrationGasSponsorRecordV1,
   type MainTokenMigrationGasSponsorStoreV1,
 } from "../lib/server/main-token-migration-gas-sponsor-store-v1";
+import {
+  MAIN_TOKEN_ADDRESS,
+  MAIN_TOKEN_MIGRATION_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_RELEASE_ID,
+  MAIN_TOKEN_MIGRATION_WALLET,
+  MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
+  MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
+} from "../lib/main-token-migration";
 import type {
   ProjectionTargetPostgresClientV1,
   ProjectionTargetPostgresQueryResultV1,
@@ -35,7 +44,7 @@ const TX_HASH = `0x${"ab".repeat(32)}` as const;
 const NOW = new Date("2026-08-30T12:00:00.000Z");
 const IDEMPOTENCY_KEY = "migration-request-00000001";
 const CONFIGURATION: MainTokenMigrationGasSponsorConfigurationV1 = {
-  releaseId: "v4-ethereum-to-robinhood-48h-2026-v1",
+  releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
   startBlockNumber: 100n,
   startBlockHash: `0x${"12".repeat(32)}`,
   deadlineTimestampExclusive: 1_900_000_000,
@@ -219,6 +228,58 @@ function sponsor(
 }
 
 describe("main token migration gas sponsor", () => {
+  it("accepts only the exact 96-hour release identity and window", () => {
+    const start = Math.floor(NOW.getTime() / 1_000) - 60;
+    const manifest = {
+      schema: "programmable-main-token-migration-activation/v1",
+      releaseId: MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      enabled: true,
+      sourceChainId: String(MAIN_TOKEN_MIGRATION_CHAIN_ID),
+      sourceTokenAddress: MAIN_TOKEN_ADDRESS,
+      sourceTokenRuntimeCodeKeccak256: MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
+      migrationWallet: MAIN_TOKEN_MIGRATION_WALLET,
+      windowDurationSeconds: String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
+      windowStartTimestamp: String(start),
+      deadlineTimestampExclusive: String(
+        start + MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
+      ),
+      startBlockNumber: "100",
+      startBlockHash: `0x${"12".repeat(32)}`,
+    };
+    const environment = {
+      MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED: "true",
+      MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_WALLET_ID:
+        CONFIGURATION.sponsorWalletId,
+      MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_POLICY_ID:
+        CONFIGURATION.sponsorPolicyId,
+      MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ADDRESS:
+        CONFIGURATION.sponsorAddress,
+      MAIN_TOKEN_MIGRATION_GAS_SPONSOR_MAX_TOP_UP_WEI:
+        CONFIGURATION.maximumTopUpWei.toString(),
+      MAIN_TOKEN_MIGRATION_GAS_SPONSOR_TOTAL_BUDGET_WEI:
+        "20000000000000000",
+    };
+
+    expect(readMainTokenMigrationGasSponsorConfigurationV1({
+      environment,
+      manifest,
+      nowMs: NOW.getTime(),
+    })).toMatchObject({
+      releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
+      deadlineTimestampExclusive: start + 96 * 60 * 60,
+    });
+    expect(readMainTokenMigrationGasSponsorConfigurationV1({
+      environment,
+      manifest: {
+        ...manifest,
+        releaseId: "v4-ethereum-to-robinhood-48h-2026-v1",
+        windowDurationSeconds: String(48 * 60 * 60),
+        deadlineTimestampExclusive: String(start + 48 * 60 * 60),
+      },
+      nowMs: NOW.getTime(),
+    })).toBeNull();
+  });
+
   it("strictly binds the request, deficit quote, and provider idempotency", () => {
     expect(parseMainTokenMigrationSponsorRequestV1({
       walletAddress: WALLET,
