@@ -1489,7 +1489,7 @@ export const programmablePublicOpenApi = {
               },
               source: {
                 type: "string",
-                enum: ["bitquery", "dexscreener", "stateview-chainlink"],
+                enum: ["bitquery", "dexscreener", "gmgn", "stateview-chainlink"],
               },
               asOfTime: { type: "string", format: "date-time" },
             },
