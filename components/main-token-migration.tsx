@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
 } from "react";
@@ -13,6 +14,7 @@ import { formatUnits, getAddress, type Hex } from "viem";
 
 import styles from "@/components/main-token-migration.module.css";
 import { useWallet } from "@/components/wallet-provider";
+import migrationActivationManifest from "@/config/main-token-migration-activation.v1.json";
 import {
   assertMainTokenMigrationBalance,
   assertMainTokenMigrationTransaction,
@@ -20,53 +22,218 @@ import {
   MAIN_TOKEN_ADDRESS,
   MAIN_TOKEN_DECIMALS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_RELEASE_ID,
   MAIN_TOKEN_MIGRATION_WALLET,
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
+  MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
   MAIN_TOKEN_SYMBOL,
+  MAIN_TOKEN_TOTAL_SUPPLY_RAW,
   parseMainTokenMigrationAmount,
 } from "@/lib/main-token-migration";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
-const startAtValue =
-  process.env.NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_START_AT ?? "";
-const deadlineAtValue =
-  process.env.NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_DEADLINE_AT ?? "";
-const startBlockValue =
-  process.env.NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_START_BLOCK ?? "";
-const requestedActivation =
-  process.env.NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_ENABLED === "true";
+const decimalIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
+const positiveIntegerPattern = /^[1-9][0-9]*$/u;
+const bytes32Pattern = /^0x[0-9a-fA-F]{64}$/u;
 
-type MigrationPhase = "preview" | "upcoming" | "active" | "closed";
+type MigrationPhase =
+  | "checking"
+  | "preview"
+  | "upcoming"
+  | "active"
+  | "closed";
 
 type MigrationWindow = Readonly<{
   enabled: boolean;
   startAt: number | null;
   deadlineAt: number | null;
   startBlock: bigint | null;
+  startBlockHash: Hex | null;
 }>;
 
 type SubmissionState =
   | { kind: "idle" }
   | { kind: "submitting" }
-  | { kind: "submitted"; hash: Hex; amount: string }
+  | { kind: "submitted"; hash: Hex; amount: string; account: string }
+  | {
+      kind: "confirmed";
+      hash: Hex;
+      amount: string;
+      account: string;
+      blockNumber: string;
+    }
+  | { kind: "reverted"; hash: Hex; amount: string; account: string }
   | { kind: "error"; message: string };
 
+type AccountCodeObservation = Readonly<{
+  account: string;
+  status: "eoa" | "contract" | "unavailable";
+}>;
+
+const migrationTransferStorageKey =
+  `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_WALLET.toLowerCase()}`;
+const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
+
+type StoredMigrationTransfer = Readonly<{
+  schema: "programmable-main-token-migration-ui/v1";
+  status: "submitted" | "confirmed";
+  chainId: number;
+  tokenAddress: string;
+  migrationWallet: string;
+  account: string;
+  amount: string;
+  hash: Hex;
+  blockNumber: string | null;
+}>;
+
+function storedMigrationTransfer(
+  value: string | null,
+): Extract<SubmissionState, { kind: "submitted" | "confirmed" }> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<StoredMigrationTransfer>;
+    if (
+      parsed.schema !== "programmable-main-token-migration-ui/v1" ||
+      (parsed.status !== "submitted" && parsed.status !== "confirmed") ||
+      parsed.chainId !== MAIN_TOKEN_MIGRATION_CHAIN_ID ||
+      parsed.tokenAddress?.toLowerCase() !== MAIN_TOKEN_ADDRESS.toLowerCase() ||
+      parsed.migrationWallet?.toLowerCase() !==
+        MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() ||
+      typeof parsed.account !== "string" ||
+      typeof parsed.amount !== "string" ||
+      typeof parsed.hash !== "string" ||
+      !transactionHashPattern.test(parsed.hash)
+    ) {
+      return null;
+    }
+    const account = getAddress(parsed.account);
+    parseMainTokenMigrationAmount(parsed.amount);
+    if (parsed.status === "confirmed") {
+      if (
+        typeof parsed.blockNumber !== "string" ||
+        !decimalIntegerPattern.test(parsed.blockNumber)
+      ) {
+        return null;
+      }
+    }
+    // Re-check every restored hash against Ethereum before showing a terminal state.
+    return {
+      kind: "submitted",
+      account,
+      amount: parsed.amount,
+      hash: parsed.hash as Hex,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistMigrationTransfer(
+  submission: Extract<SubmissionState, { kind: "submitted" | "confirmed" }>,
+) {
+  try {
+    const value: StoredMigrationTransfer = {
+      schema: "programmable-main-token-migration-ui/v1",
+      status: submission.kind,
+      chainId: MAIN_TOKEN_MIGRATION_CHAIN_ID,
+      tokenAddress: MAIN_TOKEN_ADDRESS,
+      migrationWallet: MAIN_TOKEN_MIGRATION_WALLET,
+      account: submission.account,
+      amount: submission.amount,
+      hash: submission.hash,
+      blockNumber:
+        submission.kind === "confirmed" ? submission.blockNumber : null,
+    };
+    window.localStorage.setItem(
+      migrationTransferStorageKey,
+      JSON.stringify(value),
+    );
+  } catch {
+    // Transaction tracking still works for the current page session.
+  }
+}
+
+function clearPersistedMigrationTransfer() {
+  try {
+    window.localStorage.removeItem(migrationTransferStorageKey);
+  } catch {
+    // A reverted transaction remains visible for the current page session.
+  }
+}
+
 function parseMigrationWindow(): MigrationWindow {
-  const startAt = Date.parse(startAtValue);
-  const deadlineAt = Date.parse(deadlineAtValue);
-  const startBlock = /^[1-9][0-9]*$/u.test(startBlockValue)
-    ? BigInt(startBlockValue)
+  const manifest = migrationActivationManifest as Readonly<{
+    schema: string;
+    releaseId: string;
+    enabled: boolean;
+    sourceChainId: string;
+    sourceTokenAddress: string;
+    sourceTokenRuntimeCodeKeccak256: string;
+    sourceTokenDecimals: string;
+    sourceTokenTotalSupplyRaw: string;
+    migrationWallet: string;
+    windowDurationSeconds: string;
+    windowStartTimestamp: string | null;
+    deadlineTimestampExclusive: string | null;
+    startBlockNumber: string | null;
+    startBlockHash: string | null;
+  }>;
+  const startSeconds =
+    manifest.windowStartTimestamp !== null &&
+    decimalIntegerPattern.test(manifest.windowStartTimestamp)
+      ? Number(manifest.windowStartTimestamp)
+      : Number.NaN;
+  const deadlineSeconds =
+    manifest.deadlineTimestampExclusive !== null &&
+    decimalIntegerPattern.test(manifest.deadlineTimestampExclusive)
+      ? Number(manifest.deadlineTimestampExclusive)
+      : Number.NaN;
+  const startAt = startSeconds * 1_000;
+  const deadlineAt = deadlineSeconds * 1_000;
+  const safeStartSeconds =
+    Number.isSafeInteger(startSeconds) &&
+    startSeconds <= Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
+  const safeDeadlineSeconds =
+    Number.isSafeInteger(deadlineSeconds) &&
+    deadlineSeconds <= Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
+  const startBlock =
+    manifest.startBlockNumber !== null &&
+    positiveIntegerPattern.test(manifest.startBlockNumber)
+      ? BigInt(manifest.startBlockNumber)
     : null;
+  const startBlockHash =
+    manifest.startBlockHash !== null && bytes32Pattern.test(manifest.startBlockHash)
+      ? manifest.startBlockHash.toLowerCase() as Hex
+      : null;
+  const exactPolicy =
+    manifest.schema === "programmable-main-token-migration-activation/v1" &&
+    manifest.releaseId === MAIN_TOKEN_MIGRATION_RELEASE_ID &&
+    manifest.sourceChainId === String(MAIN_TOKEN_MIGRATION_CHAIN_ID) &&
+    manifest.sourceTokenAddress.toLowerCase() === MAIN_TOKEN_ADDRESS.toLowerCase() &&
+    manifest.sourceTokenRuntimeCodeKeccak256.toLowerCase() ===
+      MAIN_TOKEN_RUNTIME_CODE_KECCAK256 &&
+    manifest.sourceTokenDecimals === String(MAIN_TOKEN_DECIMALS) &&
+    manifest.sourceTokenTotalSupplyRaw === MAIN_TOKEN_TOTAL_SUPPLY_RAW.toString() &&
+    manifest.migrationWallet.toLowerCase() ===
+      MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
+    manifest.windowDurationSeconds ===
+      String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS);
   const exactWindow =
-    Number.isFinite(startAt) &&
-    Number.isFinite(deadlineAt) &&
+    safeStartSeconds &&
+    safeDeadlineSeconds &&
     deadlineAt - startAt === MAIN_TOKEN_MIGRATION_WINDOW_SECONDS * 1_000;
 
   return Object.freeze({
-    enabled: requestedActivation && exactWindow && startBlock !== null,
-    startAt: Number.isFinite(startAt) ? startAt : null,
-    deadlineAt: Number.isFinite(deadlineAt) ? deadlineAt : null,
+    enabled:
+      manifest.enabled === true &&
+      exactPolicy &&
+      exactWindow &&
+      startBlock !== null &&
+      startBlockHash !== null,
+    startAt: safeStartSeconds ? startAt : null,
+    deadlineAt: safeDeadlineSeconds ? deadlineAt : null,
     startBlock,
+    startBlockHash,
   });
 }
 
@@ -153,11 +320,13 @@ function migrationErrorMessage(error: unknown) {
 
 function Countdown({ phase, remaining }: Readonly<{
   phase: MigrationPhase;
-  remaining: number;
+  remaining: number | null;
 }>) {
-  const parts = clockParts(remaining);
+  const parts = remaining === null ? null : clockParts(remaining);
   const label =
-    phase === "closed"
+    phase === "checking"
+      ? "Checking migration window"
+      : phase === "closed"
       ? "Migration closed"
       : phase === "upcoming"
         ? "Migration opens in"
@@ -166,17 +335,26 @@ function Countdown({ phase, remaining }: Readonly<{
           : "Migration closes in";
 
   return (
-    <div className={styles.countdown} aria-label={`${label}: ${parts.hours} hours, ${parts.minutes} minutes, ${parts.seconds} seconds`}>
+    <div
+      className={styles.countdown}
+      aria-label={
+        parts === null
+          ? label
+          : `${label}: ${parts.hours} hours, ${parts.minutes} minutes, ${parts.seconds} seconds`
+      }
+    >
       <span className={styles.countdownLabel}>{label}</span>
       <div className={styles.clock} aria-hidden="true">
-        <span><strong>{parts.hours}</strong><small>Hours</small></span>
+        <span><strong>{parts?.hours ?? "––"}</strong><small>Hours</small></span>
         <i>:</i>
-        <span><strong>{parts.minutes}</strong><small>Minutes</small></span>
+        <span><strong>{parts?.minutes ?? "––"}</strong><small>Minutes</small></span>
         <i>:</i>
-        <span><strong>{parts.seconds}</strong><small>Seconds</small></span>
+        <span><strong>{parts?.seconds ?? "––"}</strong><small>Seconds</small></span>
       </div>
       <span className={styles.absoluteDeadline}>
-        {phase === "preview"
+        {phase === "checking"
+          ? "Verifying the published UTC window"
+          : phase === "preview"
           ? "The final UTC deadline will be fixed before activation"
           : `${phase === "upcoming" ? "Opens" : "Closes"} ${formatUtc(
               phase === "upcoming"
@@ -195,6 +373,7 @@ export function MainTokenMigration() {
     switchingNetwork,
     openWallet,
     switchNetwork,
+    readConnectedAccountCode,
     readTradeBalances,
     sendTransaction,
   } = useWallet();
@@ -205,14 +384,31 @@ export function MainTokenMigration() {
   const [balanceError, setBalanceError] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmationIssue, setConfirmationIssue] = useState("");
   const [submission, setSubmission] = useState<SubmissionState>({ kind: "idle" });
+  const [accountCodeObservation, setAccountCodeObservation] =
+    useState<AccountCodeObservation | null>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const acknowledgementRef = useRef<HTMLInputElement>(null);
 
-  const phase = now === null ? "preview" : phaseAt(now);
+  const phase = now === null ? "checking" : phaseAt(now);
   const remaining = now === null
-    ? MAIN_TOKEN_MIGRATION_WINDOW_SECONDS
+    ? null
     : remainingAt(now, phase);
   const onMainnet = wallet !== null &&
     normalizeChainId(wallet.chainId) === MAIN_TOKEN_MIGRATION_CHAIN_ID;
+  const accountCodeStatus = !wallet || !onMainnet
+    ? "idle"
+    : accountCodeObservation?.account === wallet.account.toLowerCase()
+      ? accountCodeObservation.status
+      : "checking";
+  const hasTrackedTransfer =
+    submission.kind === "submitted" || submission.kind === "confirmed";
+  const canRevealDestination = phase === "active" || hasTrackedTransfer;
+  const transferSender =
+    submission.kind === "submitted" || submission.kind === "confirmed"
+    ? submission.account
+    : wallet?.account ?? null;
 
   useEffect(() => {
     const initialTick = window.setTimeout(() => setNow(Date.now()), 0);
@@ -221,6 +417,48 @@ export function MainTokenMigration() {
       window.clearTimeout(initialTick);
       window.clearInterval(interval);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!wallet || !onMainnet) return;
+    const account = wallet.account.toLowerCase();
+    let cancelled = false;
+    void readConnectedAccountCode()
+      .then((code) => {
+        if (!cancelled) {
+          setAccountCodeObservation({
+            account,
+            status: code === "0x" ? "eoa" : "contract",
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAccountCodeObservation({ account, status: "unavailable" });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [onMainnet, readConnectedAccountCode, wallet]);
+
+  useEffect(() => {
+    const restore = window.setTimeout(() => {
+      let stored: ReturnType<typeof storedMigrationTransfer> = null;
+      try {
+        stored = storedMigrationTransfer(
+          window.localStorage.getItem(migrationTransferStorageKey),
+        );
+      } catch {
+        stored = null;
+      }
+      if (stored) {
+        setSubmission(stored);
+        setAmount(stored.amount);
+        setAcknowledged(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(restore);
   }, []);
 
   const refreshBalance = useCallback(async () => {
@@ -246,6 +484,98 @@ export function MainTokenMigration() {
     return () => window.clearTimeout(pendingRefresh);
   }, [refreshBalance]);
 
+  useEffect(() => {
+    if (submission.kind !== "submitted") return;
+
+    const tracked = submission;
+    const controller = new AbortController();
+    let retryTimer: number | undefined;
+
+    const poll = async () => {
+      let retryDelay = 3_000;
+      const requestController = new AbortController();
+      const abortRequest = () => requestController.abort();
+      controller.signal.addEventListener("abort", abortRequest, { once: true });
+      const requestTimeout = window.setTimeout(
+        () => requestController.abort(),
+        15_000,
+      );
+      try {
+        const response = await fetch(
+          `/api/transaction-status?hash=${encodeURIComponent(
+            tracked.hash,
+          )}&chainId=${MAIN_TOKEN_MIGRATION_CHAIN_ID}`,
+          {
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+            signal: requestController.signal,
+          },
+        );
+        const body = (await response.json()) as {
+          status?: "pending" | "not-found" | "confirmed" | "reverted";
+          blockNumber?: string | null;
+        };
+        if (
+          !response.ok ||
+          !body ||
+          !["pending", "not-found", "confirmed", "reverted"].includes(
+            String(body.status),
+          )
+        ) {
+          throw new Error("Transaction status is unavailable");
+        }
+
+        setConfirmationIssue("");
+        if (body.status === "confirmed") {
+          if (
+            typeof body.blockNumber !== "string" ||
+            !decimalIntegerPattern.test(body.blockNumber)
+          ) {
+            throw new Error("Transaction confirmation is incomplete");
+          }
+          const confirmed: Extract<SubmissionState, { kind: "confirmed" }> = {
+            kind: "confirmed",
+            account: tracked.account,
+            amount: tracked.amount,
+            blockNumber: body.blockNumber,
+            hash: tracked.hash,
+          };
+          persistMigrationTransfer(confirmed);
+          setSubmission(confirmed);
+          void refreshBalance();
+          return;
+        }
+        if (body.status === "reverted") {
+          clearPersistedMigrationTransfer();
+          setSubmission({
+            kind: "reverted",
+            account: tracked.account,
+            amount: tracked.amount,
+            hash: tracked.hash,
+          });
+          return;
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+        retryDelay = 8_000;
+        setConfirmationIssue(
+          "Confirmation check paused. Verify the transaction on Etherscan before sending again.",
+        );
+      } finally {
+        window.clearTimeout(requestTimeout);
+        controller.signal.removeEventListener("abort", abortRequest);
+      }
+
+      retryTimer = window.setTimeout(() => void poll(), retryDelay);
+    };
+
+    void poll();
+    return () => {
+      controller.abort();
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [refreshBalance, submission]);
+
   const parsedAmount = useMemo(() => {
     if (!amount.trim()) return null;
     try {
@@ -269,20 +599,33 @@ export function MainTokenMigration() {
 
   function onAmountChange(event: ChangeEvent<HTMLInputElement>) {
     setAmount(event.target.value);
+    setConfirmationIssue("");
     setSubmission({ kind: "idle" });
   }
 
   function chooseMax() {
     if (balance === null) return;
     setAmount(formatUnits(balance, MAIN_TOKEN_DECIMALS));
+    setConfirmationIssue("");
     setSubmission({ kind: "idle" });
   }
 
+  function prepareAnotherTransfer() {
+    if (submission.kind !== "confirmed" || phase !== "active") return;
+    clearPersistedMigrationTransfer();
+    setAmount("");
+    setAcknowledged(false);
+    setConfirmationIssue("");
+    setSubmission({ kind: "idle" });
+    window.setTimeout(() => amountInputRef.current?.focus(), 0);
+  }
+
   async function copyMigrationWallet() {
-    if (phase === "closed") {
+    if (!canRevealDestination) {
       setSubmission({
         kind: "error",
-        message: "The migration window is closed. Do not send tokens to this address.",
+        message:
+          "The migration wallet is available only while the published transfer window is active.",
       });
       return;
     }
@@ -291,54 +634,91 @@ export function MainTokenMigration() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1_600);
     } catch {
-      setSubmission({
-        kind: "error",
-        message: "Unable to copy the address. Select it and copy it manually.",
-      });
+      setConfirmationIssue(
+        "Unable to copy the address. Select it and copy it manually.",
+      );
     }
   }
 
   async function reviewTransfer() {
-    if (phase === "closed") {
+    if (phase !== "active") {
       setSubmission({
         kind: "error",
-        message: "The migration window is closed. Do not send tokens to the migration wallet.",
+        message:
+          phase === "checking"
+            ? "The migration window is still being checked. Nothing can be sent yet."
+            : phase === "preview"
+              ? "Transfers remain disabled until the exact UTC window and start block are published."
+              : phase === "upcoming"
+                ? "The migration window has not opened yet."
+                : "The migration window is closed. Do not send tokens to the migration wallet.",
       });
       return;
     }
+    if (hasTrackedTransfer) return;
     if (!wallet) {
       openWallet();
       return;
     }
     if (!onMainnet) {
-      await switchNetwork(String(MAIN_TOKEN_MIGRATION_CHAIN_ID));
+      try {
+        await switchNetwork(String(MAIN_TOKEN_MIGRATION_CHAIN_ID));
+      } catch (error) {
+        setSubmission({
+          kind: "error",
+          message: migrationErrorMessage(error),
+        });
+      }
       return;
     }
-    if (phase !== "active") {
+    if (!amount.trim() || parsedAmount === null || amountError) {
       setSubmission({
         kind: "error",
-        message:
-          phase === "preview"
-            ? "This is a local preview. Transfers remain disabled until the fixed window and start block are published."
-            : phase === "upcoming"
-              ? "The migration window has not opened yet."
-              : "The migration window is closed. Do not send tokens to the migration wallet.",
+        message: amountError || "Enter the V4 amount to send.",
+      });
+      amountInputRef.current?.focus();
+      return;
+    }
+    if (balance === null) {
+      setSubmission({
+        kind: "error",
+        message: "Unable to verify your V4 balance. Refresh and try again.",
       });
       return;
     }
     if (!acknowledged) {
       setSubmission({
         kind: "error",
-        message: "Confirm that you control the same address on Robinhood Chain.",
+        message:
+          "Confirm that this is a self-custody EOA you control on Robinhood Chain.",
       });
+      acknowledgementRef.current?.focus();
       return;
     }
 
     try {
-      const amountRaw = parseMainTokenMigrationAmount(amount);
-      if (balance === null) {
-        throw new Error("Unable to verify your V4 balance. Refresh and try again.");
+      let code: Hex;
+      try {
+        code = await readConnectedAccountCode();
+      } catch {
+        throw new Error(
+          "Unable to verify this is a no-code self-custody wallet. Nothing was sent. Try again before the window closes.",
+        );
       }
+      if (code !== "0x") {
+        setAccountCodeObservation({
+          account: wallet.account.toLowerCase(),
+          status: "contract",
+        });
+        throw new Error(
+          "Smart-contract wallets are not eligible for the automatic allocation path. Contact support for manual review before sending.",
+        );
+      }
+      setAccountCodeObservation({
+        account: wallet.account.toLowerCase(),
+        status: "eoa",
+      });
+      const amountRaw = parsedAmount;
       assertMainTokenMigrationBalance(amountRaw, balance);
       const account = getAddress(wallet.account);
       const prepared = buildMainTokenMigrationTransaction({
@@ -348,19 +728,32 @@ export function MainTokenMigration() {
       const checked = assertMainTokenMigrationTransaction(prepared, account);
       setSubmission({ kind: "submitting" });
       const hash = await sendTransaction(checked);
-      setSubmission({
+      const submitted: Extract<SubmissionState, { kind: "submitted" }> = {
         kind: "submitted",
+        account,
         hash,
         amount: formatUnits(amountRaw, MAIN_TOKEN_DECIMALS),
-      });
-      void refreshBalance();
+      };
+      persistMigrationTransfer(submitted);
+      setConfirmationIssue("");
+      setSubmission(submitted);
     } catch (error) {
       setSubmission({ kind: "error", message: migrationErrorMessage(error) });
     }
   }
 
-  const primaryLabel = phase === "closed"
+  const primaryLabel = phase === "checking"
+    ? "Checking migration window"
+    : phase === "preview"
+      ? "Migration not open"
+      : phase === "upcoming"
+        ? "Migration opens soon"
+        : phase === "closed"
     ? "Migration closed"
+    : submission.kind === "submitted"
+      ? "Waiting for Ethereum confirmation"
+      : submission.kind === "confirmed"
+        ? "Transfer confirmed"
     : !wallet
     ? connecting
       ? "Opening wallet"
@@ -371,27 +764,19 @@ export function MainTokenMigration() {
         : "Switch to Ethereum"
       : submission.kind === "submitting"
         ? "Confirm in your wallet"
-        : phase === "preview"
-          ? "Migration not open"
-          : phase === "upcoming"
-            ? "Migration opens soon"
+        : accountCodeStatus === "checking"
+          ? "Checking wallet type"
+          : accountCodeStatus === "contract"
+            ? "Manual review required"
             : !amount.trim()
-                ? "Enter amount"
-                : amountError
-                  ? "Check amount"
-                  : balance === null
-                    ? "Balance unavailable"
+              ? "Enter amount"
+              : amountError
+                ? "Check amount"
+                : balance === null
+                  ? "Balance unavailable"
                   : !acknowledged
                     ? "Confirm address control"
                     : "Review transfer in wallet";
-  const canSubmit =
-    wallet !== null &&
-    onMainnet &&
-    phase === "active" &&
-    parsedAmount !== null &&
-    balance !== null &&
-    !amountError &&
-    acknowledged;
 
   return (
     <article className={styles.page}>
@@ -405,16 +790,23 @@ export function MainTokenMigration() {
           alt=""
           width={1168}
           height={1536}
+          loading="eager"
           priority
         />
         <p className={styles.eyebrow}>Ethereum → Robinhood Chain</p>
         <h1 id="migration-title">We are migrating</h1>
         <p className={styles.heroCopy}>
-          Send your V4 during the 72 hour window. At launch, the same number
-          of token units will be sent to the same EVM address on Robinhood Chain.
+          Send V4 from your self-custody Ethereum wallet during the 48-hour
+          window. Confirmed transfers are used to calculate an equal V4
+          allocation to the exact same address on Robinhood Chain.
         </p>
         <p className={styles.criticalCopy}>
-          1:1 by token units. Dollar value is not carried over or guaranteed.
+          1:1 by V4 amount. Price, dollar value, liquidity and tradability are
+          not carried over or guaranteed.
+        </p>
+        <p className={styles.officialNotice}>
+          Use only <strong>programmable.market/migration</strong>. Programmable
+          will never send a migration address by DM.
         </p>
         <Countdown phase={phase} remaining={remaining} />
       </section>
@@ -430,17 +822,17 @@ export function MainTokenMigration() {
           </div>
         ) : null}
         <div className={styles.summary} aria-label="Migration terms">
-          <div><span>Allocation</span><strong>1:1 token units</strong></div>
+          <div><span>Window</span><strong>48 hours</strong></div>
+          <div><span>Allocation basis</span><strong>1:1 V4 amount</strong></div>
           <div><span>Recipient</span><strong>Same EVM address</strong></div>
-          <div><span>Vesting</span><strong>None</strong></div>
-          <div><span>Token lock</span><strong>None</strong></div>
+          <div><span>Automatic path</span><strong>Self-custody EOA</strong></div>
         </div>
 
         <div className={styles.panelGrid}>
           <div className={styles.transferColumn}>
             <header className={styles.panelHeader}>
               <p>Send with your wallet</p>
-              <h2 id="send-v4-title">Move your V4</h2>
+              <h2 id="send-v4-title">Send V4 for migration</h2>
             </header>
 
             {wallet ? (
@@ -453,6 +845,33 @@ export function MainTokenMigration() {
                 Connect the wallet that holds your V4.
               </p>
             )}
+
+            {wallet && onMainnet ? (
+              <div
+                className={styles.walletTypeStatus}
+                data-status={accountCodeStatus}
+                role="status"
+              >
+                <strong>
+                  {accountCodeStatus === "eoa"
+                    ? "Self-custody wallet detected"
+                    : accountCodeStatus === "contract"
+                      ? "Smart-contract wallet detected"
+                      : accountCodeStatus === "unavailable"
+                        ? "Wallet type unavailable"
+                        : "Checking wallet type"}
+                </strong>
+                <span>
+                  {accountCodeStatus === "eoa"
+                    ? "No contract code is present at this Ethereum address. The wallet type is checked again before sending."
+                    : accountCodeStatus === "contract"
+                      ? "Do not send. Multisigs and smart-contract wallets require manual review and are not guaranteed an automatic allocation."
+                      : accountCodeStatus === "unavailable"
+                        ? "The automatic path remains blocked until the wallet type can be checked."
+                        : "Automatic allocation is available only to a no-code self-custody EOA."}
+                </span>
+              </div>
+            ) : null}
 
             <div className={styles.balanceRow} aria-live="polite">
               <span>Available balance</span>
@@ -470,6 +889,7 @@ export function MainTokenMigration() {
               <label htmlFor="migration-amount">Amount to send</label>
               <div className={styles.amountControl}>
                 <input
+                  ref={amountInputRef}
                   id="migration-amount"
                   name="migration-amount"
                   type="text"
@@ -478,6 +898,11 @@ export function MainTokenMigration() {
                   placeholder="0.0"
                   value={amount}
                   onChange={onAmountChange}
+                  disabled={
+                    phase !== "active" ||
+                    hasTrackedTransfer ||
+                    submission.kind === "submitting"
+                  }
                   aria-describedby={
                     amountError
                       ? "migration-amount-help migration-amount-error"
@@ -489,7 +914,14 @@ export function MainTokenMigration() {
                 <button
                   type="button"
                   onClick={chooseMax}
-                  disabled={balance === null || balance === 0n || balanceLoading}
+                  disabled={
+                    balance === null ||
+                    balance === 0n ||
+                    balanceLoading ||
+                    phase !== "active" ||
+                    hasTrackedTransfer ||
+                    submission.kind === "submitting"
+                  }
                 >
                   Max
                 </button>
@@ -506,40 +938,76 @@ export function MainTokenMigration() {
 
             <label className={styles.acknowledgement}>
               <input
+                ref={acknowledgementRef}
                 type="checkbox"
                 checked={acknowledged}
                 onChange={(event) => setAcknowledged(event.target.checked)}
+                disabled={
+                  phase !== "active" ||
+                  hasTrackedTransfer ||
+                  submission.kind === "submitting"
+                }
               />
               <span>
-                I control this same address on Robinhood Chain and understand
-                that the receiving address cannot be changed.
+                I am sending directly from a self-custody EOA and control this
+                exact address on Robinhood Chain. I understand the allocation
+                cannot be redirected.
               </span>
             </label>
 
-            <div className={styles.transferReview}>
-              <div><span>From</span><strong>{wallet ? shortenAddress(wallet.account) : "Connect wallet"}</strong></div>
-              <div><span>To</span><strong>{shortenAddress(MAIN_TOKEN_MIGRATION_WALLET)}</strong></div>
-              <div><span>You send</span><strong>{parsedAmount === null ? "Enter amount" : `${formatUnits(parsedAmount, MAIN_TOKEN_DECIMALS)} ${MAIN_TOKEN_SYMBOL}`}</strong></div>
-              <div><span>Robinhood allocation</span><strong>{parsedAmount === null ? "1:1 token units" : `${formatUnits(parsedAmount, MAIN_TOKEN_DECIMALS)} ${MAIN_TOKEN_SYMBOL}`}</strong></div>
-            </div>
+            {canRevealDestination ? (
+              <div className={styles.transferReview}>
+                <div>
+                  <span>From</span>
+                  <strong>
+                    {transferSender
+                      ? shortenAddress(transferSender)
+                      : "Connected sender"}
+                  </strong>
+                </div>
+                <div className={styles.addressReviewRow}>
+                  <span>Ethereum recipient</span>
+                  <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>
+                </div>
+                <div>
+                  <span>You send</span>
+                  <strong>{parsedAmount === null ? "Enter amount" : `${formatUnits(parsedAmount, MAIN_TOKEN_DECIMALS)} ${MAIN_TOKEN_SYMBOL}`}</strong>
+                </div>
+                <div>
+                  <span>Allocation record</span>
+                  <strong>{parsedAmount === null ? "1:1 V4 amount" : `${formatUnits(parsedAmount, MAIN_TOKEN_DECIMALS)} ${MAIN_TOKEN_SYMBOL}`}</strong>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.destinationUnavailable}>
+                <strong>Transfer destination is not available yet</strong>
+                <span>
+                  The full migration wallet appears here only while the
+                  published window is active. Do not use an address from a DM.
+                </span>
+              </div>
+            )}
 
             <button
               className={styles.primaryAction}
               type="button"
               onClick={() => void reviewTransfer()}
               disabled={
-                phase === "closed" ||
+                phase !== "active" ||
                 connecting ||
                 switchingNetwork ||
                 submission.kind === "submitting" ||
-                (wallet !== null && onMainnet && !canSubmit)
+                hasTrackedTransfer ||
+                accountCodeStatus === "checking" ||
+                accountCodeStatus === "contract"
               }
             >
               {primaryLabel}
             </button>
             <p className={styles.walletBoundary}>
-              Nothing is sent until you review and approve the transaction in
-              your wallet. Programmable never signs for you.
+              This is an irreversible ERC-20 transfer on Ethereum, not a
+              bridge. Nothing is sent until you approve it in your wallet.
+              Verify the network, V4 token contract, full recipient and amount.
             </p>
 
             <div className={styles.status} role="status" aria-live="polite" aria-atomic="true">
@@ -547,21 +1015,68 @@ export function MainTokenMigration() {
                 <p className={styles.inlineError}>{submission.message}</p>
               ) : null}
               {submission.kind === "submitted" ? (
-                <div className={styles.submitted}>
-                  <strong>Transfer submitted</strong>
+                <div className={`${styles.transactionStatus} ${styles.pendingStatus}`}>
+                  <strong>Transaction submitted — not confirmed</strong>
                   <p>
-                    {submission.amount} {MAIN_TOKEN_SYMBOL} was submitted from
-                    your wallet. Eligibility is based on a confirmed transfer
-                    inside the published migration window.
+                    Waiting for Ethereum confirmation. Do not send again. The
+                    final snapshot counts only confirmed V4 Transfer events
+                    whose Ethereum block timestamp is inside the published
+                    window.
                   </p>
                   <a
                     href={`https://etherscan.io/tx/${submission.hash}`}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    View transaction
+                    View on Etherscan
                   </a>
                 </div>
+              ) : null}
+              {submission.kind === "confirmed" ? (
+                <div className={`${styles.transactionStatus} ${styles.confirmedStatus}`}>
+                  <strong>Wallet transaction confirmed on Ethereum</strong>
+                  <p>
+                    The transaction was confirmed in block {submission.blockNumber}.
+                    The final snapshot independently verifies the V4 Transfer
+                    event, amount, sender, recipient and block timestamp before
+                    determining eligibility.
+                  </p>
+                  <a
+                    href={`https://etherscan.io/tx/${submission.hash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View on Etherscan
+                  </a>
+                  {phase === "active" ? (
+                    <button
+                      className={styles.secondaryAction}
+                      type="button"
+                      onClick={prepareAnotherTransfer}
+                    >
+                      Send another amount
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {submission.kind === "reverted" ? (
+                <div className={`${styles.transactionStatus} ${styles.revertedStatus}`}>
+                  <strong>Transaction reverted</strong>
+                  <p>
+                    No V4 was transferred. Review the transaction before trying
+                    again while the migration window is active.
+                  </p>
+                  <a
+                    href={`https://etherscan.io/tx/${submission.hash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View on Etherscan
+                  </a>
+                </div>
+              ) : null}
+              {confirmationIssue ? (
+                <p className={styles.confirmationIssue}>{confirmationIssue}</p>
               ) : null}
             </div>
           </div>
@@ -571,54 +1086,66 @@ export function MainTokenMigration() {
               <p>Fixed destination</p>
               <h2 id="migration-wallet-title">Migration wallet</h2>
             </header>
-            <p>
-              Send only V4 on Ethereum to this address. This destination cannot
-              be changed.
-            </p>
-            <div className={styles.addressBlock}>
-              <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>
-              <button
-                type="button"
-                onClick={() => void copyMigrationWallet()}
-                disabled={phase === "closed"}
-              >
-                {phase === "closed"
-                  ? "Migration closed"
-                  : copied
-                    ? "Address copied"
-                    : "Copy address"}
-              </button>
-            </div>
-            <dl className={styles.contractFacts}>
-              <div>
-                <dt>Eligible token contract</dt>
-                <dd><code>{MAIN_TOKEN_ADDRESS}</code></dd>
+            {canRevealDestination ? (
+              <>
+                <p>
+                  Send only V4 directly from a self-custody EOA on Ethereum.
+                  This address is fixed for this migration release.
+                </p>
+                <div className={styles.addressBlock}>
+                  <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>
+                  <button
+                    type="button"
+                    onClick={() => void copyMigrationWallet()}
+                  >
+                    {copied ? "Address copied" : "Copy address"}
+                  </button>
+                </div>
+                <dl className={styles.contractFacts}>
+                  <div>
+                    <dt>Eligible token contract</dt>
+                    <dd><code>{MAIN_TOKEN_ADDRESS}</code></dd>
+                  </div>
+                  <div>
+                    <dt>Network</dt>
+                    <dd>Ethereum Mainnet</dd>
+                  </div>
+                  <div>
+                    <dt>Allocation identity</dt>
+                    <dd>Ethereum Transfer event sender</dd>
+                  </div>
+                  <div>
+                    <dt>Eligibility cutoff</dt>
+                    <dd>
+                      Ethereum block timestamp at or after opening and before
+                      the deadline
+                    </dd>
+                  </div>
+                </dl>
+                <div className={styles.warning}>
+                  <strong>Before you send</strong>
+                  <p>Do not send ETH or another token.</p>
+                  <p>
+                    Do not send from an exchange, custodian or router. The
+                    Transfer event sender would receive the record, not your
+                    wallet.
+                  </p>
+                  <p>
+                    Multisigs and smart-contract wallets require manual review
+                    and have no automatic allocation guarantee.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className={styles.destinationUnavailable}>
+                <strong>Destination hidden while transfers are closed</strong>
+                <span>
+                  The full address and copy action appear only during the
+                  published transfer window. Ignore migration addresses sent by
+                  DM or shown on another domain.
+                </span>
               </div>
-              <div>
-                <dt>Network</dt>
-                <dd>Ethereum Mainnet</dd>
-              </div>
-              <div>
-                <dt>Snapshot identity</dt>
-                <dd>The address that sends V4</dd>
-              </div>
-              <div>
-                <dt>Eligibility cutoff</dt>
-                <dd>Confirmed in an Ethereum block before the deadline</dd>
-              </div>
-            </dl>
-            <div className={styles.warning}>
-              <strong>Before you send</strong>
-              <p>Do not send ETH or any other token.</p>
-              <p>
-                Do not send from an exchange or custodial service. The
-                allocation would belong to its sending address, not yours.
-              </p>
-              <p>
-                Only use a smart contract wallet if you control the identical
-                address on Robinhood Chain.
-              </p>
-            </div>
+            )}
           </aside>
         </div>
       </section>
@@ -629,13 +1156,15 @@ export function MainTokenMigration() {
           <h2 id="migration-process-title">How it works</h2>
         </header>
         <ol>
-          <li><strong>Send before the deadline</strong><span>Transfer V4 to the fixed migration wallet during the published window.</span></li>
-          <li><strong>Snapshot by sending address</strong><span>Confirmed transfers are aggregated by the address that sent them.</span></li>
-          <li><strong>Receive at launch</strong><span>The same token amount is allocated to that same address on Robinhood Chain.</span></li>
+          <li><strong>Send while active</strong><span>Transfer V4 directly from your self-custody EOA during the published window.</span></li>
+          <li><strong>Confirm on Ethereum</strong><span>Only confirmed Transfer events inside the window can enter the final snapshot.</span></li>
+          <li><strong>Final snapshot</strong><span>Amounts are aggregated by exact event sender and reviewed before the Robinhood allocation.</span></li>
         </ol>
         <p className={styles.finalNote}>
-          No vesting. No token lock. A 1:1 token allocation does not guarantee
-          the same price, dollar value, liquidity, market, or tradability.
+          A 1:1 allocation records token amount only. It does not preserve
+          price, dollar value, liquidity, market access or tradability.
+          Transfers from contract wallets or intermediaries require manual
+          review.
         </p>
         <Link className={styles.backLink} href="/">
           Back to Programmable

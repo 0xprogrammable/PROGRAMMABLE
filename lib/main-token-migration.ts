@@ -13,14 +13,20 @@ import {
 } from "./prepared-transaction";
 
 export const MAIN_TOKEN_MIGRATION_CHAIN_ID = 1 as const;
-export const MAIN_TOKEN_MIGRATION_WINDOW_SECONDS = 72 * 60 * 60;
+export const MAIN_TOKEN_MIGRATION_WINDOW_SECONDS = 48 * 60 * 60;
+export const MAIN_TOKEN_MIGRATION_RELEASE_ID =
+  "v4-ethereum-to-robinhood-48h-2026-v1" as const;
 export const MAIN_TOKEN_DECIMALS = 18;
 export const MAIN_TOKEN_SYMBOL = "V4";
+export const MAIN_TOKEN_TOTAL_SUPPLY_RAW =
+  1_000_000_000_000_000_000_000_000_000n;
+export const MAIN_TOKEN_RUNTIME_CODE_KECCAK256 =
+  "0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad" as const;
 export const MAIN_TOKEN_ADDRESS = getAddress(
   "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
 );
 export const MAIN_TOKEN_MIGRATION_WALLET = getAddress(
-  "0x14e24Ac373b3E65851627E4e757300Ac9053438C",
+  "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
 );
 
 const UINT256_MAX = (1n << 256n) - 1n;

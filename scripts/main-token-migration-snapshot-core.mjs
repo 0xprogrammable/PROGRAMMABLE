@@ -1,16 +1,19 @@
 import { createHash } from "node:crypto";
 
 export const MAIN_TOKEN_MIGRATION_POLICY = Object.freeze({
-  schema: "programmable-main-token-migration-snapshot/v1",
+  schema: "programmable-main-token-migration-snapshot/v2",
+  releaseId: "v4-ethereum-to-robinhood-48h-2026-v1",
   chainId: 1n,
   ethereumGenesisHash:
     "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
   tokenAddress: "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
-  migrationWallet: "0x14e24Ac373b3E65851627E4e757300Ac9053438C",
+  tokenRuntimeCodeKeccak256:
+    "0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad",
+  migrationWallet: "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
   tokenSymbol: "V4",
   tokenDecimals: 18n,
   tokenTotalSupplyRaw: 1_000_000_000_000_000_000_000_000_000n,
-  windowSeconds: 72n * 60n * 60n,
+  windowSeconds: 48n * 60n * 60n,
   transferTopic:
     "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
   cutoffRule: "block.timestamp >= windowStart && block.timestamp < deadline",
@@ -22,6 +25,29 @@ const BYTES32 = /^0x[0-9a-fA-F]{64}$/u;
 const BYTECODE = /^0x(?:[0-9a-fA-F]{2})*$/u;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const UINT64_MASK = (1n << 64n) - 1n;
+const KECCAK_RATE_BYTES = 136;
+const KECCAK_ROTATIONS = Object.freeze([
+  0, 1, 62, 28, 27,
+  36, 44, 6, 55, 20,
+  3, 10, 43, 25, 39,
+  41, 45, 15, 21, 8,
+  18, 2, 61, 56, 14,
+]);
+const KECCAK_ROUND_CONSTANTS = Object.freeze([
+  0x0000000000000001n, 0x0000000000008082n,
+  0x800000000000808an, 0x8000000080008000n,
+  0x000000000000808bn, 0x0000000080000001n,
+  0x8000000080008081n, 0x8000000000008009n,
+  0x000000000000008an, 0x0000000000000088n,
+  0x0000000080008009n, 0x000000008000000an,
+  0x000000008000808bn, 0x800000000000008bn,
+  0x8000000000008089n, 0x8000000000008003n,
+  0x8000000000008002n, 0x8000000000000080n,
+  0x000000000000800an, 0x800000008000000an,
+  0x8000000080008081n, 0x8000000000008080n,
+  0x0000000080000001n, 0x8000000080008008n,
+]);
 
 function fail(message) {
   throw new Error(`Migration snapshot rejected: ${message}`);
@@ -70,6 +96,73 @@ export function sha256CanonicalJson(value) {
 function sha256Bytecode(value) {
   if (!BYTECODE.test(value)) fail("token runtime bytecode is malformed");
   return `sha256:${createHash("sha256").update(Buffer.from(value.slice(2), "hex")).digest("hex")}`;
+}
+
+function rotateLeft64(value, shift) {
+  if (shift === 0) return value & UINT64_MASK;
+  const offset = BigInt(shift);
+  return ((value << offset) | (value >> (64n - offset))) & UINT64_MASK;
+}
+
+function keccakF1600(state) {
+  for (const roundConstant of KECCAK_ROUND_CONSTANTS) {
+    const columnParity = new Array(5);
+    for (let x = 0; x < 5; x += 1) {
+      columnParity[x] =
+        state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20];
+    }
+    for (let x = 0; x < 5; x += 1) {
+      const delta = columnParity[(x + 4) % 5] ^ rotateLeft64(columnParity[(x + 1) % 5], 1);
+      for (let y = 0; y < 5; y += 1) state[x + 5 * y] ^= delta;
+    }
+
+    const rotated = new Array(25).fill(0n);
+    for (let x = 0; x < 5; x += 1) {
+      for (let y = 0; y < 5; y += 1) {
+        rotated[y + 5 * ((2 * x + 3 * y) % 5)] = rotateLeft64(
+          state[x + 5 * y],
+          KECCAK_ROTATIONS[x + 5 * y],
+        );
+      }
+    }
+    for (let x = 0; x < 5; x += 1) {
+      for (let y = 0; y < 5; y += 1) {
+        const index = x + 5 * y;
+        state[index] = (
+          rotated[index] ^
+          ((~rotated[(x + 1) % 5 + 5 * y]) & rotated[(x + 2) % 5 + 5 * y])
+        ) & UINT64_MASK;
+      }
+    }
+    state[0] ^= roundConstant;
+  }
+}
+
+export function keccak256Bytecode(value) {
+  if (!BYTECODE.test(value)) fail("token runtime bytecode is malformed");
+  const bytes = Buffer.from(value.slice(2), "hex");
+  const paddedLength = Math.ceil((bytes.length + 1) / KECCAK_RATE_BYTES) * KECCAK_RATE_BYTES;
+  const padded = Buffer.alloc(paddedLength);
+  bytes.copy(padded);
+  padded[bytes.length] ^= 0x01;
+  padded[padded.length - 1] ^= 0x80;
+
+  const state = new Array(25).fill(0n);
+  for (let offset = 0; offset < padded.length; offset += KECCAK_RATE_BYTES) {
+    for (let index = 0; index < KECCAK_RATE_BYTES; index += 1) {
+      state[Math.floor(index / 8)] ^=
+        BigInt(padded[offset + index]) << (8n * BigInt(index % 8));
+    }
+    keccakF1600(state);
+  }
+
+  const output = Buffer.alloc(32);
+  for (let index = 0; index < output.length; index += 1) {
+    output[index] = Number(
+      (state[Math.floor(index / 8)] >> (8n * BigInt(index % 8))) & 0xffn,
+    );
+  }
+  return `0x${output.toString("hex")}`;
 }
 
 function unsignedBigInt(value, label) {
@@ -159,6 +252,41 @@ function normalizeLog(value, index) {
   };
 }
 
+function normalizeSenderCodeObservation(value, index) {
+  const label = `Sender code observation ${index}`;
+  if (!exactPlainObject(value)) fail(`${label} is malformed`);
+  const address = String(value.address ?? "");
+  if (!ADDRESS.test(address)) fail(`${label}.address is malformed`);
+  const runtimeCode = String(value.runtimeCode ?? "").toLowerCase();
+  if (!BYTECODE.test(runtimeCode)) fail(`${label}.runtimeCode is malformed`);
+  return {
+    address: address.toLowerCase(),
+    blockHash: exactHash(value.blockHash, `${label}.blockHash`),
+    blockNumber: unsignedBigInt(value.blockNumber, `${label}.blockNumber`),
+    runtimeCode,
+  };
+}
+
+function normalizeTransactionSenderObservation(value, index) {
+  const label = `Transaction sender observation ${index}`;
+  if (!exactPlainObject(value)) fail(`${label} is malformed`);
+  const from = String(value.from ?? "");
+  if (!ADDRESS.test(from)) fail(`${label}.from is malformed`);
+  return {
+    blockHash: exactHash(value.blockHash, `${label}.blockHash`),
+    blockNumber: unsignedBigInt(value.blockNumber, `${label}.blockNumber`),
+    from: from.toLowerCase(),
+    transactionHash: exactHash(
+      value.transactionHash,
+      `${label}.transactionHash`,
+    ),
+  };
+}
+
+function senderBlockKey(address, blockNumber) {
+  return `${address}:${blockNumber.toString()}`;
+}
+
 function normalizedLogFingerprint(log) {
   return [
     log.address,
@@ -195,7 +323,7 @@ function validateWindow({
   deadlineTimestamp,
 }) {
   if (windowStartTimestamp + MAIN_TOKEN_MIGRATION_POLICY.windowSeconds !== deadlineTimestamp) {
-    fail("deadline is not exactly 72 hours after the window start");
+    fail("deadline is not exactly 48 hours after the window start");
   }
   if (previousBlock.number + 1n !== startBlock.number) {
     fail("start block is not immediately after the opening-balance block");
@@ -272,10 +400,29 @@ export function buildMainTokenMigrationSnapshot(input) {
   if (closingRuntimeCode !== openingRuntimeCode) {
     fail("source token runtime bytecode changed during the window");
   }
+  const openingRuntimeCodeKeccak256 = keccak256Bytecode(openingRuntimeCode);
+  const closingRuntimeCodeKeccak256 = keccak256Bytecode(closingRuntimeCode);
+  if (
+    openingRuntimeCodeKeccak256 !== MAIN_TOKEN_MIGRATION_POLICY.tokenRuntimeCodeKeccak256 ||
+    closingRuntimeCodeKeccak256 !== MAIN_TOKEN_MIGRATION_POLICY.tokenRuntimeCodeKeccak256
+  ) {
+    fail("source token runtime bytecode does not match the frozen keccak256");
+  }
   const openingWalletCode = String(input.openingWalletCode ?? "").toLowerCase();
   const closingWalletCode = String(input.closingWalletCode ?? "").toLowerCase();
   if (openingWalletCode !== "0x" || closingWalletCode !== "0x") {
     fail("migration wallet is not an unchanged plain Ethereum account");
+  }
+  const openingWalletTransactionCount = unsignedBigInt(
+    input.openingWalletTransactionCount,
+    "openingWalletTransactionCount",
+  );
+  const closingWalletTransactionCount = unsignedBigInt(
+    input.closingWalletTransactionCount,
+    "closingWalletTransactionCount",
+  );
+  if (openingWalletTransactionCount !== 0n || closingWalletTransactionCount !== 0n) {
+    fail("migration wallet transaction count is not zero throughout the window");
   }
   const openingDecimals = unsignedBigInt(input.openingDecimals, "openingDecimals");
   const closingDecimals = unsignedBigInt(input.closingDecimals, "closingDecimals");
@@ -376,13 +523,196 @@ export function buildMainTokenMigrationSnapshot(input) {
       amountRaw: allocation.amountRaw.toString(),
       eventCount: allocation.eventCount.toString(),
     }));
+  if (!Array.isArray(input.senderCodeObservations)) {
+    fail("senderCodeObservations is not an array");
+  }
+  const requiredSenderBlocks = new Map();
+  const requiredTransactions = new Map();
+  for (const log of logs) {
+    if (
+      log.to !== migrationWallet ||
+      log.from === migrationWallet ||
+      log.from === ZERO_ADDRESS ||
+      log.amountRaw === 0n
+    ) {
+      continue;
+    }
+    const key = senderBlockKey(log.from, log.blockNumber);
+    const prior = requiredSenderBlocks.get(key);
+    if (prior && prior.blockHash !== log.blockHash) {
+      fail(`sender block ${key} has conflicting block hashes`);
+    }
+    if (!prior) {
+      requiredSenderBlocks.set(key, {
+        address: log.from,
+        blockHash: log.blockHash,
+        blockNumber: log.blockNumber,
+      });
+    }
+    const priorTransaction = requiredTransactions.get(log.txHash);
+    if (
+      priorTransaction &&
+      (
+        priorTransaction.blockHash !== log.blockHash ||
+        priorTransaction.blockNumber !== log.blockNumber
+      )
+    ) {
+      fail(`transaction ${log.txHash} has conflicting block identity`);
+    }
+    if (!priorTransaction) {
+      requiredTransactions.set(log.txHash, {
+        blockHash: log.blockHash,
+        blockNumber: log.blockNumber,
+        transactionHash: log.txHash,
+      });
+    }
+  }
+  const senderCodeObservations = new Map();
+  for (const [index, value] of input.senderCodeObservations.entries()) {
+    const observation = normalizeSenderCodeObservation(value, index);
+    const key = senderBlockKey(observation.address, observation.blockNumber);
+    const required = requiredSenderBlocks.get(key);
+    if (!required) fail(`Sender code observation ${index} is not required by an eligible transfer`);
+    if (observation.blockHash !== required.blockHash) {
+      fail(`Sender code observation ${index} block hash disagrees with its transfer`);
+    }
+    if (senderCodeObservations.has(key)) {
+      fail(`sender code observation ${key} was provided more than once`);
+    }
+    senderCodeObservations.set(key, observation);
+  }
+  for (const key of requiredSenderBlocks.keys()) {
+    if (!senderCodeObservations.has(key)) {
+      fail(`sender code observation ${key} is missing`);
+    }
+  }
+  if (!Array.isArray(input.transactionSenderObservations)) {
+    fail("transactionSenderObservations is not an array");
+  }
+  const transactionSenderObservations = new Map();
+  for (const [index, value] of input.transactionSenderObservations.entries()) {
+    const observation = normalizeTransactionSenderObservation(value, index);
+    const required = requiredTransactions.get(observation.transactionHash);
+    if (!required) {
+      fail(`Transaction sender observation ${index} is not required by an eligible transfer`);
+    }
+    if (
+      observation.blockHash !== required.blockHash ||
+      observation.blockNumber !== required.blockNumber
+    ) {
+      fail(`Transaction sender observation ${index} block identity disagrees with its transfer`);
+    }
+    if (transactionSenderObservations.has(observation.transactionHash)) {
+      fail(`transaction sender observation ${observation.transactionHash} was provided more than once`);
+    }
+    transactionSenderObservations.set(observation.transactionHash, observation);
+  }
+  for (const transactionHash of requiredTransactions.keys()) {
+    if (!transactionSenderObservations.has(transactionHash)) {
+      fail(`transaction sender observation ${transactionHash} is missing`);
+    }
+  }
+
+  const observationRows = [...senderCodeObservations.values()]
+    .sort((left, right) => {
+      const addressOrder = left.address.localeCompare(right.address);
+      if (addressOrder !== 0) return addressOrder;
+      return left.blockNumber < right.blockNumber
+        ? -1
+        : left.blockNumber > right.blockNumber
+          ? 1
+          : 0;
+    })
+    .map((observation) => ({
+      address: observation.address,
+      blockHash: observation.blockHash,
+      blockNumber: observation.blockNumber.toString(),
+      classification: observation.runtimeCode === "0x" ? "automatic" : "manual_review",
+      runtimeCode: observation.runtimeCode,
+    }));
+  const observationsBySender = new Map();
+  for (const observation of observationRows) {
+    const prior = observationsBySender.get(observation.address) ?? [];
+    prior.push(observation);
+    observationsBySender.set(observation.address, prior);
+  }
+
+  const transactionObservationRows = [...transactionSenderObservations.values()]
+    .sort((left, right) => left.transactionHash.localeCompare(right.transactionHash))
+    .map((observation) => ({
+      blockHash: observation.blockHash,
+      blockNumber: observation.blockNumber.toString(),
+      from: observation.from,
+      transactionHash: observation.transactionHash,
+    }));
+  const transactionSenderMismatchCounts = new Map();
+  for (const log of logs) {
+    if (
+      log.to !== migrationWallet ||
+      log.from === migrationWallet ||
+      log.from === ZERO_ADDRESS ||
+      log.amountRaw === 0n
+    ) {
+      continue;
+    }
+    const observation = transactionSenderObservations.get(log.txHash);
+    if (observation.from !== log.from) {
+      transactionSenderMismatchCounts.set(
+        log.from,
+        (transactionSenderMismatchCounts.get(log.from) ?? 0n) + 1n,
+      );
+    }
+  }
+
+  const automaticAllocations = [];
+  const manualReviewAllocations = [];
+  for (const allocation of allocationRows) {
+    const observations = observationsBySender.get(allocation.address) ?? [];
+    const nonEmptyCodeObservationCount = observations.reduce(
+      (count, observation) => count + (observation.runtimeCode === "0x" ? 0 : 1),
+      0,
+    );
+    const transactionSenderMismatchEventCount =
+      transactionSenderMismatchCounts.get(allocation.address) ?? 0n;
+    if (
+      nonEmptyCodeObservationCount === 0 &&
+      transactionSenderMismatchEventCount === 0n
+    ) {
+      automaticAllocations.push(allocation);
+    } else {
+      const reviewReasons = [];
+      if (nonEmptyCodeObservationCount > 0) reviewReasons.push("runtime_code_observed");
+      if (transactionSenderMismatchEventCount > 0n) {
+        reviewReasons.push("transaction_sender_mismatch");
+      }
+      manualReviewAllocations.push({
+        ...allocation,
+        nonEmptyCodeObservationCount: nonEmptyCodeObservationCount.toString(),
+        reviewReasons,
+        transactionSenderMismatchEventCount:
+          transactionSenderMismatchEventCount.toString(),
+      });
+    }
+  }
+  const automaticAllocationRaw = automaticAllocations.reduce(
+    (sum, allocation) => sum + BigInt(allocation.amountRaw),
+    0n,
+  );
+  const manualReviewAllocationRaw = manualReviewAllocations.reduce(
+    (sum, allocation) => sum + BigInt(allocation.amountRaw),
+    0n,
+  );
+  const combinedAllocationRaw = automaticAllocationRaw + manualReviewAllocationRaw;
+  if (combinedAllocationRaw !== inboundRaw) {
+    fail("automatic and manual-review allocations do not reconcile with inbound transfers");
+  }
   const eligibleEventCount = allocationRows.reduce(
     (sum, allocation) => sum + BigInt(allocation.eventCount),
     0n,
   );
 
   return {
-    allocations: allocationRows,
+    automaticAllocations,
     anchors: {
       boundaryBlock: blockOutput(boundaryBlock),
       endBlock: blockOutput(endBlock),
@@ -396,8 +726,15 @@ export function buildMainTokenMigrationSnapshot(input) {
     },
     counts: {
       allocationCount: allocationRows.length.toString(),
+      automaticAllocationCount: automaticAllocations.length.toString(),
       deduplicatedTransferEventCount: logs.length.toString(),
       eligibleInboundEventCount: eligibleEventCount.toString(),
+      manualReviewAllocationCount: manualReviewAllocations.length.toString(),
+      senderCodeObservationCount: observationRows.length.toString(),
+      transactionSenderMismatchEventCount: [...transactionSenderMismatchCounts.values()]
+        .reduce((sum, count) => sum + count, 0n)
+        .toString(),
+      transactionSenderObservationCount: transactionObservationRows.length.toString(),
       zeroValueEventCount: zeroValueEventCount.toString(),
     },
     events: eventRows,
@@ -408,31 +745,49 @@ export function buildMainTokenMigrationSnapshot(input) {
     },
     policy: {
       beneficiary: "ERC-20 Transfer event from address",
+      contractSenderHandling: "manual review; never automatically allocated",
       conversion: MAIN_TOKEN_MIGRATION_POLICY.conversionRule,
       custodyTypeObserved: "plain account with no runtime code",
       cutoff: MAIN_TOKEN_MIGRATION_POLICY.cutoffRule,
       deadlineTimestampExclusive: deadlineTimestamp.toString(),
       migrationWallet,
+      releaseId: MAIN_TOKEN_MIGRATION_POLICY.releaseId,
       sourceTokenAddress: tokenAddress,
+      transactionSenderHandling:
+        "automatic only when every Transfer.from equals its Ethereum transaction.from",
       windowDurationSeconds: MAIN_TOKEN_MIGRATION_POLICY.windowSeconds.toString(),
       windowStartTimestamp: windowStartTimestamp.toString(),
     },
     reconciliation: {
+      automaticAllocationRaw: automaticAllocationRaw.toString(),
       closingBalanceRaw: closingBalanceRaw.toString(),
+      combinedAllocationRaw: combinedAllocationRaw.toString(),
       expectedClosingBalanceRaw: expectedClosingBalanceRaw.toString(),
       inboundRaw: inboundRaw.toString(),
+      manualReviewAllocationRaw: manualReviewAllocationRaw.toString(),
       matches: true,
       openingBalanceRaw: openingBalanceRaw.toString(),
       outboundRaw: outboundRaw.toString(),
+    },
+    manualReviewAllocations,
+    migrationWalletEvidence: {
+      address: migrationWallet,
+      closingRuntimeCode: closingWalletCode,
+      closingTransactionCount: closingWalletTransactionCount.toString(),
+      openingRuntimeCode: openingWalletCode,
+      openingTransactionCount: openingWalletTransactionCount.toString(),
     },
     schema: MAIN_TOKEN_MIGRATION_POLICY.schema,
     sourceToken: {
       address: tokenAddress,
       decimals: openingDecimals.toString(),
       runtimeCodeSha256: sha256Bytecode(openingRuntimeCode),
+      runtimeCodeKeccak256: openingRuntimeCodeKeccak256,
       symbol: MAIN_TOKEN_MIGRATION_POLICY.tokenSymbol,
       totalSupplyRaw: openingTotalSupplyRaw.toString(),
     },
+    senderCodeObservations: observationRows,
+    transactionSenderObservations: transactionObservationRows,
   };
 }
 

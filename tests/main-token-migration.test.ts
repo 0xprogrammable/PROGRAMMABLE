@@ -9,7 +9,11 @@ import {
   assertMainTokenMigrationTransaction,
   buildMainTokenMigrationTransaction,
   MAIN_TOKEN_ADDRESS,
+  MAIN_TOKEN_DECIMALS,
+  MAIN_TOKEN_MIGRATION_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_RELEASE_ID,
   MAIN_TOKEN_MIGRATION_WALLET,
+  MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
   parseMainTokenMigrationAmount,
 } from "../lib/main-token-migration";
 import {
@@ -22,8 +26,71 @@ const other = "0x3333333333333333333333333333333333333333";
 const transferAbi = parseAbi([
   "function transfer(address to,uint256 amount) returns (bool)",
 ]);
+const migrationWallet = "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D";
+const migrationWindowSeconds = 48 * 60 * 60;
+
+function readScannerString(source: string, key: string) {
+  const match = source.match(new RegExp(`${key}:\\s*"([^"]+)"`, "u"));
+  if (!match?.[1]) throw new Error(`Missing scanner policy field ${key}`);
+  return match[1];
+}
+
+function readScannerBigIntProduct(source: string, key: string) {
+  const match = source.match(
+    new RegExp(`${key}:\\s*([0-9_n\\s*]+),`, "u"),
+  );
+  if (!match?.[1]) throw new Error(`Missing scanner policy field ${key}`);
+  return match[1].split("*").reduce((product, factor) => {
+    const normalized = factor.trim().replaceAll("_", "").replace(/n$/u, "");
+    if (!/^[0-9]+$/u.test(normalized)) {
+      throw new Error(`Invalid scanner policy field ${key}`);
+    }
+    return product * BigInt(normalized);
+  }, 1n);
+}
 
 describe("main token migration transfer", () => {
+  it("freezes the 48-hour Ethereum migration identities across UI and scanner", () => {
+    const scanner = readFileSync(
+      join(process.cwd(), "scripts/main-token-migration-snapshot-core.mjs"),
+      "utf8",
+    );
+    const walletProof = readFileSync(
+      join(process.cwd(), "scripts/main-token-migration-wallet-proof.mjs"),
+      "utf8",
+    );
+
+    expect(MAIN_TOKEN_MIGRATION_CHAIN_ID).toBe(1);
+    expect(MAIN_TOKEN_ADDRESS).toBe(
+      "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+    );
+    expect(MAIN_TOKEN_MIGRATION_WALLET).toBe(migrationWallet);
+    expect(MAIN_TOKEN_DECIMALS).toBe(18);
+    expect(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS).toBe(migrationWindowSeconds);
+
+    expect(readScannerBigIntProduct(scanner, "chainId")).toBe(
+      BigInt(MAIN_TOKEN_MIGRATION_CHAIN_ID),
+    );
+    expect(readScannerString(scanner, "tokenAddress")).toBe(
+      MAIN_TOKEN_ADDRESS,
+    );
+    expect(readScannerString(scanner, "migrationWallet")).toBe(
+      MAIN_TOKEN_MIGRATION_WALLET,
+    );
+    expect(readScannerBigIntProduct(scanner, "tokenDecimals")).toBe(
+      BigInt(MAIN_TOKEN_DECIMALS),
+    );
+    expect(readScannerBigIntProduct(scanner, "windowSeconds")).toBe(
+      BigInt(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
+    );
+    expect(readScannerString(scanner, "releaseId")).toBe(
+      MAIN_TOKEN_MIGRATION_RELEASE_ID,
+    );
+    expect(readScannerString(walletProof, "releaseId")).toBe(
+      MAIN_TOKEN_MIGRATION_RELEASE_ID,
+    );
+  });
+
   it("binds the exact token, fixed receiver, sender, chain and raw token units", () => {
     const amountRaw = parseMainTokenMigrationAmount("12345.670000000000000001");
     const prepared = buildMainTokenMigrationTransaction({
@@ -119,22 +186,181 @@ describe("main token migration transfer", () => {
 
 describe("main token migration page contract", () => {
   const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const page = read("components/main-token-migration.tsx");
+
+  it("derives the countdown from one absolute window across reloads", () => {
+    const startAt = Date.parse("2026-08-30T12:00:00.000Z");
+    const deadlineAt = startAt + migrationWindowSeconds * 1_000;
+    const remainingAt = (now: number) =>
+      Math.max(0, Math.ceil((deadlineAt - now) / 1_000));
+
+    expect(remainingAt(startAt)).toBe(migrationWindowSeconds);
+    expect(remainingAt(startAt + 12 * 60 * 60 * 1_000)).toBe(36 * 60 * 60);
+    expect(remainingAt(startAt + 37 * 60 * 60 * 1_000)).toBe(11 * 60 * 60);
+    expect(page).toContain("setNow(Date.now())");
+    expect(page).toContain("phase === \"upcoming\"");
+    expect(page).toContain("migrationWindow.startAt");
+    expect(page).toContain("migrationWindow.deadlineAt");
+    expect(page).not.toMatch(
+      /Date\.now\(\)\s*\+\s*MAIN_TOKEN_MIGRATION_WINDOW_SECONDS/u,
+    );
+  });
+
+  it("stays active through the final millisecond and closes at the deadline", () => {
+    const startAt = Date.parse("2026-08-30T12:00:00.000Z");
+    const deadlineAt = startAt + migrationWindowSeconds * 1_000;
+    const phaseAt = (now: number) => {
+      if (now < startAt) return "upcoming";
+      if (now >= deadlineAt) return "closed";
+      return "active";
+    };
+
+    expect(phaseAt(deadlineAt - 1)).toBe("active");
+    expect(phaseAt(deadlineAt)).toBe("closed");
+    expect(phaseAt(deadlineAt + 1)).toBe("closed");
+    expect(page).toContain(
+      'if (now < migrationWindow.startAt) return "upcoming";',
+    );
+    expect(page).toContain(
+      'if (now >= migrationWindow.deadlineAt) return "closed";',
+    );
+  });
+
+  it("activates only with the exact 48-hour window, start block and release", () => {
+    const startAt = Date.parse("2026-08-30T12:00:00.000Z");
+    const activation = (
+      requested: boolean,
+      deadlineAt: number,
+      startBlock: bigint | null,
+      startBlockHash: string | null,
+      releaseId: string,
+    ) =>
+      requested &&
+      deadlineAt - startAt === migrationWindowSeconds * 1_000 &&
+      startBlock !== null &&
+      /^0x[0-9a-f]{64}$/u.test(startBlockHash ?? "") &&
+      releaseId === MAIN_TOKEN_MIGRATION_RELEASE_ID;
+    const blockHash = `0x${"1".repeat(64)}`;
+
+    expect(
+      activation(
+        true,
+        startAt + migrationWindowSeconds * 1_000,
+        1n,
+        blockHash,
+        MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      ),
+    ).toBe(true);
+    expect(
+      activation(
+        false,
+        startAt + migrationWindowSeconds * 1_000,
+        1n,
+        blockHash,
+        MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      ),
+    ).toBe(false);
+    expect(
+      activation(
+        true,
+        startAt + migrationWindowSeconds * 1_000,
+        null,
+        blockHash,
+        MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      ),
+    ).toBe(false);
+    expect(
+      activation(
+        true,
+        startAt + migrationWindowSeconds * 1_000 - 1,
+        1n,
+        blockHash,
+        MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      ),
+    ).toBe(false);
+    expect(
+      activation(
+        true,
+        startAt + migrationWindowSeconds * 1_000 + 1,
+        1n,
+        blockHash,
+        MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      ),
+    ).toBe(false);
+    expect(
+      activation(
+        true,
+        startAt + migrationWindowSeconds * 1_000,
+        1n,
+        blockHash,
+        "wrong-release",
+      ),
+    ).toBe(false);
+    expect(
+      activation(
+        true,
+        startAt + migrationWindowSeconds * 1_000,
+        1n,
+        null,
+        MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      ),
+    ).toBe(false);
+    expect(page).toContain("manifest.enabled === true &&");
+    expect(page).toContain("exactPolicy &&");
+    expect(page).toContain("exactWindow &&");
+    expect(page).toContain("startBlock !== null &&");
+    expect(page).toContain("startBlockHash !== null");
+  });
 
   it("stays local-safe until an exact window and start block are configured", () => {
-    const page = read("components/main-token-migration.tsx");
     const route = read("app/migration/page.tsx");
     const landing = read("components/landing-page.tsx");
+    const activationManifest = JSON.parse(
+      read("config/main-token-migration-activation.v1.json"),
+    ) as {
+      enabled: boolean;
+      releaseId: string;
+      windowDurationSeconds: string;
+      windowStartTimestamp: string | null;
+      deadlineTimestampExclusive: string | null;
+      startBlockNumber: string | null;
+      startBlockHash: string | null;
+    };
 
-    expect(page).toContain("NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_ENABLED");
+    expect(page).toContain("main-token-migration-activation.v1.json");
     expect(page).toContain("deadlineAt - startAt ===");
     expect(page).toContain("startBlock !== null");
     expect(page).toContain("Local preview · transfers disabled");
-    expect(page).toContain("Nothing is sent until you review and approve");
-    expect(page).toContain("1:1 by token units");
-    expect(page).toContain("Do not send from an exchange or custodial service");
+    expect(page).toContain("48-hour");
+    expect(page).toContain(
+      "Nothing is sent until you approve it in your wallet.",
+    );
+    expect(page).toContain("1:1 V4 amount");
+    expect(page).toContain("Do not send from an exchange, custodian or router");
     expect(route).toContain("index: false");
     expect(route).toContain("follow: false");
+    expect(route).toContain(
+      "PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_ENABLED",
+    );
+    expect(route).toContain(
+      "PROGRAMMABLE_MAIN_TOKEN_MIGRATION_LOCAL_PREVIEW",
+    );
+    expect(route).toContain("migrationActivationManifest.enabled");
+    expect(route).toContain("notFound()");
     expect(landing).toContain('href="/migration"');
     expect(landing).toContain("We are migrating");
+    expect(landing).toContain(
+      "NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_VISIBLE",
+    );
+    expect(landing).toContain("migrationActivationManifest.enabled");
+    expect(activationManifest).toMatchObject({
+      enabled: false,
+      releaseId: MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      windowDurationSeconds: String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
+      windowStartTimestamp: null,
+      deadlineTimestampExclusive: null,
+      startBlockNumber: null,
+      startBlockHash: null,
+    });
   });
 });
