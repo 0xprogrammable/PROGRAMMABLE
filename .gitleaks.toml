@@ -61,6 +61,17 @@ paths = ['''components/docs-public-policy\.ts''']
 regexes = ['''(?i)V4_TOKEN_ADDRESS\s*=\s*"0x7987f03462200b3d8a072e02c89a8a41dcb124ee"''']
 
 [[allowlists]]
+description = "Pinned GitBook schemas contain public onchain token-address examples"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''docs/public/\.gitbook/schemas/v2/direct-native-hook-graph-profile-discovery-v1\.schema\.json''',
+  '''docs/public/\.gitbook/schemas/v2/direct-native-hook-graph-profile-discovery-v2\.schema\.json''',
+  '''docs/public/\.gitbook/schemas/v2/manifest\.schema\.json''',
+]
+regexes = ['''^\s*"(?:fundingToken|token)"\s*:\s*"0x[0-9a-fA-F]{40}",?\s*$''']
+
+[[allowlists]]
 description = "Creator articles pin the official public V4 token address"
 condition = "AND"
 regexTarget = "match"
