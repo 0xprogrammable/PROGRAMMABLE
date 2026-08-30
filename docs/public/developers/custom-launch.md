@@ -10,6 +10,10 @@ subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain available, whi
 `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy
 Registry and GitHub submission intake is closed.
 
+The installable public CLI remains `@programmable/launch` `3.3.9` for the live Ethereum V3 contract. Version `4.0.0`
+exists only as a Robinhood V4 source candidate in the reviewed repository. It is not a published or installable
+release, and its presence does not change V4 `publicWrites: false` or `releaseReady: false`.
+
 V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
 simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
 reconciliation and finalized reads remain available.
@@ -67,6 +71,39 @@ root. Canary status is valid only after the server publishes the exact deploymen
 source commitment, finality-policy digest, finalized block, pinned finalized-evidence reference, and address,
 runtime-hash and start-block tuples for the Router, GraphFactory, PermitAuthority Safe, PoolManager, PositionManager,
 Permit2, StateView, Universal Router and V4 Quoter. Partial evidence cannot promote the lane.
+
+### V4 lifecycle and wallet handoff
+
+The planned V4 resource has a separate chain-aware lifecycle. These states do not replace the live Ethereum V3
+states:
+
+| Status | Meaning |
+| --- | --- |
+| `received` | The API accepted the immutable request into durable processing. No wallet action exists. |
+| `validating` | The server is checking the exact request, policy, source, graph, external references and Router simulation bindings. |
+| `action_required` | Fix the server-authored remediation, rebuild and submit a new immutable request. This is not a wallet action or manual approval stage. |
+| `authorized` | Server admission and exact-transaction simulation passed and the exact wallet transaction is bound. It is not signed or broadcast. |
+| `awaiting_wallet_signature` | The controller must review and sign the exact transaction in the separate wallet handoff. |
+| `wallet_action_required` | The controller must open the current handoff, verify chain `4663`, sender, Router, value and calldata, then submit through the wallet. |
+| `submitted` | The exact wallet transaction was submitted, but no Robinhood or Ethereum checkpoint is implied. |
+| `sequencer_soft_confirmed` | Robinhood sequencer evidence exists. It remains reversible and is not Ethereum finality. |
+| `ethereum_posted` | The Robinhood batch is posted to Ethereum, but the configured Ethereum-finality proof is not complete. |
+| `finalized` | The exact launch evidence satisfies the published Robinhood-to-Ethereum finality policy. |
+| `failed` | Processing is terminal. Read the bound failure and remediation before creating a new request. |
+
+The CLI can prepare, validate, submit request bytes, poll status and display the exact transaction. It never signs or
+broadcasts. Always bind V4 polling to both the API version and chain so the V3 default cannot be used by mistake:
+
+```sh
+programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized
+# Stop for separate controller-wallet review, signing and broadcast.
+programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized
+```
+
+Provider source verification starts only after `finalized` and remains an independent server-authored process.
+`finalized` does not mean `exact_match`, and a provider retry or failure does not revise chain finality. Likewise,
+source verification, Programmable indexing, third-party indexing, trading readiness, Explore visibility and any public
+announcement are separate outcomes. No V4 route, schema or source candidate proves any of them is live.
 
 ## Existing-project integration
 

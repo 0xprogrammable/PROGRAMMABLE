@@ -197,4 +197,12 @@ test("public V4 example source contains no fabricated nonzero deployment address
     "utf8",
   );
   assert.match(readme, /never embeds planned Programmable deployment\s+addresses/u);
+  assert.match(readme, /Package version `4\.0\.0` is a\s+planned pre-release source candidate/u);
+  assert.match(readme, /not a published or publicly installable release/u);
+  assert.match(readme, /`planned-not-deployed` with `releaseReady: false`/u);
+  assert.doesNotMatch(readme, /verified `@programmable\/launch` 4\.0\.0 release artifact/u);
+  assert.doesNotMatch(
+    readme,
+    /releases\/download\/programmable-launch-v4\.0\.0/u,
+  );
 });

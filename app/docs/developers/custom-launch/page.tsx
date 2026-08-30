@@ -7,12 +7,13 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
   description:
-    "Package, submit and track deterministic Custom launches with scoped API credentials on Ethereum Mainnet.",
+    "Package, submit and track live Ethereum V3 launches, and inspect the planned Robinhood Chain V4 contract.",
   alternates: { canonical: "/docs/developers/custom-launch" },
 };
 
 const customLaunchSections = [
   { id: "quickstart", label: "Quickstart" },
+  { id: "robinhood-v4", label: "Robinhood V4" },
   { id: "authentication", label: "Authentication" },
   { id: "existing-project-integration", label: "Existing projects" },
   { id: "v3-general", label: "V3 general hooks" },
@@ -89,6 +90,52 @@ const lifecycle = [
     "The request is terminal. Read failure before deciding whether to create a new request.",
   ],
 ] as const;
+
+const robinhoodV4Lifecycle = [
+  ["received", "The immutable request is durably accepted. No wallet action exists."],
+  [
+    "validating",
+    "Server validation, admission, external-reference checks and exact Router simulation bindings are running.",
+  ],
+  [
+    "action_required",
+    "Fix the server-authored remediation, rebuild and submit a new immutable request. This is not a wallet action or manual approval stage.",
+  ],
+  [
+    "authorized",
+    "Server gates passed and the exact wallet transaction is bound. It is not signed or broadcast.",
+  ],
+  [
+    "awaiting_wallet_signature",
+    "The controller must review and sign the exact transaction through the separate wallet handoff.",
+  ],
+  [
+    "wallet_action_required",
+    "The controller must verify chain 4663, sender, Router, value and calldata, then submit through the wallet.",
+  ],
+  ["submitted", "The exact wallet transaction was submitted; no chain checkpoint is implied."],
+  [
+    "sequencer_soft_confirmed",
+    "Robinhood sequencer evidence exists but remains reversible.",
+  ],
+  [
+    "ethereum_posted",
+    "The Robinhood batch is posted to Ethereum but has not satisfied the finality policy.",
+  ],
+  [
+    "finalized",
+    "The exact launch evidence satisfies the published Robinhood-to-Ethereum finality policy.",
+  ],
+  [
+    "failed",
+    "Processing is terminal. Read the bound failure and remediation before creating a new request.",
+  ],
+] as const;
+
+const robinhoodV4WalletStatusCommand =
+  "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized";
+const robinhoodV4FinalityStatusCommand =
+  "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized";
 
 const cliInstallCommands = [
   [
@@ -168,6 +215,8 @@ export default function CustomLaunchApiDocsPage() {
         with nonretryable{" "}
         <code>CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
         <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new submissions.
+        Robinhood V4 version 4.0.0 is a source candidate, not a published release
+        or live API.
       </p>
 
       <section id="quickstart">
@@ -249,6 +298,76 @@ export default function CustomLaunchApiDocsPage() {
 
         <p className={styles.inlineAction}>
           <a href="/developers/custom-launch-api-v1.md">Open the raw compatibility guide</a>
+        </p>
+      </section>
+
+      <section id="robinhood-v4">
+        <div className={styles.sectionIntro}>
+          <h2>Keep the Robinhood V4 source candidate separate</h2>
+          <p>
+            Robinhood Chain Mainnet uses <code>chainId: 4663</code> and{" "}
+            <code>eip155:4663</code>. Discovery still reports{" "}
+            <code>planned</code>, <code>planned-not-deployed</code>,{" "}
+            <code>publicWrites: false</code> and{" "}
+            <code>publicAuthorization: false</code>. The V4 release binding stays{" "}
+            <code>releaseReady: false</code>.
+          </p>
+        </div>
+
+        <p className={styles.bodyCopy}>
+          CLI <code>3.3.9</code> remains the installable release for live Ethereum
+          V3. Package version <code>4.0.0</code> in the reviewed source tree is a
+          Robinhood V4 candidate only. Its{" "}
+          <a href="/openapi/custom-launch-v4.json">V4 OpenAPI</a>,{" "}
+          <a href="/schemas/custom-launch/v4/pack-config.json">
+            pack-config schema
+          </a>{" "}
+          and{" "}
+          <a href="/schemas/custom-launch/v4/source-verification-status.json">
+            source-verification schema
+          </a>{" "}
+          are integration pointers, not deployment or public-availability
+          evidence.
+        </p>
+
+        <dl className={`${styles.resultList} ${styles.lifecycleList}`}>
+          {robinhoodV4Lifecycle.map(([status, meaning]) => (
+            <div key={status}>
+              <dt>
+                <code>{status}</code>
+              </dt>
+              <dd>{meaning}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <ul className={styles.codeList}>
+          <li>
+            <code>{robinhoodV4WalletStatusCommand}</code>
+            <span>Stop for separate controller-wallet review and signing.</span>
+          </li>
+          <li>
+            <code>{robinhoodV4FinalityStatusCommand}</code>
+            <span>Poll the same chain-scoped resource after wallet broadcast.</span>
+          </li>
+        </ul>
+
+        <aside className={styles.callout}>
+          <strong>The CLI never signs or broadcasts</strong>
+          <p>
+            It can prepare and display the exact transaction. The controller
+            separately verifies chain 4663, sender, Router, value and calldata,
+            then decides whether to sign and submit through the wallet.
+          </p>
+        </aside>
+
+        <p className={styles.bodyCopy}>
+          Provider source verification starts only after <code>finalized</code>
+          and remains independent. Finality does not imply{" "}
+          <code>sourceVerification.status: exact_match</code>, and a provider retry
+          does not revise finality. Programmable indexing, third-party indexing,
+          trading readiness, Explore visibility and publication are separate
+          outcomes.
         </p>
       </section>
 
@@ -761,7 +880,7 @@ export default function CustomLaunchApiDocsPage() {
           </p>
         </div>
 
-        <dl className={styles.resultList}>
+        <dl className={`${styles.resultList} ${styles.lifecycleList}`}>
           {lifecycle.map(([status, meaning]) => (
             <div key={status}>
               <dt>

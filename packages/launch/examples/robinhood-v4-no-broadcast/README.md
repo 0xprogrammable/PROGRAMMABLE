@@ -13,11 +13,13 @@ admission, wallet approval, onchain deployment, or public availability.
 
 ## Prepare
 
-Use Node.js 24.14 and the verified `@programmable/launch` 4.0.0 release artifact. Copy the project out of the installed
-package, then install its exact compiler lock:
+Use Node.js 24.14 and an exact reviewed checkout containing this clean-room example. Package version `4.0.0` is a
+planned pre-release source candidate, not a published or publicly installable release; Robinhood V4 remains
+`planned-not-deployed` with `releaseReady: false`. Copy the project from that checkout, then install its exact
+compiler lock:
 
 ```sh
-PACKAGE_ROOT="$(npm root --global)/@programmable/launch"
+PACKAGE_ROOT="/absolute/path/to/exact-reviewed-checkout/packages/launch"
 cp -R "$PACKAGE_ROOT/examples/robinhood-v4-no-broadcast/project" ./robinhood-v4-clean-room
 cd ./robinhood-v4-clean-room
 npm ci --ignore-scripts --no-audit --no-fund

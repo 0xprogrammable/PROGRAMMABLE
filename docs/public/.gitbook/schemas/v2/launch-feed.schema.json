@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/launch-feed.schema.json",
+  "title": "Programmable launch feed",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "status",
+    "snapshot",
+    "items",
+    "page"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "degraded",
+        "unavailable"
+      ]
+    },
+    "snapshot": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/snapshot"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "launch.schema.json"
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": [
+        "nextCursor",
+        "resumeCursor",
+        "hasMore"
+      ],
+      "properties": {
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+        },
+        "resumeCursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+        },
+        "hasMore": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "snapshot": {
+      "type": "object",
+      "required": [
+        "blockNumber",
+        "blockHash",
+        "indexedAt",
+        "finality",
+        "sources",
+        "cursor"
+      ],
+      "properties": {
+        "blockNumber": {
+          "$ref": "common.schema.json#/$defs/decimalString"
+        },
+        "blockHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "indexedAt": {
+          "$ref": "common.schema.json#/$defs/isoDateTime"
+        },
+        "finality": {
+          "enum": [
+            "observed",
+            "confirmed",
+            "finalized"
+          ]
+        },
+        "customRegistryHighWaterGeneration": {
+          "$ref": "common.schema.json#/$defs/nullableDecimalString"
+        },
+        "sources": {
+          "type": "object",
+          "required": [
+            "classicIndexer",
+            "customRegistry",
+            "routerCustom"
+          ],
+          "properties": {
+            "classicIndexer": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/sourceBoundary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "customRegistry": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "highWaterGeneration"
+                  ],
+                  "properties": {
+                    "highWaterGeneration": {
+                      "$ref": "common.schema.json#/$defs/decimalString"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "routerCustom": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "blockNumber",
+                    "blockHash",
+                    "finality",
+                    "identityCommitment"
+                  ],
+                  "properties": {
+                    "blockNumber": {
+                      "$ref": "common.schema.json#/$defs/decimalString"
+                    },
+                    "blockHash": {
+                      "$ref": "common.schema.json#/$defs/hash32"
+                    },
+                    "finality": {
+                      "enum": [
+                        "observed",
+                        "confirmed",
+                        "finalized"
+                      ]
+                    },
+                    "identityCommitment": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sourceBoundary": {
+      "type": "object",
+      "required": [
+        "blockNumber",
+        "blockHash",
+        "finality"
+      ],
+      "properties": {
+        "blockNumber": {
+          "$ref": "common.schema.json#/$defs/decimalString"
+        },
+        "blockHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "finality": {
+          "enum": [
+            "observed",
+            "confirmed",
+            "finalized"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

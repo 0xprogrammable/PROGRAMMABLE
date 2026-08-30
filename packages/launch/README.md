@@ -1,17 +1,20 @@
 # Programmable Launch CLI
 
-`@programmable/launch` is the public, installable packager and API client for the Programmable Custom Launch API. It
-has exactly four commands: `pack`, `validate`, `submit`, and `status`. It never signs or broadcasts a wallet
-transaction.
+`@programmable/launch` is the source package for the Programmable Custom Launch packager and API client. It has
+exactly four commands: `pack`, `validate`, `submit`, and `status`. It never signs or broadcasts a wallet transaction.
+Release and installability are version-specific.
 
-## Install a versioned release
+## Install the current public Ethereum V3 release
+
+The commands below intentionally install the published CLI `3.3.9`. No `programmable-launch-v4.0.0` GitHub Release
+asset exists while Robinhood V4 remains `planned`, `planned-not-deployed`, and `releaseReady: false`.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
 curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
+  https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz
 curl --fail --location --output "$programmable_cli_dir/programmable-launch-3.3.9.tgz.sha256" \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
+  https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v3.3.9/programmable-launch-3.3.9.tgz.sha256
 (cd "$programmable_cli_dir" && shasum -a 256 -c programmable-launch-3.3.9.tgz.sha256)
 npm install --global "$programmable_cli_dir/programmable-launch-3.3.9.tgz"
 programmable-launch --version
@@ -35,13 +38,46 @@ and V2 resources remain readable through their original status routes:
 
 ```sh
 npm install --global \
-  https://github.com/0xprogrammable/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz
+  https://github.com/programmablehq/PROGRAMMABLE/releases/download/programmable-launch-v1.0.1/programmable-launch-1.0.1.tgz
 programmable-launch --version
 ```
 
 The V3 general hook profile is the public production profile. Package installation is not wallet authority: the API prepares
 the exact Router transaction, then the connected controller reviews and signs it separately. The human guide is
 <https://programmable.market/docs/developers/custom-launch>.
+
+## Robinhood Chain V4 source candidate
+
+Package version `4.0.0` in this repository, including local `npm pack` output, is a planned pre-release source
+candidate for Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). It is not a published or publicly installable
+release and must not be described as live. Product discovery still reports `status: planned`,
+`activationStage: planned-not-deployed`, `publicWrites: false` and `publicAuthorization: false`; the release binding
+remains `releaseReady: false`. The installable production CLI is still `3.3.9` for Ethereum V3.
+
+V4 requires an explicit API version and chain. The CLI default remains Ethereum V3, preserving V1, V2 and V3
+behavior. The V4 source candidate can prepare and validate exact bytes, submit only when the server eventually
+authorizes public writes, poll the chain-scoped resource and display the exact wallet transaction. It never signs or
+broadcasts:
+
+```sh
+programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized
+# Stop for separate controller-wallet review, signing and broadcast.
+programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized
+```
+
+The V4 lifecycle is `received`, `validating`, `action_required`, `authorized`, `awaiting_wallet_signature`,
+`wallet_action_required`, `submitted`, `sequencer_soft_confirmed`, `ethereum_posted`, `finalized` or `failed`.
+`action_required` means fix the server-authored remediation, rebuild and submit a new immutable request; it is not a
+wallet action or manual approval stage. `authorized`, `awaiting_wallet_signature` and `wallet_action_required` are
+wallet-handoff states, not proof of a signature or broadcast. `sequencer_soft_confirmed` is reversible;
+`ethereum_posted` is not yet final; only `finalized` satisfies the configured Robinhood-to-Ethereum finality policy.
+
+Source verification begins after finality and remains independent. `finalized` does not imply an exact source match,
+and provider failure does not revise finality. Indexing, trading readiness, Explore visibility, third-party listing and
+publication also remain separate states. The planned [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json),
+[pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and
+[source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json)
+are integration pointers, not deployment or public-availability evidence.
 
 ## V3 general hook profile
 

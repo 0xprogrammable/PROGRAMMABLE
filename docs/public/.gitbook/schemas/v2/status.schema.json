@@ -1,0 +1,560 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/status.schema.json",
+  "title": "Programmable integration service status",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "apiVersion",
+    "service",
+    "checkedAt",
+    "chainId",
+    "chains",
+    "classic",
+    "custom",
+    "feeds"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "apiVersion": {
+      "const": "2"
+    },
+    "service": {
+      "enum": [
+        "operational",
+        "degraded",
+        "unavailable"
+      ]
+    },
+    "checkedAt": {
+      "$ref": "common.schema.json#/$defs/isoDateTime"
+    },
+    "chainId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "caip2": {
+      "type": "string",
+      "pattern": "^eip155:[1-9][0-9]*$"
+    },
+    "supportedChainIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "chains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "chainId",
+          "caip2",
+          "status"
+        ],
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "caip2": {
+            "type": "string",
+            "pattern": "^eip155:[1-9][0-9]*$"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "canary",
+              "live",
+              "degraded",
+              "prelaunch",
+              "retired"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "classic": {
+      "$ref": "#/$defs/categoryStatus"
+    },
+    "custom": {
+      "$ref": "#/$defs/categoryStatus"
+    },
+    "customLaunchApi": {
+      "$ref": "#/$defs/customLaunchApi"
+    },
+    "customLaunchV4": {
+      "$ref": "manifest.schema.json#/properties/customLaunchV4"
+    },
+    "currentCustomLaunchCreate": {
+      "$ref": "#/$defs/currentCustomLaunchCreate"
+    },
+    "customFeeEnforcedLaunchProfileV2": {
+      "$ref": "custom-fee-enforced-launch-profile-v2.schema.json"
+    },
+    "directNativeHookGraphProfileV1": {
+      "$ref": "direct-native-hook-graph-profile-discovery-v1.schema.json"
+    },
+    "directNativeHookGraphProfileV2": {
+      "$ref": "direct-native-hook-graph-profile-discovery-v2.schema.json"
+    },
+    "directNativeHookGraphProfileV3": {
+      "$ref": "direct-native-hook-graph-profile-discovery-v3.schema.json"
+    },
+    "feeds": {
+      "type": "object",
+      "required": [
+        "manifest",
+        "launches",
+        "tokenList"
+      ],
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/feedStatus"
+        },
+        "launches": {
+          "$ref": "#/$defs/feedStatus"
+        },
+        "tokenList": {
+          "$ref": "#/$defs/feedStatus"
+        }
+      },
+      "additionalProperties": true
+    },
+    "customRegistryPublication": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/customRegistryPublication"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "routerCustom": {
+      "$ref": "#/$defs/routerCustom"
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "chainId": {
+            "const": 1
+          }
+        },
+        "required": [
+          "chainId"
+        ]
+      },
+      "then": {
+        "properties": {
+          "customLaunchApi": true,
+          "customFeeEnforcedLaunchProfileV2": true
+        },
+        "required": [
+          "customLaunchApi",
+          "customFeeEnforcedLaunchProfileV2"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "categoryStatus": {
+      "type": "object",
+      "required": [
+        "status",
+        "note"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "planned",
+            "canary",
+            "live",
+            "degraded",
+            "prelaunch",
+            "unavailable"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "feedStatus": {
+      "enum": [
+        "ready",
+        "degraded",
+        "unavailable"
+      ]
+    },
+    "routerCustom": {
+      "type": "object",
+      "required": [
+        "source",
+        "status",
+        "generatedAt",
+        "asOfBlock",
+        "asOfBlockHash",
+        "sourceIdentityCommitment",
+        "snapshotSha256",
+        "verifiedIdentityCount",
+        "publishedIdentityCount"
+      ],
+      "properties": {
+        "source": {
+          "const": "canonical-launch-stamp-router"
+        },
+        "status": {
+          "enum": [
+            "current",
+            "last-known-good",
+            "unavailable"
+          ]
+        },
+        "generatedAt": {
+          "$ref": "common.schema.json#/$defs/isoDateTime"
+        },
+        "asOfBlock": {
+          "$ref": "common.schema.json#/$defs/decimalString"
+        },
+        "asOfBlockHash": {
+          "$ref": "common.schema.json#/$defs/hash32"
+        },
+        "sourceIdentityCommitment": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "snapshotSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "verifiedIdentityCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "publishedIdentityCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "backendQuality": {
+          "type": "object",
+          "required": [
+            "status",
+            "sourceRowCount",
+            "publishedRowCount",
+            "quarantinedRowCount"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "ready",
+                "partial",
+                "stale",
+                "unavailable"
+              ]
+            },
+            "sourceRowCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "publishedRowCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "quarantinedRowCount": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "lastKnownGood": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "customLaunchApi": {
+      "description": "Custom Launch API V1 compatibility state. Use currentCustomLaunchCreate for the active create route.",
+      "type": "object",
+      "required": [
+        "status",
+        "scope",
+        "feeEnforcement",
+        "writeStatus",
+        "postResponse",
+        "readyzUrl",
+        "guideUrl",
+        "openApiUrl",
+        "apiKeyManagementUrl",
+        "walletBoundary"
+      ],
+      "properties": {
+        "status": {
+          "const": "live"
+        },
+        "scope": {
+          "const": "provenance-only"
+        },
+        "feeEnforcement": {
+          "const": "not-established-by-api"
+        },
+        "writeStatus": {
+          "const": "read-only"
+        },
+        "postResponse": {
+          "type": "object",
+          "required": [
+            "httpStatus",
+            "code",
+            "retryable"
+          ],
+          "properties": {
+            "httpStatus": {
+              "const": 409
+            },
+            "code": {
+              "const": "CUSTOM_LAUNCH_V1_READ_ONLY"
+            },
+            "retryable": {
+              "const": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "readyzUrl": {
+          "const": "https://api.programmable.market/readyz"
+        },
+        "guideUrl": {
+          "const": "https://programmable.market/developers/custom-launch-api-v1.md"
+        },
+        "openApiUrl": {
+          "const": "https://programmable.market/openapi/custom-launch-v1.json"
+        },
+        "apiKeyManagementUrl": {
+          "const": "https://programmable.market/developers/api-keys"
+        },
+        "walletBoundary": {
+          "const": "separate-wallet-signature"
+        }
+      },
+      "additionalProperties": false
+    },
+    "currentCustomLaunchCreate": {
+      "description": "Additive pointer to the active Custom Launch API create route. This is API discovery, not wallet or admission authority.",
+      "type": "object",
+      "required": [
+        "apiVersion",
+        "status",
+        "profileId",
+        "profileRevision",
+        "profileVersion",
+        "baseUrl",
+        "method",
+        "path",
+        "capabilitiesUrl",
+        "preflightUrl",
+        "readyzUrl",
+        "openApiUrl",
+        "authentication",
+        "partnerCredentials",
+        "walletBoundary"
+      ],
+      "properties": {
+        "apiVersion": {
+          "const": "3"
+        },
+        "status": {
+          "const": "live"
+        },
+        "profileId": {
+          "const": "programmable.direct-native-hook-graph.v1"
+        },
+        "profileRevision": {
+          "const": 3
+        },
+        "profileVersion": {
+          "const": "3.3.0"
+        },
+        "baseUrl": {
+          "const": "https://api.programmable.market"
+        },
+        "method": {
+          "const": "POST"
+        },
+        "path": {
+          "const": "/v3/custom-launches"
+        },
+        "capabilitiesUrl": {
+          "const": "https://api.programmable.market/v3/capabilities"
+        },
+        "preflightUrl": {
+          "const": "https://api.programmable.market/v3/custom-launches/preflight"
+        },
+        "readyzUrl": {
+          "const": "https://api.programmable.market/readyz"
+        },
+        "openApiUrl": {
+          "const": "https://programmable.market/openapi/custom-launch-v3.json"
+        },
+        "authentication": {
+          "const": "bearer-api-key"
+        },
+        "partnerCredentials": {
+          "const": {
+            "schemaVersion": "programmable.partner-public-contract.v1",
+            "status": "live",
+            "environmentVariable": "PROGRAMMABLE_API_KEY",
+            "credentialKinds": [
+              "root",
+              "subkey"
+            ],
+            "canonicalV3LaunchRoutes": true,
+            "launchScopes": [
+              "custom-launch:create",
+              "custom-launch:read"
+            ],
+            "rootOnlyScope": "partner-subkeys:manage",
+            "subkeyAdminRoutes": [
+              "GET /v1/partner/subkeys",
+              "POST /v1/partner/subkeys",
+              "POST /v1/partner/subkeys/{subkeyId}/rotate",
+              "DELETE /v1/partner/subkeys/{subkeyId}"
+            ],
+            "maximumSubkeyDepth": 1,
+            "subkeyScopesAndBudgetsCannotExceedRoot": true,
+            "subkeyExpiryCannotExceedRoot": true,
+            "permitReissueDispositionCredentialKind": "wallet-only",
+            "metadataPolicySameAsWalletKeys": true,
+            "controllerWallet": {
+              "walletKey": "must-equal-key-wallet-binding",
+              "partnerCredential": "selected-by-exact-request",
+              "mustReviewSignAndBroadcast": true
+            },
+            "launchHistoryVisibility": {
+              "root": "all-partner-attributed-root-and-subkey-launches",
+              "subkey": "stable-subkey-lineage-only",
+              "rootAggregatesSubkeys": true,
+              "rotationPreservesLineageHistory": true,
+              "newDistinctSubkeyStartsIsolatedLineage": true,
+              "revokedCredentialCanAuthenticate": false
+            },
+            "secretDelivery": "issue-and-rotation-response-only",
+            "callerSuppliedAttributionAccepted": false,
+            "attributionSource": "authenticated-partner-api-key",
+            "attributionIsVerificationOrSafetyClaim": false,
+            "walletSigningAuthority": false,
+            "walletBroadcastAuthority": false,
+            "gateBypassAuthority": false,
+            "adminProvisioning": {
+              "authentication": "website-bff-assertion-v2",
+              "authorization": "server-configured-privy-user-wallet-pair-allowlist",
+              "clientMaySelfAuthorize": false
+            }
+          }
+        },
+        "walletBoundary": {
+          "const": "wallet-reviews-signs-and-broadcasts-separately"
+        }
+      },
+      "additionalProperties": false
+    },
+    "customRegistryPublication": {
+      "type": "object",
+      "required": [
+        "status",
+        "publicSubmissionsEnabled",
+        "publicationReady",
+        "baselineReady",
+        "sourceConfigured",
+        "sourceReady",
+        "sourceCurrent",
+        "expectedSourceId",
+        "observedSourceId",
+        "activeGeneration",
+        "requiresLiveSource",
+        "publishedRegistries",
+        "baselineLaunches",
+        "applicantLaunches"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "live",
+            "planned",
+            "prelaunch"
+          ]
+        },
+        "publicSubmissionsEnabled": {
+          "type": "boolean"
+        },
+        "publicationReady": {
+          "type": "boolean"
+        },
+        "baselineReady": {
+          "type": "boolean"
+        },
+        "sourceConfigured": {
+          "type": "boolean"
+        },
+        "sourceReady": {
+          "type": "boolean"
+        },
+        "sourceCurrent": {
+          "type": "boolean"
+        },
+        "expectedSourceId": {
+          "enum": [
+            "programmable-custom-launch-registry-v3",
+            "programmable-custom-launch-registry-v4",
+            null
+          ]
+        },
+        "observedSourceId": {
+          "enum": [
+            "programmable-custom-launch-registry-v3",
+            "programmable-custom-launch-registry-v4",
+            null
+          ]
+        },
+        "activeGeneration": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "requiresLiveSource": {
+          "type": "boolean"
+        },
+        "publishedRegistries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "baselineLaunches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicantLaunches": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

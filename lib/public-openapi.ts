@@ -22,9 +22,9 @@ export const programmablePublicOpenApi = {
     title: "Programmable developer APIs",
     version: "1.6.0",
     summary:
-      "Verified launch discovery plus public credential-principal V3 general-hook creation on Ethereum.",
+      "Verified launch discovery, live Ethereum V3 creation and planned Robinhood V4 integration.",
     description:
-      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public V3.3 contract and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key never signs or broadcasts a controller-wallet transaction.",
+      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public V3.3 contract and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. Robinhood Chain V4 version 4.0.0 is a source candidate only: public writes, public authorization and release readiness remain false. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key and the CLI never sign or broadcast a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -52,7 +52,7 @@ export const programmablePublicOpenApi = {
     {
       name: "Custom launch",
       description:
-        "Fresh wallet-key, partner-root and bounded-partner-subkey writes use V3.3. V2 and V1 remain available for existing history only. Manage wallet keys at programmable.market/developers/api-keys.",
+        "Fresh wallet-key, partner-root and bounded-partner-subkey writes use Ethereum V3.3. Robinhood V4 is planned and non-authorizing. V2 and V1 remain available for existing history only. Manage wallet keys at programmable.market/developers/api-keys.",
     },
   ],
   paths: {
@@ -1698,6 +1698,48 @@ export const programmablePublicOpenApi = {
         activationRequires: "backend-and-well-known",
       },
     },
+    v4: {
+      status: "planned",
+      activationStage: "planned-not-deployed",
+      apiVersion: "4",
+      profileVersion: "4.0.0",
+      cliVersion: "4.0.0",
+      sourceCandidate: true,
+      released: false,
+      installable: false,
+      releaseReady: false,
+      publicAuthorization: false,
+      publicWrites: false,
+      chainId: 4663,
+      caip2: "eip155:4663",
+      openApiUrl: `${SITE_ORIGIN}/openapi/custom-launch-v4.json`,
+      packConfigSchemaUrl:
+        `${SITE_ORIGIN}/schemas/custom-launch/v4/pack-config.json`,
+      sourceVerificationSchemaUrl:
+        `${SITE_ORIGIN}/schemas/custom-launch/v4/source-verification-status.json`,
+      capabilitiesPath: "/v4/chains/4663/capabilities",
+      statusPath: "/v4/chains/4663/custom-launches/{launchId}",
+      statusCommand:
+        "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized",
+      statuses: [
+        "received",
+        "validating",
+        "action_required",
+        "authorized",
+        "awaiting_wallet_signature",
+        "wallet_action_required",
+        "submitted",
+        "sequencer_soft_confirmed",
+        "ethereum_posted",
+        "finalized",
+        "failed",
+      ],
+      actionRequiredMeaning: "server-authored-remediation-not-wallet-action",
+      cliWalletAuthority: false,
+      sourceVerificationStartsAfter: "finalized",
+      sourceVerificationIndependentFromFinality: true,
+      indexingTradingAndPublicationIndependent: true,
+    },
     legacyIntake: { registry: "closed", github: "closed" },
   },
   "x-programmable-boundary": {
@@ -1712,7 +1754,7 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "Fresh V3.3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. V2 and V1 history remain readable and both legacy creation routes remain write-fenced. CLI, client and model output is preparation only; the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified, while an authenticated executed failure blocks wallet handoff. Exact-source provider verification runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles.",
+      "Fresh Ethereum V3.3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. V2 and V1 history remain readable and both legacy creation routes remain write-fenced. Robinhood V4 remains planned with publicWrites, publicAuthorization and releaseReady false. CLI, client and model output is preparation only; the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified, while an authenticated executed failure blocks wallet handoff. Exact-source provider verification starts after finality, runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles. The CLI also never signs or broadcasts.",
   },
   "x-programmable-wallet-authorization-gate": {
     decisionAuthority: "api-server",

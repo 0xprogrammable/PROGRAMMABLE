@@ -1,0 +1,595 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/robinhood-custom-launch-binding.schema.json",
+  "title": "Robinhood Custom Launch chain-owned binding",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "state",
+    "chainDeploymentId",
+    "chainId",
+    "caip2",
+    "foundationSourceCommitment",
+    "sourceBinding",
+    "profileBinding",
+    "finalityPolicy",
+    "chainBindings",
+    "deployment",
+    "chainDeployment",
+    "publication"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.robinhood-custom-launch-chain-binding.v1"
+    },
+    "state": {
+      "enum": [
+        "prepared-not-broadcast",
+        "finalized-live"
+      ]
+    },
+    "chainDeploymentId": {
+      "const": "robinhood-mainnet-custom-launch-v1"
+    },
+    "chainId": {
+      "const": "4663"
+    },
+    "caip2": {
+      "const": "eip155:4663"
+    },
+    "foundationSourceCommitment": {
+      "const": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730"
+    },
+    "sourceBinding": {
+      "const": {
+        "schemaVersion": "programmable.robinhood-custom-launch-source-binding.v1",
+        "repository": "https://github.com/programmablehq/PROGRAMMABLE",
+        "sourceCommit": "53926119030772040eca34b4796a36353c9da2d2",
+        "sourceTree": "d9118605665cf047ec32214c7dc51608e9a362f0",
+        "routerSourcePath": "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
+        "routerStandardJsonInputSha256": "0x6abca24d06b013599f4ff63e049976419c3f17455fa9bc343b15ec0d6e6a078a",
+        "graphFactoryStandardJsonInputSha256": "0x8ab811a215d70b1d5aef0c71a47153173953ee78d7632725413833888369ec4d",
+        "foundationSourceCommitment": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730"
+      }
+    },
+    "profileBinding": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "structuralProfile",
+        "serverBusinessProfile",
+        "selection",
+        "admission"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-custom-launch-profile-binding.v1"
+        },
+        "structuralProfile": {
+          "const": {
+            "profileId": "programmable.custom-launch.robinhood-mainnet.v1",
+            "profileRevision": 1,
+            "profileVersion": "4.0.0"
+          }
+        },
+        "serverBusinessProfile": {
+          "type": "object",
+          "required": [
+            "profileId",
+            "profileRevision",
+            "profileVersion",
+            "profileDigest"
+          ],
+          "properties": {
+            "profileId": {
+              "const": "robinhood-production-launch"
+            },
+            "profileRevision": {
+              "const": 1
+            },
+            "profileVersion": {
+              "const": "4.0.0"
+            },
+            "profileDigest": {
+              "const": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+            }
+          },
+          "additionalProperties": false
+        },
+        "selection": {
+          "const": "api-server-chain-binding"
+        },
+        "admission": {
+          "type": "object",
+          "required": [
+            "descriptorSchemaVersion",
+            "descriptorSha256",
+            "businessPolicySha256",
+            "bindingSchemaVersion",
+            "bindingSchemaSha256",
+            "bindingSha256"
+          ],
+          "properties": {
+            "descriptorSchemaVersion": {
+              "const": "programmable.custom-launch-admission-descriptor.v4"
+            },
+            "descriptorSha256": {
+              "const": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948"
+            },
+            "businessPolicySha256": {
+              "const": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216"
+            },
+            "bindingSchemaVersion": {
+              "const": "programmable.custom-launch-admission-binding.v4"
+            },
+            "bindingSchemaSha256": {
+              "const": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7"
+            },
+            "bindingSha256": {
+              "const": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "finalityPolicy": {
+      "const": {
+        "schemaVersion": "programmable.custom-launch-finality-policy-ref.v1",
+        "policyId": "robinhood-stage-finality-v1",
+        "policyRevision": 1,
+        "policyDigest": "sha256:537d531423d1285a3808556a57303ec68f1e6bdeea3c9aaf6320f9e5a0e47153"
+      }
+    },
+    "chainBindings": {
+      "oneOf": [
+        {
+          "const": {
+            "programmableLaunchStampRouter": {
+              "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+              "runtimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+              "provenance": "prepared-not-broadcast",
+              "startBlock": null
+            },
+            "permitAuthority": {
+              "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+              "runtimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+              "provenance": "prepared-not-broadcast",
+              "startBlock": null
+            },
+            "graphFactory": {
+              "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+              "runtimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+              "provenance": "prepared-not-broadcast",
+              "startBlock": null
+            },
+            "poolManager": {
+              "address": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+              "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+              "provenance": "deployment-block",
+              "startBlock": "9070"
+            },
+            "positionManager": {
+              "address": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+              "runtimeCodeHash": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+              "provenance": "deployment-block",
+              "startBlock": "9073"
+            },
+            "stateView": {
+              "address": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+              "runtimeCodeHash": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+              "provenance": "deployment-block",
+              "startBlock": "9075"
+            },
+            "v4Quoter": {
+              "address": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+              "runtimeCodeHash": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+              "provenance": "deployment-block",
+              "startBlock": "9074"
+            },
+            "permit2": {
+              "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+              "runtimeCodeHash": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+              "provenance": "genesis-allocation",
+              "startBlock": "0",
+              "source": {
+                "documentationUrl": "https://docs.robinhood.com/chain/run-a-full-node/",
+                "genesisUrl": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-genesis.json",
+                "genesisSha256": "sha256:353e6f6441b47695b41cee0c3645cde8dd7492d2f7f574bfb6aa4371e41bb6ba",
+                "codeBytes": 9152
+              }
+            },
+            "universalRouter": {
+              "address": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+              "runtimeCodeHash": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+              "provenance": "deployment-block",
+              "startBlock": "3347899"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/finalizedChainBindings"
+        }
+      ]
+    },
+    "deployment": {
+      "oneOf": [
+        {
+          "const": {
+            "transactionHash": null,
+            "blockNumber": null,
+            "blockHash": null,
+            "startBlock": null,
+            "finalizedBlockNumber": null,
+            "finalizedBlockHash": null,
+            "finalityEvidence": null
+          }
+        },
+        {
+          "$ref": "#/$defs/finalizedDeployment"
+        }
+      ]
+    },
+    "chainDeployment": {
+      "oneOf": [
+        {
+          "$ref": "custom-launch-chain-deployment-v4.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "publication": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/finalizedPublication"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "const": "prepared-not-broadcast"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "chainBindings": {
+            "not": {
+              "$ref": "#/$defs/finalizedChainBindings"
+            }
+          },
+          "deployment": {
+            "not": {
+              "$ref": "#/$defs/finalizedDeployment"
+            }
+          },
+          "chainDeployment": {
+            "type": "null"
+          },
+          "publication": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "const": "finalized-live"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "chainBindings": {
+            "$ref": "#/$defs/finalizedChainBindings"
+          },
+          "deployment": {
+            "$ref": "#/$defs/finalizedDeployment"
+          },
+          "chainDeployment": {
+            "$ref": "custom-launch-chain-deployment-v4.schema.json"
+          },
+          "publication": {
+            "$ref": "#/$defs/finalizedPublication"
+          },
+          "profileBinding": {
+            "type": "object",
+            "properties": {
+              "serverBusinessProfile": {
+                "type": "object",
+                "properties": {
+                  "profileDigest": {
+                    "$ref": "#/$defs/sha256"
+                  }
+                }
+              },
+              "admission": {
+                "type": "object",
+                "properties": {
+                  "descriptorSha256": {
+                    "$ref": "#/$defs/sha256"
+                  },
+                  "businessPolicySha256": {
+                    "$ref": "#/$defs/sha256"
+                  },
+                  "bindingSha256": {
+                    "$ref": "#/$defs/sha256"
+                  },
+                  "bindingSchemaSha256": {
+                    "$ref": "#/$defs/sha256"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hash32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-fA-F]{64}$"
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "finalizedCodeOwnedBinding": {
+      "type": "object",
+      "required": [
+        "address",
+        "runtimeCodeHash",
+        "provenance",
+        "startBlock"
+      ],
+      "properties": {
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/$defs/hash32"
+        },
+        "provenance": {
+          "const": "deployment-block"
+        },
+        "startBlock": {
+          "$ref": "#/$defs/positiveDecimal"
+        }
+      },
+      "additionalProperties": false
+    },
+    "finalizedChainBindings": {
+      "type": "object",
+      "required": [
+        "programmableLaunchStampRouter",
+        "permitAuthority",
+        "graphFactory",
+        "poolManager",
+        "positionManager",
+        "stateView",
+        "v4Quoter",
+        "permit2",
+        "universalRouter"
+      ],
+      "properties": {
+        "programmableLaunchStampRouter": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/finalizedCodeOwnedBinding"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "const": "0x34965F2A2ee9254522232C32F02056E92BE0C98a"
+                },
+                "runtimeCodeHash": {
+                  "const": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388"
+                }
+              }
+            }
+          ]
+        },
+        "permitAuthority": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/finalizedCodeOwnedBinding"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "const": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06"
+                },
+                "runtimeCodeHash": {
+                  "const": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+                }
+              }
+            }
+          ]
+        },
+        "graphFactory": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/finalizedCodeOwnedBinding"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "const": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd"
+                },
+                "runtimeCodeHash": {
+                  "const": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+                }
+              }
+            }
+          ]
+        },
+        "poolManager": {
+          "const": {
+            "address": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+            "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+            "provenance": "deployment-block",
+            "startBlock": "9070"
+          }
+        },
+        "positionManager": {
+          "const": {
+            "address": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+            "runtimeCodeHash": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+            "provenance": "deployment-block",
+            "startBlock": "9073"
+          }
+        },
+        "stateView": {
+          "const": {
+            "address": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+            "runtimeCodeHash": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+            "provenance": "deployment-block",
+            "startBlock": "9075"
+          }
+        },
+        "v4Quoter": {
+          "const": {
+            "address": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+            "runtimeCodeHash": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+            "provenance": "deployment-block",
+            "startBlock": "9074"
+          }
+        },
+        "permit2": {
+          "const": {
+            "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            "runtimeCodeHash": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+            "provenance": "genesis-allocation",
+            "startBlock": "0",
+            "source": {
+              "documentationUrl": "https://docs.robinhood.com/chain/run-a-full-node/",
+              "genesisUrl": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-genesis.json",
+              "genesisSha256": "sha256:353e6f6441b47695b41cee0c3645cde8dd7492d2f7f574bfb6aa4371e41bb6ba",
+              "codeBytes": 9152
+            }
+          }
+        },
+        "universalRouter": {
+          "const": {
+            "address": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+            "runtimeCodeHash": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+            "provenance": "deployment-block",
+            "startBlock": "3347899"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "finalizedDeployment": {
+      "type": "object",
+      "required": [
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "startBlock",
+        "finalizedBlockNumber",
+        "finalizedBlockHash",
+        "finalityEvidence"
+      ],
+      "properties": {
+        "transactionHash": {
+          "$ref": "#/$defs/hash32"
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/hash32"
+        },
+        "startBlock": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "finalizedBlockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "finalizedBlockHash": {
+          "$ref": "#/$defs/hash32"
+        },
+        "finalityEvidence": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "finalizedPublication": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "finalizedFeedUrl",
+        "chainDeploymentDescriptorDigest",
+        "routerEventEvidenceDigest",
+        "routerGetterEvidenceDigest",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.finalized-custom-launch-publication-binding.v1"
+        },
+        "finalizedFeedUrl": {
+          "const": "https://api.programmable.market/v4/chains/4663/finalized-custom-launches"
+        },
+        "chainDeploymentDescriptorDigest": {
+          "$ref": "#/$defs/hash32"
+        },
+        "routerEventEvidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "routerGetterEvidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

@@ -14,7 +14,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Developer integration · Programmable",
   description:
-    "Read existing Custom launch history, verify Router stamps or index new launches.",
+    "Use live Ethereum V3, inspect planned Robinhood V4, verify Router stamps or index launches.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
     type: "website",
@@ -53,7 +53,7 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Create and track credential-principal V3 general-hook launches, verify Router-stamped tokens and pools, or index new launches."
+      description="Create and track live Ethereum V3 launches, inspect planned Robinhood V4, verify Router-stamped tokens and pools, or index launches."
       kicker="Developer integration"
       sections={developerSections}
       title="Integrate Programmable launches"
@@ -90,6 +90,25 @@ export default function DeveloperDocsPage() {
               href="/docs/developers/custom-launch"
             >
               Read the Custom Launch API guide
+            </Link>
+          </li>
+          <li id="robinhood-v4">
+            <h3>
+              <Link href="/docs/developers/custom-launch#robinhood-v4">
+                Inspect planned Robinhood V4
+              </Link>
+            </h3>
+            <p>
+              Read the chain-4663 machine contract and distinct wallet and
+              finality lifecycle. CLI 3.3.9 remains the installable Ethereum V3
+              release; V4 4.0.0 is a source candidate with public writes,
+              authorization and release readiness still false.
+            </p>
+            <Link
+              className={styles.textLink}
+              href="/docs/developers/custom-launch#robinhood-v4"
+            >
+              Read the Robinhood V4 boundary
             </Link>
           </li>
           <li id="identity">
@@ -286,6 +305,24 @@ export default function DeveloperDocsPage() {
             </a>
             <span>
               Check coverage, freshness and finality before ingestion.
+            </span>
+          </li>
+          <li>
+            <a href="/openapi/custom-launch-v4.json">
+              Planned Robinhood V4 OpenAPI
+            </a>
+            <span>
+              Source-candidate 4.0.0 contract. It does not prove deployment or
+              public write availability.
+            </span>
+          </li>
+          <li>
+            <a href="/schemas/custom-launch/v4/source-verification-status.json">
+              Robinhood V4 source-verification schema
+            </a>
+            <span>
+              Post-finality provider status, separate from finality, indexing,
+              trading and publication.
             </span>
           </li>
         </ul>

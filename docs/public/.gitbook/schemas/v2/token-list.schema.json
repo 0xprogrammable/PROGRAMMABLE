@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/token-list.schema.json",
+  "title": "Programmable token list",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "status",
+    "name",
+    "timestamp",
+    "version",
+    "tokens"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "degraded",
+        "unavailable"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "$ref": "common.schema.json#/$defs/isoDateTime"
+    },
+    "version": {
+      "type": "object",
+      "required": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "properties": {
+        "major": {
+          "const": 2
+        },
+        "minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "tokens": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/token"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "token": {
+      "type": "object",
+      "required": [
+        "chainId",
+        "address",
+        "name",
+        "symbol",
+        "decimals",
+        "logoURI",
+        "extensions"
+      ],
+      "properties": {
+        "chainId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "address": {
+          "$ref": "common.schema.json#/$defs/evmAddress"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "logoURI": {
+          "$ref": "common.schema.json#/$defs/nullableHttpsUrl"
+        },
+        "extensions": {
+          "type": "object",
+          "required": [
+            "programmable"
+          ],
+          "properties": {
+            "programmable": {
+              "type": "object",
+              "required": [
+                "launchId",
+                "category",
+                "provenanceStatus",
+                "marketCount",
+                "launchBlockNumber",
+                "finality"
+              ],
+              "properties": {
+                "launchId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "category": {
+                  "$ref": "common.schema.json#/$defs/category"
+                },
+                "provenanceStatus": {
+                  "enum": [
+                    "prelaunch",
+                    "partial",
+                    "verified",
+                    "revoked"
+                  ]
+                },
+                "marketCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "launchBlockNumber": {
+                  "$ref": "common.schema.json#/$defs/decimalString"
+                },
+                "finality": {
+                  "const": "finalized"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

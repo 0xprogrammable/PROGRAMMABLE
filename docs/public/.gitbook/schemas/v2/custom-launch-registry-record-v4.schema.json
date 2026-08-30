@@ -1,0 +1,2622 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/custom-launch-registry-record-v4.schema.json",
+  "title": "Canonical Programmable Custom launch Registry record v4",
+  "description": "Generation 2 approval, deployment, Registry, review, provider, fee and finality bindings. Registry record v3 remains frozen and is not reinterpreted by this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "platformId",
+    "origin",
+    "category",
+    "launchFamily",
+    "publicLabel",
+    "projectId",
+    "launchId",
+    "model",
+    "template",
+    "partner",
+    "partnerFactoryAuthorization",
+    "atomicExecutionProof",
+    "registeredRecordPreimage",
+    "registeredRecordComponentHashes",
+    "registeredRecordCommitment",
+    "registrationBindingHash",
+    "registryOrigin",
+    "approvalBinding",
+    "deploymentBinding",
+    "verifiedReview",
+    "feePolicy",
+    "onchainFeePolicy",
+    "launchingWallet",
+    "postLaunchAuthorityInventory",
+    "postLaunchAuthorityInventoryHash",
+    "launchIdentity",
+    "advertisesToken",
+    "discoverableAssets",
+    "assetIdentitySetHash",
+    "discoverableMarkets",
+    "marketSetHash",
+    "mechanisms",
+    "capabilities",
+    "finalityPolicy",
+    "finality",
+    "lifecycle",
+    "presentationVersion",
+    "presentationBindingHash",
+    "presentation",
+    "extensions",
+    "envelopeDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.custom-launch-registry-record.v4"
+    },
+    "platformId": {
+      "const": "programmable"
+    },
+    "origin": {
+      "const": "programmable"
+    },
+    "category": {
+      "const": "custom"
+    },
+    "launchFamily": {
+      "const": "custom"
+    },
+    "publicLabel": {
+      "const": "Programmable Custom"
+    },
+    "projectId": {
+      "$ref": "#/definitions/digest"
+    },
+    "launchId": {
+      "$ref": "#/definitions/digest"
+    },
+    "model": {
+      "$ref": "#/definitions/model"
+    },
+    "template": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/template"
+        }
+      ]
+    },
+    "partner": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/partner"
+        }
+      ]
+    },
+    "partnerFactoryAuthorization": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/partnerFactoryAuthorization"
+        }
+      ]
+    },
+    "atomicExecutionProof": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/atomicExecutionProof"
+        }
+      ]
+    },
+    "registeredRecordPreimage": {
+      "$ref": "#/definitions/registeredRecordPreimage"
+    },
+    "registeredRecordComponentHashes": {
+      "$ref": "#/definitions/registeredRecordComponentHashes"
+    },
+    "registeredRecordCommitment": {
+      "$ref": "#/definitions/hash32"
+    },
+    "registrationBindingHash": {
+      "$ref": "#/definitions/hash32"
+    },
+    "registryOrigin": {
+      "$ref": "#/definitions/registryOrigin"
+    },
+    "approvalBinding": {
+      "$ref": "#/definitions/approvalBinding"
+    },
+    "deploymentBinding": {
+      "$ref": "#/definitions/deploymentBinding"
+    },
+    "verifiedReview": {
+      "$ref": "#/definitions/verifiedReview"
+    },
+    "feePolicy": {
+      "$ref": "#/definitions/feePolicy"
+    },
+    "onchainFeePolicy": {
+      "$ref": "#/definitions/onchainFeePolicy"
+    },
+    "launchingWallet": {
+      "$ref": "#/definitions/identity"
+    },
+    "postLaunchAuthorityInventory": {
+      "$ref": "#/definitions/authorityInventory"
+    },
+    "postLaunchAuthorityInventoryHash": {
+      "$ref": "#/definitions/digest"
+    },
+    "launchIdentity": {
+      "$ref": "#/definitions/identity"
+    },
+    "advertisesToken": {
+      "type": "boolean"
+    },
+    "discoverableAssets": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "object"
+      }
+    },
+    "assetIdentitySetHash": {
+      "$ref": "#/definitions/digest"
+    },
+    "discoverableMarkets": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object"
+      }
+    },
+    "marketSetHash": {
+      "$ref": "#/definitions/digest"
+    },
+    "mechanisms": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/definitions/mechanism"
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/definitions/capability"
+      }
+    },
+    "finalityPolicy": {
+      "$ref": "#/definitions/finalityPolicy"
+    },
+    "finality": {
+      "$ref": "#/definitions/finality"
+    },
+    "lifecycle": {
+      "$ref": "#/definitions/lifecycle"
+    },
+    "presentationVersion": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/safeId"
+        }
+      ]
+    },
+    "presentationBindingHash": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/digest"
+        }
+      ]
+    },
+    "presentation": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object"
+        }
+      ]
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 256
+    },
+    "envelopeDigest": {
+      "$ref": "#/definitions/digest"
+    }
+  },
+  "definitions": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "hash32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "hexData": {
+      "type": "string",
+      "pattern": "^0x(?:[0-9a-f]{2})*$",
+      "maxLength": 16386
+    },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "nonnegativeDecimal": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$"
+    },
+    "safeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+~\\-]{0,255}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "repositoryUri": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?$"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "value"
+      ],
+      "properties": {
+        "namespace": {
+          "const": "eip155-address"
+        },
+        "value": {
+          "$ref": "#/definitions/address"
+        }
+      }
+    },
+    "registeredRecordPreimage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chainId",
+        "registryGeneration",
+        "launchId",
+        "projectId",
+        "approvalId",
+        "approvalBindingHash",
+        "repositoryId",
+        "commitId",
+        "sourceCommitment",
+        "buildCommitment",
+        "artifactSetHash",
+        "deploymentConfigurationHash",
+        "configurationHash",
+        "permissionsHash",
+        "deploymentId",
+        "deploymentSetHash",
+        "runtimeCodeSetHash",
+        "primaryContract",
+        "primaryRuntimeCodeHash",
+        "launchWallet",
+        "modelId",
+        "modelVersion",
+        "templateId",
+        "templateVersion",
+        "providerId",
+        "builderAttributionHash",
+        "originHash",
+        "assetSetHash",
+        "marketSetHash",
+        "marketPathId",
+        "capabilitySetHash",
+        "reviewPolicyHash",
+        "securityReviewHash",
+        "reviewResultId",
+        "reviewDeploymentBindingHash",
+        "feePolicyHash",
+        "finalityPolicyHash"
+      ],
+      "properties": {
+        "chainId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "registryGeneration": {
+          "const": "2"
+        },
+        "launchId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "projectId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "approvalId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "approvalBindingHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "repositoryId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "commitId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "sourceCommitment": {
+          "$ref": "#/definitions/hash32"
+        },
+        "buildCommitment": {
+          "$ref": "#/definitions/hash32"
+        },
+        "artifactSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "deploymentConfigurationHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "configurationHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "permissionsHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "deploymentId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "deploymentSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "runtimeCodeSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "primaryContract": {
+          "$ref": "#/definitions/address"
+        },
+        "primaryRuntimeCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "launchWallet": {
+          "$ref": "#/definitions/address"
+        },
+        "modelId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "providerId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "builderAttributionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "originHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "assetSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "marketSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "marketPathId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "capabilitySetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "reviewPolicyHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "securityReviewHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "reviewResultId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "reviewDeploymentBindingHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "feePolicyHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "finalityPolicyHash": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "registeredRecordComponentHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scopeAndApprovalHash",
+        "sourceAndDeploymentHash",
+        "attributionHash",
+        "reviewHash",
+        "feePolicyHash",
+        "finalityPolicyHash"
+      ],
+      "properties": {
+        "scopeAndApprovalHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "sourceAndDeploymentHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "attributionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "reviewHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "feePolicyHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "finalityPolicyHash": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "onchainFeeLeg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shareBps",
+        "recipient",
+        "currency",
+        "chargeModeId",
+        "basisId",
+        "roundingId",
+        "accrualId",
+        "claimId",
+        "claimRightId",
+        "controlEvidenceHash"
+      ],
+      "properties": {
+        "shareBps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "recipient": {
+          "$ref": "#/definitions/address"
+        },
+        "currency": {
+          "$ref": "#/definitions/address"
+        },
+        "chargeModeId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "basisId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "roundingId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "accrualId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "claimId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "claimRightId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "controlEvidenceHash": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "onchainFeePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "providerId",
+        "partnerStatusId",
+        "modelId",
+        "modelVersion",
+        "templateId",
+        "templateVersion",
+        "marketPathId",
+        "partnerRepositoryId",
+        "partnerCommitId",
+        "partnerRuntimeCodeSetHash",
+        "totalFeeBps",
+        "nativeCustomFeeBps",
+        "partner",
+        "programmable",
+        "activationVersion",
+        "activationBlock",
+        "paused",
+        "retired",
+        "claimIsolationEvidenceHash",
+        "accountingSafetyEvidenceHash",
+        "verificationEvidenceHash",
+        "publicPolicyBindingHash"
+      ],
+      "properties": {
+        "kind": {
+          "type": "integer",
+          "enum": [
+            0,
+            1,
+            2
+          ]
+        },
+        "providerId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "partnerStatusId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "marketPathId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "partnerRepositoryId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "partnerCommitId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "partnerRuntimeCodeSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "totalFeeBps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "nativeCustomFeeBps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "partner": {
+          "$ref": "#/definitions/onchainFeeLeg"
+        },
+        "programmable": {
+          "$ref": "#/definitions/onchainFeeLeg"
+        },
+        "activationVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "activationBlock": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "retired": {
+          "type": "boolean"
+        },
+        "claimIsolationEvidenceHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "accountingSafetyEvidenceHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "verificationEvidenceHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "publicPolicyBindingHash": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "version": {
+          "$ref": "#/definitions/safeId"
+        }
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "partnerId",
+        "repositoryId",
+        "repositoryUri",
+        "commitObjectId",
+        "treeObjectId",
+        "sourceCommitment",
+        "buildCommitment",
+        "artifactSetHash",
+        "runtimeCodeKeccak256",
+        "runtimeCodeSha256",
+        "verificationEvidenceHash"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "version": {
+          "$ref": "#/definitions/safeId"
+        },
+        "partnerId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/safeId"
+            }
+          ]
+        },
+        "repositoryId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "repositoryUri": {
+          "$ref": "#/definitions/repositoryUri"
+        },
+        "commitObjectId": {
+          "$ref": "#/definitions/gitObject"
+        },
+        "treeObjectId": {
+          "$ref": "#/definitions/gitObject"
+        },
+        "sourceCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "buildCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "artifactSetHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "runtimeCodeKeccak256": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/hash32"
+          }
+        },
+        "runtimeCodeSha256": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/digest"
+          }
+        },
+        "verificationEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "partner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "status",
+        "recipient",
+        "chainId",
+        "templateId",
+        "templateVersion",
+        "templateBindingHash",
+        "recipientVerificationEvidenceHash",
+        "activationVersion",
+        "activationBlock"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "enum": [
+            "active",
+            "paused",
+            "retired"
+          ]
+        },
+        "recipient": {
+          "$ref": "#/definitions/identity"
+        },
+        "chainId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "templateId": {
+          "$ref": "#/definitions/safeId"
+        },
+        "templateVersion": {
+          "$ref": "#/definitions/safeId"
+        },
+        "templateBindingHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "recipientVerificationEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "activationVersion": {
+          "$ref": "#/definitions/safeId"
+        },
+        "activationBlock": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        }
+      }
+    },
+    "registryOrigin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chainId",
+        "caip2",
+        "registryAddress",
+        "registryStartBlock",
+        "registryGeneration",
+        "registryContractId",
+        "contractIntegrationAbiVersion",
+        "registryReleaseSourceCommit",
+        "registryAbiSha256",
+        "registryEventSetId",
+        "registryEventSetBytesSha256",
+        "feePolicyDomain",
+        "registrationOnchainTimestamp",
+        "releaseContracts",
+        "eventBindings",
+        "registryLaunchIdRaw",
+        "launchIdEncoding",
+        "registryApprovalBindingHashRaw",
+        "registrationBindingHashRaw",
+        "registryEventSetHash",
+        "registrationTransactionHash",
+        "registrationBlockHash",
+        "registrationBlockNumber",
+        "registrationTransactionIndex",
+        "registrationLogIndex",
+        "registeredRecordHash",
+        "registrationEvidenceHash"
+      ],
+      "properties": {
+        "chainId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "caip2": {
+          "type": "string",
+          "pattern": "^eip155:[1-9][0-9]*$"
+        },
+        "registryAddress": {
+          "$ref": "#/definitions/address"
+        },
+        "registryStartBlock": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "registryGeneration": {
+          "const": "2"
+        },
+        "registryContractId": {
+          "const": "ProgrammableCustomRegistryV2"
+        },
+        "contractIntegrationAbiVersion": {
+          "const": 1
+        },
+        "registryReleaseSourceCommit": {
+          "const": "e01f36a6d69136f674c203f83cca3ebdde0e0ded"
+        },
+        "registryAbiSha256": {
+          "const": "sha256:7c5fe7d25cc874a319c3621435c31cd8f531a7abfcd7d5073fc163d10d60524f"
+        },
+        "registryEventSetId": {
+          "const": "programmable.custom-registry-event-set.v2"
+        },
+        "registryEventSetBytesSha256": {
+          "const": "sha256:0c6c32e0db5eb55b8e0bd148a6206e0c0ab8605cda75338f3a556e75cd3eff1a"
+        },
+        "feePolicyDomain": {
+          "const": "programmable.custom-fee-policy.v2"
+        },
+        "registrationOnchainTimestamp": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "releaseContracts": {
+          "$ref": "#/definitions/releaseContracts"
+        },
+        "eventBindings": {
+          "$ref": "#/definitions/eventBindings"
+        },
+        "registryLaunchIdRaw": {
+          "$ref": "#/definitions/hash32"
+        },
+        "launchIdEncoding": {
+          "const": "sha256-digest-raw-bytes32"
+        },
+        "registryApprovalBindingHashRaw": {
+          "$ref": "#/definitions/hash32"
+        },
+        "registrationBindingHashRaw": {
+          "$ref": "#/definitions/hash32"
+        },
+        "registryEventSetHash": {
+          "const": "sha256:bcff2958529fecaa7ef8c4c654389829bfb7dd61a3246f0d681cf7db0a42a58c"
+        },
+        "registrationTransactionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "registrationBlockHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "registrationBlockNumber": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "registrationTransactionIndex": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "registrationLogIndex": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "registeredRecordHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "registrationEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "approvalBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "projectId",
+        "approvalId",
+        "grantId",
+        "grantBindingHash",
+        "approvalBindingHash",
+        "decisionReceiptDigest",
+        "reviewAuthorityKind",
+        "chainId",
+        "caip2",
+        "chainProfileId",
+        "repositoryId",
+        "repositoryUri",
+        "commitObjectId",
+        "treeObjectId",
+        "sourceCommitment",
+        "buildCommitment",
+        "artifactSetHash",
+        "configurationCommitment",
+        "launchWalletBindingHash",
+        "chainProfileHash",
+        "policyVersion",
+        "policyCommitment",
+        "approvedAt"
+      ],
+      "properties": {
+        "applicationId": {
+          "$ref": "#/definitions/safeId"
+        },
+        "projectId": {
+          "$ref": "#/definitions/digest"
+        },
+        "approvalId": {
+          "$ref": "#/definitions/safeId"
+        },
+        "grantId": {
+          "$ref": "#/definitions/safeId"
+        },
+        "grantBindingHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "approvalBindingHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "decisionReceiptDigest": {
+          "$ref": "#/definitions/digest"
+        },
+        "reviewAuthorityKind": {
+          "enum": [
+            "manual_review",
+            "autonomous_ai"
+          ]
+        },
+        "chainId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "caip2": {
+          "type": "string",
+          "pattern": "^eip155:[1-9][0-9]*$"
+        },
+        "chainProfileId": {
+          "$ref": "#/definitions/safeId"
+        },
+        "repositoryId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "repositoryUri": {
+          "$ref": "#/definitions/repositoryUri"
+        },
+        "commitObjectId": {
+          "$ref": "#/definitions/gitObject"
+        },
+        "treeObjectId": {
+          "$ref": "#/definitions/gitObject"
+        },
+        "sourceCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "buildCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "artifactSetHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "configurationCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "launchWalletBindingHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "chainProfileHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "policyVersion": {
+          "$ref": "#/definitions/safeId"
+        },
+        "policyCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "approvedAt": {
+          "$ref": "#/definitions/timestamp"
+        }
+      }
+    },
+    "deployedContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "role",
+        "creationCodeHash",
+        "runtimeCodeKeccak256",
+        "runtimeCodeSha256",
+        "artifactHash",
+        "configurationCommitment",
+        "runtimeVerificationEvidenceHash"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/identity"
+        },
+        "role": {
+          "$ref": "#/definitions/safeId"
+        },
+        "creationCodeHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "runtimeCodeKeccak256": {
+          "$ref": "#/definitions/hash32"
+        },
+        "runtimeCodeSha256": {
+          "$ref": "#/definitions/digest"
+        },
+        "artifactHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "configurationCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "runtimeVerificationEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "deploymentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chainId",
+        "caip2",
+        "launchArtifactCommitmentHash",
+        "artifactManifestHash",
+        "artifactOutputSetHash",
+        "deploymentCalldataHash",
+        "launchWalletBindingHash",
+        "chainProfileHash",
+        "contracts",
+        "contractSetHash",
+        "runtimeMatch",
+        "verificationEvidenceHash"
+      ],
+      "properties": {
+        "chainId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "caip2": {
+          "type": "string",
+          "pattern": "^eip155:[1-9][0-9]*$"
+        },
+        "launchArtifactCommitmentHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "artifactManifestHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "artifactOutputSetHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "deploymentCalldataHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "launchWalletBindingHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "chainProfileHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "contracts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/deployedContract"
+          }
+        },
+        "contractSetHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "runtimeMatch": {
+          "const": "exact"
+        },
+        "verificationEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "controller",
+        "runtimeCodeKeccak256",
+        "runtimeCodeSha256",
+        "evidenceHash",
+        "trustStatus"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "kind": {
+          "enum": [
+            "contract",
+            "oracle",
+            "bridge",
+            "offchain-service",
+            "library",
+            "other"
+          ]
+        },
+        "controller": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
+        },
+        "runtimeCodeKeccak256": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/hash32"
+            }
+          ]
+        },
+        "runtimeCodeSha256": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/digest"
+            }
+          ]
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "trustStatus": {
+          "enum": [
+            "verified",
+            "disclosed",
+            "contained"
+          ]
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "status",
+        "evidenceHash"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "informational"
+          ]
+        },
+        "status": {
+          "enum": [
+            "resolved",
+            "accepted-disclosure",
+            "not-applicable"
+          ]
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "verifiedReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "label",
+        "definition",
+        "status",
+        "policyVersion",
+        "policyCommitment",
+        "repositoryId",
+        "commitObjectId",
+        "sourceCommitment",
+        "buildCommitment",
+        "artifactSetHash",
+        "runtimeCodeKeccak256",
+        "runtimeCodeSha256",
+        "configurationCommitment",
+        "authoritiesEvidenceHash",
+        "upgradeability",
+        "upgradeabilityEvidenceHash",
+        "pauseAuthority",
+        "pauseAuthorityEvidenceHash",
+        "custody",
+        "custodyEvidenceHash",
+        "dependencies",
+        "dependencySetHash",
+        "findings",
+        "findingSetHash",
+        "reviewerType",
+        "reviewedAt",
+        "deploymentBindingHash",
+        "reviewEvidenceHash",
+        "supersededBy",
+        "revokedAt",
+        "revocationEvidenceHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-verified-review.v1"
+        },
+        "label": {
+          "const": "Programmable Verified"
+        },
+        "definition": {
+          "const": "Reviewed against the published Programmable security policy and cryptographically bound to the exact deployed contract revision."
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "superseded",
+            "revoked"
+          ]
+        },
+        "policyVersion": {
+          "$ref": "#/definitions/safeId"
+        },
+        "policyCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "repositoryId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "commitObjectId": {
+          "$ref": "#/definitions/gitObject"
+        },
+        "sourceCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "buildCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "artifactSetHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "runtimeCodeKeccak256": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/hash32"
+          }
+        },
+        "runtimeCodeSha256": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/digest"
+          }
+        },
+        "configurationCommitment": {
+          "$ref": "#/definitions/digest"
+        },
+        "authoritiesEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "upgradeability": {
+          "enum": [
+            "immutable",
+            "proxy",
+            "modular",
+            "unknown"
+          ]
+        },
+        "upgradeabilityEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "pauseAuthority": {
+          "enum": [
+            "none",
+            "bounded",
+            "unbounded",
+            "unknown"
+          ]
+        },
+        "pauseAuthorityEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "custody": {
+          "enum": [
+            "none",
+            "bounded",
+            "unbounded",
+            "unknown"
+          ]
+        },
+        "custodyEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "dependencies": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/dependency"
+          }
+        },
+        "dependencySetHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/finding"
+          }
+        },
+        "findingSetHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "reviewerType": {
+          "enum": [
+            "programmable-internal",
+            "external-auditor",
+            "hybrid"
+          ]
+        },
+        "reviewedAt": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "deploymentBindingHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "reviewEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "supersededBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/digest"
+            }
+          ]
+        },
+        "revokedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "revocationEvidenceHash": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/digest"
+            }
+          ]
+        }
+      }
+    },
+    "claimRights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programmable",
+        "partner",
+        "independentlyClaimable",
+        "crossPartyClaimingProhibited",
+        "evidenceHash"
+      ],
+      "properties": {
+        "programmable": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "partner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "independentlyClaimable": {
+          "type": "boolean"
+        },
+        "crossPartyClaimingProhibited": {
+          "type": "boolean"
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "feePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "mode",
+        "programmableRecipient",
+        "totalFeeBps",
+        "programmableShareBps",
+        "partnerShareBps",
+        "partnerRecipient",
+        "chargeMode",
+        "basis",
+        "currency",
+        "accrual",
+        "claim",
+        "rounding",
+        "claimRights",
+        "verifiedMarketIds",
+        "normalProgrammableTenBpsApplied",
+        "verificationStatus",
+        "verificationAuthorityHash",
+        "verificationEvidenceHash",
+        "recipientControlEvidenceHash",
+        "claimIsolationEvidenceHash",
+        "verifiedAt",
+        "publicPolicyBindingHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-fee-policy.v3"
+        },
+        "mode": {
+          "enum": [
+            "native",
+            "partner-template",
+            "no-qualifying-market"
+          ]
+        },
+        "programmableRecipient": {
+          "$ref": "#/definitions/identity"
+        },
+        "totalFeeBps": {
+          "enum": [
+            0,
+            10,
+            20
+          ]
+        },
+        "programmableShareBps": {
+          "enum": [
+            0,
+            5,
+            10
+          ]
+        },
+        "partnerShareBps": {
+          "enum": [
+            0,
+            15
+          ]
+        },
+        "partnerRecipient": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/identity"
+            }
+          ]
+        },
+        "chargeMode": {
+          "enum": [
+            "verified-official-market-path-only",
+            "template-native-verified-market-path",
+            "none-no-qualifying-market"
+          ]
+        },
+        "basis": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "accrual": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "claim": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "rounding": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "claimRights": {
+          "$ref": "#/definitions/claimRights"
+        },
+        "verifiedMarketIds": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/safeId"
+          }
+        },
+        "normalProgrammableTenBpsApplied": {
+          "type": "boolean"
+        },
+        "verificationStatus": {
+          "enum": [
+            "verified",
+            "not_applicable"
+          ]
+        },
+        "verificationAuthorityHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "verificationEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "recipientControlEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "claimIsolationEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "verifiedAt": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "publicPolicyBindingHash": {
+          "$ref": "#/definitions/digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "native"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "totalFeeBps": {
+                "const": 10
+              },
+              "programmableShareBps": {
+                "const": 10
+              },
+              "partnerShareBps": {
+                "const": 0
+              },
+              "partnerRecipient": {
+                "type": "null"
+              },
+              "chargeMode": {
+                "const": "verified-official-market-path-only"
+              },
+              "normalProgrammableTenBpsApplied": {
+                "const": true
+              },
+              "verificationStatus": {
+                "const": "verified"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "partner-template"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "totalFeeBps": {
+                "const": 20
+              },
+              "programmableShareBps": {
+                "const": 5
+              },
+              "partnerShareBps": {
+                "const": 15
+              },
+              "partnerRecipient": {
+                "$ref": "#/definitions/identity"
+              },
+              "chargeMode": {
+                "const": "template-native-verified-market-path"
+              },
+              "normalProgrammableTenBpsApplied": {
+                "const": false
+              },
+              "verificationStatus": {
+                "const": "verified"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "no-qualifying-market"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "totalFeeBps": {
+                "const": 0
+              },
+              "programmableShareBps": {
+                "const": 0
+              },
+              "partnerShareBps": {
+                "const": 0
+              },
+              "partnerRecipient": {
+                "type": "null"
+              },
+              "chargeMode": {
+                "const": "none-no-qualifying-market"
+              },
+              "basis": {
+                "type": "null"
+              },
+              "currency": {
+                "type": "null"
+              },
+              "accrual": {
+                "type": "null"
+              },
+              "claim": {
+                "type": "null"
+              },
+              "rounding": {
+                "type": "null"
+              },
+              "verifiedMarketIds": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "normalProgrammableTenBpsApplied": {
+                "const": false
+              },
+              "verificationStatus": {
+                "const": "not_applicable"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityId",
+        "kind",
+        "controller",
+        "scope",
+        "mutable",
+        "evidenceHash"
+      ],
+      "properties": {
+        "authorityId": {
+          "$ref": "#/definitions/safeId"
+        },
+        "kind": {
+          "enum": [
+            "admin",
+            "upgrade",
+            "pause",
+            "custody",
+            "oracle",
+            "bridge",
+            "other"
+          ]
+        },
+        "controller": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/identity"
+            }
+          ]
+        },
+        "scope": {
+          "$ref": "#/definitions/safeId"
+        },
+        "mutable": {
+          "type": "boolean"
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "authorityInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "launchingWallet",
+        "authorities",
+        "postLaunchAuthorityInventoryHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-post-launch-authorities.v3"
+        },
+        "launchingWallet": {
+          "$ref": "#/definitions/identity"
+        },
+        "authorities": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/authority"
+          }
+        },
+        "postLaunchAuthorityInventoryHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "mechanism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "status",
+        "parameters",
+        "evidenceHashes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "version": {
+          "$ref": "#/definitions/safeId"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "delayed",
+            "paused",
+            "retired",
+            "unknown"
+          ]
+        },
+        "parameters": {},
+        "evidenceHashes": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/definitions/digest"
+          }
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "status",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "version": {
+          "$ref": "#/definitions/safeId"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "parameters": {}
+      }
+    },
+    "finality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "transactionHash",
+        "blockHash",
+        "blockNumber",
+        "transactionIndex",
+        "logIndex",
+        "onchainTimestamp",
+        "observedAt",
+        "confirmedAt",
+        "finalizedAt",
+        "orphanedAt",
+        "finalityEvidenceHash",
+        "verificationAuthorityHash"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "observed",
+            "confirmed",
+            "finalized",
+            "orphaned"
+          ]
+        },
+        "transactionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "blockHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "blockNumber": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "transactionIndex": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "logIndex": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/nonnegativeDecimal"
+            }
+          ]
+        },
+        "onchainTimestamp": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "observedAt": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "confirmedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "finalizedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "orphanedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "finalityEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "verificationAuthorityHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "projectedFinality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "transactionHash",
+        "blockHash",
+        "blockNumber",
+        "transactionIndex",
+        "logIndex",
+        "onchainTimestamp",
+        "observedAt",
+        "confirmedAt",
+        "finalizedAt",
+        "orphanedAt",
+        "finalityEvidenceHash",
+        "verificationAuthorityHash",
+        "canonicalHeadBlock",
+        "canonicalHeadHash"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "observed",
+            "confirmed",
+            "finalized",
+            "orphaned"
+          ]
+        },
+        "transactionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "blockHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "blockNumber": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "transactionIndex": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "logIndex": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "onchainTimestamp": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "observedAt": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "confirmedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "finalizedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "orphanedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "finalityEvidenceHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "verificationAuthorityHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "canonicalHeadBlock": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "canonicalHeadHash": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "registryReleaseContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "runtimeCodeHash",
+        "startBlock",
+        "contractId",
+        "abiSha256"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/definitions/address"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "startBlock": {
+          "$ref": "#/definitions/nonnegativeDecimal"
+        },
+        "contractId": {
+          "$ref": "#/definitions/safeId"
+        },
+        "abiSha256": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "releaseContracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "partnerFactoryRegistry",
+        "feePolicyVerifier",
+        "atomicRegistrar"
+      ],
+      "properties": {
+        "registry": {
+          "$ref": "#/definitions/registryReleaseContract"
+        },
+        "partnerFactoryRegistry": {
+          "$ref": "#/definitions/registryReleaseContract"
+        },
+        "feePolicyVerifier": {
+          "$ref": "#/definitions/registryReleaseContract"
+        },
+        "atomicRegistrar": {
+          "$ref": "#/definitions/registryReleaseContract"
+        }
+      }
+    },
+    "eventBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "emitterRole",
+        "id",
+        "topic0"
+      ],
+      "properties": {
+        "emitterRole": {
+          "enum": [
+            "registry",
+            "partnerFactoryRegistry",
+            "atomicRegistrar"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/safeId"
+        },
+        "topic0": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "eventBindings": {
+      "type": "array",
+      "minItems": 15,
+      "maxItems": 15,
+      "items": {
+        "$ref": "#/definitions/eventBinding"
+      }
+    },
+    "partnerFactoryAuthorizedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "emitterRole",
+        "emitterAddress",
+        "observedRuntimeCodeHash",
+        "topic0",
+        "indexedTopics",
+        "data",
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "transactionIndex",
+        "logIndex",
+        "configurationHash",
+        "providerId",
+        "factory",
+        "modelId",
+        "modelVersion",
+        "templateId",
+        "templateVersion",
+        "validAfterBlock",
+        "expiresAtBlock",
+        "evidenceHash"
+      ],
+      "properties": {
+        "emitterRole": {
+          "const": "partnerFactoryRegistry"
+        },
+        "emitterAddress": {
+          "$ref": "#/definitions/address"
+        },
+        "observedRuntimeCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "topic0": {
+          "$ref": "#/definitions/hash32"
+        },
+        "indexedTopics": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/definitions/hash32"
+          }
+        },
+        "data": {
+          "$ref": "#/definitions/hexData"
+        },
+        "transactionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "blockNumber": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "transactionIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "logIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configurationHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "providerId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "factory": {
+          "$ref": "#/definitions/address"
+        },
+        "modelId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "validAfterBlock": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "expiresAtBlock": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "partnerFactorySourceBoundEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "emitterRole",
+        "emitterAddress",
+        "observedRuntimeCodeHash",
+        "topic0",
+        "indexedTopics",
+        "data",
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "transactionIndex",
+        "logIndex",
+        "configurationHash",
+        "modelRepositoryId",
+        "modelSourceCommitId",
+        "factorySourceRepositoryId",
+        "factorySourceCommitId",
+        "factoryRuntimeCodeHash",
+        "launchRuntimeCodeSetHash",
+        "permissionsHash",
+        "feePolicyHash"
+      ],
+      "properties": {
+        "emitterRole": {
+          "const": "partnerFactoryRegistry"
+        },
+        "emitterAddress": {
+          "$ref": "#/definitions/address"
+        },
+        "observedRuntimeCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "topic0": {
+          "$ref": "#/definitions/hash32"
+        },
+        "indexedTopics": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/definitions/hash32"
+          }
+        },
+        "data": {
+          "$ref": "#/definitions/hexData"
+        },
+        "transactionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "blockNumber": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "transactionIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "logIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configurationHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelRepositoryId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelSourceCommitId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "factorySourceRepositoryId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "factorySourceCommitId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "factoryRuntimeCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "launchRuntimeCodeSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "permissionsHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "feePolicyHash": {
+          "$ref": "#/definitions/hash32"
+        }
+      }
+    },
+    "atomicExecutionProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "emitterRole",
+        "emitterAddress",
+        "observedRuntimeCodeHash",
+        "topic0",
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "transactionIndex",
+        "logIndex",
+        "launchId",
+        "deployed",
+        "salt",
+        "creationCodeHash",
+        "initializationResultHash",
+        "indexedTopics",
+        "data"
+      ],
+      "properties": {
+        "emitterRole": {
+          "const": "atomicRegistrar"
+        },
+        "emitterAddress": {
+          "$ref": "#/definitions/address"
+        },
+        "observedRuntimeCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "topic0": {
+          "$ref": "#/definitions/hash32"
+        },
+        "transactionHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "blockNumber": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "transactionIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "logIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "launchId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "deployed": {
+          "$ref": "#/definitions/address"
+        },
+        "salt": {
+          "$ref": "#/definitions/hash32"
+        },
+        "creationCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "initializationResultHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "indexedTopics": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/definitions/hash32"
+          }
+        },
+        "data": {
+          "$ref": "#/definitions/hexData"
+        }
+      }
+    },
+    "partnerFactoryAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chainId",
+        "registryGeneration",
+        "configurationHash",
+        "providerId",
+        "modelId",
+        "modelVersion",
+        "templateId",
+        "templateVersion",
+        "modelRepositoryId",
+        "modelSourceCommitId",
+        "factorySourceRepositoryId",
+        "factorySourceCommitId",
+        "factory",
+        "factoryRuntimeCodeHash",
+        "launchRuntimeCodeSetHash",
+        "permissionsHash",
+        "feePolicyHash",
+        "validAfterBlock",
+        "expiresAtBlock",
+        "evidenceHash",
+        "revoked",
+        "stateObservedAtBlock",
+        "stateProofHash",
+        "authorizedEvent",
+        "sourceBoundEvent"
+      ],
+      "properties": {
+        "chainId": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "registryGeneration": {
+          "const": "2"
+        },
+        "configurationHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "providerId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "templateVersion": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelRepositoryId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "modelSourceCommitId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "factorySourceRepositoryId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "factorySourceCommitId": {
+          "$ref": "#/definitions/hash32"
+        },
+        "factory": {
+          "$ref": "#/definitions/address"
+        },
+        "factoryRuntimeCodeHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "launchRuntimeCodeSetHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "permissionsHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "feePolicyHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "validAfterBlock": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "expiresAtBlock": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "evidenceHash": {
+          "$ref": "#/definitions/hash32"
+        },
+        "revoked": {
+          "const": false
+        },
+        "stateObservedAtBlock": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "stateProofHash": {
+          "$ref": "#/definitions/digest"
+        },
+        "authorizedEvent": {
+          "$ref": "#/definitions/partnerFactoryAuthorizedEvent"
+        },
+        "sourceBoundEvent": {
+          "$ref": "#/definitions/partnerFactorySourceBoundEvent"
+        }
+      }
+    },
+    "finalityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "confirmationDepth",
+        "canonicalitySource",
+        "reorgHandling",
+        "verificationAuthorityHash"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-finality-policy.v1"
+        },
+        "confirmationDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "canonicalitySource": {
+          "const": "evm-blockhash"
+        },
+        "reorgHandling": {
+          "const": "orphan"
+        },
+        "verificationAuthorityHash": {
+          "$ref": "#/definitions/digest"
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "registryGeneration",
+        "registeredAt",
+        "supersededBy",
+        "revokedAt",
+        "revocationEvidenceHash"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "active",
+            "orphaned",
+            "superseded",
+            "revoked"
+          ]
+        },
+        "registryGeneration": {
+          "$ref": "#/definitions/positiveDecimal"
+        },
+        "registeredAt": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "supersededBy": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/digest"
+            }
+          ]
+        },
+        "revokedAt": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/timestamp"
+            }
+          ]
+        },
+        "revocationEvidenceHash": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/digest"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

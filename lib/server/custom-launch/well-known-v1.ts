@@ -466,6 +466,9 @@ export function programmableWellKnownDocumentV1(
           activationStage: "planned-not-deployed" as const,
           publicAuthorization: false as const,
           publicWrites: false as const,
+          releaseReady: false as const,
+          apiVersion: "4" as const,
+          profileVersion: "4.0.0" as const,
           chainId: 4663 as const,
           caip2: "eip155:4663" as const,
           network: "Robinhood Chain Mainnet" as const,
@@ -481,12 +484,49 @@ export function programmableWellKnownDocumentV1(
             "https://programmable.market/openapi/custom-launch-v4.json",
           packConfigSchemaUrl:
             "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
+          sourceVerificationSchemaUrl:
+            "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json",
+          guideUrl:
+            "https://programmable.market/docs/developers/custom-launch#robinhood-v4",
           admissionDescriptorUrl:
             "https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json",
           sourceRepository:
             "https://github.com/programmablehq/PROGRAMMABLE",
           launchPolicyRepository:
             "https://github.com/programmablehq/Launch-Policy",
+          cli: Object.freeze({
+            sourceCandidateVersion: "4.0.0" as const,
+            sourceCandidate: true as const,
+            released: false as const,
+            installable: false as const,
+            liveEthereumVersion: "3.3.9" as const,
+            signsWalletTransactions: false as const,
+            broadcastsWalletTransactions: false as const,
+          }),
+          lifecycle: Object.freeze({
+            statuses: Object.freeze([
+              "received",
+              "validating",
+              "action_required",
+              "authorized",
+              "awaiting_wallet_signature",
+              "wallet_action_required",
+              "submitted",
+              "sequencer_soft_confirmed",
+              "ethereum_posted",
+              "finalized",
+              "failed",
+            ] as const),
+            actionRequiredMeaning:
+              "server-authored-remediation-not-wallet-action" as const,
+            walletStageStatusCommand:
+              "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized" as const,
+            finalityStatusCommand:
+              "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized" as const,
+            sourceVerificationStartsAfter: "finalized" as const,
+            sourceVerificationIndependentFromFinality: true as const,
+            indexingTradingAndPublicationIndependent: true as const,
+          }),
           foundationSourceCommitment:
             "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730" as const,
           sourceVerification: Object.freeze({
@@ -581,6 +621,7 @@ export function programmableWellKnownDocumentV1(
         customLaunchApiVersion: "4" as const,
         activationStage: "planned-not-deployed" as const,
         publicWrites: false as const,
+        releaseReady: false as const,
         externalIndexingGuaranteed: false as const,
       }),
     ]),

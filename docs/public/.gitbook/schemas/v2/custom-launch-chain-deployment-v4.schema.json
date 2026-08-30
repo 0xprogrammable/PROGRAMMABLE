@@ -1,0 +1,1421 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developers.programmable.family/schemas/v2/custom-launch-chain-deployment-v4.schema.json",
+  "title": "Public Custom Launch V4 chain deployment",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "chainDeploymentId",
+    "chainId",
+    "caip2",
+    "finality",
+    "foundationSourceCommitment",
+    "deploymentEvidence",
+    "permit2GenesisProvenance",
+    "permitAuthoritySourceProvenance",
+    "externalRootDeploymentEvidence",
+    "contracts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.custom-launch-chain-deployment.v1"
+    },
+    "chainDeploymentId": {
+      "const": "robinhood-mainnet-custom-launch-v1"
+    },
+    "chainId": {
+      "const": "4663"
+    },
+    "caip2": {
+      "const": "eip155:4663"
+    },
+    "finality": {
+      "$ref": "#/$defs/finalityPolicy"
+    },
+    "foundationSourceCommitment": {
+      "const": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730"
+    },
+    "deploymentEvidence": {
+      "$ref": "#/$defs/programmableDeploymentEvidence"
+    },
+    "permit2GenesisProvenance": {
+      "$ref": "#/$defs/permit2GenesisProvenance"
+    },
+    "permitAuthoritySourceProvenance": {
+      "$ref": "#/$defs/permitAuthoritySourceProvenance"
+    },
+    "externalRootDeploymentEvidence": {
+      "$ref": "#/$defs/externalRootDeploymentEvidence"
+    },
+    "contracts": {
+      "$ref": "#/$defs/contracts"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hash32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "nonzeroHash32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-fA-F]{64}$"
+    },
+    "lowerHash32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "lowerNonzeroHash32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x(?!0{40}$)[0-9a-fA-F]{40}$"
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "positiveDecimal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "finalityPolicy": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "policyId",
+        "policyRevision",
+        "policyDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-finality-policy-ref.v1"
+        },
+        "policyId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "policyRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "policyDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "programmableDeploymentEvidence": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "deploymentId",
+        "chainId",
+        "coveredContracts",
+        "transactionHash",
+        "from",
+        "to",
+        "valueWei",
+        "selector",
+        "calldataHash",
+        "calldataBytes",
+        "nonce",
+        "transactionIndex",
+        "receiptStatus",
+        "blockNumber",
+        "blockHash",
+        "receiptLogs",
+        "receiptLogsDigest",
+        "providerReadbacks",
+        "resultingContracts",
+        "ethereumFinalityEvidence",
+        "evidenceDigest",
+        "sourceVerification"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-atomic-root-deployment-evidence.v1"
+        },
+        "deploymentId": {
+          "const": "robinhood-mainnet-custom-launch-v1"
+        },
+        "chainId": {
+          "const": "4663"
+        },
+        "coveredContracts": {
+          "const": [
+            "programmableLaunchStampRouter",
+            "graphFactory",
+            "permitAuthority"
+          ]
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "from": {
+          "enum": [
+            "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+            "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+          ]
+        },
+        "to": {
+          "const": "0xcA11bde05977b3631167028862bE2a173976CA11"
+        },
+        "valueWei": {
+          "const": "0"
+        },
+        "selector": {
+          "const": "0x82ad56cb"
+        },
+        "calldataHash": {
+          "const": "0x3ba04469085b17e12843a94c154a335c9c384837f8f6531f179cb4915fd237d9"
+        },
+        "calldataBytes": {
+          "const": 33412
+        },
+        "nonce": {
+          "$ref": "#/$defs/decimal"
+        },
+        "transactionIndex": {
+          "$ref": "#/$defs/decimal"
+        },
+        "receiptStatus": {
+          "const": "1"
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "receiptLogs": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/atomicReceiptLog"
+          }
+        },
+        "receiptLogsDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "providerReadbacks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/atomicProviderReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "drpc"
+                    },
+                    "trustDomain": {
+                      "const": "drpc.org"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/atomicProviderReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "alchemy"
+                    },
+                    "trustDomain": {
+                      "const": "alchemy.com"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "resultingContracts": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/atomicResult"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "const": "permitAuthority"
+                    },
+                    "address": {
+                      "const": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06"
+                    },
+                    "runtimeCodeHash": {
+                      "const": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/atomicResult"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "const": "graphFactory"
+                    },
+                    "address": {
+                      "const": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd"
+                    },
+                    "runtimeCodeHash": {
+                      "const": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/atomicResult"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "const": "programmableLaunchStampRouter"
+                    },
+                    "address": {
+                      "const": "0x34965F2A2ee9254522232C32F02056E92BE0C98a"
+                    },
+                    "runtimeCodeHash": {
+                      "const": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "ethereumFinalityEvidence": {
+          "$ref": "#/$defs/ethereumFinalityEvidence"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sourceVerification": {
+          "const": {
+            "sourcifyExactMatchCoveredContracts": [
+              "programmableLaunchStampRouter",
+              "graphFactory"
+            ],
+            "officialSourcePinnedCoveredContracts": [
+              "permitAuthority"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "atomicReceiptLog": {
+      "type": "object",
+      "required": [
+        "address",
+        "topics",
+        "data",
+        "logIndex"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "topics": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/lowerNonzeroHash32"
+          }
+        },
+        "data": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-f]{2})*$"
+        },
+        "logIndex": {
+          "$ref": "#/$defs/decimal"
+        }
+      },
+      "additionalProperties": false
+    },
+    "atomicProviderReadback": {
+      "type": "object",
+      "required": [
+        "providerId",
+        "trustDomain",
+        "transactionHash",
+        "transactionResponseDigest",
+        "transactionReceiptDigest",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "trustDomain": {
+          "type": "string"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "transactionResponseDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "transactionReceiptDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "atomicResult": {
+      "type": "object",
+      "required": [
+        "contract",
+        "address",
+        "runtimeCodeHash",
+        "previousBlockRuntimeCodeHash",
+        "providerReadbacks",
+        "stateEvidenceDigest"
+      ],
+      "properties": {
+        "contract": {
+          "type": "string"
+        },
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "previousBlockRuntimeCodeHash": {
+          "const": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "providerReadbacks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/atomicRootTransitionReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "drpc"
+                    },
+                    "trustDomain": {
+                      "const": "drpc.org"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/atomicRootTransitionReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "alchemy"
+                    },
+                    "trustDomain": {
+                      "const": "alchemy.com"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "stateEvidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "atomicRootTransitionReadback": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "providerId",
+        "trustDomain",
+        "contract",
+        "address",
+        "preDeploymentBlockNumber",
+        "preDeploymentBlockHash",
+        "preDeploymentRuntimeCodeHash",
+        "deploymentBlockNumber",
+        "deploymentBlockHash",
+        "deploymentRuntimeCodeHash",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-atomic-root-runtime-transition-provider-readback.v1"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "trustDomain": {
+          "type": "string"
+        },
+        "contract": {
+          "enum": [
+            "permitAuthority",
+            "graphFactory",
+            "programmableLaunchStampRouter"
+          ]
+        },
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "preDeploymentBlockNumber": {
+          "$ref": "#/$defs/decimal"
+        },
+        "preDeploymentBlockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "preDeploymentRuntimeCodeHash": {
+          "const": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        },
+        "deploymentBlockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "deploymentBlockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "deploymentRuntimeCodeHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "permit2GenesisProvenance": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "address",
+        "startBlock",
+        "genesisSourceUrl",
+        "genesisSourceDigest",
+        "allocRuntimeCodeBytes",
+        "providerReadbacks",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-genesis-provenance.v1"
+        },
+        "kind": {
+          "const": "genesis-predeploy"
+        },
+        "address": {
+          "const": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+        },
+        "startBlock": {
+          "const": "0"
+        },
+        "genesisSourceDigest": {
+          "const": "sha256:353e6f6441b47695b41cee0c3645cde8dd7492d2f7f574bfb6aa4371e41bb6ba"
+        },
+        "genesisSourceUrl": {
+          "const": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-genesis.json"
+        },
+        "allocRuntimeCodeBytes": {
+          "const": 9152
+        },
+        "providerReadbacks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/genesisProviderReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "drpc"
+                    },
+                    "trustDomain": {
+                      "const": "drpc.org"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/genesisProviderReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "alchemy"
+                    },
+                    "trustDomain": {
+                      "const": "alchemy.com"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "genesisProviderReadback": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "providerId",
+        "trustDomain",
+        "blockNumber",
+        "blockHash",
+        "runtimeCodeHash",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-genesis-provider-readback.v1"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "trustDomain": {
+          "type": "string"
+        },
+        "blockNumber": {
+          "const": "0"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "runtimeCodeHash": {
+          "const": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "safeProvider": {
+      "type": "object",
+      "required": [
+        "providerId",
+        "trustDomain",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "trustDomain": {
+          "type": "string"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "publicProfile": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "structuralProfileId",
+        "businessProfileId",
+        "admissionDescriptorDigest",
+        "admissionPolicyDigest",
+        "admissionSchemaDigest",
+        "admissionBindingDigest",
+        "profileRevision",
+        "profileVersion",
+        "profileDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-profile-ref.v4"
+        },
+        "structuralProfileId": {
+          "const": "programmable.custom-launch.robinhood-mainnet.v1"
+        },
+        "businessProfileId": {
+          "const": "robinhood-production-launch"
+        },
+        "admissionDescriptorDigest": {
+          "const": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948"
+        },
+        "admissionPolicyDigest": {
+          "const": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216"
+        },
+        "admissionSchemaDigest": {
+          "const": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7"
+        },
+        "admissionBindingDigest": {
+          "const": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2"
+        },
+        "profileRevision": {
+          "const": 1
+        },
+        "profileVersion": {
+          "const": "4.0.0"
+        },
+        "profileDigest": {
+          "const": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ethereumFinalityEvidence": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "profile",
+        "l2Checkpoint",
+        "batchNumber",
+        "l2Providers",
+        "ethereumProviders",
+        "rollup",
+        "sequencerInbox",
+        "postingTransactionHash",
+        "postingBlockNumber",
+        "postingBlockHash",
+        "postingLogIndex",
+        "ethereumFinalizedCheckpoint",
+        "observedAt",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-l2-checkpoint-ethereum-finality.v1"
+        },
+        "profile": {
+          "$ref": "#/$defs/publicProfile"
+        },
+        "l2Checkpoint": {
+          "type": "object",
+          "required": [
+            "blockNumber",
+            "blockHash"
+          ],
+          "properties": {
+            "blockNumber": {
+              "$ref": "#/$defs/positiveDecimal"
+            },
+            "blockHash": {
+              "$ref": "#/$defs/lowerNonzeroHash32"
+            }
+          },
+          "additionalProperties": false
+        },
+        "batchNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "l2Providers": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "type": "object",
+              "required": [
+                "providerId",
+                "trustDomain",
+                "l1Confirmations"
+              ],
+              "properties": {
+                "providerId": {
+                  "const": "drpc"
+                },
+                "trustDomain": {
+                  "const": "drpc.org"
+                },
+                "l1Confirmations": {
+                  "$ref": "#/$defs/positiveDecimal"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "providerId",
+                "trustDomain",
+                "l1Confirmations"
+              ],
+              "properties": {
+                "providerId": {
+                  "const": "alchemy"
+                },
+                "trustDomain": {
+                  "const": "alchemy.com"
+                },
+                "l1Confirmations": {
+                  "$ref": "#/$defs/positiveDecimal"
+                }
+              },
+              "additionalProperties": false
+            }
+          ],
+          "items": false
+        },
+        "ethereumProviders": {
+          "const": [
+            {
+              "providerId": "drpc",
+              "trustDomain": "drpc.org"
+            },
+            {
+              "providerId": "quicknode",
+              "trustDomain": "quicknode.com"
+            }
+          ]
+        },
+        "rollup": {
+          "const": "0x23A19d23e89166adedbDcB432518AB01e4272D94"
+        },
+        "sequencerInbox": {
+          "const": "0xBd0D173EEb87D57A09521c24388a12789F33ba96"
+        },
+        "postingTransactionHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "postingBlockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "postingBlockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "postingLogIndex": {
+          "$ref": "#/$defs/decimal"
+        },
+        "ethereumFinalizedCheckpoint": {
+          "type": "object",
+          "required": [
+            "blockNumber",
+            "blockHash",
+            "tag"
+          ],
+          "properties": {
+            "blockNumber": {
+              "$ref": "#/$defs/positiveDecimal"
+            },
+            "blockHash": {
+              "$ref": "#/$defs/lowerNonzeroHash32"
+            },
+            "tag": {
+              "const": "finalized"
+            }
+          },
+          "additionalProperties": false
+        },
+        "observedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "safeConfigurationEvidence": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "finalized",
+        "blockNumber",
+        "blockHash",
+        "proxyRuntimeCodeHash",
+        "singleton",
+        "fallbackHandler",
+        "fallbackHandlerRuntimeCodeHash",
+        "owners",
+        "threshold",
+        "nonce",
+        "modules",
+        "modulesNext",
+        "guard",
+        "singletonSlot",
+        "fallbackHandlerSlot",
+        "guardSlot",
+        "primaryProvider",
+        "secondaryProvider",
+        "atomicRootStateEvidenceDigest",
+        "ethereumFinalityEvidence",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.safe-configuration-evidence.v1"
+        },
+        "finalized": {
+          "const": true
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/nonzeroHash32"
+        },
+        "proxyRuntimeCodeHash": {
+          "const": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+        },
+        "singleton": {
+          "type": "object",
+          "required": [
+            "address",
+            "runtimeCodeHash",
+            "version",
+            "sourceCommitment"
+          ],
+          "properties": {
+            "address": {
+              "const": "0x41675C099F32341bf84BFc5382aF534df5C7461a"
+            },
+            "runtimeCodeHash": {
+              "const": "0x1fe2df852ba3299d6534ef416eefa406e56ced995bca886ab7a553e6d0c5e1c4"
+            },
+            "version": {
+              "const": "1.4.1"
+            },
+            "sourceCommitment": {
+              "const": "sha256:4591dc35029cba2a869f91919cb3cf7e7c68f26727cc68e4b03d99cdf1bc2ebb"
+            }
+          },
+          "additionalProperties": false
+        },
+        "fallbackHandler": {
+          "const": "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99"
+        },
+        "fallbackHandlerRuntimeCodeHash": {
+          "const": "0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9"
+        },
+        "owners": {
+          "const": [
+            "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+            "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+          ]
+        },
+        "threshold": {
+          "const": 1
+        },
+        "nonce": {
+          "const": "0"
+        },
+        "modules": {
+          "const": []
+        },
+        "modulesNext": {
+          "const": "0x0000000000000000000000000000000000000001"
+        },
+        "guard": {
+          "type": "null"
+        },
+        "singletonSlot": {
+          "const": "0x00000000000000000000000041675c099f32341bf84bfc5382af534df5c7461a"
+        },
+        "fallbackHandlerSlot": {
+          "const": "0x000000000000000000000000fd0732dc9e303f09fcef3a7388ad10a83459ec99"
+        },
+        "guardSlot": {
+          "const": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "primaryProvider": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/safeProvider"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "const": "drpc"
+                },
+                "trustDomain": {
+                  "const": "drpc.org"
+                }
+              }
+            }
+          ]
+        },
+        "secondaryProvider": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/safeProvider"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "const": "alchemy"
+                },
+                "trustDomain": {
+                  "const": "alchemy.com"
+                }
+              }
+            }
+          ]
+        },
+        "atomicRootStateEvidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "ethereumFinalityEvidence": {
+          "$ref": "#/$defs/ethereumFinalityEvidence"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "permitAuthoritySourceProvenance": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "address",
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "sourceCommitment",
+        "evidenceDigest",
+        "configurationEvidence"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-deployment-evidence.v1"
+        },
+        "kind": {
+          "const": "official-source-pinned"
+        },
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/nonzeroHash32"
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/nonzeroHash32"
+        },
+        "sourceCommitment": {
+          "const": "sha256:4591dc35029cba2a869f91919cb3cf7e7c68f26727cc68e4b03d99cdf1bc2ebb"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "configurationEvidence": {
+          "$ref": "#/$defs/safeConfigurationEvidence"
+        }
+      },
+      "additionalProperties": false
+    },
+    "externalRoot": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "contract",
+        "kind",
+        "address",
+        "runtimeCodeHash",
+        "transactionHash",
+        "startBlock",
+        "blockHash",
+        "registrySource",
+        "providerReadbacks",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-deployment-evidence.v1"
+        },
+        "contract": {
+          "enum": [
+            "poolManager",
+            "positionManager",
+            "stateView",
+            "v4Quoter",
+            "universalRouter"
+          ]
+        },
+        "kind": {
+          "const": "exact-observed-deployment"
+        },
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/$defs/nonzeroHash32"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "startBlock": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "registrySource": {
+          "const": {
+            "repository": "Uniswap/contracts",
+            "commit": "4cfc406c8e34da3ce04e60657a7825075b64fd22",
+            "path": "deployments/json/4663.json",
+            "rawUrl": "https://raw.githubusercontent.com/Uniswap/contracts/4cfc406c8e34da3ce04e60657a7825075b64fd22/deployments/json/4663.json",
+            "sha256": "sha256:21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15"
+          }
+        },
+        "providerReadbacks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/externalRootProviderReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "drpc"
+                    },
+                    "trustDomain": {
+                      "const": "drpc.org"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/externalRootProviderReadback"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "providerId": {
+                      "const": "alchemy"
+                    },
+                    "trustDomain": {
+                      "const": "alchemy.com"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "externalRootProviderReadback": {
+      "type": "object",
+      "required": [
+        "providerId",
+        "trustDomain",
+        "transactionHash",
+        "blockNumber",
+        "blockHash",
+        "runtimeCodeHash",
+        "transactionReceiptDigest",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "trustDomain": {
+          "type": "string"
+        },
+        "transactionHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "blockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "blockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "transactionReceiptDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "externalRootDeploymentEvidence": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/externalRoot"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "contract": {
+                  "const": "poolManager"
+                },
+                "address": {
+                  "const": "0x8366a39CC670B4001A1121B8F6A443A643e40951"
+                },
+                "runtimeCodeHash": {
+                  "const": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
+                },
+                "transactionHash": {
+                  "const": "0x4fb28d4935866f462582c6c931c6f2705e55f5be5eb178c7d8d9329a95c44c41"
+                },
+                "startBlock": {
+                  "const": "9070"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/externalRoot"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "contract": {
+                  "const": "positionManager"
+                },
+                "address": {
+                  "const": "0x58daec3116aae6D93017bAAea7749052E8a04fA7"
+                },
+                "runtimeCodeHash": {
+                  "const": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2"
+                },
+                "transactionHash": {
+                  "const": "0x228c18ada6cb46b4fbcc18f4ec1519953415393e256fa8349aafbd5a2db037c8"
+                },
+                "startBlock": {
+                  "const": "9073"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/externalRoot"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "contract": {
+                  "const": "stateView"
+                },
+                "address": {
+                  "const": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b"
+                },
+                "runtimeCodeHash": {
+                  "const": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6"
+                },
+                "transactionHash": {
+                  "const": "0x3d61e2c9eeb482385b1aa436b9e8f812167ea579cc390e4f93bc5abde00582f4"
+                },
+                "startBlock": {
+                  "const": "9075"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/externalRoot"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "contract": {
+                  "const": "v4Quoter"
+                },
+                "address": {
+                  "const": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94"
+                },
+                "runtimeCodeHash": {
+                  "const": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6"
+                },
+                "transactionHash": {
+                  "const": "0x6bf436d72a17f87284ddcab43094689bd320dfb39b535213b9a0b669fabc4ab4"
+                },
+                "startBlock": {
+                  "const": "9074"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/externalRoot"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "contract": {
+                  "const": "universalRouter"
+                },
+                "address": {
+                  "const": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99"
+                },
+                "runtimeCodeHash": {
+                  "const": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5"
+                },
+                "transactionHash": {
+                  "const": "0xdfb76494e158d8dea4376160315239271636a18515207fd4526e574bc7eeb456"
+                },
+                "startBlock": {
+                  "const": "3347899"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "contractBinding": {
+      "type": "object",
+      "required": [
+        "address",
+        "runtimeCodeHash"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/address"
+        },
+        "runtimeCodeHash": {
+          "$ref": "#/$defs/nonzeroHash32"
+        }
+      },
+      "additionalProperties": false
+    },
+    "contracts": {
+      "type": "object",
+      "required": [
+        "programmableLaunchStampRouter",
+        "permitAuthority",
+        "graphFactory",
+        "poolManager",
+        "positionManager",
+        "stateView",
+        "v4Quoter",
+        "permit2",
+        "universalRouter"
+      ],
+      "properties": {
+        "programmableLaunchStampRouter": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "permitAuthority": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "graphFactory": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "poolManager": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "positionManager": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "stateView": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "v4Quoter": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "permit2": {
+          "$ref": "#/$defs/contractBinding"
+        },
+        "universalRouter": {
+          "$ref": "#/$defs/contractBinding"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
