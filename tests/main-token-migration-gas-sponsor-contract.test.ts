@@ -39,7 +39,7 @@ describe("main token migration gas sponsor activation contract", () => {
     "config/main-token-migration-gas-sponsor-contract.v1.json",
   );
   const manifest = parse<Record<string, unknown>>(
-    "config/main-token-migration-activation.v1.json",
+    "config/main-token-migration-activation.v2.json",
   );
   const environment = read(".env.example");
   const implementation = read(
@@ -60,14 +60,24 @@ describe("main token migration gas sponsor activation contract", () => {
       "v4-ethereum-to-robinhood-96h-2026-v1",
     );
     expect(manifest).toMatchObject({
-      schema: "programmable-main-token-migration-activation/v1",
+      schema: "programmable-main-token-migration-activation/v2",
       releaseId: contract.releaseId,
       enabled: false,
       windowDurationSeconds: "345600",
       windowStartTimestamp: null,
       deadlineTimestampExclusive: null,
-      startBlockNumber: null,
-      startBlockHash: null,
+      snapshotBoundaryRule:
+        "first-canonical-block-at-or-after-timestamp",
+      minimumPublicLeadSeconds: "900",
+      targetChainId: "4663",
+      targetTokenTotalSupplyRaw: "1000000000000000000000000000",
+      targetTokenAddress: null,
+      targetTokenRuntimeCodeKeccak256: null,
+      migrationDistributorAddress: null,
+      migrationDistributorRuntimeCodeKeccak256: null,
+      distributionPlanSha256: null,
+      sponsorEligibilityBlockNumber: null,
+      sponsorEligibilityBlockHash: null,
     });
 
     expect(environment).toContain(
@@ -89,7 +99,7 @@ describe("main token migration gas sponsor activation contract", () => {
       schema:
         "programmable-main-token-migration-gas-sponsor-activation-contract/v1",
       activationManifestPath:
-        "config/main-token-migration-activation.v1.json",
+        "config/main-token-migration-activation.v2.json",
       route: "/api/main-token-migration/gas-sponsorship",
       serverOnly: true,
       chainId: "1",
@@ -108,8 +118,12 @@ describe("main token migration gas sponsor activation contract", () => {
     }
     expect(readiness).toContain("If any item is false or unknown");
     expect(runbook).toContain("exact 96-hour migration window");
-    expect(runbook).toContain("exactly 345,600 seconds after the start");
-    expect(readiness).toContain("has a 345,600-second window");
+    expect(runbook).toContain("exactly 345,600 seconds later");
+    expect(runbook).toContain("900-second public lead");
+    expect(readiness).toContain("a future 345,600-second window");
+    expect(readiness).toContain("timestamp-derived snapshot-boundary rule");
+    expect(readiness).toContain("target token and migration distributor");
+    expect(runbook).toContain("distribution-plan SHA-256");
   });
 
   it("binds the documented wallet, fee, budget and deadline limits to code", () => {
@@ -128,6 +142,8 @@ describe("main token migration gas sponsor activation contract", () => {
         "transactionType",
         "gasAndFeeBounds",
         "exactValue",
+        "sponsorEligibilityBlock",
+        "targetDeliveryCommitment",
       ],
     });
     expect(contract.limits).toEqual({

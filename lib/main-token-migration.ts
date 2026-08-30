@@ -13,13 +13,21 @@ import {
 } from "./prepared-transaction";
 
 export const MAIN_TOKEN_MIGRATION_CHAIN_ID = 1 as const;
+export const MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID = 4663 as const;
 export const MAIN_TOKEN_MIGRATION_WINDOW_SECONDS = 96 * 60 * 60;
+export const MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS = 15 * 60;
+export const MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA =
+  "programmable-main-token-migration-activation/v2" as const;
+export const MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE =
+  "first-canonical-block-at-or-after-timestamp" as const;
 export const MAIN_TOKEN_MIGRATION_RELEASE_ID =
   "v4-ethereum-to-robinhood-96h-2026-v1" as const;
 export const MAIN_TOKEN_DECIMALS = 18;
 export const MAIN_TOKEN_SYMBOL = "V4";
 export const MAIN_TOKEN_TOTAL_SUPPLY_RAW =
   1_000_000_000_000_000_000_000_000_000n;
+export const MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW =
+  MAIN_TOKEN_TOTAL_SUPPLY_RAW;
 export const MAIN_TOKEN_RUNTIME_CODE_KECCAK256 =
   "0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad" as const;
 export const MAIN_TOKEN_ADDRESS = getAddress(

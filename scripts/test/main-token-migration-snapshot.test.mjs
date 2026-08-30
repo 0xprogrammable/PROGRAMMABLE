@@ -17,6 +17,15 @@ const SENDER_B = "0x2222222222222222222222222222222222222222";
 const CONTRACT_SENDER = "0x3333333333333333333333333333333333333333";
 const RELAYER = "0x4444444444444444444444444444444444444444";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const TARGET_DELIVERY = Object.freeze({
+  chainId: MAIN_TOKEN_MIGRATION_POLICY.targetChainId,
+  distributionPlanSha256: `sha256:${"56".repeat(32)}`,
+  distributorAddress: "0x6666666666666666666666666666666666666666",
+  distributorRuntimeCodeKeccak256: `0x${"34".repeat(32)}`,
+  tokenAddress: "0x5555555555555555555555555555555555555555",
+  tokenRuntimeCodeKeccak256: `0x${"12".repeat(32)}`,
+  tokenTotalSupplyRaw: MAIN_TOKEN_MIGRATION_POLICY.targetTokenTotalSupplyRaw,
+});
 const TOKEN_RUNTIME_CODE = [
   "0x608060405234801561000f575f5ffd5b5060043610610115575f3560e01c8063392f37e9116100ad57806395d89b411161007d578063d5",
   "05accf11610063578063d505accf146102a0578063dd62ed3e146102b5578063f56a499f146102c8575f5ffd5b806395d89b411461028557",
@@ -326,6 +335,11 @@ test("freezes the exact Ethereum V4 migration identities and 96-hour rule", () =
     "0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad",
   );
   assert.equal(MAIN_TOKEN_MIGRATION_POLICY.windowSeconds, 345_600n);
+  assert.equal(MAIN_TOKEN_MIGRATION_POLICY.targetChainId, 4_663n);
+  assert.equal(
+    MAIN_TOKEN_MIGRATION_POLICY.targetTokenTotalSupplyRaw,
+    MAIN_TOKEN_MIGRATION_POLICY.tokenTotalSupplyRaw,
+  );
   assert.equal(
     MAIN_TOKEN_MIGRATION_POLICY.schema,
     "programmable-main-token-migration-snapshot/v2",
@@ -454,13 +468,40 @@ test("emits byte-identical canonical JSON and a stable SHA-256 digest", () => {
   assert.equal(canonicalJson(first), canonicalJson(second));
   assert.equal(sha256CanonicalJson(first), sha256CanonicalJson(second));
   assert.equal(canonicalJson({ b: 2, a: 1 }), "{\"a\":1,\"b\":2}");
-  const artifact = buildMainTokenMigrationSnapshotArtifact(first, true);
+  const artifact = buildMainTokenMigrationSnapshotArtifact(
+    first,
+    true,
+    TARGET_DELIVERY,
+  );
   assert.match(artifact.snapshotSha256, /^sha256:[0-9a-f]{64}$/u);
   assert.equal(artifact.rpcAgreement.independentEndpointCount, "2");
   assert.equal(artifact.rpcAgreement.snapshotsIdentical, true);
+  assert.deepEqual(artifact.targetDelivery, {
+    chainId: "4663",
+    distributionPlanSha256: TARGET_DELIVERY.distributionPlanSha256,
+    distributorAddress: TARGET_DELIVERY.distributorAddress,
+    distributorRuntimeCodeKeccak256:
+      TARGET_DELIVERY.distributorRuntimeCodeKeccak256,
+    tokenAddress: TARGET_DELIVERY.tokenAddress,
+    tokenRuntimeCodeKeccak256:
+      TARGET_DELIVERY.tokenRuntimeCodeKeccak256,
+    tokenTotalSupplyRaw: MAIN_TOKEN_MIGRATION_POLICY.tokenTotalSupplyRaw.toString(),
+  });
   assert.throws(
-    () => buildMainTokenMigrationSnapshotArtifact(first, false),
+    () => buildMainTokenMigrationSnapshotArtifact(
+      first,
+      false,
+      TARGET_DELIVERY,
+    ),
     /two independent RPC snapshots were not confirmed/u,
+  );
+  assert.throws(
+    () => buildMainTokenMigrationSnapshotArtifact(
+      first,
+      true,
+      { ...TARGET_DELIVERY, distributorAddress: null },
+    ),
+    /target delivery commitment is incomplete/u,
   );
 });
 
@@ -665,12 +706,14 @@ test("binds transaction sender observations into independent RPC artifact agreem
       buildMainTokenMigrationSnapshotArtifact(
         buildMainTokenMigrationSnapshot(primary),
         true,
+        TARGET_DELIVERY,
       ),
     ),
     canonicalJson(
       buildMainTokenMigrationSnapshotArtifact(
         buildMainTokenMigrationSnapshot(secondary),
         true,
+        TARGET_DELIVERY,
       ),
     ),
   );
@@ -682,6 +725,14 @@ test("enforces the start and exclusive deadline block boundaries", () => {
   assert.throws(
     () => buildMainTokenMigrationSnapshot(earlyStart),
     /start block is before the window start/u,
+  );
+
+  const lateStart = baseInput();
+  lateStart.previousBlock.timestamp = WINDOW_START;
+  lateStart.startBlock.timestamp = WINDOW_START + 1n;
+  assert.throws(
+    () => buildMainTokenMigrationSnapshot(lateStart),
+    /opening-balance block is not before the window start/u,
   );
 
   const lateEnd = baseInput();

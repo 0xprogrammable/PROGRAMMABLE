@@ -3,6 +3,8 @@
 import { readFile } from "node:fs/promises";
 
 import { readBoundedResponseText } from "./read-bounded-response.mjs";
+import { parseMainTokenMigrationActivationManifest } from
+  "./main-token-migration-activation-core.mjs";
 import {
   MAIN_TOKEN_MIGRATION_POLICY,
   buildMainTokenMigrationSnapshot,
@@ -13,11 +15,9 @@ import {
 const PRIMARY_RPC_ENV = "MAIN_TOKEN_MIGRATION_RPC_URL_PRIMARY";
 const SECONDARY_RPC_ENV = "MAIN_TOKEN_MIGRATION_RPC_URL_SECONDARY";
 const ACTIVATION_MANIFEST_URL = new URL(
-  "../config/main-token-migration-activation.v1.json",
+  "../config/main-token-migration-activation.v2.json",
   import.meta.url,
 );
-const ACTIVATION_MANIFEST_SCHEMA =
-  "programmable-main-token-migration-activation/v1";
 const RPC_TIMEOUT_MS = 30_000;
 const RPC_MAXIMUM_RESPONSE_BYTES = 16 * 1024 * 1024;
 const DEFAULT_CHUNK_SIZE = 5_000n;
@@ -121,13 +121,6 @@ function parseArguments(argv) {
   };
 }
 
-function exactManifestKeys(value, expected) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const actual = Object.keys(value).sort();
-  return actual.length === expected.length &&
-    actual.every((key, index) => key === expected[index]);
-}
-
 async function readActivationManifest(options) {
   let payload;
   try {
@@ -135,104 +128,16 @@ async function readActivationManifest(options) {
   } catch {
     reject("activation manifest is unavailable or invalid JSON");
   }
-  const expectedKeys = [
-    "deadlineTimestampExclusive",
-    "enabled",
-    "migrationWallet",
-    "releaseId",
-    "schema",
-    "sourceChainId",
-    "sourceTokenAddress",
-    "sourceTokenDecimals",
-    "sourceTokenRuntimeCodeKeccak256",
-    "sourceTokenTotalSupplyRaw",
-    "startBlockHash",
-    "startBlockNumber",
-    "windowDurationSeconds",
-    "windowStartTimestamp",
-  ].sort();
-  if (!exactManifestKeys(payload, expectedKeys)) {
-    reject("activation manifest fields are not exact");
-  }
-  if (payload.schema !== ACTIVATION_MANIFEST_SCHEMA) {
-    reject("activation manifest schema is not supported");
-  }
-  if (payload.enabled !== true) reject("activation manifest is not enabled");
-  if (payload.releaseId !== MAIN_TOKEN_MIGRATION_POLICY.releaseId) {
-    reject("activation manifest releaseId is not the frozen release");
-  }
-  if (parseDecimal(payload.sourceChainId, "manifest sourceChainId") !== MAIN_TOKEN_MIGRATION_POLICY.chainId) {
-    reject("activation manifest source chain is not Ethereum mainnet");
-  }
+  const activation = parseMainTokenMigrationActivationManifest(payload, {
+    requireEnabled: true,
+  });
   if (
-    String(payload.sourceTokenAddress ?? "").toLowerCase() !==
-    MAIN_TOKEN_MIGRATION_POLICY.tokenAddress.toLowerCase()
-  ) {
-    reject("activation manifest source token is not the frozen token");
-  }
-  if (
-    String(payload.sourceTokenRuntimeCodeKeccak256 ?? "").toLowerCase() !==
-    MAIN_TOKEN_MIGRATION_POLICY.tokenRuntimeCodeKeccak256
-  ) {
-    reject("activation manifest source runtime hash is not frozen");
-  }
-  if (
-    parseDecimal(payload.sourceTokenDecimals, "manifest sourceTokenDecimals") !==
-    MAIN_TOKEN_MIGRATION_POLICY.tokenDecimals
-  ) {
-    reject("activation manifest source token decimals are not frozen");
-  }
-  if (
-    parseDecimal(payload.sourceTokenTotalSupplyRaw, "manifest sourceTokenTotalSupplyRaw") !==
-    MAIN_TOKEN_MIGRATION_POLICY.tokenTotalSupplyRaw
-  ) {
-    reject("activation manifest source token supply is not frozen");
-  }
-  if (
-    String(payload.migrationWallet ?? "").toLowerCase() !==
-    MAIN_TOKEN_MIGRATION_POLICY.migrationWallet.toLowerCase()
-  ) {
-    reject("activation manifest migration wallet is not frozen");
-  }
-  const windowDurationSeconds = parseDecimal(
-    payload.windowDurationSeconds,
-    "manifest windowDurationSeconds",
-  );
-  const windowStartTimestamp = parseDecimal(
-    payload.windowStartTimestamp,
-    "manifest windowStartTimestamp",
-  );
-  const deadlineTimestamp = parseDecimal(
-    payload.deadlineTimestampExclusive,
-    "manifest deadlineTimestampExclusive",
-  );
-  const startBlock = parseDecimal(
-    payload.startBlockNumber,
-    "manifest startBlockNumber",
-  );
-  if (!BYTES32.test(String(payload.startBlockHash ?? ""))) {
-    reject("manifest startBlockHash is malformed");
-  }
-  if (
-    windowDurationSeconds !== MAIN_TOKEN_MIGRATION_POLICY.windowSeconds ||
-    windowStartTimestamp + windowDurationSeconds !== deadlineTimestamp
-  ) {
-    reject("activation manifest window is not the frozen 96-hour interval");
-  }
-  if (
-    options.startBlock !== startBlock ||
-    options.windowStartTimestamp !== windowStartTimestamp ||
-    options.deadlineTimestamp !== deadlineTimestamp
+    options.windowStartTimestamp !== activation.windowStartTimestamp ||
+    options.deadlineTimestamp !== activation.deadlineTimestampExclusive
   ) {
     reject("CLI window arguments do not match the activation manifest");
   }
-  return {
-    deadlineTimestamp,
-    releaseId: payload.releaseId,
-    startBlock,
-    startBlockHash: payload.startBlockHash.toLowerCase(),
-    windowStartTimestamp,
-  };
+  return activation;
 }
 
 function rpcUrlFromEnvironment(name) {
@@ -587,7 +492,7 @@ function requireBlockNumber(block, expected, label) {
   if (block.number !== expected) reject(`${label} number does not match the explicit argument`);
 }
 
-async function snapshotFromProvider(url, label, options, activation) {
+async function snapshotFromProvider(url, label, options) {
   const state = { label, requestId: 0 };
   const chainId = parseRpcQuantity(
     await jsonRpc(url, state, "eth_chainId", []),
@@ -624,10 +529,6 @@ async function snapshotFromProvider(url, label, options, activation) {
   requireBlockNumber(startBlock, options.startBlock, `${label}.startBlock`);
   requireBlockNumber(endBlock, options.endBlock, `${label}.endBlock`);
   requireBlockNumber(boundaryBlock, options.endBlock + 1n, `${label}.boundaryBlock`);
-  if (startBlock.hash.toLowerCase() !== activation.startBlockHash) {
-    reject(`${label}.startBlock hash does not match the activation manifest`);
-  }
-
   const walletTopic = paddedAddressTopic(MAIN_TOKEN_MIGRATION_POLICY.migrationWallet);
   const inboundLogs = await scanLogs(
     url,
@@ -768,16 +669,38 @@ async function main() {
     reject("primary and secondary RPC endpoints must have different HTTPS origins");
   }
   const [primarySnapshot, secondarySnapshot] = await Promise.all([
-    snapshotFromProvider(primaryUrl, "primary RPC", options, activation),
-    snapshotFromProvider(secondaryUrl, "secondary RPC", options, activation),
+    snapshotFromProvider(primaryUrl, "primary RPC", options),
+    snapshotFromProvider(secondaryUrl, "secondary RPC", options),
   ]);
   const primaryArtifact = buildMainTokenMigrationSnapshotArtifact(
     primarySnapshot,
     true,
+    {
+      chainId: activation.targetChainId,
+      distributionPlanSha256: activation.distributionPlanSha256,
+      distributorAddress: activation.migrationDistributorAddress,
+      distributorRuntimeCodeKeccak256:
+        activation.migrationDistributorRuntimeCodeKeccak256,
+      tokenAddress: activation.targetTokenAddress,
+      tokenRuntimeCodeKeccak256:
+        activation.targetTokenRuntimeCodeKeccak256,
+      tokenTotalSupplyRaw: activation.targetTokenTotalSupplyRaw,
+    },
   );
   const secondaryArtifact = buildMainTokenMigrationSnapshotArtifact(
     secondarySnapshot,
     true,
+    {
+      chainId: activation.targetChainId,
+      distributionPlanSha256: activation.distributionPlanSha256,
+      distributorAddress: activation.migrationDistributorAddress,
+      distributorRuntimeCodeKeccak256:
+        activation.migrationDistributorRuntimeCodeKeccak256,
+      tokenAddress: activation.targetTokenAddress,
+      tokenRuntimeCodeKeccak256:
+        activation.targetTokenRuntimeCodeKeccak256,
+      tokenTotalSupplyRaw: activation.targetTokenTotalSupplyRaw,
+    },
   );
   if (canonicalJson(primaryArtifact) !== canonicalJson(secondaryArtifact)) {
     reject("independent RPC artifacts disagree");

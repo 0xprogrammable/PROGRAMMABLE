@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { MainTokenMigration } from "@/components/main-token-migration";
-import migrationActivationManifest from "@/config/main-token-migration-activation.v1.json";
+import migrationActivationManifest from "@/config/main-token-migration-activation.v2.json";
 
 export const metadata: Metadata = {
   title: "V4 migration | Programmable",

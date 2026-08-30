@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { LandingExploreGate } from "@/components/landing-explore-gate";
 import styles from "@/components/landing-page.module.css";
-import migrationActivationManifest from "@/config/main-token-migration-activation.v1.json";
+import migrationActivationManifest from "@/config/main-token-migration-activation.v2.json";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
 const HERO_TWINKLE_COUNT = 120;

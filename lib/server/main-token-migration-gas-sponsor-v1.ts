@@ -17,11 +17,17 @@ import {
 } from "viem";
 import { mainnet } from "viem/chains";
 
-import activationManifest from "@/config/main-token-migration-activation.v1.json";
+import activationManifest from "@/config/main-token-migration-activation.v2.json";
 import {
+  MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA,
   MAIN_TOKEN_ADDRESS,
+  MAIN_TOKEN_DECIMALS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS,
   MAIN_TOKEN_MIGRATION_RELEASE_ID,
+  MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
+  MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW,
   MAIN_TOKEN_MIGRATION_WALLET,
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
   MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
@@ -52,6 +58,10 @@ const ERC20_ABI = parseAbi([
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/u;
 const DECIMAL = /^[1-9][0-9]{0,77}$/u;
 const HASH = /^0x[0-9a-f]{64}$/u;
+const SHA256 = /^sha256:[0-9a-f]{64}$/u;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const ZERO_HASH = `0x${"0".repeat(64)}`;
+const ZERO_SHA256 = `sha256:${"0".repeat(64)}`;
 const MAXIMUM_BODY_BYTES = 4_096;
 const GAS_MULTIPLIER_BPS = 12_500n;
 const BPS = 10_000n;
@@ -65,8 +75,9 @@ type Environment = Readonly<Record<string, string | undefined>>;
 
 export type MainTokenMigrationGasSponsorConfigurationV1 = Readonly<{
   releaseId: typeof MAIN_TOKEN_MIGRATION_RELEASE_ID;
-  startBlockNumber: bigint;
-  startBlockHash: Hex;
+  windowStartTimestamp: number;
+  sponsorEligibilityBlockNumber: bigint;
+  sponsorEligibilityBlockHash: Hex;
   deadlineTimestampExclusive: number;
   sponsorWalletId: string;
   sponsorPolicyId: string;
@@ -264,23 +275,49 @@ export function readMainTokenMigrationGasSponsorConfigurationV1(input: Readonly<
   const manifest = input.manifest as Record<string, unknown>;
   if (
     !manifest || typeof manifest !== "object"
-    || manifest.schema !== "programmable-main-token-migration-activation/v1"
+    || manifest.schema !== MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA
     || manifest.releaseId !== MAIN_TOKEN_MIGRATION_RELEASE_ID
     || manifest.enabled !== true
     || manifest.sourceChainId !== String(MAIN_TOKEN_MIGRATION_CHAIN_ID)
     || typeof manifest.sourceTokenAddress !== "string"
     || manifest.sourceTokenAddress.toLowerCase() !== MAIN_TOKEN_ADDRESS.toLowerCase()
     || manifest.sourceTokenRuntimeCodeKeccak256 !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256
+    || manifest.sourceTokenDecimals !== String(MAIN_TOKEN_DECIMALS)
+    || manifest.sourceTokenTotalSupplyRaw !== MAIN_TOKEN_TOTAL_SUPPLY_RAW.toString()
+    || manifest.targetChainId !== String(MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID)
+    || manifest.targetTokenTotalSupplyRaw !==
+      MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW.toString()
+    || typeof manifest.targetTokenAddress !== "string"
+    || !isAddress(manifest.targetTokenAddress, { strict: true })
+    || manifest.targetTokenAddress.toLowerCase() === ZERO_ADDRESS
+    || typeof manifest.targetTokenRuntimeCodeKeccak256 !== "string"
+    || !HASH.test(manifest.targetTokenRuntimeCodeKeccak256)
+    || manifest.targetTokenRuntimeCodeKeccak256 === ZERO_HASH
+    || typeof manifest.migrationDistributorAddress !== "string"
+    || !isAddress(manifest.migrationDistributorAddress, { strict: true })
+    || manifest.migrationDistributorAddress.toLowerCase() === ZERO_ADDRESS
+    || manifest.migrationDistributorAddress.toLowerCase() ===
+      manifest.targetTokenAddress.toLowerCase()
+    || typeof manifest.migrationDistributorRuntimeCodeKeccak256 !== "string"
+    || !HASH.test(manifest.migrationDistributorRuntimeCodeKeccak256)
+    || manifest.migrationDistributorRuntimeCodeKeccak256 === ZERO_HASH
+    || typeof manifest.distributionPlanSha256 !== "string"
+    || !SHA256.test(manifest.distributionPlanSha256)
+    || manifest.distributionPlanSha256 === ZERO_SHA256
     || manifest.migrationWallet !== MAIN_TOKEN_MIGRATION_WALLET
     || manifest.windowDurationSeconds !== String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS)
+    || manifest.snapshotBoundaryRule !== MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE
+    || manifest.minimumPublicLeadSeconds !==
+      String(MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS)
     || typeof manifest.windowStartTimestamp !== "string"
     || !/^[1-9][0-9]*$/u.test(manifest.windowStartTimestamp)
     || typeof manifest.deadlineTimestampExclusive !== "string"
     || !/^[1-9][0-9]*$/u.test(manifest.deadlineTimestampExclusive)
-    || typeof manifest.startBlockNumber !== "string"
-    || !/^[1-9][0-9]*$/u.test(manifest.startBlockNumber)
-    || typeof manifest.startBlockHash !== "string"
-    || !HASH.test(manifest.startBlockHash)
+    || typeof manifest.sponsorEligibilityBlockNumber !== "string"
+    || !/^[1-9][0-9]*$/u.test(manifest.sponsorEligibilityBlockNumber)
+    || typeof manifest.sponsorEligibilityBlockHash !== "string"
+    || !HASH.test(manifest.sponsorEligibilityBlockHash)
+    || manifest.sponsorEligibilityBlockHash === ZERO_HASH
   ) return null;
   const start = Number(manifest.windowStartTimestamp);
   const deadline = Number(manifest.deadlineTimestampExclusive);
@@ -301,18 +338,30 @@ export function readMainTokenMigrationGasSponsorConfigurationV1(input: Readonly<
     throw new MainTokenMigrationGasSponsorErrorV1(503, "configuration_invalid");
   }
   const sponsorAddress = getAddress(sponsorAddressValue);
+  const targetTokenAddress = getAddress(manifest.targetTokenAddress as string);
+  const migrationDistributorAddress = getAddress(
+    manifest.migrationDistributorAddress as string,
+  );
   const maximumTopUpWei = BigInt(maximumTopUp);
   const totalBudgetWei = BigInt(totalBudget);
   if (maximumTopUpWei > ABSOLUTE_TOP_UP_CAP_WEI
     || totalBudgetWei < maximumTopUpWei
     || totalBudgetWei > ABSOLUTE_TOTAL_BUDGET_CAP_WEI
-    || [MAIN_TOKEN_ADDRESS, MAIN_TOKEN_MIGRATION_WALLET].some(
+    || [MAIN_TOKEN_ADDRESS, MAIN_TOKEN_MIGRATION_WALLET,
+      targetTokenAddress, migrationDistributorAddress].some(
       (address) => address.toLowerCase() === sponsorAddress.toLowerCase(),
+    )
+    || [MAIN_TOKEN_ADDRESS, MAIN_TOKEN_MIGRATION_WALLET].some(
+      (address) => address.toLowerCase() === targetTokenAddress.toLowerCase()
+        || address.toLowerCase() === migrationDistributorAddress.toLowerCase(),
     )) throw new MainTokenMigrationGasSponsorErrorV1(503, "configuration_invalid");
   return Object.freeze({
     releaseId: MAIN_TOKEN_MIGRATION_RELEASE_ID,
-    startBlockNumber: BigInt(manifest.startBlockNumber),
-    startBlockHash: manifest.startBlockHash as Hex,
+    windowStartTimestamp: start,
+    sponsorEligibilityBlockNumber:
+      BigInt(manifest.sponsorEligibilityBlockNumber),
+    sponsorEligibilityBlockHash:
+      manifest.sponsorEligibilityBlockHash as Hex,
     deadlineTimestampExclusive: deadline,
     sponsorWalletId: walletId,
     sponsorPolicyId: policyId,
@@ -703,6 +752,7 @@ function assertSponsorshipWindowOpen(
 ) {
   const nowSeconds = Math.floor(now.getTime() / 1_000);
   if (!Number.isFinite(nowSeconds)
+    || nowSeconds < configuration.windowStartTimestamp
     || nowSeconds >= configuration.deadlineTimestampExclusive
       - DEADLINE_SAFETY_SECONDS) {
     throw new MainTokenMigrationGasSponsorErrorV1(503, "sponsorship_closed");
@@ -792,26 +842,33 @@ export function createMainTokenMigrationGasSponsorChainV1(
         const heads = await Promise.all(clients.map((client) => client.getBlockNumber()));
         const blockNumber = heads[0] < heads[1] ? heads[0] : heads[1];
         const observations = await Promise.all(clients.map(async (client) => {
-          const [chainId, block, startBlock, tokenCode, holderCode, startHolderCode,
+          const [chainId, block, eligibilityBlock, tokenCode, holderCode,
+            eligibilityHolderCode,
             sponsorCode, currentBalance, openingBalance, nativeBalance, sponsorBalance,
             fees] = await Promise.all([
             client.getChainId(),
             client.getBlock({ blockNumber }),
-            client.getBlock({ blockNumber: configuration.startBlockNumber }),
+            client.getBlock({
+              blockNumber: configuration.sponsorEligibilityBlockNumber,
+            }),
             client.getCode({ address: MAIN_TOKEN_ADDRESS, blockNumber }),
             client.getCode({ address: request.walletAddress, blockNumber }),
-            client.getCode({ address: request.walletAddress, blockNumber: configuration.startBlockNumber }),
+            client.getCode({
+              address: request.walletAddress,
+              blockNumber: configuration.sponsorEligibilityBlockNumber,
+            }),
             client.getCode({ address: configuration.sponsorAddress, blockNumber }),
             client.readContract({ address: MAIN_TOKEN_ADDRESS, abi: ERC20_ABI,
               functionName: "balanceOf", args: [request.walletAddress], blockNumber }),
             client.readContract({ address: MAIN_TOKEN_ADDRESS, abi: ERC20_ABI,
               functionName: "balanceOf", args: [request.walletAddress],
-              blockNumber: configuration.startBlockNumber }),
+              blockNumber: configuration.sponsorEligibilityBlockNumber }),
             client.getBalance({ address: request.walletAddress, blockNumber }),
             client.getBalance({ address: configuration.sponsorAddress, blockNumber }),
             client.estimateFeesPerGas(),
           ]);
-          return { chainId, block, startBlock, tokenCode, holderCode, startHolderCode,
+          return { chainId, block, eligibilityBlock, tokenCode, holderCode,
+            eligibilityHolderCode,
             sponsorCode,
             currentBalance, openingBalance, nativeBalance, sponsorBalance,
             fee: fees.maxFeePerGas,
@@ -820,8 +877,10 @@ export function createMainTokenMigrationGasSponsorChainV1(
         const [left, right] = observations;
         if (!left || !right || left.chainId !== 1 || right.chainId !== 1
           || left.block.hash !== right.block.hash
-          || left.startBlock.hash !== configuration.startBlockHash
-          || right.startBlock.hash !== configuration.startBlockHash
+          || left.eligibilityBlock.hash !==
+            configuration.sponsorEligibilityBlockHash
+          || right.eligibilityBlock.hash !==
+            configuration.sponsorEligibilityBlockHash
           || !left.tokenCode || !right.tokenCode
           || keccak256(left.tokenCode) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256
           || keccak256(right.tokenCode) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256
@@ -833,7 +892,8 @@ export function createMainTokenMigrationGasSponsorChainV1(
           );
         }
         if (left.holderCode !== "0x" || right.holderCode !== "0x"
-          || left.startHolderCode !== "0x" || right.startHolderCode !== "0x"
+          || left.eligibilityHolderCode !== "0x"
+          || right.eligibilityHolderCode !== "0x"
           || left.sponsorCode !== "0x" || right.sponsorCode !== "0x"
           || left.currentBalance < request.amountRaw || right.currentBalance < request.amountRaw
           || left.openingBalance < request.amountRaw || right.openingBalance < request.amountRaw) {

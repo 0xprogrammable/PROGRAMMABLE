@@ -14,8 +14,9 @@ import { formatUnits, getAddress, isAddress, type Hex } from "viem";
 
 import styles from "@/components/main-token-migration.module.css";
 import { useWallet } from "@/components/wallet-provider";
-import migrationActivationManifest from "@/config/main-token-migration-activation.v1.json";
+import migrationActivationManifest from "@/config/main-token-migration-activation.v2.json";
 import {
+  MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA,
   assertMainTokenMigrationBalance,
   assertMainTokenMigrationTransaction,
   buildMainTokenMigrationTransaction,
@@ -23,6 +24,10 @@ import {
   MAIN_TOKEN_DECIMALS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
   MAIN_TOKEN_MIGRATION_RELEASE_ID,
+  MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS,
+  MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
+  MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW,
   MAIN_TOKEN_MIGRATION_WALLET,
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
   MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
@@ -35,6 +40,10 @@ const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
 const decimalIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
 const positiveIntegerPattern = /^[1-9][0-9]*$/u;
 const bytes32Pattern = /^0x[0-9a-fA-F]{64}$/u;
+const sha256Pattern = /^sha256:[0-9a-f]{64}$/u;
+const zeroAddress = "0x0000000000000000000000000000000000000000";
+const zeroBytes32 = `0x${"0".repeat(64)}`;
+const zeroSha256 = `sha256:${"0".repeat(64)}`;
 
 type MigrationPhase =
   | "checking"
@@ -47,8 +56,6 @@ type MigrationWindow = Readonly<{
   enabled: boolean;
   startAt: number | null;
   deadlineAt: number | null;
-  startBlock: bigint | null;
-  startBlockHash: Hex | null;
 }>;
 
 type SubmissionState =
@@ -467,12 +474,21 @@ function parseMigrationWindow(): MigrationWindow {
     sourceTokenRuntimeCodeKeccak256: string;
     sourceTokenDecimals: string;
     sourceTokenTotalSupplyRaw: string;
+    targetChainId: string;
+    targetTokenTotalSupplyRaw: string;
+    targetTokenAddress: string | null;
+    targetTokenRuntimeCodeKeccak256: string | null;
+    migrationDistributorAddress: string | null;
+    migrationDistributorRuntimeCodeKeccak256: string | null;
+    distributionPlanSha256: string | null;
     migrationWallet: string;
     windowDurationSeconds: string;
     windowStartTimestamp: string | null;
     deadlineTimestampExclusive: string | null;
-    startBlockNumber: string | null;
-    startBlockHash: string | null;
+    snapshotBoundaryRule: string;
+    minimumPublicLeadSeconds: string;
+    sponsorEligibilityBlockNumber: string | null;
+    sponsorEligibilityBlockHash: string | null;
   }>;
   const startSeconds =
     manifest.windowStartTimestamp !== null &&
@@ -492,17 +508,8 @@ function parseMigrationWindow(): MigrationWindow {
   const safeDeadlineSeconds =
     Number.isSafeInteger(deadlineSeconds) &&
     deadlineSeconds <= Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
-  const startBlock =
-    manifest.startBlockNumber !== null &&
-    positiveIntegerPattern.test(manifest.startBlockNumber)
-      ? BigInt(manifest.startBlockNumber)
-    : null;
-  const startBlockHash =
-    manifest.startBlockHash !== null && bytes32Pattern.test(manifest.startBlockHash)
-      ? manifest.startBlockHash.toLowerCase() as Hex
-      : null;
   const exactPolicy =
-    manifest.schema === "programmable-main-token-migration-activation/v1" &&
+    manifest.schema === MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA &&
     manifest.releaseId === MAIN_TOKEN_MIGRATION_RELEASE_ID &&
     manifest.sourceChainId === String(MAIN_TOKEN_MIGRATION_CHAIN_ID) &&
     manifest.sourceTokenAddress.toLowerCase() === MAIN_TOKEN_ADDRESS.toLowerCase() &&
@@ -510,26 +517,62 @@ function parseMigrationWindow(): MigrationWindow {
       MAIN_TOKEN_RUNTIME_CODE_KECCAK256 &&
     manifest.sourceTokenDecimals === String(MAIN_TOKEN_DECIMALS) &&
     manifest.sourceTokenTotalSupplyRaw === MAIN_TOKEN_TOTAL_SUPPLY_RAW.toString() &&
+    manifest.targetChainId === String(MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID) &&
+    manifest.targetTokenTotalSupplyRaw ===
+      MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW.toString() &&
     manifest.migrationWallet.toLowerCase() ===
       MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
     manifest.windowDurationSeconds ===
-      String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS);
+      String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS) &&
+    manifest.snapshotBoundaryRule ===
+      MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE &&
+    manifest.minimumPublicLeadSeconds ===
+      String(MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS);
   const exactWindow =
     safeStartSeconds &&
     safeDeadlineSeconds &&
     deadlineAt - startAt === MAIN_TOKEN_MIGRATION_WINDOW_SECONDS * 1_000;
+  const exactSponsorEligibilityBlock =
+    manifest.sponsorEligibilityBlockNumber !== null &&
+    positiveIntegerPattern.test(manifest.sponsorEligibilityBlockNumber) &&
+    manifest.sponsorEligibilityBlockHash !== null &&
+    bytes32Pattern.test(manifest.sponsorEligibilityBlockHash) &&
+    manifest.sponsorEligibilityBlockHash.toLowerCase() !== zeroBytes32;
+  const targetTokenAddress = manifest.targetTokenAddress?.toLowerCase() ?? null;
+  const migrationDistributorAddress =
+    manifest.migrationDistributorAddress?.toLowerCase() ?? null;
+  const exactTargetDelivery =
+    manifest.targetTokenAddress !== null &&
+    isAddress(manifest.targetTokenAddress, { strict: true }) &&
+    targetTokenAddress !== zeroAddress &&
+    targetTokenAddress !== MAIN_TOKEN_ADDRESS.toLowerCase() &&
+    targetTokenAddress !== MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
+    manifest.targetTokenRuntimeCodeKeccak256 !== null &&
+    bytes32Pattern.test(manifest.targetTokenRuntimeCodeKeccak256) &&
+    manifest.targetTokenRuntimeCodeKeccak256.toLowerCase() !== zeroBytes32 &&
+    manifest.migrationDistributorAddress !== null &&
+    isAddress(manifest.migrationDistributorAddress, { strict: true }) &&
+    migrationDistributorAddress !== zeroAddress &&
+    migrationDistributorAddress !== targetTokenAddress &&
+    migrationDistributorAddress !== MAIN_TOKEN_ADDRESS.toLowerCase() &&
+    migrationDistributorAddress !== MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
+    manifest.migrationDistributorRuntimeCodeKeccak256 !== null &&
+    bytes32Pattern.test(manifest.migrationDistributorRuntimeCodeKeccak256) &&
+    manifest.migrationDistributorRuntimeCodeKeccak256.toLowerCase() !==
+      zeroBytes32 &&
+    manifest.distributionPlanSha256 !== null &&
+    sha256Pattern.test(manifest.distributionPlanSha256) &&
+    manifest.distributionPlanSha256 !== zeroSha256;
 
   return Object.freeze({
     enabled:
       manifest.enabled === true &&
       exactPolicy &&
       exactWindow &&
-      startBlock !== null &&
-      startBlockHash !== null,
+      exactSponsorEligibilityBlock &&
+      exactTargetDelivery,
     startAt: safeStartSeconds ? startAt : null,
     deadlineAt: safeDeadlineSeconds ? deadlineAt : null,
-    startBlock,
-    startBlockHash,
   });
 }
 
@@ -1855,10 +1898,16 @@ export function MainTokenMigration() {
               </div>
             ) : (
               <div className={styles.destinationUnavailable}>
-                <strong>Transfer destination is not available yet</strong>
+                <strong>
+                  {phase === "upcoming"
+                    ? "Migration window has not opened"
+                    : phase === "closed"
+                      ? "Migration window is closed"
+                      : "Migration window is not active"}
+                </strong>
                 <span>
-                  The full migration wallet appears here only while the
-                  published window is active. Do not use an address from a DM.
+                  Transfers are available only during the published 96-hour
+                  window.
                 </span>
               </div>
             )}
@@ -1880,8 +1929,9 @@ export function MainTokenMigration() {
               {primaryLabel}
             </button>
             <p className={styles.walletBoundary}>
-              This is an irreversible ERC-20 transfer on Ethereum, not a
-              bridge. Nothing is sent until you confirm the transfer in your wallet.
+              This transfer is irreversible. V4 sent to the migration wallet
+              is not returned and may be used for the Robinhood launch.
+              Nothing is sent until you confirm the transfer in your wallet.
               The optional gas sponsor only sends ETH to this wallet and never
               initiates the V4 transfer. Verify the network, V4 token contract,
               full recipient and amount.

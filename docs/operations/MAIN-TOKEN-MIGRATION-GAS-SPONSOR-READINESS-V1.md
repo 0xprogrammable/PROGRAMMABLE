@@ -7,8 +7,14 @@ and private release evidence.
 ## Candidate identity
 
 - [ ] The candidate is an immutable build from the exact reviewed `production` commit.
-- [ ] `config/main-token-migration-activation.v1.json` binds the reviewed release and has a 345,600-second window,
-      exact opening block number and exact opening block hash.
+- [ ] `config/main-token-migration-activation.v2.json` binds the reviewed release, a future 345,600-second window,
+      the timestamp-derived snapshot-boundary rule, 900-second public lead, and exact finalized sponsor-eligibility
+      block number/hash.
+- [ ] Independent Chain 4663 readback proves the target token and migration distributor are deployed at the exact
+      manifest addresses, their runtime-code hashes match, and the target token has the exact 1,000,000,000-token raw
+      supply.
+- [ ] The manifest binds the reviewed immutable distribution-plan SHA-256. Unknown target-delivery values remain null
+      only while `enabled: false`; they are never guessed or substituted to activate the page.
 - [ ] The sponsor contract matches
       `config/main-token-migration-gas-sponsor-contract.v1.json` byte-for-byte in the candidate.
 
@@ -36,10 +42,10 @@ and private release evidence.
 ## Focused behavior
 
 - [ ] Disabled manifest or disabled environment switch returns a fail-closed unavailable response and spends nothing.
-- [ ] An authenticated linked EOA that held the requested V4 amount at the opening block can receive only its bounded
-      current gas deficit.
-- [ ] Unlinked wallets, smart-contract wallets, insufficient opening/current token balances, wrong opening block,
-      RPC disagreement, quotes above 20 gwei, exhausted budget and the final five minutes all fail closed.
+- [ ] An authenticated linked EOA that held the requested V4 amount at the sponsor-eligibility block can receive only
+      its bounded current gas deficit.
+- [ ] Unlinked wallets, smart-contract wallets, insufficient eligibility/current token balances, wrong eligibility
+      block, RPC disagreement, quotes above 20 gwei, exhausted budget and the final five minutes all fail closed.
 - [ ] Concurrent duplicate requests reserve and broadcast no more than one transfer.
 - [ ] An ambiguous Privy response is recorded as unknown and is not rebroadcast.
 - [ ] Dual-RPC readback confirms the exact transaction fields and successful receipt before status becomes confirmed.
@@ -50,6 +56,8 @@ and private release evidence.
 - [ ] Privy wallet/policy readback is captured privately without credentials.
 - [ ] Candidate route readback, sponsor balance, durable-store readiness and independent RPC identity are captured at
       the activation time.
+- [ ] The promotion-window verifier preserves at least 900 seconds of lead, and the exact production page is read
+      back before the scheduled UTC start.
 - [ ] Public page visibility is enabled only after the sponsor gate and the separate migration snapshot/readback gates
       pass.
 - [ ] Post-window disablement and Privy policy revocation have named owners.

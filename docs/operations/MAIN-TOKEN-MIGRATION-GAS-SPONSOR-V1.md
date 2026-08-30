@@ -14,7 +14,7 @@ never submits the holder's token transfer, and never uses the migration recipien
 The machine-readable companion is
 [`config/main-token-migration-gas-sponsor-contract.v1.json`](../../config/main-token-migration-gas-sponsor-contract.v1.json).
 The release activation source is
-[`config/main-token-migration-activation.v1.json`](../../config/main-token-migration-activation.v1.json).
+[`config/main-token-migration-activation.v2.json`](../../config/main-token-migration-activation.v2.json).
 
 ## Activation contract
 
@@ -47,9 +47,13 @@ Activation additionally requires the normal runtime dependencies:
 | `PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT` | Commitment to the secondary endpoint |
 
 The root migration manifest must independently bind the exact release, token, runtime-code hash, migration wallet,
-96-hour timestamps, opening block number and opening block hash. Sponsor configuration is accepted only while that
-manifest has `enabled: true`, the current time is inside the window, and at least five minutes remain. In this branch
-the manifest deliberately remains `enabled: false` with null timing and block fields.
+future 96-hour timestamps, timestamp-derived snapshot-boundary rule, minimum public lead, and a finalized
+pre-activation sponsor-eligibility block number and hash. It must also bind Robinhood Chain ID 4663, the exact
+1,000,000,000-token raw supply, deployed target-token and migration-distributor addresses, both runtime-code hashes,
+and the reviewed distribution-plan SHA-256. Sponsor configuration is accepted only while that manifest has
+`enabled: true`, the current time is inside the window, and at least five minutes remain. In this branch the manifest
+deliberately remains `enabled: false` with null timing, sponsor-eligibility, target-contract, and distribution-plan
+fields.
 
 ## Privy wallet and policy
 
@@ -92,9 +96,11 @@ recommendation.
 ## Eligibility and replay boundary
 
 The endpoint authenticates the Privy access token and requires the requested address to be linked to that Privy
-principal. Both independent Ethereum providers must agree on chain ID, canonical head, the opening block hash and
-the pinned V4 runtime code. The holder and sponsor must be EOAs. The holder must own at least the requested V4 amount
-both at the opening block and at the current canonical read.
+principal. Both independent Ethereum providers must agree on chain ID, canonical head, the finalized
+sponsor-eligibility block hash and the pinned V4 runtime code. The holder and sponsor must be EOAs. The holder must
+own at least the requested V4 amount both at the conservative pre-activation eligibility block and at the current
+canonical read. This block controls only gas sponsorship; the migration snapshot independently derives its start and
+deadline boundaries from the published timestamps.
 
 The POST is same-origin, request-size bounded and idempotency-bound. The durable store reserves at most one sponsor
 intent per release and holder under a database advisory lock. An ambiguous provider response is never automatically
@@ -113,11 +119,17 @@ empty calldata and successful receipt on the same block.
    funded balance after the retained safety margin.
 5. Configure the Privy secret, projection database bindings and exact independent RPC commitments on the immutable
    deployment candidate.
-6. At the migration opening block, record the exact block number/hash and calculate timestamps whose exclusive
-   deadline is exactly 345,600 seconds after the start.
-7. Only the integration owner may change the reviewed activation manifest to `enabled: true`, inject all six sponsor
+6. Independently read back Chain ID 4663, the deployed target token, its exact raw supply and the migration
+   distributor. Record both runtime-code hashes and the reviewed immutable distribution-plan SHA-256. Do not enable
+   the manifest while any target-delivery field is unknown.
+7. Record a finalized sponsor-eligibility block number/hash and choose a future UTC start whose exclusive deadline is
+   exactly 345,600 seconds later. This block never replaces the timestamp-derived snapshot boundary.
+8. Only the integration owner may change the reviewed activation manifest to `enabled: true`, inject all six sponsor
    values with `MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED=true`, and deploy the exact reviewed `production` commit.
-8. Run the separate readiness checklist before exposing the migration entry point.
+9. Run `node scripts/verify-main-token-migration-promotion-window.mjs` immediately before promotion. It must preserve
+   at least the manifest's 900-second public lead, and the production page must be read back before the scheduled
+   start. If the lead is missed, choose a new future window and build a new candidate instead of promoting late.
+10. Run the separate readiness checklist before exposing the migration entry point.
 
 ## Disable and incident response
 

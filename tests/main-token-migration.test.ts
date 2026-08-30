@@ -5,15 +5,21 @@ import { decodeFunctionData, parseAbi } from "viem";
 import { describe, expect, it } from "vitest";
 
 import {
+  MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA,
   assertMainTokenMigrationBalance,
   assertMainTokenMigrationTransaction,
   buildMainTokenMigrationTransaction,
   MAIN_TOKEN_ADDRESS,
   MAIN_TOKEN_DECIMALS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS,
   MAIN_TOKEN_MIGRATION_RELEASE_ID,
+  MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
+  MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID,
+  MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW,
   MAIN_TOKEN_MIGRATION_WALLET,
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
+  MAIN_TOKEN_TOTAL_SUPPLY_RAW,
   parseMainTokenMigrationAmount,
 } from "../lib/main-token-migration";
 import {
@@ -67,6 +73,11 @@ describe("main token migration transfer", () => {
     expect(MAIN_TOKEN_MIGRATION_WALLET).toBe(migrationWallet);
     expect(MAIN_TOKEN_DECIMALS).toBe(18);
     expect(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS).toBe(migrationWindowSeconds);
+    expect(MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS).toBe(15 * 60);
+    expect(MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID).toBe(4_663);
+    expect(MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW).toBe(
+      MAIN_TOKEN_TOTAL_SUPPLY_RAW,
+    );
 
     expect(readScannerBigIntProduct(scanner, "chainId")).toBe(
       BigInt(MAIN_TOKEN_MIGRATION_CHAIN_ID),
@@ -82,6 +93,21 @@ describe("main token migration transfer", () => {
     );
     expect(readScannerBigIntProduct(scanner, "windowSeconds")).toBe(
       BigInt(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
+    );
+    expect(readScannerBigIntProduct(scanner, "minimumPublicLeadSeconds")).toBe(
+      BigInt(MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS),
+    );
+    expect(readScannerBigIntProduct(scanner, "targetChainId")).toBe(
+      BigInt(MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID),
+    );
+    expect(readScannerBigIntProduct(scanner, "targetTokenTotalSupplyRaw")).toBe(
+      MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW,
+    );
+    expect(readScannerString(scanner, "activationSchema")).toBe(
+      MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA,
+    );
+    expect(readScannerString(scanner, "snapshotBoundaryRule")).toBe(
+      MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
     );
     expect(readScannerString(scanner, "releaseId")).toBe(
       MAIN_TOKEN_MIGRATION_RELEASE_ID,
@@ -273,20 +299,24 @@ describe("main token migration page contract", () => {
     );
   });
 
-  it("activates only with the exact 96-hour window, start block and release", () => {
+  it("activates only with the exact V2 window, boundary rule, sponsor anchor and release", () => {
     const startAt = Date.parse("2026-08-30T12:00:00.000Z");
     const activation = (
       requested: boolean,
       deadlineAt: number,
-      startBlock: bigint | null,
-      startBlockHash: string | null,
+      sponsorEligibilityBlock: bigint | null,
+      sponsorEligibilityBlockHash: string | null,
       releaseId: string,
+      boundaryRule = MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
+      targetDeliveryReady = true,
     ) =>
       requested &&
       deadlineAt - startAt === migrationWindowSeconds * 1_000 &&
-      startBlock !== null &&
-      /^0x[0-9a-f]{64}$/u.test(startBlockHash ?? "") &&
-      releaseId === MAIN_TOKEN_MIGRATION_RELEASE_ID;
+      sponsorEligibilityBlock !== null &&
+      /^0x[0-9a-f]{64}$/u.test(sponsorEligibilityBlockHash ?? "") &&
+      releaseId === MAIN_TOKEN_MIGRATION_RELEASE_ID &&
+      boundaryRule === MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE &&
+      targetDeliveryReady;
     const blockHash = `0x${"1".repeat(64)}`;
 
     expect(
@@ -305,6 +335,17 @@ describe("main token migration page contract", () => {
         1n,
         blockHash,
         MAIN_TOKEN_MIGRATION_RELEASE_ID,
+      ),
+    ).toBe(false);
+    expect(
+      activation(
+        true,
+        startAt + migrationWindowSeconds * 1_000,
+        1n,
+        blockHash,
+        MAIN_TOKEN_MIGRATION_RELEASE_ID,
+        MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
+        false,
       ),
     ).toBe(false);
     expect(
@@ -350,33 +391,45 @@ describe("main token migration page contract", () => {
         1n,
         null,
         MAIN_TOKEN_MIGRATION_RELEASE_ID,
+        "wrong-boundary-rule",
       ),
     ).toBe(false);
     expect(page).toContain("manifest.enabled === true &&");
     expect(page).toContain("exactPolicy &&");
     expect(page).toContain("exactWindow &&");
-    expect(page).toContain("startBlock !== null &&");
-    expect(page).toContain("startBlockHash !== null");
+    expect(page).toContain("exactSponsorEligibilityBlock");
+    expect(page).toContain("exactTargetDelivery");
+    expect(page).toContain("MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE");
   });
 
-  it("stays local-safe until an exact window and start block are configured", () => {
+  it("stays local-safe until an exact V2 window and sponsor anchor are configured", () => {
     const route = read("app/migration/page.tsx");
     const landing = read("components/landing-page.tsx");
     const activationManifest = JSON.parse(
-      read("config/main-token-migration-activation.v1.json"),
+      read("config/main-token-migration-activation.v2.json"),
     ) as {
       enabled: boolean;
       releaseId: string;
       windowDurationSeconds: string;
       windowStartTimestamp: string | null;
       deadlineTimestampExclusive: string | null;
-      startBlockNumber: string | null;
-      startBlockHash: string | null;
+      snapshotBoundaryRule: string;
+      minimumPublicLeadSeconds: string;
+      targetChainId: string;
+      targetTokenTotalSupplyRaw: string;
+      targetTokenAddress: string | null;
+      targetTokenRuntimeCodeKeccak256: string | null;
+      migrationDistributorAddress: string | null;
+      migrationDistributorRuntimeCodeKeccak256: string | null;
+      distributionPlanSha256: string | null;
+      sponsorEligibilityBlockNumber: string | null;
+      sponsorEligibilityBlockHash: string | null;
     };
 
-    expect(page).toContain("main-token-migration-activation.v1.json");
+    expect(page).toContain("main-token-migration-activation.v2.json");
     expect(page).toContain("deadlineAt - startAt ===");
-    expect(page).toContain("startBlock !== null");
+    expect(page).toContain("exactSponsorEligibilityBlock");
+    expect(page).toContain("exactTargetDelivery");
     expect(page).toContain("Local preview · transfers disabled");
     expect(page).toContain("96-hour");
     expect(page).toContain("<strong>96 hours</strong>");
@@ -385,6 +438,13 @@ describe("main token migration page contract", () => {
     );
     expect(page).toContain("1:1 V4 amount");
     expect(page).toContain("Do not send from an exchange, custodian or router");
+    expect(page).toContain(
+      "V4 sent to the migration wallet\n              is not returned and may be used for the Robinhood launch.",
+    );
+    expect(page).not.toContain("Transfer destination is not available yet");
+    expect(page).not.toContain(
+      "The full migration wallet appears here only while the",
+    );
     expect(route).toContain("index: false");
     expect(route).toContain("follow: false");
     expect(route).toContain(
@@ -407,8 +467,19 @@ describe("main token migration page contract", () => {
       windowDurationSeconds: String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
       windowStartTimestamp: null,
       deadlineTimestampExclusive: null,
-      startBlockNumber: null,
-      startBlockHash: null,
+      snapshotBoundaryRule: MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
+      minimumPublicLeadSeconds:
+        String(MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS),
+      targetChainId: String(MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID),
+      targetTokenTotalSupplyRaw:
+        MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW.toString(),
+      targetTokenAddress: null,
+      targetTokenRuntimeCodeKeccak256: null,
+      migrationDistributorAddress: null,
+      migrationDistributorRuntimeCodeKeccak256: null,
+      distributionPlanSha256: null,
+      sponsorEligibilityBlockNumber: null,
+      sponsorEligibilityBlockHash: null,
     });
   });
 });

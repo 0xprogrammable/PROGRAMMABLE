@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const MAIN_TOKEN_MIGRATION_POLICY = Object.freeze({
+  activationSchema: "programmable-main-token-migration-activation/v2",
   schema: "programmable-main-token-migration-snapshot/v2",
   releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
   chainId: 1n,
@@ -13,7 +14,11 @@ export const MAIN_TOKEN_MIGRATION_POLICY = Object.freeze({
   tokenSymbol: "V4",
   tokenDecimals: 18n,
   tokenTotalSupplyRaw: 1_000_000_000_000_000_000_000_000_000n,
+  targetChainId: 4663n,
+  targetTokenTotalSupplyRaw: 1_000_000_000_000_000_000_000_000_000n,
   windowSeconds: 96n * 60n * 60n,
+  minimumPublicLeadSeconds: 15n * 60n,
+  snapshotBoundaryRule: "first-canonical-block-at-or-after-timestamp",
   transferTopic:
     "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
   cutoffRule: "block.timestamp >= windowStart && block.timestamp < deadline",
@@ -22,9 +27,21 @@ export const MAIN_TOKEN_MIGRATION_POLICY = Object.freeze({
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/u;
 const BYTES32 = /^0x[0-9a-fA-F]{64}$/u;
+const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const BYTECODE = /^0x(?:[0-9a-fA-F]{2})*$/u;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
+const ZERO_SHA256 = `sha256:${"0".repeat(64)}`;
+const TARGET_DELIVERY_KEYS = Object.freeze([
+  "chainId",
+  "distributionPlanSha256",
+  "distributorAddress",
+  "distributorRuntimeCodeKeccak256",
+  "tokenAddress",
+  "tokenRuntimeCodeKeccak256",
+  "tokenTotalSupplyRaw",
+].sort());
 const UINT64_MASK = (1n << 64n) - 1n;
 const KECCAK_RATE_BYTES = 136;
 const KECCAK_ROTATIONS = Object.freeze([
@@ -749,6 +766,7 @@ export function buildMainTokenMigrationSnapshot(input) {
       conversion: MAIN_TOKEN_MIGRATION_POLICY.conversionRule,
       custodyTypeObserved: "plain account with no runtime code",
       cutoff: MAIN_TOKEN_MIGRATION_POLICY.cutoffRule,
+      snapshotBoundaryRule: MAIN_TOKEN_MIGRATION_POLICY.snapshotBoundaryRule,
       deadlineTimestampExclusive: deadlineTimestamp.toString(),
       migrationWallet,
       releaseId: MAIN_TOKEN_MIGRATION_POLICY.releaseId,
@@ -794,10 +812,59 @@ export function buildMainTokenMigrationSnapshot(input) {
 export function buildMainTokenMigrationSnapshotArtifact(
   snapshot,
   independentRpcAgreement,
+  targetDelivery,
 ) {
   if (independentRpcAgreement !== true) {
     fail("two independent RPC snapshots were not confirmed byte-identical");
   }
+  const targetDeliveryKeys = exactPlainObject(targetDelivery)
+    ? Object.keys(targetDelivery).sort()
+    : [];
+  if (!exactPlainObject(targetDelivery) ||
+    targetDeliveryKeys.length !== TARGET_DELIVERY_KEYS.length ||
+    !targetDeliveryKeys.every(
+      (key, index) => key === TARGET_DELIVERY_KEYS[index],
+    ) ||
+    typeof targetDelivery.chainId !== "bigint" ||
+    targetDelivery.chainId !==
+      MAIN_TOKEN_MIGRATION_POLICY.targetChainId ||
+    typeof targetDelivery.tokenTotalSupplyRaw !== "bigint" ||
+    targetDelivery.tokenTotalSupplyRaw !==
+      MAIN_TOKEN_MIGRATION_POLICY.targetTokenTotalSupplyRaw ||
+    typeof targetDelivery.tokenAddress !== "string" ||
+    !ADDRESS.test(targetDelivery.tokenAddress) ||
+    targetDelivery.tokenAddress.toLowerCase() === ZERO_ADDRESS ||
+    typeof targetDelivery.tokenRuntimeCodeKeccak256 !== "string" ||
+    !BYTES32.test(targetDelivery.tokenRuntimeCodeKeccak256) ||
+    targetDelivery.tokenRuntimeCodeKeccak256.toLowerCase() === ZERO_BYTES32 ||
+    typeof targetDelivery.distributorAddress !== "string" ||
+    !ADDRESS.test(targetDelivery.distributorAddress) ||
+    targetDelivery.distributorAddress.toLowerCase() === ZERO_ADDRESS ||
+    targetDelivery.distributorAddress.toLowerCase() ===
+      targetDelivery.tokenAddress.toLowerCase() ||
+    typeof targetDelivery.distributorRuntimeCodeKeccak256 !== "string" ||
+    !BYTES32.test(
+      targetDelivery.distributorRuntimeCodeKeccak256,
+    ) ||
+    targetDelivery.distributorRuntimeCodeKeccak256.toLowerCase() ===
+      ZERO_BYTES32 ||
+    typeof targetDelivery.distributionPlanSha256 !== "string" ||
+    !SHA256.test(targetDelivery.distributionPlanSha256) ||
+    targetDelivery.distributionPlanSha256 === ZERO_SHA256) {
+    fail("target delivery commitment is incomplete or malformed");
+  }
+  const normalizedTargetDelivery = {
+    chainId: MAIN_TOKEN_MIGRATION_POLICY.targetChainId.toString(),
+    distributionPlanSha256: targetDelivery.distributionPlanSha256,
+    distributorAddress: targetDelivery.distributorAddress.toLowerCase(),
+    distributorRuntimeCodeKeccak256:
+      targetDelivery.distributorRuntimeCodeKeccak256.toLowerCase(),
+    tokenAddress: targetDelivery.tokenAddress.toLowerCase(),
+    tokenRuntimeCodeKeccak256:
+      targetDelivery.tokenRuntimeCodeKeccak256.toLowerCase(),
+    tokenTotalSupplyRaw:
+      MAIN_TOKEN_MIGRATION_POLICY.targetTokenTotalSupplyRaw.toString(),
+  };
   return {
     canonicalization: "recursively sorted JSON object keys; UTF-8; no whitespace",
     rpcAgreement: {
@@ -806,5 +873,6 @@ export function buildMainTokenMigrationSnapshotArtifact(
     },
     snapshot,
     snapshotSha256: sha256CanonicalJson(snapshot),
+    targetDelivery: normalizedTargetDelivery,
   };
 }
