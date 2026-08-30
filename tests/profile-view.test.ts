@@ -88,6 +88,15 @@ function profileCssDeclarationsFor(selectorFragment: string) {
 }
 
 describe("profile editor composition", () => {
+  it("hydrates editor drafts from the latest wallet-local profile", () => {
+    expect(profileViewSource).toMatch(
+      /readLocalProfile\(window\.localStorage, account\)/u,
+    );
+    expect(profileViewSource).toMatch(
+      /populateProfileDrafts\(latestProfileForEditor\(\)\)/u,
+    );
+  });
+
   it("keeps banner actions on the trailing edge away from the avatar", () => {
     expect(profileExperienceCss).toMatch(
       /\.bannerActions\s*\{[^}]*flex-direction:\s*row-reverse;[^}]*right:\s*14px;/s,
