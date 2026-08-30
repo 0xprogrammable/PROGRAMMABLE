@@ -709,6 +709,8 @@ export function TokenPriceChart({
     chart && activePointIndex !== null
       ? chart.points[Math.min(activePointIndex, chart.points.length - 1)]
       : null;
+  const singleObservation =
+    chart?.points.length === 1 ? chart.points[0] : null;
   const displayedPrice = activePoint?.value ?? chart?.latestValue;
   const historyLabel = chartMetric === "market-cap"
     ? "Market cap history"
@@ -817,7 +819,11 @@ export function TokenPriceChart({
                 : "—"}
           </p>
           <p className={styles.context} aria-hidden="true">
-            {activePoint ? chartPointContext(activePoint) : "\u00A0"}
+            {activePoint
+              ? chartPointContext(activePoint)
+              : singleObservation
+                ? `1 verified observation · ${chartPointContext(singleObservation)}`
+                : "\u00A0"}
           </p>
         </div>
         {historyEnabled && launchModel !== "stock-paired" ? (
@@ -848,6 +854,17 @@ export function TokenPriceChart({
 
       {loading ? (
         <div className={`${styles.plot} ${styles.waitingPlot}`} aria-hidden="true" />
+      ) : singleObservation && chart ? (
+        <div className={styles.placeholder} role="note">
+          <p>
+            <span
+              className={`${styles.inspectionDot} ${styles.singleObservationDot}`}
+              aria-hidden="true"
+            />
+            One verified observation. The chart will appear as more history is
+            recorded.
+          </p>
+        </div>
       ) : chart ? (
         <div
           className={styles.plot}

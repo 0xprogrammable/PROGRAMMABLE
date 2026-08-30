@@ -2004,11 +2004,9 @@ function TokenDetailContent({
                 <button
                   className={styles.address}
                   type="button"
-                  aria-label={
-                    copied
-                      ? `${token.name} contract address copied`
-                      : `Copy ${token.name} contract address`
-                  }
+                  aria-label={copied
+                    ? `Contract address ${token.tokenAddress} copied`
+                    : `Copy ${token.name} contract address ${token.tokenAddress}`}
                   title={copied ? "Copied" : "Copy contract address"}
                   onClick={copyAddress}
                 >
@@ -2116,15 +2114,18 @@ function TokenDetailContent({
             />
           ) : isRouterStamped ? (
             <div className={styles.routerNotice} role="status">
-              <strong>Router launch</strong>
+              <strong>Launch details</strong>
               <p>
-                Onsite trading is not enabled for this launch. Launch details
-                remain available.
+                Trading is not available on this page for this launch. You can
+                still review its launch and market details.
               </p>
             </div>
           ) : !canUseClassicTrade || classicSwapFeeBps === null ? (
             <div className={styles.submitted} role="status">
-              <p>Trading is unavailable because the fee policy is unknown</p>
+              <p>
+                Trading is temporarily unavailable because this launch&apos;s fee
+                settings could not be verified.
+              </p>
             </div>
           ) : preview ? (
             <PreviewTokenTrade token={token} />
@@ -2293,13 +2294,82 @@ function TokenDetailContent({
 }
 
 function customMarketStatus(project: CustomProjectExploreEntry): string {
-  if (project.markets.length === 0) return "No supported market";
+  if (project.markets.length === 0) return "No market listed";
   const statuses = [...new Set(project.markets.map(({ status }) => status))];
-  if (statuses.length > 1) return `${project.markets.length} canonical markets`;
+  if (statuses.length > 1) return `${project.markets.length} markets`;
   const status = statuses[0]!;
   return status === "verification_pending"
-    ? "Verification pending"
-    : status.charAt(0).toUpperCase() + status.slice(1);
+    ? "Verification in progress"
+    : status === "active"
+      ? "Active"
+      : status === "paused"
+        ? "Paused"
+        : "Closed";
+}
+
+type CustomMarket = CustomProjectExploreEntry["markets"][number];
+type CustomMarketAsset = CustomMarket["baseAsset"];
+
+function preferredCustomMarketAssetLabel(
+  asset: CustomMarketAsset,
+): string | null {
+  return asset.symbol?.trim() || asset.name?.trim() || null;
+}
+
+function normalizedCustomMarketAssetLabel(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function customMarketAssetLabel(
+  asset: CustomMarketAsset,
+  markets: readonly CustomMarket[],
+): string {
+  const preferredLabel = preferredCustomMarketAssetLabel(asset);
+  if (!preferredLabel) return asset.assetId.trim();
+  const normalizedLabel = normalizedCustomMarketAssetLabel(preferredLabel);
+  const ambiguous = markets.some((market) =>
+    [market.baseAsset, market.quoteAsset].some((candidate) => {
+      const candidateLabel = preferredCustomMarketAssetLabel(candidate);
+      return candidate.assetId !== asset.assetId
+        && candidateLabel !== null
+        && normalizedCustomMarketAssetLabel(candidateLabel) === normalizedLabel;
+    })
+  );
+  return ambiguous
+    ? `${preferredLabel} (${asset.assetId.trim()})`
+    : preferredLabel;
+}
+
+export function customMarketPairLabel(
+  market: CustomMarket,
+  markets: readonly CustomMarket[] = [market],
+): string {
+  const base = customMarketAssetLabel(market.baseAsset, markets);
+  const quote = customMarketAssetLabel(market.quoteAsset, markets);
+  return `${base} / ${quote}`;
+}
+
+function conciseCustomMarketId(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= 28) return normalized;
+  return `${normalized.slice(0, 12)}…${normalized.slice(-8)}`;
+}
+
+export function customMarketIdentityLabel(market: CustomMarket): string {
+  const marketId = market.marketId.trim();
+  const poolId = market.poolId?.trim();
+  const identity = marketId
+    ? `Market ${conciseCustomMarketId(marketId)}`
+    : poolId
+      ? `Pool ${conciseCustomMarketId(poolId)}`
+      : `${market.baseAsset.assetId.trim()} / ${market.quoteAsset.assetId.trim()}`;
+  return `${market.kind.trim() || "Custom market"} · ${identity}`;
+}
+
+function customMarketIdentityDescription(market: CustomMarket): string {
+  return `${market.kind}; market ID ${market.marketId}${
+    market.poolId ? `; pool ID ${market.poolId}` : ""
+  }`;
 }
 
 function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
@@ -2479,8 +2549,8 @@ function CustomProjectDetailContent({
                   className={styles.address}
                   type="button"
                   aria-label={copied
-                    ? `${project.name} contract address copied`
-                    : `Copy ${project.name} contract address`}
+                    ? `Contract address ${project.tokenAddress} copied`
+                    : `Copy ${project.name} contract address ${project.tokenAddress}`}
                   onClick={() => void copyAddress()}
                 >
                   <code>{project.tokenAddress}</code>
@@ -2512,22 +2582,36 @@ function CustomProjectDetailContent({
         <section className={styles.customMarketPanel} aria-labelledby="custom-market-heading">
           <div className={styles.customPanelHeading}>
             <div>
-              <span>Canonical market record</span>
+              <span>Market details</span>
               <h2 id="custom-market-heading">{customMarketStatus(project)}</h2>
             </div>
             <span className={styles.categoryBadge}>Custom</span>
           </div>
           <dl className={styles.customFacts}>
             <div><dt>Type</dt><dd>Custom</dd></div>
-            <div><dt>Model</dt><dd>{project.modelId}</dd></div>
+            <div><dt>Launch model</dt><dd>{project.modelId}</dd></div>
             <div><dt>Chain</dt><dd>{getNetworkLabel(chainId)}</dd></div>
             <div><dt>Markets</dt><dd>{project.markets.length}</dd></div>
             {project.markets.map((market) => (
-              <div className={styles.customWideFact} key={market.marketId}>
-                <dt>{market.marketId}</dt>
+              <div
+                className={styles.customWideFact}
+                data-market-id={market.marketId}
+                data-market-kind={market.kind}
+                data-pool-id={market.poolId}
+                key={market.marketId}
+              >
+                <dt>{customMarketPairLabel(market, project.markets)}</dt>
                 <dd>
-                  {market.kind} · {market.status}
-                  {market.poolId ? <><br /><code>{market.poolId}</code></> : null}
+                  {market.status === "verification_pending"
+                    ? "Verification in progress"
+                    : market.status.charAt(0).toUpperCase() + market.status.slice(1)}
+                  <br />
+                  <code
+                    aria-label={customMarketIdentityDescription(market)}
+                    title={customMarketIdentityDescription(market)}
+                  >
+                    {customMarketIdentityLabel(market)}
+                  </code>
                 </dd>
               </div>
             ))}
@@ -2550,15 +2634,15 @@ function CustomProjectDetailContent({
             ) : (
               <div className={styles.customTradeState} role="status">
                 <span>Programmable trading</span>
-                <h2>Unavailable for this Custom market</h2>
+                <h2>Trading is not available here</h2>
                 <p>
-                  The canonical launch record does not include a reviewed trade
-                  preparation route. Programmable will not infer a router from a
-                  token address or pool.
+                  This launch does not include a verified Programmable trading
+                  route. Programmable does not create one from a token or pool
+                  address alone.
                 </p>
                 <dl className={styles.customTradeFacts}>
-                  <div><dt>Market state</dt><dd>{customMarketStatus(project)}</dd></div>
-                  <div><dt>Route</dt><dd>Not bound</dd></div>
+                  <div><dt>Market</dt><dd>{customMarketStatus(project)}</dd></div>
+                  <div><dt>Programmable route</dt><dd>Not available</dd></div>
                 </dl>
               </div>
             )}
@@ -2597,14 +2681,14 @@ function CustomProjectDetailContent({
         <section className={styles.customProvenancePanel} aria-labelledby="custom-provenance-heading">
           <div className={styles.customPanelHeading}>
             <div>
-              <span>Launch provenance</span>
-              <h2 id="custom-provenance-heading">Wallet-bound authority</h2>
+              <span>Launch record</span>
+              <h2 id="custom-provenance-heading">Launching wallet</h2>
             </div>
           </div>
           <p>
-            Launched by <code>{project.launchingWallet.value}</code>. GitHub
-            proves the reviewed source revision only; it cannot authorize any
-            post-launch action.
+            Launched by <code>{project.launchingWallet.value}</code>. The launch
+            record binds this project to its submitting wallet and finalized
+            onchain execution. It does not grant post-launch authority.
           </p>
         </section>
       </div>

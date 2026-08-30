@@ -39,7 +39,7 @@ export function GenericLaunchDirectoryV2() {
   }, []);
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>Legacy Custom records</p>
         <h1>Registry launch history</h1>
@@ -85,7 +85,7 @@ export function GenericLaunchDirectoryV2() {
           ))}
         </section>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -111,14 +111,14 @@ export function GenericLaunchDetailV2({ recordHash }: { recordHash: string }) {
     return () => controller.abort();
   }, [recordHash]);
   if (record === undefined) {
-    return <main className={styles.page}><p role="status" className={styles.status}>Loading launch…</p></main>;
+    return <div className={styles.page}><p role="status" className={styles.status}>Loading launch…</p></div>;
   }
   if (record === null) {
-    return <main className={styles.page}><p role="status" className={styles.status}>This launch record is unavailable.</p></main>;
+    return <div className={styles.page}><p role="status" className={styles.status}>This launch record is unavailable.</p></div>;
   }
   const source = record.sourceProjection;
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <Link className={styles.back} href="/custom-launches">← Registry records</Link>
       <article className={styles.detail} aria-labelledby="launch-title">
         <p className={styles.eyebrow}>Legacy Registry launch</p>
@@ -146,7 +146,7 @@ export function GenericLaunchDetailV2({ recordHash }: { recordHash: string }) {
           <Link href="/developers/api-keys">Manage API keys</Link>
         </div>
       </article>
-    </main>
+    </div>
   );
 }
 

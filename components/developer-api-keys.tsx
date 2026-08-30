@@ -731,7 +731,11 @@ function DeveloperApiKeysView({
           ));
         }
         const parsed = parseApiKeyList(body);
-        if (!parsed) throw new Error("The API returned an invalid key list.");
+        if (!parsed) {
+          throw new Error(
+            "Programmable could not verify the API key list. Refresh and try again.",
+          );
+        }
         if (readGeneration !== apiKeyReadGenerationRef.current) return;
         setApiKeys((current) => mergeApiKeySummaries(current, parsed));
         setListState("ready");
@@ -889,7 +893,11 @@ function DeveloperApiKeysView({
         ));
       }
       const parsed = parseApiKeyMutationResult(responseBody, response.status);
-      if (!parsed) throw new Error("The API returned an invalid new key.");
+      if (!parsed) {
+        throw new Error(
+          "The key may have been created, but the response could not be verified. Refresh your keys before trying again.",
+        );
+      }
 
       pendingMutationAttemptRef.current = null;
       setApiKeys((current) => applyApiKeyMutationResult(
@@ -1061,7 +1069,11 @@ function DeveloperApiKeysView({
         response.status,
         apiKey.id,
       );
-      if (!parsed) throw new Error("The API returned an invalid rotated key.");
+      if (!parsed) {
+        throw new Error(
+          "The key may have been rotated, but the response could not be verified. Refresh your keys before trying again.",
+        );
+      }
 
       pendingMutationAttemptRef.current = null;
       setApiKeys((current) => applyApiKeyMutationResult(
@@ -1118,7 +1130,9 @@ function DeveloperApiKeysView({
         body.revoked !== true ||
         body.credentialId !== apiKey.id
       ) {
-        throw new Error("The API returned an invalid revoke result.");
+        throw new Error(
+          "The key may have been revoked, but the response could not be verified. Refresh your keys before trying again.",
+        );
       }
 
       setApiKeys((current) =>
@@ -1164,8 +1178,8 @@ function DeveloperApiKeysView({
           <p className={styles.kicker}>Developer access</p>
           <h1>API keys</h1>
           <p className={styles.intro}>
-            Create and revoke keys for eligible Custom launch workflows. A key
-            can inspect, preflight and submit a request, but only your wallet can
+            Create and revoke keys for Custom launch workflows. A key can
+            inspect, preflight and submit a request, but only your wallet can
             sign funding or send the launch transaction.
           </p>
         </div>
@@ -1288,10 +1302,9 @@ function DeveloperApiKeysView({
                     </div>
                   </div>
                   <p className={styles.setupNote}>
-                    Agent setup contains the <code>$PROGRAMMABLE_API_KEY</code>
-                    placeholder, install and workflow instructions, plus public
-                    discovery, capabilities, preflight, remediation, pack schema,
-                    CLI, guide, and OpenAPI links. It never includes this key.
+                    Agent setup uses only the <code>$PROGRAMMABLE_API_KEY</code>
+                    placeholder and never includes this key. It links to the
+                    public CLI, guide and OpenAPI contract.
                   </p>
                   {keyCopyState === "error" ? (
                     <p className={styles.inlineError} role="alert">

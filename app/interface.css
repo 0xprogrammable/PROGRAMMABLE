@@ -163,6 +163,13 @@ li {
 }
 
 code,
+pre,
+kbd,
+samp {
+  letter-spacing: normal;
+}
+
+code,
 .animated-market-cap,
 .token-card-market-cap,
 .portfolioStat strong {
@@ -217,10 +224,6 @@ code,
 .route-transition h1[tabindex="-1"]:focus-visible {
   outline: 2px solid var(--brand-ivory);
   outline-offset: 6px;
-}
-
-.route-transition h1[data-route-announcement-focus="true"]:focus {
-  outline: 0;
 }
 
 .app-frame::before,

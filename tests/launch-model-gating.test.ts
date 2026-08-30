@@ -204,7 +204,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       "Package, validate and submit a deterministic Custom launch through the public V3 API. Your connected wallet reviews and signs separately.",
     );
-    expect(html).toContain("Launch with the API");
+    expect(html).toContain("Open API launch guide");
     expect(html).not.toContain("approved GitHub revision");
     expect(html.indexOf('data-launch-model-option="classic"')).toBeLessThan(
       html.indexOf('data-launch-model-option="custom"'),
@@ -241,7 +241,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-launchable="false"');
     expect(html).toContain('data-status="live">Live API</small>');
     expect(html).toContain('href="/docs/developers/custom-launch"');
-    expect(html).toContain("Launch with the API");
+    expect(html).toContain("Open API launch guide");
     expect(html).not.toContain("approved GitHub revision");
     expect(html).not.toContain("Build or resume");
   });

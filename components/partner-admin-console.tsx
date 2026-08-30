@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type RefObject,
 } from "react";
 import {
   Check,
@@ -55,6 +56,13 @@ type SecretReveal = Readonly<{
   operation: "issued" | "rotated";
   mutation: PartnerRootKeyMutationV1;
 }>;
+type PartnerFormField =
+  | "displayName"
+  | "slug"
+  | "publicUrl"
+  | "prepareRequestsPerHour"
+  | "readRequestsPerMinute"
+  | "subkeyAdminRequestsPerHour";
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -62,6 +70,7 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 });
 
 const ROOT_KEYS_PER_PAGE = 5;
+const PARTNER_FORM_ERROR_ID = "partner-form-error";
 const EMPTY_PARTNER_PAGINATION = Object.freeze({
   page: 1,
   pageSize: PARTNER_ADMIN_LIST_LIMITS_V1.defaultPageSize,
@@ -179,9 +188,39 @@ export function PartnerAdminConsole() {
   const [readRequestsPerMinute, setReadRequestsPerMinute] = useState("60");
   const [subkeyAdminRequestsPerHour, setSubkeyAdminRequestsPerHour] = useState("20");
   const [formError, setFormError] = useState("");
+  const [formErrorField, setFormErrorField] =
+    useState<PartnerFormField | null>(null);
   const [keyExpiryDays, setKeyExpiryDays] = useState<Record<string, string>>({});
   const secretRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  const slugRef = useRef<HTMLInputElement>(null);
+  const publicUrlRef = useRef<HTMLInputElement>(null);
+  const prepareRequestsRef = useRef<HTMLInputElement>(null);
+  const readRequestsRef = useRef<HTMLInputElement>(null);
+  const subkeyAdminRequestsRef = useRef<HTMLInputElement>(null);
+
+  const clearFieldError = (field: PartnerFormField) => {
+    if (formErrorField !== field) return;
+    setFormError("");
+    setFormErrorField(null);
+  };
+
+  const setFieldError = (field: PartnerFormField, message: string) => {
+    const fieldRefs: Record<
+      PartnerFormField,
+      RefObject<HTMLInputElement | null>
+    > = {
+      displayName: nameRef,
+      slug: slugRef,
+      publicUrl: publicUrlRef,
+      prepareRequestsPerHour: prepareRequestsRef,
+      readRequestsPerMinute: readRequestsRef,
+      subkeyAdminRequestsPerHour: subkeyAdminRequestsRef,
+    };
+    setFormError(message);
+    setFormErrorField(field);
+    window.requestAnimationFrame(() => fieldRefs[field].current?.focus());
+  };
 
   const applyAuthorityError = useCallback((error: unknown) => {
     if (
@@ -289,41 +328,64 @@ export function PartnerAdminConsole() {
     const name = displayName.trim();
     const partnerSlug = slug.trim();
     const website = publicUrl.trim();
-    const budgetValues = [
-      prepareRequestsPerHour,
-      readRequestsPerMinute,
-      subkeyAdminRequestsPerHour,
-    ]
-      .map((value) => Number(value));
+    const prepareBudget = Number(prepareRequestsPerHour);
+    const readBudget = Number(readRequestsPerMinute);
+    const subkeyAdminBudget = Number(subkeyAdminRequestsPerHour);
     if (parseLaunchPartnerNameV1(name) === null) {
-      setFormError("Enter a public partner name with 96 characters or fewer.");
-      nameRef.current?.focus();
+      setFieldError(
+        "displayName",
+        "Enter a public partner name with 96 characters or fewer.",
+      );
       return;
     }
     if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u.test(partnerSlug)) {
-      setFormError("Use a stable lowercase ID with letters, numbers and single hyphens.");
+      setFieldError(
+        "slug",
+        "Use a stable lowercase ID with letters, numbers and single hyphens.",
+      );
       return;
     }
     if (parseLaunchPartnerWebsiteV1(website) === null) {
-      setFormError("Enter a public HTTPS link without credentials, fragments or secret query parameters.");
+      setFieldError(
+        "publicUrl",
+        "Enter a public HTTPS link without credentials, fragments or secret query parameters.",
+      );
       return;
     }
-    if (
-      !Number.isSafeInteger(budgetValues[0])
-      || budgetValues[0]! < 1
-      || budgetValues[0]! > PARTNER_BUDGET_LIMITS_V1.prepareRequestsPerHour
-      || !Number.isSafeInteger(budgetValues[1])
-      || budgetValues[1]! < 1
-      || budgetValues[1]! > PARTNER_BUDGET_LIMITS_V1.readRequestsPerMinute
-      || !Number.isSafeInteger(budgetValues[2])
-      || budgetValues[2]! < 1
-      || budgetValues[2]! > PARTNER_BUDGET_LIMITS_V1.subkeyAdminRequestsPerHour
-    ) {
-      setFormError("Use whole-number budgets within the limits shown below.");
+    const budgetFields: Array<{
+      field: PartnerFormField;
+      value: number;
+      maximum: number;
+    }> = [
+      {
+        field: "prepareRequestsPerHour",
+        value: prepareBudget,
+        maximum: PARTNER_BUDGET_LIMITS_V1.prepareRequestsPerHour,
+      },
+      {
+        field: "readRequestsPerMinute",
+        value: readBudget,
+        maximum: PARTNER_BUDGET_LIMITS_V1.readRequestsPerMinute,
+      },
+      {
+        field: "subkeyAdminRequestsPerHour",
+        value: subkeyAdminBudget,
+        maximum: PARTNER_BUDGET_LIMITS_V1.subkeyAdminRequestsPerHour,
+      },
+    ];
+    const invalidBudget = budgetFields.find(({ value, maximum }) =>
+      !Number.isSafeInteger(value) || value < 1 || value > maximum,
+    );
+    if (invalidBudget) {
+      setFieldError(
+        invalidBudget.field,
+        "Use a whole-number budget within the limit shown for this field.",
+      );
       return;
     }
     setBusy("create");
     setFormError("");
+    setFormErrorField(null);
     try {
       const response = await fetch("/api/admin/partners", {
         method: "POST",
@@ -336,9 +398,9 @@ export function PartnerAdminConsole() {
           publicUrl: website,
           rootKeyLabel: "Primary root key",
           budgets: {
-            prepareRequestsPerHour: budgetValues[0],
-            readRequestsPerMinute: budgetValues[1],
-            subkeyAdminRequestsPerHour: budgetValues[2],
+            prepareRequestsPerHour: prepareBudget,
+            readRequestsPerMinute: readBudget,
+            subkeyAdminRequestsPerHour: subkeyAdminBudget,
           },
           expiresInDays: 366,
         }),
@@ -379,8 +441,10 @@ export function PartnerAdminConsole() {
     } catch (error) {
       if (applyAuthorityError(error)) {
         setFormError("");
+        setFormErrorField(null);
         return;
       }
+      setFormErrorField(null);
       setFormError(error instanceof Error ? error.message : "Unable to create the partner.");
     } finally {
       setBusy(null);
@@ -773,53 +837,157 @@ export function PartnerAdminConsole() {
                     ref={nameRef}
                     name="displayName"
                     autoComplete="organization"
+                    aria-describedby={
+                      formErrorField === "displayName"
+                        ? PARTNER_FORM_ERROR_ID
+                        : undefined
+                    }
+                    aria-invalid={
+                      formErrorField === "displayName" ? true : undefined
+                    }
                     maxLength={96}
                     placeholder="Partner Studio"
                     value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
+                    onChange={(event) => {
+                      setDisplayName(event.target.value);
+                      clearFieldError("displayName");
+                    }}
                   />
                 </label>
                 <label>
                   <span>Stable partner ID</span>
                   <input
+                    ref={slugRef}
                     name="slug"
                     autoCapitalize="none"
                     autoComplete="off"
+                    aria-describedby={
+                      formErrorField === "slug"
+                        ? PARTNER_FORM_ERROR_ID
+                        : undefined
+                    }
+                    aria-invalid={formErrorField === "slug" ? true : undefined}
                     maxLength={64}
                     pattern="[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?"
                     placeholder="partner-studio"
                     spellCheck={false}
                     value={slug}
-                    onChange={(event) => setSlug(event.target.value)}
+                    onChange={(event) => {
+                      setSlug(event.target.value);
+                      clearFieldError("slug");
+                    }}
                   />
                 </label>
                 <label>
                   <span>Public attribution link</span>
                   <input
+                    ref={publicUrlRef}
                     name="publicUrl"
                     autoComplete="url"
+                    aria-describedby={
+                      formErrorField === "publicUrl"
+                        ? PARTNER_FORM_ERROR_ID
+                        : undefined
+                    }
+                    aria-invalid={
+                      formErrorField === "publicUrl" ? true : undefined
+                    }
                     inputMode="url"
                     placeholder="https://partner.example/"
                     value={publicUrl}
-                    onChange={(event) => setPublicUrl(event.target.value)}
+                    onChange={(event) => {
+                      setPublicUrl(event.target.value);
+                      clearFieldError("publicUrl");
+                    }}
                   />
                 </label>
                 <fieldset>
                   <legend>Root-key budgets</legend>
                   <label>
                     <span>Create / hour</span>
-                    <input min="1" max={PARTNER_BUDGET_LIMITS_V1.prepareRequestsPerHour} inputMode="numeric" type="number" value={prepareRequestsPerHour} onChange={(event) => setPrepareRequestsPerHour(event.target.value)} />
+                    <input
+                      ref={prepareRequestsRef}
+                      aria-describedby={
+                        formErrorField === "prepareRequestsPerHour"
+                          ? PARTNER_FORM_ERROR_ID
+                          : undefined
+                      }
+                      aria-invalid={
+                        formErrorField === "prepareRequestsPerHour"
+                          ? true
+                          : undefined
+                      }
+                      min="1"
+                      max={PARTNER_BUDGET_LIMITS_V1.prepareRequestsPerHour}
+                      inputMode="numeric"
+                      type="number"
+                      value={prepareRequestsPerHour}
+                      onChange={(event) => {
+                        setPrepareRequestsPerHour(event.target.value);
+                        clearFieldError("prepareRequestsPerHour");
+                      }}
+                    />
                   </label>
                   <label>
                     <span>Reads / minute</span>
-                    <input min="1" max={PARTNER_BUDGET_LIMITS_V1.readRequestsPerMinute} inputMode="numeric" type="number" value={readRequestsPerMinute} onChange={(event) => setReadRequestsPerMinute(event.target.value)} />
+                    <input
+                      ref={readRequestsRef}
+                      aria-describedby={
+                        formErrorField === "readRequestsPerMinute"
+                          ? PARTNER_FORM_ERROR_ID
+                          : undefined
+                      }
+                      aria-invalid={
+                        formErrorField === "readRequestsPerMinute"
+                          ? true
+                          : undefined
+                      }
+                      min="1"
+                      max={PARTNER_BUDGET_LIMITS_V1.readRequestsPerMinute}
+                      inputMode="numeric"
+                      type="number"
+                      value={readRequestsPerMinute}
+                      onChange={(event) => {
+                        setReadRequestsPerMinute(event.target.value);
+                        clearFieldError("readRequestsPerMinute");
+                      }}
+                    />
                   </label>
                   <label>
                     <span>Subkey admin / hour</span>
-                    <input min="1" max={PARTNER_BUDGET_LIMITS_V1.subkeyAdminRequestsPerHour} inputMode="numeric" type="number" value={subkeyAdminRequestsPerHour} onChange={(event) => setSubkeyAdminRequestsPerHour(event.target.value)} />
+                    <input
+                      ref={subkeyAdminRequestsRef}
+                      aria-describedby={
+                        formErrorField === "subkeyAdminRequestsPerHour"
+                          ? PARTNER_FORM_ERROR_ID
+                          : undefined
+                      }
+                      aria-invalid={
+                        formErrorField === "subkeyAdminRequestsPerHour"
+                          ? true
+                          : undefined
+                      }
+                      min="1"
+                      max={PARTNER_BUDGET_LIMITS_V1.subkeyAdminRequestsPerHour}
+                      inputMode="numeric"
+                      type="number"
+                      value={subkeyAdminRequestsPerHour}
+                      onChange={(event) => {
+                        setSubkeyAdminRequestsPerHour(event.target.value);
+                        clearFieldError("subkeyAdminRequestsPerHour");
+                      }}
+                    />
                   </label>
                 </fieldset>
-                {formError ? <p className={styles.error} role="alert">{formError}</p> : null}
+                {formError ? (
+                  <p
+                    className={styles.error}
+                    id={PARTNER_FORM_ERROR_ID}
+                    role={formErrorField ? undefined : "alert"}
+                  >
+                    {formError}
+                  </p>
+                ) : null}
                 <button className={styles.primaryButton} disabled={busy !== null || Boolean(secretReveal)} type="submit">
                   {busy === "create" ? "Creating partner" : "Create partner"}
                 </button>

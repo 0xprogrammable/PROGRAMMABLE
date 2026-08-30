@@ -4,8 +4,9 @@ import Link from "next/link";
 import styles from "@/components/site-footer.module.css";
 
 const productLinks = [
-  { href: "/#explore", label: "Explore" },
+  { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
+  { href: "/developers/api-keys", label: "API keys" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
 ];
@@ -22,12 +23,12 @@ const resourceLinks = [
   },
   {
     href: "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
-    label: "Token",
+    label: "DEX Screener",
     external: true,
   },
   {
     href: "https://dune.com/0xprogrammable6098/programmable-analytics",
-    label: "Dune",
+    label: "Dune analytics",
     external: true,
   },
   {
@@ -42,7 +43,7 @@ const resourceLinks = [
   },
   {
     href: "https://docs.uniswap.org/contracts/v4/overview",
-    label: "Uniswap v4",
+    label: "Uniswap v4 docs",
     external: true,
   },
 ];

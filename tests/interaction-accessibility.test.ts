@@ -138,8 +138,10 @@ describe("interaction accessibility", () => {
     const css = readFileSync(join(root, "app/interface.css"), "utf8");
 
     expect(source).toContain('className="atmosphere-stars');
-    expect(source).toContain("const TWINKLE_COUNT = 56");
-    expect(source).toContain("const LOWER_TWINKLE_COUNT = 20");
+    expect(source).toContain("const TWINKLE_COUNT = 24");
+    expect(source).toContain("const LOWER_TWINKLE_COUNT = 8");
+    expect(source).toContain("const DENSE_TWINKLE_COUNT = 12");
+    expect(source).toContain("const ACCENT_TWINKLE_COUNT = 4");
     expect(source).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(css).not.toMatch(
       /\.atmosphere-stars-(?:primary|secondary)\s*\{[^}]*animation:/s,
@@ -228,7 +230,7 @@ describe("interaction accessibility", () => {
     expect(source).toContain('aria-label="Programmable on X"');
     expect(source).toContain('aria-label="Programmable on GitHub"');
     expect(source).toContain('aria-label="Programmable on Discord"');
-    expect(source).toContain('aria-label="Programmable on Dexscreener"');
+    expect(source).toContain('aria-label="Programmable on DEX Screener"');
     expect(landing).toContain('href="#what-is-programmable"');
     expect(landing).toContain('href="/docs"');
     expect(css).toMatch(/\.scrollCue\s*\{[^}]*min-height:\s*52px;/s);

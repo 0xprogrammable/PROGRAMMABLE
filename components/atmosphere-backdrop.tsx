@@ -1,7 +1,12 @@
 import type { CSSProperties } from "react";
 
-const TWINKLE_COUNT = 56;
-const LOWER_TWINKLE_COUNT = 20;
+// The gradient layers provide the field of static stars. Keep the animated
+// points deliberately bounded so the atmosphere stays lively without making
+// every route pay for more than a hundred perpetual animations.
+const TWINKLE_COUNT = 24;
+const LOWER_TWINKLE_COUNT = 8;
+const DENSE_TWINKLE_COUNT = 12;
+const ACCENT_TWINKLE_COUNT = 4;
 
 type SparkleStyle = CSSProperties & {
   "--sparkle-delay": string;
@@ -49,12 +54,12 @@ export function AtmosphereBackdrop() {
         ))}
       </span>
       <span className="atmosphere-sparkles atmosphere-sparkles-dense">
-        {Array.from({ length: TWINKLE_COUNT }, (_, index) => (
+        {Array.from({ length: DENSE_TWINKLE_COUNT }, (_, index) => (
           <i key={`dense-${index}`} style={sparkleStyle(index, 29)} />
         ))}
       </span>
       <span className="atmosphere-sparkles atmosphere-sparkles-accent">
-        {Array.from({ length: LOWER_TWINKLE_COUNT }, (_, index) => (
+        {Array.from({ length: ACCENT_TWINKLE_COUNT }, (_, index) => (
           <i key={`accent-${index}`} style={sparkleStyle(index, 47)} />
         ))}
       </span>

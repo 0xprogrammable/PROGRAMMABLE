@@ -1078,7 +1078,7 @@ function statusDescription(status: LaunchStatus) {
     case "awaiting_funding_authorization": return "Review and sign the exact USDC funding authorization. This does not send a transaction.";
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
     case "simulating": return "The exact wallet transaction is being simulated.";
-    case "authorized": return "Review the exact Mainnet transaction, then ask your wallet to send it.";
+    case "authorized": return "Review the exact Ethereum Mainnet transaction, then ask your wallet to send it.";
     case "awaiting_wallet_signature": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
     case "wallet_action_required": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
     case "submitted": return "The wallet transaction is being tracked onchain.";

@@ -25,7 +25,7 @@ describe("topbar and Explore hero polish", () => {
     );
   });
 
-  it("uses large white navigation text without an active underline", () => {
+  it("uses large white navigation text with a restrained active indicator", () => {
     const css = read("app/webde-final-ui.css");
 
     expect(css).toMatch(
@@ -35,7 +35,10 @@ describe("topbar and Explore hero polish", () => {
       /\.desktop-nav a,[\s\S]*?\.desktop-nav a\.active\s*\{[^}]*color:\s*var\(--webde-ink\);[^}]*font-size:\s*17px;/s,
     );
     expect(css).toMatch(
-      /\.desktop-nav a::after,[\s\S]*?\.desktop-nav a\.active::after\s*\{[^}]*display:\s*none;/s,
+      /\.desktop-nav a::after,[\s\S]*?\.desktop-nav a\.active::after\s*\{[^}]*display:\s*block;[^}]*opacity:\s*0;[^}]*width:\s*0;/s,
+    );
+    expect(css).toMatch(
+      /\.desktop-nav a\.active::after\s*\{[^}]*opacity:\s*1;[^}]*width:\s*18px;/s,
     );
   });
 
@@ -55,19 +58,19 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain('href="https://x.com/ProgrammableHQ"');
     expect(navigation).toContain('aria-label="Programmable on GitHub"');
     expect(navigation).toContain('aria-label="Programmable on Discord"');
-    expect(navigation).toContain('aria-label="Programmable on Dexscreener"');
+    expect(navigation).toContain('aria-label="Programmable on DEX Screener"');
     expect(navigation).toContain('aria-label="Programmable analytics on Dune"');
     expect(navigation).toContain(
       "https://dune.com/0xprogrammable6098/programmable-analytics",
     );
-    expect(navigation.indexOf('aria-label="Programmable on Dexscreener"')).toBeLessThan(
+    expect(navigation.indexOf('aria-label="Programmable on DEX Screener"')).toBeLessThan(
       navigation.indexOf('aria-label="Programmable analytics on Dune"'),
     );
     expect(navigation.indexOf('aria-label="Programmable analytics on Dune"')).toBeLessThan(
       navigation.indexOf('aria-label="Programmable on Discord"'),
     );
     expect(landing).toContain('href="/docs"');
-    expect(landing).toContain("Read more in our docs");
+    expect(landing).toContain("Read the Programmable overview");
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).not.toContain('if (pathname === "/") return null;');
     expect(navigation).toContain("<HeaderAccountAction");
@@ -83,7 +86,7 @@ describe("topbar and Explore hero polish", () => {
       "Explore",
       "Create",
       "Docs",
-      "API Keys",
+      "API keys",
       "Profile",
     ]) {
       expect(navigation).toContain(`label: "${label}"`);

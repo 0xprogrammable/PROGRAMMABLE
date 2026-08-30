@@ -5,6 +5,8 @@ import {
   buildChartVolumeMetric,
   buildTokenDetailMetrics,
   createTokenDetailInitialState,
+  customMarketIdentityLabel,
+  customMarketPairLabel,
   formatPreparedMinimum,
   formatStockPairedGrossVolume,
   getValuationMetricLabel,
@@ -58,7 +60,80 @@ const canonicalToken = {
   },
 } satisfies CanonicalTokenExploreEntry;
 
+type CustomMarket = Parameters<typeof customMarketPairLabel>[0];
+
+function customMarket(overrides: Partial<CustomMarket> = {}): CustomMarket {
+  return {
+    marketId: "market-alpha",
+    kind: "uniswap-v4",
+    status: "active",
+    baseAsset: {
+      assetId: "asset-base",
+      identity: { namespace: "eip155:1/erc20", value: token.tokenAddress },
+      symbol: "BASE",
+    },
+    quoteAsset: {
+      assetId: "asset-quote",
+      identity: { namespace: "eip155:1/slip44", value: "60" },
+      symbol: "ETH",
+    },
+    ...overrides,
+  };
+}
+
 describe("token detail metrics", () => {
+  it("falls back to required asset IDs when market metadata is missing", () => {
+    const market = customMarket({
+      baseAsset: {
+        assetId: "asset-base",
+        identity: { namespace: "eip155:1/erc20", value: token.tokenAddress },
+      },
+      quoteAsset: {
+        assetId: "asset-quote",
+        identity: { namespace: "eip155:1/slip44", value: "60" },
+      },
+    });
+
+    expect(customMarketPairLabel(market)).toBe("asset-base / asset-quote");
+    expect(customMarketIdentityLabel(market)).toBe(
+      "uniswap-v4 · Market market-alpha",
+    );
+  });
+
+  it("disambiguates colliding asset labels across market rows", () => {
+    const first = customMarket({
+      marketId: "market-one",
+      baseAsset: {
+        assetId: "asset-one",
+        identity: { namespace: "eip155:1/erc20", value: token.tokenAddress },
+        symbol: "SAME",
+      },
+    });
+    const second = customMarket({
+      marketId: "market-two",
+      baseAsset: {
+        assetId: "asset-two",
+        identity: { namespace: "eip155:1/erc20", value: token.hookAddress },
+        symbol: "same",
+      },
+    });
+
+    expect(customMarketPairLabel(first, [first, second])).toBe(
+      "SAME (asset-one) / ETH",
+    );
+    expect(customMarketPairLabel(second, [first, second])).toBe(
+      "same (asset-two) / ETH",
+    );
+  });
+
+  it("keeps long canonical identities concise without dropping their kind", () => {
+    const market = customMarket({ marketId: `sha256:${"ab".repeat(32)}` });
+
+    expect(customMarketIdentityLabel(market)).toBe(
+      "uniswap-v4 · Market sha256:ababa…abababab",
+    );
+  });
+
   it("accepts the canonical Classic V4 release marker", () => {
     expect(classicV4Token.launchModelVersion).toBe("classic-v4");
   });

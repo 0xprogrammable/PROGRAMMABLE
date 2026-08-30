@@ -79,8 +79,9 @@ export async function readInitialExploreWithinDeadline(
 }
 
 export const metadata: Metadata = {
-  title: "Programmable",
-  description: "Explore tokens launched through Programmable.",
+  title: "Explore launches · Programmable",
+  description:
+    "Explore Classic tokens and custom Uniswap v4 hook projects launched through Programmable.",
   alternates: {
     canonical: "/explore",
   },

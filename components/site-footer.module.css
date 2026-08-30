@@ -2,6 +2,8 @@
   margin-bottom: 28px;
   margin-top: clamp(52px, 7vw, 86px);
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .surface {
@@ -109,7 +111,7 @@
   display: inline-flex;
   font-size: 14px;
   font-weight: 560;
-  min-height: 36px;
+  min-height: 44px;
   margin-inline-start: -10px;
   padding-inline: 10px;
   transition:

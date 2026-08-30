@@ -234,7 +234,7 @@ export function customTradePoolKeyV1(
 ) {
   if (capability.routerGeneration !== CUSTOM_TRADE_ROUTER_GENERATION_V1) {
     throw new CustomMarketTradeUnavailableErrorV1(
-      "This verified Universal Router generation is not supported by the Website",
+      "This verified Universal Router generation is not supported by the website",
     );
   }
   const poolKey = {

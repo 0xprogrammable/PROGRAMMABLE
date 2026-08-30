@@ -149,7 +149,7 @@ export function LaunchModelPicker({
         <span
           className={`launch-model-action ${launchExperience.modelAction}`}
         >
-          Launch with the API
+          Open API launch guide
           <ArrowRight aria-hidden="true" size={16} />
         </span>
       </span>

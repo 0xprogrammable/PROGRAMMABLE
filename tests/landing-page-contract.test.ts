@@ -20,7 +20,7 @@ describe("landing page contract", () => {
     );
     expect(navigation).toContain('href="/"');
     expect(homePage).toContain(
-      'const pageDescription = "Shape what assets can do";',
+      '"Build and launch custom Uniswap v4 hooks.',
     );
     expect(homePage).toContain("description: pageDescription");
     expect(homePage).toContain("openGraph:");
@@ -36,8 +36,10 @@ describe("landing page contract", () => {
 
     expect(backdrop).not.toContain('"use client"');
     expect(backdrop).not.toContain("<video");
-    expect(backdrop).toContain("const TWINKLE_COUNT = 56");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 20");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 24");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 8");
+    expect(backdrop).toContain("const DENSE_TWINKLE_COUNT = 12");
+    expect(backdrop).toContain("const ACCENT_TWINKLE_COUNT = 4");
     expect(backdrop).not.toContain("atmosphere-botanicals");
     expect(backdrop).toContain('aria-hidden="true"');
     expect(finalStyles).toMatch(
@@ -56,7 +58,7 @@ describe("landing page contract", () => {
     expect(landing).toContain("const HERO_TWINKLE_COUNT = 120");
     expect(landing).toContain("const duration = 2.8");
     expect(landing).toContain('<h1 id="landing-title">Programmable</h1>');
-    expect(landing).toContain("Shape what assets can do");
+    expect(landing).toContain("Build and launch custom Uniswap v4 hooks");
     expect(landing).toContain('id="intro"');
     expect(landing).toContain('href="#what-is-programmable"');
     expect(landing).toContain('id="what-is-programmable"');
@@ -170,8 +172,10 @@ describe("landing page contract", () => {
     const interfaceStyles = read("app/interface.css");
     const finalStyles = read("app/webde-final-ui.css");
 
-    expect(backdrop).toContain("const TWINKLE_COUNT = 56");
-    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 20");
+    expect(backdrop).toContain("const TWINKLE_COUNT = 24");
+    expect(backdrop).toContain("const LOWER_TWINKLE_COUNT = 8");
+    expect(backdrop).toContain("const DENSE_TWINKLE_COUNT = 12");
+    expect(backdrop).toContain("const ACCENT_TWINKLE_COUNT = 4");
     expect(backdrop).toContain("Array.from({ length: TWINKLE_COUNT }");
     expect(backdrop).toContain("Array.from({ length: LOWER_TWINKLE_COUNT }");
     expect(backdrop).toContain("const duration = 4.6");
@@ -188,14 +192,13 @@ describe("landing page contract", () => {
     expect(finalStyles).not.toContain("cross");
   });
 
-  it("restarts the home hero on an unmodified logo activation", () => {
+  it("uses normal client navigation for the home logo", () => {
     const navigation = read("components/site-navigation.tsx");
 
-    expect(navigation).toContain("function restartHome(");
-    expect(navigation).toContain('window.location.assign("/")');
-    expect(navigation).toContain("onClick={restartHome}");
-    expect(navigation).toContain("event.metaKey");
-    expect(navigation).toContain("event.ctrlKey");
+    expect(navigation).toContain('aria-label="Programmable home"');
+    expect(navigation).toContain('href="/"');
+    expect(navigation).not.toContain("function restartHome(");
+    expect(navigation).not.toContain('window.location.assign("/")');
   });
 
   it("opens Explore as its own route from the shared topbar", () => {

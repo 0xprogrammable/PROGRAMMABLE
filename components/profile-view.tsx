@@ -3407,9 +3407,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
             priority
           />
           <h1>Profile</h1>
-          <p>
-            Connect to review verified fee earnings and claim rewards.
-          </p>
+          <p>Connect to manage your profile, launches and rewards.</p>
           <button
             className={styles.connectButton}
             type="button"
@@ -3748,7 +3746,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
                   avatarError ||
                   bannerError ||
                   saveError ||
-                  "3–12 letters or numbers · profile image 1000 × 1000 recommended"}
+                  "Username: 3–12 letters or numbers. Profile image: 1000 × 1000 px recommended."}
               </p>
             </form>
           ) : null}
@@ -4491,7 +4489,26 @@ export function profileRewardsForAccount<
 export function ProfileSessionLoadingState() {
   return (
     <div className={`${styles.page} page-width`}>
-      <ProfileLoadingSkeleton label="Restoring wallet profile" showHero />
+      <section
+        className={`${styles.connectCard} liquid-glass-surface`}
+        aria-busy="true"
+        aria-label="Loading profile"
+      >
+        <Image
+          className={styles.connectMark}
+          src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
+          alt=""
+          width={512}
+          height={512}
+          sizes="(max-width: 700px) 72px, 188px"
+          priority
+        />
+        <h1>Profile</h1>
+        <p role="status">Loading profile…</p>
+        <button className={styles.connectButton} type="button" disabled>
+          Loading
+        </button>
+      </section>
     </div>
   );
 }
@@ -4696,8 +4713,8 @@ function PublicCreatorProfile({
           </div>
           <p className={styles.address}>{account}</p>
           <p className={styles.publicProfileNote}>
-            Finalized launches are public. Connect this wallet to manage the
-            profile and rewards.
+            Finalized launches are public. If this is your wallet, connect it
+            to manage the profile and rewards.
           </p>
         </div>
       </section>
@@ -4717,13 +4734,13 @@ function PublicCreatorProfile({
           aria-live="polite"
         >
           <h2>Launches unavailable</h2>
-          <p>Unable to load this public profile. Check again.</p>
+          <p>Unable to load this public profile. Try again.</p>
           <button
             className={styles.retryButton}
             type="button"
             onClick={() => setRefreshKey((current) => current + 1)}
           >
-            Check again
+            Try again
           </button>
         </section>
       ) : entries.length ? (
