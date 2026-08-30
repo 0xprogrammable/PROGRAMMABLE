@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -1071,7 +1072,9 @@ function getServerThemeSnapshot(): ColorTheme {
   return "light";
 }
 
-function ConfiguredWalletProvider({
+// Adopting the bridge value rerenders WalletProvider. Keep that parent update
+// from feeding back through Privy's hook callbacks and emitting it again.
+const ConfiguredWalletProvider = memo(function ConfiguredWalletProvider({
   appId,
   autoAction,
   linkedWalletOnly,
@@ -1118,7 +1121,7 @@ function ConfiguredWalletProvider({
       />
     </PrivyProvider>
   );
-}
+});
 
 function PrivyWalletBridge({
   autoAction,
