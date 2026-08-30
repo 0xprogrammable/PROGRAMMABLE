@@ -270,9 +270,18 @@ export const TOKEN_SELECTORS = Object.freeze({
 
 export const HOOKS = Object.freeze([
   {
+    id: "classic-v4",
+    name: "Classic V4",
+    detail: "Aktuell",
+    kind: "native",
+    address: "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+    runtimeCodeHash:
+      "0xf3a1a628ce898c527f24569b426aa795ec65ff9d97afa2b89e8ea5a2b99ad280",
+  },
+  {
     id: "classic-v3",
     name: "Classic V3",
-    detail: "Aktuell",
+    detail: "Frühere Version",
     kind: "native",
     address: "0x35Fe236EA82F7cF525c9719d7df8F49F94D720CC",
     runtimeCodeHash:
@@ -1155,7 +1164,11 @@ export function createRefreshQueue(run) {
           try {
             while (requested) {
               requested = false;
-              await run();
+              try {
+                await run();
+              } catch (error) {
+                if (!requested) throw error;
+              }
             }
           } finally {
             active = null;
@@ -1166,6 +1179,23 @@ export function createRefreshQueue(run) {
       if (!requested && active === null) return;
     }
   };
+}
+
+export function createLatestOperationGuard() {
+  let generation = 0;
+  return Object.freeze({
+    begin() {
+      const operationGeneration = ++generation;
+      return Object.freeze({
+        isCurrent() {
+          return operationGeneration === generation;
+        },
+      });
+    },
+    invalidate() {
+      generation += 1;
+    },
+  });
 }
 
 export function formatEth(value, maximumFractionDigits = 6) {

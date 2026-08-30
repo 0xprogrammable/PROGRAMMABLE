@@ -10,6 +10,7 @@ const files = [
   "index.html",
   "logic.mjs",
   "styles.css",
+  "view-state.mjs",
 ];
 
 await rm(output, { force: true, recursive: true });
@@ -17,6 +18,10 @@ await mkdir(output, { recursive: true });
 
 await Promise.all(
   files.map((file) => cp(new URL(file, root), new URL(file, output))),
+);
+await cp(
+  new URL("./assets/programmable-loop-mark-64.png", root),
+  new URL("./favicon.ico", output),
 );
 await Promise.all(
   ["assets", "fonts"].map(async (directory) => {
