@@ -254,12 +254,13 @@ npm run contracts:robinhood:source-inputs:verify
 
 Immediately before the owner opens the wallet, follow the complete
 [owner-wallet handoff](../../docs/operations/releases/custom-launch-v4/OWNER-WALLET-HANDOFF.md)
-from the repository root. It reads the exact credentialed dRPC-primary and
-Alchemy-secondary endpoints without placing them in shell history or command
-arguments, binds reviewed endpoint commitments, requires clean `HEAD` to equal
-canonical `origin/production`, and binds the successful protected hosted
-`Verify` run and immutable proof artifact for that exact commit and tree. The
-strict action-time verifier compares every canonical wallet request field.
+from the repository root. It reads the exact credentialed QuickNode **Hood
+Explorer Indexer** primary and Alchemy **Programmable Production 3** secondary
+endpoints without placing them in shell history or command arguments, binds
+reviewed endpoint commitments, requires clean `HEAD` to equal canonical
+`origin/production`, and binds the successful protected hosted `Verify` run and
+immutable proof artifact for that exact commit and tree. The strict action-time
+verifier compares every canonical wallet request field.
 There is intentionally no balance read, wallet opening, signature, broadcast,
 bridge or transaction retry in that path.
 
@@ -272,7 +273,8 @@ npm run contracts:robinhood:postdeploy:test
 npm run release:custom-launch:v4:test
 ```
 
-The production assembler pins the prepared artifact bytes, requires ordered dRPC/Alchemy L2 evidence and
+The production assembler pins the prepared artifact bytes, requires the retained ordered
+dRPC/Alchemy historical Phase A L2 evidence and
 dRPC/QuickNode Ethereum evidence, checks the exact Multicall3 envelope, proves D-1 to D code
 transitions, checks the Router getters and full fresh Safe state, binds source closure, and derives
 the live descriptor plus digest. Applying the reviewed bundle is a separate explicit local command.

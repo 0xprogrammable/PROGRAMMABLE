@@ -67,14 +67,35 @@ export ROBINHOOD_MAINNET_RPC_URL_SECONDARY
 npm run --silent contracts:robinhood:provider-commitments
 ```
 
-The commitment helper accepts only the exact credential-bearing dRPC-primary
-and Alchemy-secondary Robinhood URL forms. With the two review-frozen variables
-present, it prints only `ROBINHOOD_RPC_PROVIDER_COMMITMENTS_MATCH_REVIEW` after
-an exact match. Replacing a credential URL, changing dRPC query order, reversing
-provider roles, or substituting two new otherwise valid credential URLs fails
-against the independently frozen commitments.
+The commitment helper accepts only the exact credential-bearing QuickNode
+primary and Alchemy secondary Robinhood URL forms:
 
-Public Robinhood RPC is not a substitute. A public endpoint may return
+```text
+https://<HOOD_EXPLORER_INDEXER_ENDPOINT>.quiknode.pro/<TOKEN>/
+https://robinhood-mainnet.g.alchemy.com/v2/<ALCHEMY_API_KEY>
+```
+
+The primary URL must be copied from the existing QuickNode **Hood Explorer
+Indexer** project. The secondary URL must be copied from the existing Alchemy
+**Programmable Production 3** app. The helper can validate the authenticated
+provider URL shape, role, provider ID and trust domain; it cannot prove either
+dashboard display name, account ownership, plan or archive entitlement. Those
+facts and both providers' required historical reads remain separate release
+checks.
+
+This ordered role pair is compatible with backend provider-profile digest
+`sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910`.
+That digest is not owner-envelope or backend-release evidence by itself; the
+cross-repository promotion must still bind the exact backend artifact and its
+attested runtime readiness. With the two review-frozen commitment variables
+present, the helper prints only
+`ROBINHOOD_RPC_PROVIDER_COMMITMENTS_MATCH_REVIEW` after an exact match.
+Replacing a credential URL, changing the QuickNode endpoint host or credential
+path, reversing provider roles, or substituting two new otherwise valid
+credential URLs fails against the independently frozen commitments.
+
+Public Robinhood RPC, dRPC and provider demo endpoints are not substitutes for
+the current owner action-time pair. A public endpoint may return
 `safe`/`finalized` headers while failing historical state reads at that same
 block. The credentialed providers must pass the exact fixed-block code, nonce,
 pending-state, simulation and closing-state inventory.

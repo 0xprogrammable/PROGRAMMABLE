@@ -55,13 +55,13 @@ const PREPARED_ADDRESSES = Object.freeze({
   router: "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
 });
 const RPC_URLS = Object.freeze([
-  "https://lb.drpc.live/robinhood/0123456789abcdef",
+  "https://hood-explorer-indexer.quiknode.pro/0123456789abcdef/",
   "https://robinhood-mainnet.g.alchemy.com/v2/abcdef0123456789",
 ]);
 const RPC_COMMITMENTS = Object.freeze([
   robinhoodFoundationRpcEndpointCommitment({
     role: "primary",
-    providerId: "drpc",
+    providerId: "quicknode",
     rpcUrl: RPC_URLS[0],
   }),
   robinhoodFoundationRpcEndpointCommitment({
@@ -195,7 +195,7 @@ function mockRpc(options = {}) {
     if (method === "eth_chainId") return provider.chainId ?? "0x1237";
     if (method === "eth_getBlockByNumber") {
       if (params[0] === "latest") {
-        return providerId === "drpc"
+        return providerId === "quicknode"
           ? block(1_000, "11")
           : block(provider.headNumber ?? 1_002, "22");
       }
@@ -383,15 +383,15 @@ test("provider pins reject public, same-origin, unauthenticated, and unsafe endp
   assert.deepEqual(
     assertRobinhoodFoundationRpcProviders({
       rpcUrls: [
-        "https://lb.drpc.org/ogrpc?network=robinhood&dkey=credential_0123456789",
+        "https://hood-explorer-indexer-alt.quiknode.pro/credential_0123456789/",
         RPC_URLS[1],
       ],
       endpointCommitments: [
         robinhoodFoundationRpcEndpointCommitment({
           role: "primary",
-          providerId: "drpc",
+          providerId: "quicknode",
           rpcUrl:
-            "https://lb.drpc.org/ogrpc?network=robinhood&dkey=credential_0123456789",
+            "https://hood-explorer-indexer-alt.quiknode.pro/credential_0123456789/",
         }),
         RPC_COMMITMENTS[1],
       ],
@@ -399,14 +399,14 @@ test("provider pins reject public, same-origin, unauthenticated, and unsafe endp
     [
       {
         role: "primary",
-        providerId: "drpc",
-        trustDomain: "drpc.org",
+        providerId: "quicknode",
+        trustDomain: "quicknode.com",
         authentication: "provider-credential",
         endpointCommitment: robinhoodFoundationRpcEndpointCommitment({
           role: "primary",
-          providerId: "drpc",
+          providerId: "quicknode",
           rpcUrl:
-            "https://lb.drpc.org/ogrpc?network=robinhood&dkey=credential_0123456789",
+            "https://hood-explorer-indexer-alt.quiknode.pro/credential_0123456789/",
         }),
       },
       {
@@ -420,14 +420,17 @@ test("provider pins reject public, same-origin, unauthenticated, and unsafe endp
   );
   const invalid = [
     ["https://rpc.mainnet.chain.robinhood.com", RPC_URLS[1]],
-    ["http://lb.drpc.live/robinhood/0123456789abcdef", RPC_URLS[1]],
+    ["https://lb.drpc.live/robinhood/0123456789abcdef", RPC_URLS[1]],
+    ["http://hood-explorer-indexer.quiknode.pro/0123456789abcdef/", RPC_URLS[1]],
     [
-      "https://user:secret@lb.drpc.live/robinhood/0123456789abcdef",
+      "https://user:secret@hood-explorer-indexer.quiknode.pro/0123456789abcdef/",
       RPC_URLS[1],
     ],
-    ["https://lb.drpc.live/", RPC_URLS[1]],
-    ["https://lb.drpc.live/robinhood/DOCS-DEMO", RPC_URLS[1]],
-    ["https://lb.drpc.org/ogrpc?network=robinhood&dkey=docs-demo", RPC_URLS[1]],
+    ["https://hood-explorer-indexer.quiknode.pro/", RPC_URLS[1]],
+    ["https://docs-demo.quiknode.pro/0123456789abcdef/", RPC_URLS[1]],
+    ["https://hood-explorer-indexer.quiknode.pro/short/", RPC_URLS[1]],
+    ["https://hood-explorer-indexer.quiknode.pro/0123456789abcdef", RPC_URLS[1]],
+    [`${RPC_URLS[0]}?extra=1`, RPC_URLS[1]],
     [
       RPC_URLS[0],
       "https://robinhood-mainnet.g.alchemy.com/v1/abcdef0123456789",
@@ -530,12 +533,12 @@ test("preflight fails closed on provider, pin, vacancy, nonce, simulation, gas, 
     ],
     [
       "occupied target",
-      { providers: { drpc: { occupiedCodeKey: "router" } } },
+      { providers: { quicknode: { occupiedCodeKey: "router" } } },
       /predicted address is occupied/u,
     ],
     [
       "target nonce",
-      { providers: { drpc: { targetNonceKey: "graphFactory" } } },
+      { providers: { quicknode: { targetNonceKey: "graphFactory" } } },
       /nonce is non-zero/u,
     ],
     [
@@ -555,12 +558,16 @@ test("preflight fails closed on provider, pin, vacancy, nonce, simulation, gas, 
     ],
     [
       "closing nonce",
-      { providers: { drpc: { closingNonce: "0x8" } } },
+      { providers: { quicknode: { closingNonce: "0x8" } } },
       /state changed/u,
     ],
     [
       "closing parent",
-      { providers: { drpc: { closingParentHash: `0x${"bb".repeat(32)}` } } },
+      {
+        providers: {
+          quicknode: { closingParentHash: `0x${"bb".repeat(32)}` },
+        },
+      },
       /state changed/u,
     ],
     [
@@ -590,7 +597,7 @@ test("owner fee and total-cost ceilings fail closed", async () => {
         },
         options: {
           providers: {
-            drpc: { priorityFee: "0x1" },
+            quicknode: { priorityFee: "0x1" },
             alchemy: { priorityFee: "0x1" },
           },
         },
@@ -614,8 +621,8 @@ test("RPC transport is strict, bounded, and redacts endpoint/error content", asy
   const secret = "credential-canary-0123456789";
   const responseBudget = { consumed: 0, limit: 4 * 1024 * 1024 };
   const result = await robinhoodFoundationRpc({
-    providerId: "drpc",
-    rpcUrl: `https://lb.drpc.live/robinhood/${secret}`,
+    providerId: "quicknode",
+    rpcUrl: `https://hood-explorer-indexer.quiknode.pro/${secret}/`,
     method: "eth_chainId",
     responseBudget,
     fetchImpl: async () =>
@@ -631,8 +638,8 @@ test("RPC transport is strict, bounded, and redacts endpoint/error content", asy
   await assert.rejects(
     () =>
       robinhoodFoundationRpc({
-        providerId: "drpc",
-        rpcUrl: `https://lb.drpc.live/robinhood/${secret}`,
+        providerId: "quicknode",
+        rpcUrl: `https://hood-explorer-indexer.quiknode.pro/${secret}/`,
         method: "eth_chainId",
         responseBudget: { consumed: 0, limit: 4 * 1024 * 1024 },
         fetchImpl: async () =>
@@ -784,15 +791,15 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
       ],
     );
     const requestsByProvider = Object.fromEntries(
-      ["drpc", "alchemy"].map((providerId) => [
+      ["quicknode", "alchemy"].map((providerId) => [
         providerId,
         actionTimeMock.requestInventory
           .filter((request) => request.providerId === providerId)
           .map(({ method, params }) => ({ method, params })),
       ]),
     );
-    assert.equal(requestsByProvider.drpc.length, 19);
-    assert.deepEqual(requestsByProvider.drpc, requestsByProvider.alchemy);
+    assert.equal(requestsByProvider.quicknode.length, 19);
+    assert.deepEqual(requestsByProvider.quicknode, requestsByProvider.alchemy);
     assert.ok(
       actionTimeMock.requestInventory.every(
         ({ method }) =>
@@ -807,7 +814,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
           env: {
             ...env,
             ROBINHOOD_MAINNET_RPC_URL_PRIMARY:
-              "https://lb.drpc.live/robinhood/substitute_0123456789",
+              "https://hood-explorer-indexer.quiknode.pro/substitute_0123456789/",
           },
           nowMilliseconds: FIXED_TIMESTAMP * 1_000,
           sourceIdentity: () => ({
@@ -855,12 +862,12 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
       ],
       [
         "target code",
-        { providers: { drpc: { occupiedCodeKey: "router" } } },
+        { providers: { quicknode: { occupiedCodeKey: "router" } } },
         /predicted address is occupied/u,
       ],
       [
         "target nonce",
-        { providers: { drpc: { targetNonceKey: "graphFactory" } } },
+        { providers: { quicknode: { targetNonceKey: "graphFactory" } } },
         /nonce is non-zero/u,
       ],
       [
@@ -875,7 +882,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
       ],
       [
         "closing owner nonce",
-        { providers: { drpc: { closingNonce: "0x8" } } },
+        { providers: { quicknode: { closingNonce: "0x8" } } },
         /state changed during wallet verification/u,
       ],
     ];
