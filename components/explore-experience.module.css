@@ -1299,7 +1299,7 @@
 .runnerMeta {
   border-top: 1px solid var(--webde-line);
   gap: 4px;
-  min-height: 48px;
+  min-height: 70px;
   padding: 1px 8px 1px 14px;
 }
 
@@ -1693,6 +1693,14 @@
   height: 12px;
   margin-inline-start: auto;
   width: 92px;
+}
+
+.skeletonPartner {
+  flex: 1 0 100%;
+  height: 11px;
+  margin-block: 2px 7px;
+  order: 5;
+  width: min(44%, 132px);
 }
 
 @media (max-width: 700px) {

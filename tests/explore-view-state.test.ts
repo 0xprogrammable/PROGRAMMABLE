@@ -664,7 +664,7 @@ describe("Explore refresh state", () => {
     ).toBe("initial-mobile-request");
   });
 
-  it("keeps a responsive initial failure explicit instead of refetching it", () => {
+  it("falls through once to the bounded client read after an initial failure", () => {
     expect(createResponsiveExploreInitialState(
       { ok: false, body: { error: "Launch index is catching up" } },
       {
@@ -674,12 +674,7 @@ describe("Explore refresh state", () => {
         requestKey: "initial-mobile-error-request",
         pageSize: EXPLORE_MOBILE_TOKENS_PER_PAGE,
       },
-    )).toEqual({
-      phase: "error",
-      message: "Launch index is catching up",
-      contentKey: "initial-mobile-error-content",
-      requestKey: "initial-mobile-error-request",
-    });
+    )).toBeNull();
   });
 
   it("stops reusing the server page after the first non-initial request", () => {
@@ -946,15 +941,15 @@ describe("Explore refresh state", () => {
     });
   });
 
-  it("announces when the default valuation sort is turned off", () => {
+  it("announces Newest as the default and FDV ranking as an override", () => {
     expect(exploreActiveSelectionState({
       valuationSort: "highest",
       ageSort: "none",
       socialFilter: "all",
       modelFilter: "all",
     })).toEqual({
-      count: 0,
-      summary: "Default sorting applied",
+      count: 1,
+      summary: "Highest FDV selected",
     });
     expect(exploreActiveSelectionState({
       valuationSort: "none",
@@ -962,8 +957,8 @@ describe("Explore refresh state", () => {
       socialFilter: "all",
       modelFilter: "all",
     })).toEqual({
-      count: 1,
-      summary: "Newest launch order selected",
+      count: 0,
+      summary: "Default sorting applied",
     });
   });
 

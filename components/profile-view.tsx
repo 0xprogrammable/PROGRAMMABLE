@@ -1397,7 +1397,13 @@ export function formatBannerPositionStatus(position: {
 }
 
 export function ProfileView({ onchainData }: ProfileViewProps = {}) {
-  const { wallet, openWallet, sendTransaction, connecting } = useWallet();
+  const {
+    wallet,
+    openWallet,
+    sendTransaction,
+    connecting,
+    hasSession,
+  } = useWallet();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
@@ -3387,13 +3393,24 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   }
 
   const sessionView = getProfileSessionView(connecting, account);
+  const requestedProfileAccount = publicProfileAccountFromQuery(
+    searchParams.getAll("account"),
+  );
   const publicProfileAccount = publicProfileAccountFromQuery(
     searchParams.getAll("account"),
     account,
   );
 
   if (!clientHydrated || sessionView === "loading") {
-    return <ProfileSessionLoadingState />;
+    return (
+      <ProfileSessionLoadingState
+        showDashboard={
+          clientHydrated &&
+          requestedProfileAccount === null &&
+          (hasSession || Boolean(account))
+        }
+      />
+    );
   }
 
   if (publicProfileAccount) {
@@ -4500,29 +4517,35 @@ export function profileRewardsForAccount<
   );
 }
 
-export function ProfileSessionLoadingState() {
+export function ProfileSessionLoadingState({
+  showDashboard = false,
+}: Readonly<{ showDashboard?: boolean }> = {}) {
   return (
     <div className={`${styles.page} page-width`}>
-      <section
-        className={`${styles.connectCard} liquid-glass-surface`}
-        aria-busy="true"
-        aria-label="Loading profile"
-      >
-        <Image
-          className={styles.connectMark}
-          src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
-          alt=""
-          width={512}
-          height={512}
-          sizes="(max-width: 700px) 72px, 188px"
-          priority
-        />
-        <h1>Profile</h1>
-        <p role="status">Loading profile…</p>
-        <button className={styles.connectButton} type="button" disabled>
-          Loading
-        </button>
-      </section>
+      {showDashboard ? (
+        <ProfileLoadingSkeleton label="Loading profile" showHero />
+      ) : (
+        <section
+          className={`${styles.connectCard} liquid-glass-surface`}
+          aria-busy="true"
+          aria-label="Loading profile"
+        >
+          <Image
+            className={styles.connectMark}
+            src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
+            alt=""
+            width={512}
+            height={512}
+            sizes="(max-width: 700px) 72px, 188px"
+            priority
+          />
+          <h1>Profile</h1>
+          <p role="status">Loading profile…</p>
+          <button className={styles.connectButton} type="button" disabled>
+            Loading
+          </button>
+        </section>
+      )}
     </div>
   );
 }
@@ -4591,14 +4614,18 @@ function ProfileLoadingSkeleton({
           <span className={styles.profileSkeletonBar} />
         </div>
         <div className={styles.profileSkeletonClaims}>
-          <span className={styles.profileSkeletonHeading} />
-          {Array.from({ length: profileClaimPageSize }, (_, item) => (
-            <span className={styles.profileSkeletonRow} key={item}>
-              <span />
-              <span />
-              <span />
-            </span>
-          ))}
+          <span className={styles.profileSkeletonSectionHeader}>
+            <span className={styles.profileSkeletonHeading} />
+          </span>
+          <span className={styles.profileSkeletonRows}>
+            {Array.from({ length: profileClaimPageSize }, (_, item) => (
+              <span className={styles.profileSkeletonRow} key={item}>
+                <span />
+                <span />
+                <span />
+              </span>
+            ))}
+          </span>
         </div>
       </div>
     </section>

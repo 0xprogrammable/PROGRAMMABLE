@@ -12,6 +12,8 @@ import {
   X as CloseIcon,
 } from "lucide-react";
 import {
+  type SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -20,7 +22,7 @@ import {
 } from "react";
 
 import {
-  formatMarketCapMetric,
+  AnimatedMarketCap,
   type MarketCapMetric,
 } from "@/components/animated-market-cap";
 import { XBrandIcon } from "@/components/brand-icons";
@@ -30,6 +32,10 @@ import {
   useInterfacePreview,
 } from "@/components/interface-preview";
 import { WebsiteLinkIcon } from "@/components/website-link-icon";
+import {
+  useViewChain,
+  type ViewChainId,
+} from "@/components/view-chain";
 import { PartnerLaunchAttribution } from
   "@/components/partner-launch-attribution";
 import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
@@ -43,7 +49,6 @@ import {
   type ExploreValuation,
   type ValuedExploreEntry,
 } from "@/lib/explore-financial-data";
-import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 import {
   CLASSIC_V4_PUBLIC_RELEASE_BINDING,
   isClassicV4AnchoredPublicReleaseBinding,
@@ -327,21 +332,34 @@ function preserveKnownMarketObservation(
   previous: ValuedExploreEntry,
   incoming: ValuedExploreEntry,
 ): ValuedExploreEntry {
-  const valuation =
+  const acceptIncoming =
     incoming.valuation.status === "available" ||
-      previous.valuation.status !== "available"
-      ? incoming.valuation
-      : previous.valuation;
-  const marketData = incoming.marketData ?? previous.marketData;
-  const liquidityEvidence =
-    incoming.liquidityEvidence ?? previous.liquidityEvidence;
+      previous.valuation.status !== "available";
+  if (!acceptIncoming) return previous;
 
+  const {
+    marketData: _previousMarketData,
+    liquidityEvidence: _previousLiquidityEvidence,
+    fdvUsdWad: _previousFdvUsdWad,
+    ...identity
+  } = previous as ValuedExploreEntry & Readonly<{ fdvUsdWad?: string }>;
+  const incomingCompatibility = incoming as ValuedExploreEntry &
+    Readonly<{ fdvUsdWad?: string }>;
+  void _previousMarketData;
+  void _previousLiquidityEvidence;
+  void _previousFdvUsdWad;
   return {
-    ...previous,
-    ...incoming,
-    valuation,
-    ...(marketData ? { marketData } : {}),
-    ...(liquidityEvidence ? { liquidityEvidence } : {}),
+    ...identity,
+    valuation: incoming.valuation,
+    ...(incoming.marketData === undefined
+      ? {}
+      : { marketData: incoming.marketData }),
+    ...(incoming.liquidityEvidence === undefined
+      ? {}
+      : { liquidityEvidence: incoming.liquidityEvidence }),
+    ...(incomingCompatibility.fdvUsdWad === undefined
+      ? {}
+      : { fdvUsdWad: incomingCompatibility.fdvUsdWad }),
   } as ValuedExploreEntry;
 }
 
@@ -353,26 +371,27 @@ export function stabilizeExploreRevalidationPayload(
     previous.status !== "ready" ||
     incoming.status !== "ready" ||
     previous.page !== incoming.page ||
-    previous.pageSize !== incoming.pageSize
+    previous.pageSize !== incoming.pageSize ||
+    previous.catalog?.identityCommitment !==
+      incoming.catalog?.identityCommitment
   ) {
     return incoming;
   }
 
-  const previousIds = new Set(previous.tokens.map((token) => token.id));
   const incomingById = new Map(
     incoming.tokens.map((token) => [token.id, token] as const),
   );
-  const newTokens = incoming.tokens.filter((token) => !previousIds.has(token.id));
   const stableTokens = previous.tokens.map((token) => {
     const next = incomingById.get(token.id);
     return next ? preserveKnownMarketObservation(token, next) : token;
   });
 
   return {
-    ...incoming,
-    tokens: [...newTokens, ...stableTokens].slice(0, incoming.pageSize),
-    total: Math.max(previous.total, incoming.total),
-    totalPages: Math.max(previous.totalPages, incoming.totalPages),
+    ...previous,
+    tokens: stableTokens,
+    dataQuality: incoming.dataQuality ?? previous.dataQuality,
+    marketRead: incoming.marketRead ?? previous.marketRead,
+    ranking: incoming.ranking ?? previous.ranking,
   };
 }
 
@@ -382,7 +401,7 @@ export const EXPLORE_TOKENS_PER_PAGE = 9;
 export const EXPLORE_MOBILE_TOKENS_PER_PAGE = 4;
 export const EXPLORE_MOBILE_BREAKPOINT_PX = 700;
 export const EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE = 100;
-export const EXPLORE_REVALIDATION_INTERVAL_MS = 15_000;
+export const EXPLORE_REVALIDATION_INTERVAL_MS = 45_000;
 const EXPLORE_REVALIDATION_MIN_INTERVAL_MS = 1_000;
 const EXPLORE_REVALIDATION_MAX_INTERVAL_MS = 60_000;
 
@@ -563,8 +582,7 @@ function useExploreTokensPerPage() {
 }
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
-const DEFAULT_EXPLORE_VALUATION_SORT: ExploreValuationSort =
-  DEFAULT_EXPLORE_VIEW_SORT === "market-cap" ? "highest" : "none";
+const DEFAULT_EXPLORE_VALUATION_SORT: ExploreValuationSort = "none";
 const fallbackTokenImages = [
   "/brand/programmable-token-card-fallback-night-garden-01.webp",
   "/brand/programmable-token-card-fallback-night-garden-02.webp",
@@ -1457,6 +1475,27 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   if (!Array.isArray(value.tokens)) {
     throw new Error("The token registry returned invalid token data");
   }
+  if (value.status === "not-deployed") {
+    if (
+      value.tokens.length !== 0 ||
+      value.page !== 1 ||
+      typeof value.pageSize !== "number" ||
+      !Number.isSafeInteger(value.pageSize) ||
+      value.pageSize < 1 ||
+      value.total !== 0 ||
+      value.totalPages !== 0
+    ) {
+      throw new Error("The token registry returned invalid deployment data");
+    }
+    return {
+      status: "not-deployed",
+      tokens: [],
+      page: 1,
+      pageSize: value.pageSize,
+      total: 0,
+      totalPages: 0,
+    };
+  }
   if (
     value.dataQuality !== undefined &&
     !isExploreDataQuality(value.dataQuality)
@@ -1625,7 +1664,8 @@ export function createResponsiveExploreInitialState(
   }>,
 ): ExploreState | null {
   if (!input.reuseAvailable || !input.isInitialRequest) return null;
-  return createExploreInitialState(response, input);
+  const initialState = createExploreInitialState(response, input);
+  return initialState?.phase === "ready" ? initialState : null;
 }
 
 type PendingExploreRequest = {
@@ -2522,6 +2562,10 @@ function ExploreCardSkeleton() {
           className={`${styles.skeletonLine} ${styles.skeletonContract}`}
           data-skeleton="true"
         />
+        <span
+          className={`${styles.skeletonLine} ${styles.skeletonPartner}`}
+          data-skeleton="true"
+        />
       </div>
     </article>
   );
@@ -2554,16 +2598,31 @@ function resultRangeLabel(payload: ExplorePayload | null) {
 
 export function ExploreView({
   initialResponse,
+  initialResponseChainId,
   initialModelFilter = "all",
   loadingOnly = false,
   embedded = false,
 }: Readonly<{
   initialResponse?: ExploreInitialResponse;
+  initialResponseChainId?: ViewChainId;
   initialModelFilter?: ExploreModelFilter;
   loadingOnly?: boolean;
   embedded?: boolean;
 }> = {}) {
   const preview = useInterfacePreview();
+  const {
+    hydrated: viewChainReady,
+    viewChainId: resolvedViewChainId,
+  } = useViewChain();
+  const viewChainId =
+    !viewChainReady && initialResponseChainId !== undefined
+      ? initialResponseChainId
+      : resolvedViewChainId;
+  const activeInitialResponse =
+    initialResponseChainId === undefined ||
+      initialResponseChainId === viewChainId
+      ? initialResponse
+      : undefined;
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -2575,12 +2634,34 @@ export function ExploreView({
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>(
     initialModelFilter,
   );
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSelection, setPageSelection] = useState({
+    chainId: viewChainId,
+    page: 1,
+  });
+  const currentPage = pageSelection.chainId === viewChainId
+    ? pageSelection.page
+    : 1;
+  const setCurrentPage = useCallback(
+    (nextPage: SetStateAction<number>) => {
+      setPageSelection((current) => {
+        const activePage = current.chainId === viewChainId ? current.page : 1;
+        const page = typeof nextPage === "function"
+          ? nextPage(activePage)
+          : nextPage;
+        return current.chainId === viewChainId && current.page === page
+          ? current
+          : { chainId: viewChainId, page };
+      });
+    },
+    [viewChainId],
+  );
   const pageSize = useExploreTokensPerPage();
   const [retryKey, setRetryKey] = useState(0);
+  const [revalidationKey, setRevalidationKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const activeExploreContentKey = useRef<string | null>(null);
+  const backgroundRevalidationTarget = useRef<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultStatusRef = useRef<HTMLParagraphElement>(null);
   const copyFeedbackTimerRef = useRef<number | null>(null);
@@ -2595,13 +2676,14 @@ export function ExploreView({
     valuationSort,
     ageSort,
   );
-  const contentKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
+  const chainContentKey = `${viewChainId}`;
+  const contentKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
   const requestKey = `${contentKey}\u0000${retryKey}`;
-  const modelDatasetKey = `${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
+  const modelDatasetKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
   const activeRequestContentKey =
     requiresCompleteDataset ? modelDatasetKey : contentKey;
   const [initialState] = useState(() =>
-    createExploreInitialState(initialResponse, {
+    createExploreInitialState(activeInitialResponse, {
       requestKey,
       contentKey,
       pageSize,
@@ -2667,11 +2749,11 @@ export function ExploreView({
     }, QUERY_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timer);
-  }, [debouncedQuery, normalizedQuery]);
+  }, [debouncedQuery, normalizedQuery, setCurrentPage]);
 
   useEffect(() => {
     return subscribeToExploreViewport(() => setCurrentPage(1));
-  }, []);
+  }, [setCurrentPage]);
 
   useEffect(() => {
     function closeFilter(event: PointerEvent | KeyboardEvent) {
@@ -2703,6 +2785,52 @@ export function ExploreView({
     if (
       preview ||
       loadingOnly ||
+      isInterfacePreviewHost(window.location.hostname)
+    ) return;
+
+    const schedulerStartedAt = Date.now();
+    const scheduler = createExploreRevalidationScheduler({
+      visibilityState: () => document.visibilityState,
+      online: () => navigator.onLine,
+      now: () => Date.now(),
+      setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      clearTimeout: (timer) => window.clearTimeout(timer),
+      onRevalidate: () => {
+        if (!explorePageSizeMatchesViewport(pageSize, window.innerWidth)) return;
+        backgroundRevalidationTarget.current = activeRequestContentKey;
+        modelDatasetCache.current = null;
+        expireResolvedExplorePayloadCache(activeRequestContentKey);
+        setRevalidationKey((value) => value + 1);
+      },
+      lastRevalidationAt: exploreRevalidationCacheTimestamp({
+        activeKey: activeRequestContentKey,
+        fallback: schedulerStartedAt,
+        resolvedUpdatedAt: resolvedExplorePayloadUpdatedAt(
+          activeRequestContentKey,
+          schedulerStartedAt,
+        ),
+        modelDataset: modelDatasetCache.current,
+      }),
+    });
+    const syncScheduler = () => scheduler.sync();
+
+    document.addEventListener("visibilitychange", syncScheduler);
+    window.addEventListener("focus", syncScheduler);
+    window.addEventListener("online", syncScheduler);
+    window.addEventListener("offline", syncScheduler);
+    return () => {
+      scheduler.dispose();
+      document.removeEventListener("visibilitychange", syncScheduler);
+      window.removeEventListener("focus", syncScheduler);
+      window.removeEventListener("online", syncScheduler);
+      window.removeEventListener("offline", syncScheduler);
+    };
+  }, [activeRequestContentKey, loadingOnly, pageSize, preview]);
+
+  useEffect(() => {
+    if (
+      preview ||
+      loadingOnly ||
       (typeof window !== "undefined" &&
         isInterfacePreviewHost(window.location.hostname))
     ) {
@@ -2717,6 +2845,7 @@ export function ExploreView({
     }
 
     const search = new URLSearchParams({
+      chain: String(viewChainId),
       q: debouncedQuery,
       sort,
       page: String(currentPage),
@@ -2740,9 +2869,10 @@ export function ExploreView({
       socialFilter === "all" &&
       modelFilter === initialModelFilter &&
       currentPage === 1 &&
-      retryKey === 0;
+      retryKey === 0 &&
+      revalidationKey === 0;
     const responsiveInitialState = createResponsiveExploreInitialState(
-      initialResponse,
+      activeInitialResponse,
       {
         reuseAvailable: initialResponseReuseAvailable.current,
         isInitialRequest,
@@ -2770,6 +2900,11 @@ export function ExploreView({
     initialResponseReuseAvailable.current = false;
 
     let ignore = false;
+    const isBackgroundRevalidation =
+      backgroundRevalidationTarget.current === activeRequestContentKey;
+    if (isBackgroundRevalidation) {
+      backgroundRevalidationTarget.current = null;
+    }
     const previousContentKey = activeExploreContentKey.current;
     if (previousContentKey && previousContentKey !== activeRequestContentKey) {
       abortExplorePayload(previousContentKey);
@@ -2778,7 +2913,7 @@ export function ExploreView({
     async function loadTokens() {
       try {
         let payload: ExplorePayload;
-        if (!requiresCompleteDataset) {
+        if (isBackgroundRevalidation || !requiresCompleteDataset) {
           payload = await loadExplorePage(
             activeRequestContentKey,
             search,
@@ -2823,12 +2958,17 @@ export function ExploreView({
           setCurrentPage(payload.page);
         }
         handledRequestKey.current = requestKey;
-        setState({
+        setState((current) => ({
           phase: "ready",
-          payload,
+          payload:
+            isBackgroundRevalidation &&
+              current.phase === "ready" &&
+              current.contentKey === contentKey
+              ? stabilizeExploreRevalidationPayload(current.payload, payload)
+              : payload,
           requestKey,
           contentKey,
-        });
+        }));
       } catch (error) {
         if (ignore) return;
         const message =
@@ -2857,17 +2997,20 @@ export function ExploreView({
     modelDatasetKey,
     modelFilter,
     pageSize,
-    initialResponse,
+    activeInitialResponse,
     initialModelFilter,
     initialState,
     loadingOnly,
     preview,
+    revalidationKey,
     requestKey,
     retryKey,
     requiresCompleteDataset,
     socialFilter,
     sort,
+    setCurrentPage,
     valuationSort,
+    viewChainId,
     ageSort,
   ]);
 
@@ -2907,6 +3050,11 @@ export function ExploreView({
     valuationSort,
   ]);
 
+  const activeChainState: ExploreState =
+    state.phase === "loading" ||
+      state.contentKey.startsWith(`${chainContentKey}\u0000`)
+      ? state
+      : { phase: "loading" };
   const displayState: ExploreState = preview
     ? {
         phase: "ready",
@@ -2914,7 +3062,7 @@ export function ExploreView({
         requestKey,
         contentKey,
       }
-    : state;
+    : activeChainState;
 
   const payload = displayState.phase === "ready" ? displayState.payload : null;
   const cards = useMemo(
@@ -2997,8 +3145,16 @@ export function ExploreView({
       return (
         <div className={`${styles.emptyState} liquid-glass-surface`}>
           <div>
-            <h2>Explore is getting ready</h2>
-            <p>The launch index is not available in this environment yet.</p>
+            <h2>
+              {viewChainId === 4663
+                ? "Robinhood Explore is planned"
+                : "Explore is getting ready"}
+            </h2>
+            <p>
+              {viewChainId === 4663
+                ? "Robinhood Chain launches are not deployed yet."
+                : "The launch index is not available in this environment yet."}
+            </p>
           </div>
         </div>
       );
@@ -3025,7 +3181,7 @@ export function ExploreView({
                 setQuery("");
                 setSocialFilter("all");
                 updateModelFilter("all");
-                setValuationSort("highest");
+                setValuationSort(DEFAULT_EXPLORE_VALUATION_SORT);
                 setAgeSort("none");
                 searchInputRef.current?.focus();
               }}
@@ -3080,9 +3236,6 @@ export function ExploreView({
           const imageSource = getTokenCardImageSource(token.imageUrl);
           const preserveArtworkAspectRatio =
             imageSource === SHARD_ORIGINAL_ARTWORK_SOURCE;
-          const valuationLabel = token.valuation
-            ? formatMarketCapMetric(token.valuation)
-            : null;
           const eagerImage = !embedded && index < Math.min(pageSize, 4);
           const cardContent = (
             <>
@@ -3126,9 +3279,14 @@ export function ExploreView({
                 <div className={styles.runnerData}>
                   <span>
                     <small title="Fully diluted valuation">FDV</small>
-                    <strong>
-                      {valuationLabel ?? token.marketStatus ?? "Unavailable"}
-                    </strong>
+                    {token.valuation ? (
+                      <AnimatedMarketCap
+                        metric={token.valuation}
+                        replayKey={token.id}
+                      />
+                    ) : (
+                      <strong>{token.marketStatus ?? "Unavailable"}</strong>
+                    )}
                   </span>
                 </div>
               </div>

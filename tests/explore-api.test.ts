@@ -280,6 +280,72 @@ describe("Explore static identity and Dexscreener market contract", () => {
     }));
   });
 
+  it("returns an honest planned Robinhood state without reading Ethereum", async () => {
+    const response = await GET(
+      request("chain=4663&sort=newest&page=1&limit=9"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual(expect.objectContaining({
+      status: "not-deployed",
+      activationStage: "planned-not-deployed",
+      chainId: 4663,
+      tokens: [],
+      page: 1,
+      pageSize: 9,
+      total: 0,
+      totalPages: 0,
+      sort: "newest",
+    }));
+    expect(response.headers.get("x-programmable-chain-id")).toBe("4663");
+    expect(mocks.readCatalog).not.toHaveBeenCalled();
+    expect(mocks.readLastGoodCatalog).not.toHaveBeenCalled();
+    expect(mocks.readCustom).not.toHaveBeenCalled();
+    expect(mocks.readRouter).not.toHaveBeenCalled();
+    expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
+  it("defaults omitted chain and sort to the visible Ethereum Newest page", async () => {
+    const response = await GET(request("page=1&limit=9"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.chainId).toBe(1);
+    expect(body.sort).toBe("newest");
+    expect(body.tokens).toHaveLength(9);
+    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(9);
+  });
+
+  it("excludes identities from other chains before Ethereum enrichment", async () => {
+    const foreignBase = token(99);
+    const foreignId = `4663:${foreignBase.tokenAddress}`;
+    const foreign = {
+      ...foreignBase,
+      id: foreignId,
+      launchCategoryProvenance: {
+        ...foreignBase.launchCategoryProvenance,
+        recordId: foreignId,
+      },
+    } as ExploreEntry;
+    mocks.readCatalog.mockResolvedValueOnce(catalog({
+      entries: [...entries, foreign],
+    }));
+
+    const response = await GET(
+      request("chain=1&sort=newest&page=1&limit=100"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(TOKEN_COUNT);
+    expect(body.catalog.identityCount).toBe(TOKEN_COUNT);
+    expect(body.tokens).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: foreignId }),
+    ]));
+    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(TOKEN_COUNT);
+  });
+
   it("merges the independently verified Custom Registry lane when ready", async () => {
     const custom = token(99);
     mocks.customEnabled.mockReturnValue(true);
@@ -650,7 +716,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       catalog: {
         source: "envio-classic-v3",
         status: "last-known-good",
-        lastIndexedAt: NOW,
+        lastIndexedAt: "2026-08-16T08:00:01.000Z",
         identityCount: TOKEN_COUNT,
       },
     });
@@ -784,7 +850,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(9);
   });
 
-  it("discloses a stale validated Envio catalog and its exact timestamp", async () => {
+  it("uses the timestamp owned by the selected aggregate boundary", async () => {
     mocks.readCatalog.mockResolvedValueOnce(catalog({
       source: "envio-classic-v3",
       status: "last-known-good",
@@ -795,12 +861,12 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(body.catalog).toMatchObject({
       source: "envio-classic-v3",
       status: "last-known-good",
-      lastIndexedAt: "2026-08-01T04:20:58.618Z",
+      lastIndexedAt: "2026-08-16T08:00:01.000Z",
       identityCount: 12,
     });
     expect(body.dataQuality).toMatchObject({
       status: "partial",
-      generatedAt: "2026-08-01T04:20:58.618Z",
+      generatedAt: "2026-08-16T08:00:01.000Z",
       launchIdentity: { custom: "unavailable" },
     });
   });
@@ -812,6 +878,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     "q=a&q=b",
     "socials=maybe",
     "model=anything",
+    "chain=10",
   ])(
     "rejects unsupported query shape: %s",
     async (query) => {
