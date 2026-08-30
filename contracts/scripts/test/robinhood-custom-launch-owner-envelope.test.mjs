@@ -947,6 +947,51 @@ test("RPC transport is strict, bounded, and redacts endpoint/error content", asy
       return true;
     },
   );
+  const requestStarts = [];
+  await Promise.all(
+    Array.from({ length: 3 }, () =>
+      robinhoodFoundationRpc({
+        providerId: "quicknode",
+        rpcUrl:
+          "https://pacing-test.robinhood-mainnet.quiknode.pro/0123456789abcdef/",
+        method: "eth_chainId",
+        responseBudget: { consumed: 0, limit: 4 * 1024 * 1024 },
+        fetchImpl: async () => {
+          requestStarts.push(Date.now());
+          return new Response(
+            JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x1237" }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        },
+      }),
+    ),
+  );
+  assert.equal(requestStarts.length, 3);
+  assert.ok(requestStarts[1] - requestStarts[0] >= 80);
+  assert.ok(requestStarts[2] - requestStarts[1] >= 80);
+  await assert.rejects(
+    () =>
+      robinhoodFoundationRpc({
+        providerId: "quicknode",
+        rpcUrl: `https://rate-limit.robinhood-mainnet.quiknode.pro/${secret}/`,
+        method: "eth_getCode",
+        responseBudget: { consumed: 0, limit: 4 * 1024 * 1024 },
+        fetchImpl: async () =>
+          new Response(`rate-limited-${secret}`, {
+            status: 429,
+            headers: { "content-type": "text/plain" },
+          }),
+      }),
+    (error) => {
+      assert.match(error.message, /invalid HTTP envelope/u);
+      assert.ok(!error.message.includes(secret));
+      assert.ok(!error.message.includes("rate-limited"));
+      return true;
+    },
+  );
 });
 
 test("CLI parser accepts only the five non-signing review inputs", () => {

@@ -127,6 +127,11 @@ pending observations. The final action-time guard additionally requires a
 provider-agreed owner balance that remains unchanged through its closing read.
 Fee fields use the highest base fee, gas price and priority fee reported by
 either provider and remain bounded by the owner's explicit ceilings.
+The transport paces QuickNode requests at a bounded provider-specific rate so
+the complete opening and closing inventories do not become an unreviewed burst.
+An HTTP throttle response still fails the entire fresh attempt closed; it is
+never treated as agreement, retried as a partial snapshot or replaced by a
+different endpoint.
 
 ## Fresh envelope
 

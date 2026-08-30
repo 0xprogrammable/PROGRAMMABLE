@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 import {
   decodeAbiParameters,
@@ -290,6 +291,8 @@ const OWNER_ENVELOPE_RPC_METHOD_INVENTORY = Object.freeze(
   ),
 );
 const RPC_AGGREGATE_RESPONSE_LIMIT_BYTES = 4 * 1024 * 1024;
+const QUICKNODE_RPC_MINIMUM_REQUEST_INTERVAL_MS = 100;
+const quicknodeRpcPacing = new Map();
 
 function fail(message) {
   throw new Error(message);
@@ -1057,6 +1060,52 @@ export function assertRobinhoodFoundationRpcProviders({
   );
 }
 
+async function pacedRobinhoodFoundationRpcFetch({
+  providerId,
+  rpcUrl,
+  operationSignal,
+  fetchResponse,
+}) {
+  if (providerId !== "quicknode") return fetchResponse();
+  const key = sha256(
+    Buffer.concat([
+      Buffer.from(
+        "programmable.robinhood-custom-launch.quicknode-pacing.v1",
+        "utf8",
+      ),
+      Buffer.from([0]),
+      Buffer.from(rpcUrl, "utf8"),
+    ]),
+  );
+  let pacing = quicknodeRpcPacing.get(key);
+  if (!pacing) {
+    pacing = {
+      nextRequestNotBefore: 0,
+      tail: Promise.resolve(),
+    };
+    quicknodeRpcPacing.set(key, pacing);
+  }
+  const scheduled = pacing.tail.then(async () => {
+    const waitMilliseconds = Math.max(
+      0,
+      pacing.nextRequestNotBefore - Date.now(),
+    );
+    if (waitMilliseconds > 0) {
+      await delay(waitMilliseconds, undefined, {
+        signal: operationSignal,
+      });
+    }
+    pacing.nextRequestNotBefore =
+      Date.now() + QUICKNODE_RPC_MINIMUM_REQUEST_INTERVAL_MS;
+    return fetchResponse();
+  });
+  pacing.tail = scheduled.then(
+    () => undefined,
+    () => undefined,
+  );
+  return scheduled;
+}
+
 export async function robinhoodFoundationRpc({
   providerId,
   rpcUrl,
@@ -1088,18 +1137,25 @@ export async function robinhoodFoundationRpc({
   }
   let response;
   try {
-    const requestSignal = AbortSignal.timeout(requestTimeoutMs);
-    response = await fetchImpl(rpcUrl, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
+    response = await pacedRobinhoodFoundationRpcFetch({
+      providerId,
+      rpcUrl,
+      operationSignal,
+      fetchResponse: () => {
+        const requestSignal = AbortSignal.timeout(requestTimeoutMs);
+        return fetchImpl(rpcUrl, {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+          redirect: "error",
+          signal: operationSignal
+            ? AbortSignal.any([requestSignal, operationSignal])
+            : requestSignal,
+        });
       },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      redirect: "error",
-      signal: operationSignal
-        ? AbortSignal.any([requestSignal, operationSignal])
-        : requestSignal,
     });
   } catch {
     fail(`${providerId} RPC ${method} request failed`);
