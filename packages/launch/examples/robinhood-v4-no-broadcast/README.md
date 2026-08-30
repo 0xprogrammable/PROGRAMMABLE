@@ -25,7 +25,7 @@ mkdir -p assets
 ```
 
 Supply only public preparation inputs. The nonce is public launch input, not a private key. The image must be a real
-local PNG, JPEG, WebP, or GIF whose public URI belongs to the project. The source revision must be the exact public
+local PNG or single-frame GIF whose public URI belongs to the project; V4 rejects JPEG, WebP, and animated GIF. The source revision must be the exact public
 40-character Git commit containing these source bytes.
 
 ```sh

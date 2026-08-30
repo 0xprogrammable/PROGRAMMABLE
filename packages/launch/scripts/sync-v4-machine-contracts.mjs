@@ -46,6 +46,11 @@ const sha256 = { type: "string", pattern: "^sha256:[0-9a-f]{64}$" };
 const uint = { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" };
 const positiveUint = { type: "string", pattern: "^[1-9][0-9]*$" };
 const dateTime = { type: "string", format: "date-time" };
+const millisecondDateTime = {
+  type: "string",
+  format: "date-time",
+  pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+};
 const identifier = { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$" };
 const uuid = {
   type: "string",
@@ -1336,6 +1341,157 @@ const partnerAttribution = closed(
   },
 );
 
+const sourceVerificationComponent = {
+  oneOf: [
+    ...["queued", "retrying"].map((status) => closed(
+      [
+        "targetId", "address", "status", "exactMatchProvider", "evidenceDigest",
+        "updatedAt", "nextAttemptAt",
+      ],
+      {
+        targetId: identifier,
+        address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
+        status: { const: status },
+        exactMatchProvider: { type: "null" },
+        evidenceDigest: { type: "null" },
+        updatedAt: millisecondDateTime,
+        nextAttemptAt: millisecondDateTime,
+      },
+    )),
+    closed(
+      [
+        "targetId", "address", "status", "exactMatchProvider", "evidenceDigest",
+        "updatedAt",
+      ],
+      {
+        targetId: identifier,
+        address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
+        status: { const: "exact_match" },
+        exactMatchProvider: { const: "sourcify-v2" },
+        evidenceDigest: sha256,
+        updatedAt: millisecondDateTime,
+      },
+    ),
+    closed(
+      [
+        "targetId", "address", "status", "exactMatchProvider", "evidenceDigest",
+        "updatedAt",
+      ],
+      {
+        targetId: identifier,
+        address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
+        status: { const: "needs_attention" },
+        exactMatchProvider: { type: "null" },
+        evidenceDigest: { type: "null" },
+        updatedAt: millisecondDateTime,
+      },
+    ),
+  ],
+};
+const sourceVerificationComponents = array(sourceVerificationComponent, {
+  minItems: 1,
+  maxItems: 16,
+  "x-programmable-order": "unique UTF-8 targetId ascending",
+});
+const sourceVerificationStatus = closed(
+  [
+    "schemaVersion", "chainId", "caip2", "chainDeploymentId", "status",
+    "components", "updatedAt",
+  ],
+  {
+    schemaVersion: { const: "programmable.source-verification-status.v4" },
+    chainId: { const: "4663" },
+    caip2: { const: "eip155:4663" },
+    chainDeploymentId: { const: "robinhood-mainnet-custom-launch-v1" },
+    status: { enum: ["queued", "retrying", "exact_match", "needs_attention"] },
+    components: sourceVerificationComponents,
+    updatedAt: millisecondDateTime,
+  },
+  {
+    description:
+      "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+    "x-programmable-order": "updatedAt == max components[*].updatedAt",
+    allOf: [
+      {
+        if: { properties: { status: { const: "exact_match" } }, required: ["status"] },
+        then: {
+          properties: {
+            components: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { status: { const: "exact_match" } },
+                required: ["status"],
+              },
+            },
+          },
+        },
+      },
+      {
+        if: { properties: { status: { const: "needs_attention" } }, required: ["status"] },
+        then: {
+          properties: {
+            components: {
+              type: "array",
+              contains: {
+                type: "object",
+                properties: { status: { const: "needs_attention" } },
+                required: ["status"],
+              },
+            },
+          },
+        },
+      },
+      {
+        if: { properties: { status: { const: "retrying" } }, required: ["status"] },
+        then: {
+          properties: {
+            components: {
+              type: "array",
+              contains: {
+                type: "object",
+                properties: { status: { const: "retrying" } },
+                required: ["status"],
+              },
+              not: {
+                contains: {
+                  type: "object",
+                  properties: { status: { const: "needs_attention" } },
+                  required: ["status"],
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        if: { properties: { status: { const: "queued" } }, required: ["status"] },
+        then: {
+          properties: {
+            components: {
+              type: "array",
+              contains: {
+                type: "object",
+                properties: { status: { const: "queued" } },
+                required: ["status"],
+              },
+              not: {
+                contains: {
+                  type: "object",
+                  properties: {
+                    status: { enum: ["needs_attention", "retrying"] },
+                  },
+                  required: ["status"],
+                },
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+);
+
 const resource = closed(
   [
     "schemaVersion", "apiVersion", "launchId", "requestId", "routeId", "chainId", "caip2",
@@ -1383,6 +1539,11 @@ const resource = closed(
     admissionReceipt: nullable(admissionReceipt),
     simulationReceipt: nullable(simulationReceipt),
     externalContractEvidenceReceipt: nullable(externalEvidenceReceipt),
+    sourceVerification: {
+      description:
+        "Optional server-authored post-finality status. It is absent or null until verification jobs exist; clients never submit or infer it.",
+      oneOf: [sourceVerificationStatus, { type: "null" }],
+    },
     actionRequired: nullable(closed(["kind", "walletHandoffUrl", "expiresAt"], {
       kind: { const: "send-router-transaction" },
       walletHandoffUrl: { type: "string", format: "uri" },
@@ -1402,18 +1563,29 @@ const resource = closed(
     updatedAt: dateTime,
   },
   {
-    allOf: [{
-      if: {
-        properties: { status: { enum: ["received", "validating"] } },
-        required: ["status"],
+    allOf: [
+      {
+        if: {
+          properties: { status: { enum: ["received", "validating"] } },
+          required: ["status"],
+        },
+        then: {
+          properties: { externalContractEvidenceReceipt: { type: "null" } },
+        },
+        else: {
+          properties: { externalContractEvidenceReceipt: externalEvidenceReceipt },
+        },
       },
-      then: {
-        properties: { externalContractEvidenceReceipt: { type: "null" } },
+      {
+        if: {
+          properties: { status: { not: { const: "finalized" } } },
+          required: ["status"],
+        },
+        then: {
+          properties: { sourceVerification: { type: "null" } },
+        },
       },
-      else: {
-        properties: { externalContractEvidenceReceipt: externalEvidenceReceipt },
-      },
-    }],
+    ],
   },
 );
 
@@ -1593,7 +1765,7 @@ const finalizedMetadata = closed(
   [
     "schemaVersion", "apiVersion", "launchId", "chainId", "caip2", "chainDeploymentId",
     "chainDeploymentDescriptorDigest", "chainDeployment", "profile", "projectMetadata", "funding",
-    "liquidityModel", "commitments", "onchain", "createdAt", "finalizedAt",
+    "liquidityModel", "commitments", "onchain", "sourceVerification", "createdAt", "finalizedAt",
   ],
   {
     schemaVersion: { const: "programmable.finalized-custom-launch-metadata.v4" },
@@ -1610,6 +1782,7 @@ const finalizedMetadata = closed(
     liquidityModel,
     commitments,
     onchain: publicOnchainEvidence,
+    sourceVerification: sourceVerificationStatus,
     createdAt: dateTime,
     finalizedAt: dateTime,
   },
@@ -1648,6 +1821,7 @@ const finalizedListEnvelope = closed(
 const standalone = new Map([
   ["custom-launch-create-request.json", annotate("Custom Launch V4 create request", "custom-launch-create-request.json", createRequest)],
   ["custom-launch.json", annotate("Custom Launch resource V4", "custom-launch.json", resource)],
+  ["source-verification-status.json", annotate("Custom Launch source-verification status V4", "source-verification-status.json", sourceVerificationStatus)],
   ["capabilities.json", annotate("Custom Launch capabilities V2 for API V4", "capabilities.json", capabilities)],
   ["preflight.json", annotate("Custom Launch preflight V2 for API V4", "preflight.json", preflight)],
   ["onchain-evidence.json", annotate("Custom Launch onchain evidence V2 for API V4", "onchain-evidence.json", onchainEvidence)],
@@ -1670,6 +1844,7 @@ openapi.components.schemas = {
   CustomLaunchCapabilitiesV2: standalone.get("capabilities.json"),
   CustomLaunchPreflightV2: standalone.get("preflight.json"),
   CustomLaunchResourceV4: standalone.get("custom-launch.json"),
+  SourceVerificationStatusV4: standalone.get("source-verification-status.json"),
   CustomLaunchOnchainEvidenceV2: standalone.get("onchain-evidence.json"),
   ExactWalletTransactionV4: standalone.get("exact-wallet-transaction.json"),
   CustomLaunchFinalizedMetadataV4: finalizedMetadata,

@@ -17,6 +17,7 @@ import {
   validV4Preflight,
   validV4ProjectMetadata,
   validV4Resource,
+  validV4SourceVerificationStatus,
   v4ChainDeployment,
   v4Profile,
 } from "./fixtures/v4.mjs";
@@ -37,6 +38,7 @@ const publicSchemaFiles = Object.freeze({
   "pack-config.json": "PackConfigV4",
   "custom-launch-create-request.json": "CustomLaunchCreateRequestV4",
   "custom-launch.json": "CustomLaunchResourceV4",
+  "source-verification-status.json": "SourceVerificationStatusV4",
   "capabilities.json": "CustomLaunchCapabilitiesV2",
   "preflight.json": "CustomLaunchPreflightV2",
   "onchain-evidence.json": "CustomLaunchOnchainEvidenceV2",
@@ -179,6 +181,8 @@ test("V4 programmable-order semantics fail closed for every declared machine rul
     "resultingContracts providerReadbacks prove blockNumber - 1 -> blockNumber",
     "strictly increasing logIndex; unique",
     "unique UTF-8 ascending",
+    "unique UTF-8 targetId ascending",
+    "updatedAt == max components[*].updatedAt",
   ].sort(compareUtf8));
   for (const rule of declaredRules) {
     assert.equal(validateProgrammableOrder(rule, null), false, `${rule} rejects malformed input`);
@@ -229,6 +233,35 @@ test("V4 programmable-order semantics fail closed for every declared machine rul
   assert.equal(validateProgrammableOrder("unique UTF-8 ascending", ["alpha", "beta"]), true);
   assert.equal(validateProgrammableOrder("unique UTF-8 ascending", ["beta", "alpha"]), false);
   assert.equal(validateProgrammableOrder("unique UTF-8 ascending", ["alpha", "alpha"]), false);
+
+  const sourceComponents = validV4SourceVerificationStatus().components;
+  assert.equal(
+    validateProgrammableOrder("unique UTF-8 targetId ascending", sourceComponents),
+    true,
+  );
+  assert.equal(
+    validateProgrammableOrder(
+      "unique UTF-8 targetId ascending",
+      sourceComponents.toReversed(),
+    ),
+    false,
+  );
+  const sourceStatus = validV4SourceVerificationStatus();
+  assert.equal(
+    validateProgrammableOrder(
+      "updatedAt == max components[*].updatedAt",
+      sourceStatus,
+    ),
+    true,
+  );
+  sourceStatus.updatedAt = "2026-08-29T12:31:00.000Z";
+  assert.equal(
+    validateProgrammableOrder(
+      "updatedAt == max components[*].updatedAt",
+      sourceStatus,
+    ),
+    false,
+  );
 });
 
 test("V4 pack schema rejects cross-chain, trust-root, profile, funding, and graph bypasses", () => {
@@ -463,6 +496,7 @@ test("OpenAPI 4.0.0 publishes all required V4 routes and machine schema names", 
     CustomLaunchCapabilitiesV2: "programmable.custom-launch-capabilities.v2",
     CustomLaunchPreflightV2: "programmable.custom-launch-preflight.v2",
     CustomLaunchResourceV4: "programmable.custom-launch.v4",
+    SourceVerificationStatusV4: "programmable.source-verification-status.v4",
     CustomLaunchOnchainEvidenceV2: "programmable.custom-launch-onchain-evidence.v2",
     ExactWalletTransactionV4: "programmable.exact-wallet-transaction.v4",
   };
@@ -569,6 +603,7 @@ test("standalone and OpenAPI V4 schemas accept goldens and reject one-field addi
     ["preflight.json", preflight],
     ["onchain-evidence.json", evidence],
     ["exact-wallet-transaction.json", exactWallet],
+    ["source-verification-status.json", validV4SourceVerificationStatus()],
   ]);
   for (const [fileName, componentName] of Object.entries(publicSchemaFiles)) {
     const standalone = publicSchemas.get(fileName);
@@ -651,6 +686,140 @@ test("V4 list and finalized routes publish closed launches/nextCursor envelopes"
   );
   finalizedGolden.unexpectedField = true;
   assert.equal(finalizedValidator(finalizedGolden), false, "finalized envelope must be closed");
+});
+
+test("V4 source-verification schemas bind aggregate truth, exact evidence, and finalized readback", () => {
+  const standalone = publicSchemas.get("source-verification-status.json");
+  const {
+    $schema: _schema,
+    $id: _id,
+    title: _title,
+    ...sourceVerificationCore
+  } = standalone;
+  const resourceSchema = publicSchemas.get("custom-launch.json");
+  const embedded = resourceSchema.properties.sourceVerification.oneOf
+    .find((candidate) => candidate.type === "object");
+  const finalizedSchema = openapi.components.schemas.CustomLaunchFinalizedMetadataV4;
+  assert.deepEqual(embedded, sourceVerificationCore);
+  assert.deepEqual(finalizedSchema.properties.sourceVerification, sourceVerificationCore);
+  assert.equal(resourceSchema.required.includes("sourceVerification"), false);
+  assert.equal(finalizedSchema.required.includes("sourceVerification"), true);
+
+  const validateSource = machineContractAjv().compile(standalone);
+  const validStates = [
+    validV4SourceVerificationStatus(),
+    validV4SourceVerificationStatus({
+      components: validV4SourceVerificationStatus().components.map((component, index) => {
+        const { nextAttemptAt: _nextAttemptAt, ...terminal } = component;
+        if (index === 0) {
+          return {
+            ...terminal,
+            status: "queued",
+            exactMatchProvider: null,
+            evidenceDigest: null,
+            nextAttemptAt: "2026-08-29T12:35:00.000Z",
+          };
+        }
+        return {
+          ...terminal,
+          status: "exact_match",
+          exactMatchProvider: "sourcify-v2",
+          evidenceDigest: component.evidenceDigest ?? `sha256:${"a".repeat(64)}`,
+        };
+      }),
+    }),
+    validV4SourceVerificationStatus({
+      components: validV4SourceVerificationStatus().components.map((component) => {
+        const { nextAttemptAt: _nextAttemptAt, ...withoutRetry } = component;
+        return {
+          ...withoutRetry,
+          status: "exact_match",
+          exactMatchProvider: "sourcify-v2",
+          evidenceDigest: component.evidenceDigest ?? `sha256:${"a".repeat(64)}`,
+        };
+      }),
+    }),
+    validV4SourceVerificationStatus({
+      components: validV4SourceVerificationStatus().components.map((component, index) => {
+        const { nextAttemptAt: _nextAttemptAt, ...withoutRetry } = component;
+        if (index === 0) {
+          return {
+            ...withoutRetry,
+            status: "queued",
+            exactMatchProvider: null,
+            evidenceDigest: null,
+            nextAttemptAt: "2026-08-29T12:35:00.000Z",
+          };
+        }
+        if (index === 1) {
+          return {
+            ...withoutRetry,
+            status: "needs_attention",
+            exactMatchProvider: null,
+            evidenceDigest: null,
+          };
+        }
+        return {
+          ...withoutRetry,
+          status: "retrying",
+          exactMatchProvider: null,
+          evidenceDigest: null,
+          nextAttemptAt: "2026-08-29T12:36:00.000Z",
+        };
+      }),
+    }),
+  ];
+  assert.deepEqual(
+    validStates.map(({ status }) => status),
+    ["retrying", "queued", "exact_match", "needs_attention"],
+  );
+  for (const state of validStates) {
+    assert.equal(validateSource(state), true, JSON.stringify(validateSource.errors));
+  }
+
+  const cases = [
+    ["aggregate status", (value) => { value.status = "queued"; }],
+    ["aggregate timestamp", (value) => {
+      value.updatedAt = "2026-08-29T12:31:00.000Z";
+    }],
+    ["component order", (value) => { value.components.reverse(); }],
+    ["component identity", (value) => {
+      value.components[1].targetId = value.components[0].targetId;
+    }],
+    ["lowercase address", (value) => {
+      value.components[0].address = `0x${"A".repeat(40)}`;
+    }],
+    ["retry schedule", (value) => { delete value.components[1].nextAttemptAt; }],
+    ["terminal retry schedule", (value) => {
+      value.components[0].nextAttemptAt = "2026-08-29T12:35:00.000Z";
+    }],
+    ["non-exact evidence", (value) => {
+      value.components[1].evidenceDigest = `sha256:${"b".repeat(64)}`;
+    }],
+    ["exact provider", (value) => {
+      value.components[0].exactMatchProvider = "blockscout-v2";
+    }],
+  ];
+  for (const [label, mutate] of cases) {
+    const state = structuredClone(validV4SourceVerificationStatus());
+    mutate(state);
+    assert.equal(validateSource(state), false, label);
+  }
+
+  const validateResource = machineContractAjv().compile(resourceSchema);
+  const prefinal = validV4Resource(undefined, undefined, {
+    sourceVerification: validV4SourceVerificationStatus(),
+  });
+  assert.equal(validateResource(prefinal), false, "pre-finality source state must stay hidden");
+  prefinal.sourceVerification = null;
+  assert.equal(validateResource(prefinal), true, JSON.stringify(validateResource.errors));
+
+  const validateFinalized = machineContractAjv().compile(finalizedSchema);
+  const finalized = fixtureFromSchema(finalizedSchema);
+  finalized.sourceVerification = validV4SourceVerificationStatus();
+  assert.equal(validateFinalized(finalized), true, JSON.stringify(validateFinalized.errors));
+  delete finalized.sourceVerification;
+  assert.equal(validateFinalized(finalized), false, "finalized readback must carry source state");
 });
 
 test("V4 schema semantics lock image pixels, evidence state, and proxy facts", () => {
@@ -927,6 +1096,26 @@ function validateProgrammableOrder(rule, value) {
   if (rule === "unique UTF-8 ascending") {
     return Array.isArray(value) && value.every((entry, index) => typeof entry === "string"
       && (index === 0 || compareUtf8(value[index - 1], entry) < 0));
+  }
+  if (rule === "unique UTF-8 targetId ascending") {
+    return Array.isArray(value) && value.every((entry, index) =>
+      entry !== null
+      && typeof entry === "object"
+      && !Array.isArray(entry)
+      && typeof entry.targetId === "string"
+      && (index === 0
+        || compareUtf8(value[index - 1]?.targetId, entry.targetId) < 0));
+  }
+  if (rule === "updatedAt == max components[*].updatedAt") {
+    if (value === null || typeof value !== "object" || Array.isArray(value)
+      || typeof value.updatedAt !== "string"
+      || !Array.isArray(value.components)
+      || value.components.length === 0
+      || value.components.some((component) =>
+        typeof component?.updatedAt !== "string")) return false;
+    return value.updatedAt === value.components
+      .map((component) => component.updatedAt)
+      .reduce((latest, current) => current > latest ? current : latest);
   }
   if (rule
     === "previousBlockNumber + 1 == startBlock; "

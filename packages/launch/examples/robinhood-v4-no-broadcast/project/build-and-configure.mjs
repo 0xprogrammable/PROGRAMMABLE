@@ -197,10 +197,8 @@ function relativePath(value) {
 function assertSupportedImage(bytes) {
   const hex = bytes.subarray(0, 12).toString("hex");
   const supported = hex.startsWith("89504e470d0a1a0a")
-    || hex.startsWith("ffd8ff")
-    || hex.startsWith("52494646")
-    || bytes.subarray(0, 6).toString("ascii") === "GIF89a";
-  if (!supported) throw new TypeError("project image must be PNG, JPEG, WebP, or GIF");
+    || new Set(["GIF87a", "GIF89a"]).has(bytes.subarray(0, 6).toString("ascii"));
+  if (!supported) throw new TypeError("V4 project image must be PNG or single-frame GIF");
 }
 
 function sha256(bytes) {

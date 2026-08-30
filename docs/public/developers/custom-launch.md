@@ -37,10 +37,14 @@ The stable planned contract uses
 `/v4/chains/4663/finalized-custom-launches`. Read the
 [V4 OpenAPI pointer](https://programmable.market/openapi/custom-launch-v4.json), the
 [V4 pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and the
+[V4 source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json), plus the
 [V4 admission descriptor](https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json).
 Authentication is handed off only through `$PROGRAMMABLE_API_KEY`; it never selects a policy profile or grants wallet
 authority. V4 currently advertises only no funding and exact wallet transaction value. ERC-20 funding needs separate
 settlement proof before it can be advertised.
+
+V4 metadata images are exactly PNG or single-frame GIF, as published by `metadataImage.mediaTypes` and `gifFrames`.
+JPEG, WebP, and animated GIF are rejected by the V4 packer before any network request.
 
 Project-owned token and hook targets, 3–16 graph targets and all fourteen hook permission bits are structurally
 representable. That does not prove safety or behavior. `feeBehaviorClaim` remains false, generic fee claiming and
@@ -591,8 +595,12 @@ Router as `to`, exact value and the response-contract selector and calldata. It 
 After a bundled request becomes finalized, provider verification is queued independently for every exclusive
 component. Explorer failure never blocks or revises launch finality. `sourceVerification.status` is server-authored and
 uses `queued`, `retrying`, `exact_match` or `needs_attention`. Only literal `exact_match` for every component means
-Source verified. Clients must never infer, promote or submit that state. Legacy requests and requests without a bundle
-remain compatible and unverified.
+Source verified. Components are uniquely sorted by UTF-8 `targetId`; non-exact rows expose no provider or evidence
+digest, while exact rows name only `sourcify-v2` and carry its evidence digest. `nextAttemptAt` exists only for queued
+or retrying rows. Otherwise aggregate state is fail closed: any `needs_attention` wins, then any `retrying`, then
+`queued`; aggregate `updatedAt` is the latest component timestamp. The authenticated V4 resource may omit
+or null this field before finality; the V4 finalized-feed contract requires it. Clients must never infer, promote
+or submit that state. Legacy requests and requests without a bundle remain compatible and unverified.
 
 A finalized Router launch remains eligible for Explore and the connected wallet's Profile after discovery refreshes.
 Router provenance is not approval, audit coverage, active liquidity, tradability or a safety claim.

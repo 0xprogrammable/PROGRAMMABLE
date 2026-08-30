@@ -28,6 +28,7 @@ import {
   validV4ProjectMetadata,
   validV4Request,
   validV4Resource,
+  validV4SourceVerificationStatus,
   v4RequestBytes,
 } from "./fixtures/v4.mjs";
 
@@ -484,6 +485,103 @@ test("V4 status fetches capabilities first and stops at an exact wallet action w
   assert.equal(result.walletHandoffReady, true);
   assert.equal(result.walletHandoffStage, "router-transaction-required");
   assert.equal(result.resource.walletTransaction.schemaVersion, "programmable.exact-wallet-transaction.v4");
+});
+
+test("V4 finalized status validates and emits the server-authored exact-source state", async () => {
+  const sourceVerification = validV4SourceVerificationStatus();
+  const wallet = validExactWalletTransaction();
+  const resource = walletReadyResource(validV4Resource(undefined, undefined, {
+    status: "finalized",
+    walletTransactionPreimageHash: wallet.transactionPreimageHash,
+    walletTransaction: wallet,
+    sourceVerification,
+  }));
+  const result = await statusLaunch({
+    requestId: V4_LAUNCH_ID,
+    apiVersion: 4,
+    chainId: "4663",
+    maxAttempts: 1,
+    fetchImpl: async (url) => url === CAPABILITIES_URL
+      ? jsonResponse(validV4Capabilities())
+      : jsonResponse(resource),
+    loadApiKeyImpl: async () => V4_API_KEY,
+  });
+
+  assert.deepEqual(result.sourceVerification, sourceVerification);
+  assert.deepEqual(result.resource.sourceVerification, sourceVerification);
+  assert.equal(result.terminal, true);
+  assert.equal(result.resource.sourceVerification.status, "retrying");
+  assert.equal(
+    result.resource.sourceVerification.components[1].nextAttemptAt,
+    "2026-08-29T12:34:00.000Z",
+  );
+});
+
+test("V4 source-verification parser rejects drift, unsafe evidence, and pre-finality exposure", async () => {
+  const submitStatus = async (sourceVerification, status = "finalized") => {
+    const wallet = validExactWalletTransaction();
+    const resource = walletReadyResource(validV4Resource(undefined, undefined, {
+      status,
+      walletTransactionPreimageHash: wallet.transactionPreimageHash,
+      walletTransaction: wallet,
+      sourceVerification,
+    }));
+    return statusLaunch({
+      requestId: V4_LAUNCH_ID,
+      apiVersion: 4,
+      chainId: "4663",
+      maxAttempts: 1,
+      fetchImpl: async (url) => url === CAPABILITIES_URL
+        ? jsonResponse(validV4Capabilities())
+        : jsonResponse(resource),
+      loadApiKeyImpl: async () => V4_API_KEY,
+    });
+  };
+  const cases = [
+    ["target order", (value) => value.components.reverse(), "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["lowercase address", (value) => {
+      value.components[0].address = `0x${"A".repeat(40)}`;
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["exact provider", (value) => {
+      value.components[0].exactMatchProvider = "blockscout-v2";
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["non-exact evidence", (value) => {
+      value.components[1].evidenceDigest = `sha256:${"a".repeat(64)}`;
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["retry schedule", (value) => {
+      delete value.components[1].nextAttemptAt;
+    }, "CUSTOM_LAUNCH_V4_CONTRACT_INVALID"],
+    ["terminal retry schedule", (value) => {
+      value.components[0].nextAttemptAt = "2026-08-29T12:35:00.000Z";
+    }, "CUSTOM_LAUNCH_V4_CONTRACT_INVALID"],
+    ["aggregate status", (value) => {
+      value.status = "queued";
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["aggregate timestamp", (value) => {
+      value.updatedAt = "2026-08-29T12:31:00.000Z";
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+  ];
+  for (const [label, mutate, expectedCode] of cases) {
+    const sourceVerification = structuredClone(validV4SourceVerificationStatus());
+    mutate(sourceVerification);
+    await assert.rejects(
+      submitStatus(sourceVerification),
+      (error) => {
+        assert.ok(error instanceof ProgrammableApiError, label);
+        assert.equal(error.details?.code, expectedCode, label);
+        return true;
+      },
+    );
+  }
+
+  await assert.rejects(
+    submitStatus(validV4SourceVerificationStatus(), "submitted"),
+    (error) => {
+      assert.ok(error instanceof ProgrammableApiError);
+      assert.equal(error.details?.serverDetails?.field, "sourceVerification.status");
+      return true;
+    },
+  );
 });
 
 function requestWithWalletContract(overrides = {}) {

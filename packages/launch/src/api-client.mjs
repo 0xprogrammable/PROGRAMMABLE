@@ -352,6 +352,9 @@ export async function submitLaunch(options) {
     idempotencyKey,
     requestSha256,
     ...(isV4 ? { apiVersion: "v4", chainId, caip2: request.caip2 } : {}),
+    ...(isV4 && Object.hasOwn(result.body, "sourceVerification")
+      ? { sourceVerification: result.body.sourceVerification }
+      : {}),
     journalPath,
     ...(Array.isArray(validation.diagnostics) && validation.diagnostics.length !== 0
       ? { diagnostics: validation.diagnostics }
@@ -440,6 +443,9 @@ export async function statusLaunch(options) {
       return {
         ...(apiVersion === 4
           ? { apiVersion: "v4", chainId, caip2: ROBINHOOD_CAIP2 }
+          : {}),
+        ...(apiVersion === 4 && Object.hasOwn(resource, "sourceVerification")
+          ? { sourceVerification: resource.sourceVerification }
           : {}),
         httpStatus: result.status,
         stopped,
@@ -1130,6 +1136,7 @@ function assertV4LaunchResource(value, {
     "expiresAt",
     "secondsRemaining",
     "partnerAttribution",
+    "sourceVerification",
   ].filter((field) => Object.hasOwn(value, field));
   assertV4ExactKeys(value, [
     "schemaVersion",
@@ -1309,6 +1316,13 @@ function assertV4LaunchResource(value, {
       serverDetails: { field: "timestamps" },
     });
   }
+  if (value.sourceVerification !== undefined
+    && value.sourceVerification !== null) {
+    if (value.status !== "finalized") {
+      throw invalidV4SourceVerification("status");
+    }
+    assertV4SourceVerificationStatus(value.sourceVerification);
+  }
   if (value.failure !== null) {
     assertV4ExactKeys(value.failure, ["code", "message", "retryable"], "resource.failure");
     if (!nonemptyString(value.failure.code)
@@ -1395,6 +1409,103 @@ function assertV4LaunchResource(value, {
   if (value.onchain !== null) {
     assertV4OnchainEvidence(value.onchain, capabilities, value);
   }
+}
+
+function assertV4SourceVerificationStatus(value) {
+  assertResponseObject(value, "resource.sourceVerification");
+  assertV4ExactKeys(value, [
+    "schemaVersion",
+    "chainId",
+    "caip2",
+    "chainDeploymentId",
+    "status",
+    "components",
+    "updatedAt",
+  ], "resource.sourceVerification");
+  const statuses = new Set(["queued", "retrying", "exact_match", "needs_attention"]);
+  if (value.schemaVersion !== "programmable.source-verification-status.v4"
+    || value.chainId !== ROBINHOOD_CHAIN_ID
+    || value.caip2 !== ROBINHOOD_CAIP2
+    || value.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
+    || !statuses.has(value.status)
+    || !Array.isArray(value.components)
+    || value.components.length < 1
+    || value.components.length > 16
+    || !canonicalMillisecondTimestampV4(value.updatedAt)) {
+    throw invalidV4SourceVerification("root");
+  }
+  let previousTargetId = null;
+  const componentTimestamps = [];
+  for (const [index, component] of value.components.entries()) {
+    const label = `resource.sourceVerification.components[${index}]`;
+    assertResponseObject(component, label);
+    const active = component.status === "queued" || component.status === "retrying";
+    assertV4ExactKeys(component, [
+      "targetId",
+      "address",
+      "status",
+      "exactMatchProvider",
+      "evidenceDigest",
+      "updatedAt",
+      ...(active ? ["nextAttemptAt"] : []),
+    ], label);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,255}$/u.test(component.targetId ?? "")
+      || !/^0x[0-9a-f]{40}$/u.test(component.address ?? "")
+      || !statuses.has(component.status)
+      || !canonicalMillisecondTimestampV4(component.updatedAt)
+      || (previousTargetId !== null
+        && Buffer.compare(
+          Buffer.from(previousTargetId, "utf8"),
+          Buffer.from(component.targetId, "utf8"),
+        ) >= 0)) {
+      throw invalidV4SourceVerification(`components[${index}]`);
+    }
+    if (component.status === "exact_match") {
+      if (component.exactMatchProvider !== "sourcify-v2"
+        || !SHA256.test(component.evidenceDigest ?? "")) {
+        throw invalidV4SourceVerification(`components[${index}].exactMatchProvider`);
+      }
+    } else if (component.exactMatchProvider !== null
+      || component.evidenceDigest !== null) {
+      throw invalidV4SourceVerification(`components[${index}].evidenceDigest`);
+    }
+    if (active && !canonicalMillisecondTimestampV4(component.nextAttemptAt)) {
+      throw invalidV4SourceVerification(`components[${index}].nextAttemptAt`);
+    }
+    previousTargetId = component.targetId;
+    componentTimestamps.push(component.updatedAt);
+  }
+  const expectedStatus = value.components.every(({ status }) => status === "exact_match")
+    ? "exact_match"
+    : value.components.some(({ status }) => status === "needs_attention")
+      ? "needs_attention"
+      : value.components.some(({ status }) => status === "retrying")
+        ? "retrying"
+        : "queued";
+  const expectedUpdatedAt = componentTimestamps.reduce((latest, current) =>
+    current > latest ? current : latest);
+  if (value.status !== expectedStatus || value.updatedAt !== expectedUpdatedAt) {
+    throw invalidV4SourceVerification(
+      value.status !== expectedStatus ? "status" : "updatedAt",
+    );
+  }
+}
+
+function canonicalMillisecondTimestampV4(value) {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)
+    && Number.isFinite(Date.parse(value))
+    && new Date(Date.parse(value)).toISOString() === value;
+}
+
+function invalidV4SourceVerification(field) {
+  return new ProgrammableApiError(
+    "Custom Launch API returned invalid V4 source-verification state",
+    {
+      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+      serverDetails: { field: `sourceVerification.${field}` },
+    },
+  );
 }
 
 function assertExactWalletTransactionV4(

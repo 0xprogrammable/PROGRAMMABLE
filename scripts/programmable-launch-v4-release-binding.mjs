@@ -156,6 +156,8 @@ const MACHINES = Object.freeze({
     "https://programmable.market/schemas/custom-launch/v4/custom-launch-create-request.json"],
   resource: ["public/schemas/custom-launch/v4/custom-launch.json",
     "https://programmable.market/schemas/custom-launch/v4/custom-launch.json"],
+  sourceVerificationStatus: ["public/schemas/custom-launch/v4/source-verification-status.json",
+    "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json"],
   capabilities: ["public/schemas/custom-launch/v4/capabilities.json",
     "https://programmable.market/schemas/custom-launch/v4/capabilities.json"],
   preflight: ["public/schemas/custom-launch/v4/preflight.json",
