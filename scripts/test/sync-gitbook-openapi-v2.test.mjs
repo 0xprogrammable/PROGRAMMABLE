@@ -22,7 +22,7 @@ test("committed GitBook OpenAPI mirror is the complete pinned local closure", as
   const result = await checkGitBookOpenApiMirror({ repositoryRoot });
   assert.equal(
     DEVELOPERS_SOURCE.commit,
-    "5641d2c75d58239864f4827c9bb054abc170af18",
+    "edaa839148897781c710d92650dbf9f1f52a86e8",
   );
   assert.equal(result.entrypointDigest, `sha256:${DEVELOPERS_SOURCE.entrypointSha256}`);
   assert.equal(result.localDocumentCount, 18);

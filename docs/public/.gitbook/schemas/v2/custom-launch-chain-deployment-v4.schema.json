@@ -218,10 +218,10 @@
                   "type": "object",
                   "properties": {
                     "providerId": {
-                      "const": "drpc"
+                      "const": "quicknode"
                     },
                     "trustDomain": {
-                      "const": "drpc.org"
+                      "const": "quicknode.com"
                     }
                   }
                 }
@@ -437,10 +437,10 @@
                   "type": "object",
                   "properties": {
                     "providerId": {
-                      "const": "drpc"
+                      "const": "quicknode"
                     },
                     "trustDomain": {
-                      "const": "drpc.org"
+                      "const": "quicknode.com"
                     }
                   }
                 }
@@ -582,10 +582,10 @@
                   "type": "object",
                   "properties": {
                     "providerId": {
-                      "const": "drpc"
+                      "const": "quicknode"
                     },
                     "trustDomain": {
-                      "const": "drpc.org"
+                      "const": "quicknode.com"
                     }
                   }
                 }
@@ -781,10 +781,10 @@
               ],
               "properties": {
                 "providerId": {
-                  "const": "drpc"
+                  "const": "quicknode"
                 },
                 "trustDomain": {
-                  "const": "drpc.org"
+                  "const": "quicknode.com"
                 },
                 "l1Confirmations": {
                   "$ref": "#/$defs/positiveDecimal"
@@ -986,10 +986,10 @@
               "type": "object",
               "properties": {
                 "providerId": {
-                  "const": "drpc"
+                  "const": "quicknode"
                 },
                 "trustDomain": {
-                  "const": "drpc.org"
+                  "const": "quicknode.com"
                 }
               }
             }
@@ -1138,10 +1138,10 @@
                   "type": "object",
                   "properties": {
                     "providerId": {
-                      "const": "drpc"
+                      "const": "quicknode"
                     },
                     "trustDomain": {
-                      "const": "drpc.org"
+                      "const": "quicknode.com"
                     }
                   }
                 }

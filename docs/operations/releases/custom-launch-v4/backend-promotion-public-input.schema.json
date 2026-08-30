@@ -249,7 +249,7 @@
         "robinhood": {
           "type": "array",
           "prefixItems": [
-            { "const": { "providerId": "drpc", "trustDomain": "drpc.org" } },
+            { "const": { "providerId": "quicknode", "trustDomain": "quicknode.com" } },
             { "const": { "providerId": "alchemy", "trustDomain": "alchemy.com" } }
           ],
           "items": false,

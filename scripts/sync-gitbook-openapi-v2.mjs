@@ -15,10 +15,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const DEVELOPERS_SOURCE = Object.freeze({
   repository: "programmablehq/Developers",
-  commit: "5641d2c75d58239864f4827c9bb054abc170af18",
+  commit: "edaa839148897781c710d92650dbf9f1f52a86e8",
   entrypoint: "openapi/programmable-v2.yaml",
   entrypointSha256:
-    "b7925914d450d0a10cc73cd85fcc36418ac0238b9f3d9f46a15499d5483a405e",
+    "2e6009eef6c926bea3f5723c8e7f819c811fa1ef91c20694c5927f284b1a2c6c",
   strictGraphDocumentCount: 21,
   strictGraphReferenceDocumentCount: 20,
 });
@@ -37,8 +37,8 @@ const PINNED_DOCUMENTS = Object.freeze(
   [
     [
       "openapi/programmable-v2.yaml",
-      40_803,
-      "b7925914d450d0a10cc73cd85fcc36418ac0238b9f3d9f46a15499d5483a405e",
+      42_381,
+      "2e6009eef6c926bea3f5723c8e7f819c811fa1ef91c20694c5927f284b1a2c6c",
     ],
     [
       "schemas/v2/common.schema.json",
@@ -52,8 +52,8 @@ const PINNED_DOCUMENTS = Object.freeze(
     ],
     [
       "schemas/v2/custom-launch-chain-deployment-v4.schema.json",
-      38_718,
-      "6969a26df1aadc0fd9ed5eeafbc40b9f45a45284af804adc738ba122d69d7fb1",
+      38_778,
+      "eda72f2214f3deef9ad0989cb1e2ed5488d674e4e6a282983de169d432a8bbaa",
     ],
     [
       "schemas/v2/custom-launch-registry-record-v3.schema.json",
@@ -131,7 +131,7 @@ const PINNED_DOCUMENTS = Object.freeze(
 );
 
 const PINNED_CLOSURE_SHA256 =
-  "861b55bd07fe721ca9abbda98812a8adb5ba34191b7d1cc123a032db24cb4e79";
+  "11fd2cf66ccf5801d31ff1f49ac198e9086625cd51bf7b00f77e0bc477d36bb9";
 const PINNED_BY_SOURCE_PATH = new Map(
   PINNED_DOCUMENTS.map((document) => [document.sourcePath, document]),
 );

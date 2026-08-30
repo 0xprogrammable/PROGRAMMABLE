@@ -319,6 +319,10 @@ test("V4 chain deployment schema locks atomic, registry, Permit2, Safe, and fina
     ["atomic provider order", (deployment) => {
       deployment.deploymentEvidence.providerReadbacks.reverse();
     }],
+    ["historical Robinhood dRPC primary", (deployment) => {
+      deployment.deploymentEvidence.providerReadbacks[0].providerId = "drpc";
+      deployment.deploymentEvidence.providerReadbacks[0].trustDomain = "drpc.org";
+    }],
     ["atomic resulting-contract order", (deployment) => {
       deployment.deploymentEvidence.resultingContracts.reverse();
     }],

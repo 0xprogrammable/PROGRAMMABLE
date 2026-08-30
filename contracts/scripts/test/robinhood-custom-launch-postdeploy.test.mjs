@@ -110,7 +110,7 @@ const sourcePaths = [
 ];
 const FRESH_PROVIDER_RPC_URLS = Object.freeze({
   robinhood: Object.freeze([
-    "https://lb.drpc.live/robinhood/protected_test_credential_0123456789",
+    "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/protected_test_credential_0123456789/",
     "https://robinhood-mainnet.g.alchemy.com/v2/protected_test_credential_0123456789",
   ]),
   ethereum: Object.freeze([
@@ -391,19 +391,9 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
     const endpointCanary = "credentialslug_do_not_publish_0123456789";
     const acceptedEndpoints = [
       [
-        `https://lb.drpc.live/robinhood/${endpointCanary}`,
+        `https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/`,
         "robinhood",
-        "drpc",
-      ],
-      [
-        `https://lb.drpc.org/ogrpc?network=robinhood&dkey=${endpointCanary}`,
-        "robinhood",
-        "drpc",
-      ],
-      [
-        `https://lb.drpc.org/ogrpc?network=robinhood-mainnet&dkey=${endpointCanary}`,
-        "robinhood",
-        "drpc",
+        "quicknode",
       ],
       [
         `https://robinhood-mainnet.g.alchemy.com/v2/${endpointCanary}`,
@@ -435,17 +425,26 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
       "role", "providerId", "trustDomain", "authentication", "observedAt",
     ]);
     const rejectedEndpoints = [
-      [`https://${endpointCanary}:password@lb.drpc.live/robinhood/${endpointCanary}`,
-        "robinhood", "drpc"],
-      [`https://lb.drpc.live/robinhood/${endpointCanary}#fragment`, "robinhood", "drpc"],
-      ["https://rpc.robinhoodchain.com", "robinhood", "drpc"],
-      [`https://robinhood.drpc.org/${endpointCanary}`, "robinhood", "drpc"],
-      ["https://lb.drpc.live/robinhood/docs-demo-credential", "robinhood", "drpc"],
-      [`https://lb.drpc.live/ethereum/${endpointCanary}`, "robinhood", "drpc"],
-      [`https://lb.drpc.org/ogrpc?dkey=${endpointCanary}&network=robinhood`,
-        "robinhood", "drpc"],
-      [`https://lb.drpc.org/ogrpc?network=ethereum&dkey=${endpointCanary}`,
-        "robinhood", "drpc"],
+      [`https://${endpointCanary}:password@release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/#fragment`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro:443/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/?extra=1`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/extra`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.quiknode.pro/${endpointCanary}/`, "robinhood", "quicknode"],
+      [`https://release-canary.ethereum-mainnet.quiknode.pro/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      [`https://docs-demo.robinhood-mainnet.quiknode.pro/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      ["https://rpc.robinhoodchain.com", "robinhood", "quicknode"],
+      [`https://lb.drpc.live/robinhood/${endpointCanary}`, "robinhood", "quicknode"],
+      [`https://lb.drpc.live/robinhood/${endpointCanary}`, "robinhood", "drpc"],
       [`https://robinhood-mainnet.g.alchemy.com/v1/${endpointCanary}`,
         "robinhood", "alchemy"],
       [`https://eth-mainnet.g.alchemy.com/v2/${endpointCanary}`,
@@ -1798,7 +1797,7 @@ async function buildInput(fixture, options = {}) {
   const atomicNames = ["permitAuthority", "graphFactory", "programmableLaunchStampRouter"];
   const externalNames = ["poolManager", "positionManager", "stateView", "v4Quoter", "universalRouter"];
   const providers = [
-    { providerId: "drpc", trustDomain: "drpc.org" },
+    { providerId: "quicknode", trustDomain: "quicknode.com" },
     { providerId: "alchemy", trustDomain: "alchemy.com" },
   ].map((provider) => ({
     ...provider,

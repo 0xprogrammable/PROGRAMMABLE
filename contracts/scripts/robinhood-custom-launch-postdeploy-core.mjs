@@ -263,7 +263,7 @@ const DOMAINS = Object.freeze({
 });
 
 const PROVIDERS = Object.freeze([
-  Object.freeze({ providerId: "drpc", trustDomain: "drpc.org" }),
+  Object.freeze({ providerId: "quicknode", trustDomain: "quicknode.com" }),
   Object.freeze({ providerId: "alchemy", trustDomain: "alchemy.com" }),
 ]);
 

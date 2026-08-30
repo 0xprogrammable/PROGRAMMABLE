@@ -2,9 +2,9 @@
   "schemaVersion": "programmable.gitbook-openapi-source-receipt.v1",
   "canonicalSource": {
     "repository": "programmablehq/Developers",
-    "commit": "5641d2c75d58239864f4827c9bb054abc170af18",
+    "commit": "edaa839148897781c710d92650dbf9f1f52a86e8",
     "entrypoint": "openapi/programmable-v2.yaml",
-    "entrypointDigest": "sha256:b7925914d450d0a10cc73cd85fcc36418ac0238b9f3d9f46a15499d5483a405e",
+    "entrypointDigest": "sha256:2e6009eef6c926bea3f5723c8e7f819c811fa1ef91c20694c5927f284b1a2c6c",
     "upstreamStrictGraph": {
       "documentCount": 21,
       "referenceDocumentCount": 20
@@ -15,7 +15,7 @@
     "schemaRoot": "docs/public/.gitbook/schemas/v2",
     "localDocumentCount": 18,
     "localReferenceDocumentCount": 17,
-    "closureDigest": "sha256:861b55bd07fe721ca9abbda98812a8adb5ba34191b7d1cc123a032db24cb4e79",
+    "closureDigest": "sha256:11fd2cf66ccf5801d31ff1f49ac198e9086625cd51bf7b00f77e0bc477d36bb9",
     "allowedExternalReferences": [
       "https://programmable.market/openapi/custom-launch-v3.json#/components/schemas/FinalizedCustomLaunchMetadataListV1"
     ],
@@ -23,8 +23,8 @@
       {
         "sourcePath": "openapi/programmable-v2.yaml",
         "destinationPath": "docs/public/.gitbook/assets/programmable-v2.yaml",
-        "bytes": 40803,
-        "digest": "sha256:b7925914d450d0a10cc73cd85fcc36418ac0238b9f3d9f46a15499d5483a405e"
+        "bytes": 42381,
+        "digest": "sha256:2e6009eef6c926bea3f5723c8e7f819c811fa1ef91c20694c5927f284b1a2c6c"
       },
       {
         "sourcePath": "schemas/v2/common.schema.json",
@@ -41,8 +41,8 @@
       {
         "sourcePath": "schemas/v2/custom-launch-chain-deployment-v4.schema.json",
         "destinationPath": "docs/public/.gitbook/schemas/v2/custom-launch-chain-deployment-v4.schema.json",
-        "bytes": 38718,
-        "digest": "sha256:6969a26df1aadc0fd9ed5eeafbc40b9f45a45284af804adc738ba122d69d7fb1"
+        "bytes": 38778,
+        "digest": "sha256:eda72f2214f3deef9ad0989cb1e2ed5488d674e4e6a282983de169d432a8bbaa"
       },
       {
         "sourcePath": "schemas/v2/custom-launch-registry-record-v3.schema.json",

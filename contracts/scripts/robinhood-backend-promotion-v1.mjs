@@ -458,7 +458,7 @@ function exactReadinessIdentity(value, stageBundle, backendSource) {
     "backend readiness provider quorums");
   if (canonicalizeJson(value.providerQuorums) !== canonicalizeJson({
     robinhood: [
-      { providerId: "drpc", trustDomain: "drpc.org" },
+      { providerId: "quicknode", trustDomain: "quicknode.com" },
       { providerId: "alchemy", trustDomain: "alchemy.com" },
     ],
     ethereum: [
@@ -1524,7 +1524,7 @@ export function buildRobinhoodBackendPromotionFixture(stageBundle) {
     },
     providerQuorums: {
       robinhood: [
-        { providerId: "drpc", trustDomain: "drpc.org" },
+        { providerId: "quicknode", trustDomain: "quicknode.com" },
         { providerId: "alchemy", trustDomain: "alchemy.com" },
       ],
       ethereum: [

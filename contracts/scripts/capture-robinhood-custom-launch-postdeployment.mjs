@@ -558,7 +558,7 @@ export async function captureRobinhoodPostdeployment(options) {
   if ([...endpoints.l2, ...endpoints.l1].some((value) => !value)) {
     throw new TypeError("capture requires four protected provider endpoints");
   }
-  validateRobinhoodCaptureEndpoint(endpoints.l2[0], "robinhood", "drpc");
+  validateRobinhoodCaptureEndpoint(endpoints.l2[0], "robinhood", "quicknode");
   validateRobinhoodCaptureEndpoint(endpoints.l2[1], "robinhood", "alchemy");
   validateRobinhoodCaptureEndpoint(endpoints.l1[0], "ethereum", "drpc");
   validateRobinhoodCaptureEndpoint(endpoints.l1[1], "ethereum", "quicknode");
@@ -567,8 +567,8 @@ export async function captureRobinhoodPostdeployment(options) {
   const expiresAt = new Date(observed.getTime() + 15 * 60 * 1000).toISOString();
   const responseBudget = createRobinhoodResponseBudget();
   const l2 = await Promise.all([
-    collectL2(endpoints.l2[0], { role: "primary", providerId: "drpc",
-      trustDomain: "drpc.org" }, options.transactionHash, observedAt, responseBudget),
+    collectL2(endpoints.l2[0], { role: "primary", providerId: "quicknode",
+      trustDomain: "quicknode.com" }, options.transactionHash, observedAt, responseBudget),
     collectL2(endpoints.l2[1], { role: "secondary", providerId: "alchemy",
       trustDomain: "alchemy.com" }, options.transactionHash, observedAt, responseBudget),
   ]);

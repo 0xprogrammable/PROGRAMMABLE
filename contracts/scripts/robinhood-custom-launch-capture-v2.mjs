@@ -94,15 +94,15 @@ const QUANTITY = /^0x(?:0|[1-9a-f][0-9a-f]*)$/u;
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 
 const CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{8,512}";
-const ALCHEMY_CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{8,256}";
+const ALCHEMY_CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{16,256}";
 const QUICKNODE_CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{8,256}";
+const ROBINHOOD_QUICKNODE_CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{16,256}";
 const QUICKNODE_ENDPOINT_LABEL =
   "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 const CREDENTIALED_PROVIDER_ENDPOINTS = Object.freeze({
-  "robinhood:drpc": Object.freeze([
-    new RegExp(`^https://lb\\.drpc\\.live/robinhood/${CREDENTIAL_COMPONENT}$`, "u"),
+  "robinhood:quicknode": Object.freeze([
     new RegExp(
-      `^https://lb\\.drpc\\.org/ogrpc\\?network=robinhood(?:-mainnet)?&dkey=${CREDENTIAL_COMPONENT}$`,
+      `^https://${QUICKNODE_ENDPOINT_LABEL}\\.robinhood-mainnet\\.quiknode\\.pro/${ROBINHOOD_QUICKNODE_CREDENTIAL_COMPONENT}/$`,
       "u",
     ),
   ]),
@@ -131,8 +131,8 @@ const PROVIDER_PINS = Object.freeze({
   robinhood: Object.freeze([
     Object.freeze({
       role: "primary",
-      providerId: "drpc",
-      trustDomain: "drpc.org",
+      providerId: "quicknode",
+      trustDomain: "quicknode.com",
     }),
     Object.freeze({
       role: "secondary",
