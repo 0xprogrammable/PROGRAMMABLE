@@ -3,10 +3,35 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+const rpcClientMocks = vi.hoisted(() => ({
+  clients: [] as Array<Record<string, unknown>>,
+  createPublicClient: vi.fn(),
+}));
+
+vi.mock("viem", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("viem")>();
+  rpcClientMocks.createPublicClient.mockImplementation(() => {
+    const client = rpcClientMocks.clients.shift();
+    if (!client) throw new Error("Missing mocked migration sponsor RPC client");
+    return client;
+  });
+  return {
+    ...actual,
+    createPublicClient: rpcClientMocks.createPublicClient,
+    keccak256(value: `0x${string}`) {
+      if (value === "0x6000") {
+        return "0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad";
+      }
+      return actual.keccak256(value);
+    },
+  };
+});
+
 import {
   MainTokenMigrationGasSponsorErrorV1,
   assertMainTokenMigrationPrivySponsorWalletV1,
   calculateMainTokenMigrationTopUpWeiV1,
+  createMainTokenMigrationGasSponsorChainV1,
   createMainTokenMigrationGasSponsorV1,
   deriveMainTokenMigrationSponsorBindingsV1,
   deriveMainTokenMigrationSponsorPrincipalBindingV1,
@@ -192,6 +217,80 @@ function chain(): MainTokenMigrationGasSponsorChainV1 {
   };
 }
 
+function createRpcClient(input: Readonly<{
+  eligibilityTimestamp?: bigint;
+  finalizedBlockNumber?: bigint;
+}> = {}) {
+  const eligibilityTimestamp = input.eligibilityTimestamp
+    ?? BigInt(CONFIGURATION.windowStartTimestamp - 1);
+  const finalizedBlockNumber = input.finalizedBlockNumber ?? 100n;
+  return {
+    async getBlockNumber() {
+      return 110n;
+    },
+    async getBlock(query: Readonly<{
+      blockNumber?: bigint;
+      blockTag?: string;
+    }>) {
+      if (query.blockTag === "finalized") {
+        return {
+          hash: `0x${"56".repeat(32)}`,
+          number: finalizedBlockNumber,
+          timestamp: eligibilityTimestamp,
+        };
+      }
+      if (query.blockNumber === CONFIGURATION.sponsorEligibilityBlockNumber) {
+        return {
+          hash: CONFIGURATION.sponsorEligibilityBlockHash,
+          number: CONFIGURATION.sponsorEligibilityBlockNumber,
+          timestamp: eligibilityTimestamp,
+        };
+      }
+      if (query.blockNumber === 110n) {
+        return {
+          hash: `0x${"34".repeat(32)}`,
+          number: 110n,
+          timestamp: eligibilityTimestamp + 10n,
+        };
+      }
+      throw new Error("Unexpected block request");
+    },
+    async getChainId() {
+      return 1;
+    },
+    async getCode(input: Readonly<{ address: string }>) {
+      return input.address.toLowerCase() === MAIN_TOKEN_ADDRESS.toLowerCase()
+        ? "0x6000"
+        : "0x";
+    },
+    async readContract() {
+      return 1_000n;
+    },
+    async getBalance(input: Readonly<{ address: string }>) {
+      return input.address.toLowerCase() === SPONSOR.toLowerCase()
+        ? 1_000_000_000_000_000_000n
+        : 0n;
+    },
+    async estimateFeesPerGas() {
+      return {
+        maxFeePerGas: 2_000_000_000n,
+        maxPriorityFeePerGas: 1_000_000_000n,
+      };
+    },
+  };
+}
+
+function rpcBackedChain(
+  left: ReturnType<typeof createRpcClient>,
+  right: ReturnType<typeof createRpcClient>,
+) {
+  rpcClientMocks.clients.splice(0, rpcClientMocks.clients.length, left, right);
+  return createMainTokenMigrationGasSponsorChainV1([
+    { endpoint: "https://primary.invalid" },
+    { endpoint: "https://secondary.invalid" },
+  ] as never);
+}
+
 function request(
   walletAddress: `0x${string}` = WALLET,
   idempotencyKey = IDEMPOTENCY_KEY,
@@ -236,6 +335,54 @@ function sponsor(
 }
 
 describe("main token migration gas sponsor", () => {
+  it("accepts an exact pre-start eligibility anchor finalized by both RPCs", async () => {
+    const migrationChain = rpcBackedChain(createRpcClient(), createRpcClient());
+
+    await expect(migrationChain.observe({
+      configuration: CONFIGURATION,
+      request: { walletAddress: WALLET, amountRaw: 100n },
+    })).resolves.toMatchObject({
+      walletAddress: WALLET,
+      amountRaw: 100n,
+    });
+  });
+
+  it("rejects an eligibility anchor if either RPC has not finalized it", async () => {
+    const migrationChain = rpcBackedChain(
+      createRpcClient({ finalizedBlockNumber: 99n }),
+      createRpcClient(),
+    );
+
+    await expect(migrationChain.observe({
+      configuration: CONFIGURATION,
+      request: { walletAddress: WALLET, amountRaw: 100n },
+    })).rejects.toMatchObject({
+      status: 503,
+      code: "rpc_quorum_unavailable",
+    });
+  });
+
+  it.each([
+    ["equal to", BigInt(CONFIGURATION.windowStartTimestamp)],
+    ["later than", BigInt(CONFIGURATION.windowStartTimestamp + 1)],
+  ])("rejects an eligibility anchor %s the window start", async (
+    _label,
+    eligibilityTimestamp,
+  ) => {
+    const migrationChain = rpcBackedChain(
+      createRpcClient({ eligibilityTimestamp }),
+      createRpcClient({ eligibilityTimestamp }),
+    );
+
+    await expect(migrationChain.observe({
+      configuration: CONFIGURATION,
+      request: { walletAddress: WALLET, amountRaw: 100n },
+    })).rejects.toMatchObject({
+      status: 503,
+      code: "rpc_quorum_unavailable",
+    });
+  });
+
   it("accepts only the exact 96-hour release identity and window", () => {
     const start = Math.floor(NOW.getTime() / 1_000) - 60;
     const manifest = {
@@ -256,7 +403,7 @@ describe("main token migration gas sponsor", () => {
       migrationDistributorAddress:
         "0x6666666666666666666666666666666666666666",
       migrationDistributorRuntimeCodeKeccak256: `0x${"78".repeat(32)}`,
-      distributionPlanSha256: `sha256:${"56".repeat(32)}`,
+      targetDesignSha256: `sha256:${"56".repeat(32)}`,
       migrationWallet: MAIN_TOKEN_MIGRATION_WALLET,
       windowDurationSeconds: String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
       snapshotBoundaryRule: MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
@@ -315,7 +462,7 @@ describe("main token migration gas sponsor", () => {
       environment,
       manifest: {
         ...manifest,
-        distributionPlanSha256: null,
+        targetDesignSha256: null,
       },
       nowMs: NOW.getTime(),
     })).toBeNull();

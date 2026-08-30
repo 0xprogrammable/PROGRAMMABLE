@@ -301,9 +301,9 @@ export function readMainTokenMigrationGasSponsorConfigurationV1(input: Readonly<
     || typeof manifest.migrationDistributorRuntimeCodeKeccak256 !== "string"
     || !HASH.test(manifest.migrationDistributorRuntimeCodeKeccak256)
     || manifest.migrationDistributorRuntimeCodeKeccak256 === ZERO_HASH
-    || typeof manifest.distributionPlanSha256 !== "string"
-    || !SHA256.test(manifest.distributionPlanSha256)
-    || manifest.distributionPlanSha256 === ZERO_SHA256
+    || typeof manifest.targetDesignSha256 !== "string"
+    || !SHA256.test(manifest.targetDesignSha256)
+    || manifest.targetDesignSha256 === ZERO_SHA256
     || manifest.migrationWallet !== MAIN_TOKEN_MIGRATION_WALLET
     || manifest.windowDurationSeconds !== String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS)
     || manifest.snapshotBoundaryRule !== MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE
@@ -842,12 +842,14 @@ export function createMainTokenMigrationGasSponsorChainV1(
         const heads = await Promise.all(clients.map((client) => client.getBlockNumber()));
         const blockNumber = heads[0] < heads[1] ? heads[0] : heads[1];
         const observations = await Promise.all(clients.map(async (client) => {
-          const [chainId, block, eligibilityBlock, tokenCode, holderCode,
+          const [chainId, block, finalizedBlock, eligibilityBlock,
+            tokenCode, holderCode,
             eligibilityHolderCode,
             sponsorCode, currentBalance, openingBalance, nativeBalance, sponsorBalance,
             fees] = await Promise.all([
             client.getChainId(),
             client.getBlock({ blockNumber }),
+            client.getBlock({ blockTag: "finalized" }),
             client.getBlock({
               blockNumber: configuration.sponsorEligibilityBlockNumber,
             }),
@@ -867,7 +869,8 @@ export function createMainTokenMigrationGasSponsorChainV1(
             client.getBalance({ address: configuration.sponsorAddress, blockNumber }),
             client.estimateFeesPerGas(),
           ]);
-          return { chainId, block, eligibilityBlock, tokenCode, holderCode,
+          return { chainId, block, finalizedBlock, eligibilityBlock,
+            tokenCode, holderCode,
             eligibilityHolderCode,
             sponsorCode,
             currentBalance, openingBalance, nativeBalance, sponsorBalance,
@@ -881,6 +884,18 @@ export function createMainTokenMigrationGasSponsorChainV1(
             configuration.sponsorEligibilityBlockHash
           || right.eligibilityBlock.hash !==
             configuration.sponsorEligibilityBlockHash
+          || left.eligibilityBlock.number !==
+            configuration.sponsorEligibilityBlockNumber
+          || right.eligibilityBlock.number !==
+            configuration.sponsorEligibilityBlockNumber
+          || left.eligibilityBlock.timestamp >=
+            BigInt(configuration.windowStartTimestamp)
+          || right.eligibilityBlock.timestamp >=
+            BigInt(configuration.windowStartTimestamp)
+          || left.finalizedBlock.number <
+            configuration.sponsorEligibilityBlockNumber
+          || right.finalizedBlock.number <
+            configuration.sponsorEligibilityBlockNumber
           || !left.tokenCode || !right.tokenCode
           || keccak256(left.tokenCode) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256
           || keccak256(right.tokenCode) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256
