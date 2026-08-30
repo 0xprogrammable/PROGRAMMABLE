@@ -556,12 +556,12 @@ function assertLocalValidation(value) {
 export async function prepareCleanRoom(options) {
   requireValue(!Object.hasOwn(process.env, "PROGRAMMABLE_API_KEY"),
     "PREPARE_REFUSES_PROGRAMMABLE_API_KEY");
+  const reviewedRelease = await loadReviewedReleaseCoordinate();
   requireValue(process.version === NODE_VERSION, "NODE_VERSION_INVALID");
   const npmVersion = (await runCommand("npm", ["--version"], {
     stage: "NPM_VERSION", requireSilentStderr: true,
   })).trim();
   requireValue(npmVersion === NPM_VERSION, "NPM_VERSION_INVALID");
-  const reviewedRelease = await loadReviewedReleaseCoordinate();
   const workspace = path.resolve(options.workspace);
   await mkdir(workspace, { recursive: false, mode: 0o700 });
   const releaseDirectory = path.join(workspace, "release");
