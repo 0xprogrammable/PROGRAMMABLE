@@ -224,6 +224,30 @@ describe("main token migration page contract", () => {
     expect(page).toContain(
       'if (now >= migrationWindow.deadlineAt) return "closed";',
     );
+    const firstFinalWindowCheck = page.indexOf(
+      'if (phaseAt(Date.now()) !== "active")',
+    );
+    const finalWindowCheck = page.lastIndexOf(
+      'if (phaseAt(Date.now()) !== "active")',
+    );
+    const finalTransactionBinding = page.indexOf(
+      "const checked = assertMainTokenMigrationTransaction",
+    );
+    const walletPrompt = page.indexOf("const hash = await sendTransaction");
+    expect(firstFinalWindowCheck).toBeGreaterThan(0);
+    expect(finalWindowCheck).toBeGreaterThan(firstFinalWindowCheck);
+    expect(finalWindowCheck).toBeGreaterThan(finalTransactionBinding);
+    expect(walletPrompt).toBeGreaterThan(finalWindowCheck);
+  });
+
+  it("keeps keyboard focus in the sponsorship flow", () => {
+    expect(page).toContain("focusSponsorshipActionOrStatus");
+    expect(
+      page.match(/focusSponsorshipActionOrStatus\(\);/gu)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(6);
+    expect(page).toContain(
+      "(sponsorButtonRef.current ?? sponsorshipRegionRef.current)?.focus()",
+    );
   });
 
   it("activates only with the exact 48-hour window, start block and release", () => {

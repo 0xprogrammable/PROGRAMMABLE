@@ -129,6 +129,12 @@ npm run contracts:verify
 These commands prove only the local revision that was checked. They do not prove deployment, production activation,
 provider availability or onchain lifecycle completion.
 
+The Ethereum-to-Robinhood main-token migration and its optional gas sponsor are currently release-dark. Their
+checked-in activation manifest remains disabled and contains no live window or opening block. Operator preparation is
+defined by the [gas sponsor runbook](./docs/operations/MAIN-TOKEN-MIGRATION-GAS-SPONSOR-V1.md) and the separate
+[readiness checklist](./docs/operations/MAIN-TOKEN-MIGRATION-GAS-SPONSOR-READINESS-V1.md); neither document authorizes
+publication, wallet spending or production activation.
+
 ## Public interfaces
 
 | Surface                      | Canonical location                                                                                       |
