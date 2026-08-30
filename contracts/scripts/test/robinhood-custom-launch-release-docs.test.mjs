@@ -11,7 +11,16 @@ async function repositoryText(relativePath) {
 }
 
 test("operator runbooks use repo-root commands and independently frozen provider commitments", async () => {
-  const [security, handoff, commitmentHelper, packageBytes] = await Promise.all([
+  const [
+    security,
+    handoff,
+    commitmentHelper,
+    packageBytes,
+    ownerEnvelopeCore,
+    postdeployment,
+    releaseReadme,
+    phaseACapture,
+  ] = await Promise.all([
     repositoryText("contracts/security/ROBINHOOD-CUSTOM-LAUNCH.md"),
     repositoryText(
       "docs/operations/releases/custom-launch-v4/OWNER-WALLET-HANDOFF.md",
@@ -20,6 +29,16 @@ test("operator runbooks use repo-root commands and independently frozen provider
       "contracts/scripts/commit-robinhood-custom-launch-provider-endpoints.mjs",
     ),
     repositoryText("package.json"),
+    repositoryText(
+      "contracts/scripts/robinhood-custom-launch-owner-envelope-core.mjs",
+    ),
+    repositoryText(
+      "docs/operations/releases/custom-launch-v4/POSTDEPLOYMENT.md",
+    ),
+    repositoryText("docs/operations/releases/custom-launch-v4/README.md"),
+    repositoryText(
+      "contracts/scripts/capture-robinhood-custom-launch-postdeployment.mjs",
+    ),
   ]);
   const packageJson = JSON.parse(packageBytes);
 
@@ -62,6 +81,34 @@ test("operator runbooks use repo-root commands and independently frozen provider
     /ROBINHOOD_RPC_PROVIDER_COMMITMENTS_MATCH_REVIEW/u,
   );
   assert.match(commitmentHelper, /reviewedCount !== 2/u);
+  assert.match(
+    commitmentHelper,
+    /role: "primary",\s+providerId: "quicknode"/u,
+  );
+  assert.doesNotMatch(commitmentHelper, /providerId: "drpc"/u);
+  assert.match(
+    ownerEnvelopeCore,
+    /role: "primary",\s+providerId: "quicknode",\s+trustDomain: "quicknode\.com"/u,
+  );
+  assert.match(handoff, /Hood Explorer\s+Indexer/u);
+  assert.match(handoff, /Programmable Production 3/u);
+  assert.match(
+    handoff,
+    /sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910/u,
+  );
+  for (const historicalBoundary of [postdeployment, releaseReadme]) {
+    assert.match(historicalBoundary, /historical Phase A/u);
+    assert.match(historicalBoundary, /dRPC then\s+Alchemy/u);
+    assert.match(historicalBoundary, /QuickNode[\s\S]*Programmable Production 3/u);
+  }
+  assert.match(
+    phaseACapture,
+    /collectL2\(endpoints\.l2\[0\], \{ role: "primary", providerId: "drpc"/u,
+  );
+  assert.match(
+    phaseACapture,
+    /collectL2\(endpoints\.l2\[1\], \{ role: "secondary", providerId: "alchemy"/u,
+  );
   assert.doesNotMatch(security, /=<[^>]+>/u);
   assert.match(
     security,

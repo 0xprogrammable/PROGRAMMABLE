@@ -40,6 +40,20 @@ The four artifacts at that tree are:
 Changing the merge commit, tree, path, role, or digest changes the release identity and must fail
 closed.
 
+## Provider timeline separation
+
+The next owner-wallet action-time envelope uses the ordered,
+credentialed Robinhood pair QuickNode **Hood Explorer Indexer** primary and
+Alchemy **Programmable Production 3** secondary. Its provider identities are
+compatible with backend provider-profile digest
+`sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910`,
+but that digest is not backend readiness evidence by itself.
+
+The historical Phase A deployment evidence below remains ordered dRPC then
+Alchemy on Robinhood, while Ethereum remains dRPC then QuickNode. Those retained
+observations describe the providers that actually performed those reads. The
+current owner endpoint commitments must never relabel, replace or re-hash them.
+
 ## Per-contract deployment provenance
 
 The deployment evidence must preserve the source model of each root. A global “all contracts are

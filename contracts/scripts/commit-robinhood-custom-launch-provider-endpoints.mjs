@@ -13,7 +13,7 @@ try {
   const derivedEndpointCommitments = [
     robinhoodFoundationRpcEndpointCommitment({
       role: "primary",
-      providerId: "drpc",
+      providerId: "quicknode",
       rpcUrl: rpcUrls[0],
     }),
     robinhoodFoundationRpcEndpointCommitment({

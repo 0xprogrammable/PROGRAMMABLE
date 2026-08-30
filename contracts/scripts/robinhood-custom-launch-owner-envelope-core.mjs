@@ -108,8 +108,8 @@ const EXPECTED_DEPENDENCY_BINDINGS = Object.freeze({
 const EXPECTED_PROVIDER_PINS = Object.freeze([
   Object.freeze({
     role: "primary",
-    providerId: "drpc",
-    trustDomain: "drpc.org",
+    providerId: "quicknode",
+    trustDomain: "quicknode.com",
   }),
   Object.freeze({
     role: "secondary",
@@ -530,25 +530,21 @@ function authenticatedProviderBinding(pin, rpcUrl) {
   ) {
     fail(`${pin.providerId} RPC endpoint violates its provider pin`);
   }
-  const keyPattern = /^[A-Za-z0-9_-]{8,512}$/u;
-  const drpcLive =
-    /^https:\/\/lb\.drpc\.live\/robinhood\/[A-Za-z0-9_-]{8,512}$/u.test(
+  const quicknode =
+    /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,62})\.quiknode\.pro\/[A-Za-z0-9_-]{16,256}\/$/u.test(
       rpcUrl,
     ) &&
-    !/docs[-_]?demo/iu.test(url.pathname);
-  const drpcOrg =
-    /^https:\/\/lb\.drpc\.org\/ogrpc\?network=robinhood(?:-mainnet)?&dkey=[A-Za-z0-9_-]{8,512}$/u.test(
-      rpcUrl,
-    ) &&
-    keyPattern.test(url.searchParams.get("dkey") ?? "") &&
-    !/docs[-_]?demo/iu.test(url.searchParams.get("dkey") ?? "");
+    !url.hostname.startsWith("docs-demo.") &&
+    !/^(?:demo|example|placeholder|token|key)$/iu.test(
+      url.pathname.slice(1, -1),
+    );
   const alchemy =
-    /^https:\/\/robinhood-mainnet\.g\.alchemy\.com\/v2\/[A-Za-z0-9_-]{8,256}$/u.test(
+    /^https:\/\/robinhood-mainnet\.g\.alchemy\.com\/v2\/[A-Za-z0-9_-]{16,256}$/u.test(
       rpcUrl,
     ) &&
     !/docs[-_]?demo/iu.test(url.pathname);
   const authenticated =
-    pin.providerId === "alchemy" ? alchemy : drpcLive || drpcOrg;
+    pin.providerId === "alchemy" ? alchemy : quicknode;
   if (!authenticated) {
     fail(`${pin.providerId} RPC endpoint is not credential-bearing`);
   }
