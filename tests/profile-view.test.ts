@@ -27,6 +27,7 @@ import {
   profileHasRewardSurface,
   profileNativeClaimMeetsVisibilityThreshold,
   publicProfileAccountFromQuery,
+  readProfileForEditor,
   prioritizedProfileActionState,
   profileRouterLaunchEntries,
   profileRewardsForAccount,
@@ -88,6 +89,35 @@ function profileCssDeclarationsFor(selectorFragment: string) {
 }
 
 describe("profile editor composition", () => {
+  it("hydrates editor drafts from the latest wallet-local profile", () => {
+    const storage = {
+      getItem: vi.fn(() => JSON.stringify({
+        version: 2,
+        username: "Programmable",
+        avatarDataUrl: "",
+        xUrl: "ProgrammableHQ",
+        websiteUrl: "programmable.market",
+        githubUrl: "programmablehq",
+      })),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    };
+
+    expect(readProfileForEditor(
+      storage,
+      firstAddress,
+      { username: "", avatarDataUrl: "" },
+    )).toMatchObject({
+      username: "Programmable",
+      xUrl: "ProgrammableHQ",
+      websiteUrl: "programmable.market",
+      githubUrl: "programmablehq",
+    });
+    expect(profileViewSource).toMatch(
+      /function beginEditingProfile\(\)\s*\{\s*populateProfileDrafts\(latestProfileForEditor\(\)\);/u,
+    );
+  });
+
   it("keeps banner actions on the trailing edge away from the avatar", () => {
     expect(profileExperienceCss).toMatch(
       /\.bannerActions\s*\{[^}]*flex-direction:\s*row-reverse;[^}]*right:\s*14px;/s,

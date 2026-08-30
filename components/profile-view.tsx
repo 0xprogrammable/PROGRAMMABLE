@@ -84,6 +84,7 @@ import {
   normalizeProfileUsername,
   parseLocalProfile,
   PROFILE_UPDATED_EVENT,
+  readLocalProfile,
   writeLocalProfile,
 } from "@/lib/profile/local-profile";
 import {
@@ -1317,6 +1318,20 @@ function getServerHydrationSnapshot() {
   return false;
 }
 
+export function readProfileForEditor(
+  storage: Parameters<typeof readLocalProfile>[0],
+  address: string | undefined,
+  fallback: ReturnType<typeof readLocalProfile>,
+) {
+  if (!address) return fallback;
+
+  try {
+    return readLocalProfile(storage, address);
+  } catch {
+    return fallback;
+  }
+}
+
 export function withoutClosedDeepProfileData(
   data: ProfileOnchainData,
 ): ProfileOnchainData {
@@ -1981,18 +1996,27 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     profileRefresh,
   ]);
 
-  function beginEditingProfile() {
-    setUsernameDraft(savedProfile.username);
-    setAvatarDraft(savedProfile.avatarDataUrl);
-    setBannerDraft(savedProfile.bannerDataUrl ?? "");
+  function populateProfileDrafts(profile: typeof savedProfile) {
+    setUsernameDraft(profile.username);
+    setAvatarDraft(profile.avatarDataUrl);
+    setBannerDraft(profile.bannerDataUrl ?? "");
     setBannerPositionDraft({
-      x: savedProfile.bannerPositionX ?? 50,
-      y: savedProfile.bannerPositionY ?? 50,
+      x: profile.bannerPositionX ?? 50,
+      y: profile.bannerPositionY ?? 50,
     });
-    setBioDraft(savedProfile.bio ?? "");
-    setXUrlDraft(savedProfile.xUrl ?? "");
-    setWebsiteUrlDraft(savedProfile.websiteUrl ?? "");
-    setGithubUrlDraft(savedProfile.githubUrl ?? "");
+    setBioDraft(profile.bio ?? "");
+    setXUrlDraft(profile.xUrl ?? "");
+    setWebsiteUrlDraft(profile.websiteUrl ?? "");
+    setGithubUrlDraft(profile.githubUrl ?? "");
+  }
+
+  function latestProfileForEditor() {
+    if (!account || typeof window === "undefined") return savedProfile;
+    return readProfileForEditor(window.localStorage, account, savedProfile);
+  }
+
+  function beginEditingProfile() {
+    populateProfileDrafts(latestProfileForEditor());
     setUsernameError("");
     setAvatarError("");
     setBannerError("");
@@ -2001,17 +2025,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   }
 
   function cancelEditingProfile() {
-    setUsernameDraft(savedProfile.username);
-    setAvatarDraft(savedProfile.avatarDataUrl);
-    setBannerDraft(savedProfile.bannerDataUrl ?? "");
-    setBannerPositionDraft({
-      x: savedProfile.bannerPositionX ?? 50,
-      y: savedProfile.bannerPositionY ?? 50,
-    });
-    setBioDraft(savedProfile.bio ?? "");
-    setXUrlDraft(savedProfile.xUrl ?? "");
-    setWebsiteUrlDraft(savedProfile.websiteUrl ?? "");
-    setGithubUrlDraft(savedProfile.githubUrl ?? "");
+    populateProfileDrafts(latestProfileForEditor());
     setUsernameError("");
     setAvatarError("");
     setBannerError("");
