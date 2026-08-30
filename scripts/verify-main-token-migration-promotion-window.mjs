@@ -33,7 +33,7 @@ async function main() {
     migrationDistributorAddress: activation.migrationDistributorAddress,
     migrationDistributorRuntimeCodeKeccak256:
       activation.migrationDistributorRuntimeCodeKeccak256,
-    distributionPlanSha256: activation.distributionPlanSha256,
+    targetDesignSha256: activation.targetDesignSha256,
     windowStartTimestamp: activation.windowStartTimestamp.toString(),
   })}\n`);
 }

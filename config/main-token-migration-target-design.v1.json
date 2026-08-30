@@ -1,0 +1,103 @@
+{
+  "schema": "programmable-main-token-migration-target-design/v1",
+  "state": "design-frozen-deployment-disabled-pending-owner-fields-and-planned-source-window",
+  "enabled": false,
+  "releaseId": "v4-ethereum-to-robinhood-96h-2026-v1",
+  "releaseIdHash": "0xe22e729786da05c9b8b2b4c94df049badbdbd427563177c87abe4e1036edde6e",
+  "source": {
+    "chainId": "1",
+    "tokenAddress": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+    "tokenDecimals": "18",
+    "tokenTotalSupplyRaw": "1000000000000000000000000000",
+    "deadlineTimestampExclusive": null,
+    "snapshotRule": "first-canonical-block-at-or-after-timestamp|block.timestamp >= windowStart && block.timestamp < deadline|1:1 raw token units|same EVM recipient only",
+    "snapshotRuleHash": "0x6720fe7cfe3d287cc5f21d264bb4a4125f1ab7f37189407d213c89489ed2d5f0"
+  },
+  "target": {
+    "chainId": "4663",
+    "tokenName": "Programmable",
+    "tokenSymbol": "V4",
+    "tokenDecimals": "18",
+    "tokenTotalSupplyRaw": "1000000000000000000000000000",
+    "tokenAddress": null,
+    "distributorAddress": null,
+    "tokenRuntimeCodeKeccak256": null,
+    "distributorRuntimeCodeKeccak256": null
+  },
+  "deployment": {
+    "transactionHash": null,
+    "blockNumber": null,
+    "blockHash": null,
+    "finalizedBlockNumber": null,
+    "finalizedBlockHash": null,
+    "independentRpcAgreement": false,
+    "tokenMigrationDistributorAddress": null,
+    "distributorTokenBalanceRaw": null,
+    "distributorIsSealed": null,
+    "verificationReceiptSha256": null
+  },
+  "authorities": {
+    "sealAuthority": null,
+    "remainderRecipient": null,
+    "sealAuthorityPower": "one call at or after the frozen source deadline to bind root, snapshot digest, and migration total",
+    "postSealAdministrativePower": "none"
+  },
+  "distribution": {
+    "allocationType": "ProgrammableV4MigrationAllocationV1(uint256 targetChainId,bytes32 releaseIdHash,uint256 sourceChainId,address sourceToken,uint256 sourceDeadlineTimestampExclusive,bytes32 snapshotRuleHash,bytes32 sourceSnapshotSha256,uint256 index,address account,uint256 amountRaw)",
+    "allocationTypehash": "0xad2fffcc1f1c630a5449082a781eabf0c6b3e2e19597d5858353e4ca24e95fe7",
+    "leafHashing": "keccak256(bytes.concat(keccak256(abi.encode(allocation fields))))",
+    "pairHashing": "keccak256(sort(bytes32 left, bytes32 right))",
+    "recipientRule": "exact same EVM address committed in the leaf; caller cannot redirect",
+    "singleDistribution": "permissionless",
+    "batchDistribution": "permissionless, atomic, maximum 64 entries",
+    "duplicateProtection": "uint256 bitmap indexed by allocation index",
+    "vesting": "none",
+    "rescueOrSweep": "none"
+  },
+  "activationGuards": {
+    "targetDeploymentBeforeSourceWindowRequired": true,
+    "fullTargetSupplyLockedInDistributorBeforeSourceWindowRequired": true,
+    "sealBeforeSourceDeadlineAllowed": false,
+    "sealIsOneTime": true,
+    "distributionBeforeSealAllowed": false,
+    "deploymentEnabled": false,
+    "sealEnabled": false,
+    "distributionEnabled": false
+  },
+  "build": {
+    "solcVersion": "0.8.26",
+    "evmVersion": "cancun",
+    "optimizerEnabled": true,
+    "optimizerRuns": "1000",
+    "bytecodeHash": "none",
+    "cborMetadata": false,
+    "openzeppelinContractsCommit": "21c8312b022f495ebe3621d5daeed20552b43ff9",
+    "sources": [
+      {
+        "path": "contracts/src/robinhood-main-token/ProgrammableV4TokenV1.sol",
+        "sha256": "sha256:8649f933085cb4bee6ca5bbfb12df5264188f5c0faefef5429652df5fa842cf4"
+      },
+      {
+        "path": "contracts/src/robinhood-main-token/ProgrammableV4MigrationDistributorV1.sol",
+        "sha256": "sha256:fc2e10e3e8525dfae219fd530f0c21b3c122d172356052462037fa7aaa8bce9d"
+      },
+      {
+        "path": "scripts/main-token-migration-snapshot-core.mjs",
+        "sha256": "sha256:f9e17c3bfa227cafc27b1969d9819bca8b415c1b24d43eaef828b107e12ec54a"
+      },
+      {
+        "path": "scripts/main-token-migration-distribution-core.mjs",
+        "sha256": "sha256:06e242ee16e0cb599d1838525450e2cf67f2f0baffad08ede1a94eb2185b01b6"
+      },
+      {
+        "path": "scripts/main-token-migration-distribution.mjs",
+        "sha256": "sha256:23d606e49cacac6612302f34bbfc4b147a14c29b67ef42fff781f5c6be26161b"
+      }
+    ]
+  },
+  "remainingOwnerFields": [
+    "source.deadlineTimestampExclusive",
+    "authorities.sealAuthority",
+    "authorities.remainderRecipient"
+  ]
+}
