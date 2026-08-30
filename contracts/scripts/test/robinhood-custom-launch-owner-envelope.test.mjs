@@ -9,8 +9,10 @@ import test from "node:test";
 
 import { encodeAbiParameters, keccak256, parseAbiParameters } from "viem";
 
+import { canonicalizeJson } from "../../../packages/launch/src/canonical-json.mjs";
 import { prepareOwnerTransactionFromCreationCode } from "../prepare-robinhood-custom-launch-owner-transaction.mjs";
 import {
+  ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_SCHEMA,
   assertRobinhoodFoundationRpcProviders,
   assertFreshRobinhoodFoundationOwnerEnvelope,
   prepareRobinhoodFoundationOwnerEnvelope,
@@ -106,6 +108,24 @@ function sha256(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
+function redigestOwnerEnvelope(receipt) {
+  const subject = structuredClone(receipt);
+  delete subject.receiptDigest;
+  return {
+    ...subject,
+    receiptDigest: sha256(
+      Buffer.concat([
+        Buffer.from(
+          "programmable.robinhood-custom-launch.owner-envelope.receipt.v2",
+          "utf8",
+        ),
+        Buffer.from([0]),
+        Buffer.from(canonicalizeJson(subject), "utf8"),
+      ]),
+    ),
+  };
+}
+
 function prepared(owner = OWNER_0) {
   return prepareOwnerTransactionFromCreationCode(owner, {
     graphCreationCode: verifiedCompilation.commitments.graph.creationCode,
@@ -157,6 +177,13 @@ function mockRpc(options = {}) {
   const requestInventory = [];
   const pendingOwnerNonceReads = new Map();
   const pendingBlockReads = new Map();
+  const chainReads = new Map();
+  const targetNonceReads = new Map();
+  const codeReads = new Map();
+  const gasPriceReads = new Map();
+  const priorityFeeReads = new Map();
+  const callReads = new Map();
+  const estimateReads = new Map();
   const codeByAddress = new Map();
   const hashByCode = new Map();
   Object.entries(dependencyBindings()).forEach(([key, binding], index) => {
@@ -183,20 +210,39 @@ function mockRpc(options = {}) {
         count > 1 && provider.closingParentHash
           ? provider.closingParentHash
           : (provider.pendingParentHash ?? `0x${"aa".repeat(32)}`),
-      timestamp: `0x${FIXED_TIMESTAMP.toString(16)}`,
-      gasLimit: provider.pendingGasLimit ?? "0x1c9c380",
-      baseFeePerGas: provider.baseFeePerGas ?? "0x3b9aca00",
+      timestamp:
+        count > 1 && provider.closingPendingTimestamp
+          ? provider.closingPendingTimestamp
+          : (provider.pendingTimestamp ?? `0x${FIXED_TIMESTAMP.toString(16)}`),
+      gasLimit:
+        count > 1 && provider.closingPendingGasLimit
+          ? provider.closingPendingGasLimit
+          : (provider.pendingGasLimit ?? "0x1c9c380"),
+      baseFeePerGas:
+        count > 1 && provider.closingBaseFeePerGas
+          ? provider.closingBaseFeePerGas
+          : (provider.baseFeePerGas ?? "0x3b9aca00"),
     };
   };
   const rpcClient = async ({ providerId, method, params }) => {
     methodInventory.push(method);
     requestInventory.push({ providerId, method, params: structuredClone(params) });
     const provider = providerOption(providerId);
-    if (method === "eth_chainId") return provider.chainId ?? "0x1237";
+    if (method === "eth_chainId") {
+      const count = (chainReads.get(providerId) ?? 0) + 1;
+      chainReads.set(providerId, count);
+      return count > 1 && provider.closingChainId
+        ? provider.closingChainId
+        : (provider.chainId ?? "0x1237");
+    }
     if (method === "eth_getBlockByNumber") {
       if (params[0] === "latest") {
         return providerId === "quicknode"
-          ? block(1_000, "11")
+          ? block(
+              1_000,
+              provider.commonHashByte ?? "33",
+              provider.commonTimestamp ?? FIXED_TIMESTAMP,
+            )
           : block(provider.headNumber ?? 1_002, "22");
       }
       if (params[0] === "pending") return pendingBlock(providerId);
@@ -215,6 +261,15 @@ function mockRpc(options = {}) {
           (value) => value.toLowerCase() === address,
         )
       ) {
+        const targetReadKey = `${providerId}:${address}`;
+        const count = (targetNonceReads.get(targetReadKey) ?? 0) + 1;
+        targetNonceReads.set(targetReadKey, count);
+        if (
+          provider.closingTargetNonceKey === target.key &&
+          count > (provider.closingTargetNonceAfterReads ?? 2)
+        ) {
+          return "0x1";
+        }
         return provider.targetNonceKey === target.key ? "0x1" : "0x0";
       }
       if (params[1] === "latest") return provider.latestNonce ?? "0x7";
@@ -227,18 +282,52 @@ function mockRpc(options = {}) {
     if (method === "eth_getCode") {
       const entry = codeByAddress.get(params[0].toLowerCase());
       assert.ok(entry, `unexpected code address ${params[0]}`);
+      const codeReadKey = `${providerId}:${params[0].toLowerCase()}`;
+      const count = (codeReads.get(codeReadKey) ?? 0) + 1;
+      codeReads.set(codeReadKey, count);
+      if (
+        provider.closingCodeDriftKey === entry.key &&
+        count > (provider.closingCodeAfterReads ?? 2)
+      ) {
+        return "0x6000";
+      }
+      if (
+        provider.closingOccupiedCodeKey === entry.key &&
+        count > (provider.closingCodeAfterReads ?? 2)
+      ) {
+        return "0x6001";
+      }
       if (provider.codeDriftKey === entry.key) return "0x6000";
       if (provider.occupiedCodeKey === entry.key) return "0x6001";
       return entry.code;
     }
-    if (method === "eth_call")
-      return provider.callResult ?? EXPECTED_SIMULATION;
-    if (method === "eth_estimateGas") {
-      return provider.estimate ?? "0x6d66aa";
+    if (method === "eth_call") {
+      const count = (callReads.get(providerId) ?? 0) + 1;
+      callReads.set(providerId, count);
+      return count > 1 && provider.closingCallResult !== undefined
+        ? provider.closingCallResult
+        : (provider.callResult ?? EXPECTED_SIMULATION);
     }
-    if (method === "eth_gasPrice") return provider.gasPrice ?? "0x77359400";
+    if (method === "eth_estimateGas") {
+      const count = (estimateReads.get(providerId) ?? 0) + 1;
+      estimateReads.set(providerId, count);
+      return count > 1 && provider.closingEstimate !== undefined
+        ? provider.closingEstimate
+        : (provider.estimate ?? "0x6d66aa");
+    }
+    if (method === "eth_gasPrice") {
+      const count = (gasPriceReads.get(providerId) ?? 0) + 1;
+      gasPriceReads.set(providerId, count);
+      return count > 1 && provider.closingGasPrice
+        ? provider.closingGasPrice
+        : (provider.gasPrice ?? "0x77359400");
+    }
     if (method === "eth_maxPriorityFeePerGas") {
-      return provider.priorityFee ?? "0x0";
+      const count = (priorityFeeReads.get(providerId) ?? 0) + 1;
+      priorityFeeReads.set(providerId, count);
+      return count > 1 && provider.closingPriorityFee
+        ? provider.closingPriorityFee
+        : (provider.priorityFee ?? "0x0");
     }
     assert.fail(`unexpected RPC method ${method}`);
   };
@@ -297,6 +386,10 @@ test("reviewed gas headroom is exact and fails instead of clamping", () => {
 test("both reviewed owners produce a protected, digest-bound envelope", async () => {
   for (const owner of [OWNER_0, OWNER_1]) {
     const { receipt, methodInventory } = await prepareEnvelope({ owner });
+    assert.equal(
+      receipt.schemaVersion,
+      ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_SCHEMA,
+    );
     assert.equal(receipt.state, "prepared-not-signed-not-broadcast");
     assert.equal(receipt.transaction.from.toLowerCase(), owner.toLowerCase());
     assert.equal(receipt.transaction.to, deployment.atomicOwnerTransaction.to);
@@ -318,6 +411,129 @@ test("both reviewed owners produce a protected, digest-bound envelope", async ()
     assert.ok(!rendered.includes("0123456789abcdef"));
     assert.ok(!rendered.includes("abcdef0123456789"));
   }
+});
+
+test("moving pending heads and provider fee differences use conservative maxima", async () => {
+  const openingParents = [
+    `0x${"a1".repeat(32)}`,
+    `0x${"b2".repeat(32)}`,
+  ];
+  const closingParents = [
+    `0x${"c3".repeat(32)}`,
+    `0x${"d4".repeat(32)}`,
+  ];
+  const { receipt } = await prepareEnvelope({
+    ceilings: {
+      maximumFeePerGasWei: "4000000000",
+      maximumGasCostWei: "31000000000000000",
+    },
+    options: {
+      providers: {
+        quicknode: {
+          pendingParentHash: openingParents[0],
+          pendingTimestamp: `0x${FIXED_TIMESTAMP.toString(16)}`,
+          baseFeePerGas: "0x3b9aca00",
+          closingParentHash: closingParents[0],
+          closingPendingTimestamp: `0x${(FIXED_TIMESTAMP + 2).toString(16)}`,
+          closingBaseFeePerGas: "0x4190ab00",
+          gasPrice: "0xcaa7e200",
+          priorityFee: "0x5f5e100",
+          closingGasPrice: "0x77359400",
+          closingPriorityFee: "0x2faf080",
+        },
+        alchemy: {
+          pendingParentHash: openingParents[1],
+          pendingTimestamp: `0x${(FIXED_TIMESTAMP + 1).toString(16)}`,
+          baseFeePerGas: "0x59682f00",
+          closingParentHash: closingParents[1],
+          closingPendingTimestamp: `0x${(FIXED_TIMESTAMP + 3).toString(16)}`,
+          closingBaseFeePerGas: "0x53724e00",
+          gasPrice: "0xa0eebb00",
+          priorityFee: "0x1dcd6500",
+          closingGasPrice: "0x83215600",
+          closingPriorityFee: "0x5f5e100",
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(receipt.observation.openingPendingBlocks, [
+    {
+      providerId: "quicknode",
+      parentHash: openingParents[0],
+      blockTimestamp: FIXED_TIMESTAMP.toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1000000000",
+    },
+    {
+      providerId: "alchemy",
+      parentHash: openingParents[1],
+      blockTimestamp: (FIXED_TIMESTAMP + 1).toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1500000000",
+    },
+  ]);
+  assert.deepEqual(receipt.observation.closingPendingBlocks, [
+    {
+      providerId: "quicknode",
+      parentHash: closingParents[0],
+      blockTimestamp: (FIXED_TIMESTAMP + 2).toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1100000000",
+    },
+    {
+      providerId: "alchemy",
+      parentHash: closingParents[1],
+      blockTimestamp: (FIXED_TIMESTAMP + 3).toString(),
+      gasLimit: "30000000",
+      baseFeePerGas: "1400000000",
+    },
+  ]);
+  assert.deepEqual(receipt.observation.openingFeeObservations, [
+    {
+      providerId: "quicknode",
+      gasPrice: "3400000000",
+      maxPriorityFeePerGas: "100000000",
+    },
+    {
+      providerId: "alchemy",
+      gasPrice: "2700000000",
+      maxPriorityFeePerGas: "500000000",
+    },
+  ]);
+  assert.deepEqual(receipt.observation.closingFeeObservations, [
+    {
+      providerId: "quicknode",
+      gasPrice: "2000000000",
+      maxPriorityFeePerGas: "50000000",
+    },
+    {
+      providerId: "alchemy",
+      gasPrice: "2200000000",
+      maxPriorityFeePerGas: "100000000",
+    },
+  ]);
+  assert.ok(!Object.hasOwn(receipt.observation, "pendingBlock"));
+  assert.deepEqual(receipt.simulation.closingGasEstimates, [
+    "7169706",
+    "7169706",
+  ]);
+  assert.equal(receipt.gasPolicy.observedPendingBaseFeePerGasWei, "1500000000");
+  assert.equal(receipt.gasPolicy.observedGasPriceWei, "3400000000");
+  assert.equal(receipt.gasPolicy.observedMaxPriorityFeePerGasWei, "500000000");
+  assert.equal(receipt.transaction.maxPriorityFeePerGas, "500000000");
+  assert.equal(receipt.transaction.maxFeePerGas, "3500000000");
+  assert.equal(receipt.checks.movingPendingHeadsTolerated, true);
+  assert.equal(receipt.checks.stateRelevantOpeningAgreement, true);
+  assert.equal(receipt.checks.stateRelevantClosingAgreement, true);
+  assert.equal(receipt.checks.closingSimulationAgreement, true);
+  assert.equal(receipt.checks.closingGasAgreement, true);
+  assert.equal(
+    receipt.checks.feeCeilingUsesOpeningAndClosingProviderMaxima,
+    true,
+  );
+  assert.ok(!Object.hasOwn(receipt.checks, "pendingBlockAgreement"));
+  assert.ok(!Object.hasOwn(receipt.checks, "closingFeeAgreement"));
 });
 
 test("implementation inventory contains no balance, signing, or broadcast primitive", async () => {
@@ -548,7 +764,7 @@ test("provider commitment helper separates review derivation from live exact mat
   assert.doesNotMatch(substituted.stderr, /0123456789abcdef|abcdef0123456789/u);
 });
 
-test("preflight fails closed on provider, pin, vacancy, nonce, simulation, gas, and fee drift", async (t) => {
+test("preflight fails closed on provider, pin, vacancy, nonce, simulation, and gas drift", async (t) => {
   const cases = [
     ["chain", { providers: { alchemy: { chainId: "0x1" } } }, /not Robinhood/u],
     [
@@ -597,18 +813,34 @@ test("preflight fails closed on provider, pin, vacancy, nonce, simulation, gas, 
       /state changed/u,
     ],
     [
-      "closing parent",
-      {
-        providers: {
-          quicknode: { closingParentHash: `0x${"bb".repeat(32)}` },
-        },
-      },
+      "closing chain",
+      { providers: { quicknode: { closingChainId: "0x1" } } },
       /state changed/u,
     ],
     [
-      "fee",
-      { providers: { alchemy: { gasPrice: "0x77359401" } } },
-      /disagree on closing/u,
+      "closing dependency code",
+      { providers: { quicknode: { closingCodeDriftKey: "poolManager" } } },
+      /state changed/u,
+    ],
+    [
+      "closing occupied target",
+      { providers: { quicknode: { closingOccupiedCodeKey: "router" } } },
+      /state changed/u,
+    ],
+    [
+      "closing target nonce",
+      { providers: { quicknode: { closingTargetNonceKey: "graphFactory" } } },
+      /state changed/u,
+    ],
+    [
+      "closing simulation",
+      { providers: { quicknode: { closingCallResult: "0x" } } },
+      /simulation|state changed/u,
+    ],
+    [
+      "closing gas estimate",
+      { providers: { quicknode: { closingEstimate: "0x6d66ab" } } },
+      /gas|state changed/u,
     ],
   ];
   for (const [name, options, pattern] of cases) {
@@ -809,6 +1041,8 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
       preparedAddressCount: 3,
       pendingSimulationVerified: true,
       pendingGasEstimate: receipt.simulation.agreedGasEstimate,
+      closingSimulationVerified: true,
+      closingGasEstimate: receipt.simulation.agreedGasEstimate,
       closingVacancyVerified: true,
       rpcResponseBytesConsumed: 0,
     });
@@ -833,7 +1067,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
           .map(({ method, params }) => ({ method, params })),
       ]),
     );
-    assert.equal(requestsByProvider.quicknode.length, 19);
+    assert.equal(requestsByProvider.quicknode.length, 22);
     assert.deepEqual(requestsByProvider.quicknode, requestsByProvider.alchemy);
     assert.ok(
       actionTimeMock.requestInventory.every(
@@ -1028,6 +1262,101 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
   }
 });
 
+test("action-time closing chain, target, simulation, and gas drift fail closed", async (t) => {
+  const { receipt } = await prepareEnvelope();
+  const root = await mkdtemp(
+    path.join(os.homedir(), ".robinhood-wallet-closing-test-"),
+  );
+  await chmod(root, 0o700);
+  const envelopePath = path.join(root, "envelope.json");
+  const walletRequestPath = path.join(root, "wallet-request.json");
+  const env = {
+    ROBINHOOD_OWNER_ENVELOPE_ROOT: root,
+    ROBINHOOD_MAINNET_RPC_URL_PRIMARY: RPC_URLS[0],
+    ROBINHOOD_MAINNET_RPC_URL_SECONDARY: RPC_URLS[1],
+    ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY: RPC_COMMITMENTS[0],
+    ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY: RPC_COMMITMENTS[1],
+  };
+  try {
+    await Promise.all([
+      writeFile(envelopePath, `${JSON.stringify(receipt, null, 2)}\n`, {
+        mode: 0o600,
+        flag: "wx",
+      }),
+      writeFile(
+        walletRequestPath,
+        `${JSON.stringify(walletRequest(receipt), null, 2)}\n`,
+        { mode: 0o600, flag: "wx" },
+      ),
+    ]);
+    const cases = [
+      [
+        "closing chain ID drift",
+        { providers: { quicknode: { closingChainId: "0x1" } } },
+        /state changed during wallet verification/u,
+      ],
+      [
+        "closing occupied target",
+        {
+          providers: {
+            quicknode: {
+              closingOccupiedCodeKey: "router",
+              closingCodeAfterReads: 1,
+            },
+          },
+        },
+        /state changed during wallet verification/u,
+      ],
+      [
+        "closing target nonce",
+        {
+          providers: {
+            quicknode: {
+              closingTargetNonceKey: "graphFactory",
+              closingTargetNonceAfterReads: 1,
+            },
+          },
+        },
+        /state changed during wallet verification/u,
+      ],
+      [
+        "closing eth_call drift",
+        { providers: { quicknode: { closingCallResult: "0x" } } },
+        /simulation|state changed during wallet verification/u,
+      ],
+      [
+        "closing eth_estimateGas drift",
+        { providers: { quicknode: { closingEstimate: "0x6d66ab" } } },
+        /gas|state changed during wallet verification/u,
+      ],
+    ];
+    for (const [name, rpcOptions, pattern] of cases) {
+      await t.test(name, async () => {
+        await assert.rejects(
+          () =>
+            verifyRobinhoodOwnerWalletRequest({
+              envelopePath,
+              walletRequestPath,
+              env,
+              nowMilliseconds: FIXED_TIMESTAMP * 1_000,
+              sourceIdentity: () => ({
+                commit: receipt.source.commit,
+                tree: receipt.source.tree,
+                clean: true,
+              }),
+              hostedVerifyResolver: async () => receipt.hostedVerify,
+              rpcClient: mockRpc(rpcOptions).rpcClient,
+              clock: () => FIXED_TIMESTAMP * 1_000,
+            }),
+          pattern,
+        );
+      });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("freshness validation and protected output reject tampering, expiry, and overwrite", async () => {
   const { receipt } = await prepareEnvelope();
   assert.equal(
@@ -1037,6 +1366,68 @@ test("freshness validation and protected output reject tampering, expiry, and ov
     ),
     receipt.receiptDigest,
   );
+  assert.equal(redigestOwnerEnvelope(receipt).receiptDigest, receipt.receiptDigest);
+  const semanticallyInvalidReceipts = [
+    ["schema", (candidate) => {
+      candidate.schemaVersion =
+        "programmable.robinhood-custom-launch.owner-envelope.v1";
+    }],
+    ["source key inventory", (candidate) => {
+      candidate.source.unexpected = true;
+    }],
+    ["transaction key inventory", (candidate) => {
+      candidate.transaction.gasPrice = "1";
+    }],
+    ["common anchor", (candidate) => {
+      candidate.observation.commonAnchor.blockNumber = (
+        BigInt(candidate.observation.commonAnchor.blockNumber) - 1n
+      ).toString();
+    }],
+    ["opening head gap", (candidate) => {
+      candidate.observation.openingHeads[1].blockNumber = (
+        BigInt(candidate.observation.openingHeads[0].blockNumber) + 5n
+      ).toString();
+    }],
+    ["opening fee maximum", (candidate) => {
+      candidate.observation.openingPendingBlocks[0].baseFeePerGas = (
+        BigInt(candidate.gasPolicy.observedPendingBaseFeePerGasWei) + 1n
+      ).toString();
+    }],
+    ["opening gas-price maximum", (candidate) => {
+      candidate.observation.openingFeeObservations[0].gasPrice = (
+        BigInt(candidate.gasPolicy.observedGasPriceWei) + 1n
+      ).toString();
+    }],
+    ["closing priority-fee maximum", (candidate) => {
+      candidate.observation.closingFeeObservations[0].maxPriorityFeePerGas = (
+        BigInt(candidate.gasPolicy.observedMaxPriorityFeePerGasWei) + 1n
+      ).toString();
+    }],
+    ["simulation gas agreement", (candidate) => {
+      candidate.simulation.gasEstimates[0] = (
+        BigInt(candidate.simulation.agreedGasEstimate) + 1n
+      ).toString();
+    }],
+    ["boolean check", (candidate) => {
+      candidate.checks.closingGasAgreement = false;
+    }],
+    ["RPC method inventory", (candidate) => {
+      candidate.checks.rpcMethodInventory.push("eth_sendTransaction");
+    }],
+  ];
+  for (const [name, mutate] of semanticallyInvalidReceipts) {
+    const candidate = structuredClone(receipt);
+    mutate(candidate);
+    assert.throws(
+      () =>
+        assertFreshRobinhoodFoundationOwnerEnvelope(
+          redigestOwnerEnvelope(candidate),
+          FIXED_TIMESTAMP * 1_000,
+        ),
+      /stale, unsafe, or digest-invalid/u,
+      name,
+    );
+  }
   assert.throws(
     () =>
       assertFreshRobinhoodFoundationOwnerEnvelope(
