@@ -3090,6 +3090,9 @@ async function refreshClaimsOnce() {
             ? `Aktuell · Block ${BigInt(blockTag).toString()}`
             : `${failedClaims} Guthaben konnten nicht gelesen werden`,
     );
+  } catch (error) {
+    setStatus("Prüfung unvollständig");
+    throw error;
   } finally {
     state.scanInProgress = false;
     renderSummary();

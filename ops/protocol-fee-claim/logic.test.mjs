@@ -469,6 +469,10 @@ test("discovers MetaMask with EIP-6963 and safe legacy fallbacks", () => {
 
 test("keeps the static Vercel scanner on wallet RPC and serializes refreshes", () => {
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const refreshClaimsOnce = app.slice(
+    app.indexOf("async function refreshClaimsOnce()"),
+    app.indexOf("const refreshClaims = createRefreshQueue(refreshClaimsOnce);"),
+  );
   assert.match(
     app,
     /const walletProvider = await requireMetaMaskProvider\(\);\s*const operation = walletProvider\.request\(\{ method, params \}\);/,
@@ -535,6 +539,10 @@ test("keeps the static Vercel scanner on wallet RPC and serializes refreshes", (
     /const batch = await preflightClaimBatch\(claims\);\s*await requireActiveRewardWallet\(expectedAccount\);\s*requireConfirmedBatchStorage\(\);/,
   );
   assert.doesNotMatch(app, /fetch\(["']\/rpc/);
+  assert.match(
+    refreshClaimsOnce,
+    /catch \(error\) \{\s*setStatus\("Prüfung unvollständig"\);\s*throw error;\s*\} finally/,
+  );
   assert.match(app, /const refreshClaims = createRefreshQueue\(refreshClaimsOnce\);/);
   assert.match(app, /await refreshClaims\(\);/);
   assert.match(app, /async function preflightClaimBatch\(claims\)/);
