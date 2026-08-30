@@ -176,6 +176,7 @@ const EXPECTED_OBSERVATION_KEYS = Object.freeze([
   "elapsedMilliseconds",
   "expiresAtTimestamp",
   "minimumRemainingTtlSeconds",
+  "openingFeeObservations",
   "openingHeads",
   "openingPendingBlocks",
   "operationStartedAtTimestamp",
@@ -215,7 +216,6 @@ const EXPECTED_SIMULATION_KEYS = Object.freeze([
 ]);
 const EXPECTED_CHECK_KEYS = Object.freeze([
   "boundedTimeout",
-  "closingFeeCeilingUsesProviderMaxima",
   "closingGasAgreement",
   "closingSimulationAgreement",
   "closingVacancyVerified",
@@ -224,6 +224,7 @@ const EXPECTED_CHECK_KEYS = Object.freeze([
   "exactCleanSource",
   "exactFreshDeterministicCompilation",
   "exactPreparedArtifact",
+  "feeCeilingUsesOpeningAndClosingProviderMaxima",
   "fixedAndPendingCodeAndNonceVacancyVerified",
   "independentAuthenticatedRpcCount",
   "movingPendingHeadsTolerated",
@@ -474,7 +475,13 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
       (minimum, { number }) => (number < minimum ? number : minimum),
       openingHeads[0].number,
     );
+    const openingMaximum = openingHeads.reduce(
+      (maximum, { number }) => (number > maximum ? number : maximum),
+      openingHeads[0].number,
+    );
     if (
+      openingMaximum - openingMinimum >
+        ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_HEAD_GAP ||
       commonAnchor.number !== openingMinimum ||
       openingHeads.some(
         ({ number, hash, timestamp }) =>
@@ -524,33 +531,39 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
       observation.closingPendingBlocks,
       "closing",
     );
-    if (
-      !Array.isArray(observation.closingFeeObservations) ||
-      observation.closingFeeObservations.length !== providerIds.length
-    ) {
-      fail("receipt closing fee observation count is invalid");
-    }
-    const closingFees = observation.closingFeeObservations.map(
-      (value, index) => {
+    const normalizeFeeObservations = (values, label) => {
+      if (!Array.isArray(values) || values.length !== providerIds.length) {
+        fail(`receipt ${label} fee observation count is invalid`);
+      }
+      return values.map((value, index) => {
         if (
           !hasExactKeys(value, EXPECTED_FEE_OBSERVATION_KEYS) ||
           value.providerId !== providerIds[index]
         ) {
-          fail("receipt closing fee observation is invalid");
+          fail(`receipt ${label} fee observation is invalid`);
         }
         return {
           gasPrice: parseDecimalWei(
             value.gasPrice,
-            "receipt closing gas price",
+            `receipt ${label} gas price`,
           ),
           priorityFee: parseDecimalWei(
             value.maxPriorityFeePerGas,
-            "receipt closing priority fee",
+            `receipt ${label} priority fee`,
             { positive: false },
           ),
         };
-      },
+      });
+    };
+    const openingFees = normalizeFeeObservations(
+      observation.openingFeeObservations,
+      "opening",
     );
+    const closingFees = normalizeFeeObservations(
+      observation.closingFeeObservations,
+      "closing",
+    );
+    const feeObservations = [...openingFees, ...closingFees];
     const simulation = receipt.simulation;
     const agreedGasEstimate = parseDecimalWei(
       simulation.agreedGasEstimate,
@@ -573,11 +586,11 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
         baseFeePerGas > maximum ? baseFeePerGas : maximum,
       0n,
     );
-    const gasPriceMaximum = closingFees.reduce(
+    const gasPriceMaximum = feeObservations.reduce(
       (maximum, { gasPrice }) => (gasPrice > maximum ? gasPrice : maximum),
       0n,
     );
-    const priorityFeeMaximum = closingFees.reduce(
+    const priorityFeeMaximum = feeObservations.reduce(
       (maximum, { priorityFee }) =>
         priorityFee > maximum ? priorityFee : maximum,
       0n,
@@ -1995,6 +2008,8 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
     providers.map(async (provider) => {
       const [
         pendingBlockValue,
+        gasPriceValue,
+        priorityFeeValue,
         codes,
         vacancyNonces,
         callResult,
@@ -2004,6 +2019,14 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
           provider,
           "eth_getBlockByNumber",
           ["pending", false],
+          rpcClient,
+          requestTimeoutMs,
+        ),
+        rpc(provider, "eth_gasPrice", [], rpcClient, requestTimeoutMs),
+        rpc(
+          provider,
+          "eth_maxPriorityFeePerGas",
+          [],
           rpcClient,
           requestTimeoutMs,
         ),
@@ -2069,6 +2092,14 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
           pendingBlockValue,
           `${provider.providerId} pending block`,
         ),
+        gasPrice: parseQuantity(
+          gasPriceValue,
+          `${provider.providerId} opening gas price`,
+        ),
+        priorityFee: parseQuantity(
+          priorityFeeValue,
+          `${provider.providerId} opening priority fee`,
+        ),
         codes,
         vacancyNonces,
         callResult: exactCode(
@@ -2109,6 +2140,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
   const closings = await Promise.all(
     providers.map(async (provider) => {
       const [
+        chainIdValue,
         anchorValue,
         pendingBlockValue,
         pendingNonceValue,
@@ -2119,6 +2151,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         callResult,
         estimateValue,
       ] = await Promise.all([
+        rpc(provider, "eth_chainId", [], rpcClient, requestTimeoutMs),
         rpc(
           provider,
           "eth_getBlockByNumber",
@@ -2194,6 +2227,10 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         ),
       ]);
       return {
+        chainId: parseQuantity(
+          chainIdValue,
+          `${provider.providerId} closing chain ID`,
+        ),
         anchor: exactBlock(
           anchorValue,
           `${provider.providerId} closing anchor`,
@@ -2229,6 +2266,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
   );
   for (const [index, closing] of closings.entries()) {
     if (
+      closing.chainId !== CHAIN_ID ||
       closing.anchor.number !== commonBlockNumber ||
       closing.anchor.hash !== commonBlocks[0].hash ||
       closing.pendingNonce !== nonce ||
@@ -2257,6 +2295,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
     });
   }
   if (
+    closings[0].chainId !== closings[1].chainId ||
     closings[0].pendingNonce !== closings[1].pendingNonce ||
     JSON.stringify(closings[0].codes) !== JSON.stringify(closings[1].codes) ||
     JSON.stringify(closings[0].vacancyNonces) !==
@@ -2268,7 +2307,8 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       "Robinhood RPCs disagree on closing nonce, code, vacancy, simulation, or gas",
     );
   }
-  const maxPriorityFeePerGas = closings.reduce(
+  const feeObservations = [...pendingSnapshots, ...closings];
+  const maxPriorityFeePerGas = feeObservations.reduce(
     (maximum, { priorityFee }) =>
       priorityFee > maximum ? priorityFee : maximum,
     0n,
@@ -2280,7 +2320,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
     (maximum, value) => (value > maximum ? value : maximum),
     0n,
   );
-  const observedGasPrice = closings.reduce(
+  const observedGasPrice = feeObservations.reduce(
     (maximum, { gasPrice }) => (gasPrice > maximum ? gasPrice : maximum),
     0n,
   );
@@ -2374,6 +2414,13 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         gasLimit: pendingBlock.gasLimit.toString(),
         baseFeePerGas: pendingBlock.baseFeePerGas.toString(),
       })),
+      openingFeeObservations: pendingSnapshots.map(
+        ({ gasPrice, priorityFee }, index) => ({
+          providerId: providerBindings[index].providerId,
+          gasPrice: gasPrice.toString(),
+          maxPriorityFeePerGas: priorityFee.toString(),
+        }),
+      ),
       closingPendingBlocks: closings.map(({ pendingBlock }, index) => ({
         providerId: providerBindings[index].providerId,
         parentHash: pendingBlock.parentHash,
@@ -2459,7 +2506,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       noPendingOwnerTransaction: true,
       closingSimulationAgreement: true,
       closingGasAgreement: true,
-      closingFeeCeilingUsesProviderMaxima: true,
+      feeCeilingUsesOpeningAndClosingProviderMaxima: true,
       closingVacancyVerified: true,
       boundedTimeout: true,
       rpcResponseBudgetBytes: RPC_AGGREGATE_RESPONSE_LIMIT_BYTES,

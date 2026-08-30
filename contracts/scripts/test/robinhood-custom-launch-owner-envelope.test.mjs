@@ -180,6 +180,8 @@ function mockRpc(options = {}) {
   const chainReads = new Map();
   const targetNonceReads = new Map();
   const codeReads = new Map();
+  const gasPriceReads = new Map();
+  const priorityFeeReads = new Map();
   const callReads = new Map();
   const estimateReads = new Map();
   const codeByAddress = new Map();
@@ -313,9 +315,19 @@ function mockRpc(options = {}) {
         ? provider.closingEstimate
         : (provider.estimate ?? "0x6d66aa");
     }
-    if (method === "eth_gasPrice") return provider.gasPrice ?? "0x77359400";
+    if (method === "eth_gasPrice") {
+      const count = (gasPriceReads.get(providerId) ?? 0) + 1;
+      gasPriceReads.set(providerId, count);
+      return count > 1 && provider.closingGasPrice
+        ? provider.closingGasPrice
+        : (provider.gasPrice ?? "0x77359400");
+    }
     if (method === "eth_maxPriorityFeePerGas") {
-      return provider.priorityFee ?? "0x0";
+      const count = (priorityFeeReads.get(providerId) ?? 0) + 1;
+      priorityFeeReads.set(providerId, count);
+      return count > 1 && provider.closingPriorityFee
+        ? provider.closingPriorityFee
+        : (provider.priorityFee ?? "0x0");
     }
     assert.fail(`unexpected RPC method ${method}`);
   };
@@ -426,6 +438,8 @@ test("moving pending heads and provider fee differences use conservative maxima"
           closingBaseFeePerGas: "0x4190ab00",
           gasPrice: "0xcaa7e200",
           priorityFee: "0x5f5e100",
+          closingGasPrice: "0x77359400",
+          closingPriorityFee: "0x2faf080",
         },
         alchemy: {
           pendingParentHash: openingParents[1],
@@ -436,6 +450,8 @@ test("moving pending heads and provider fee differences use conservative maxima"
           closingBaseFeePerGas: "0x53724e00",
           gasPrice: "0xa0eebb00",
           priorityFee: "0x1dcd6500",
+          closingGasPrice: "0x83215600",
+          closingPriorityFee: "0x5f5e100",
         },
       },
     },
@@ -473,6 +489,30 @@ test("moving pending heads and provider fee differences use conservative maxima"
       baseFeePerGas: "1400000000",
     },
   ]);
+  assert.deepEqual(receipt.observation.openingFeeObservations, [
+    {
+      providerId: "quicknode",
+      gasPrice: "3400000000",
+      maxPriorityFeePerGas: "100000000",
+    },
+    {
+      providerId: "alchemy",
+      gasPrice: "2700000000",
+      maxPriorityFeePerGas: "500000000",
+    },
+  ]);
+  assert.deepEqual(receipt.observation.closingFeeObservations, [
+    {
+      providerId: "quicknode",
+      gasPrice: "2000000000",
+      maxPriorityFeePerGas: "50000000",
+    },
+    {
+      providerId: "alchemy",
+      gasPrice: "2200000000",
+      maxPriorityFeePerGas: "100000000",
+    },
+  ]);
   assert.ok(!Object.hasOwn(receipt.observation, "pendingBlock"));
   assert.deepEqual(receipt.simulation.closingGasEstimates, [
     "7169706",
@@ -488,7 +528,10 @@ test("moving pending heads and provider fee differences use conservative maxima"
   assert.equal(receipt.checks.stateRelevantClosingAgreement, true);
   assert.equal(receipt.checks.closingSimulationAgreement, true);
   assert.equal(receipt.checks.closingGasAgreement, true);
-  assert.equal(receipt.checks.closingFeeCeilingUsesProviderMaxima, true);
+  assert.equal(
+    receipt.checks.feeCeilingUsesOpeningAndClosingProviderMaxima,
+    true,
+  );
   assert.ok(!Object.hasOwn(receipt.checks, "pendingBlockAgreement"));
   assert.ok(!Object.hasOwn(receipt.checks, "closingFeeAgreement"));
 });
@@ -767,6 +810,11 @@ test("preflight fails closed on provider, pin, vacancy, nonce, simulation, and g
     [
       "closing nonce",
       { providers: { quicknode: { closingNonce: "0x8" } } },
+      /state changed/u,
+    ],
+    [
+      "closing chain",
+      { providers: { quicknode: { closingChainId: "0x1" } } },
       /state changed/u,
     ],
     [
@@ -1335,14 +1383,24 @@ test("freshness validation and protected output reject tampering, expiry, and ov
         BigInt(candidate.observation.commonAnchor.blockNumber) - 1n
       ).toString();
     }],
+    ["opening head gap", (candidate) => {
+      candidate.observation.openingHeads[1].blockNumber = (
+        BigInt(candidate.observation.openingHeads[0].blockNumber) + 5n
+      ).toString();
+    }],
     ["opening fee maximum", (candidate) => {
       candidate.observation.openingPendingBlocks[0].baseFeePerGas = (
         BigInt(candidate.gasPolicy.observedPendingBaseFeePerGasWei) + 1n
       ).toString();
     }],
-    ["closing fee maximum", (candidate) => {
-      candidate.observation.closingFeeObservations[0].gasPrice = (
+    ["opening gas-price maximum", (candidate) => {
+      candidate.observation.openingFeeObservations[0].gasPrice = (
         BigInt(candidate.gasPolicy.observedGasPriceWei) + 1n
+      ).toString();
+    }],
+    ["closing priority-fee maximum", (candidate) => {
+      candidate.observation.closingFeeObservations[0].maxPriorityFeePerGas = (
+        BigInt(candidate.gasPolicy.observedMaxPriorityFeePerGasWei) + 1n
       ).toString();
     }],
     ["simulation gas agreement", (candidate) => {
