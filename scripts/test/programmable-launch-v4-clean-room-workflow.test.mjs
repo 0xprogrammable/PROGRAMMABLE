@@ -34,26 +34,40 @@ function contractFailures(workflowSource = workflow, runnerSource = runner) {
     "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
     "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    "actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26",
     "persist-credentials: false",
     "fetch-depth: 0",
     "+refs/heads/production:refs/remotes/origin/production",
     "test \"$(git rev-parse refs/remotes/origin/production^{commit})\" = \"$GITHUB_SHA\"",
+    "Reconfirm protected production tip immediately before credential use",
     "test \"$GITHUB_REF_PROTECTED\" = \"true\"",
     "programmable-launch-v4-clean-room.yml@$GITHUB_REF",
     "test -z \"$(git status --porcelain=v1 --untracked-files=all)\"",
     "node-version: 24.14.0",
     "npm@11.16.0",
+    "Install exact protected-source verifier dependencies without credentials",
+    "npm ci --ignore-scripts --no-audit --no-fund",
     "test -z \"${PROGRAMMABLE_API_KEY:-}\"",
     "PROGRAMMABLE_API_KEY: ${{ secrets.PROGRAMMABLE_V4_CLEAN_ROOM_PRODUCTION_API_KEY }}",
+    "PROGRAMMABLE_CLEAN_ROOM_ENVIRONMENT: production",
     "programmable-launch-v4-clean-room.mjs prepare",
     "programmable-launch-v4-clean-room.mjs run",
     "programmable-launch-v4-clean-room.mjs verify-evidence",
+    "programmable-launch-v4-clean-room.mjs verify-recovery",
+    "--recovery-output \"$RUNNER_TEMP/programmable-launch-v4-clean-room-recovery.json\"",
     "Upload only canonical redacted evidence",
     "path: ${{ runner.temp }}/programmable-launch-v4-clean-room-evidence.json",
     "include-hidden-files: false",
     "overwrite: false",
+    "Upload canonical redacted recovery on success or later failure",
+    "Attest canonical redacted recovery without production credentials",
+    "create-storage-record: true",
     "RELEASE_TAG = \"programmable-launch-v4.0.0\"",
     "RELEASE_VERSION = \"4.0.0\"",
+    "REVIEWED_RELEASE_COORDINATE_PATH",
+    "V4_RELEASE_BINDING_NOT_READY",
+    "REVIEWED_RELEASE_COORDINATE_BLOCKED",
     "runCommand(\"gh\", [",
     "\"release\", \"download\", RELEASE_TAG",
     "\"release\", \"verify\", RELEASE_TAG",
@@ -81,6 +95,10 @@ function contractFailures(workflowSource = workflow, runnerSource = runner) {
     "apiCredentialRecorded: false",
     "rawRequestRecorded: false",
     "rawTransactionRecorded: false",
+    "transactionCalldataRecorded: false",
+    "producerProvenanceFromEnvironment",
+    "buildCleanRoomRecoveryReceipt",
+    "await writeFile(recoveryOutput, canonicalJsonBytes(recovery)",
     "await rm(stateDirectory, { recursive: true, force: true, maxRetries: 3 })",
   ];
   return required.filter((text) => !implementation.includes(text));
@@ -90,9 +108,11 @@ test("V4 clean-room workflow closes release, credential, replay, and no-broadcas
   assert.deepEqual(contractFailures(), []);
   assert.equal(packageJson.scripts["release:custom-launch:v4:clean-room:test"],
     "node --test scripts/test/programmable-launch-v4-clean-room.test.mjs scripts/test/programmable-launch-v4-clean-room-workflow.test.mjs");
-  assert.equal(workflow.includes("actions/attest@"), false);
-  assert.equal(workflow.includes("attestations: write"), false);
-  assert.equal(workflow.includes("id-token: write"), false);
+  const provenanceJob = workflow.slice(workflow.indexOf("\n  provenance:"));
+  const cleanRoomJob = workflow.slice(0, workflow.indexOf("\n  provenance:"));
+  assert.equal(cleanRoomJob.includes("actions/attest@"), false);
+  assert.equal(cleanRoomJob.includes("attestations: write"), false);
+  assert.equal(cleanRoomJob.includes("id-token: write"), false);
   assert.equal(workflow.includes("contents: write"), false);
   assert.equal(workflow.includes("gh release create"), false);
   assert.equal(workflow.includes("npm publish"), false);
@@ -100,6 +120,9 @@ test("V4 clean-room workflow closes release, credential, replay, and no-broadcas
   assert.equal(workflow.includes("pull_request:"), false);
   assert.equal(workflow.includes("push:"), false);
   assert.equal(workflow.match(/secrets\.PROGRAMMABLE_V4_CLEAN_ROOM_PRODUCTION_API_KEY/gu)?.length, 1);
+  assert.equal(provenanceJob.includes("PROGRAMMABLE_API_KEY"), false);
+  assert.match(provenanceJob, /attestations: write/u);
+  assert.match(provenanceJob, /id-token: write/u);
   assert.match(verifyWorkflow, /Verify V4 clean-room no-broadcast release gate[\s\S]*npm run release:custom-launch:v4:clean-room:test/u);
   assert.ok(
     workflow.indexOf("Fresh-download, attest, install, pack, and validate locally")
@@ -107,6 +130,14 @@ test("V4 clean-room workflow closes release, credential, replay, and no-broadcas
   );
   assert.ok(runner.indexOf("const firstSubmit") < runner.indexOf("const replaySubmit"));
   assert.ok(runner.indexOf("const replaySubmit") < runner.indexOf("const status"));
+  assert.ok(
+    runner.indexOf("recovery = buildCleanRoomRecoveryReceipt")
+      < runner.indexOf("const replaySubmit = await runCli"),
+  );
+  assert.ok(
+    runner.indexOf("await writeFile(recoveryOutput, canonicalJsonBytes(recovery)")
+      < runner.indexOf("const replaySubmit = await runCli"),
+  );
 });
 
 test("workflow contract mutations fail closed", () => {
@@ -114,13 +145,16 @@ test("workflow contract mutations fail closed", () => {
     workflow.replace("github.ref_protected == true", "true"),
     workflow.replace("github.ref == 'refs/heads/production'", "true"),
     workflow.replace("persist-credentials: false", "persist-credentials: true"),
-    workflow.replace("runs-on: ubuntu-24.04", "runs-on: ubuntu-latest"),
+    workflow.replaceAll("runs-on: ubuntu-24.04", "runs-on: ubuntu-latest"),
     workflow.replace("attestations: read", "attestations: write"),
     workflow.replace("npm@11.16.0", "npm@latest"),
-    workflow.replace("test -z \"${PROGRAMMABLE_API_KEY:-}\"", "true"),
+    workflow.replaceAll("test -z \"${PROGRAMMABLE_API_KEY:-}\"", "true"),
     workflow.replace("programmable-launch-v4-clean-room.mjs verify-evidence", "echo trusted"),
-    workflow.replace("include-hidden-files: false", "include-hidden-files: true"),
-    workflow.replace("overwrite: false", "overwrite: true"),
+    workflow.replaceAll("include-hidden-files: false", "include-hidden-files: true"),
+    workflow.replaceAll("overwrite: false", "overwrite: true"),
+    workflow.replace("Reconfirm protected production tip immediately before credential use", "Skip tip"),
+    workflow.replace("verify-recovery", "echo recovery"),
+    workflow.replace("create-storage-record: true", "create-storage-record: false"),
   ];
   for (const [index, changed] of mutations.entries()) {
     assert.notDeepEqual(contractFailures(changed, runner), [], `workflow mutation ${index} escaped`);
@@ -130,8 +164,9 @@ test("workflow contract mutations fail closed", () => {
     runner.replace("\"--source-digest\", release.source.commitSha", ""),
     runner.replace("const replaySubmit = await runCli(cliPath, submitArgs", "const replaySubmit = firstSubmit; //"),
     runner.replace("resource?.status === \"wallet_action_required\"", "resource?.status !== null"),
-    runner.replace("walletSignatureObserved: false", "walletSignatureObserved: true"),
-    runner.replace("transactionBroadcastObserved: false", "transactionBroadcastObserved: true"),
+    runner.replaceAll("walletSignatureObserved: false", "walletSignatureObserved: true"),
+    runner.replaceAll("transactionBroadcastObserved: false", "transactionBroadcastObserved: true"),
+    runner.replace("await writeFile(recoveryOutput, canonicalJsonBytes(recovery)", "await Promise.resolve("),
   ];
   for (const [index, changed] of runnerMutations.entries()) {
     assert.notDeepEqual(contractFailures(workflow, changed), [], `runner mutation ${index} escaped`);

@@ -111,6 +111,21 @@ export function validCleanRoomTranscript() {
   };
   return structuredClone({
     prepared: validPreparedHandoff(),
+    producer: {
+      schemaVersion: "programmable.launch-v4-clean-room-producer.v1",
+      repository: "programmablehq/PROGRAMMABLE",
+      repositoryId: "1314365508",
+      workflowPath: ".github/workflows/programmable-launch-v4-clean-room.yml",
+      workflowRef:
+        "programmablehq/PROGRAMMABLE/.github/workflows/programmable-launch-v4-clean-room.yml@refs/heads/production",
+      sourceSha: "e".repeat(40),
+      workflowSha: "e".repeat(40),
+      runId: "123456789",
+      runAttempt: "1",
+      actor: "hazarxyz",
+      actorId: "258789013",
+      environment: "production",
+    },
     request,
     local,
     remote,
@@ -138,6 +153,10 @@ export function validPreparedHandoff() {
         schemaVersion: "programmable.launch-cli-v4-release-binding.v1",
         path: "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
         sha256: digest("3"),
+      },
+      reviewedCoordinate: {
+        path: "docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.json",
+        sha256: digest("e"),
       },
       assets: [
         ["programmable-launch-4.0.0.cdx.json", "4"],

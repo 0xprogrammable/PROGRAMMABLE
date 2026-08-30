@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/releases/custom-launch-v4/clean-room-release-coordinate.schema.json",
+  "title": "Programmable Launch V4 clean-room reviewed release coordinate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "releaseReady",
+    "repository",
+    "tag",
+    "version",
+    "source",
+    "releaseBinding",
+    "machineContractBinding",
+    "manifestSha256",
+    "assets",
+    "blockers"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./clean-room-release-coordinate.schema.json"
+    },
+    "schemaVersion": {
+      "const": "programmable.launch-v4-clean-room-release-coordinate.v1"
+    },
+    "releaseReady": {
+      "type": "boolean"
+    },
+    "repository": {
+      "const": "programmablehq/PROGRAMMABLE"
+    },
+    "tag": {
+      "const": "programmable-launch-v4.0.0"
+    },
+    "version": {
+      "const": "4.0.0"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "commitSha", "treeSha"],
+      "properties": {
+        "ref": {
+          "const": "refs/heads/production"
+        },
+        "commitSha": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+          ]
+        },
+        "treeSha": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+          ]
+        }
+      }
+    },
+    "releaseBinding": {
+      "$ref": "#/$defs/binding"
+    },
+    "machineContractBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "path", "sha256"],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.launch-cli-v4-release-binding.v1"
+        },
+        "path": {
+          "const": "docs/operations/releases/custom-launch-v4/cli-release-binding.json"
+        },
+        "sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        }
+      }
+    },
+    "manifestSha256": {
+      "$ref": "#/$defs/nullableSha256"
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "$ref": "#/$defs/sbomAsset" },
+        { "$ref": "#/$defs/manifestAsset" },
+        { "$ref": "#/$defs/tarballAsset" },
+        { "$ref": "#/$defs/checksumAsset" }
+      ],
+      "items": false
+    },
+    "blockers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "releaseBindingReady",
+          "releaseSourceCoordinate",
+          "releaseManifestDigest",
+          "releaseAssetDigests",
+          "machineContractBindingDigest"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "nullableSha256": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "const": "docs/operations/releases/custom-launch-v4/cli-release-binding.json"
+        },
+        "sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        }
+      }
+    },
+    "assetBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": { "type": "string" },
+        "sha256": { "$ref": "#/$defs/nullableSha256" }
+      }
+    },
+    "sbomAsset": {
+      "allOf": [
+        { "$ref": "#/$defs/assetBase" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "const": "programmable-launch-4.0.0.cdx.json" },
+            "sha256": { "$ref": "#/$defs/nullableSha256" }
+          }
+        }
+      ]
+    },
+    "manifestAsset": {
+      "allOf": [
+        { "$ref": "#/$defs/assetBase" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "const": "programmable-launch-4.0.0.release.json" },
+            "sha256": { "$ref": "#/$defs/nullableSha256" }
+          }
+        }
+      ]
+    },
+    "tarballAsset": {
+      "allOf": [
+        { "$ref": "#/$defs/assetBase" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "const": "programmable-launch-4.0.0.tgz" },
+            "sha256": { "$ref": "#/$defs/nullableSha256" }
+          }
+        }
+      ]
+    },
+    "checksumAsset": {
+      "allOf": [
+        { "$ref": "#/$defs/assetBase" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "const": "programmable-launch-4.0.0.tgz.sha256" },
+            "sha256": { "$ref": "#/$defs/nullableSha256" }
+          }
+        }
+      ]
+    }
+  }
+}

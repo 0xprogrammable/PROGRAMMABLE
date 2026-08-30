@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import {
@@ -22,9 +22,20 @@ import {
   parseStrictJson,
 } from "../packages/launch/src/canonical-json.mjs";
 import { decodeExactProjectImageV4 } from "../packages/launch/src/image-validation-v4.mjs";
+import {
+  V4_RELEASE_BINDING_PATH,
+  V4_RELEASE_BINDING_SCHEMA,
+  auditV4ReleaseBinding,
+} from "./programmable-launch-v4-release-binding.mjs";
 
 export const CLEAN_ROOM_SCHEMA = "programmable.launch-v4-clean-room-evidence.v1";
 export const PREPARED_SCHEMA = "programmable.launch-v4-clean-room-prepared.v1";
+export const RECOVERY_SCHEMA = "programmable.launch-v4-clean-room-recovery.v1";
+export const PRODUCER_SCHEMA = "programmable.launch-v4-clean-room-producer.v1";
+export const REVIEWED_RELEASE_COORDINATE_SCHEMA =
+  "programmable.launch-v4-clean-room-release-coordinate.v1";
+export const REVIEWED_RELEASE_COORDINATE_PATH =
+  "docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.json";
 export const RELEASE_REPOSITORY = "programmablehq/PROGRAMMABLE";
 export const RELEASE_MANIFEST_REPOSITORY = "programmablehq/programmable";
 export const RELEASE_TAG = "programmable-launch-v4.0.0";
@@ -50,9 +61,20 @@ const RELEASE_NAMES = Object.freeze({
   manifest: "programmable-launch-4.0.0.release.json",
 });
 const RELEASE_FILES = Object.freeze(Object.values(RELEASE_NAMES).sort());
+const CLEAN_ROOM_WORKFLOW_PATH =
+  ".github/workflows/programmable-launch-v4-clean-room.yml";
+const PRODUCTION_ENVIRONMENT = "production";
+const RECOVERY_STATUSES = new Set([
+  "received", "validating", "action_required", "awaiting_wallet_signature",
+  "wallet_action_required",
+]);
+const FORBIDDEN_TRANSACTION_FIELDS = Object.freeze([
+  "walletSignature", "signature", "signedTransaction", "rawTransaction", "transactionHash",
+]);
 const MAX_JSON_BYTES = 40 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5_242_880;
 const execFileAsync = promisify(execFile);
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 class CleanRoomError extends Error {
   constructor(code) {
@@ -171,6 +193,16 @@ async function assertRegularFile(filePath, label, maximumBytes = Number.MAX_SAFE
   return metadata;
 }
 
+async function assertPathAbsent(filePath, label) {
+  try {
+    await lstat(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw new CleanRoomError(`${label}_PATH_UNREADABLE`);
+  }
+  throw new CleanRoomError(`${label}_ALREADY_EXISTS`);
+}
+
 async function readReleaseFiles(directory) {
   const entries = (await readdir(directory)).sort();
   exactJson(entries, RELEASE_FILES, "RELEASE_DIRECTORY_SHAPE_INVALID");
@@ -257,6 +289,118 @@ export function validateReleaseFiles(files) {
   });
 }
 
+export function validateReviewedReleaseCoordinate(value, bindingResult) {
+  exactKeys(value, [
+    "$schema", "schemaVersion", "releaseReady", "repository", "tag", "version",
+    "source", "releaseBinding", "machineContractBinding", "manifestSha256", "assets",
+    "blockers",
+  ], "reviewed_release_coordinate");
+  requireValue(value.$schema === "./clean-room-release-coordinate.schema.json"
+    && value.schemaVersion === REVIEWED_RELEASE_COORDINATE_SCHEMA,
+  "REVIEWED_RELEASE_COORDINATE_SCHEMA_INVALID");
+  requireValue(value.repository === RELEASE_REPOSITORY
+    && value.tag === RELEASE_TAG && value.version === RELEASE_VERSION,
+  "REVIEWED_RELEASE_COORDINATE_IDENTITY_INVALID");
+  exactKeys(value.source, ["ref", "commitSha", "treeSha"], "reviewed_release_source");
+  requireValue(value.source.ref === PRODUCTION_REF,
+    "REVIEWED_RELEASE_SOURCE_REF_INVALID");
+  exactKeys(value.releaseBinding, ["path", "sha256"], "reviewed_release_binding");
+  exactKeys(value.machineContractBinding, ["schemaVersion", "path", "sha256"],
+    "reviewed_machine_contract_binding");
+  requireValue(value.releaseBinding.path === V4_RELEASE_BINDING_PATH
+    && value.machineContractBinding.schemaVersion === V4_RELEASE_BINDING_SCHEMA
+    && value.machineContractBinding.path === V4_RELEASE_BINDING_PATH,
+  "REVIEWED_RELEASE_BINDING_IDENTITY_INVALID");
+  requireValue(Array.isArray(value.assets) && value.assets.length === RELEASE_FILES.length,
+    "REVIEWED_RELEASE_ASSETS_INVALID");
+  for (const [index, asset] of value.assets.entries()) {
+    exactKeys(asset, ["name", "sha256"], `reviewed_release_asset_${index}`);
+    requireValue(asset.name === RELEASE_FILES[index]
+      && (asset.sha256 === null || SHA256.test(asset.sha256 ?? "")),
+    "REVIEWED_RELEASE_ASSET_INVALID");
+  }
+  requireValue(value.source.commitSha === null || COMMIT.test(value.source.commitSha ?? ""),
+    "REVIEWED_RELEASE_SOURCE_COMMIT_INVALID");
+  requireValue(value.source.treeSha === null || COMMIT.test(value.source.treeSha ?? ""),
+    "REVIEWED_RELEASE_SOURCE_TREE_INVALID");
+  for (const [digest, code] of [
+    [value.releaseBinding.sha256, "REVIEWED_RELEASE_BINDING_DIGEST_INVALID"],
+    [value.machineContractBinding.sha256, "REVIEWED_MACHINE_BINDING_DIGEST_INVALID"],
+    [value.manifestSha256, "REVIEWED_RELEASE_MANIFEST_DIGEST_INVALID"],
+  ]) {
+    requireValue(digest === null || SHA256.test(digest ?? ""), code);
+  }
+  requireValue(plainObject(bindingResult)
+    && typeof bindingResult.releaseReady === "boolean"
+    && SHA256.test(bindingResult.bindingSha256 ?? ""),
+  "REVIEWED_RELEASE_BINDING_RESULT_INVALID");
+  const manifestAsset = value.assets.find(({ name }) => name === RELEASE_NAMES.manifest);
+  if (value.manifestSha256 !== null && manifestAsset?.sha256 !== null) {
+    requireValue(value.manifestSha256 === manifestAsset?.sha256,
+      "REVIEWED_RELEASE_MANIFEST_ASSET_DRIFT");
+  }
+  const blockers = [
+    ...(!bindingResult.releaseReady ? ["releaseBindingReady"] : []),
+    ...(!(COMMIT.test(value.source.commitSha ?? "") && COMMIT.test(value.source.treeSha ?? ""))
+      ? ["releaseSourceCoordinate"] : []),
+    ...(!SHA256.test(value.manifestSha256 ?? "") ? ["releaseManifestDigest"] : []),
+    ...(value.assets.some(({ sha256: digest }) => !SHA256.test(digest ?? ""))
+      ? ["releaseAssetDigests"] : []),
+    ...(!(value.releaseBinding.sha256 === bindingResult.bindingSha256
+      && value.machineContractBinding.sha256 === bindingResult.bindingSha256)
+      ? ["machineContractBindingDigest"] : []),
+  ];
+  requireValue(Array.isArray(value.blockers)
+    && value.blockers.every((entry) => typeof entry === "string")
+    && new Set(value.blockers).size === value.blockers.length,
+  "REVIEWED_RELEASE_BLOCKERS_INVALID");
+  exactJson(value.blockers, blockers, "REVIEWED_RELEASE_BLOCKERS_DRIFT");
+  requireValue(value.releaseReady === (blockers.length === 0),
+    "REVIEWED_RELEASE_READY_DRIFT");
+  return value;
+}
+
+export function assertReleaseMatchesReviewedCoordinate(release, coordinate) {
+  requireValue(coordinate.releaseReady === true,
+    "REVIEWED_RELEASE_COORDINATE_BLOCKED");
+  requireValue(release.repository === coordinate.repository
+    && release.tag === coordinate.tag && release.version === coordinate.version,
+  "RELEASE_REVIEWED_IDENTITY_MISMATCH");
+  exactJson(release.source, coordinate.source, "RELEASE_REVIEWED_SOURCE_MISMATCH");
+  exactJson(release.machineContractBinding, coordinate.machineContractBinding,
+    "RELEASE_REVIEWED_MACHINE_BINDING_MISMATCH");
+  const reviewedAssets = coordinate.assets.map(({ name, sha256: digest }) => ({
+    name,
+    sha256: digest,
+  }));
+  exactJson(release.assets.map(({ name, sha256: digest }) => ({ name, sha256: digest })),
+    reviewedAssets, "RELEASE_REVIEWED_ASSET_MISMATCH");
+  requireValue(coordinate.manifestSha256
+      === reviewedAssets.find(({ name }) => name === RELEASE_NAMES.manifest)?.sha256,
+  "RELEASE_REVIEWED_MANIFEST_MISMATCH");
+  return release;
+}
+
+async function loadReviewedReleaseCoordinate() {
+  const binding = auditV4ReleaseBinding({ repositoryRoot: REPOSITORY_ROOT });
+  const coordinatePath = path.join(REPOSITORY_ROOT, REVIEWED_RELEASE_COORDINATE_PATH);
+  await assertRegularFile(coordinatePath, "REVIEWED_RELEASE_COORDINATE", 1_048_576);
+  const bytes = await readFile(coordinatePath);
+  const coordinate = validateReviewedReleaseCoordinate(
+    parseJsonBytes(bytes, "REVIEWED_RELEASE_COORDINATE", 1_048_576),
+    binding,
+  );
+  requireValue(prettyCanonicalJsonBytes(coordinate).equals(bytes),
+    "REVIEWED_RELEASE_COORDINATE_NOT_CANONICAL");
+  requireValue(binding.releaseReady === true, "V4_RELEASE_BINDING_NOT_READY");
+  requireValue(coordinate.releaseReady === true,
+    "REVIEWED_RELEASE_COORDINATE_BLOCKED");
+  return Object.freeze({
+    coordinate: Object.freeze(structuredClone(coordinate)),
+    coordinateSha256: sha256(bytes),
+  });
+}
+
 async function verifyTarball(directory, release) {
   const tarball = path.join(directory, RELEASE_NAMES.tarball);
   const entries = (await runCommand("tar", ["-tzf", tarball], {
@@ -335,7 +479,7 @@ function exactHttps(value, code) {
   return url.href;
 }
 
-async function downloadAndVerifyRelease(releaseDirectory) {
+async function downloadAndVerifyRelease(releaseDirectory, reviewedRelease) {
   requireValue(typeof process.env.GH_TOKEN === "string" && process.env.GH_TOKEN.length >= 20,
     "GITHUB_TOKEN_INVALID");
   const githubEnv = safeBaseEnv({ GH_TOKEN: process.env.GH_TOKEN });
@@ -380,6 +524,7 @@ async function downloadAndVerifyRelease(releaseDirectory) {
   const finalFiles = await readReleaseFiles(releaseDirectory);
   const finalRelease = validateReleaseFiles(finalFiles);
   exactJson(finalRelease, release, "RELEASE_BYTES_CHANGED_AFTER_VERIFICATION");
+  assertReleaseMatchesReviewedCoordinate(finalRelease, reviewedRelease.coordinate);
   await verifyTarball(releaseDirectory, release);
   return release;
 }
@@ -416,12 +561,13 @@ export async function prepareCleanRoom(options) {
     stage: "NPM_VERSION", requireSilentStderr: true,
   })).trim();
   requireValue(npmVersion === NPM_VERSION, "NPM_VERSION_INVALID");
+  const reviewedRelease = await loadReviewedReleaseCoordinate();
   const workspace = path.resolve(options.workspace);
   await mkdir(workspace, { recursive: false, mode: 0o700 });
   const releaseDirectory = path.join(workspace, "release");
   const installDirectory = path.join(workspace, "install");
   const projectDirectory = path.join(workspace, "project");
-  const release = await downloadAndVerifyRelease(releaseDirectory);
+  const release = await downloadAndVerifyRelease(releaseDirectory, reviewedRelease);
   await runCommand("npm", [
     "install", "--prefix", installDirectory, "--ignore-scripts", "--no-audit", "--no-fund",
     path.join(releaseDirectory, RELEASE_NAMES.tarball),
@@ -465,6 +611,9 @@ export async function prepareCleanRoom(options) {
       PROGRAMMABLE_LAUNCH_NONCE: nonce,
       PROGRAMMABLE_LAUNCH_WALLET: launchWallet,
       PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH: "assets/project-image",
+      PROGRAMMABLE_PROJECT_IMAGE_VALIDATOR_MODULE: pathToFileURL(
+        path.join(packageRoot, "src", "image-validation-v4.mjs"),
+      ).href,
       PROGRAMMABLE_PROJECT_IMAGE_URI: imageUri,
       PROGRAMMABLE_SOURCE_ORIGIN: "https://github.com/programmablehq/PROGRAMMABLE",
       PROGRAMMABLE_SOURCE_REVISION: release.source.commitSha,
@@ -492,6 +641,10 @@ export async function prepareCleanRoom(options) {
     schemaVersion: PREPARED_SCHEMA,
     release: {
       ...release,
+      reviewedCoordinate: {
+        path: REVIEWED_RELEASE_COORDINATE_PATH,
+        sha256: reviewedRelease.coordinateSha256,
+      },
       attestation: {
         verified: true,
         signerWorkflow: RELEASE_SIGNER_WORKFLOW,
@@ -518,7 +671,8 @@ function validatePrepared(value) {
   exactKeys(value, ["schemaVersion", "release", "bindings"], "prepared");
   requireValue(value.schemaVersion === PREPARED_SCHEMA, "PREPARED_SCHEMA_INVALID");
   exactKeys(value.release, [
-    "repository", "tag", "version", "source", "machineContractBinding", "assets", "attestation",
+    "repository", "tag", "version", "source", "machineContractBinding", "assets",
+    "reviewedCoordinate", "attestation",
   ], "prepared_release");
   requireValue(value.release.repository === RELEASE_REPOSITORY
     && value.release.tag === RELEASE_TAG && value.release.version === RELEASE_VERSION,
@@ -546,6 +700,11 @@ function validatePrepared(value) {
       && Number.isSafeInteger(asset.bytes) && asset.bytes > 0
       && SHA256.test(asset.sha256 ?? ""), "PREPARED_RELEASE_ASSET_INVALID");
   }
+  exactKeys(value.release.reviewedCoordinate, ["path", "sha256"],
+    "prepared_reviewed_coordinate");
+  requireValue(value.release.reviewedCoordinate.path === REVIEWED_RELEASE_COORDINATE_PATH
+    && SHA256.test(value.release.reviewedCoordinate.sha256 ?? ""),
+  "PREPARED_REVIEWED_COORDINATE_INVALID");
   exactKeys(value.release.attestation,
     ["verified", "signerWorkflow", "sourceRef", "sourceDigest"], "prepared_attestation");
   requireValue(value.release.attestation.verified === true
@@ -572,10 +731,185 @@ function requireSameResourceBinding(resource, expected, code) {
   exactJson(resource.profile, expected.profile, code);
 }
 
-export function buildCleanRoomEvidence(input) {
-  const { prepared, request, local, remote, firstSubmit, replaySubmit, status } = input;
+export function validateProducerProvenance(value) {
+  exactKeys(value, [
+    "schemaVersion", "repository", "repositoryId", "workflowPath", "workflowRef",
+    "sourceSha", "workflowSha", "runId", "runAttempt", "actor", "actorId", "environment",
+  ], "producer_provenance");
+  requireValue(value.schemaVersion === PRODUCER_SCHEMA
+    && value.repository === RELEASE_REPOSITORY
+    && value.repositoryId === "1314365508"
+    && value.workflowPath === CLEAN_ROOM_WORKFLOW_PATH
+    && value.workflowRef
+      === `${RELEASE_REPOSITORY}/${CLEAN_ROOM_WORKFLOW_PATH}@${PRODUCTION_REF}`
+    && COMMIT.test(value.sourceSha ?? "")
+    && value.workflowSha === value.sourceSha
+    && /^[1-9][0-9]*$/u.test(value.runId ?? "")
+    && value.runAttempt === "1"
+    && value.actor === "hazarxyz"
+    && value.actorId === "258789013"
+    && value.environment === PRODUCTION_ENVIRONMENT,
+  "PRODUCER_PROVENANCE_INVALID");
+  return value;
+}
+
+function producerProvenanceFromEnvironment() {
+  return validateProducerProvenance({
+    schemaVersion: PRODUCER_SCHEMA,
+    repository: process.env.GITHUB_REPOSITORY,
+    repositoryId: process.env.GITHUB_REPOSITORY_ID,
+    workflowPath: CLEAN_ROOM_WORKFLOW_PATH,
+    workflowRef: process.env.GITHUB_WORKFLOW_REF,
+    sourceSha: process.env.GITHUB_SHA,
+    workflowSha: process.env.GITHUB_WORKFLOW_SHA,
+    runId: process.env.GITHUB_RUN_ID,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+    actor: process.env.GITHUB_ACTOR,
+    actorId: process.env.GITHUB_ACTOR_ID,
+    environment: process.env.PROGRAMMABLE_CLEAN_ROOM_ENVIRONMENT,
+  });
+}
+
+export function buildCleanRoomRecoveryReceipt(input) {
+  const { prepared, local, firstSubmit, producer } = input;
   validatePrepared(prepared);
   assertLocalValidation(local);
+  validateProducerProvenance(producer);
+  requireValue(firstSubmit?.apiVersion === "v4"
+    && firstSubmit.chainId === CHAIN_ID && firstSubmit.caip2 === CAIP2
+    && firstSubmit.requestSha256 === local.requestSha256
+    && typeof firstSubmit.idempotencyKey === "string"
+    && firstSubmit.idempotencyKey.length >= 16,
+  "RECOVERY_SUBMIT_INVALID");
+  const resource = firstSubmit.resource;
+  requireValue(UUID.test(resource?.launchId ?? "")
+    && UUID.test(resource?.requestId ?? "")
+    && SHA256.test(resource?.requestHash ?? "")
+    && resource.rawRequestSha256 === local.requestSha256
+    && resource.chainId === CHAIN_ID && resource.caip2 === CAIP2
+    && RECOVERY_STATUSES.has(resource.status)
+    && resource.onchain === null && resource.failure === null
+    && FORBIDDEN_TRANSACTION_FIELDS.every((field) => !Object.hasOwn(resource, field))
+    && (resource.walletTransaction === null || plainObject(resource.walletTransaction))
+    && (resource.walletTransaction === null || FORBIDDEN_TRANSACTION_FIELDS.every(
+      (field) => !Object.hasOwn(resource.walletTransaction, field),
+    )),
+  "RECOVERY_RESOURCE_INVALID");
+  const releaseAsset = (name) => prepared.release.assets.find((asset) => asset.name === name);
+  const observedAt = input.observedAt ?? new Date().toISOString();
+  requireValue(Number.isFinite(Date.parse(observedAt)) && observedAt.endsWith("Z"),
+    "RECOVERY_OBSERVED_AT_INVALID");
+  const preimage = {
+    schemaVersion: RECOVERY_SCHEMA,
+    producer: structuredClone(producer),
+    release: {
+      repository: RELEASE_REPOSITORY,
+      tag: RELEASE_TAG,
+      version: RELEASE_VERSION,
+      sourceCommit: prepared.release.source.commitSha,
+      sourceTree: prepared.release.source.treeSha,
+      reviewedCoordinateSha256: prepared.release.reviewedCoordinate.sha256,
+      machineContractBindingSha256: prepared.release.machineContractBinding.sha256,
+      tarballSha256: releaseAsset(RELEASE_NAMES.tarball)?.sha256,
+      checksumSha256: releaseAsset(RELEASE_NAMES.checksum)?.sha256,
+      sbomSha256: releaseAsset(RELEASE_NAMES.sbom)?.sha256,
+      manifestSha256: releaseAsset(RELEASE_NAMES.manifest)?.sha256,
+    },
+    request: {
+      chainId: CHAIN_ID,
+      caip2: CAIP2,
+      rawRequestSha256: local.requestSha256,
+      requestDigest: resource.requestHash,
+    },
+    submission: {
+      launchId: resource.launchId,
+      requestId: resource.requestId,
+      status: resource.status,
+      idempotencyKeySha256: sha256(Buffer.from(firstSubmit.idempotencyKey, "utf8")),
+    },
+    safety: {
+      apiCredentialRecorded: false,
+      rawRequestRecorded: false,
+      transactionCalldataRecorded: false,
+      walletSignatureObserved: false,
+      rawTransactionRecorded: false,
+      transactionBroadcastObserved: false,
+    },
+    observedAt,
+  };
+  const receipt = {
+    ...preimage,
+    recoveryDigest: framedSha256(RECOVERY_SCHEMA, preimage),
+  };
+  validateCleanRoomRecoveryReceipt(receipt);
+  if (typeof input.apiKey === "string") {
+    requireValue(!canonicalizeJson(receipt).includes(input.apiKey),
+      "API_KEY_LEAKED_TO_RECOVERY");
+  }
+  return receipt;
+}
+
+export function validateCleanRoomRecoveryReceipt(value) {
+  exactKeys(value, [
+    "schemaVersion", "producer", "release", "request", "submission", "safety",
+    "observedAt", "recoveryDigest",
+  ], "clean_room_recovery");
+  requireValue(value.schemaVersion === RECOVERY_SCHEMA, "RECOVERY_SCHEMA_INVALID");
+  validateProducerProvenance(value.producer);
+  exactKeys(value.release, [
+    "repository", "tag", "version", "sourceCommit", "sourceTree",
+    "reviewedCoordinateSha256", "machineContractBindingSha256", "tarballSha256",
+    "checksumSha256", "sbomSha256", "manifestSha256",
+  ], "recovery_release");
+  requireValue(value.release.repository === RELEASE_REPOSITORY
+    && value.release.tag === RELEASE_TAG && value.release.version === RELEASE_VERSION
+    && COMMIT.test(value.release.sourceCommit ?? "")
+    && COMMIT.test(value.release.sourceTree ?? "")
+    && [
+      value.release.reviewedCoordinateSha256,
+      value.release.machineContractBindingSha256,
+      value.release.tarballSha256,
+      value.release.checksumSha256,
+      value.release.sbomSha256,
+      value.release.manifestSha256,
+    ].every((digest) => SHA256.test(digest ?? "")),
+  "RECOVERY_RELEASE_INVALID");
+  exactKeys(value.request,
+    ["chainId", "caip2", "rawRequestSha256", "requestDigest"], "recovery_request");
+  requireValue(value.request.chainId === CHAIN_ID && value.request.caip2 === CAIP2
+    && SHA256.test(value.request.rawRequestSha256 ?? "")
+    && SHA256.test(value.request.requestDigest ?? ""),
+  "RECOVERY_REQUEST_INVALID");
+  exactKeys(value.submission,
+    ["launchId", "requestId", "status", "idempotencyKeySha256"], "recovery_submission");
+  requireValue(UUID.test(value.submission.launchId ?? "")
+    && UUID.test(value.submission.requestId ?? "")
+    && RECOVERY_STATUSES.has(value.submission.status)
+    && SHA256.test(value.submission.idempotencyKeySha256 ?? ""),
+  "RECOVERY_SUBMISSION_INVALID");
+  exactKeys(value.safety, [
+    "apiCredentialRecorded", "rawRequestRecorded", "transactionCalldataRecorded",
+    "walletSignatureObserved", "rawTransactionRecorded", "transactionBroadcastObserved",
+  ], "recovery_safety");
+  requireValue(Object.values(value.safety).every((entry) => entry === false),
+    "RECOVERY_SAFETY_INVALID");
+  requireValue(Number.isFinite(Date.parse(value.observedAt)) && value.observedAt.endsWith("Z"),
+    "RECOVERY_OBSERVED_AT_INVALID");
+  requireValue(SHA256.test(value.recoveryDigest ?? ""), "RECOVERY_DIGEST_INVALID");
+  const preimage = { ...value };
+  delete preimage.recoveryDigest;
+  requireValue(value.recoveryDigest === framedSha256(RECOVERY_SCHEMA, preimage),
+    "RECOVERY_DIGEST_MISMATCH");
+  return value;
+}
+
+export function buildCleanRoomEvidence(input) {
+  const { prepared, request, local, remote, firstSubmit, replaySubmit, status, producer, recovery } = input;
+  validatePrepared(prepared);
+  assertLocalValidation(local);
+  validateProducerProvenance(producer);
+  validateCleanRoomRecoveryReceipt(recovery);
+  const releaseAsset = (name) => prepared.release.assets.find((asset) => asset.name === name);
   requireValue(request?.schemaVersion === "programmable.custom-launch-create-request.v4"
     && request.chainId === CHAIN_ID && request.caip2 === CAIP2,
   "REQUEST_CHAIN_INVALID");
@@ -638,6 +972,24 @@ export function buildCleanRoomEvidence(input) {
   "IDEMPOTENCY_LAUNCH_REPLAY_DRIFT");
   requireValue(firstSubmit.resource.requestHash === replaySubmit.resource.requestHash,
     "IDEMPOTENCY_REQUEST_DIGEST_REPLAY_DRIFT");
+  exactJson(recovery.producer, producer, "RECOVERY_PRODUCER_DRIFT");
+  requireValue(recovery.release.sourceCommit === prepared.release.source.commitSha
+    && recovery.release.sourceTree === prepared.release.source.treeSha
+    && recovery.release.reviewedCoordinateSha256
+      === prepared.release.reviewedCoordinate.sha256
+    && recovery.release.machineContractBindingSha256
+      === prepared.release.machineContractBinding.sha256
+    && recovery.release.tarballSha256 === releaseAsset(RELEASE_NAMES.tarball)?.sha256
+    && recovery.release.checksumSha256 === releaseAsset(RELEASE_NAMES.checksum)?.sha256
+    && recovery.release.sbomSha256 === releaseAsset(RELEASE_NAMES.sbom)?.sha256
+    && recovery.release.manifestSha256 === releaseAsset(RELEASE_NAMES.manifest)?.sha256
+    && recovery.request.rawRequestSha256 === local.requestSha256
+    && recovery.request.requestDigest === firstSubmit.resource.requestHash
+    && recovery.submission.launchId === firstSubmit.resource.launchId
+    && recovery.submission.requestId === firstSubmit.resource.requestId
+    && recovery.submission.idempotencyKeySha256
+      === sha256(Buffer.from(firstSubmit.idempotencyKey, "utf8")),
+  "RECOVERY_EVIDENCE_BINDING_DRIFT");
   const resource = status?.resource;
   requireValue(status?.apiVersion === "v4" && status.chainId === CHAIN_ID
     && status.caip2 === CAIP2 && status.stopped === true && status.terminal === false
@@ -691,17 +1043,20 @@ export function buildCleanRoomEvidence(input) {
   const observedAt = input.observedAt ?? new Date().toISOString();
   requireValue(Number.isFinite(Date.parse(observedAt)) && observedAt.endsWith("Z"),
     "OBSERVED_AT_INVALID");
-  const releaseAsset = (name) => prepared.release.assets.find((asset) => asset.name === name);
   const preimage = {
     schemaVersion: CLEAN_ROOM_SCHEMA,
+    producer: structuredClone(producer),
     release: {
       repository: RELEASE_REPOSITORY,
       tag: RELEASE_TAG,
       version: RELEASE_VERSION,
       sourceCommit: prepared.release.source.commitSha,
       sourceTree: prepared.release.source.treeSha,
+      reviewedCoordinateSha256: prepared.release.reviewedCoordinate.sha256,
+      machineContractBindingSha256: prepared.release.machineContractBinding.sha256,
       tarballSha256: releaseAsset(RELEASE_NAMES.tarball)?.sha256,
       checksumSha256: releaseAsset(RELEASE_NAMES.checksum)?.sha256,
+      sbomSha256: releaseAsset(RELEASE_NAMES.sbom)?.sha256,
       manifestSha256: releaseAsset(RELEASE_NAMES.manifest)?.sha256,
       attestationsVerified: true,
       signerWorkflow: RELEASE_SIGNER_WORKFLOW,
@@ -730,6 +1085,9 @@ export function buildCleanRoomEvidence(input) {
       sameLaunchId: true,
       sameRequestDigest: true,
     },
+    recovery: {
+      recoveryDigest: recovery.recoveryDigest,
+    },
     safety: {
       walletSignatureObserved: false,
       transactionBroadcastObserved: false,
@@ -753,20 +1111,25 @@ export function buildCleanRoomEvidence(input) {
 
 export function validateCleanRoomEvidence(value) {
   exactKeys(value, [
-    "schemaVersion", "release", "request", "walletHandoff", "replay", "safety",
-    "observedAt", "evidenceDigest",
+    "schemaVersion", "producer", "release", "request", "walletHandoff", "replay",
+    "recovery", "safety", "observedAt", "evidenceDigest",
   ], "clean_room_evidence");
   requireValue(value.schemaVersion === CLEAN_ROOM_SCHEMA, "EVIDENCE_SCHEMA_INVALID");
+  validateProducerProvenance(value.producer);
   exactKeys(value.release, [
     "repository", "tag", "version", "sourceCommit", "sourceTree", "tarballSha256",
-    "checksumSha256", "manifestSha256", "attestationsVerified", "signerWorkflow",
+    "checksumSha256", "sbomSha256", "manifestSha256", "reviewedCoordinateSha256",
+    "machineContractBindingSha256", "attestationsVerified", "signerWorkflow",
   ], "evidence_release");
   requireValue(value.release.repository === RELEASE_REPOSITORY
     && value.release.tag === RELEASE_TAG && value.release.version === RELEASE_VERSION
     && COMMIT.test(value.release.sourceCommit ?? "") && COMMIT.test(value.release.sourceTree ?? "")
     && SHA256.test(value.release.tarballSha256 ?? "")
     && SHA256.test(value.release.checksumSha256 ?? "")
+    && SHA256.test(value.release.sbomSha256 ?? "")
     && SHA256.test(value.release.manifestSha256 ?? "")
+    && SHA256.test(value.release.reviewedCoordinateSha256 ?? "")
+    && SHA256.test(value.release.machineContractBindingSha256 ?? "")
     && value.release.attestationsVerified === true
     && value.release.signerWorkflow === RELEASE_SIGNER_WORKFLOW,
   "EVIDENCE_RELEASE_INVALID");
@@ -798,6 +1161,9 @@ export function validateCleanRoomEvidence(value) {
     ["identicalIdempotencyKey", "sameLaunchId", "sameRequestDigest"], "evidence_replay");
   requireValue(Object.values(value.replay).every((entry) => entry === true),
     "EVIDENCE_REPLAY_INVALID");
+  exactKeys(value.recovery, ["recoveryDigest"], "evidence_recovery");
+  requireValue(SHA256.test(value.recovery.recoveryDigest ?? ""),
+    "EVIDENCE_RECOVERY_INVALID");
   exactKeys(value.safety, [
     "walletSignatureObserved", "transactionBroadcastObserved", "onchainEvidenceObserved",
     "apiCredentialRecorded", "rawRequestRecorded", "rawTransactionRecorded",
@@ -816,16 +1182,22 @@ export function validateCleanRoomEvidence(value) {
 
 export async function runCleanRoom(options) {
   requireValue(process.version === NODE_VERSION, "NODE_VERSION_INVALID");
+  const reviewedRelease = await loadReviewedReleaseCoordinate();
   const workspace = path.resolve(options.workspace);
   const preparedPath = path.join(workspace, "prepared.json");
   await assertRegularFile(preparedPath, "PREPARED_HANDOFF", 4 * 1024 * 1024);
   const preparedBytes = await readFile(preparedPath);
   const prepared = validatePrepared(parseJsonBytes(preparedBytes, "PREPARED_HANDOFF"));
   requireValue(canonicalJsonBytes(prepared).equals(preparedBytes), "PREPARED_HANDOFF_NOT_CANONICAL");
+  requireValue(prepared.release.reviewedCoordinate.sha256
+      === reviewedRelease.coordinateSha256,
+  "PREPARED_REVIEWED_COORDINATE_CHANGED");
   const releaseFromBytes = validateReleaseFiles(await readReleaseFiles(path.join(workspace, "release")));
   const preparedReleaseBytes = { ...prepared.release };
   delete preparedReleaseBytes.attestation;
+  delete preparedReleaseBytes.reviewedCoordinate;
   exactJson(releaseFromBytes, preparedReleaseBytes, "PREPARED_RELEASE_BYTES_CHANGED");
+  assertReleaseMatchesReviewedCoordinate(releaseFromBytes, reviewedRelease.coordinate);
   const installDirectory = path.join(workspace, "install");
   const projectDirectory = path.join(workspace, "project");
   requireValue(await directoryDigest(installDirectory) === prepared.bindings.installTreeSha256,
@@ -853,7 +1225,20 @@ export async function runCleanRoom(options) {
   const local = parseJsonBytes(localBytes, "LOCAL_VALIDATION");
   const idempotencyKey = `programmable-v4-clean-room-${sha256(launchBytes).slice("sha256:".length)}`;
   const stateDirectory = path.join(workspace, "private-submit-state");
+  const output = path.resolve(options.output);
+  const recoveryOutput = path.resolve(options.recoveryOutput);
+  requireValue(output !== recoveryOutput, "OUTPUT_PATHS_MUST_BE_DISTINCT");
+  requireValue(output !== workspace && !output.startsWith(`${workspace}${path.sep}`)
+    && recoveryOutput !== workspace
+    && !recoveryOutput.startsWith(`${workspace}${path.sep}`),
+  "OUTPUT_PATHS_MUST_BE_OUTSIDE_PRIVATE_WORKSPACE");
+  await Promise.all([
+    assertPathAbsent(output, "EVIDENCE_OUTPUT"),
+    assertPathAbsent(recoveryOutput, "RECOVERY_OUTPUT"),
+  ]);
+  const producer = producerProvenanceFromEnvironment();
   let evidence;
+  let recovery;
   try {
     const remote = await runCli(cliPath, [
       "validate", launchPath, "--config", configPath, "--remote",
@@ -866,6 +1251,17 @@ export async function runCleanRoom(options) {
     ];
     const firstSubmit = await runCli(cliPath, submitArgs, {
       cwd: projectDirectory, apiKey, stage: "SUBMIT",
+    });
+    recovery = buildCleanRoomRecoveryReceipt({
+      prepared,
+      local,
+      firstSubmit,
+      producer,
+      apiKey,
+    });
+    await writeFile(recoveryOutput, canonicalJsonBytes(recovery), {
+      flag: "wx",
+      mode: 0o600,
     });
     const replaySubmit = await runCli(cliPath, submitArgs, {
       cwd: projectDirectory, apiKey, stage: "SUBMIT_REPLAY",
@@ -882,7 +1278,7 @@ export async function runCleanRoom(options) {
       timeout: 900_000,
     });
     evidence = buildCleanRoomEvidence({
-      prepared, request, local, remote, firstSubmit, replaySubmit, status, apiKey,
+      prepared, request, local, remote, firstSubmit, replaySubmit, status, producer, recovery, apiKey,
     });
   } finally {
     await rm(stateDirectory, { recursive: true, force: true, maxRetries: 3 });
@@ -891,7 +1287,7 @@ export async function runCleanRoom(options) {
     "INSTALL_TREE_CHANGED_DURING_RUN");
   requireValue(await directoryDigest(projectDirectory) === prepared.bindings.projectTreeSha256,
     "PROJECT_TREE_CHANGED_DURING_RUN");
-  const output = path.resolve(options.output);
+  await verifyRecoveryFile(recoveryOutput);
   await writeFile(output, canonicalJsonBytes(evidence), { flag: "wx", mode: 0o600 });
   return evidence;
 }
@@ -904,9 +1300,18 @@ export async function verifyEvidenceFile(filePath) {
   return evidence;
 }
 
+export async function verifyRecoveryFile(filePath) {
+  await assertRegularFile(filePath, "RECOVERY_FILE", 2 * 1024 * 1024);
+  const bytes = await readFile(filePath);
+  const receipt = validateCleanRoomRecoveryReceipt(parseJsonBytes(bytes, "RECOVERY_FILE"));
+  requireValue(canonicalJsonBytes(receipt).equals(bytes), "RECOVERY_FILE_NOT_CANONICAL");
+  return receipt;
+}
+
 function parseArguments(argv) {
   const [command, ...rest] = argv;
-  requireValue(new Set(["prepare", "run", "verify-evidence"]).has(command), "COMMAND_INVALID");
+  requireValue(new Set(["prepare", "run", "verify-evidence", "verify-recovery"]).has(command),
+    "COMMAND_INVALID");
   requireValue(rest.length % 2 === 0, "ARGUMENTS_INVALID");
   const options = {};
   for (let index = 0; index < rest.length; index += 2) {
@@ -921,7 +1326,7 @@ function parseArguments(argv) {
   const allowed = command === "prepare"
     ? ["workspace", "image", "launchWallet", "imageUri", "websiteUrl", "xUrl"]
     : command === "run"
-      ? ["workspace", "output"]
+      ? ["workspace", "output", "recoveryOutput"]
       : ["input"];
   exactKeys(options, allowed, "arguments");
   return { command, options };
@@ -931,12 +1336,15 @@ async function main(argv) {
   const { command, options } = parseArguments(argv);
   if (command === "prepare") await prepareCleanRoom(options);
   else if (command === "run") await runCleanRoom(options);
-  else await verifyEvidenceFile(path.resolve(options.input));
+  else if (command === "verify-evidence") await verifyEvidenceFile(path.resolve(options.input));
+  else await verifyRecoveryFile(path.resolve(options.input));
   process.stdout.write(`${command === "prepare"
     ? "PROGRAMMABLE_LAUNCH_V4_CLEAN_ROOM_PREPARED"
     : command === "run"
       ? "PROGRAMMABLE_LAUNCH_V4_WALLET_ACTION_REQUIRED"
-      : "PROGRAMMABLE_LAUNCH_V4_CLEAN_ROOM_EVIDENCE_VALID"}\n`);
+      : command === "verify-evidence"
+        ? "PROGRAMMABLE_LAUNCH_V4_CLEAN_ROOM_EVIDENCE_VALID"
+        : "PROGRAMMABLE_LAUNCH_V4_CLEAN_ROOM_RECOVERY_VALID"}\n`);
 }
 
 const directInvocation = process.argv[1]

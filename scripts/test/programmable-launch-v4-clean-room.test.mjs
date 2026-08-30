@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import Ajv2020 from "ajv/dist/2020.js";
+
 import {
+  assertReleaseMatchesReviewedCoordinate,
   buildCleanRoomEvidence,
+  buildCleanRoomRecoveryReceipt,
   canonicalJsonBytes,
   prepareCleanRoom,
   validateCleanRoomEvidence,
+  validateCleanRoomRecoveryReceipt,
   validateCleanRoomImage,
   validateReleaseFiles,
+  validateReviewedReleaseCoordinate,
 } from "../programmable-launch-v4-clean-room.mjs";
 import {
   validCleanRoomTranscript,
@@ -76,8 +83,14 @@ function releaseFiles() {
   };
 }
 
-test("V4 clean-room evidence proves exact idempotent wallet handoff without sensitive bytes", () => {
+function completeTranscript() {
   const input = validCleanRoomTranscript();
+  input.recovery = buildCleanRoomRecoveryReceipt(input);
+  return input;
+}
+
+test("V4 clean-room evidence proves exact idempotent wallet handoff without sensitive bytes", () => {
+  const input = completeTranscript();
   const evidence = buildCleanRoomEvidence(input);
   assert.equal(validateCleanRoomEvidence(evidence), evidence);
   assert.equal(evidence.request.chainId, "4663");
@@ -117,6 +130,7 @@ test("V4 clean-room transcript rejects chain, trust-root, profile, transaction, 
   ];
   for (const [index, mutate] of mutations.entries()) {
     const input = validCleanRoomTranscript();
+    input.recovery = buildCleanRoomRecoveryReceipt(input);
     mutate(input);
     assert.throws(() => buildCleanRoomEvidence(input), /[A-Z][A-Z0-9_]+/u,
       `mutation ${index} escaped`);
@@ -124,7 +138,7 @@ test("V4 clean-room transcript rejects chain, trust-root, profile, transaction, 
 });
 
 test("canonical redacted evidence rejects extra fields, unsafe booleans, and digest drift", () => {
-  const evidence = buildCleanRoomEvidence(validCleanRoomTranscript());
+  const evidence = buildCleanRoomEvidence(completeTranscript());
   const mutations = [
     (value) => { value.secret = "unexpected"; },
     (value) => { value.safety.walletSignatureObserved = true; },
@@ -160,6 +174,124 @@ test("V4 release contract binds canonical manifest, checksum, assets, and produc
 
   const extra = { ...files, "unattested.txt": Buffer.from("no") };
   assert.throws(() => validateReleaseFiles(extra), /RELEASE_FILES_SHAPE_INVALID/u);
+});
+
+test("reviewed release coordinate blocks the current unreleased state and binds every future byte", () => {
+  const coordinateSchema = JSON.parse(readFileSync(new URL(
+    "../../docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.schema.json",
+    import.meta.url,
+  ), "utf8"));
+  const validateCoordinateSchema = new Ajv2020({ strict: true }).compile(coordinateSchema);
+  const blocked = JSON.parse(readFileSync(new URL(
+    "../../docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.json",
+    import.meta.url,
+  ), "utf8"));
+  assert.equal(validateCoordinateSchema(blocked), true, JSON.stringify(validateCoordinateSchema.errors));
+  assert.equal(validateReviewedReleaseCoordinate(blocked, {
+    releaseReady: false,
+    bindingSha256: `sha256:${"f".repeat(64)}`,
+  }), blocked);
+  assert.equal(blocked.releaseReady, false);
+  assert.deepEqual(blocked.blockers, [
+    "releaseBindingReady",
+    "releaseSourceCoordinate",
+    "releaseManifestDigest",
+    "releaseAssetDigests",
+    "machineContractBindingDigest",
+  ]);
+
+  const release = validateReleaseFiles(releaseFiles());
+  const bindingSha256 = release.machineContractBinding.sha256;
+  const coordinate = {
+    $schema: "./clean-room-release-coordinate.schema.json",
+    schemaVersion: "programmable.launch-v4-clean-room-release-coordinate.v1",
+    releaseReady: true,
+    repository: release.repository,
+    tag: release.tag,
+    version: release.version,
+    source: structuredClone(release.source),
+    releaseBinding: {
+      path: release.machineContractBinding.path,
+      sha256: bindingSha256,
+    },
+    machineContractBinding: structuredClone(release.machineContractBinding),
+    manifestSha256: release.assets.find(({ name }) => name.endsWith(".release.json")).sha256,
+    assets: release.assets.map(({ name, sha256 }) => ({ name, sha256 })),
+    blockers: [],
+  };
+  validateReviewedReleaseCoordinate(coordinate, { releaseReady: true, bindingSha256 });
+  assert.equal(assertReleaseMatchesReviewedCoordinate(release, coordinate), release);
+
+  for (const mutate of [
+    (value) => { value.source.commitSha = "9".repeat(40); },
+    (value) => { value.source.treeSha = "8".repeat(40); },
+    (value) => { value.manifestSha256 = `sha256:${"7".repeat(64)}`; },
+    (value) => { value.assets[0].sha256 = `sha256:${"6".repeat(64)}`; },
+    (value) => { value.machineContractBinding.sha256 = `sha256:${"5".repeat(64)}`; },
+  ]) {
+    const changed = structuredClone(coordinate);
+    mutate(changed);
+    assert.throws(
+      () => assertReleaseMatchesReviewedCoordinate(release, changed),
+      /RELEASE_REVIEWED_/u,
+    );
+  }
+});
+
+test("first-submit recovery is canonical, redacted, producer-bound, and tamper evident", () => {
+  const input = validCleanRoomTranscript();
+  const recovery = buildCleanRoomRecoveryReceipt(input);
+  assert.equal(validateCleanRoomRecoveryReceipt(recovery), recovery);
+  assert.equal(recovery.producer.sourceSha, input.producer.sourceSha);
+  assert.equal(recovery.submission.launchId, input.firstSubmit.resource.launchId);
+  const serialized = canonicalJsonBytes(recovery).toString("utf8");
+  assert.equal(serialized.includes(input.apiKey), false);
+  assert.equal(serialized.includes(input.firstSubmit.idempotencyKey), false);
+  assert.equal(serialized.includes(input.status.resource.walletTransaction.calldata), false);
+  for (const mutate of [
+    (value) => { value.producer.sourceSha = "f".repeat(40); },
+    (value) => { value.producer.runAttempt = "2"; },
+    (value) => { value.safety.transactionCalldataRecorded = true; },
+    (value) => { value.release.manifestSha256 = `sha256:${"0".repeat(64)}`; },
+    (value) => { value.recoveryDigest = `sha256:${"0".repeat(64)}`; },
+  ]) {
+    const changed = structuredClone(recovery);
+    mutate(changed);
+    assert.throws(() => validateCleanRoomRecoveryReceipt(changed), /[A-Z][A-Z0-9_]+/u);
+  }
+});
+
+test("recovery refuses any signed, submitted, failed, or onchain first-submit state", () => {
+  const mutations = [
+    (value) => { value.firstSubmit.resource.status = "submitted"; },
+    (value) => { value.firstSubmit.resource.status = "sequencer_soft_confirmed"; },
+    (value) => { value.firstSubmit.resource.status = "ethereum_posted"; },
+    (value) => { value.firstSubmit.resource.status = "finalized"; },
+    (value) => { value.firstSubmit.resource.status = "failed"; },
+    (value) => { value.firstSubmit.resource.status = "authorized"; },
+    (value) => { value.firstSubmit.resource.onchain = { transactionHash: `0x${"1".repeat(64)}` }; },
+    (value) => { value.firstSubmit.resource.failure = { code: "BROADCAST_FAILED" }; },
+    (value) => { value.firstSubmit.resource.walletSignature = "0x1234"; },
+    (value) => { value.firstSubmit.resource.signedTransaction = "0x1234"; },
+    (value) => { value.firstSubmit.resource.rawTransaction = "0x1234"; },
+    (value) => { value.firstSubmit.resource.transactionHash = `0x${"2".repeat(64)}`; },
+    (value) => { value.firstSubmit.resource.walletTransaction.walletSignature = "0x1234"; },
+    (value) => { value.firstSubmit.resource.walletTransaction.signature = "0x1234"; },
+    (value) => { value.firstSubmit.resource.walletTransaction.signedTransaction = "0x1234"; },
+    (value) => { value.firstSubmit.resource.walletTransaction.rawTransaction = "0x1234"; },
+    (value) => {
+      value.firstSubmit.resource.walletTransaction.transactionHash = `0x${"3".repeat(64)}`;
+    },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const input = validCleanRoomTranscript();
+    mutate(input);
+    assert.throws(
+      () => buildCleanRoomRecoveryReceipt(input),
+      /RECOVERY_RESOURCE_INVALID/u,
+      `unsafe recovery mutation ${index} escaped`,
+    );
+  }
 });
 
 test("V4 clean-room image gate admits decoded PNG/single-frame GIF and rejects JPEG, WebP, animation", () => {
@@ -199,6 +331,17 @@ test("prepare stage refuses to coexist with the production API credential", asyn
       prepareCleanRoom({}),
       /PREPARE_REFUSES_PROGRAMMABLE_API_KEY/u,
     );
+  } finally {
+    if (previous === undefined) delete process.env.PROGRAMMABLE_API_KEY;
+    else process.env.PROGRAMMABLE_API_KEY = previous;
+  }
+});
+
+test("prepare stage cannot execute while the protected V4 release binding remains blocked", async () => {
+  const previous = process.env.PROGRAMMABLE_API_KEY;
+  delete process.env.PROGRAMMABLE_API_KEY;
+  try {
+    await assert.rejects(prepareCleanRoom({}), /V4_RELEASE_BINDING_NOT_READY/u);
   } finally {
     if (previous === undefined) delete process.env.PROGRAMMABLE_API_KEY;
     else process.env.PROGRAMMABLE_API_KEY = previous;
