@@ -103,6 +103,7 @@ function failures(value) {
     "npm run verify:machine-contracts",
     "npm run pack:dry-run",
     "node scripts/programmable-launch-v4-release-binding.mjs verify-release-ready",
+    "npm run release:custom-launch:v4:clean-room:test",
     "PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json",
     "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
     "startsWith(inputs.version, '4.')",
@@ -314,6 +315,7 @@ test("release workflow contract mutations fail closed", () => {
     source.replace("node scripts/verify-programmable-launch-tag-ruleset.mjs \"$rulesets\"", "echo unchecked"),
     source.replace("npm test", "echo skipped"),
     source.replace("node scripts/programmable-launch-v4-release-binding.mjs verify-release-ready", "echo unbound"),
+    source.replace("npm run release:custom-launch:v4:clean-room:test", "echo skipped-clean-room-contract"),
     source.replaceAll(
       "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
       "",

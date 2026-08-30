@@ -1,0 +1,48 @@
+{
+  "$schema": "./clean-room-release-coordinate.schema.json",
+  "assets": [
+    {
+      "name": "programmable-launch-4.0.0.cdx.json",
+      "sha256": null
+    },
+    {
+      "name": "programmable-launch-4.0.0.release.json",
+      "sha256": null
+    },
+    {
+      "name": "programmable-launch-4.0.0.tgz",
+      "sha256": null
+    },
+    {
+      "name": "programmable-launch-4.0.0.tgz.sha256",
+      "sha256": null
+    }
+  ],
+  "blockers": [
+    "releaseBindingReady",
+    "releaseSourceCoordinate",
+    "releaseManifestDigest",
+    "releaseAssetDigests",
+    "machineContractBindingDigest"
+  ],
+  "machineContractBinding": {
+    "path": "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+    "schemaVersion": "programmable.launch-cli-v4-release-binding.v1",
+    "sha256": null
+  },
+  "manifestSha256": null,
+  "releaseBinding": {
+    "path": "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+    "sha256": null
+  },
+  "releaseReady": false,
+  "repository": "programmablehq/PROGRAMMABLE",
+  "schemaVersion": "programmable.launch-v4-clean-room-release-coordinate.v1",
+  "source": {
+    "commitSha": null,
+    "ref": "refs/heads/production",
+    "treeSha": null
+  },
+  "tag": "programmable-launch-v4.0.0",
+  "version": "4.0.0"
+}

@@ -95,14 +95,20 @@ function decodePng(bytes) {
   if (expectedInflated > MAXIMUM_PIXELS * 9) {
     throw new TypeError("PNG decompressed byte budget is exceeded");
   }
-  let inflated;
+  const compressedBytes = Buffer.concat(compressed);
+  let inflateResult;
   try {
-    inflated = inflateSync(Buffer.concat(compressed), {
+    inflateResult = inflateSync(compressedBytes, {
+      info: true,
       maxOutputLength: expectedInflated + 1,
     });
   } catch {
     throw new TypeError("PNG compressed scanlines are malformed");
   }
+  if (inflateResult.engine.bytesWritten !== compressedBytes.byteLength) {
+    throw new TypeError("PNG compressed stream contains trailing bytes");
+  }
+  const inflated = inflateResult.buffer;
   if (inflated.byteLength !== expectedInflated) {
     throw new TypeError("PNG decompressed scanline length is invalid");
   }
@@ -266,6 +272,15 @@ function decodeGifLzw(data, minimumCodeSize, expectedPixels) {
       if (nextCode === (1 << codeSize) && codeSize < 12) codeSize += 1;
     }
     previous = entry;
+  }
+  const usedBytes = Math.ceil(bitOffset / 8);
+  if (usedBytes !== data.byteLength) {
+    throw new TypeError("GIF LZW stream contains trailing bytes");
+  }
+  const usedBitsInLastByte = bitOffset % 8;
+  if (usedBitsInLastByte !== 0
+    && (data[data.byteLength - 1] >>> usedBitsInLastByte) !== 0) {
+    throw new TypeError("GIF LZW stream contains nonzero trailing bits");
   }
   if (output !== expectedPixels) throw new TypeError("GIF pixel count is incomplete");
 }

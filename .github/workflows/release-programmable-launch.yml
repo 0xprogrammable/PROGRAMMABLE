@@ -209,6 +209,10 @@ jobs:
           node scripts/programmable-launch-v4-release-binding.mjs verify-release-ready
           --repository-root "$GITHUB_WORKSPACE"
 
+      - name: Verify V4 clean-room no-broadcast runner contract
+        if: ${{ startsWith(inputs.version, '4.') }}
+        run: npm run release:custom-launch:v4:clean-room:test
+
       - name: Require protected CLI tags and a fresh release identity
         env:
           GH_TOKEN: ${{ github.token }}

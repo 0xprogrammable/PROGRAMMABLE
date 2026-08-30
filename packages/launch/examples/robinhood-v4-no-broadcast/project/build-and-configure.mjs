@@ -3,10 +3,12 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import solc from "solc";
 
 import { createPackConfigFromCapabilities } from "./config-from-capabilities.mjs";
+import { assertExactProjectImageV4 } from "./image-precheck.mjs";
 
 const CAPABILITIES_URL =
   "https://api.programmable.market/v4/chains/4663/capabilities";
@@ -37,7 +39,7 @@ const tokenSupply = process.env.PROGRAMMABLE_TOKEN_SUPPLY
 const checkedAt = process.env.PROGRAMMABLE_CHECKED_AT ?? new Date().toISOString();
 const imageSourcePath = relativePath(required("PROGRAMMABLE_PROJECT_IMAGE_SOURCE_PATH"));
 const imageBytes = await readFile(path.join(root, ...imageSourcePath.split("/")));
-assertSupportedImage(imageBytes);
+await assertExactProjectImageV4(imageBytes, exactImageValidatorModule());
 const projectMetadata = {
   schemaVersion: "programmable.project-metadata-input.v1",
   token: { name: "Robinhood Clean Room", symbol: "RHCR" },
@@ -194,11 +196,19 @@ function relativePath(value) {
   return value;
 }
 
-function assertSupportedImage(bytes) {
-  const hex = bytes.subarray(0, 12).toString("hex");
-  const supported = hex.startsWith("89504e470d0a1a0a")
-    || new Set(["GIF87a", "GIF89a"]).has(bytes.subarray(0, 6).toString("ascii"));
-  if (!supported) throw new TypeError("V4 project image must be PNG or single-frame GIF");
+function exactImageValidatorModule() {
+  const configured = process.env.PROGRAMMABLE_PROJECT_IMAGE_VALIDATOR_MODULE;
+  if (configured !== undefined) {
+    const url = new URL(configured);
+    if (url.protocol !== "file:" || url.username || url.password || url.hash) {
+      throw new TypeError("PROGRAMMABLE_PROJECT_IMAGE_VALIDATOR_MODULE must be a local file URL");
+    }
+    return url.href;
+  }
+  return pathToFileURL(path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../src/image-validation-v4.mjs",
+  )).href;
 }
 
 function sha256(bytes) {
