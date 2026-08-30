@@ -186,11 +186,13 @@ test("partitions every artifact-dependent suite without multi-filter side effect
   const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
   const interfaceCommand = packageJson.scripts["test:interface:ci"];
   const contractCommand = packageJson.scripts["test:contract-release:ci"];
+  const robinhoodCommand = packageJson.scripts["contracts:robinhood:owner-envelope:test"];
 
   assert.deepEqual(contractCommand.split(" && "), [
     ...CONTRACT_RELEASE_TEST_PATHS.map((path) => `vitest run ${path}`),
     "npm run contracts:classic-v4:release:test",
     "npm run contracts:classic-v4:launcher-upgrade:test",
+    "npm run contracts:robinhood:owner-envelope:test",
   ]);
   for (const path of CONTRACT_RELEASE_TEST_PATHS) {
     assert.match(
@@ -199,6 +201,16 @@ test("partitions every artifact-dependent suite without multi-filter side effect
     );
     assert.equal(contractCommand.split(path).length - 1, 1);
   }
+  assert.equal(
+    robinhoodCommand.split(
+      "contracts/scripts/test/robinhood-custom-launch-sourcify-v2.test.mjs",
+    ).length - 1,
+    1,
+  );
+  assert.match(
+    robinhoodCommand,
+    /^node --test .*robinhood-custom-launch-standard-json\.test\.mjs .*robinhood-custom-launch-owner-envelope\.test\.mjs .*robinhood-custom-launch-sourcify-v2\.test\.mjs/u,
+  );
 });
 
 test("partitions every database runtime suite out of the concurrent interface batch", () => {

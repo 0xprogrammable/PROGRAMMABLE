@@ -87,19 +87,23 @@ function component(to, data, purpose) {
   };
 }
 
-export async function prepareOwnerTransaction(owner) {
+export function prepareOwnerTransactionFromCreationCode(
+  owner,
+  { graphCreationCode, routerBaseCreationCode },
+) {
   assert(
     [OWNER_0.toLowerCase(), OWNER_1.toLowerCase()].includes(
       owner?.toLowerCase(),
     ),
     `ROBINHOOD_CUSTOM_LAUNCH_DEPLOYER must be ${OWNER_0} or ${OWNER_1}`,
   );
-
-  const graphCreationCode = await creationCode(
-    "../out/ProgrammableCreate2GraphDeployerV1.sol/ProgrammableCreate2GraphDeployerV1.json",
+  assert(
+    /^0x[0-9a-f]+$/iu.test(graphCreationCode ?? ""),
+    "GraphFactory creation bytecode is invalid",
   );
-  const routerBaseCreationCode = await creationCode(
-    "../out/ProgrammableLaunchStampRouterV1.sol/ProgrammableLaunchStampRouterV1.json",
+  assert(
+    /^0x[0-9a-f]+$/iu.test(routerBaseCreationCode ?? ""),
+    "Router creation bytecode is invalid",
   );
   const routerConstructorArguments = encodeAbiParameters(
     parseAbiParameters("address,address,address"),
@@ -214,6 +218,21 @@ export async function prepareOwnerTransaction(owner) {
     ],
     automaticSigningOrBroadcast: false,
   };
+}
+
+export async function prepareOwnerTransaction(owner) {
+  const [graphCreationCode, routerBaseCreationCode] = await Promise.all([
+    creationCode(
+      "../out/ProgrammableCreate2GraphDeployerV1.sol/ProgrammableCreate2GraphDeployerV1.json",
+    ),
+    creationCode(
+      "../out/ProgrammableLaunchStampRouterV1.sol/ProgrammableLaunchStampRouterV1.json",
+    ),
+  ]);
+  return prepareOwnerTransactionFromCreationCode(owner, {
+    graphCreationCode,
+    routerBaseCreationCode,
+  });
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;

@@ -79,9 +79,10 @@ const MAX_SOURCIFY_BYTES = 32 * 1024 * 1024;
 const MAX_FRESH_CAPTURE_BYTES = 96 * 1024 * 1024;
 const MAX_PUBLIC_CAPTURE_BYTES = 128 * 1024 * 1024;
 const SOURCIFY_NORMALIZED_RESPONSE_DOMAIN =
-  "programmable.robinhood-custom-launch.sourcify-normalized-response.v1";
+  "programmable.robinhood-custom-launch.sourcify-normalized-response.v2";
 const SOURCIFY_RESPONSE_CLOSURE_DOMAIN =
-  "programmable.robinhood-custom-launch.sourcify-response-closure.v4";
+  "programmable.robinhood-custom-launch.sourcify-response-closure.v5";
+const SOURCIFY_PROVIDER_CLASSIFICATION = "PARTIAL_NO_CBOR_EXACT_BYTES";
 const CAPTURE_INVENTORY_DOMAIN =
   "programmable.robinhood-custom-launch.capture-inventory.v4";
 export const ROBINHOOD_SOURCIFY_RESPONSE_BYTES = MAX_SOURCIFY_BYTES;
@@ -92,19 +93,51 @@ const HEX32 = /^0x[0-9a-f]{64}$/u;
 const QUANTITY = /^0x(?:0|[1-9a-f][0-9a-f]*)$/u;
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 
+const CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{8,512}";
+const ALCHEMY_CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{8,256}";
+const QUICKNODE_CREDENTIAL_COMPONENT = "[A-Za-z0-9_-]{8,256}";
+const QUICKNODE_ENDPOINT_LABEL =
+  "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const CREDENTIALED_PROVIDER_ENDPOINTS = Object.freeze({
+  "robinhood:drpc": Object.freeze([
+    new RegExp(`^https://lb\\.drpc\\.live/robinhood/${CREDENTIAL_COMPONENT}$`, "u"),
+    new RegExp(
+      `^https://lb\\.drpc\\.org/ogrpc\\?network=robinhood(?:-mainnet)?&dkey=${CREDENTIAL_COMPONENT}$`,
+      "u",
+    ),
+  ]),
+  "robinhood:alchemy": Object.freeze([
+    new RegExp(
+      `^https://robinhood-mainnet\\.g\\.alchemy\\.com/v2/${ALCHEMY_CREDENTIAL_COMPONENT}$`,
+      "u",
+    ),
+  ]),
+  "ethereum:drpc": Object.freeze([
+    new RegExp(`^https://lb\\.drpc\\.live/ethereum/${CREDENTIAL_COMPONENT}$`, "u"),
+    new RegExp(
+      `^https://lb\\.drpc\\.org/ogrpc\\?network=ethereum(?:-mainnet)?&dkey=${CREDENTIAL_COMPONENT}$`,
+      "u",
+    ),
+  ]),
+  "ethereum:quicknode": Object.freeze([
+    new RegExp(
+      `^https://${QUICKNODE_ENDPOINT_LABEL}\\.ethereum-mainnet\\.quiknode\\.pro/${QUICKNODE_CREDENTIAL_COMPONENT}/?$`,
+      "u",
+    ),
+  ]),
+});
+
 const PROVIDER_PINS = Object.freeze({
   robinhood: Object.freeze([
     Object.freeze({
       role: "primary",
       providerId: "drpc",
       trustDomain: "drpc.org",
-      hostnameSuffixes: Object.freeze(["drpc.org", "drpc.live"]),
     }),
     Object.freeze({
       role: "secondary",
       providerId: "alchemy",
       trustDomain: "alchemy.com",
-      hostnameSuffixes: Object.freeze(["alchemy.com"]),
     }),
   ]),
   ethereum: Object.freeze([
@@ -112,16 +145,37 @@ const PROVIDER_PINS = Object.freeze({
       role: "primary",
       providerId: "drpc",
       trustDomain: "drpc.org",
-      hostnameSuffixes: Object.freeze(["drpc.org", "drpc.live"]),
     }),
     Object.freeze({
       role: "secondary",
       providerId: "quicknode",
       trustDomain: "quicknode.com",
-      hostnameSuffixes: Object.freeze(["quiknode.pro"]),
     }),
   ]),
 });
+
+export function validateRobinhoodCredentialedProviderEndpoint(value, layer, providerId) {
+  const label = `${layer} ${providerId} RPC`;
+  if (typeof value !== "string" || value.length === 0 || value.length > 1_024
+    || value !== value.trim()) {
+    throw new TypeError(`${label} violates its exact credentialed endpoint pin`);
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new TypeError(`${label} violates its exact credentialed endpoint pin`);
+  }
+  const patterns = CREDENTIALED_PROVIDER_ENDPOINTS[`${layer}:${providerId}`];
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== ""
+    || url.port !== "" || url.hash !== ""
+    || url.hostname !== url.hostname.toLowerCase()
+    || !Array.isArray(patterns) || !patterns.some((pattern) => pattern.test(value))
+    || /docs[-_]?demo/iu.test(value)) {
+    throw new TypeError(`${label} violates its exact credentialed endpoint pin`);
+  }
+  return url;
+}
 
 const L2_ENTRY_ORDER = Object.freeze([
   "chainId",
@@ -349,6 +403,19 @@ function iso(value, label) {
     throw new TypeError(`${label} must be a canonical ISO-8601 instant`);
   }
   return value;
+}
+
+function providerRfc3339(value, label) {
+  if (typeof value !== "string"
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(value)
+    || !Number.isFinite(Date.parse(value))) {
+    throw new TypeError(`${label} must be a canonical UTC RFC3339 instant`);
+  }
+  const canonical = new Date(value).toISOString();
+  if (value !== canonical && value !== canonical.replace(/\.000Z$/u, "Z")) {
+    throw new TypeError(`${label} must be a canonical UTC RFC3339 instant`);
+  }
+  return canonical;
 }
 
 export function canonicalRobinhoodFreshObservedAt(now = () => new Date()) {
@@ -1598,13 +1665,15 @@ function normalizeRawSourcify(value, index, repositoryRoot, expected, readFile, 
   }
   const response = plainObject(parseJsonBytes(bytes, `${label} response`), `${label} response`);
   if (response.chainId !== "4663" || response.address !== expected.address
-    || response.match !== "exact_match" || response.creationMatch !== "exact_match"
-    || response.runtimeMatch !== "exact_match"
+    || response.match !== "match" || response.creationMatch !== "match"
+    || response.runtimeMatch !== "match"
     || typeof response.matchId !== "string" || response.matchId.length === 0
     || typeof response.verifiedAt !== "string") {
-    throw new TypeError(`${label} is not an exact creation-and-runtime match for the pinned target`);
+    throw new TypeError(
+      `${label} is not the required provider match/match/match for appendCBOR=false`,
+    );
   }
-  iso(response.verifiedAt, `${label}.verifiedAt`);
+  providerRfc3339(response.verifiedAt, `${label}.verifiedAt`);
   const compilation = plainObject(response.compilation, `${label}.compilation`);
   if (compilation.language !== "Solidity" || compilation.compiler !== "solc"
     || compilation.compilerVersion !== "0.8.26+commit.8a97fa7a"
@@ -1640,9 +1709,11 @@ function normalizeRawSourcify(value, index, repositoryRoot, expected, readFile, 
     provider: "sourcify-v2",
     chainId: "4663",
     address: expected.address,
-    match: "exact_match",
-    creationMatch: "exact_match",
-    runtimeMatch: "exact_match",
+    match: "match",
+    creationMatch: "match",
+    runtimeMatch: "match",
+    providerClassification: SOURCIFY_PROVIDER_CLASSIFICATION,
+    providerReleaseAuthority: false,
     observedAt: iso(observedAt, `${label}.observedAt`),
     compiler: Object.freeze({
       language: "Solidity",
@@ -1684,7 +1755,8 @@ function validateNormalizedSourcify(
   const label = `capture.sourcifyResponses[${index}]`;
   assertExactKeys(value, [
     "contract", "provider", "chainId", "address", "match", "creationMatch",
-    "runtimeMatch", "observedAt", "compiler", "sourceFilesDigest",
+    "runtimeMatch", "providerClassification", "providerReleaseAuthority",
+    "observedAt", "compiler", "sourceFilesDigest",
     "standardJsonInputPath", "standardJsonInputSha256", "urlPath", "httpStatus",
     "contentType", "normalizedVerificationDigest",
   ], label);
@@ -1697,14 +1769,18 @@ function validateNormalizedSourcify(
     maximumBytes: localBytes.byteLength,
   });
   const expectedSources = plainObject(localInput.sources, `${label} local sources`);
-  if (value.match !== "exact_match" || value.creationMatch !== "exact_match"
-    || value.runtimeMatch !== "exact_match" || value.address !== expected.address) {
-    throw new TypeError(`${label} is not an exact creation-and-runtime match for the pinned target`);
+  if (value.match !== "match" || value.creationMatch !== "match"
+    || value.runtimeMatch !== "match" || value.address !== expected.address) {
+    throw new TypeError(
+      `${label} is not the required provider match/match/match for appendCBOR=false`,
+    );
   }
   if (value.contract !== expected.contract || value.provider !== "sourcify-v2"
     || value.chainId !== "4663" || value.address !== expected.address
-    || value.match !== "exact_match" || value.creationMatch !== "exact_match"
-    || value.runtimeMatch !== "exact_match" || value.observedAt !== observedAt
+    || value.match !== "match" || value.creationMatch !== "match"
+    || value.runtimeMatch !== "match"
+    || value.providerClassification !== SOURCIFY_PROVIDER_CLASSIFICATION
+    || value.providerReleaseAuthority !== false || value.observedAt !== observedAt
     || value.compiler.language !== "Solidity" || value.compiler.compiler !== "solc"
     || value.compiler.compilerVersion !== "0.8.26+commit.8a97fa7a"
     || value.compiler.name !== expected.name
@@ -2085,24 +2161,11 @@ export async function freshVerifyRobinhoodSourcify({
 }
 
 function freshEndpoint(value, layer, index) {
-  if (typeof value !== "string" || value.length === 0 || value.length > 4_096) {
-    throw new TypeError(`fresh ${layer} provider ${index} endpoint is missing or oversized`);
-  }
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new TypeError(`fresh ${layer} provider ${index} endpoint is not an absolute URL`);
-  }
   const pin = PROVIDER_PINS[layer][index];
-  if (url.protocol !== "https:" || url.username !== "" || url.password !== ""
-    || (url.port !== "" && url.port !== "443") || url.hash !== ""
-    || url.hostname !== url.hostname.toLowerCase()
-    || !pin.hostnameSuffixes.some((suffix) =>
-      url.hostname === suffix || url.hostname.endsWith(`.${suffix}`))) {
-    throw new TypeError(`fresh ${layer} provider ${index} endpoint violates its hostname pin`);
+  if (pin === undefined) {
+    throw new TypeError(`fresh ${layer} provider ${index} has no code-owned endpoint pin`);
   }
-  return url;
+  return validateRobinhoodCredentialedProviderEndpoint(value, layer, pin.providerId);
 }
 
 async function freshRpcEntries({
@@ -2186,6 +2249,12 @@ export async function freshVerifyRobinhoodProviderReadbacks({
   if (!Array.isArray(rpcUrls?.robinhood) || rpcUrls.robinhood.length !== 2
     || !Array.isArray(rpcUrls?.ethereum) || rpcUrls.ethereum.length !== 2) {
     throw new TypeError("fresh provider verification requires two L2 and two L1 RPC URLs");
+  }
+  for (const layer of ["robinhood", "ethereum"]) {
+    for (const [index, endpoint] of rpcUrls[layer].entries()) {
+      const pin = PROVIDER_PINS[layer][index];
+      validateRobinhoodCredentialedProviderEndpoint(endpoint, layer, pin.providerId);
+    }
   }
   if (!Array.isArray(capture?.l2ProviderReadbacks)
     || !Array.isArray(capture?.ethereumProviderReadbacks)

@@ -542,11 +542,31 @@ test("V4 source-verification parser rejects drift, unsafe evidence, and pre-fina
     ["lowercase address", (value) => {
       value.components[0].address = `0x${"A".repeat(40)}`;
     }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
-    ["exact provider", (value) => {
-      value.components[0].exactMatchProvider = "blockscout-v2";
+    ["provider cannot be exact authority", (value) => {
+      value.components[0].exactSourceAuthority = "sourcify-v2";
     }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
     ["non-exact evidence", (value) => {
-      value.components[1].evidenceDigest = `sha256:${"a".repeat(64)}`;
+      value.components[1].exactSourceBinding = structuredClone(
+        value.components[0].exactSourceBinding,
+      );
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["provider remains non-authoritative", (value) => {
+      value.components[0].providerObservation.releaseAuthority = true;
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["provider partial classification", (value) => {
+      value.components[0].providerObservation.classification = "exact_match";
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["provider match vocabulary", (value) => {
+      value.components[0].providerObservation.match = "exact_match";
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["binding authority", (value) => {
+      value.components[0].exactSourceBinding.authority = "sourcify-v2";
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["binding coverage", (value) => {
+      value.components[0].exactSourceBinding.coveredEvidence.pop();
+    }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
+    ["binding digest", (value) => {
+      value.components[0].exactSourceBinding.bindingDigest = `sha256:${"A".repeat(64)}`;
     }, "CUSTOM_LAUNCH_V4_RESOURCE_INVALID"],
     ["retry schedule", (value) => {
       delete value.components[1].nextAttemptAt;

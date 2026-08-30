@@ -159,6 +159,16 @@ ETHEREUM_MAINNET_RPC_URL_PRIMARY
 ETHEREUM_MAINNET_RPC_URL_SECONDARY
 ```
 
+Before any capture or fresh replay request, code rejects every URL outside the reviewed credential
+forms: dRPC live is `https://lb.drpc.live/{robinhood|ethereum}/{credential}`; dRPC org is exactly
+`https://lb.drpc.org/ogrpc?network={robinhood|ethereum}[-mainnet]&dkey={credential}` with that query
+order; Robinhood Alchemy is `https://robinhood-mainnet.g.alchemy.com/v2/{credential}`; Ethereum
+QuickNode is `https://{endpoint-name}.ethereum-mainnet.quiknode.pro/{credential}/`, matching the
+existing Programmable production endpoint contract. Userinfo, explicit ports,
+fragments, extra or reordered query parameters, wrong-chain paths and public endpoints fail before
+the first network request. Ethereum chain ID and the complete retained readback inventory bind the
+QuickNode endpoint to mainnet. Credential values and full URLs are never serialized or printed.
+
 The protected workflow is the canonical production invocation. A manual production-equivalent
 stage assembly must supply all portable Phase A proof coordinates:
 
@@ -355,16 +365,101 @@ and QuickNode must agree on the event, decoded batch binding and finalized check
 address/topic/batch, accumulators, delayed accumulator/message count, time bounds, data location
 and complete transaction/block/log inclusion tuple are closed into evidence.
 
-Sourcify evidence retains bounded exact response bytes for Router and GraphFactory:
+### Sourcify publication and composite exact binding
+
+If either source is not yet public, first run the repo-root GET-only review into
+an existing owner-only directory outside the repository and OS temporary tree:
+
+```sh
+npm run contracts:robinhood:sourcify:review -- \
+  --creation-transaction-hash "$ROBINHOOD_FOUNDATION_TX_HASH" \
+  --output /absolute/owner-only/sourcify-review.json
+```
+
+This does not publish, sign or broadcast. The returned authorization digest is
+valid only for that protected production tree, finalized creation transaction,
+exact request bytes and disclosed legal/Blockscout side effects. `submit` is a
+separate owner-authorized irreversible public-source publication and license
+grant; see `contracts/security/ROBINHOOD-CUSTOM-LAUNCH.md` for the exact compound
+acknowledgement. Never place credentials in either command or retain the plan or
+receipt inside the source repository.
+
+| Observed state | Safe recovery |
+| --- | --- |
+| Review/preflight fails before a POST | Correct the read-only/source issue and create a new review plan; nothing was published. |
+| Durable attempt-marker write or its file/parent `fsync` fails | The operator sends zero POSTs and removes only its unused reservation. Correct the local owner-only filesystem issue and start from review. |
+| One target published, the other failed or timed out | Keep the digest-valid `externalActionPossible=true` marker and its exact-readback checkpoints. Run `contracts:robinhood:sourcify:recover` against that marker first; it uses GET only. If one target remains missing, keep the marker and, only after renewed owner approval, re-run `submit` with the same still-valid plan and acknowledgements into a different absent output path. It never POSTs an already verified target. |
+| Provider returns `exact_match`, runtime-only success, schema drift or mismatched bytes | Stop. Do not normalize it to success, change metadata or weaken the gate. Investigate and create a newly reviewed plan only after code review. |
+| POST may have succeeded but local receipt temp-write, `fsync` or rename failed | Never delete the retained marker. Run GET-only `recover`; exact readback of both targets atomically replaces it with a `recovered-read-only` receipt without repeating a POST. |
+| Parent-directory `fsync` or protected-source recheck fails after the atomic receipt rename | Keep the completed receipt exactly where written. Treat it as retained recovery evidence, not promotion authority, until source and filesystem state are reviewed. |
+| Protected revision/tree changes after review | The submit step fails before POST. Re-run review against the new protected tree and obtain a new explicit authorization. |
+
+The GET-only recovery command is:
+
+```sh
+npm run contracts:robinhood:sourcify:recover -- \
+  --review-plan /absolute/owner-only/sourcify-review.json \
+  --recovery-marker /absolute/owner-only/sourcify-publication-receipt.json
+```
+
+The review and every action-time rebind require a stable clean checkout equal
+to both the local `origin/production` tracking ref and the freshly queried live
+`refs/heads/production` revision. No mutable local tracking ref alone can
+authorize publication.
+
+Sourcify evidence retains bounded response bytes for Router and GraphFactory:
 
 ```text
 GET /server/v2/contract/4663/{EIP55Address}?fields=all
 ```
 
-`match`, `creationMatch` and `runtimeMatch` must all be `exact_match`. The validator binds compiler
-settings, metadata, sources and the repository Standard JSON input into the source-verification
-closure. Provider URLs are code-owned HTTPS dRPC/Alchemy for Robinhood and HTTPS dRPC/QuickNode for
-Ethereum. Only sanitized hostnames enter evidence.
+`match`, `creationMatch` and `runtimeMatch` must all be `match`, with
+`providerClassification=PARTIAL_NO_CBOR_EXACT_BYTES` and
+`providerReleaseAuthority=false`. `exact_match` is rejected: the pinned Standard JSON inputs set
+`metadata.appendCBOR=false`, so Sourcify cannot produce its metadata-backed exact classification.
+The provider validator still binds compiler settings, metadata, sources and the repository Standard
+JSON input into the source-verification closure.
+
+The release-authoritative exact claim is a separate
+`programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1` record. It
+binds the protected revision/tree and capture authorization, the attested hosted Verify proof and
+pinned Linux solc binary, both Standard JSON/compiler-settings digests, exact creation-code hashes,
+the owner transaction hash/data hash and finalized block, and exact deployed runtime hashes observed
+by both dRPC and Alchemy. A Sourcify response cannot replace or weaken this binding. Provider URLs
+are code-owned HTTPS dRPC/Alchemy for Robinhood and HTTPS dRPC/QuickNode for Ethereum. Only
+sanitized hostnames enter evidence.
+
+### Optional Blockscout observation
+
+Blockscout is explorer evidence only and is not a Phase A, closure, stage, fresh-replay or
+promotion requirement. The reviewed Standard JSON inputs set `metadata.appendCBOR=false`, while
+Blockscout v11.2.8 derives its `FULL` classification from matching CBOR metadata. Consequently these
+unchanged exact binaries are expected to be provider-classified `PARTIAL`; changing the compiler
+profile, bytecode, CREATE2 addresses or owner envelope to obtain `FULL` is forbidden.
+
+After an explicitly authorized optional Blockscout publication, a bounded read-only observation can
+be captured from the repository root into a new owner-only file:
+
+```sh
+npm run contracts:robinhood:blockscout:observe -- \
+  --output /absolute/protected/new-blockscout-observation.json
+```
+
+The observer queries the official
+[`GET /api/v2/smart-contracts/{address}`](https://docs.blockscout.com/api-reference/get-smart-contract)
+endpoint at `https://robinhoodchain.blockscout.com` for both contracts. It requires HTTP 200 JSON
+within fixed per-response and aggregate byte/time bounds,
+requires the exact `PARTIAL`/unchanged/no-twin provider flags, and independently compares the full
+source closure, compiler version/settings, constructor arguments, creation bytes and deployed-byte
+hash to the pinned Standard JSON and deployment bindings. Its receipt is permanently labeled
+`PARTIAL_NO_CBOR_NOT_RELEASE_AUTHORITY`, `releaseAuthority=false`,
+`promotionRequirement=false`, and
+`exactSourceAuthority=protected-hosted-build-finalized-transaction-bytecode`.
+
+A successful Blockscout submission, `is_verified` flag or this degraded observation never satisfies
+exact source verification. A per-instance API deprecation, non-JSON response, rate limit or
+Cloudflare challenge is an optional observation failure only; it must not weaken or replace the
+required Sourcify V2 match or the independent exact byte/source/build/transaction binding.
 
 Production capture binds repository `programmablehq/PROGRAMMABLE`, repository ID `1314365508`,
 protected ref `refs/heads/production`, exact revision/tree and source-closure digest. The capture's
@@ -535,6 +630,10 @@ The relevant domains are:
 ```text
 programmable.robinhood-custom-launch.capture-authorization.v2
 programmable.robinhood-custom-launch.capture-closure.v3
+programmable.robinhood-custom-launch.sourcify-normalized-response.v2
+programmable.robinhood-custom-launch.sourcify-response-closure.v5
+programmable.robinhood-custom-launch.source-verification-closure.v5
+programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1
 programmable.robinhood-custom-launch.backend-promotion-input.v1
 programmable.robinhood-custom-launch.backend-promotion-public-input.v2
 programmable.robinhood-custom-launch.backend-promotion-semantic-input.v1

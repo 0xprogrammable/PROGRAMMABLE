@@ -361,11 +361,15 @@ const chainDeployment = closed(
         evidenceDigest: sha256,
         sourceVerification: closed(
           [
-            "sourcifyExactMatchCoveredContracts",
+            "sourcifyProviderMatchCoveredContracts",
+            "exactByteSourceBuildTransactionCoveredContracts",
             "officialSourcePinnedCoveredContracts",
           ],
           {
-            sourcifyExactMatchCoveredContracts: {
+            sourcifyProviderMatchCoveredContracts: {
+              const: ["programmableLaunchStampRouter", "graphFactory"],
+            },
+            exactByteSourceBuildTransactionCoveredContracts: {
               const: ["programmableLaunchStampRouter", "graphFactory"],
             },
             officialSourcePinnedCoveredContracts: {
@@ -1341,48 +1345,91 @@ const partnerAttribution = closed(
   },
 );
 
+const exactSourceBindingCoveredEvidence = [
+  "protected-source-tree",
+  "source-closure",
+  "hosted-build-artifact",
+  "standard-json-input",
+  "compiler-binary",
+  "compiler-settings",
+  "finalized-creation-transaction",
+  "creation-bytecode",
+  "runtime-bytecode",
+];
+const sourceVerificationProviderObservation = closed(
+  [
+    "provider", "classification", "match", "creationMatch", "runtimeMatch",
+    "releaseAuthority", "evidenceDigest",
+  ],
+  {
+    provider: { const: "sourcify-v2" },
+    classification: { const: "PARTIAL_NO_CBOR_EXACT_BYTES" },
+    creationMatch: { const: "match" },
+    runtimeMatch: { const: "match" },
+    match: { const: "match" },
+    releaseAuthority: { const: false },
+    evidenceDigest: sha256,
+  },
+);
+const sourceVerificationExactSourceBinding = closed(
+  ["schemaVersion", "authority", "coveredEvidence", "bindingDigest"],
+  {
+    schemaVersion: {
+      const:
+        "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1",
+    },
+    authority: { const: "protected-hosted-build-finalized-transaction-bytecode" },
+    coveredEvidence: { const: exactSourceBindingCoveredEvidence },
+    bindingDigest: sha256,
+  },
+);
 const sourceVerificationComponent = {
   oneOf: [
     ...["queued", "retrying"].map((status) => closed(
       [
-        "targetId", "address", "status", "exactMatchProvider", "evidenceDigest",
-        "updatedAt", "nextAttemptAt",
+        "targetId", "address", "status", "providerObservation", "exactSourceAuthority",
+        "exactSourceBinding", "updatedAt", "nextAttemptAt",
       ],
       {
         targetId: identifier,
         address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
         status: { const: status },
-        exactMatchProvider: { type: "null" },
-        evidenceDigest: { type: "null" },
+        providerObservation: { type: "null" },
+        exactSourceAuthority: { type: "null" },
+        exactSourceBinding: { type: "null" },
         updatedAt: millisecondDateTime,
         nextAttemptAt: millisecondDateTime,
       },
     )),
     closed(
       [
-        "targetId", "address", "status", "exactMatchProvider", "evidenceDigest",
-        "updatedAt",
+        "targetId", "address", "status", "providerObservation", "exactSourceAuthority",
+        "exactSourceBinding", "updatedAt",
       ],
       {
         targetId: identifier,
         address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
         status: { const: "exact_match" },
-        exactMatchProvider: { const: "sourcify-v2" },
-        evidenceDigest: sha256,
+        providerObservation: sourceVerificationProviderObservation,
+        exactSourceAuthority: {
+          const: "protected-hosted-build-finalized-transaction-bytecode",
+        },
+        exactSourceBinding: sourceVerificationExactSourceBinding,
         updatedAt: millisecondDateTime,
       },
     ),
     closed(
       [
-        "targetId", "address", "status", "exactMatchProvider", "evidenceDigest",
-        "updatedAt",
+        "targetId", "address", "status", "providerObservation", "exactSourceAuthority",
+        "exactSourceBinding", "updatedAt",
       ],
       {
         targetId: identifier,
         address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
         status: { const: "needs_attention" },
-        exactMatchProvider: { type: "null" },
-        evidenceDigest: { type: "null" },
+        providerObservation: { type: "null" },
+        exactSourceAuthority: { type: "null" },
+        exactSourceBinding: { type: "null" },
         updatedAt: millisecondDateTime,
       },
     ),
@@ -1409,7 +1456,7 @@ const sourceVerificationStatus = closed(
   },
   {
     description:
-      "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+      "Server-authored post-finality exact-source state. Sourcify v2 match/match/match is explicitly non-authoritative provider observation; exact_match is emitted only after the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite binding closes. Provider retries and failures never alter launch finality.",
     "x-programmable-order": "updatedAt == max components[*].updatedAt",
     allOf: [
       {

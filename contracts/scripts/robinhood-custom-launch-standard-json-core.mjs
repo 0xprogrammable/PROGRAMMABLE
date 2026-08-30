@@ -1,6 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +22,7 @@ import {
   stringToHex,
 } from "viem";
 
-import { prepareOwnerTransaction } from "./prepare-robinhood-custom-launch-owner-transaction.mjs";
+import { prepareOwnerTransactionFromCreationCode } from "./prepare-robinhood-custom-launch-owner-transaction.mjs";
 
 const contractsRoot = fileURLToPath(new URL("../", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -86,6 +95,41 @@ export const EXPECTED_COMPILER_PROFILE = Object.freeze({
   binaryLabel: "solc-0.8.26+commit.8a97fa7a.Darwin.appleclang",
   binarySha256:
     "0x24b06eb31fd9db8edf3a57bdf7468d7360d6fc2fb202a6bb577bda089193ef31",
+});
+
+const MAX_REPRODUCTION_COMPILER_BYTES = 128 * 1024 * 1024;
+const REPRODUCTION_COMPILER_VERSION = "0.8.26+commit.8a97fa7a";
+const REPRODUCTION_COMPILER_LOCKS = Object.freeze({
+  darwin: Object.freeze({
+    architectures: Object.freeze(["arm64", "x64"]),
+    profileBuildCandidate: Object.freeze({
+      binaryLabel: EXPECTED_COMPILER_PROFILE.binaryLabel,
+      binarySha256: EXPECTED_COMPILER_PROFILE.binarySha256,
+      relativePath: ".local/share/uv/tools/solc-select/bin/solc",
+      source: "profile-build-compiler",
+    }),
+    binaryLabel: "solc-macosx-amd64-v0.8.26+commit.8a97fa7a",
+    binarySha256:
+      "0x0ff016aef2396b12d1fc65429d8ea6cf53c2ee4b041bb8925644615ee1c30ab9",
+    downloadUrl:
+      "https://binaries.soliditylang.org/macosx-amd64/solc-macosx-amd64-v0.8.26+commit.8a97fa7a",
+    versionLine: `Version: ${REPRODUCTION_COMPILER_VERSION}.Darwin.appleclang`,
+  }),
+  linux: Object.freeze({
+    architectures: Object.freeze(["x64"]),
+    binaryLabel: "solc-linux-amd64-v0.8.26+commit.8a97fa7a",
+    binarySha256:
+      "0xd5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef",
+    downloadUrl:
+      "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.26+commit.8a97fa7a",
+    versionLine: `Version: ${REPRODUCTION_COMPILER_VERSION}.Linux.g++`,
+  }),
+});
+
+const REPRODUCTION_COMPILER_ENV = Object.freeze({
+  LANG: "C",
+  LC_ALL: "C",
+  PATH: "/usr/bin:/bin",
 });
 
 export const ROBINHOOD_STANDARD_JSON_ARTIFACTS = Object.freeze({
@@ -336,24 +380,245 @@ export function assertPinnedCompilerProfile(compiler) {
   );
 }
 
-async function resolvePinnedCompiler(profile, solcPath) {
+export function robinhoodReproductionCompilerLayout({
+  platform = process.platform,
+  architecture = process.arch,
+  homeDirectory = os.homedir(),
+} = {}) {
+  const lock = REPRODUCTION_COMPILER_LOCKS[platform];
+  assert(
+    lock?.architectures.includes(architecture),
+    "Unsupported Robinhood reproduction compiler platform or architecture",
+  );
+  assert(
+    typeof homeDirectory === "string" && path.isAbsolute(homeDirectory),
+    "Robinhood reproduction compiler home must be absolute",
+  );
+  const fixedCandidates = [
+    ...(lock.profileBuildCandidate
+      ? [
+          Object.freeze({
+            source: lock.profileBuildCandidate.source,
+            path: path.join(
+              homeDirectory,
+              lock.profileBuildCandidate.relativePath,
+            ),
+            versionLine: lock.versionLine,
+            binaryLabel: lock.profileBuildCandidate.binaryLabel,
+            binarySha256: lock.profileBuildCandidate.binarySha256,
+          }),
+        ]
+      : []),
+    Object.freeze({
+      source: "foundry-svm-cache",
+      path: path.join(homeDirectory, ".svm/0.8.26/solc-0.8.26"),
+      versionLine: lock.versionLine,
+      binaryLabel: lock.binaryLabel,
+      binarySha256: lock.binarySha256,
+    }),
+    Object.freeze({
+      source: "solc-select-cache",
+      path: path.join(
+        homeDirectory,
+        ".solc-select/artifacts/solc-0.8.26/solc-0.8.26",
+      ),
+      versionLine: lock.versionLine,
+      binaryLabel: lock.binaryLabel,
+      binarySha256: lock.binarySha256,
+    }),
+  ];
+  return Object.freeze({
+    platform,
+    architecture,
+    version: REPRODUCTION_COMPILER_VERSION,
+    versionLine: lock.versionLine,
+    binaryLabel: lock.binaryLabel,
+    binarySha256: lock.binarySha256,
+    downloadUrl: lock.downloadUrl,
+    candidates: Object.freeze(fixedCandidates),
+  });
+}
+
+export async function readBoundedRobinhoodCompilerResponse(
+  response,
+  maximumBytes = MAX_REPRODUCTION_COMPILER_BYTES,
+) {
+  assert(
+    Number.isSafeInteger(maximumBytes) && maximumBytes > 0,
+    "Reproduction solc response limit is invalid",
+  );
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    assert(
+      /^[0-9]+$/u.test(declaredLength) &&
+        Number(declaredLength) <= maximumBytes,
+      "Official reproduction solc response length is invalid",
+    );
+  }
+  assert(response.body, "Official reproduction solc response body is missing");
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maximumBytes) {
+        await reader.cancel();
+        throw new Error("Official reproduction solc response is too large");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
+async function materializePinnedCompiler(bytes, layout, selected, tempRoot) {
+  assert(
+    sha256Hex(bytes) === selected.binarySha256,
+    "Pinned reproduction solc binary SHA-256 drift",
+  );
+  const directory = await mkdtemp(
+    path.join(tempRoot, "programmable-robinhood-solc-0.8.26-"),
+  );
+  try {
+    const selectedPath = path.join(directory, "solc");
+    await writeFile(selectedPath, bytes, { flag: "wx", mode: 0o700 });
+    await chmod(selectedPath, 0o700);
+    const version = spawnSync(selectedPath, ["--version"], {
+      encoding: "utf8",
+      env: REPRODUCTION_COMPILER_ENV,
+    });
+    assert(
+      !version.error && version.status === 0,
+      "Pinned reproduction solc version command failed",
+    );
+    const versionLines = version.stdout.trim().split(/\r?\n/u);
+    assert(
+      versionLines.at(-1) === selected.versionLine,
+      "Pinned reproduction solc version drift",
+    );
+    return {
+      path: selectedPath,
+      cleanupDirectory: directory,
+      versionOutput: version.stdout.trim(),
+      attestation: Object.freeze({
+        role: "platform-reproduction-compiler",
+        version: layout.version,
+        versionLine: selected.versionLine,
+        platform: layout.platform,
+        architecture: layout.architecture,
+        binaryLabel: selected.binaryLabel,
+        binarySha256: selected.binarySha256,
+        source: selected.source,
+      }),
+    };
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function readFixedCompilerCandidate(candidate) {
+  let handle;
+  try {
+    handle = await open(
+      candidate.path,
+      fsConstants.O_RDONLY | fsConstants.O_NONBLOCK | fsConstants.O_NOFOLLOW,
+    );
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return null;
+    throw new Error("Pinned reproduction solc candidate is unreadable");
+  }
+  try {
+    const before = await handle.stat();
+    assert(
+      before.isFile() &&
+        before.nlink === 1 &&
+        before.size > 0 &&
+        before.size <= MAX_REPRODUCTION_COMPILER_BYTES,
+      "Pinned reproduction solc candidate file type or size is invalid",
+    );
+    const compilerBytes = await handle.readFile();
+    const after = await handle.stat();
+    assert(
+      after.isFile() &&
+        after.dev === before.dev &&
+        after.ino === before.ino &&
+        after.nlink === 1 &&
+        after.size === before.size &&
+        compilerBytes.length === before.size,
+      "Pinned reproduction solc candidate changed while reading",
+    );
+    return compilerBytes;
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function resolveRobinhoodReproductionCompiler(
+  profile,
+  {
+    platform = process.platform,
+    architecture = process.arch,
+    homeDirectory = os.homedir(),
+    tempRoot = os.tmpdir(),
+    allowDownload = true,
+    fetchImplementation = globalThis.fetch,
+  } = {},
+) {
   assertPinnedCompilerProfile(profile.compiler);
-  const selectedPath =
-    solcPath ??
-    process.env.ROBINHOOD_SOLC_0_8_26_PATH ??
-    path.join(os.homedir(), ".local/bin/solc");
-  const compilerBytes = await readFile(selectedPath);
+  const layout = robinhoodReproductionCompilerLayout({
+    platform,
+    architecture,
+    homeDirectory,
+  });
+  for (const candidate of layout.candidates) {
+    const compilerBytes = await readFixedCompilerCandidate(candidate);
+    if (compilerBytes === null) continue;
+    assert(
+      sha256Hex(compilerBytes) === candidate.binarySha256,
+      "Pinned reproduction solc candidate SHA-256 drift",
+    );
+    return materializePinnedCompiler(
+      compilerBytes,
+      layout,
+      candidate,
+      tempRoot,
+    );
+  }
   assert(
-    sha256Hex(compilerBytes) === profile.compiler.binarySha256,
-    "Pinned solc binary SHA-256 drift",
+    allowDownload,
+    "Pinned reproduction solc is unavailable in fixed local candidates",
   );
-  const version = spawnSync(selectedPath, ["--version"], { encoding: "utf8" });
-  assert(version.status === 0, version.stderr || "Pinned solc version failed");
   assert(
-    version.stdout.includes("0.8.26+commit.8a97fa7a.Darwin.appleclang"),
-    "Pinned solc version drift",
+    typeof fetchImplementation === "function",
+    "Official reproduction solc fetch is unavailable",
   );
-  return { path: selectedPath, version: version.stdout.trim() };
+  const response = await fetchImplementation(layout.downloadUrl, {
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
+  assert(response.ok, "Official reproduction solc download failed");
+  const compilerBytes = await readBoundedRobinhoodCompilerResponse(response);
+  assert(
+    sha256Hex(compilerBytes) === layout.binarySha256,
+    "Downloaded reproduction solc binary SHA-256 drift",
+  );
+  return materializePinnedCompiler(
+    compilerBytes,
+    layout,
+    {
+      source: "official-solidity-binary-download",
+      versionLine: layout.versionLine,
+      binaryLabel: layout.binaryLabel,
+      binarySha256: layout.binarySha256,
+    },
+    tempRoot,
+  );
 }
 
 async function compileStandardJson(bytes, compiler, artifact) {
@@ -365,6 +630,7 @@ async function compileStandardJson(bytes, compiler, artifact) {
       cwd: compileDirectory,
       input: bytes,
       encoding: "utf8",
+      env: REPRODUCTION_COMPILER_ENV,
       maxBuffer: 512 * 1024 * 1024,
     });
     assert(
@@ -632,7 +898,9 @@ export async function generateCanonicalStandardJsonInputs({
   return generated;
 }
 
-export async function verifyRobinhoodStandardJsonInputs({ solcPath } = {}) {
+export async function verifyRobinhoodStandardJsonInputs({
+  requireForgeArtifacts = true,
+} = {}) {
   const [profile, deployment] = await Promise.all([
     readManifest("contracts/spec/robinhood-custom-launch/chain-4663.v1.json"),
     readManifest(
@@ -678,38 +946,51 @@ export async function verifyRobinhoodStandardJsonInputs({ solcPath } = {}) {
     "Foundation source commitment drift",
   );
 
-  const compiler = await resolvePinnedCompiler(profile, solcPath);
-  const compilations = Object.fromEntries(
-    await Promise.all(
-      Object.values(ROBINHOOD_STANDARD_JSON_ARTIFACTS).map(async (artifact) => [
-        artifact.key,
-        await compileStandardJson(bytes[artifact.key], compiler, artifact),
-      ]),
-    ),
-  );
+  const compiler = await resolveRobinhoodReproductionCompiler(profile);
+  let compilations;
+  try {
+    compilations = Object.fromEntries(
+      await Promise.all(
+        Object.values(ROBINHOOD_STANDARD_JSON_ARTIFACTS).map(
+          async (artifact) => [
+            artifact.key,
+            await compileStandardJson(bytes[artifact.key], compiler, artifact),
+          ],
+        ),
+      ),
+    );
+  } finally {
+    await rm(compiler.cleanupDirectory, { recursive: true, force: true });
+  }
   const commitments = verifyCompiledCommitments({
     profile,
     deployment,
     compilations,
   });
 
-  for (const artifact of Object.values(ROBINHOOD_STANDARD_JSON_ARTIFACTS)) {
-    const forgeArtifact = JSON.parse(
-      await readFile(path.join(repositoryRoot, artifact.outArtifactPath)),
-    );
-    assert(
-      sha256Hex(canonicalJsonBytes(forgeArtifact.abi)) === artifact.abiSha256,
-      `${artifact.key} committed Forge ABI drift`,
-    );
-    assert(
-      canonicalJson(canonicalAbi(forgeArtifact.abi)) ===
-        canonicalJson(canonicalAbi(compilations[artifact.key].abi)),
-      `${artifact.key} compiled ABI differs from committed Forge ABI`,
-    );
+  if (requireForgeArtifacts) {
+    for (const artifact of Object.values(ROBINHOOD_STANDARD_JSON_ARTIFACTS)) {
+      const forgeArtifact = JSON.parse(
+        await readFile(path.join(repositoryRoot, artifact.outArtifactPath)),
+      );
+      assert(
+        sha256Hex(canonicalJsonBytes(forgeArtifact.abi)) === artifact.abiSha256,
+        `${artifact.key} committed Forge ABI drift`,
+      );
+      assert(
+        canonicalJson(canonicalAbi(forgeArtifact.abi)) ===
+          canonicalJson(canonicalAbi(compilations[artifact.key].abi)),
+        `${artifact.key} compiled ABI differs from committed Forge ABI`,
+      );
+    }
   }
 
-  const prepared = await prepareOwnerTransaction(
+  const prepared = prepareOwnerTransactionFromCreationCode(
     "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+    {
+      graphCreationCode: commitments.graph.creationCode,
+      routerBaseCreationCode: commitments.router.baseCreationCode,
+    },
   );
   assert(
     prepared.dataHash === EXPECTED_OWNER_DATA_HASH &&
@@ -742,7 +1023,9 @@ export async function verifyRobinhoodStandardJsonInputs({ solcPath } = {}) {
     deployment,
     inputs,
     compilations,
-    compiler,
+    compiler: Object.freeze({ version: compiler.versionOutput }),
+    buildCompiler: profile.compiler,
+    reproductionCompiler: compiler.attestation,
     commitments,
     sourceCommitment,
     ownerTransaction: {

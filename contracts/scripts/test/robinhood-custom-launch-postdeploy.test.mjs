@@ -108,6 +108,16 @@ const sourcePaths = [
   "contracts/src/ProgrammableCreate2GraphDeployerV1.sol",
   "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
 ];
+const FRESH_PROVIDER_RPC_URLS = Object.freeze({
+  robinhood: Object.freeze([
+    "https://lb.drpc.live/robinhood/protected_test_credential_0123456789",
+    "https://robinhood-mainnet.g.alchemy.com/v2/protected_test_credential_0123456789",
+  ]),
+  ethereum: Object.freeze([
+    "https://lb.drpc.org/ogrpc?network=ethereum&dkey=protected_test_credential_0123456789",
+    "https://release-canary.ethereum-mainnet.quiknode.pro/protected_test_credential_0123456789/",
+  ]),
+});
 const template = JSON.parse(await readFile(path.join(repositoryRoot, bindingPath), "utf8"));
 const postdeploymentSchemaNames = [
   "cli-release-binding", "stage-bundle", "backend-promotion-input",
@@ -378,23 +388,87 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
       responseBytes: ambiguous,
     }), /contain exactly|successful JSON-RPC/u);
 
-    const endpointCanary = "credentialslug-do-not-publish";
-    assert.equal(validateRobinhoodCaptureEndpoint(
-      `https://${endpointCanary}.g.alchemy.com/v2/${endpointCanary}?token=${endpointCanary}`,
-      "robinhood",
-      "alchemy",
-    ), true);
+    const endpointCanary = "credentialslug_do_not_publish_0123456789";
+    const acceptedEndpoints = [
+      [
+        `https://lb.drpc.live/robinhood/${endpointCanary}`,
+        "robinhood",
+        "drpc",
+      ],
+      [
+        `https://lb.drpc.org/ogrpc?network=robinhood&dkey=${endpointCanary}`,
+        "robinhood",
+        "drpc",
+      ],
+      [
+        `https://lb.drpc.org/ogrpc?network=robinhood-mainnet&dkey=${endpointCanary}`,
+        "robinhood",
+        "drpc",
+      ],
+      [
+        `https://robinhood-mainnet.g.alchemy.com/v2/${endpointCanary}`,
+        "robinhood",
+        "alchemy",
+      ],
+      [
+        `https://lb.drpc.live/ethereum/${endpointCanary}`,
+        "ethereum",
+        "drpc",
+      ],
+      [
+        `https://lb.drpc.org/ogrpc?network=ethereum-mainnet&dkey=${endpointCanary}`,
+        "ethereum",
+        "drpc",
+      ],
+      [
+        `https://release-canary.ethereum-mainnet.quiknode.pro/${endpointCanary}/`,
+        "ethereum",
+        "quicknode",
+      ],
+    ];
+    for (const [endpoint, layer, providerId] of acceptedEndpoints) {
+      assert.equal(validateRobinhoodCaptureEndpoint(endpoint, layer, providerId), true);
+    }
     const publicIdentity = built.input.capture.l2ProviderReadbacks[1].identity;
     assert.equal(JSON.stringify(publicIdentity).includes(endpointCanary), false);
     assert.deepEqual(Object.keys(publicIdentity), [
       "role", "providerId", "trustDomain", "authentication", "observedAt",
     ]);
-    assert.throws(() => validateRobinhoodCaptureEndpoint(
-      `https://${endpointCanary}:password@rpc.drpc.org/`, "robinhood", "drpc",
-    ), /endpoint pin/u);
-    assert.throws(() => validateRobinhoodCaptureEndpoint(
-      `https://rpc.drpc.org/#${endpointCanary}`, "robinhood", "drpc",
-    ), /endpoint pin/u);
+    const rejectedEndpoints = [
+      [`https://${endpointCanary}:password@lb.drpc.live/robinhood/${endpointCanary}`,
+        "robinhood", "drpc"],
+      [`https://lb.drpc.live/robinhood/${endpointCanary}#fragment`, "robinhood", "drpc"],
+      ["https://rpc.robinhoodchain.com", "robinhood", "drpc"],
+      [`https://robinhood.drpc.org/${endpointCanary}`, "robinhood", "drpc"],
+      ["https://lb.drpc.live/robinhood/docs-demo-credential", "robinhood", "drpc"],
+      [`https://lb.drpc.live/ethereum/${endpointCanary}`, "robinhood", "drpc"],
+      [`https://lb.drpc.org/ogrpc?dkey=${endpointCanary}&network=robinhood`,
+        "robinhood", "drpc"],
+      [`https://lb.drpc.org/ogrpc?network=ethereum&dkey=${endpointCanary}`,
+        "robinhood", "drpc"],
+      [`https://robinhood-mainnet.g.alchemy.com/v1/${endpointCanary}`,
+        "robinhood", "alchemy"],
+      [`https://eth-mainnet.g.alchemy.com/v2/${endpointCanary}`,
+        "robinhood", "alchemy"],
+      [`https://robinhood-mainnet.g.alchemy.com/v2/${endpointCanary}?token=extra`,
+        "robinhood", "alchemy"],
+      [`https://lb.drpc.org/ogrpc?dkey=${endpointCanary}&network=ethereum`,
+        "ethereum", "drpc"],
+      [`https://release-canary.quiknode.pro/${endpointCanary}`,
+        "ethereum", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}`,
+        "ethereum", "quicknode"],
+      [`https://docs-demo.ethereum-mainnet.quiknode.pro/${endpointCanary}`,
+        "ethereum", "quicknode"],
+      [`https://release-canary.ethereum-mainnet.quiknode.pro/${endpointCanary}?extra=1`,
+        "ethereum", "quicknode"],
+    ];
+    for (const [endpoint, layer, providerId] of rejectedEndpoints) {
+      assert.throws(
+        () => validateRobinhoodCaptureEndpoint(endpoint, layer, providerId),
+        /endpoint pin/u,
+      );
+    }
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
@@ -426,8 +500,22 @@ test("authenticated raw capture deterministically materializes a closed test-onl
       "stageBundleDigest",
     ]);
     assert.equal(bundle.captureClosure.postingEvent.batchNumber, "153046");
-    assert.equal(bundle.captureClosure.sourcify[0].creationMatch, "exact_match");
-    assert.equal(bundle.captureClosure.sourcify[0].runtimeMatch, "exact_match");
+    assert.equal(bundle.captureClosure.sourcify[0].creationMatch, "match");
+    assert.equal(bundle.captureClosure.sourcify[0].runtimeMatch, "match");
+    assert.equal(
+      bundle.captureClosure.sourcify[0].providerClassification,
+      "PARTIAL_NO_CBOR_EXACT_BYTES",
+    );
+    assert.equal(bundle.captureClosure.sourcify[0].providerReleaseAuthority, false);
+    assert.equal(bundle.sourceVerification.providerReleaseAuthority, false);
+    assert.equal(
+      bundle.sourceVerification.exactSourceBinding.deploymentTransactionHash,
+      bundle.captureClosure.l2ProviderReadbacks[0].transactionHash,
+    );
+    assert.equal(
+      bundle.sourceVerification.exactSourceBinding.sourceTree,
+      fixture.tree,
+    );
     assert.equal(bundle.sourceClosure.revision, fixture.revision);
     assert.equal(bundle.sourceClosure.protectedRef, "refs/heads/production");
     assert.equal(bundle.consumerInputs.indexer.captureClosureDigest,
@@ -441,6 +529,37 @@ test("authenticated raw capture deterministically materializes a closed test-onl
     await assert.rejects(
       readFile(path.join(fixture.root, ROBINHOOD_LIVE_DEPLOYMENT_PATH)),
       /ENOENT/u,
+    );
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("rejects a fully redigested substitution of the exact source/build/transaction binding", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const built = await buildInput(fixture);
+    const bundle = await materialize(fixture, built);
+    const tampered = structuredClone(bundle);
+    const binding = tampered.sourceVerification.exactSourceBinding;
+    binding.deploymentTransactionHash = hash32("substituted-source-binding-transaction");
+    binding.bindingDigest = framed(
+      "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1",
+      { ...binding, bindingDigest: null },
+    );
+    const { evidenceDigest: _sourceDigest, ...sourcePreimage } = tampered.sourceVerification;
+    tampered.sourceVerification.evidenceDigest = framed(
+      "programmable.robinhood-custom-launch.source-verification-closure.v5",
+      sourcePreimage,
+    );
+    const { stageBundleDigest: _stageDigest, ...stagePreimage } = tampered;
+    tampered.stageBundleDigest = framed(
+      "programmable.robinhood-custom-launch.stage-bundle.v1",
+      stagePreimage,
+    );
+    await assert.rejects(
+      verify(fixture, built, tampered),
+      /stage bundle and authenticated capture sidecar/u,
     );
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
@@ -1065,8 +1184,9 @@ test("rejects recomputed adversarial raw capture variants", async () => {
     ["wrong SequencerInbox", { wrongSequencerInbox: true }, /pinned.*batch|SequencerInbox/iu],
     ["posting receipt target", { wrongPostingReceiptTarget: true }, /posting receipt.*inclusion/u],
     ["finalized reorg", { finalizedRereadHash: hash32("reorg") }, /changed on reread/u],
-    ["partial Sourcify", { sourcifyMatch: "match" }, /exact creation-and-runtime/u],
-    ["wrong Sourcify address", { wrongSourcifyAddress: true }, /exact creation-and-runtime/u],
+    ["impossible no-CBOR exact Sourcify", { sourcifyMatch: "exact_match" }, /appendCBOR=false/u],
+    ["missing Sourcify match", { sourcifyMatch: null }, /appendCBOR=false/u],
+    ["wrong Sourcify address", { wrongSourcifyAddress: true }, /appendCBOR=false/u],
     ["reordered inventory", { reorderL2Inventory: true }, /missing or reorders/u],
     ["late external code", { lateExternalCode: true }, /runtime code hash|transition/u],
     ["preexisting external code", { preexistingExternalCode: true }, /runtime code hash|transition/u],
@@ -1537,16 +1657,7 @@ test("fresh apply-time provider replay revalidates the complete raw inventory an
   try {
     const built = await buildInput(fixture);
     const bundle = await materialize(fixture, built);
-    const rpcUrls = {
-      robinhood: [
-        "https://robinhood.drpc.org/protected-test-key",
-        "https://robinhood.g.alchemy.com/v2/protected-test-key",
-      ],
-      ethereum: [
-        "https://ethereum.drpc.org/protected-test-key",
-        "https://ethereum.quiknode.pro/protected-test-key",
-      ],
-    };
+    const rpcUrls = FRESH_PROVIDER_RPC_URLS;
     const replayed = await freshVerifyRobinhoodProviderReadbacks({
       capture: built.input.capture,
       captureClosure: bundle.captureClosure,
@@ -1571,6 +1682,28 @@ test("fresh apply-time provider replay revalidates the complete raw inventory an
       replayed.freshReadbackDigest,
       "an older provider freshness digest must not replay at a later observation instant",
     );
+    let substitutedEndpointFetches = 0;
+    await assert.rejects(
+      freshVerifyRobinhoodProviderReadbacks({
+        capture: built.input.capture,
+        captureClosure: bundle.captureClosure,
+        rpcUrls: {
+          robinhood: [
+            "https://lb.drpc.org/ogrpc?dkey=protected_test_credential_0123456789&network=robinhood",
+            FRESH_PROVIDER_RPC_URLS.robinhood[1],
+          ],
+          ethereum: FRESH_PROVIDER_RPC_URLS.ethereum,
+        },
+        fetch: async () => {
+          substitutedEndpointFetches += 1;
+          throw new Error("substituted endpoint must fail before a provider request");
+        },
+        ...testCaptureDependencies,
+        now: () => new Date("2026-08-29T18:03:30.000Z"),
+      }),
+      /exact credentialed endpoint pin/u,
+    );
+    assert.equal(substitutedEndpointFetches, 0);
     await assert.rejects(
       freshVerifyRobinhoodProviderReadbacks({
         capture: built.input.capture,
@@ -1791,7 +1924,7 @@ async function buildInput(fixture, options = {}) {
   ]);
   const sourcifyNormalized = sourcifyResponses.map(({ normalized }) => normalized);
   const sourceVerificationClosureDigest = framed(
-    "programmable.robinhood-custom-launch.sourcify-response-closure.v4",
+    "programmable.robinhood-custom-launch.sourcify-response-closure.v5",
     sourcifyNormalized,
   );
   const sourceEntries = await Promise.all([...sourcePaths].sort(bufferCompare).map(async (relativePath) => {
@@ -2234,12 +2367,12 @@ async function sourcifyResponse(fixture, target, options, index) {
   const address = index === 0 && options.wrongSourcifyAddress
     ? ROOTS.poolManager.address : target.address;
   const response = {
-    match: options.sourcifyMatch ?? "exact_match",
-    creationMatch: options.sourcifyMatch ?? "exact_match",
-    runtimeMatch: options.sourcifyMatch ?? "exact_match",
+    match: options.sourcifyMatch === undefined ? "match" : options.sourcifyMatch,
+    creationMatch: options.sourcifyMatch === undefined ? "match" : options.sourcifyMatch,
+    runtimeMatch: options.sourcifyMatch === undefined ? "match" : options.sourcifyMatch,
     chainId: "4663",
     address,
-    verifiedAt: "2026-08-29T17:55:00.000Z",
+    verifiedAt: options.sourcifyVerifiedAt ?? "2026-08-29T17:55:00Z",
     matchId: String(index + 100),
     compilation: {
       language: "Solidity",
@@ -2271,6 +2404,8 @@ async function sourcifyResponse(fixture, target, options, index) {
     match: response.match,
     creationMatch: response.creationMatch,
     runtimeMatch: response.runtimeMatch,
+    providerClassification: "PARTIAL_NO_CBOR_EXACT_BYTES",
+    providerReleaseAuthority: false,
     observedAt: OBSERVED_AT,
     compiler: {
       language: "Solidity",
@@ -2295,7 +2430,7 @@ async function sourcifyResponse(fixture, target, options, index) {
     normalizedVerificationDigest: null,
   };
   normalized.normalizedVerificationDigest = framed(
-    "programmable.robinhood-custom-launch.sourcify-normalized-response.v1",
+    "programmable.robinhood-custom-launch.sourcify-normalized-response.v2",
     { ...normalized, normalizedVerificationDigest: null },
   );
   return { raw, normalized };
@@ -2744,23 +2879,23 @@ function freshBackendFetch(input, {
 }
 
 function freshRpcFetch(built, options = {}) {
-  const providersByHostname = new Map([
-    ["robinhood.drpc.org", built.input.capture.l2ProviderReadbacks[0]],
-    ["robinhood.g.alchemy.com", built.input.capture.l2ProviderReadbacks[1]],
-    ["ethereum.drpc.org", built.input.capture.ethereumProviderReadbacks[0]],
-    ["ethereum.quiknode.pro", built.input.capture.ethereumProviderReadbacks[1]],
+  const providersByEndpoint = new Map([
+    [FRESH_PROVIDER_RPC_URLS.robinhood[0], built.input.capture.l2ProviderReadbacks[0]],
+    [FRESH_PROVIDER_RPC_URLS.robinhood[1], built.input.capture.l2ProviderReadbacks[1]],
+    [FRESH_PROVIDER_RPC_URLS.ethereum[0], built.input.capture.ethereumProviderReadbacks[0]],
+    [FRESH_PROVIDER_RPC_URLS.ethereum[1], built.input.capture.ethereumProviderReadbacks[1]],
   ]);
   return async (urlValue, init) => {
     const url = new URL(urlValue);
     const request = JSON.parse(Buffer.from(init.body).toString("utf8"));
-    const provider = providersByHostname.get(url.hostname);
-    if (provider === undefined) throw new Error(`unexpected test RPC ${url.hostname}`);
+    const provider = providersByEndpoint.get(url.toString());
+    if (provider === undefined) throw new Error("unexpected test RPC endpoint");
     const entry = provider.entries.find((candidate) =>
       candidate.method === request.method
       && canonicalizeJson(candidate.params) === canonicalizeJson(request.params));
     if (entry === undefined) throw new Error(`unexpected test RPC method ${request.method}`);
     const result = options.secondL2Batch !== undefined
-      && url.hostname === "robinhood.g.alchemy.com"
+      && url.toString() === FRESH_PROVIDER_RPC_URLS.robinhood[1]
       && entry.key === "findBatchContainingBlock"
       ? abiWord(options.secondL2Batch)
       : entry.result;

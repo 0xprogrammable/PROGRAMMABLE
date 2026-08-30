@@ -438,7 +438,10 @@ assertJsonEqual(
     atomicDeploymentEvidence.properties.sourceVerification.properties,
   ).map(([name, schema]) => [name, schema.const])),
   {
-    sourcifyExactMatchCoveredContracts: [
+    sourcifyProviderMatchCoveredContracts: [
+      "programmableLaunchStampRouter", "graphFactory",
+    ],
+    exactByteSourceBuildTransactionCoveredContracts: [
       "programmableLaunchStampRouter", "graphFactory",
     ],
     officialSourcePinnedCoveredContracts: ["permitAuthority"],
@@ -880,6 +883,49 @@ assert.equal(
   sourceVerificationStatusV4["x-programmable-order"],
   "updatedAt == max components[*].updatedAt",
   "V4 source-verification aggregate timestamp must be explicit",
+);
+const exactSourceVerificationComponent = sourceVerificationStatusV4.properties.components.items.oneOf
+  .find(({ properties }) => properties.status.const === "exact_match");
+assertClosedSchemaFields(exactSourceVerificationComponent, [
+  "targetId", "address", "status", "providerObservation", "exactSourceAuthority",
+  "exactSourceBinding", "updatedAt",
+], "V4 exact source-verification component");
+assertClosedSchemaFields(exactSourceVerificationComponent.properties.providerObservation, [
+  "provider", "classification", "match", "creationMatch", "runtimeMatch",
+  "releaseAuthority", "evidenceDigest",
+], "V4 Sourcify provider observation");
+assert.equal(
+  exactSourceVerificationComponent.properties.providerObservation.properties.releaseAuthority.const,
+  false,
+  "Sourcify no-CBOR observation must never be release authority",
+);
+assert.equal(
+  exactSourceVerificationComponent.properties.exactSourceAuthority.const,
+  "protected-hosted-build-finalized-transaction-bytecode",
+  "V4 exact source authority must be the independent composite",
+);
+assertClosedSchemaFields(exactSourceVerificationComponent.properties.exactSourceBinding, [
+  "schemaVersion", "authority", "coveredEvidence", "bindingDigest",
+], "V4 exact source composite binding");
+assert.equal(
+  exactSourceVerificationComponent.properties.exactSourceBinding.properties.schemaVersion.const,
+  "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1",
+  "V4 exact source status must bind the canonical composite schema",
+);
+assert.deepEqual(
+  exactSourceVerificationComponent.properties.exactSourceBinding.properties.coveredEvidence.const,
+  [
+    "protected-source-tree",
+    "source-closure",
+    "hosted-build-artifact",
+    "standard-json-input",
+    "compiler-binary",
+    "compiler-settings",
+    "finalized-creation-transaction",
+    "creation-bytecode",
+    "runtime-bytecode",
+  ],
+  "V4 exact source status must publish the full independent evidence closure",
 );
 assert.equal(
   v4.components.schemas.CustomLaunchResourceV4.required.includes("sourceVerification"),

@@ -289,7 +289,12 @@ const atomicDeploymentEvidencePreimage = Object.freeze({
   resultingContracts: atomicResultingContracts,
   ethereumFinalityEvidence: safeEthereumFinalityEvidence,
   sourceVerification: {
-    sourcifyExactMatchCoveredContracts: ["programmableLaunchStampRouter", "graphFactory"],
+    sourcifyProviderMatchCoveredContracts: [
+      "programmableLaunchStampRouter", "graphFactory",
+    ],
+    exactByteSourceBuildTransactionCoveredContracts: [
+      "programmableLaunchStampRouter", "graphFactory",
+    ],
     officialSourcePinnedCoveredContracts: ["permitAuthority"],
   },
 });
@@ -1027,21 +1032,50 @@ function framedSha256(domain, value) {
 }
 
 export function validV4SourceVerificationStatus(overrides = {}) {
+  const exactEvidence = (providerDigestDigit, bindingDigestDigit) => ({
+    providerObservation: {
+      provider: "sourcify-v2",
+      classification: "PARTIAL_NO_CBOR_EXACT_BYTES",
+      match: "match",
+      creationMatch: "match",
+      runtimeMatch: "match",
+      releaseAuthority: false,
+      evidenceDigest: `sha256:${providerDigestDigit.repeat(64)}`,
+    },
+    exactSourceAuthority: "protected-hosted-build-finalized-transaction-bytecode",
+    exactSourceBinding: {
+      schemaVersion:
+        "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1",
+      authority: "protected-hosted-build-finalized-transaction-bytecode",
+      coveredEvidence: [
+        "protected-source-tree",
+        "source-closure",
+        "hosted-build-artifact",
+        "standard-json-input",
+        "compiler-binary",
+        "compiler-settings",
+        "finalized-creation-transaction",
+        "creation-bytecode",
+        "runtime-bytecode",
+      ],
+      bindingDigest: `sha256:${bindingDigestDigit.repeat(64)}`,
+    },
+  });
   const components = overrides.components ?? [
     {
       targetId: "hook",
       address: "0x2222222222222222222222222222222222222222",
       status: "exact_match",
-      exactMatchProvider: "sourcify-v2",
-      evidenceDigest: `sha256:${"8".repeat(64)}`,
+      ...exactEvidence("8", "a"),
       updatedAt: "2026-08-29T12:31:00.000Z",
     },
     {
       targetId: "initializer",
       address: "0x3333333333333333333333333333333333333333",
       status: "retrying",
-      exactMatchProvider: null,
-      evidenceDigest: null,
+      providerObservation: null,
+      exactSourceAuthority: null,
+      exactSourceBinding: null,
       updatedAt: "2026-08-29T12:32:00.000Z",
       nextAttemptAt: "2026-08-29T12:34:00.000Z",
     },
@@ -1049,8 +1083,7 @@ export function validV4SourceVerificationStatus(overrides = {}) {
       targetId: "token",
       address: "0x1111111111111111111111111111111111111111",
       status: "exact_match",
-      exactMatchProvider: "sourcify-v2",
-      evidenceDigest: `sha256:${"9".repeat(64)}`,
+      ...exactEvidence("9", "b"),
       updatedAt: "2026-08-29T12:30:00.000Z",
     },
   ];

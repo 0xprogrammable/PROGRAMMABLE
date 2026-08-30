@@ -174,6 +174,28 @@ const ROOTS = Object.freeze({
       "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
   }),
 });
+const EXACT_SOURCE_BUILD_TARGETS = Object.freeze([
+  Object.freeze({
+    contract: "programmableLaunchStampRouter",
+    address: ROOTS.programmableLaunchStampRouter.address,
+    standardJsonInputSha256:
+      "sha256:6abca24d06b013599f4ff63e049976419c3f17455fa9bc343b15ec0d6e6a078a",
+    creationCodeHash:
+      "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
+    runtimeCodeHash: ROOTS.programmableLaunchStampRouter.runtimeCodeHash,
+  }),
+  Object.freeze({
+    contract: "graphFactory",
+    address: ROOTS.graphFactory.address,
+    standardJsonInputSha256:
+      "sha256:8ab811a215d70b1d5aef0c71a47153173953ee78d7632725413833888369ec4d",
+    creationCodeHash:
+      "0x84f7cb8e9e445d3322249dbc2b9efc65bb9c7a8ba26902aafef9b0552f4bc208",
+    runtimeCodeHash: ROOTS.graphFactory.runtimeCodeHash,
+  }),
+]);
+const HOSTED_REPRODUCTION_COMPILER_SHA256 =
+  "0xd5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef";
 
 const ATOMIC_ROOT_NAMES = Object.freeze([
   "permitAuthority",
@@ -231,7 +253,9 @@ const DOMAINS = Object.freeze({
   permit2: "programmable.custom-launch-genesis-provenance.v1",
   externalReadback: "programmable.custom-launch-deployment-provider-readback.v2",
   sourceVerification:
-    "programmable.robinhood-custom-launch.source-verification-closure.v4",
+    "programmable.robinhood-custom-launch.source-verification-closure.v5",
+  exactSourceBinding:
+    "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1",
   backendReleaseAssets:
     "programmable.robinhood-custom-launch.backend-release-assets.v1",
   stageBundle: ROBINHOOD_STAGE_BUNDLE_SCHEMA,
@@ -808,14 +832,60 @@ function normalizeFinalityInput(value, profile, blockNumber, blockHash) {
   return { ...normalized, evidenceDigest: framedSha256(DOMAINS.finality, normalized) };
 }
 
-function normalizeSourceVerification(value) {
+function exactSourceBindingFromCapture(captureClosure) {
+  const provider = captureClosure.l2ProviderReadbacks[0];
+  const compilerSettingsByContract = new Map(
+    captureClosure.sourcify.map((entry) => [
+      entry.contract,
+      entry.compiler.compilerSettingsDigest,
+    ]),
+  );
+  const normalized = {
+    schemaVersion: DOMAINS.exactSourceBinding,
+    authority: "protected-hosted-build-finalized-transaction-bytecode",
+    coveredContracts: EXACT_SOURCE_BUILD_TARGETS.map(({ contract }) => contract),
+    sourceRevision: captureClosure.sourceOrigin.revision,
+    sourceTree: captureClosure.sourceOrigin.tree,
+    captureAuthorizationDigest: captureClosure.authorization.verificationDigest,
+    productionVerifyProofSha256:
+      captureClosure.authorization.productionVerifyProofSha256,
+    productionVerifyArtifactDigest:
+      captureClosure.authorization.productionVerifyArtifactDigest,
+    compilerVersion: "0.8.26+commit.8a97fa7a",
+    hostedReproductionCompilerSha256: HOSTED_REPRODUCTION_COMPILER_SHA256,
+    deploymentTransactionHash: provider.transactionHash,
+    deploymentBlockNumber: provider.deploymentBlock.blockNumber,
+    deploymentBlockHash: provider.deploymentBlock.blockHash,
+    ownerTransactionDataHash: OWNER_CALLDATA_HASH,
+    contracts: EXACT_SOURCE_BUILD_TARGETS.map((target) => ({
+      ...target,
+      compilerSettingsDigest: compilerSettingsByContract.get(target.contract),
+    })),
+    bindingDigest: null,
+  };
+  if (normalized.contracts.some(({ compilerSettingsDigest }) =>
+    typeof compilerSettingsDigest !== "string")) {
+    throw new TypeError("exact source binding is missing compiler settings evidence");
+  }
+  normalized.bindingDigest = framedSha256(
+    DOMAINS.exactSourceBinding,
+    { ...normalized, bindingDigest: null },
+  );
+  return Object.freeze(normalized);
+}
+
+function normalizeSourceVerification(value, captureClosure) {
   const label = "sourceVerification";
   assertExactKeys(value, [
     "schemaVersion", "provider", "graphFactory", "programmableLaunchStampRouter",
+    "providerReleaseAuthority", "exactSourceAuthority", "exactSourceBinding",
     "permitAuthority", "sourceVerificationClosureDigest",
   ], label);
-  if (value.schemaVersion !== DOMAINS.sourceVerification || value.provider !== "sourcify-v2") {
-    throw new TypeError(`${label} must use the exact Sourcify V2 closure`);
+  if (value.schemaVersion !== DOMAINS.sourceVerification || value.provider !== "sourcify-v2"
+    || value.providerReleaseAuthority !== false
+    || value.exactSourceAuthority
+      !== "protected-hosted-build-finalized-transaction-bytecode") {
+    throw new TypeError(`${label} must use the no-CBOR provider match plus exact byte binding`);
   }
   const sourceRoots = {
     graphFactory: {
@@ -838,6 +908,7 @@ function normalizeSourceVerification(value) {
     const entry = value[name];
     assertExactKeys(entry, [
       "chainId", "address", "match", "creationMatch", "runtimeMatch", "observedAt",
+      "providerClassification", "providerReleaseAuthority",
       "compiler", "sourceFilesDigest", "urlPath", "httpStatus",
       "contentType", "standardJsonInputPath",
       "standardJsonInputSha256", "normalizedVerificationDigest",
@@ -846,18 +917,22 @@ function normalizeSourceVerification(value) {
       "language", "compiler", "compilerVersion", "name", "fullyQualifiedName",
       "compilerSettingsDigest",
     ], `${entryLabel}.compiler`);
-    if (entry.chainId !== CHAIN_ID || entry.match !== "exact_match"
-      || entry.creationMatch !== "exact_match" || entry.runtimeMatch !== "exact_match"
+    if (entry.chainId !== CHAIN_ID || entry.match !== "match"
+      || entry.creationMatch !== "match" || entry.runtimeMatch !== "match"
+      || entry.providerClassification !== "PARTIAL_NO_CBOR_EXACT_BYTES"
+      || entry.providerReleaseAuthority !== false
       || entry.httpStatus !== 200 || entry.contentType !== "application/json"
       || entry.standardJsonInputPath !== expected.standardJsonInputPath) {
-      throw new TypeError(`${entryLabel} is not the exact prepared compiler input match`);
+      throw new TypeError(`${entryLabel} is not the no-CBOR provider source match`);
     }
     return [name, {
       chainId: CHAIN_ID,
       address: exactAddress(entry.address, `${entryLabel}.address`, expected.address),
-      match: "exact_match",
-      creationMatch: "exact_match",
-      runtimeMatch: "exact_match",
+      match: "match",
+      creationMatch: "match",
+      runtimeMatch: "match",
+      providerClassification: "PARTIAL_NO_CBOR_EXACT_BYTES",
+      providerReleaseAuthority: false,
       observedAt: isoDate(entry.observedAt, `${entryLabel}.observedAt`),
       compiler: {
         language: entry.compiler.language,
@@ -894,10 +969,17 @@ function normalizeSourceVerification(value) {
   if (value.permitAuthority.kind !== "official-source-pinned") {
     throw new TypeError(`${label}.permitAuthority.kind differs`);
   }
+  const exactSourceBinding = exactSourceBindingFromCapture(captureClosure);
+  if (canonicalizeJson(value.exactSourceBinding) !== canonicalizeJson(exactSourceBinding)) {
+    throw new TypeError(`${label}.exactSourceBinding differs from source/build/transaction bytes`);
+  }
   const normalized = {
     schemaVersion: DOMAINS.sourceVerification,
     provider: "sourcify-v2",
+    providerReleaseAuthority: false,
+    exactSourceAuthority: "protected-hosted-build-finalized-transaction-bytecode",
     ...normalizedRoots,
+    exactSourceBinding,
     permitAuthority: {
       address: exactAddress(
         value.permitAuthority.address,
@@ -1153,7 +1235,10 @@ function buildAtomicDeploymentEvidence(providers, results, ethereumFinalityEvide
     resultingContracts: results,
     ethereumFinalityEvidence,
     sourceVerification: {
-      sourcifyExactMatchCoveredContracts: [
+      sourcifyProviderMatchCoveredContracts: [
+        "programmableLaunchStampRouter", "graphFactory",
+      ],
+      exactByteSourceBuildTransactionCoveredContracts: [
         "programmableLaunchStampRouter", "graphFactory",
       ],
       officialSourcePinnedCoveredContracts: ["permitAuthority"],
@@ -1207,6 +1292,8 @@ function sourceVerificationFromCapture(captureClosure) {
     match: entry.match,
     creationMatch: entry.creationMatch,
     runtimeMatch: entry.runtimeMatch,
+    providerClassification: entry.providerClassification,
+    providerReleaseAuthority: entry.providerReleaseAuthority,
     observedAt: entry.observedAt,
     compiler: structuredClone(entry.compiler),
     sourceFilesDigest: entry.sourceFilesDigest,
@@ -1220,7 +1307,10 @@ function sourceVerificationFromCapture(captureClosure) {
   return {
     schemaVersion: DOMAINS.sourceVerification,
     provider: "sourcify-v2",
+    providerReleaseAuthority: false,
+    exactSourceAuthority: "protected-hosted-build-finalized-transaction-bytecode",
     ...entries,
+    exactSourceBinding: exactSourceBindingFromCapture(captureClosure),
     permitAuthority: {
       address: ROOTS.permitAuthority.address,
       kind: "official-source-pinned",
@@ -1301,7 +1391,10 @@ export async function buildRobinhoodChainDeployment({
   };
   const normalizedDescriptor = normalizeV4ChainDeployment(descriptor);
   const sourceVerificationInput = sourceVerificationFromCapture(captureClosure);
-  const sourceVerification = normalizeSourceVerification(sourceVerificationInput);
+  const sourceVerification = normalizeSourceVerification(
+    sourceVerificationInput,
+    captureClosure,
+  );
   return {
     descriptor: normalizedDescriptor,
     chainDeploymentDescriptorDigest: hashV4ChainDeployment(normalizedDescriptor),
