@@ -33,6 +33,7 @@ import {
   ROBINHOOD_PRODUCTION_REPOSITORY_ID,
   ROBINHOOD_SEQUENCER_INBOX,
   SEQUENCER_BATCH_DELIVERED_TOPIC,
+  assertRobinhoodCaptureL2EndpointCommitments,
   buildRobinhoodPostdeploymentInput,
   buildRobinhoodPublicRpcEntry,
   createRobinhoodResponseBudget,
@@ -40,6 +41,7 @@ import {
   robinhoodRpcResponseLimit,
   validateRobinhoodCredentialedProviderEndpoint,
 } from "./robinhood-custom-launch-capture-v2.mjs";
+import { resolveReviewedRobinhoodProviderCommitments } from "./robinhood-custom-launch-provider-commitment-custody.mjs";
 
 const execFileAsync = promisify(execFile);
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
@@ -555,11 +557,19 @@ export async function captureRobinhoodPostdeployment(options) {
     l1: [process.env.ETHEREUM_MAINNET_RPC_URL_PRIMARY,
       process.env.ETHEREUM_MAINNET_RPC_URL_SECONDARY],
   };
+  const l2EndpointCommitments =
+    await resolveReviewedRobinhoodProviderCommitments({
+      env: process.env,
+      repositoryRoot: options.repositoryRoot,
+    });
   if ([...endpoints.l2, ...endpoints.l1].some((value) => !value)) {
     throw new TypeError("capture requires four protected provider endpoints");
   }
-  validateRobinhoodCaptureEndpoint(endpoints.l2[0], "robinhood", "drpc");
-  validateRobinhoodCaptureEndpoint(endpoints.l2[1], "robinhood", "alchemy");
+  const reviewedL2EndpointCommitments =
+    assertRobinhoodCaptureL2EndpointCommitments({
+      rpcUrls: endpoints.l2,
+      endpointCommitments: l2EndpointCommitments,
+    });
   validateRobinhoodCaptureEndpoint(endpoints.l1[0], "ethereum", "drpc");
   validateRobinhoodCaptureEndpoint(endpoints.l1[1], "ethereum", "quicknode");
   const observed = new Date();
@@ -567,8 +577,8 @@ export async function captureRobinhoodPostdeployment(options) {
   const expiresAt = new Date(observed.getTime() + 15 * 60 * 1000).toISOString();
   const responseBudget = createRobinhoodResponseBudget();
   const l2 = await Promise.all([
-    collectL2(endpoints.l2[0], { role: "primary", providerId: "drpc",
-      trustDomain: "drpc.org" }, options.transactionHash, observedAt, responseBudget),
+    collectL2(endpoints.l2[0], { role: "primary", providerId: "quicknode",
+      trustDomain: "quicknode.com" }, options.transactionHash, observedAt, responseBudget),
     collectL2(endpoints.l2[1], { role: "secondary", providerId: "alchemy",
       trustDomain: "alchemy.com" }, options.transactionHash, observedAt, responseBudget),
   ]);
@@ -595,6 +605,7 @@ export async function captureRobinhoodPostdeployment(options) {
     observedAt,
     expiresAt,
     providers: l2.map(({ normalized }) => normalized),
+    l2ProviderEndpointCommitments: reviewedL2EndpointCommitments,
     l2ProviderReadbacks: l2.map(({ readback }) => readback),
     ethereumProviderReadbacks: l1,
     sourcifyResponses,

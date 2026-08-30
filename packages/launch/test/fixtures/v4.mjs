@@ -63,7 +63,7 @@ const safeEthereumFinalityPreimage = Object.freeze({
   },
   batchNumber: "153046",
   l2Providers: [
-    { providerId: "drpc", trustDomain: "drpc.org", l1Confirmations: "12" },
+    { providerId: "quicknode", trustDomain: "quicknode.com", l1Confirmations: "12" },
     { providerId: "alchemy", trustDomain: "alchemy.com", l1Confirmations: "12" },
   ],
   ethereumProviders: [
@@ -110,7 +110,7 @@ const atomicResultingContracts = Object.freeze([
     "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388"],
 ].map(([contract, contractAddress, runtimeCodeHash]) => {
   const providerReadbacks = Object.freeze([
-    ["drpc", "drpc.org"],
+    ["quicknode", "quicknode.com"],
     ["alchemy", "alchemy.com"],
   ].map(([providerId, trustDomain]) => {
     const preimage = Object.freeze({
@@ -179,8 +179,8 @@ const safeConfigurationEvidencePreimage = Object.freeze({
   fallbackHandlerSlot: storageWord("0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99"),
   guardSlot: codeHash("0"),
   primaryProvider: {
-    providerId: "drpc",
-    trustDomain: "drpc.org",
+    providerId: "quicknode",
+    trustDomain: "quicknode.com",
     evidenceDigest: `sha256:${"5".repeat(64)}`,
   },
   secondaryProvider: {
@@ -201,7 +201,7 @@ const safeConfigurationEvidence = Object.freeze({
 });
 
 const permit2ProviderReadbacks = Object.freeze([
-  ["drpc", "drpc.org"],
+  ["quicknode", "quicknode.com"],
   ["alchemy", "alchemy.com"],
 ].map(([providerId, trustDomain]) => {
   const preimage = Object.freeze({
@@ -243,7 +243,7 @@ const atomicReceiptLogsDigest = framedSha256Json(
   atomicReceiptLogs,
 );
 const atomicProviderReadbacks = Object.freeze([
-  ["drpc", "drpc.org", "1", "2"],
+  ["quicknode", "quicknode.com", "1", "2"],
   ["alchemy", "alchemy.com", "3", "4"],
 ].map(([providerId, trustDomain, responseDigit, receiptDigit]) => {
   const preimage = Object.freeze({
@@ -357,7 +357,7 @@ const externalRootDeploymentEvidence = Object.freeze([
   const previousBlockHash = codeHash(String((index + 4) % 10));
   const previousBlockNumber = (BigInt(startBlock) - 1n).toString(10);
   const providerReadbacks = Object.freeze([
-    ["drpc", "drpc.org"],
+    ["quicknode", "quicknode.com"],
     ["alchemy", "alchemy.com"],
   ].map(([providerId, trustDomain]) => {
     const preimage = Object.freeze({

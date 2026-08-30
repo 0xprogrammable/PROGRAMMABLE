@@ -197,12 +197,16 @@ jobs:
           L1_POSTING_BLOCK: ${{ inputs.l1_posting_block }}
           ROBINHOOD_MAINNET_RPC_URL_PRIMARY: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL_PRIMARY }}
           ROBINHOOD_MAINNET_RPC_URL_SECONDARY: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL_SECONDARY }}
+          ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY: ${{ secrets.ROBINHOOD_MAINNET_QUICKNODE_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E }}
+          ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY: ${{ secrets.ROBINHOOD_MAINNET_ALCHEMY_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E }}
           ETHEREUM_MAINNET_RPC_URL_PRIMARY: ${{ secrets.ETHEREUM_MAINNET_RPC_URL_PRIMARY }}
           ETHEREUM_MAINNET_RPC_URL_SECONDARY: ${{ secrets.ETHEREUM_MAINNET_RPC_URL_SECONDARY }}
         run: |
           set -euo pipefail
           [[ "$DEPLOYMENT_TX_HASH" =~ ^0x[0-9a-f]{64}$ ]]
           [[ "$L1_POSTING_BLOCK" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY" =~ ^sha256:[0-9a-f]{64}$ ]]
           output="$RUNNER_TEMP/programmable-postdeployment-capture.json"
           node contracts/scripts/capture-robinhood-custom-launch-postdeployment.mjs capture \
             --transaction-hash "$DEPLOYMENT_TX_HASH" \

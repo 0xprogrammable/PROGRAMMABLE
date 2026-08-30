@@ -274,7 +274,7 @@ npm run release:custom-launch:v4:test
 ```
 
 The production assembler pins the prepared artifact bytes, requires the retained ordered
-dRPC/Alchemy historical Phase A L2 evidence and
+QuickNode/Alchemy Phase A L2 evidence and
 dRPC/QuickNode Ethereum evidence, checks the exact Multicall3 envelope, proves D-1 to D code
 transitions, checks the Router getters and full fresh Safe state, binds source closure, and derives
 the live descriptor plus digest. Applying the reviewed bundle is a separate explicit local command.

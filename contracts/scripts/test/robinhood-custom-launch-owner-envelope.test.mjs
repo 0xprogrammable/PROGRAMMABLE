@@ -88,6 +88,7 @@ const HOSTED_VERIFY = Object.freeze({
   verificationMode: "change",
 });
 const FIXED_TIMESTAMP = 1_800_000_000;
+const DEFAULT_OWNER_BALANCE_WEI = 30_000_000_000_000_000n;
 const EXPECTED_SIMULATION = encodeAbiParameters(
   parseAbiParameters("(bool,bytes)[]"),
   [
@@ -152,6 +153,7 @@ function walletRequest(receipt) {
           maxFeePerGas: receipt.transaction.maxFeePerGasQuantity,
           maxPriorityFeePerGas:
             receipt.transaction.maxPriorityFeePerGasQuantity,
+          accessList: [],
           type: receipt.transaction.type,
         },
       ],
@@ -182,6 +184,7 @@ function mockRpc(options = {}) {
   const codeReads = new Map();
   const gasPriceReads = new Map();
   const priorityFeeReads = new Map();
+  const balanceReads = new Map();
   const callReads = new Map();
   const estimateReads = new Map();
   const codeByAddress = new Map();
@@ -279,6 +282,13 @@ function mockRpc(options = {}) {
         ? provider.closingNonce
         : (provider.pendingNonce ?? "0x7");
     }
+    if (method === "eth_getBalance") {
+      const count = (balanceReads.get(providerId) ?? 0) + 1;
+      balanceReads.set(providerId, count);
+      return count > 1 && provider.closingBalance !== undefined
+        ? provider.closingBalance
+        : (provider.balance ?? `0x${DEFAULT_OWNER_BALANCE_WEI.toString(16)}`);
+    }
     if (method === "eth_getCode") {
       const entry = codeByAddress.get(params[0].toLowerCase());
       assert.ok(entry, `unexpected code address ${params[0]}`);
@@ -336,6 +346,14 @@ function mockRpc(options = {}) {
     runtimeCodeHash: (code) => hashByCode.get(code) ?? keccak256(code),
     methodInventory,
     requestInventory,
+  };
+}
+
+function actionTimeRpc(options = {}) {
+  const mock = mockRpc(options);
+  return {
+    rpcClient: mock.rpcClient,
+    runtimeCodeHash: mock.runtimeCodeHash,
   };
 }
 
@@ -536,7 +554,7 @@ test("moving pending heads and provider fee differences use conservative maxima"
   assert.ok(!Object.hasOwn(receipt.checks, "closingFeeAgreement"));
 });
 
-test("implementation inventory contains no balance, signing, or broadcast primitive", async () => {
+test("implementation inventory isolates balance reads to action-time verification and contains no signing or broadcast primitive", async () => {
   const [core, refresh] = await Promise.all([
     readFile(
       path.join(
@@ -556,7 +574,7 @@ test("implementation inventory contains no balance, signing, or broadcast primit
   const implementation = `${core}\n${refresh}`;
   assert.doesNotMatch(
     implementation,
-    /["'](?:eth_getBalance|eth_sendRawTransaction|eth_sendTransaction|eth_sign|eth_signTransaction|personal_sign)["']/u,
+    /["'](?:eth_sendRawTransaction|eth_sendTransaction|eth_sign|eth_signTransaction|personal_sign)["']/u,
   );
   assert.doesNotMatch(
     implementation,
@@ -580,13 +598,17 @@ test("implementation inventory contains no balance, signing, or broadcast primit
       "eth_call",
       "eth_chainId",
       "eth_estimateGas",
+      "eth_gasPrice",
+      "eth_getBalance",
+      "eth_getBlockByNumber",
       "eth_getTransactionCount",
+      "eth_maxPriorityFeePerGas",
     ],
   );
   assert.match(actionTimeImplementation, /readCodes\(/u);
   assert.doesNotMatch(
     actionTimeImplementation,
-    /eth_getBalance|eth_send|eth_sign|wallet_|personal_|signTransaction|requestPermissions/iu,
+    /eth_send|eth_sign|wallet_|personal_|signTransaction|requestPermissions/iu,
   );
   assert.match(core, /ALLOWED_OWNERS\.includes/u);
   assert.doesNotMatch(
@@ -953,7 +975,7 @@ test("CLI parser accepts only the five non-signing review inputs", () => {
   );
 });
 
-test("canonical action-time wallet request binds every type-2 field and rejects extras", async () => {
+test("canonical action-time wallet request requires exact empty accessList and binds every type-2 field", async () => {
   const { receipt } = await prepareEnvelope();
   const request = walletRequest(receipt);
   const summary = assertCanonicalRobinhoodOwnerWalletRequest(receipt, request);
@@ -964,13 +986,18 @@ test("canonical action-time wallet request binds every type-2 field and rejects 
     summary.ownerMaximumGasCostWei,
     receipt.gasPolicy.ownerMaximumGasCostWei,
   );
+  assert.deepEqual(summary.accessList, []);
   assert.ok(!JSON.stringify(summary).includes(receipt.transaction.input));
   assert.ok(!JSON.stringify(summary).includes(RPC_URLS[0]));
   const transactionKeys = Object.keys(request.request.params[0]);
   for (const key of transactionKeys) {
     const mutated = structuredClone(request);
     mutated.request.params[0][key] =
-      key === "from" ? OWNER_1 : `${mutated.request.params[0][key]}0`;
+      key === "from"
+        ? OWNER_1
+        : key === "accessList"
+          ? [{}]
+          : `${mutated.request.params[0][key]}0`;
     assert.throws(
       () => assertCanonicalRobinhoodOwnerWalletRequest(receipt, mutated),
       /differs|canonical/u,
@@ -983,9 +1010,16 @@ test("canonical action-time wallet request binds every type-2 field and rejects 
     () => assertCanonicalRobinhoodOwnerWalletRequest(receipt, extra),
     /key inventory/u,
   );
+  const missingAccessList = structuredClone(request);
+  delete missingAccessList.request.params[0].accessList;
+  assert.throws(
+    () =>
+      assertCanonicalRobinhoodOwnerWalletRequest(receipt, missingAccessList),
+    /key inventory/u,
+  );
 });
 
-test("read-only action-time verifier rebinds source, hosted CI, endpoints, and live chain state", async () => {
+test("read-only action-time verifier rebinds source, CI, endpoints, funding, fees, and live state", async () => {
   const { receipt } = await prepareEnvelope();
   const root = await mkdtemp(
     path.join(os.homedir(), ".robinhood-wallet-request-test-"),
@@ -1031,9 +1065,11 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
         return receipt.hostedVerify;
       },
       rpcClient: actionTimeMock.rpcClient,
+      runtimeCodeHash: actionTimeMock.runtimeCodeHash,
       clock: () => FIXED_TIMESTAMP * 1_000,
     });
     assert.equal(verified.receiptDigest, receipt.receiptDigest);
+    assert.deepEqual(verified.accessList, []);
     assert.deepEqual(verified.actionTimeState, {
       chainId: "0x1237",
       ownerNonce: receipt.transaction.nonce,
@@ -1044,6 +1080,17 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
       closingSimulationVerified: true,
       closingGasEstimate: receipt.simulation.agreedGasEstimate,
       closingVacancyVerified: true,
+      ownerBalanceWei: DEFAULT_OWNER_BALANCE_WEI.toString(),
+      maximumDebitWei: (
+        BigInt(receipt.transaction.gasLimit) *
+        BigInt(receipt.transaction.maxFeePerGas)
+      ).toString(),
+      observedPendingBaseFeePerGasWei: "1000000000",
+      observedGasPriceWei: "2000000000",
+      observedMaxPriorityFeePerGasWei: "0",
+      requiredMaxFeePerGasWei: "2000000000",
+      fundingVerified: true,
+      feeCapsVerified: true,
       rpcResponseBytesConsumed: 0,
     });
     assert.ok(
@@ -1055,8 +1102,12 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
         "eth_call",
         "eth_chainId",
         "eth_estimateGas",
+        "eth_gasPrice",
+        "eth_getBalance",
+        "eth_getBlockByNumber",
         "eth_getCode",
         "eth_getTransactionCount",
+        "eth_maxPriorityFeePerGas",
       ],
     );
     const requestsByProvider = Object.fromEntries(
@@ -1067,12 +1118,12 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
           .map(({ method, params }) => ({ method, params })),
       ]),
     );
-    assert.equal(requestsByProvider.quicknode.length, 22);
+    assert.equal(requestsByProvider.quicknode.length, 42);
     assert.deepEqual(requestsByProvider.quicknode, requestsByProvider.alchemy);
     assert.ok(
       actionTimeMock.requestInventory.every(
         ({ method }) =>
-          !/eth_getBalance|eth_send|wallet_|personal_|sign/iu.test(method),
+          !/eth_send|wallet_|personal_|sign/iu.test(method),
       ),
     );
     await assert.rejects(
@@ -1092,7 +1143,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
             clean: true,
           }),
           hostedVerifyResolver: async () => receipt.hostedVerify,
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /reviewed commitment/u,
@@ -1113,7 +1164,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
             ...receipt.hostedVerify,
             sourceCommit: "4".repeat(40),
           }),
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /protected source differs/u,
@@ -1135,6 +1186,16 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
         /predicted address is occupied/u,
       ],
       [
+        "transaction target dependency code",
+        { providers: { quicknode: { codeDriftKey: "multicall3" } } },
+        /runtime code hash drifted/u,
+      ],
+      [
+        "non-transaction dependency code",
+        { providers: { alchemy: { codeDriftKey: "poolManager" } } },
+        /runtime code hash drifted/u,
+      ],
+      [
         "target nonce",
         { providers: { quicknode: { targetNonceKey: "graphFactory" } } },
         /nonce is non-zero/u,
@@ -1154,6 +1215,53 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
         { providers: { quicknode: { closingNonce: "0x8" } } },
         /state changed during wallet verification/u,
       ],
+      [
+        "cross-provider owner balance",
+        { providers: { alchemy: { balance: "0x1" } } },
+        /RPCs disagree on action-time owner-wallet state/u,
+      ],
+      [
+        "insufficient owner balance",
+        {
+          providers: {
+            quicknode: { balance: "0x1" },
+            alchemy: { balance: "0x1" },
+          },
+        },
+        /owner funding or conservative fee guard/u,
+      ],
+      [
+        "closing owner balance drift",
+        { providers: { quicknode: { closingBalance: "0x1" } } },
+        /state changed during wallet verification/u,
+      ],
+      [
+        "closing base-fee increase exceeds transaction cap",
+        {
+          providers: {
+            quicknode: { closingBaseFeePerGas: "0x4190ab00" },
+          },
+        },
+        /owner funding or conservative fee guard/u,
+      ],
+      [
+        "closing gas-price increase exceeds transaction cap",
+        {
+          providers: {
+            alchemy: { closingGasPrice: "0x7d2b7500" },
+          },
+        },
+        /owner funding or conservative fee guard/u,
+      ],
+      [
+        "closing priority-fee increase exceeds transaction cap",
+        {
+          providers: {
+            quicknode: { closingPriorityFee: "0x1" },
+          },
+        },
+        /owner funding or conservative fee guard/u,
+      ],
     ];
     for (const [name, rpcOptions, pattern] of actionTimeDriftCases) {
       await assert.rejects(
@@ -1169,7 +1277,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
               clean: true,
             }),
             hostedVerifyResolver: async () => receipt.hostedVerify,
-            rpcClient: mockRpc(rpcOptions).rpcClient,
+            ...actionTimeRpc(rpcOptions),
             clock: () => FIXED_TIMESTAMP * 1_000,
           }),
         pattern,
@@ -1196,7 +1304,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
             };
           },
           hostedVerifyResolver: async () => receipt.hostedVerify,
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /source changed during action-time/u,
@@ -1224,7 +1332,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
                   artifactDigest: `sha256:${"4".repeat(64)}`,
                 };
           },
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /hosted Verify proof changed during action-time/u,
@@ -1251,7 +1359,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
             };
           },
           hostedVerifyResolver: async () => receipt.hostedVerify,
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /source changed during hosted Verify revalidation/u,
@@ -1308,6 +1416,30 @@ test("action-time closing chain, target, simulation, and gas drift fail closed",
         /state changed during wallet verification/u,
       ],
       [
+        "closing transaction target dependency code",
+        {
+          providers: {
+            quicknode: {
+              closingCodeDriftKey: "multicall3",
+              closingCodeAfterReads: 1,
+            },
+          },
+        },
+        /state changed during wallet verification/u,
+      ],
+      [
+        "closing non-transaction dependency code",
+        {
+          providers: {
+            quicknode: {
+              closingCodeDriftKey: "poolManager",
+              closingCodeAfterReads: 1,
+            },
+          },
+        },
+        /state changed during wallet verification/u,
+      ],
+      [
         "closing target nonce",
         {
           providers: {
@@ -1345,7 +1477,7 @@ test("action-time closing chain, target, simulation, and gas drift fail closed",
                 clean: true,
               }),
               hostedVerifyResolver: async () => receipt.hostedVerify,
-              rpcClient: mockRpc(rpcOptions).rpcClient,
+              ...actionTimeRpc(rpcOptions),
               clock: () => FIXED_TIMESTAMP * 1_000,
             }),
           pattern,

@@ -16,9 +16,12 @@ import {
   exactRobinhoodFoundationSourceIdentity,
   resolveRobinhoodFoundationHostedVerify,
 } from "./refresh-robinhood-custom-launch-owner-envelope.mjs";
+import { resolveReviewedRobinhoodProviderCommitments } from "./robinhood-custom-launch-provider-commitment-custody.mjs";
 
 export const ROBINHOOD_OWNER_WALLET_REQUEST_SCHEMA =
   "programmable.robinhood-custom-launch.owner-wallet-request.v1";
+
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 const MAXIMUM_ENVELOPE_BYTES = 2 * 1024 * 1024;
 const MAXIMUM_WALLET_REQUEST_BYTES = 128 * 1024;
@@ -154,6 +157,7 @@ export function assertCanonicalRobinhoodOwnerWalletRequest(receipt, value) {
       "gas",
       "maxFeePerGas",
       "maxPriorityFeePerGas",
+      "accessList",
       "type",
     ],
     "wallet transaction",
@@ -168,6 +172,7 @@ export function assertCanonicalRobinhoodOwnerWalletRequest(receipt, value) {
     gas: receipt.transaction.gasQuantity,
     maxFeePerGas: receipt.transaction.maxFeePerGasQuantity,
     maxPriorityFeePerGas: receipt.transaction.maxPriorityFeePerGasQuantity,
+    accessList: [],
     type: receipt.transaction.type,
   };
   if (JSON.stringify(transaction) !== JSON.stringify(expected)) {
@@ -189,6 +194,7 @@ export function assertCanonicalRobinhoodOwnerWalletRequest(receipt, value) {
     gasLimit: receipt.transaction.gasLimit,
     maxFeePerGas: receipt.transaction.maxFeePerGas,
     maxPriorityFeePerGas: receipt.transaction.maxPriorityFeePerGas,
+    accessList: [],
     reviewedMaximumGasCostWei: receipt.gasPolicy.maximumGasCostWei,
     ownerMaximumGasCostWei: receipt.gasPolicy.ownerMaximumGasCostWei,
   });
@@ -202,6 +208,7 @@ export async function verifyRobinhoodOwnerWalletRequest({
   sourceIdentity = exactRobinhoodFoundationSourceIdentity,
   hostedVerifyResolver = resolveRobinhoodFoundationHostedVerify,
   rpcClient,
+  runtimeCodeHash,
   clock = () => Date.now(),
 } = {}) {
   const configuredRoot = env.ROBINHOOD_OWNER_ENVELOPE_ROOT;
@@ -224,10 +231,11 @@ export async function verifyRobinhoodOwnerWalletRequest({
     env.ROBINHOOD_MAINNET_RPC_URL_PRIMARY,
     env.ROBINHOOD_MAINNET_RPC_URL_SECONDARY,
   ];
-  const endpointCommitments = [
-    env.ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY,
-    env.ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY,
-  ];
+  const endpointCommitments =
+    await resolveReviewedRobinhoodProviderCommitments({
+      env,
+      repositoryRoot,
+    });
   const bindings = assertRobinhoodFoundationRpcProviders({
     rpcUrls,
     endpointCommitments,
@@ -261,6 +269,7 @@ export async function verifyRobinhoodOwnerWalletRequest({
       rpcUrls,
       rpcEndpointCommitments: endpointCommitments,
       ...(rpcClient ? { rpcClient } : {}),
+      ...(runtimeCodeHash ? { runtimeCodeHash } : {}),
       clock,
     });
   const closingSource = sourceIdentity();

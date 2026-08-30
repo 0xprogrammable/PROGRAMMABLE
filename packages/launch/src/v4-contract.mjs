@@ -928,7 +928,7 @@ function normalizeV4DeploymentEvidence(value) {
   }
   const providerReadbacks = [
     normalizeV4AtomicProviderReadback(
-      value.providerReadbacks[0], value.transactionHash, "drpc", "drpc.org", 0,
+      value.providerReadbacks[0], value.transactionHash, "quicknode", "quicknode.com", 0,
     ),
     normalizeV4AtomicProviderReadback(
       value.providerReadbacks[1], value.transactionHash, "alchemy", "alchemy.com", 1,
@@ -1057,7 +1057,7 @@ function normalizeV4AtomicDeploymentResult(
   const providerReadbacks = [
     normalizeV4AtomicRuntimeTransitionReadback(
       value.providerReadbacks[0], contract, expected, deploymentBlockNumber,
-      deploymentBlockHash, "drpc", "drpc.org", `${label}.providerReadbacks[0]`,
+      deploymentBlockHash, "quicknode", "quicknode.com", `${label}.providerReadbacks[0]`,
     ),
     normalizeV4AtomicRuntimeTransitionReadback(
       value.providerReadbacks[1], contract, expected, deploymentBlockNumber,
@@ -1250,8 +1250,8 @@ function normalizeV4SafeConfigurationEvidence(value) {
   const primaryProvider = normalizeV4SafeConfigurationProvider(
     value.primaryProvider,
     `${label}.primaryProvider`,
-    "drpc",
-    "drpc.org",
+    "quicknode",
+    "quicknode.com",
   );
   const secondaryProvider = normalizeV4SafeConfigurationProvider(
     value.secondaryProvider,
@@ -1354,7 +1354,9 @@ function normalizeV4EthereumFinalityEvidence(value, label) {
   }
   const profile = normalizeV4ProfileRef(value.profile);
   const l2Providers = [
-    normalizeV4L2FinalityProvider(value.l2Providers[0], `${label}.l2Providers[0]`, "drpc", "drpc.org"),
+    normalizeV4L2FinalityProvider(
+      value.l2Providers[0], `${label}.l2Providers[0]`, "quicknode", "quicknode.com",
+    ),
     normalizeV4L2FinalityProvider(value.l2Providers[1], `${label}.l2Providers[1]`, "alchemy", "alchemy.com"),
   ];
   const ethereumProviders = [
@@ -1496,7 +1498,8 @@ function normalizeV4ExternalRootDeploymentEvidence(value) {
     }
     const providerReadbacks = [
       normalizeV4ExternalRootProviderReadback(
-        entry.providerReadbacks[0], expected, "drpc", "drpc.org", `${label}.providerReadbacks[0]`,
+        entry.providerReadbacks[0], expected, "quicknode", "quicknode.com",
+        `${label}.providerReadbacks[0]`,
       ),
       normalizeV4ExternalRootProviderReadback(
         entry.providerReadbacks[1], expected, "alchemy", "alchemy.com",
@@ -1630,8 +1633,8 @@ function normalizeV4Permit2GenesisProvenance(value) {
     normalizeV4Permit2GenesisProviderReadback(
       value.providerReadbacks[0],
       "chainDeployment.permit2GenesisProvenance.providerReadbacks[0]",
-      "drpc",
-      "drpc.org",
+      "quicknode",
+      "quicknode.com",
     ),
     normalizeV4Permit2GenesisProviderReadback(
       value.providerReadbacks[1],

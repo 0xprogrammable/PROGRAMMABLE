@@ -351,7 +351,7 @@ assert.deepEqual(
     trustDomain: provider.properties.trustDomain.const,
   })),
   [
-    { providerId: "drpc", trustDomain: "drpc.org" },
+    { providerId: "quicknode", trustDomain: "quicknode.com" },
     { providerId: "alchemy", trustDomain: "alchemy.com" },
   ],
   "V4 atomic deployment providers must be the exact ordered production quorum",
@@ -409,7 +409,7 @@ for (const result of atomicDeploymentEvidence.properties.resultingContracts.pref
       deploymentRuntimeCodeHash: provider.properties.deploymentRuntimeCodeHash.const,
     })),
     [
-      { providerId: "drpc", trustDomain: "drpc.org" },
+      { providerId: "quicknode", trustDomain: "quicknode.com" },
       { providerId: "alchemy", trustDomain: "alchemy.com" },
     ].map(({ providerId, trustDomain }) => ({
       schemaVersion:
@@ -492,8 +492,8 @@ assert.deepEqual(
   })),
   [
     {
-      providerId: "drpc",
-      trustDomain: "drpc.org",
+      providerId: "quicknode",
+      trustDomain: "quicknode.com",
       blockNumber: "0",
       runtimeCodeHash:
         "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
@@ -639,7 +639,7 @@ for (const [index, entry] of externalRootDeploymentEvidence.prefixItems.entries(
       runtimeCodeHash: provider.properties.runtimeCodeHash.const,
     })),
     [
-      { providerId: "drpc", trustDomain: "drpc.org", ...expectedRoot },
+      { providerId: "quicknode", trustDomain: "quicknode.com", ...expectedRoot },
       { providerId: "alchemy", trustDomain: "alchemy.com", ...expectedRoot },
     ].map(({ providerId, trustDomain, transactionHash, startBlock, runtimeCodeHash }) => ({
       providerId,
@@ -774,7 +774,7 @@ assert.deepEqual(
     trustDomain: provider.properties.trustDomain.const,
   })),
   [
-    { providerId: "drpc", trustDomain: "drpc.org" },
+    { providerId: "quicknode", trustDomain: "quicknode.com" },
     { providerId: "alchemy", trustDomain: "alchemy.com" },
   ],
   "V4 finality evidence L2 provider order",

@@ -44,6 +44,7 @@ import {
   buildRobinhoodCaptureAuthorization,
   buildRobinhoodPostdeploymentInput,
   buildRobinhoodPublicRpcEntry,
+  assertRobinhoodCaptureL2EndpointCommitments,
   computeRobinhoodCaptureClosureDigest,
   createRobinhoodResponseBudget,
   freshVerifyRobinhoodProviderReadbacks,
@@ -52,6 +53,8 @@ import {
   sha256CaptureBytes,
   testOnlyFramedCaptureDigest,
 } from "../robinhood-custom-launch-capture-v2.mjs";
+import { robinhoodFoundationRpcEndpointCommitment } from
+  "../robinhood-custom-launch-owner-envelope-core.mjs";
 import {
   ROBINHOOD_LIVE_DEPLOYMENT_PATH,
   ROBINHOOD_PREDEPLOYMENT_PATH,
@@ -110,7 +113,7 @@ const sourcePaths = [
 ];
 const FRESH_PROVIDER_RPC_URLS = Object.freeze({
   robinhood: Object.freeze([
-    "https://lb.drpc.live/robinhood/protected_test_credential_0123456789",
+    "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/protected_test_credential_0123456789/",
     "https://robinhood-mainnet.g.alchemy.com/v2/protected_test_credential_0123456789",
   ]),
   ethereum: Object.freeze([
@@ -118,6 +121,18 @@ const FRESH_PROVIDER_RPC_URLS = Object.freeze({
     "https://release-canary.ethereum-mainnet.quiknode.pro/protected_test_credential_0123456789/",
   ]),
 });
+const FRESH_ROBINHOOD_RPC_COMMITMENTS = Object.freeze([
+  robinhoodFoundationRpcEndpointCommitment({
+    role: "primary",
+    providerId: "quicknode",
+    rpcUrl: FRESH_PROVIDER_RPC_URLS.robinhood[0],
+  }),
+  robinhoodFoundationRpcEndpointCommitment({
+    role: "secondary",
+    providerId: "alchemy",
+    rpcUrl: FRESH_PROVIDER_RPC_URLS.robinhood[1],
+  }),
+]);
 const template = JSON.parse(await readFile(path.join(repositoryRoot, bindingPath), "utf8"));
 const postdeploymentSchemaNames = [
   "cli-release-binding", "stage-bundle", "backend-promotion-input",
@@ -391,19 +406,9 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
     const endpointCanary = "credentialslug_do_not_publish_0123456789";
     const acceptedEndpoints = [
       [
-        `https://lb.drpc.live/robinhood/${endpointCanary}`,
+        `https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/`,
         "robinhood",
-        "drpc",
-      ],
-      [
-        `https://lb.drpc.org/ogrpc?network=robinhood&dkey=${endpointCanary}`,
-        "robinhood",
-        "drpc",
-      ],
-      [
-        `https://lb.drpc.org/ogrpc?network=robinhood-mainnet&dkey=${endpointCanary}`,
-        "robinhood",
-        "drpc",
+        "quicknode",
       ],
       [
         `https://robinhood-mainnet.g.alchemy.com/v2/${endpointCanary}`,
@@ -429,23 +434,49 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
     for (const [endpoint, layer, providerId] of acceptedEndpoints) {
       assert.equal(validateRobinhoodCaptureEndpoint(endpoint, layer, providerId), true);
     }
+    assert.deepEqual(
+      assertRobinhoodCaptureL2EndpointCommitments({
+        rpcUrls: FRESH_PROVIDER_RPC_URLS.robinhood,
+        endpointCommitments: FRESH_ROBINHOOD_RPC_COMMITMENTS,
+      }),
+      FRESH_ROBINHOOD_RPC_COMMITMENTS,
+    );
+    assert.throws(
+      () => assertRobinhoodCaptureL2EndpointCommitments({
+        rpcUrls: [
+          `https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/`,
+          FRESH_PROVIDER_RPC_URLS.robinhood[1],
+        ],
+        endpointCommitments: FRESH_ROBINHOOD_RPC_COMMITMENTS,
+      }),
+      /reviewed commitment/u,
+    );
     const publicIdentity = built.input.capture.l2ProviderReadbacks[1].identity;
     assert.equal(JSON.stringify(publicIdentity).includes(endpointCanary), false);
     assert.deepEqual(Object.keys(publicIdentity), [
       "role", "providerId", "trustDomain", "authentication", "observedAt",
     ]);
     const rejectedEndpoints = [
-      [`https://${endpointCanary}:password@lb.drpc.live/robinhood/${endpointCanary}`,
-        "robinhood", "drpc"],
-      [`https://lb.drpc.live/robinhood/${endpointCanary}#fragment`, "robinhood", "drpc"],
-      ["https://rpc.robinhoodchain.com", "robinhood", "drpc"],
-      [`https://robinhood.drpc.org/${endpointCanary}`, "robinhood", "drpc"],
-      ["https://lb.drpc.live/robinhood/docs-demo-credential", "robinhood", "drpc"],
-      [`https://lb.drpc.live/ethereum/${endpointCanary}`, "robinhood", "drpc"],
-      [`https://lb.drpc.org/ogrpc?dkey=${endpointCanary}&network=robinhood`,
-        "robinhood", "drpc"],
-      [`https://lb.drpc.org/ogrpc?network=ethereum&dkey=${endpointCanary}`,
-        "robinhood", "drpc"],
+      [`https://${endpointCanary}:password@release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/#fragment`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro:443/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/?extra=1`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.robinhood-mainnet.quiknode.pro/${endpointCanary}/extra`,
+        "robinhood", "quicknode"],
+      [`https://release-canary.quiknode.pro/${endpointCanary}/`, "robinhood", "quicknode"],
+      [`https://release-canary.ethereum-mainnet.quiknode.pro/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      [`https://docs-demo.robinhood-mainnet.quiknode.pro/${endpointCanary}/`,
+        "robinhood", "quicknode"],
+      ["https://rpc.robinhoodchain.com", "robinhood", "quicknode"],
+      [`https://lb.drpc.live/robinhood/${endpointCanary}`, "robinhood", "quicknode"],
+      [`https://lb.drpc.live/robinhood/${endpointCanary}`, "robinhood", "drpc"],
       [`https://robinhood-mainnet.g.alchemy.com/v1/${endpointCanary}`,
         "robinhood", "alchemy"],
       [`https://eth-mainnet.g.alchemy.com/v2/${endpointCanary}`,
@@ -1701,7 +1732,28 @@ test("fresh apply-time provider replay revalidates the complete raw inventory an
         ...testCaptureDependencies,
         now: () => new Date("2026-08-29T18:03:30.000Z"),
       }),
-      /exact credentialed endpoint pin/u,
+      /credential-bearing|reviewed commitment|endpoint pin/u,
+    );
+    assert.equal(substitutedEndpointFetches, 0);
+    await assert.rejects(
+      freshVerifyRobinhoodProviderReadbacks({
+        capture: built.input.capture,
+        captureClosure: bundle.captureClosure,
+        rpcUrls: {
+          robinhood: [
+            "https://release-canary.robinhood-mainnet.quiknode.pro/substituted_test_credential_0123456789/",
+            FRESH_PROVIDER_RPC_URLS.robinhood[1],
+          ],
+          ethereum: FRESH_PROVIDER_RPC_URLS.ethereum,
+        },
+        fetch: async () => {
+          substitutedEndpointFetches += 1;
+          throw new Error("commitment substitution must fail before a provider request");
+        },
+        ...testCaptureDependencies,
+        now: () => new Date("2026-08-29T18:03:45.000Z"),
+      }),
+      /reviewed commitment/u,
     );
     assert.equal(substitutedEndpointFetches, 0);
     await assert.rejects(
@@ -1798,7 +1850,7 @@ async function buildInput(fixture, options = {}) {
   const atomicNames = ["permitAuthority", "graphFactory", "programmableLaunchStampRouter"];
   const externalNames = ["poolManager", "positionManager", "stateView", "v4Quoter", "universalRouter"];
   const providers = [
-    { providerId: "drpc", trustDomain: "drpc.org" },
+    { providerId: "quicknode", trustDomain: "quicknode.com" },
     { providerId: "alchemy", trustDomain: "alchemy.com" },
   ].map((provider) => ({
     ...provider,
@@ -1992,6 +2044,7 @@ async function buildInput(fixture, options = {}) {
     expiresAt: EXPIRES_AT,
     profileDigest: ROBINHOOD_CAPTURE_PROFILE_DIGEST,
     sourceOrigin,
+    l2ProviderEndpointCommitments: FRESH_ROBINHOOD_RPC_COMMITMENTS,
     l2ProviderReadbacks: l2Providers,
     ethereumProviderReadbacks: ethereumProviders,
     sourcifyResponses: sourcifyResponses.map(({ normalized }) => normalized),
@@ -2686,6 +2739,8 @@ async function rebuildWithProductionInputBuilder(fixture, input) {
     observedAt: OBSERVED_AT,
     expiresAt: EXPIRES_AT,
     providers: input.providers,
+    l2ProviderEndpointCommitments:
+      input.capture.l2ProviderEndpointCommitments,
     l2ProviderReadbacks: input.capture.l2ProviderReadbacks,
     ethereumProviderReadbacks: input.capture.ethereumProviderReadbacks,
     sourcifyResponses: input.capture.sourcifyResponses,

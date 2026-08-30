@@ -533,11 +533,49 @@ paths:
     get:
       tags: [Launches]
       operationId: getLaunchById
-      summary: Get one launch by canonical launch ID
+      summary: Get one Ethereum launch by canonical launch ID
       description: |
-        Returns any Programmable launch, including project-only and multi-token
-        launches that do not have one canonical ERC-20 lookup address.
+        Ethereum compatibility alias for `/api/v2/chains/1/launches/{launchId}`.
+        New multi-chain integrations must use the chain-qualified route because
+        a launch ID is not a global cross-chain identity.
       parameters:
+        - $ref: "#/components/parameters/LaunchIdPath"
+      responses:
+        "200":
+          description: Normalized launch record.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Launch"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /api/v2/chains/{chainId}/launches/{launchId}:
+    get:
+      tags: [Launches]
+      operationId: getLaunchByIdForChain
+      summary: Get one launch by chain and canonical launch ID
+      description: |
+        Returns any Programmable launch on one published EVM chain, including
+        project-only and multi-token launches that do not have one canonical
+        ERC-20 lookup address. Chain ID and launch ID are both identity inputs.
+      parameters:
+        - $ref: "#/components/parameters/ChainIdPath"
         - $ref: "#/components/parameters/LaunchIdPath"
       responses:
         "200":
@@ -816,7 +854,7 @@ components:
       name: cursor
       in: query
       required: false
-      description: Opaque page-continuation cursor from `page.nextCursor`. Do not construct or parse it; do not combine it with `after`.
+      description: Opaque page-continuation cursor from `page.nextCursor`. Repeat the same `chainId` and `category` query scope that created it. Do not construct or parse it; do not combine it with `after`.
       schema:
         type: string
         minLength: 1
@@ -826,7 +864,7 @@ components:
       name: after
       in: query
       required: false
-      description: Opaque durable polling checkpoint from `page.resumeCursor`. Returns records observed after that checkpoint. Do not construct or parse it; do not combine it with `cursor`.
+      description: Opaque durable polling checkpoint from `page.resumeCursor`. Repeat the same `chainId` and `category` query scope that created it. Returns records observed after that checkpoint. Do not construct or parse it; do not combine it with `cursor`.
       schema:
         type: string
         minLength: 1
@@ -899,7 +937,7 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     NotFound:
-      description: No launch exists for this chain and token address.
+      description: The requested chain or launch identity is not published.
       headers:
         X-Request-Id:
           $ref: "#/components/headers/RequestId"

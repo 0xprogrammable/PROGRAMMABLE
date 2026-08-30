@@ -114,7 +114,7 @@ const ATOMIC_DEPLOYMENT_CALLDATA_BYTES = 33_412 as const;
 const EMPTY_RUNTIME_CODE_HASH =
   "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470" as const;
 const EXTERNAL_DEPLOYMENT_PROVIDER_READBACK_SCHEMA =
-  "programmable.custom-launch-deployment-provider-readback.v1" as const;
+  "programmable.custom-launch-deployment-provider-readback.v2" as const;
 const UNISWAP_REGISTRY_SOURCE = deepFreeze({
   repository: "Uniswap/contracts",
   commit: "4cfc406c8e34da3ce04e60657a7825075b64fd22",
@@ -1231,7 +1231,7 @@ function exactChainDeployment(value: unknown) {
     || permit2Provenance.providerReadbacks.length !== 2) return invalid();
   const permit2ProviderReadbacks = [
     exactPermit2GenesisProviderReadback(
-      permit2Provenance.providerReadbacks[0], "drpc", "drpc.org",
+      permit2Provenance.providerReadbacks[0], "quicknode", "quicknode.com",
     ),
     exactPermit2GenesisProviderReadback(
       permit2Provenance.providerReadbacks[1], "alchemy", "alchemy.com",
@@ -1410,7 +1410,9 @@ function exactAtomicDeploymentEvidence(value: unknown) {
     return invalid();
   }
   const providerReadbacks = [
-    exactAtomicProviderReadback(evidence.providerReadbacks[0], transactionHash, "drpc", "drpc.org"),
+    exactAtomicProviderReadback(
+      evidence.providerReadbacks[0], transactionHash, "quicknode", "quicknode.com",
+    ),
     exactAtomicProviderReadback(
       evidence.providerReadbacks[1], transactionHash, "alchemy", "alchemy.com",
     ),
@@ -1473,8 +1475,8 @@ function exactAtomicDeploymentEvidence(value: unknown) {
 function exactAtomicProviderReadback(
   value: unknown,
   transactionHash: Hex,
-  providerId: "drpc" | "alchemy",
-  trustDomain: "drpc.org" | "alchemy.com",
+  providerId: "quicknode" | "alchemy",
+  trustDomain: "quicknode.com" | "alchemy.com",
 ) {
   const readback = exactRecord(value, [
     "providerId", "trustDomain", "transactionHash", "transactionResponseDigest",
@@ -1516,7 +1518,7 @@ function exactAtomicDeploymentResult(
   const providerReadbacks = [
     exactAtomicRuntimeTransitionReadback(
       result.providerReadbacks[0], contract, expected, deploymentBlockNumber,
-      deploymentBlockHash, "drpc", "drpc.org",
+      deploymentBlockHash, "quicknode", "quicknode.com",
     ),
     exactAtomicRuntimeTransitionReadback(
       result.providerReadbacks[1], contract, expected, deploymentBlockNumber,
@@ -1543,8 +1545,8 @@ function exactAtomicRuntimeTransitionReadback(
   expected: Readonly<{ address: string; runtimeCodeHash: Hex }>,
   deploymentBlockNumber: string,
   deploymentBlockHash: Hex,
-  providerId: "drpc" | "alchemy",
-  trustDomain: "drpc.org" | "alchemy.com",
+  providerId: "quicknode" | "alchemy",
+  trustDomain: "quicknode.com" | "alchemy.com",
 ) {
   const readback = exactRecord(value, [
     "schemaVersion", "providerId", "trustDomain", "contract", "address",
@@ -1595,20 +1597,26 @@ function exactExternalRootDeploymentEvidence(value: unknown) {
     const expected = EXTERNAL_ROOT_DEPLOYMENTS[contract];
     const evidence = exactRecord(item, [
       "schemaVersion", "contract", "kind", "address", "runtimeCodeHash",
-      "transactionHash", "startBlock", "blockHash", "registrySource",
-      "providerReadbacks", "evidenceDigest",
+      "transactionHash", "previousBlockNumber", "previousBlockHash",
+      "previousBlockRuntimeCodeHash", "startBlock", "blockHash",
+      "registrySource", "providerReadbacks", "evidenceDigest",
     ]);
     const registrySource = exactRecord(
       evidence.registrySource,
       ["repository", "commit", "path", "rawUrl", "sha256"],
     );
     const blockHash = exactLowerBytes32(evidence.blockHash);
+    const previousBlockNumber = (BigInt(expected.startBlock) - 1n).toString(10);
+    const previousBlockHash = exactLowerBytes32(evidence.previousBlockHash);
     if (evidence.schemaVersion !== "programmable.custom-launch-deployment-evidence.v1"
       || evidence.contract !== contract
       || evidence.kind !== "exact-observed-deployment"
       || canonicalAddress(evidence.address) !== expected.address
       || exactLowerBytes32(evidence.runtimeCodeHash) !== expected.runtimeCodeHash
       || exactLowerBytes32(evidence.transactionHash) !== expected.transactionHash
+      || evidence.previousBlockNumber !== previousBlockNumber
+      || previousBlockHash === `0x${"0".repeat(64)}`
+      || evidence.previousBlockRuntimeCodeHash !== EMPTY_RUNTIME_CODE_HASH
       || evidence.startBlock !== expected.startBlock
       || blockHash === `0x${"0".repeat(64)}`
       || canonicalJson(registrySource) !== canonicalJson(UNISWAP_REGISTRY_SOURCE)
@@ -1616,13 +1624,20 @@ function exactExternalRootDeploymentEvidence(value: unknown) {
       || evidence.providerReadbacks.length !== 2) return invalid();
     const providerReadbacks = [
       exactExternalRootProviderReadback(
-        evidence.providerReadbacks[0], expected, "drpc", "drpc.org",
+        evidence.providerReadbacks[0], expected, "quicknode", "quicknode.com",
       ),
       exactExternalRootProviderReadback(
         evidence.providerReadbacks[1], expected, "alchemy", "alchemy.com",
       ),
     ];
-    if (providerReadbacks[0].blockHash !== providerReadbacks[1].blockHash
+    if (providerReadbacks[0].rawTransactionDigest
+        !== providerReadbacks[1].rawTransactionDigest
+      || providerReadbacks[0].transactionDigest !== providerReadbacks[1].transactionDigest
+      || providerReadbacks[0].previousBlockHash !== providerReadbacks[1].previousBlockHash
+      || providerReadbacks[0].blockHash !== providerReadbacks[1].blockHash
+      || providerReadbacks[0].transactionReceiptDigest
+        !== providerReadbacks[1].transactionReceiptDigest
+      || previousBlockHash !== providerReadbacks[0].previousBlockHash
       || blockHash !== providerReadbacks[0].blockHash) return invalid();
     const preimage = deepFreeze({
       schemaVersion: "programmable.custom-launch-deployment-evidence.v1" as const,
@@ -1631,6 +1646,9 @@ function exactExternalRootDeploymentEvidence(value: unknown) {
       address: expected.address,
       runtimeCodeHash: expected.runtimeCodeHash,
       transactionHash: expected.transactionHash,
+      previousBlockNumber,
+      previousBlockHash,
+      previousBlockRuntimeCodeHash: EMPTY_RUNTIME_CODE_HASH,
       startBlock: expected.startBlock,
       blockHash,
       registrySource: UNISWAP_REGISTRY_SOURCE,
@@ -1649,27 +1667,40 @@ function exactExternalRootProviderReadback(
     startBlock: string;
     runtimeCodeHash: Hex;
   }>,
-  providerId: "drpc" | "alchemy",
-  trustDomain: "drpc.org" | "alchemy.com",
+  providerId: "quicknode" | "alchemy",
+  trustDomain: "quicknode.com" | "alchemy.com",
 ) {
   const readback = exactRecord(value, [
-    "providerId", "trustDomain", "transactionHash", "blockNumber", "blockHash",
-    "runtimeCodeHash", "transactionReceiptDigest", "evidenceDigest",
+    "providerId", "trustDomain", "transactionHash", "rawTransactionDigest",
+    "transactionDigest", "previousBlockNumber", "previousBlockHash",
+    "previousBlockRuntimeCodeHash", "blockNumber", "blockHash", "runtimeCodeHash",
+    "transactionReceiptDigest", "evidenceDigest",
   ]);
+  const previousBlockNumber = (BigInt(expected.startBlock) - 1n).toString(10);
+  const previousBlockHash = exactLowerBytes32(readback.previousBlockHash);
+  const blockHash = exactLowerBytes32(readback.blockHash);
   if (readback.providerId !== providerId || readback.trustDomain !== trustDomain
     || exactLowerBytes32(readback.transactionHash) !== expected.transactionHash
+    || readback.previousBlockNumber !== previousBlockNumber
+    || previousBlockHash === `0x${"0".repeat(64)}`
+    || readback.previousBlockRuntimeCodeHash !== EMPTY_RUNTIME_CODE_HASH
     || readback.blockNumber !== expected.startBlock
+    || blockHash === `0x${"0".repeat(64)}`
     || exactLowerBytes32(readback.runtimeCodeHash) !== expected.runtimeCodeHash) return invalid();
   const preimage = deepFreeze({
     providerId,
     trustDomain,
     transactionHash: expected.transactionHash,
+    rawTransactionDigest: exactSha256(readback.rawTransactionDigest),
+    transactionDigest: exactSha256(readback.transactionDigest),
+    previousBlockNumber,
+    previousBlockHash,
+    previousBlockRuntimeCodeHash: EMPTY_RUNTIME_CODE_HASH,
     blockNumber: expected.startBlock,
-    blockHash: exactLowerBytes32(readback.blockHash),
+    blockHash,
     runtimeCodeHash: expected.runtimeCodeHash,
     transactionReceiptDigest: exactSha256(readback.transactionReceiptDigest),
   });
-  if (preimage.blockHash === `0x${"0".repeat(64)}`) return invalid();
   const evidenceDigest = exactSha256(readback.evidenceDigest);
   if (evidenceDigest !== framedSha256(EXTERNAL_DEPLOYMENT_PROVIDER_READBACK_SCHEMA, preimage)) {
     return invalid();
@@ -1718,8 +1749,8 @@ function exactSafeConfigurationEvidence(value: unknown) {
   }
   const primaryProvider = exactSafeConfigurationProvider(
     evidence.primaryProvider,
-    "drpc",
-    "drpc.org",
+    "quicknode",
+    "quicknode.com",
   );
   const secondaryProvider = exactSafeConfigurationProvider(
     evidence.secondaryProvider,
@@ -1776,7 +1807,8 @@ function exactEthereumFinalityEvidence(value: unknown) {
     "schemaVersion", "profile", "l2Checkpoint", "batchNumber", "l2Providers",
     "ethereumProviders", "rollup", "sequencerInbox", "postingTransactionHash",
     "postingBlockNumber", "postingBlockHash", "postingLogIndex",
-    "ethereumFinalizedCheckpoint", "observedAt", "evidenceDigest",
+    "ethereumFinalizedCheckpoint", "observedAt", "captureClosureDigest",
+    "postingEventDigest", "l1EvidenceDigest", "evidenceDigest",
   ]);
   const l2Checkpoint = exactRecord(evidence.l2Checkpoint, ["blockNumber", "blockHash"]);
   const finalizedCheckpoint = exactRecord(
@@ -1807,7 +1839,7 @@ function exactEthereumFinalityEvidence(value: unknown) {
     || !Array.isArray(evidence.ethereumProviders)
     || evidence.ethereumProviders.length !== 2) return invalid();
   const l2Providers = [
-    exactL2FinalityProvider(evidence.l2Providers[0], "drpc", "drpc.org"),
+    exactL2FinalityProvider(evidence.l2Providers[0], "quicknode", "quicknode.com"),
     exactL2FinalityProvider(evidence.l2Providers[1], "alchemy", "alchemy.com"),
   ];
   const ethereumProviders = [
@@ -1842,6 +1874,9 @@ function exactEthereumFinalityEvidence(value: unknown) {
       tag: "finalized" as const,
     },
     observedAt: canonicalIsoTimestamp(evidence.observedAt).source,
+    captureClosureDigest: exactSha256(evidence.captureClosureDigest),
+    postingEventDigest: exactSha256(evidence.postingEventDigest),
+    l1EvidenceDigest: exactSha256(evidence.l1EvidenceDigest),
   });
   const evidenceDigest = exactSha256(evidence.evidenceDigest);
   if (evidenceDigest !== framedSha256(preimage.schemaVersion, preimage)) return invalid();
@@ -1850,8 +1885,8 @@ function exactEthereumFinalityEvidence(value: unknown) {
 
 function exactL2FinalityProvider(
   value: unknown,
-  providerId: "drpc" | "alchemy",
-  trustDomain: "drpc.org" | "alchemy.com",
+  providerId: "quicknode" | "alchemy",
+  trustDomain: "quicknode.com" | "alchemy.com",
 ) {
   const provider = exactRecord(value, ["providerId", "trustDomain", "l1Confirmations"]);
   const l1Confirmations = canonicalUint(provider.l1Confirmations, UINT256_MAXIMUM).source;
@@ -1893,8 +1928,8 @@ function exactSafeConfigurationProvider(
 
 function exactPermit2GenesisProviderReadback(
   value: unknown,
-  providerId: "drpc" | "alchemy",
-  trustDomain: "drpc.org" | "alchemy.com",
+  providerId: "quicknode" | "alchemy",
+  trustDomain: "quicknode.com" | "alchemy.com",
 ) {
   const readback = exactRecord(value, [
     "schemaVersion", "providerId", "trustDomain", "blockNumber", "blockHash",

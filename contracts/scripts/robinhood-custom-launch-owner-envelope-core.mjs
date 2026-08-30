@@ -277,12 +277,18 @@ const RPC_RESPONSE_LIMIT_BYTES = Object.freeze({
   eth_chainId: 8 * 1024,
   eth_getBlockByNumber: 128 * 1024,
   eth_getTransactionCount: 8 * 1024,
+  eth_getBalance: 8 * 1024,
   eth_getCode: 128 * 1024,
   eth_call: 128 * 1024,
   eth_estimateGas: 8 * 1024,
   eth_gasPrice: 8 * 1024,
   eth_maxPriorityFeePerGas: 8 * 1024,
 });
+const OWNER_ENVELOPE_RPC_METHOD_INVENTORY = Object.freeze(
+  Object.keys(RPC_RESPONSE_LIMIT_BYTES).filter(
+    (method) => method !== "eth_getBalance",
+  ),
+);
 const RPC_AGGREGATE_RESPONSE_LIMIT_BYTES = 4 * 1024 * 1024;
 
 function fail(message) {
@@ -709,7 +715,7 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
       checks.rpcResponseBytesConsumed >= 0 &&
       checks.rpcResponseBytesConsumed <= RPC_AGGREGATE_RESPONSE_LIMIT_BYTES &&
       JSON.stringify(checks.rpcMethodInventory) ===
-        JSON.stringify(Object.keys(RPC_RESPONSE_LIMIT_BYTES));
+        JSON.stringify(OWNER_ENVELOPE_RPC_METHOD_INVENTORY);
   } catch {
     evidenceIsExact = false;
   }
@@ -1453,9 +1459,13 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
   rpcUrls,
   rpcEndpointCommitments,
   rpcClient = robinhoodFoundationRpc,
+  runtimeCodeHash = keccak256,
   requestTimeoutMs = ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_REQUEST_TIMEOUT_MS,
   clock = () => Date.now(),
 }) {
+  if (typeof runtimeCodeHash !== "function") {
+    fail("runtime code hasher is invalid");
+  }
   assertFreshRobinhoodFoundationOwnerEnvelope(receipt, clock());
   const operationSignal = AbortSignal.timeout(
     ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_OPERATION_MS,
@@ -1483,6 +1493,11 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
       { address },
     ]),
   );
+  const dependencyBindings = EXPECTED_DEPENDENCY_BINDINGS;
+  const codeBindings = {
+    ...dependencyBindings,
+    ...preparedBindings,
+  };
   const expectedNonce = parseQuantity(
     receipt.transaction.nonceQuantity,
     "owner-envelope nonce",
@@ -1495,6 +1510,28 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     receipt.transaction.gasQuantity,
     "owner-envelope gas limit",
   );
+  const transactionMaxFeePerGas = parseQuantity(
+    receipt.transaction.maxFeePerGasQuantity,
+    "owner-envelope maximum fee per gas",
+  );
+  const transactionMaxPriorityFeePerGas = parseQuantity(
+    receipt.transaction.maxPriorityFeePerGasQuantity,
+    "owner-envelope maximum priority fee per gas",
+  );
+  const ownerMaximumFeePerGas = parseDecimalWei(
+    receipt.gasPolicy.ownerMaximumFeePerGasWei,
+    "owner-envelope owner maximum fee per gas",
+  );
+  const ownerMaximumPriorityFeePerGas = parseDecimalWei(
+    receipt.gasPolicy.ownerMaximumPriorityFeePerGasWei,
+    "owner-envelope owner maximum priority fee per gas",
+    { positive: false },
+  );
+  const ownerMaximumGasCost = parseDecimalWei(
+    receipt.gasPolicy.ownerMaximumGasCostWei,
+    "owner-envelope owner maximum gas cost",
+  );
+  const maximumDebit = reviewedGasLimit * transactionMaxFeePerGas;
   const simulationRequest = {
     from: receipt.transaction.from,
     to: receipt.transaction.to,
@@ -1508,6 +1545,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
         chainIdValue,
         latestNonceValue,
         pendingNonceValue,
+        pendingBlockValue,
+        ownerBalanceValue,
+        gasPriceValue,
+        priorityFeeValue,
         codes,
         vacancyNonces,
         callResultValue,
@@ -1528,9 +1569,31 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
           rpcClient,
           requestTimeoutMs,
         ),
+        rpc(
+          provider,
+          "eth_getBlockByNumber",
+          ["pending", false],
+          rpcClient,
+          requestTimeoutMs,
+        ),
+        rpc(
+          provider,
+          "eth_getBalance",
+          [receipt.transaction.from, "pending"],
+          rpcClient,
+          requestTimeoutMs,
+        ),
+        rpc(provider, "eth_gasPrice", [], rpcClient, requestTimeoutMs),
+        rpc(
+          provider,
+          "eth_maxPriorityFeePerGas",
+          [],
+          rpcClient,
+          requestTimeoutMs,
+        ),
         readCodes({
           provider,
-          bindings: preparedBindings,
+          bindings: codeBindings,
           blockTag: "pending",
           rpcClient,
           requestTimeoutMs,
@@ -1570,6 +1633,22 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
           pendingNonceValue,
           `${provider.providerId} action-time pending nonce`,
         ),
+        pendingBlock: exactPendingBlock(
+          pendingBlockValue,
+          `${provider.providerId} action-time pending block`,
+        ),
+        ownerBalance: parseQuantity(
+          ownerBalanceValue,
+          `${provider.providerId} action-time owner balance`,
+        ),
+        gasPrice: parseQuantity(
+          gasPriceValue,
+          `${provider.providerId} action-time gas price`,
+        ),
+        priorityFee: parseQuantity(
+          priorityFeeValue,
+          `${provider.providerId} action-time priority fee`,
+        ),
         codes,
         vacancyNonces,
         callResult: exactCode(
@@ -1589,7 +1668,8 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     if (
       snapshot.chainId !== CHAIN_ID ||
       snapshot.latestNonce !== expectedNonce ||
-      snapshot.pendingNonce !== expectedNonce
+      snapshot.pendingNonce !== expectedNonce ||
+      reviewedGasLimit > snapshot.pendingBlock.gasLimit
     ) {
       fail(
         `${providerId} action-time chain or owner nonce differs from the envelope`,
@@ -1597,10 +1677,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     }
     verifyCodeSnapshot({
       snapshot: snapshot.codes,
-      dependencies: {},
+      dependencies: dependencyBindings,
       prepared: preparedBindings,
       label: `${providerId} action-time`,
-      runtimeCodeHash: keccak256,
+      runtimeCodeHash,
     });
     verifyVacancyNonces({
       snapshot: snapshot.vacancyNonces,
@@ -1624,6 +1704,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     snapshots[0].chainId !== snapshots[1].chainId ||
     snapshots[0].latestNonce !== snapshots[1].latestNonce ||
     snapshots[0].pendingNonce !== snapshots[1].pendingNonce ||
+    snapshots[0].ownerBalance !== snapshots[1].ownerBalance ||
     JSON.stringify(snapshots[0].codes) !==
       JSON.stringify(snapshots[1].codes) ||
     JSON.stringify(snapshots[0].vacancyNonces) !==
@@ -1640,6 +1721,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
         chainIdValue,
         latestNonceValue,
         pendingNonceValue,
+        pendingBlockValue,
+        ownerBalanceValue,
+        gasPriceValue,
+        priorityFeeValue,
         codes,
         vacancyNonces,
         callResultValue,
@@ -1660,9 +1745,31 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
             rpcClient,
             requestTimeoutMs,
           ),
+          rpc(
+            provider,
+            "eth_getBlockByNumber",
+            ["pending", false],
+            rpcClient,
+            requestTimeoutMs,
+          ),
+          rpc(
+            provider,
+            "eth_getBalance",
+            [receipt.transaction.from, "pending"],
+            rpcClient,
+            requestTimeoutMs,
+          ),
+          rpc(provider, "eth_gasPrice", [], rpcClient, requestTimeoutMs),
+          rpc(
+            provider,
+            "eth_maxPriorityFeePerGas",
+            [],
+            rpcClient,
+            requestTimeoutMs,
+          ),
           readCodes({
             provider,
-            bindings: preparedBindings,
+            bindings: codeBindings,
             blockTag: "pending",
             rpcClient,
             requestTimeoutMs,
@@ -1702,6 +1809,22 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
           pendingNonceValue,
           `${provider.providerId} action-time closing pending nonce`,
         ),
+        pendingBlock: exactPendingBlock(
+          pendingBlockValue,
+          `${provider.providerId} action-time closing pending block`,
+        ),
+        ownerBalance: parseQuantity(
+          ownerBalanceValue,
+          `${provider.providerId} action-time closing owner balance`,
+        ),
+        gasPrice: parseQuantity(
+          gasPriceValue,
+          `${provider.providerId} action-time closing gas price`,
+        ),
+        priorityFee: parseQuantity(
+          priorityFeeValue,
+          `${provider.providerId} action-time closing priority fee`,
+        ),
         codes,
         vacancyNonces,
         callResult: exactCode(
@@ -1724,6 +1847,8 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
       closing.pendingNonce !== expectedNonce ||
       closing.latestNonce !== snapshots[index].latestNonce ||
       closing.pendingNonce !== snapshots[index].pendingNonce ||
+      closing.ownerBalance !== snapshots[index].ownerBalance ||
+      reviewedGasLimit > closing.pendingBlock.gasLimit ||
       JSON.stringify(closing.codes) !== JSON.stringify(snapshots[index].codes) ||
       JSON.stringify(closing.vacancyNonces) !==
         JSON.stringify(snapshots[index].vacancyNonces) ||
@@ -1737,10 +1862,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     }
     verifyCodeSnapshot({
       snapshot: closing.codes,
-      dependencies: {},
+      dependencies: dependencyBindings,
       prepared: preparedBindings,
       label: `${providerId} action-time closing`,
-      runtimeCodeHash: keccak256,
+      runtimeCodeHash,
     });
     verifyVacancyNonces({
       snapshot: closing.vacancyNonces,
@@ -1752,6 +1877,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     closings[0].chainId !== closings[1].chainId ||
     closings[0].latestNonce !== closings[1].latestNonce ||
     closings[0].pendingNonce !== closings[1].pendingNonce ||
+    closings[0].ownerBalance !== closings[1].ownerBalance ||
     JSON.stringify(closings[0].codes) !== JSON.stringify(closings[1].codes) ||
     JSON.stringify(closings[0].vacancyNonces) !==
       JSON.stringify(closings[1].vacancyNonces) ||
@@ -1759,6 +1885,42 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     closings[0].estimatedGas !== closings[1].estimatedGas
   ) {
     fail("Robinhood RPCs disagree on action-time closing owner-wallet state");
+  }
+  const feeObservations = [...snapshots, ...closings];
+  const observedPendingBaseFeePerGas = feeObservations.reduce(
+    (maximum, { pendingBlock }) =>
+      pendingBlock.baseFeePerGas > maximum
+        ? pendingBlock.baseFeePerGas
+        : maximum,
+    0n,
+  );
+  const observedGasPrice = feeObservations.reduce(
+    (maximum, { gasPrice }) => (gasPrice > maximum ? gasPrice : maximum),
+    0n,
+  );
+  const observedMaxPriorityFeePerGas = feeObservations.reduce(
+    (maximum, { priorityFee }) =>
+      priorityFee > maximum ? priorityFee : maximum,
+    0n,
+  );
+  const doubledBaseFeeEnvelope =
+    2n * observedPendingBaseFeePerGas + observedMaxPriorityFeePerGas;
+  const requiredMaxFeePerGas =
+    observedGasPrice > doubledBaseFeeEnvelope
+      ? observedGasPrice
+      : doubledBaseFeeEnvelope;
+  const ownerBalance = snapshots[0].ownerBalance;
+  if (
+    ownerBalance < maximumDebit ||
+    transactionMaxPriorityFeePerGas < observedMaxPriorityFeePerGas ||
+    transactionMaxFeePerGas < requiredMaxFeePerGas ||
+    transactionMaxPriorityFeePerGas > ownerMaximumPriorityFeePerGas ||
+    transactionMaxFeePerGas > ownerMaximumFeePerGas ||
+    maximumDebit > ownerMaximumGasCost
+  ) {
+    fail(
+      "action-time owner funding or conservative fee guard differs from the envelope",
+    );
   }
   assertFreshRobinhoodFoundationOwnerEnvelope(receipt, clock());
   return Object.freeze({
@@ -1771,6 +1933,16 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     closingSimulationVerified: true,
     closingGasEstimate: expectedGasEstimate.toString(),
     closingVacancyVerified: true,
+    ownerBalanceWei: ownerBalance.toString(),
+    maximumDebitWei: maximumDebit.toString(),
+    observedPendingBaseFeePerGasWei:
+      observedPendingBaseFeePerGas.toString(),
+    observedGasPriceWei: observedGasPrice.toString(),
+    observedMaxPriorityFeePerGasWei:
+      observedMaxPriorityFeePerGas.toString(),
+    requiredMaxFeePerGasWei: requiredMaxFeePerGas.toString(),
+    fundingVerified: true,
+    feeCapsVerified: true,
     rpcResponseBytesConsumed: responseBudget.consumed,
   });
 }
@@ -2511,7 +2683,7 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       boundedTimeout: true,
       rpcResponseBudgetBytes: RPC_AGGREGATE_RESPONSE_LIMIT_BYTES,
       rpcResponseBytesConsumed: responseBudget.consumed,
-      rpcMethodInventory: Object.keys(RPC_RESPONSE_LIMIT_BYTES),
+      rpcMethodInventory: OWNER_ENVELOPE_RPC_METHOD_INVENTORY,
     },
     ownerWalletReviewRequired: true,
     privateKeyAccepted: false,

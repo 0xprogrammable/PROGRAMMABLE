@@ -158,7 +158,7 @@ const atomicDeploymentResult = (contract, contractAddress, runtimeCodeHash) => c
     },
     providerReadbacks: tuple(
       atomicRootTransitionProviderReadback(
-        "drpc", "drpc.org", contract, contractAddress, runtimeCodeHash,
+        "quicknode", "quicknode.com", contract, contractAddress, runtimeCodeHash,
       ),
       atomicRootTransitionProviderReadback(
         "alchemy", "alchemy.com", contract, contractAddress, runtimeCodeHash,
@@ -243,7 +243,7 @@ const externalRootDeployment = (
     registrySource: clone(robinhoodUniswapRegistrySource),
     providerReadbacks: tuple(
       externalRootProviderReadback(
-        "drpc", "drpc.org", transactionHash, startBlock, runtimeCodeHash,
+        "quicknode", "quicknode.com", transactionHash, startBlock, runtimeCodeHash,
       ),
       externalRootProviderReadback(
         "alchemy", "alchemy.com", transactionHash, startBlock, runtimeCodeHash,
@@ -337,7 +337,7 @@ const chainDeployment = closed(
         ),
         receiptLogsDigest: sha256,
         providerReadbacks: tuple(
-          atomicDeploymentProviderReadback("drpc", "drpc.org"),
+          atomicDeploymentProviderReadback("quicknode", "quicknode.com"),
           atomicDeploymentProviderReadback("alchemy", "alchemy.com"),
         ),
         resultingContracts: tuple(
@@ -401,7 +401,7 @@ const chainDeployment = closed(
         },
         allocRuntimeCodeBytes: { const: 9_152 },
         providerReadbacks: tuple(
-          permit2GenesisProviderReadback("drpc", "drpc.org"),
+          permit2GenesisProviderReadback("quicknode", "quicknode.com"),
           permit2GenesisProviderReadback("alchemy", "alchemy.com"),
         ),
         evidenceDigest: sha256,
@@ -476,8 +476,8 @@ const chainDeployment = closed(
             },
             guardSlot: { const: `0x${"0".repeat(64)}` },
             primaryProvider: closed(["providerId", "trustDomain", "evidenceDigest"], {
-              providerId: { const: "drpc" },
-              trustDomain: { const: "drpc.org" },
+              providerId: { const: "quicknode" },
+              trustDomain: { const: "quicknode.com" },
               evidenceDigest: sha256,
             }),
             secondaryProvider: closed(["providerId", "trustDomain", "evidenceDigest"], {
@@ -606,7 +606,7 @@ function robinhoodEthereumFinalityEvidence() {
       }),
       batchNumber: positiveUint,
       l2Providers: tuple(
-        provider("drpc", "drpc.org", true),
+        provider("quicknode", "quicknode.com", true),
         provider("alchemy", "alchemy.com", true),
       ),
       ethereumProviders: tuple(

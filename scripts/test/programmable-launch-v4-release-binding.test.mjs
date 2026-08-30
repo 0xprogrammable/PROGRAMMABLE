@@ -198,7 +198,7 @@ test("six mechanically recomputed evidence objects unlock structural readiness",
     assert.equal(descriptor.permit2GenesisProvenance.startBlock, "0");
     assert.deepEqual(
       descriptor.permit2GenesisProvenance.providerReadbacks.map(({ providerId }) => providerId),
-      ["drpc", "alchemy"],
+      ["quicknode", "alchemy"],
     );
     assert.deepEqual(
       descriptor.externalRootDeploymentEvidence.map(({ contract }) => contract),

@@ -1,9 +1,10 @@
 # Robinhood foundation owner-wallet handoff
 
-This handoff prepares and verifies one chain-4663 EIP-1559 wallet request. It
-does not read a balance, select an owner, open a wallet, sign, broadcast, bridge
-funds, or retry a transaction. The owner remains responsible for the final
-wallet review and authorization.
+This handoff prepares and verifies one chain-4663 EIP-1559 wallet request.
+Envelope preparation does not read a balance; the final read-only action-time
+verifier does. The handoff does not select an owner, open a wallet, sign,
+broadcast, bridge funds, or retry a transaction. The owner remains responsible
+for the final wallet review and authorization.
 
 Run every command below from the repository root at the exact reviewed
 `production` commit. The checkout must be clean, its canonical `origin` must be
@@ -30,14 +31,30 @@ overwrites or immediately sources. The live handoff must start from those
 already review-frozen values. Computing new hashes from the URLs being used and
 then accepting those same hashes proves only self-consistency, not review.
 
+Custody must retain those values as owner-only read-only `0400` regular files directly
+under one absolute, real, owner-only `0700` `ROBINHOOD_CUSTODY_ROOT` outside the
+repository and OS temporary roots. The only accepted ordered record basenames
+are:
+
+```text
+quicknode-hood-explorer-indexer-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+alchemy-programmable-production-3-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+```
+
+The retired generic QuickNode record
+`quicknode-hood-explorer-indexer-robinhood-mainnet-rpc-commitment.v1` is not a
+fallback and is rejected even when it contains a syntactically valid commitment.
+
 ## Secret-safe provider input
 
 Use an approved secret runner when one is available. The manual fallback below
 keeps credential URLs out of shell history and command arguments. Do not use it
 with shell tracing, paste a URL into an `export` command, store a URL in a repo
 `.env` file, pass a URL as a CLI flag, echo it, or capture an environment dump.
-Replace the two commitment placeholders only with the earlier review-frozen,
-non-secret SHA-256 values.
+Replace only the custody-root placeholder with the protected directory that
+contains the two exact versioned records above. The loader rejects symlinks,
+wrong owners or modes, repository/temp roots, renamed records and mixed direct
+commitment environment variables.
 
 ```sh
 set +x
@@ -51,11 +68,13 @@ cleanup_robinhood_owner_handoff() {
   unset ROBINHOOD_MAINNET_RPC_URL_SECONDARY
   unset ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY
   unset ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY
+  unset ROBINHOOD_CUSTODY_ROOT
 }
 trap cleanup_robinhood_owner_handoff EXIT HUP INT TERM
 
-export ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY='<review-frozen-sha256-primary>'
-export ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY='<review-frozen-sha256-secondary>'
+unset ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY
+unset ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY
+export ROBINHOOD_CUSTODY_ROOT='/absolute/owner-only/robinhood-provider-endpoints-20260830'
 
 IFS= read -r -s ROBINHOOD_MAINNET_RPC_URL_PRIMARY </dev/tty
 printf '\n' >/dev/tty
@@ -88,8 +107,8 @@ This ordered role pair is compatible with backend provider-profile digest
 `sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910`.
 That digest is not owner-envelope or backend-release evidence by itself; the
 cross-repository promotion must still bind the exact backend artifact and its
-attested runtime readiness. With the two review-frozen commitment variables
-present, the helper prints only
+attested runtime readiness. With the exact custody root present, the helper
+loads only the two versioned records and prints only
 `ROBINHOOD_RPC_PROVIDER_COMMITMENTS_MATCH_REVIEW` after an exact match.
 Replacing a credential URL, changing the QuickNode endpoint host or credential
 path, reversing provider roles, or substituting two new otherwise valid
@@ -101,11 +120,13 @@ the current owner action-time pair. A public endpoint may return
 block. The credentialed providers must pass the exact fixed-block code, nonce,
 pending-state, simulation and closing-state inventory. Robinhood produces blocks
 fast enough that authenticated providers can legitimately observe different
-pending parents or fees during one bounded preflight. The guard therefore
-requires two identical state-relevant snapshots (runtime code, target vacancy,
-owner nonce, simulation return and gas estimate) while recording both pending
-observations. Fee fields use the highest base fee, gas price and priority fee
-reported by either provider and remain bounded by the owner's explicit ceilings.
+pending parents or fees during one bounded preflight. The preparation guard
+therefore requires two identical state-relevant snapshots (runtime code, target
+vacancy, owner nonce, simulation return and gas estimate) while recording both
+pending observations. The final action-time guard additionally requires a
+provider-agreed owner balance that remains unchanged through its closing read.
+Fee fields use the highest base fee, gas price and priority fee reported by
+either provider and remain bounded by the owner's explicit ceilings.
 
 ## Fresh envelope
 
@@ -132,8 +153,10 @@ contains a provider URL or token.
 The signing interface must export the exact request it is about to open as the
 canonical one-LF JSON shape below. `request.params` contains exactly one
 type-`0x2` transaction with exactly these keys: `chainId`, `from`, `to`,
-`value`, `data`, `nonce`, `gas`, `maxFeePerGas`, `maxPriorityFeePerGas`, and
-`type`. No `gasPrice`, access list, signature or extra key is accepted.
+`value`, `data`, `nonce`, `gas`, `maxFeePerGas`, `maxPriorityFeePerGas`,
+`accessList`, and `type`. `accessList` is required and must be exactly `[]`;
+no missing, non-empty or differently shaped access list, `gasPrice`, signature
+or extra key is accepted.
 
 An integration that needs a deterministic candidate may derive it from the
 protected envelope without printing the calldata:
@@ -154,6 +177,7 @@ jq '{
       gas: .transaction.gasQuantity,
       maxFeePerGas: .transaction.maxFeePerGasQuantity,
       maxPriorityFeePerGas: .transaction.maxPriorityFeePerGasQuantity,
+      accessList: [],
       type: .transaction.type
     }]
   }
@@ -164,11 +188,20 @@ chmod 600 "$ROBINHOOD_OWNER_ENVELOPE_ROOT/wallet-request-<unique-id>.json"
 
 Immediately before the owner opens the wallet, run the strictly read-only
 verifier. It rechecks freshness, the protected source and production ref, the
-exact hosted Verify proof, provider commitments and every wallet field. It then
-uses both frozen credentialed providers to re-read chain ID, owner `latest` and
-`pending` nonce, pending code and nonce vacancy for all three targets, the exact
-pending simulation and gas estimate, and a second closing
-nonce/code/vacancy/simulation/gas snapshot.
+exact hosted Verify proof, provider commitments and every wallet field,
+including exact `accessList: []`. It then uses both frozen credentialed
+providers to re-read chain ID; owner `latest` and `pending` nonce; owner pending
+balance; pending base fee, gas price and maximum priority fee; pending code and
+nonce vacancy for all three targets; and the exact pending simulation and gas
+estimate. It repeats a second closing
+nonce/balance/fee/code/vacancy/simulation/gas snapshot immediately before wallet
+delivery. Both providers must agree on the owner balance, and the opening and
+closing balance must remain identical. The balance must cover the maximum debit
+`gasLimit * maxFeePerGas`; the transaction fee caps must cover the highest
+opening-or-closing provider gas price and the conservative
+`2 * pendingBaseFee + maxPriorityFeePerGas` formula without exceeding the
+owner-reviewed envelope ceilings. Any funding insufficiency, fee-cap violation,
+or state drift fails closed.
 It then re-reads the canonical GitHub `production` ref and revalidates the same
 persisted immutable Verify run, attempt and artifact before one final local
 source/freshness guard. Its output contains only a bounded safe summary, never

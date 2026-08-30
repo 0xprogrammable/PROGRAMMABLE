@@ -33,6 +33,7 @@ import {
   ROBINHOOD_FOUNDATION_HOSTED_VERIFY_SCHEMA,
   normalizeRobinhoodFoundationHostedVerifyBinding,
 } from "./robinhood-custom-launch-owner-envelope-core.mjs";
+import { resolveReviewedRobinhoodProviderCommitments } from "./robinhood-custom-launch-provider-commitment-custody.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const PRODUCTION_BASE_COMMIT = "ec0f44d5d60d1bb61b605fc13ddea6e0a29007e6";
@@ -398,10 +399,11 @@ export async function runRobinhoodFoundationEnvelopeCli({
     env.ROBINHOOD_MAINNET_RPC_URL_PRIMARY,
     env.ROBINHOOD_MAINNET_RPC_URL_SECONDARY,
   ];
-  const rpcEndpointCommitments = [
-    env.ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY,
-    env.ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY,
-  ];
+  const rpcEndpointCommitments =
+    await resolveReviewedRobinhoodProviderCommitments({
+      env,
+      repositoryRoot,
+    });
   if (
     rpcUrls.some((value) => !value) ||
     rpcEndpointCommitments.some(

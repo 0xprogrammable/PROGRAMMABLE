@@ -155,28 +155,51 @@ URLs, paths, query credentials or tokens:
 ```text
 ROBINHOOD_MAINNET_RPC_URL_PRIMARY
 ROBINHOOD_MAINNET_RPC_URL_SECONDARY
+ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY
+ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY
 ETHEREUM_MAINNET_RPC_URL_PRIMARY
 ETHEREUM_MAINNET_RPC_URL_SECONDARY
 ```
 
-Before any capture or fresh replay request, code rejects every URL outside the reviewed credential
-forms: dRPC live is `https://lb.drpc.live/{robinhood|ethereum}/{credential}`; dRPC org is exactly
-`https://lb.drpc.org/ogrpc?network={robinhood|ethereum}[-mainnet]&dkey={credential}` with that query
-order; Robinhood Alchemy is `https://robinhood-mainnet.g.alchemy.com/v2/{credential}`; Ethereum
-QuickNode is `https://{endpoint-name}.ethereum-mainnet.quiknode.pro/{credential}/`, matching the
-existing Programmable production endpoint contract. Userinfo, explicit ports,
-fragments, extra or reordered query parameters, wrong-chain paths and public endpoints fail before
-the first network request. Ethereum chain ID and the complete retained readback inventory bind the
-QuickNode endpoint to mainnet. Credential values and full URLs are never serialized or printed.
+For a manual protected run, leave the two direct Robinhood commitment variables unset and set
+`ROBINHOOD_CUSTODY_ROOT` to an absolute, real, owner-only `0700` directory outside the repository
+and OS temporary roots. The collector reads only owner-only read-only `0400` regular files with these exact
+ordered basenames:
 
-These are the historical Phase A capture identities: Robinhood dRPC then
-Alchemy, and Ethereum dRPC then QuickNode. They intentionally remain byte-for-byte
-separate from the next owner action-time pair, which is Robinhood
-QuickNode **Hood Explorer Indexer** then Alchemy **Programmable Production 3**.
-Never reinterpret, rewrite or re-hash an existing Phase A readback as if it came
-from the current action-time pair. The action-time endpoint commitments prove
-only the fresh wallet-preparation reads; the retained Phase A identities prove
-only the deployment observations they actually performed.
+```text
+quicknode-hood-explorer-indexer-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+alchemy-programmable-production-3-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+```
+
+The generic QuickNode basename ending in `rpc-commitment.v1` is retired and cannot be selected.
+The protected GitHub environment maps those same records only through version-qualified secrets
+`ROBINHOOD_MAINNET_QUICKNODE_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E` and
+`ROBINHOOD_MAINNET_ALCHEMY_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E`; the workflow maps them to the
+two runtime commitment variables above. It never references an unversioned commitment secret.
+
+Before any capture or fresh replay request, code rejects every URL outside the reviewed credential
+forms. Robinhood QuickNode is exactly
+`https://{endpoint-name}.robinhood-mainnet.quiknode.pro/{credential}/`; Robinhood Alchemy is
+`https://robinhood-mainnet.g.alchemy.com/v2/{credential}`. Ethereum dRPC live is
+`https://lb.drpc.live/ethereum/{credential}`; Ethereum dRPC org is exactly
+`https://lb.drpc.org/ogrpc?network=ethereum[-mainnet]&dkey={credential}` with that query order;
+Ethereum QuickNode is
+`https://{endpoint-name}.ethereum-mainnet.quiknode.pro/{credential}/`. Userinfo, explicit ports,
+fragments, extra or reordered query parameters, wrong-chain paths and public endpoints fail before
+the first network request. Before that request, the two Robinhood URLs must also hash to the exact
+review-frozen endpoint commitments. The two credential-free SHA-256 commitments are retained under
+`capture.l2ProviderEndpointCommitments` and therefore covered by the capture digest and portable
+attestation. Fresh Phase B replay hashes its supplied Robinhood URLs against those same attested
+commitments before its first provider request. The network-qualified hosts, chain IDs and complete
+retained readback inventories bind both QuickNode endpoints to their respective networks.
+Credential values and full URLs are never serialized or printed.
+
+The Phase A capture identities are Robinhood QuickNode **Hood Explorer Indexer** then Alchemy
+**Programmable Production 3**, and Ethereum dRPC then QuickNode. The Robinhood identities match the
+owner action-time pair, but the evidence does not: action-time endpoint commitments prove only the
+fresh wallet-preparation reads, while the retained Phase A inventories prove only the postdeployment
+observations they actually performed. Never reinterpret, reuse or re-hash one evidence set as the
+other.
 
 The protected workflow is the canonical production invocation. A manual production-equivalent
 stage assembly must supply all portable Phase A proof coordinates:
@@ -358,7 +381,9 @@ sourceClosure
 capture
 ```
 
-`providers` contains normalized dRPC then Alchemy L2 state. Those summaries are not authority.
+`capture.l2ProviderEndpointCommitments` contains exactly two distinct, ordered, review-frozen
+SHA-256 commitments for QuickNode then Alchemy. `providers` contains normalized QuickNode then
+Alchemy L2 state. Those summaries are not authority.
 Every claimed value is proven by both providers' ordered retained JSON-RPC inventory under
 `capture.l2ProviderReadbacks`: chain ID, raw and parsed transaction, successful receipt and logs,
 deployment/predecessor headers, D-1/D contract code, Safe configuration/storage, Router getters,
@@ -434,10 +459,10 @@ The release-authoritative exact claim is a separate
 binds the protected revision/tree and capture authorization, the attested hosted Verify proof and
 pinned Linux solc binary, both Standard JSON/compiler-settings digests, exact creation-code hashes,
 the owner transaction hash/data hash and finalized block, and exact deployed runtime hashes observed
-by both dRPC and Alchemy. A Sourcify response cannot replace or weaken this binding. These retained
-historical Phase A provider URLs are code-owned HTTPS dRPC/Alchemy for Robinhood and HTTPS
-dRPC/QuickNode for Ethereum; they are not the current owner action-time endpoint commitments. Only
-sanitized hostnames enter evidence.
+by both QuickNode and Alchemy. A Sourcify response cannot replace or weaken this binding. The Phase A
+provider URLs are code-owned HTTPS QuickNode/Alchemy for Robinhood and HTTPS dRPC/QuickNode for
+Ethereum. They are separately supplied for capture and are not substituted by owner action-time
+endpoint commitments. Only sanitized hostnames enter evidence.
 
 ### Optional Blockscout observation
 

@@ -514,6 +514,7 @@
         "profileDigest",
         "sourceOrigin",
         "authorization",
+        "l2ProviderEndpointCommitments",
         "l2Checkpoint",
         "l2ProviderReadbacks",
         "batchNumber",
@@ -541,6 +542,13 @@
         },
         "sourceOrigin": { "$ref": "#/$defs/sourceOrigin" },
         "authorization": { "$ref": "#/$defs/captureAuthorization" },
+        "l2ProviderEndpointCommitments": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
         "l2Checkpoint": { "$ref": "#/$defs/checkpoint" },
         "l2ProviderReadbacks": {
           "type": "array",

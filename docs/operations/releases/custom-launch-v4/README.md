@@ -40,19 +40,28 @@ The four artifacts at that tree are:
 Changing the merge commit, tree, path, role, or digest changes the release identity and must fail
 closed.
 
-## Provider timeline separation
+## Provider evidence separation
 
-The next owner-wallet action-time envelope uses the ordered,
+The owner-wallet action-time envelope uses the ordered,
 credentialed Robinhood pair QuickNode **Hood Explorer Indexer** primary and
 Alchemy **Programmable Production 3** secondary. Its provider identities are
 compatible with backend provider-profile digest
 `sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910`,
 but that digest is not backend readiness evidence by itself.
 
-The historical Phase A deployment evidence below remains ordered dRPC then
-Alchemy on Robinhood, while Ethereum remains dRPC then QuickNode. Those retained
-observations describe the providers that actually performed those reads. The
-current owner endpoint commitments must never relabel, replace or re-hash them.
+Phase A deployment evidence uses the same ordered Robinhood provider identities,
+QuickNode then Alchemy, while Ethereum remains dRPC then QuickNode. Its separately
+supplied endpoints must match the exact review-frozen owner action-time commitments
+before any provider request. Those credential-free commitments and the retained
+inventories describe the endpoints and providers that actually performed the
+postdeployment reads; fresh Phase B replay rechecks the same attested commitments.
+Commitments must never replace, relabel or re-hash the provider evidence itself.
+The protected handoff resolves them only from the version-qualified
+`public-production-2fb6a4e` QuickNode Hood Explorer Indexer and Alchemy
+Programmable Production 3 custody-record basenames. Local runs use an absolute,
+owner-only `ROBINHOOD_CUSTODY_ROOT`; the hosted capture maps only the matching
+version-qualified environment secrets. The retired generic QuickNode record is
+never an accepted fallback.
 
 ## Per-contract deployment provenance
 
@@ -65,28 +74,28 @@ profile.
   Standard JSON inputs set `metadata.appendCBOR=false`. Sourcify is not the exact-source authority.
   Their exact claim is a separate composite binding across the protected source revision/tree,
   authenticated hosted reproduction build, pinned compiler settings and Standard JSON bytes,
-  creation bytes in the finalized atomic transaction, and runtime bytes independently read by dRPC
-  and Alchemy.
+  creation bytes in the finalized atomic transaction, and runtime bytes independently read by
+  QuickNode and Alchemy.
 - `PermitAuthority` is the Safe proxy root. It is bound to the pinned Safe 1.4.1 source commitment,
   exact singleton and fallback-handler runtimes, owners, threshold, modules, guard, storage words,
-  ordered dRPC/Alchemy configuration observations, and the complete Robinhood L2 checkpoint to
+  ordered QuickNode/Alchemy configuration observations, and the complete Robinhood L2 checkpoint to
   Ethereum-finalized proof. Its `atomicRootStateEvidenceDigest` must equal the PermitAuthority
   atomic result-state digest.
-- Each of the three atomic results carries ordered dRPC then Alchemy D-1/D runtime-transition
+- Each of the three atomic results carries ordered QuickNode then Alchemy D-1/D runtime-transition
   readbacks. The predecessor block is exactly deployment block minus one, its runtime is empty,
   both providers agree on the predecessor hash, and both bind the deployment block/hash and final
   runtime. Each readback and full result state has its own framed digest.
 - `Permit2` is an exact genesis predeploy at block `0`, bound to the official Robinhood genesis URL,
-  the pinned genesis-document digest, the 9,152-byte alloc runtime, and matching ordered dRPC and
+  the pinned genesis-document digest, the 9,152-byte alloc runtime, and matching ordered QuickNode and
   Alchemy block-0 readbacks.
 - `PoolManager`, `PositionManager`, `StateView`, `V4Quoter`, and `UniversalRouter` are an exact
   positional tuple sourced from `Uniswap/contracts` commit
   `4cfc406c8e34da3ce04e60657a7825075b64fd22`, path `deployments/json/4663.json`, and raw-file digest
   `sha256:21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15`.
-  Every registry root requires matching ordered dRPC and Alchemy deployment-receipt readbacks.
+  Every registry root requires matching ordered QuickNode and Alchemy deployment-receipt readbacks.
 
 The release-level finality evidence must match both the atomic deployment checkpoint and the Safe
-checkpoint byte for byte. The nested proof requires ordered dRPC/Alchemy Robinhood observations,
+checkpoint byte for byte. The nested proof requires ordered QuickNode/Alchemy Robinhood observations,
 ordered dRPC/QuickNode Ethereum observations, the pinned rollup and sequencer inbox, and an
 Ethereum `finalized` checkpoint whose block is not earlier than the batch-posting block.
 
