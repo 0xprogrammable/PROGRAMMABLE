@@ -63,12 +63,14 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain(
       "https://dune.com/0xprogrammable6098/programmable-analytics",
     );
-    expect(navigation.indexOf('aria-label="Programmable on DEX Screener"')).toBeLessThan(
+    expect(
+      navigation.indexOf('aria-label="Programmable on DEX Screener"'),
+    ).toBeLessThan(
       navigation.indexOf('aria-label="Programmable analytics on Dune"'),
     );
-    expect(navigation.indexOf('aria-label="Programmable analytics on Dune"')).toBeLessThan(
-      navigation.indexOf('aria-label="Programmable on Discord"'),
-    );
+    expect(
+      navigation.indexOf('aria-label="Programmable analytics on Dune"'),
+    ).toBeLessThan(navigation.indexOf('aria-label="Programmable on Discord"'));
     expect(landing).toContain('href="/docs"');
     expect(landing).toContain("Read the Programmable overview");
     expect(navigation).not.toContain("ThemeToggle");
@@ -85,16 +87,16 @@ describe("topbar and Explore hero polish", () => {
     for (const label of [
       "Explore",
       "Create",
+      "Migrate",
       "Docs",
       "API keys",
       "Profile",
     ]) {
       expect(navigation).toContain(`label: "${label}"`);
     }
+    expect(navigation).toContain('{ href: "/migration", label: "Migrate" }');
     expect(navigationCss).toContain("@media (max-width: 60rem)");
-    expect(navigationCss).toContain(
-      "grid-template-columns: 1fr",
-    );
+    expect(navigationCss).toContain("grid-template-columns: 1fr");
     expect(navigation).toContain("<HeaderSocialLinks mobile />");
     expect(navigationCss).toMatch(
       /\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*flex;[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;/s,
@@ -116,19 +118,19 @@ describe("topbar and Explore hero polish", () => {
     expect(navigationCss).toMatch(
       /@media \(max-width: 26rem\)[\s\S]*?\.mobileSheet\s*\{[^}]*width:\s*calc\(100vw - 24px\);/s,
     );
-    expect(landingCss).toMatch(
-      /\.docsLink\s*\{[^}]*font-size:\s*18px;/s,
-    );
+    expect(landingCss).toMatch(/\.docsLink\s*\{[^}]*font-size:\s*18px;/s);
   });
 
   it("keeps the wallet menu mounted for a smooth accessible exit", () => {
     const wallet = read("components/wallet-provider.tsx");
     const css = read("app/webde-final-ui.css");
 
-    expect(wallet).toContain('menuOpen ? "wallet-menu-open" : "wallet-menu-closed"');
+    expect(wallet).toContain(
+      'menuOpen ? "wallet-menu-open" : "wallet-menu-closed"',
+    );
     expect(wallet).toContain("aria-hidden={!menuOpen}");
     expect(wallet).toContain("tabIndex={menuOpen ? undefined : -1}");
-    expect(wallet).toContain('prefetch={false}');
+    expect(wallet).toContain("prefetch={false}");
     expect(css).toMatch(
       /\.header-actions \.wallet-button-compact\s*\{[^}]*width:\s*154px;/s,
     );

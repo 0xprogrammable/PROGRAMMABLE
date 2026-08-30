@@ -25,7 +25,7 @@ describe("interaction accessibility", () => {
     expect(chartSource).toContain("onKeyDown={inspectKeyboard}");
     expect(chartSource).toContain('role="group"');
     expect(chartSource).toContain("tabIndex={0}");
-    expect(chartSource).not.toContain("role=\"slider\"");
+    expect(chartSource).not.toContain('role="slider"');
   });
 
   it("keeps primary token interactions at a reliable touch size", () => {
@@ -44,9 +44,7 @@ describe("interaction accessibility", () => {
 
     expect(tokenCss).toMatch(/\.back\s*\{[^}]*min-height:\s*44px;/s);
     expect(tokenCss).toMatch(/\.address\s*\{[^}]*min-height:\s*44px;/s);
-    expect(tokenCss).toMatch(
-      /\.slippageControl\s*\{[^}]*min-height:\s*44px;/s,
-    );
+    expect(tokenCss).toMatch(/\.slippageControl\s*\{[^}]*min-height:\s*44px;/s);
     expect(tokenCss).toMatch(
       /\.slippageControl input\s*\{[^}]*min-height:\s*44px;/s,
     );
@@ -54,14 +52,14 @@ describe("interaction accessibility", () => {
       /\.rangeButton\s*\{[^}]*height:\s*44px;[^}]*min-width:\s*44px;/s,
     );
     expect(tokenSource).toContain(
-      '<section\n      className={styles.tradeForm}',
+      "<section\n      className={styles.tradeForm}",
     );
     expect(tokenSource).toContain(
-      'className={`${styles.links} ${styles.addressLinks}`}',
+      "className={`${styles.links} ${styles.addressLinks}`}",
     );
-    expect(tokenSource).toContain('aria-label={`${token.name} links`}');
+    expect(tokenSource).toContain("aria-label={`${token.name} links`}");
     expect(tokenSource).toContain(
-      '<nav className={styles.links} aria-label={`${project.name} links`}>',
+      "<nav className={styles.links} aria-label={`${project.name} links`}>",
     );
   });
 
@@ -193,7 +191,9 @@ describe("interaction accessibility", () => {
     );
 
     expect(source).toContain("onBlur={closeOnFocusLeave}");
-    expect(source).toContain("event.currentTarget.contains(event.relatedTarget)");
+    expect(source).toContain(
+      "event.currentTarget.contains(event.relatedTarget)",
+    );
     expect(source).toContain("header.contains(document.activeElement)");
     expect(source).not.toContain(
       '.querySelector<HTMLElement>("a, button:not(:disabled)")',
@@ -258,15 +258,14 @@ describe("interaction accessibility", () => {
       return segments;
     });
 
-    expect(source).toContain('const mobileNavItems = desktopNavItems;');
+    expect(source).toContain("const mobileNavItems = desktopNavItems;");
     expect(source).toContain('{ href: "/profile", label: "Profile" },');
-    expect(source).not.toContain('/hookathon');
+    expect(source).toContain('{ href: "/migration", label: "Migrate" },');
+    expect(source).not.toContain("/hookathon");
     expect(source).toContain(
       '<nav className="mobile-nav" aria-label="Primary navigation">',
     );
-    expect(source).toContain(
-      'aria-current={current ? "page" : undefined}',
-    );
+    expect(source).toContain('aria-current={current ? "page" : undefined}');
     expect(source).not.toContain('<Icon aria-hidden="true"');
     expect(source).toContain("<span>{item.label}</span>");
     expect(mobileMediaSegments).toEqual(

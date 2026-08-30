@@ -22,14 +22,14 @@ import {
   NavigationMenuIcon,
 } from "@/components/navigation-icons";
 import { useViewChain, type ViewChainId } from "@/components/view-chain";
-import { isRobinhoodUnavailableRoute } from
-  "@/components/view-chain-unavailable";
+import { isRobinhoodUnavailableRoute } from "@/components/view-chain-unavailable";
 import { useWallet } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
   { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
+  { href: "/migration", label: "Migrate" },
   { href: "/docs", label: "Docs" },
   { href: "/developers/api-keys", label: "API keys" },
   { href: "/profile", label: "Profile" },
@@ -51,9 +51,7 @@ function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
   return (
     <div
       className={
-        mobile
-          ? styles.mobileSocials
-          : `header-socials ${styles.headerSocials}`
+        mobile ? styles.mobileSocials : `header-socials ${styles.headerSocials}`
       }
       role="group"
       aria-label="Programmable social links"
@@ -242,10 +240,7 @@ function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
   const activePath = "activePath" in item ? item.activePath : item.href;
 
   if (activePath === "/explore") {
-    return (
-      pathname === "/explore" ||
-      pathname.startsWith("/explore/")
-    );
+    return pathname === "/explore" || pathname.startsWith("/explore/");
   }
   if (activePath === "/docs") {
     return pathname === "/docs" || pathname.startsWith("/docs/");
@@ -302,7 +297,11 @@ function ViewChainMark({ viewChainId }: { viewChainId: ViewChainId }) {
         fill="currentColor"
         opacity="0.72"
       />
-      <path d="m12 9.25-6.5 2.95L12 15.9l6.5-3.7L12 9.25Z" fill="currentColor" opacity="0.9" />
+      <path
+        d="m12 9.25-6.5 2.95L12 15.9l6.5-3.7L12 9.25Z"
+        fill="currentColor"
+        opacity="0.9"
+      />
     </svg>
   );
 }
@@ -366,7 +365,9 @@ function HeaderChainSelector({
         aria-expanded={open}
         aria-busy={!hydrated || undefined}
         aria-label={
-          hydrated ? `Viewing ${currentLabel}. Change network` : "Loading network"
+          hydrated
+            ? `Viewing ${currentLabel}. Change network`
+            : "Loading network"
         }
         disabled={!hydrated}
         title={hydrated ? currentLabel : undefined}
@@ -574,10 +575,7 @@ export function SiteHeader() {
         aria-hidden={!menuOpen}
         inert={menuOpen ? undefined : true}
       >
-        <div
-          className={styles.mobileSheetSurface}
-          id={menuId}
-        >
+        <div className={styles.mobileSheetSurface} id={menuId}>
           <HeaderAccountAction
             menuOpen={menuOpen}
             onConnect={() => setMenuPath(null)}
