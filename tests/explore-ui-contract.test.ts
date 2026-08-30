@@ -62,6 +62,8 @@ describe("Explore UI contract", () => {
     expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
     expect(source).not.toContain("ExploreModeSwitch");
     expect(source).toContain("const eagerImage = !embedded");
+    expect(source).toContain("onPointerEnter={() => router.prefetch(href)}");
+    expect(source).toContain("onFocus={() => router.prefetch(href)}");
     expect(source).toContain("function ExploreGridSkeleton");
     expect(source).toContain(
       "<ExploreGridSkeleton count={pageSize} />",
@@ -217,7 +219,9 @@ describe("Explore UI contract", () => {
     expect(source).toContain("useExplorePaginationViewport()");
     expect(source).toContain("limit: String(pageSize)");
     expect(source.match(/subscribeToExploreViewport/gu)).toHaveLength(2);
-    expect(source).toContain("previousPageSize.current === pageSize");
+    expect(source).toContain("pageSelection.pageSize === pageSize");
+    expect(source).toContain("{ chainId: viewChainId, pageSize, page }");
+    expect(source).not.toContain("previousPageSize");
     expect(source).toContain("displayState.payload.pageSize !== pageSize");
     expect(source).toContain("pendingMobilePagination");
     expect(source).toContain("styles.viewportPendingPagination");

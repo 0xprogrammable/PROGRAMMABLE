@@ -10,6 +10,7 @@ import {
   type TokenDetailInitialResponse,
 } from "@/components/token-detail-view";
 import { TokenDetailShell } from "@/components/token-detail-shell";
+import { TokenRouteChainSync } from "@/components/token-route-chain-sync";
 import { tokenDetailMetadataFromProjection } from
   "@/lib/token-detail-metadata";
 import {
@@ -142,11 +143,13 @@ async function InitialTokenDetail({
   const initialResponse = await readInitialTokenDetail(address, chainId);
 
   return (
-    <TokenDetailView
-      key={`${chainId}:${address.toLowerCase()}`}
-      address={address}
-      chainId={chainId}
-      initialResponse={initialResponse}
-    />
+    <TokenRouteChainSync key={chainId} chainId={chainId}>
+      <TokenDetailView
+        key={`${chainId}:${address.toLowerCase()}`}
+        address={address}
+        chainId={chainId}
+        initialResponse={initialResponse}
+      />
+    </TokenRouteChainSync>
   );
 }

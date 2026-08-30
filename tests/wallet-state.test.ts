@@ -195,7 +195,10 @@ describe("wallet recovery state", () => {
     expect(provider).toContain("scheduleWalletRuntimeIdlePreload(preload)");
     expect(provider).toContain("window.requestIdleCallback(preload");
     expect(provider).toContain("configuredValue={configuredValue}");
-    expect(provider).toContain("onValueChange={setConfiguredValue}");
+    expect(provider).toContain(
+      "configuredSnapshot?.linkedWalletOnly === linkedWalletOnly",
+    );
+    expect(provider).toContain("onValueChange={acceptConfiguredValue}");
     expect(provider).not.toContain("if (!runtime) {");
     expect(provider).toContain("const hydrationPending = !authReady");
     expect(provider).toContain(

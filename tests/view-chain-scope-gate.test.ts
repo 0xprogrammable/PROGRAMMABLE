@@ -13,7 +13,7 @@ describe("Robinhood view-chain scope gate", () => {
     expect(isRobinhoodUnavailableRoute("/profile/settings")).toBe(true);
     expect(isRobinhoodUnavailableRoute("/launch")).toBe(true);
     expect(isRobinhoodUnavailableRoute("/launch/history")).toBe(true);
-    expect(isRobinhoodUnavailableRoute("/token/0x1234")).toBe(true);
+    expect(isRobinhoodUnavailableRoute("/token/0x1234")).toBe(false);
 
     expect(isRobinhoodUnavailableRoute("/explore")).toBe(false);
     expect(isRobinhoodUnavailableRoute("/docs")).toBe(false);
@@ -28,13 +28,22 @@ describe("Robinhood view-chain scope gate", () => {
     const resolvedLayout = read("components/resolved-view-chain-layout.tsx");
     const transition = read("components/route-transition.tsx");
     const navigation = read("components/site-navigation.tsx");
+    const tokenPage = read("app/token/[address]/page.tsx");
+    const tokenSync = read("components/token-route-chain-sync.tsx");
     const styles = read("components/view-chain-unavailable.module.css");
 
     expect(boundary).toContain("resolvedViewChainId === 4663");
     expect(boundary).toContain("<ViewChainUnavailable />");
+    expect(boundary).toContain("<ViewChainPending />");
+    expect(boundary).toContain("initialViewChainId === null");
     expect(resolvedLayout).toContain("VIEW_CHAIN_COOKIE_NAME");
     expect(transition).not.toContain("<ViewChainPending />");
     expect(transition).not.toContain("<ViewChainUnavailable />");
+    expect(transition).toContain("routeUsesChainBoundary");
+    expect(navigation).toContain('pathname.startsWith("/token/")');
+    expect(navigation).toContain('url.searchParams.set("chain"');
+    expect(tokenPage).toContain("<TokenRouteChainSync");
+    expect(tokenSync).toContain("synchronized.current = true");
     expect(transition).toContain(
       "const resolvedInitialChain = !previousHydrated.current && hydrated",
     );

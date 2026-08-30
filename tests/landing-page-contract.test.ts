@@ -110,7 +110,10 @@ describe("landing page contract", () => {
     expect(gate).toContain('window.location.hash === "#explore"');
     expect(gate).toContain('window.addEventListener("hashchange"');
     expect(gate).toContain('!("IntersectionObserver" in window)');
-    expect(gate).toContain("aria-busy={failed ? undefined : true}");
+    expect(gate).toContain("aria-busy={!failed || retrying ? true : undefined}");
+    expect(gate).toContain("aria-disabled={retrying}");
+    expect(gate).toContain("retryRequestedRef.current = true");
+    expect(gate).toContain('"[data-explore-heading]"');
     expect(gate).toContain('<h2 data-explore-heading>Explore</h2>');
     expect(styles).toMatch(
       /\.exploreGate\s*\{[^}]*min-height:\s*calc\(100svh - var\(--header-height\)\);/s,

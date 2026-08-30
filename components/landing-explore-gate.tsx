@@ -19,23 +19,31 @@ type LandingExploreViewComponent = ComponentType<
 function LandingExploreFallback({
   failed = false,
   onRetry,
+  retrying = false,
 }: Readonly<{
   failed?: boolean;
   onRetry?: () => void;
+  retrying?: boolean;
 }>) {
   return (
     <div
       className={`${styles.exploreFallback} page-width`}
-      aria-busy={failed ? undefined : true}
+      aria-busy={!failed || retrying ? true : undefined}
     >
       <header className={styles.exploreFallbackHeading}>
         <h2 data-explore-heading>Explore</h2>
       </header>
       {failed && onRetry ? (
         <p className={styles.exploreFallbackError} role="status">
-          Unable to load launches.{" "}
-          <button type="button" onClick={onRetry}>
-            Try again
+          {retrying ? "Loading launches…" : "Unable to load launches."}{" "}
+          <button
+            aria-disabled={retrying}
+            type="button"
+            onClick={() => {
+              if (!retrying) onRetry();
+            }}
+          >
+            {retrying ? "Loading…" : "Try again"}
           </button>
         </p>
       ) : null}
@@ -49,7 +57,9 @@ export function LandingExploreGate() {
   const [ExploreComponent, setExploreComponent] =
     useState<LandingExploreViewComponent | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const retryRequestedRef = useRef(false);
 
   useLayoutEffect(() => {
     const loadForExploreHash = () => {
@@ -92,10 +102,28 @@ export function LandingExploreGate() {
     let cancelled = false;
     void import("@/components/explore-view")
       .then((module) => {
-        if (!cancelled) setExploreComponent(() => module.ExploreView);
+        if (cancelled) return;
+        const restoreExploreFocus = retryRequestedRef.current;
+        retryRequestedRef.current = false;
+        setLoadFailed(false);
+        setRetrying(false);
+        setExploreComponent(() => module.ExploreView);
+        if (restoreExploreFocus) {
+          window.requestAnimationFrame(() => {
+            const heading = gateRef.current?.querySelector<HTMLElement>(
+              "[data-explore-heading]",
+            );
+            if (!heading) return;
+            heading.tabIndex = -1;
+            heading.focus({ preventScroll: true });
+          });
+        }
       })
       .catch(() => {
-        if (!cancelled) setLoadFailed(true);
+        if (!cancelled) {
+          setLoadFailed(true);
+          setRetrying(false);
+        }
       });
 
     return () => {
@@ -110,8 +138,10 @@ export function LandingExploreGate() {
       ) : (
         <LandingExploreFallback
           failed={loadFailed}
+          retrying={retrying}
           onRetry={() => {
-            setLoadFailed(false);
+            retryRequestedRef.current = true;
+            setRetrying(true);
             setLoadAttempt((current) => current + 1);
           }}
         />

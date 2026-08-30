@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronDown,
@@ -2616,6 +2617,7 @@ export function ExploreView({
   loadingOnly?: boolean;
   embedded?: boolean;
 }> = {}) {
+  const router = useRouter();
   const preview = useInterfacePreview();
   const {
     hydrated: viewChainReady,
@@ -2641,29 +2643,37 @@ export function ExploreView({
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>(
     initialModelFilter,
   );
+  const { pageSize, ready: exploreViewportReady } =
+    useExplorePaginationViewport();
   const [pageSelection, setPageSelection] = useState({
     chainId: viewChainId,
+    pageSize,
     page: 1,
   });
-  const currentPage = pageSelection.chainId === viewChainId
-    ? pageSelection.page
-    : 1;
+  const currentPage =
+    pageSelection.chainId === viewChainId &&
+      pageSelection.pageSize === pageSize
+      ? pageSelection.page
+      : 1;
   const setCurrentPage = useCallback(
     (nextPage: SetStateAction<number>) => {
       setPageSelection((current) => {
-        const activePage = current.chainId === viewChainId ? current.page : 1;
+        const activePage =
+          current.chainId === viewChainId && current.pageSize === pageSize
+            ? current.page
+            : 1;
         const page = typeof nextPage === "function"
           ? nextPage(activePage)
           : nextPage;
-        return current.chainId === viewChainId && current.page === page
+        return current.chainId === viewChainId &&
+            current.pageSize === pageSize &&
+            current.page === page
           ? current
-          : { chainId: viewChainId, page };
+          : { chainId: viewChainId, pageSize, page };
       });
     },
-    [viewChainId],
+    [pageSize, viewChainId],
   );
-  const { pageSize, ready: exploreViewportReady } =
-    useExplorePaginationViewport();
   const [retryKey, setRetryKey] = useState(0);
   const [revalidationKey, setRevalidationKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
@@ -2758,13 +2768,6 @@ export function ExploreView({
 
     return () => window.clearTimeout(timer);
   }, [debouncedQuery, normalizedQuery, setCurrentPage]);
-
-  const previousPageSize = useRef(pageSize);
-  useEffect(() => {
-    if (previousPageSize.current === pageSize) return;
-    previousPageSize.current = pageSize;
-    setCurrentPage(1);
-  }, [pageSize, setCurrentPage]);
 
   useEffect(() => {
     function closeFilter(event: PointerEvent | KeyboardEvent) {
@@ -3329,6 +3332,8 @@ export function ExploreView({
                   href={href}
                   prefetch={false}
                   aria-label={`Open ${token.name}`}
+                  onPointerEnter={() => router.prefetch(href)}
+                  onFocus={() => router.prefetch(href)}
                 >
                   {cardContent}
                 </Link>

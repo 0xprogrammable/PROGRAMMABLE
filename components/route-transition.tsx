@@ -3,12 +3,17 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useViewChain } from "@/components/view-chain";
+import { isRobinhoodUnavailableRoute } from
+  "@/components/view-chain-unavailable";
 
 export function RouteTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { hydrated, viewChainId } = useViewChain();
   const contentRef = useRef<HTMLDivElement>(null);
-  const focusContext = `${pathname}\u0000${hydrated ? viewChainId : "pending"}`;
+  const routeUsesChainBoundary = isRobinhoodUnavailableRoute(pathname);
+  const focusContext = `${pathname}\u0000${
+    routeUsesChainBoundary ? (hydrated ? viewChainId : "pending") : "route"
+  }`;
   const previousFocusContext = useRef(focusContext);
   const previousHydrated = useRef(hydrated);
   const previousMotionPathname = useRef(pathname);

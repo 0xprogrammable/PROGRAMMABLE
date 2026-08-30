@@ -855,8 +855,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [runtime, setRuntime] = useState<WalletProviderRuntime | null>(null);
-  const [configuredValue, setConfiguredValue] =
-    useState<WalletContextValue | null>(null);
+  const [configuredSnapshot, setConfiguredSnapshot] = useState<{
+    linkedWalletOnly: boolean;
+    value: WalletContextValue;
+  } | null>(null);
+  const configuredValue =
+    configuredSnapshot?.linkedWalletOnly === linkedWalletOnly
+      ? configuredSnapshot.value
+      : null;
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
@@ -882,6 +888,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const consumePendingAction = useCallback(() => {
     setPendingAction(null);
   }, []);
+  const acceptConfiguredValue = useCallback(
+    (value: WalletContextValue) => {
+      setConfiguredSnapshot({ linkedWalletOnly, value });
+    },
+    [linkedWalletOnly],
+  );
 
   useEffect(() => {
     if (!privyAppId || !active || runtime) return;
@@ -948,7 +960,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           autoAction={pendingAction}
           linkedWalletOnly={linkedWalletOnly}
           onAutoActionConsumed={consumePendingAction}
-          onValueChange={setConfiguredValue}
+          onValueChange={acceptConfiguredValue}
           runtime={runtime}
         />
       ) : null}

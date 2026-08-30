@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -77,16 +77,18 @@ describe("view chain", () => {
     expect(routeBoundary).toContain(
       "const resolvedViewChainId = hydrated ? viewChainId : initialViewChainId",
     );
+    expect(routeBoundary).toContain("initialViewChainId === null");
+    expect(routeBoundary).toContain("<ViewChainPending />");
     expect(routeBoundary).toContain("resolvedViewChainId === 4663");
     for (const routeLayout of [
       "app/profile/layout.tsx",
       "app/launch/layout.tsx",
-      "app/token/layout.tsx",
     ]) {
       expect(read(routeLayout)).toContain(
         "ResolvedViewChainLayout as default",
       );
     }
+    expect(existsSync("app/token/layout.tsx")).toBe(false);
   });
 
   it("renders one alternate-chain option before the hamburger as an accessible disclosure", () => {
