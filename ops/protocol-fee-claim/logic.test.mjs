@@ -68,10 +68,15 @@ import {
   walletSendDuplicateBatchId,
   withTimeout,
 } from "./logic.mjs";
+import {
+  SCAN_SNAPSHOT_SCHEMA,
+  createScanSnapshot,
+  parseScanSnapshot,
+} from "./view-state.mjs";
 
 test("binds exactly Classic and deployed Stock fee sources", () => {
-  assert.equal(HOOKS.length, 5);
-  assert.equal(CLAIMS.filter(({ kind }) => kind === "native").length, 3);
+  assert.equal(HOOKS.length, 6);
+  assert.equal(CLAIMS.filter(({ kind }) => kind === "native").length, 4);
   assert.equal(CLAIMS.filter(({ kind }) => kind === "asset").length, 18);
   assert.ok(
     HOOKS.every(
@@ -83,6 +88,124 @@ test("binds exactly Classic and deployed Stock fee sources", () => {
   assert.equal(
     HOOKS.some(({ id }) => id.includes("deep")),
     false,
+  );
+});
+
+test("round-trips a display-only scan snapshot for the exact reward wallet", () => {
+  const scannedAt = Date.UTC(2026, 7, 30, 16, 0, 0);
+  const snapshot = createScanSnapshot({
+    account: TREASURY,
+    chainId: MAINNET_CHAIN_ID,
+    blockNumber: 25_869_574n,
+    nativeWei: 558_522_000_000_000_000n,
+    claimCount: 12,
+    assetCount: 7,
+    scannedAt,
+  });
+  assert.equal(snapshot.schema, SCAN_SNAPSHOT_SCHEMA);
+  const parsed = parseScanSnapshot(
+    JSON.stringify({
+      ...snapshot,
+      claims: [{ claimData: "0xdeadbeef", verified: true }],
+      calls: [{ to: TREASURY, data: "0xdeadbeef" }],
+      claimData: "0xdeadbeef",
+    }),
+    {
+      expectedAccount: TREASURY,
+      expectedChainId: MAINNET_CHAIN_ID,
+      now: scannedAt + 1_000,
+    },
+  );
+  assert.deepEqual(parsed, snapshot);
+  assert.deepEqual(Object.keys(parsed).sort(), [
+    "account",
+    "assetCount",
+    "blockNumber",
+    "chainId",
+    "claimCount",
+    "nativeWei",
+    "scannedAt",
+    "schema",
+  ]);
+  assert.equal(Object.isFrozen(parsed), true);
+});
+
+test("rejects stale, foreign or malformed scan snapshots", () => {
+  const scannedAt = Date.UTC(2026, 7, 30, 16, 0, 0);
+  const snapshot = createScanSnapshot({
+    account: TREASURY,
+    chainId: MAINNET_CHAIN_ID,
+    blockNumber: 25_869_574n,
+    nativeWei: 1n,
+    claimCount: 1,
+    assetCount: 0,
+    scannedAt,
+  });
+  assert.throws(() =>
+    parseScanSnapshot(snapshot, {
+      expectedAccount: "0x0000000000000000000000000000000000000001",
+      expectedChainId: MAINNET_CHAIN_ID,
+      now: scannedAt,
+    }),
+  );
+  assert.throws(() =>
+    parseScanSnapshot(snapshot, {
+      expectedAccount: TREASURY,
+      expectedChainId: "0x2",
+      now: scannedAt,
+    }),
+  );
+  assert.throws(() =>
+    parseScanSnapshot(
+      { ...snapshot, nativeWei: "-1" },
+      {
+        expectedAccount: TREASURY,
+        expectedChainId: MAINNET_CHAIN_ID,
+        now: scannedAt,
+      },
+    ),
+  );
+  assert.throws(() =>
+    parseScanSnapshot(
+      { ...snapshot, nativeWei: "9".repeat(79) },
+      {
+        expectedAccount: TREASURY,
+        expectedChainId: MAINNET_CHAIN_ID,
+        now: scannedAt,
+      },
+    ),
+  );
+  assert.throws(() =>
+    parseScanSnapshot(snapshot, {
+      expectedAccount: TREASURY,
+      expectedChainId: MAINNET_CHAIN_ID,
+      now: scannedAt + 31 * 24 * 60 * 60 * 1_000,
+    }),
+  );
+});
+
+test("keeps the cached scan display-only and the main action wallet-first", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const index = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const claimAll = app.slice(
+    app.indexOf("async function claimAll()"),
+    app.indexOf("async function resumeStoredBatch()"),
+  );
+  const primaryAction = app.slice(
+    app.indexOf("async function handlePrimaryAction()"),
+    app.indexOf('window.addEventListener("storage"'),
+  );
+
+  assert.equal((index.match(/data-action(?:\s|>)/g) ?? []).length, 1);
+  assert.doesNotMatch(index, /data-refresh|Neu scannen/);
+  assert.match(index, /Mit der Reward Wallet verbinden und claimen\./);
+  assert.match(app, /elements\.actionLabel\.textContent = "Erneut prüfen"/);
+  assert.match(app, /elements\.actionDetail\.textContent = "Reward Wallet bleibt verbunden"/);
+  assert.match(claimAll, /await refreshClaims\(\);/);
+  assert.doesNotMatch(claimAll, /scanSnapshot|SCAN_SNAPSHOT/);
+  assert.match(
+    primaryAction,
+    /if \([\s\S]*scanNeedsRetry\(verifiedHooks\)[\s\S]*claimableClaims\(\)\.length === 0[\s\S]*state\.capabilityStatus === "failed"[\s\S]*\)\s*await refreshClaims\(\);\s*else await claimAll\(\);/,
   );
 });
 
@@ -113,6 +236,26 @@ test("keeps the public claim discovery manifest aligned with the scanner", () =>
     manifest.classic.legacyAggregateClaim.feeHook.toLowerCase(),
     HOOKS.find(({ id }) => id === "classic-v1").address.toLowerCase(),
   );
+  assert.deepEqual(manifest.classic.routerAggregateClaims, [
+    {
+      version: "v4",
+      releaseStatus: "publicly-available",
+      releaseCommit: "707d438576dcf47dc2667125789fd35eb1c3de50",
+      publicAvailabilityCommit: "ff51e713feb52e4e13f3c553d1c726f3c8f2858c",
+      indexerCatalogStatus: "indexer-activated",
+      sourceCommitment:
+        "0x038f0dec0856e2638eac146af373a388bf18fd40c6891fece4c9490b9dac18ca",
+      launcher: "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+      feeHook: HOOKS.find(({ id }) => id === "classic-v4").address,
+      feeHookDeploymentBlock: "25851137",
+      feeHookRuntimeCodeHash: HOOKS.find(({ id }) => id === "classic-v4")
+        .runtimeCodeHash,
+      recipientSelector: SELECTORS.launcherFeeRecipient,
+      expectedRecipient: TREASURY,
+      accruedSelector: SELECTORS.launcherFeesAccrued,
+      claimSelector: SELECTORS.claimLauncherFees,
+    },
+  ]);
   assert.equal(
     manifest.stock.claimLegCount,
     CLAIMS.filter(({ kind }) => kind === "asset").length,
@@ -349,9 +492,26 @@ test("keeps the static Vercel scanner on wallet RPC and serializes refreshes", (
     app,
     /async function syncAfterWalletEvent\(\) \{\s*const revision = invalidateWalletAuthorizationState\(\);[\s\S]*await syncWallet\(\{ expectedRevision: revision \}\);\s*\} catch \{\s*if \(revision !== walletAuthorizationRevision\) return;\s*clearWalletAuthorizationState\(\);/,
   );
+  assert.match(app, /const syncGeneration = \+\+walletSyncGeneration;/);
   assert.match(
     app,
-    /if \(expectedRevision !== walletAuthorizationRevision\) return;\s*state\.account =/,
+    /expectedRevision !== walletAuthorizationRevision \|\|\s*syncGeneration !== walletSyncGeneration/,
+  );
+  assert.match(
+    app,
+    /const synchronized = await syncWallet\(\);\s*if \(synchronized\) lastPassiveWalletSyncAt = Date\.now\(\);/,
+  );
+  assert.match(
+    app,
+    /"eip6963:announceProvider", \(\) =>\s*schedulePassiveWalletSync\(\{ force: true \}\)/,
+  );
+  assert.match(
+    app,
+    /state\.capabilityStatus = state\.capability \? "ready" : "unsupported";[\s\S]*state\.capabilityStatus = "failed";/,
+  );
+  assert.match(
+    app,
+    /state\.capabilityStatus === "failed"[\s\S]*elements\.action\.disabled = state\.busy;/,
   );
   assert.match(
     app,
@@ -582,6 +742,28 @@ test("queues one fresh scan when refresh is requested during an active scan", as
   const third = refresh();
   releaseFirst();
   await Promise.all([first, second, third]);
+
+  assert.deepEqual(runs, [1, 2]);
+});
+
+test("runs a queued retry after the active refresh fails", async () => {
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const runs = [];
+  const refresh = createRefreshQueue(async () => {
+    runs.push(runs.length + 1);
+    if (runs.length !== 1) return;
+    await firstGate;
+    throw new Error("first refresh failed");
+  });
+
+  const first = refresh();
+  await Promise.resolve();
+  const queued = refresh();
+  releaseFirst();
+  await Promise.all([first, queued]);
 
   assert.deepEqual(runs, [1, 2]);
 });

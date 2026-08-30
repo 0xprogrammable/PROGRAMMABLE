@@ -6,7 +6,11 @@
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <meta name="color-scheme" content="light" />
     <title>Programmable Fee Claim</title>
-    <link rel="icon" href="./assets/programmable-loop-mark-64.png" />
+    <link
+      rel="icon"
+      type="image/png"
+      href="./assets/programmable-loop-mark-64.png"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -28,13 +32,11 @@
         <div class="hero">
           <p class="eyebrow">Fee Claim</p>
           <h1 id="claim-title">Alles claimen.</h1>
-          <p class="intro">
-            Reward Wallet verbinden. Offene Fees werden automatisch gefunden.
-          </p>
+          <p class="intro">Mit der Reward Wallet verbinden und claimen.</p>
         </div>
 
-        <div class="total-line" aria-label="Offene Gebühren">
-          <span>Offen</span>
+        <div class="total-line" aria-label="Offene Gebühren" data-total-card>
+          <span data-total-label>Wird geprüft</span>
           <strong data-total>0 ETH</strong>
           <small data-claim-count>Noch nicht gescannt</small>
         </div>
@@ -49,10 +51,11 @@
         </p>
         <p class="error" role="alert" data-error hidden></p>
 
-        <div class="quick-actions">
-          <button class="refresh" type="button" data-refresh hidden disabled>
-            Neu scannen
-          </button>
+        <div class="wallet-state" data-wallet-state data-state="idle">
+          Reward Wallet nicht verbunden
+        </div>
+
+        <div class="wallet-link">
           <a
             href="https://link.metamask.io/dapp/claimhazard.vercel.app/"
             data-metamask-open
@@ -60,7 +63,6 @@
           >
             In MetaMask öffnen
           </a>
-          <span>Nur die Reward Wallet kann claimen</span>
         </div>
 
         <details class="details">
@@ -76,6 +78,8 @@
                 <strong data-batch-mode>Wird geprüft</strong>
               </div>
             </div>
+
+            <p class="detail-error" data-error-detail hidden></p>
 
             <ul
               class="claim-list"

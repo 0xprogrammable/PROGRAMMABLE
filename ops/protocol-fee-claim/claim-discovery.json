@@ -164,6 +164,24 @@
   },
   "classic": {
     "claimMode": "one_aggregate_claim_per_hook_version",
+    "routerAggregateClaims": [
+      {
+        "version": "v4",
+        "releaseStatus": "publicly-available",
+        "releaseCommit": "707d438576dcf47dc2667125789fd35eb1c3de50",
+        "publicAvailabilityCommit": "ff51e713feb52e4e13f3c553d1c726f3c8f2858c",
+        "indexerCatalogStatus": "indexer-activated",
+        "sourceCommitment": "0x038f0dec0856e2638eac146af373a388bf18fd40c6891fece4c9490b9dac18ca",
+        "launcher": "0xBBDF30a2fE1394e4AA864aC269C6cF09b518E699",
+        "feeHook": "0xADF955a44FD7F009380240d56D71dFAfB46020cc",
+        "feeHookDeploymentBlock": "25851137",
+        "feeHookRuntimeCodeHash": "0xf3a1a628ce898c527f24569b426aa795ec65ff9d97afa2b89e8ea5a2b99ad280",
+        "recipientSelector": "0x4c50e2c4",
+        "expectedRecipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+        "accruedSelector": "0x1497233e",
+        "claimSelector": "0x64d46b85"
+      }
+    ],
     "launchDiscovery": [
       {
         "version": "v3",
