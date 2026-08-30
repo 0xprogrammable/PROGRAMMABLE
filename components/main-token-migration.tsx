@@ -27,6 +27,7 @@ import {
   MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
   MAIN_TOKEN_SYMBOL,
   MAIN_TOKEN_TOTAL_SUPPLY_RAW,
+  isMainTokenMigrationWalletCodeEligible,
   parseMainTokenMigrationAmount,
 } from "@/lib/main-token-migration";
 
@@ -920,7 +921,9 @@ export function MainTokenMigration() {
         if (!cancelled) {
           setAccountCodeObservation({
             account,
-            status: code === "0x" ? "eoa" : "contract",
+            status: isMainTokenMigrationWalletCodeEligible(code)
+              ? "eoa"
+              : "contract",
           });
         }
       })
@@ -1484,7 +1487,7 @@ export function MainTokenMigration() {
           "Unable to verify this wallet for the automatic path. Nothing was sent. Try again before the window closes.",
         );
       }
-      if (code !== "0x") {
+      if (!isMainTokenMigrationWalletCodeEligible(code)) {
         setAccountCodeObservation({
           account: wallet.account.toLowerCase(),
           status: "contract",
