@@ -843,7 +843,8 @@ function normalizeV4DeploymentEvidence(value) {
     "sourceVerification",
   ], "chainDeployment.deploymentEvidence");
   assertExactKeys(value.sourceVerification, [
-    "sourcifyExactMatchCoveredContracts",
+    "sourcifyProviderMatchCoveredContracts",
+    "exactByteSourceBuildTransactionCoveredContracts",
     "officialSourcePinnedCoveredContracts",
   ], "chainDeployment.deploymentEvidence.sourceVerification");
   if (value.schemaVersion !== V4_ATOMIC_ROOT_DEPLOYMENT_EVIDENCE_SCHEMA
@@ -853,7 +854,11 @@ function normalizeV4DeploymentEvidence(value) {
       !== canonicalizeJson([
         "programmableLaunchStampRouter", "graphFactory", "permitAuthority",
       ])
-    || canonicalizeJson(value.sourceVerification.sourcifyExactMatchCoveredContracts)
+    || canonicalizeJson(value.sourceVerification.sourcifyProviderMatchCoveredContracts)
+      !== canonicalizeJson(["programmableLaunchStampRouter", "graphFactory"])
+    || canonicalizeJson(
+      value.sourceVerification.exactByteSourceBuildTransactionCoveredContracts,
+    )
       !== canonicalizeJson(["programmableLaunchStampRouter", "graphFactory"])
     || canonicalizeJson(value.sourceVerification.officialSourcePinnedCoveredContracts)
       !== canonicalizeJson(["permitAuthority"])
@@ -974,7 +979,12 @@ function normalizeV4DeploymentEvidence(value) {
     resultingContracts,
     ethereumFinalityEvidence,
     sourceVerification: {
-      sourcifyExactMatchCoveredContracts: ["programmableLaunchStampRouter", "graphFactory"],
+      sourcifyProviderMatchCoveredContracts: [
+        "programmableLaunchStampRouter", "graphFactory",
+      ],
+      exactByteSourceBuildTransactionCoveredContracts: [
+        "programmableLaunchStampRouter", "graphFactory",
+      ],
       officialSourcePinnedCoveredContracts: ["permitAuthority"],
     },
   };

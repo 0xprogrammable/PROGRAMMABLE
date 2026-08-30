@@ -304,6 +304,18 @@ export async function resolveProductionVerifyProofFromGitHubV1(input) {
   ) {
     throw new Error("Production Verify proof freshness policy is invalid.");
   }
+  const hasExpectedRunId = input.expectedRunId !== undefined;
+  const hasExpectedRunAttempt = input.expectedRunAttempt !== undefined;
+  if (
+    hasExpectedRunId !== hasExpectedRunAttempt
+    || (hasExpectedRunId
+      && (!Number.isSafeInteger(input.expectedRunId)
+        || input.expectedRunId < 1
+        || !Number.isSafeInteger(input.expectedRunAttempt)
+        || input.expectedRunAttempt < 1))
+  ) {
+    throw new Error("Bound production Verify run identity is invalid.");
+  }
 
   const fetchImpl = input.fetchImpl ?? fetch;
   const encodedRepository = encodeRepository(PRODUCTION_REPOSITORY);
@@ -333,6 +345,8 @@ export async function resolveProductionVerifyProofFromGitHubV1(input) {
     commitSha: input.commitSha,
     treeSha: input.treeSha,
     eventName,
+    expectedRunId: input.expectedRunId,
+    expectedRunAttempt: input.expectedRunAttempt,
   });
 
   const [jobs, artifacts] = await Promise.all([
@@ -411,7 +425,13 @@ function selectLatestExactVerifyRun(response, expected) {
       - parseTimestamp(left.run_started_at, "run start");
     return timeDifference || numeric(right.id) - numeric(left.id);
   });
-  const run = runs[0];
+  const run = expected.expectedRunId === undefined
+    ? runs[0]
+    : runs.find(
+      ({ id, run_attempt: runAttempt }) =>
+        id === expected.expectedRunId
+        && runAttempt === expected.expectedRunAttempt,
+    );
   if (
     !Number.isSafeInteger(run?.id)
     || run.id < 1

@@ -706,6 +706,15 @@ test("V4 source-verification schemas bind aggregate truth, exact evidence, and f
   assert.equal(finalizedSchema.required.includes("sourceVerification"), true);
 
   const validateSource = machineContractAjv().compile(standalone);
+  const exactEvidenceFixture = validV4SourceVerificationStatus().components
+    .find(({ status }) => status === "exact_match");
+  const asExact = (component) => ({
+    ...component,
+    status: "exact_match",
+    providerObservation: structuredClone(exactEvidenceFixture.providerObservation),
+    exactSourceAuthority: exactEvidenceFixture.exactSourceAuthority,
+    exactSourceBinding: structuredClone(exactEvidenceFixture.exactSourceBinding),
+  });
   const validStates = [
     validV4SourceVerificationStatus(),
     validV4SourceVerificationStatus({
@@ -715,28 +724,19 @@ test("V4 source-verification schemas bind aggregate truth, exact evidence, and f
           return {
             ...terminal,
             status: "queued",
-            exactMatchProvider: null,
-            evidenceDigest: null,
+            providerObservation: null,
+            exactSourceAuthority: null,
+            exactSourceBinding: null,
             nextAttemptAt: "2026-08-29T12:35:00.000Z",
           };
         }
-        return {
-          ...terminal,
-          status: "exact_match",
-          exactMatchProvider: "sourcify-v2",
-          evidenceDigest: component.evidenceDigest ?? `sha256:${"a".repeat(64)}`,
-        };
+        return asExact(terminal);
       }),
     }),
     validV4SourceVerificationStatus({
       components: validV4SourceVerificationStatus().components.map((component) => {
         const { nextAttemptAt: _nextAttemptAt, ...withoutRetry } = component;
-        return {
-          ...withoutRetry,
-          status: "exact_match",
-          exactMatchProvider: "sourcify-v2",
-          evidenceDigest: component.evidenceDigest ?? `sha256:${"a".repeat(64)}`,
-        };
+        return asExact(withoutRetry);
       }),
     }),
     validV4SourceVerificationStatus({
@@ -746,8 +746,9 @@ test("V4 source-verification schemas bind aggregate truth, exact evidence, and f
           return {
             ...withoutRetry,
             status: "queued",
-            exactMatchProvider: null,
-            evidenceDigest: null,
+            providerObservation: null,
+            exactSourceAuthority: null,
+            exactSourceBinding: null,
             nextAttemptAt: "2026-08-29T12:35:00.000Z",
           };
         }
@@ -755,15 +756,17 @@ test("V4 source-verification schemas bind aggregate truth, exact evidence, and f
           return {
             ...withoutRetry,
             status: "needs_attention",
-            exactMatchProvider: null,
-            evidenceDigest: null,
+            providerObservation: null,
+            exactSourceAuthority: null,
+            exactSourceBinding: null,
           };
         }
         return {
           ...withoutRetry,
           status: "retrying",
-          exactMatchProvider: null,
-          evidenceDigest: null,
+          providerObservation: null,
+          exactSourceAuthority: null,
+          exactSourceBinding: null,
           nextAttemptAt: "2026-08-29T12:36:00.000Z",
         };
       }),
@@ -794,10 +797,30 @@ test("V4 source-verification schemas bind aggregate truth, exact evidence, and f
       value.components[0].nextAttemptAt = "2026-08-29T12:35:00.000Z";
     }],
     ["non-exact evidence", (value) => {
-      value.components[1].evidenceDigest = `sha256:${"b".repeat(64)}`;
+      value.components[1].providerObservation = structuredClone(
+        value.components[0].providerObservation,
+      );
     }],
-    ["exact provider", (value) => {
-      value.components[0].exactMatchProvider = "blockscout-v2";
+    ["provider cannot be exact authority", (value) => {
+      value.components[0].exactSourceAuthority = "sourcify-v2";
+    }],
+    ["provider remains non-authoritative", (value) => {
+      value.components[0].providerObservation.releaseAuthority = true;
+    }],
+    ["provider classification", (value) => {
+      value.components[0].providerObservation.classification = "exact_match";
+    }],
+    ["provider match vocabulary", (value) => {
+      value.components[0].providerObservation.match = "exact_match";
+    }],
+    ["binding authority", (value) => {
+      value.components[0].exactSourceBinding.authority = "sourcify-v2";
+    }],
+    ["binding coverage", (value) => {
+      value.components[0].exactSourceBinding.coveredEvidence.pop();
+    }],
+    ["binding digest", (value) => {
+      value.components[0].exactSourceBinding.bindingDigest = `sha256:${"B".repeat(64)}`;
     }],
   ];
   for (const [label, mutate] of cases) {

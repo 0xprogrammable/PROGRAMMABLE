@@ -168,7 +168,12 @@ test("six mechanically recomputed evidence objects unlock structural readiness",
 
     const descriptor = result.binding.evidence.chainDeployment.descriptor;
     assert.deepEqual(descriptor.deploymentEvidence.sourceVerification, {
-      sourcifyExactMatchCoveredContracts: ["programmableLaunchStampRouter", "graphFactory"],
+      sourcifyProviderMatchCoveredContracts: [
+        "programmableLaunchStampRouter", "graphFactory",
+      ],
+      exactByteSourceBuildTransactionCoveredContracts: [
+        "programmableLaunchStampRouter", "graphFactory",
+      ],
       officialSourcePinnedCoveredContracts: ["permitAuthority"],
     });
     const safe = descriptor.permitAuthoritySourceProvenance.configurationEvidence;
@@ -459,8 +464,11 @@ test("per-contract provenance cannot collapse into a global Sourcify claim", asy
     const cases = [
       ["Safe as Sourcify", (descriptor) => {
         descriptor.deploymentEvidence.sourceVerification = {
-          sourcifyExactMatchCoveredContracts: [
+          sourcifyProviderMatchCoveredContracts: [
             "programmableLaunchStampRouter", "graphFactory", "permitAuthority",
+          ],
+          exactByteSourceBuildTransactionCoveredContracts: [
+            "programmableLaunchStampRouter", "graphFactory",
           ],
           officialSourcePinnedCoveredContracts: [],
         };

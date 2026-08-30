@@ -66,6 +66,17 @@ const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
+const ROBINHOOD_EXACT_SOURCE_BINDING_COVERED_EVIDENCE = Object.freeze([
+  "protected-source-tree",
+  "source-closure",
+  "hosted-build-artifact",
+  "standard-json-input",
+  "compiler-binary",
+  "compiler-settings",
+  "finalized-creation-transaction",
+  "creation-bytecode",
+  "runtime-bytecode",
+]);
 const PROFILE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const PARTNER_API_KEY =
   /^pm_partner_(?:root_)?[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u;
@@ -1444,8 +1455,9 @@ function assertV4SourceVerificationStatus(value) {
       "targetId",
       "address",
       "status",
-      "exactMatchProvider",
-      "evidenceDigest",
+      "providerObservation",
+      "exactSourceAuthority",
+      "exactSourceBinding",
       "updatedAt",
       ...(active ? ["nextAttemptAt"] : []),
     ], label);
@@ -1461,13 +1473,47 @@ function assertV4SourceVerificationStatus(value) {
       throw invalidV4SourceVerification(`components[${index}]`);
     }
     if (component.status === "exact_match") {
-      if (component.exactMatchProvider !== "sourcify-v2"
-        || !SHA256.test(component.evidenceDigest ?? "")) {
-        throw invalidV4SourceVerification(`components[${index}].exactMatchProvider`);
+      assertResponseObject(component.providerObservation, `${label}.providerObservation`);
+      assertV4ExactKeys(component.providerObservation, [
+        "provider",
+        "classification",
+        "match",
+        "creationMatch",
+        "runtimeMatch",
+        "releaseAuthority",
+        "evidenceDigest",
+      ], `${label}.providerObservation`);
+      if (component.providerObservation.provider !== "sourcify-v2"
+        || component.providerObservation.classification !== "PARTIAL_NO_CBOR_EXACT_BYTES"
+        || component.providerObservation.match !== "match"
+        || component.providerObservation.creationMatch !== "match"
+        || component.providerObservation.runtimeMatch !== "match"
+        || component.providerObservation.releaseAuthority !== false
+        || !SHA256.test(component.providerObservation.evidenceDigest ?? "")) {
+        throw invalidV4SourceVerification(`components[${index}].providerObservation`);
       }
-    } else if (component.exactMatchProvider !== null
-      || component.evidenceDigest !== null) {
-      throw invalidV4SourceVerification(`components[${index}].evidenceDigest`);
+      assertResponseObject(component.exactSourceBinding, `${label}.exactSourceBinding`);
+      assertV4ExactKeys(component.exactSourceBinding, [
+        "schemaVersion",
+        "authority",
+        "coveredEvidence",
+        "bindingDigest",
+      ], `${label}.exactSourceBinding`);
+      if (component.exactSourceAuthority
+          !== "protected-hosted-build-finalized-transaction-bytecode"
+        || component.exactSourceBinding.schemaVersion
+          !== "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+        || component.exactSourceBinding.authority
+          !== "protected-hosted-build-finalized-transaction-bytecode"
+        || canonicalizeJson(component.exactSourceBinding.coveredEvidence)
+          !== canonicalizeJson(ROBINHOOD_EXACT_SOURCE_BINDING_COVERED_EVIDENCE)
+        || !SHA256.test(component.exactSourceBinding.bindingDigest ?? "")) {
+        throw invalidV4SourceVerification(`components[${index}].exactSourceBinding`);
+      }
+    } else if (component.providerObservation !== null
+      || component.exactSourceAuthority !== null
+      || component.exactSourceBinding !== null) {
+      throw invalidV4SourceVerification(`components[${index}].exactSourceBinding`);
     }
     if (active && !canonicalMillisecondTimestampV4(component.nextAttemptAt)) {
       throw invalidV4SourceVerification(`components[${index}].nextAttemptAt`);

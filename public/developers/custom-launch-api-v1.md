@@ -61,7 +61,7 @@ or unbound references gain no trust and block admission. These planned checks ar
 
 Foundation source commitment:
 `0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`. It binds reviewed source, not a deployed
-address. Sourcify v2 exact match is required. Robinhood Blockscout is optional, unproven and degraded; it cannot
+address. Sourcify v2 provider-native `match` is required; exact source authority is the separate protected-build/finalized-bytecode binding. Robinhood Blockscout is optional, unproven and degraded; it cannot
 support an exact-source claim or block or revise finality.
 
 Planned discovery keeps the complete V4 `deploymentEvidence` record null, including all contract roots. Canary
@@ -452,8 +452,14 @@ Finality is independent from explorer availability. After a bundled request is f
 idempotent verification work for each exclusive component. Optional `sourceVerification` is server authored and uses
 `queued`, `retrying`, `exact_match` or `needs_attention`. Only literal `exact_match` for every component means Source
 verified. Components are uniquely sorted by UTF-8 `targetId`; non-exact rows expose no provider or evidence digest,
-while exact rows name only `sourcify-v2` and carry its evidence digest. `nextAttemptAt` exists only for queued or
-retrying rows. Otherwise aggregate state is fail closed: any `needs_attention` wins, then any `retrying`, then
+while exact rows keep the Sourcify v2 `match/match/match` observation explicitly non-authoritative as
+`PARTIAL_NO_CBOR_EXACT_BYTES` with `releaseAuthority: false`. They separately require
+`exactSourceAuthority: protected-hosted-build-finalized-transaction-bytecode` and the
+`programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1` composite digest covering
+the protected source tree and closure, hosted build artifact, Standard JSON input, compiler binary and settings,
+finalized creation transaction, and exact creation/runtime bytecode. A provider observation alone never satisfies
+`exact_match`. `nextAttemptAt` exists only for queued or retrying rows. Otherwise aggregate state is fail closed: any
+`needs_attention` wins, then any `retrying`, then
 `queued`; aggregate `updatedAt` is the latest component timestamp. The authenticated resource may omit or
 null this field before finality; the V4 finalized-feed contract requires it. A client must never submit or infer
 this state. Legacy or unbundled requests remain compatible and unverified.

@@ -38,6 +38,7 @@ import {
   createRobinhoodResponseBudget,
   readRobinhoodBoundedResponse,
   robinhoodRpcResponseLimit,
+  validateRobinhoodCredentialedProviderEndpoint,
 } from "./robinhood-custom-launch-capture-v2.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -81,12 +82,6 @@ const EXTERNAL = Object.freeze({
     transactionHash: "0xdfb76494e158d8dea4376160315239271636a18515207fd4526e574bc7eeb456",
     startBlock: "3347899",
   }),
-});
-const PROVIDER_HOST_SUFFIXES = Object.freeze({
-  "robinhood:drpc": Object.freeze(["drpc.org", "drpc.live"]),
-  "robinhood:alchemy": Object.freeze(["alchemy.com"]),
-  "ethereum:drpc": Object.freeze(["drpc.org", "drpc.live"]),
-  "ethereum:quicknode": Object.freeze(["quiknode.pro"]),
 });
 const ROUTER_ABI = Object.freeze([
   { type: "function", name: "PERMIT_AUTHORITY", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
@@ -167,15 +162,7 @@ function callParams(target, abi, functionName, args, blockTag) {
 }
 
 export function validateRobinhoodCaptureEndpoint(endpoint, layer, providerId) {
-  const url = new URL(endpoint);
-  const suffixes = PROVIDER_HOST_SUFFIXES[`${layer}:${providerId}`];
-  if (url.protocol !== "https:" || url.username !== "" || url.password !== ""
-    || (url.port !== "" && url.port !== "443") || url.hash !== ""
-    || url.hostname !== url.hostname.toLowerCase()
-    || !Array.isArray(suffixes) || !suffixes.some((suffix) =>
-      url.hostname === suffix || url.hostname.endsWith(`.${suffix}`))) {
-    throw new TypeError(`${layer} RPC violates its code-owned provider endpoint pin`);
-  }
+  validateRobinhoodCredentialedProviderEndpoint(endpoint, layer, providerId);
   return true;
 }
 
@@ -571,6 +558,10 @@ export async function captureRobinhoodPostdeployment(options) {
   if ([...endpoints.l2, ...endpoints.l1].some((value) => !value)) {
     throw new TypeError("capture requires four protected provider endpoints");
   }
+  validateRobinhoodCaptureEndpoint(endpoints.l2[0], "robinhood", "drpc");
+  validateRobinhoodCaptureEndpoint(endpoints.l2[1], "robinhood", "alchemy");
+  validateRobinhoodCaptureEndpoint(endpoints.l1[0], "ethereum", "drpc");
+  validateRobinhoodCaptureEndpoint(endpoints.l1[1], "ethereum", "quicknode");
   const observed = new Date();
   const observedAt = observed.toISOString();
   const expiresAt = new Date(observed.getTime() + 15 * 60 * 1000).toISOString();

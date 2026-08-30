@@ -21,6 +21,8 @@ process.stdout.write(
   `${JSON.stringify({
     chainId: verified.profile.chainId,
     compiler: verified.compiler.version,
+    buildCompiler: verified.buildCompiler,
+    reproductionCompiler: verified.reproductionCompiler,
     artifacts: verified.artifacts,
     graphFactory: {
       creationCodeHash: verified.commitments.graph.creationCodeHash,

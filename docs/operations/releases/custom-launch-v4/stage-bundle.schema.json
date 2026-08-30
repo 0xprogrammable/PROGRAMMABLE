@@ -462,6 +462,8 @@
         "match",
         "creationMatch",
         "runtimeMatch",
+        "providerClassification",
+        "providerReleaseAuthority",
         "observedAt",
         "compiler",
         "sourceFilesDigest",
@@ -479,9 +481,11 @@
         "provider": { "const": "sourcify-v2" },
         "chainId": { "const": "4663" },
         "address": { "$ref": "#/$defs/address" },
-        "match": { "const": "exact_match" },
-        "creationMatch": { "const": "exact_match" },
-        "runtimeMatch": { "const": "exact_match" },
+        "match": { "const": "match" },
+        "creationMatch": { "const": "match" },
+        "runtimeMatch": { "const": "match" },
+        "providerClassification": { "const": "PARTIAL_NO_CBOR_EXACT_BYTES" },
+        "providerReleaseAuthority": { "const": false },
         "observedAt": { "$ref": "#/$defs/isoInstant" },
         "compiler": { "$ref": "#/$defs/compilerIdentity" },
         "sourceFilesDigest": { "$ref": "#/$defs/sha256" },
@@ -583,6 +587,8 @@
         "match",
         "creationMatch",
         "runtimeMatch",
+        "providerClassification",
+        "providerReleaseAuthority",
         "observedAt",
         "compiler",
         "sourceFilesDigest",
@@ -596,9 +602,11 @@
       "properties": {
         "chainId": { "const": "4663" },
         "address": { "$ref": "#/$defs/address" },
-        "match": { "const": "exact_match" },
-        "creationMatch": { "const": "exact_match" },
-        "runtimeMatch": { "const": "exact_match" },
+        "match": { "const": "match" },
+        "creationMatch": { "const": "match" },
+        "runtimeMatch": { "const": "match" },
+        "providerClassification": { "const": "PARTIAL_NO_CBOR_EXACT_BYTES" },
+        "providerReleaseAuthority": { "const": false },
         "observedAt": { "$ref": "#/$defs/isoInstant" },
         "compiler": { "$ref": "#/$defs/compilerIdentity" },
         "sourceFilesDigest": { "$ref": "#/$defs/sha256" },
@@ -610,27 +618,112 @@
         "normalizedVerificationDigest": { "$ref": "#/$defs/sha256" }
       }
     },
+    "exactSourceBindingContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "address",
+        "standardJsonInputSha256",
+        "creationCodeHash",
+        "runtimeCodeHash",
+        "compilerSettingsDigest"
+      ],
+      "properties": {
+        "contract": {
+          "enum": ["programmableLaunchStampRouter", "graphFactory"]
+        },
+        "address": { "$ref": "#/$defs/address" },
+        "standardJsonInputSha256": { "$ref": "#/$defs/sha256" },
+        "creationCodeHash": { "$ref": "#/$defs/hex32" },
+        "runtimeCodeHash": { "$ref": "#/$defs/hex32" },
+        "compilerSettingsDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "exactSourceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "authority",
+        "coveredContracts",
+        "sourceRevision",
+        "sourceTree",
+        "captureAuthorizationDigest",
+        "productionVerifyProofSha256",
+        "productionVerifyArtifactDigest",
+        "compilerVersion",
+        "hostedReproductionCompilerSha256",
+        "deploymentTransactionHash",
+        "deploymentBlockNumber",
+        "deploymentBlockHash",
+        "ownerTransactionDataHash",
+        "contracts",
+        "bindingDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+        },
+        "authority": {
+          "const": "protected-hosted-build-finalized-transaction-bytecode"
+        },
+        "coveredContracts": {
+          "const": ["programmableLaunchStampRouter", "graphFactory"]
+        },
+        "sourceRevision": { "$ref": "#/$defs/gitHash" },
+        "sourceTree": { "$ref": "#/$defs/gitHash" },
+        "captureAuthorizationDigest": { "$ref": "#/$defs/sha256" },
+        "productionVerifyProofSha256": { "$ref": "#/$defs/sha256" },
+        "productionVerifyArtifactDigest": { "$ref": "#/$defs/sha256" },
+        "compilerVersion": { "const": "0.8.26+commit.8a97fa7a" },
+        "hostedReproductionCompilerSha256": {
+          "const": "0xd5f23436f443edb85d8e76906d12f0a86ce0490e7663a9e608efeb7a93f149ef"
+        },
+        "deploymentTransactionHash": { "$ref": "#/$defs/hex32" },
+        "deploymentBlockNumber": { "$ref": "#/$defs/positiveDecimal" },
+        "deploymentBlockHash": { "$ref": "#/$defs/hex32" },
+        "ownerTransactionDataHash": {
+          "const": "0x3ba04469085b17e12843a94c154a335c9c384837f8f6531f179cb4915fd237d9"
+        },
+        "contracts": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/exactSourceBindingContract" }
+        },
+        "bindingDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
     "sourceVerification": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "schemaVersion",
         "provider",
+        "providerReleaseAuthority",
+        "exactSourceAuthority",
         "graphFactory",
         "programmableLaunchStampRouter",
+        "exactSourceBinding",
         "permitAuthority",
         "sourceVerificationClosureDigest",
         "evidenceDigest"
       ],
       "properties": {
         "schemaVersion": {
-          "const": "programmable.robinhood-custom-launch.source-verification-closure.v4"
+          "const": "programmable.robinhood-custom-launch.source-verification-closure.v5"
         },
         "provider": { "const": "sourcify-v2" },
+        "providerReleaseAuthority": { "const": false },
+        "exactSourceAuthority": {
+          "const": "protected-hosted-build-finalized-transaction-bytecode"
+        },
         "graphFactory": { "$ref": "#/$defs/sourceVerificationEntry" },
         "programmableLaunchStampRouter": {
           "$ref": "#/$defs/sourceVerificationEntry"
         },
+        "exactSourceBinding": { "$ref": "#/$defs/exactSourceBinding" },
         "permitAuthority": {
           "type": "object",
           "additionalProperties": false,

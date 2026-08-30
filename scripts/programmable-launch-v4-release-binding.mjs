@@ -719,7 +719,12 @@ function auditDeployment(value) {
 
 function assertPerContractProvenance(descriptor) {
   deep(descriptor.deploymentEvidence.sourceVerification, {
-    sourcifyExactMatchCoveredContracts: ["programmableLaunchStampRouter", "graphFactory"],
+    sourcifyProviderMatchCoveredContracts: [
+      "programmableLaunchStampRouter", "graphFactory",
+    ],
+    exactByteSourceBuildTransactionCoveredContracts: [
+      "programmableLaunchStampRouter", "graphFactory",
+    ],
     officialSourcePinnedCoveredContracts: ["permitAuthority"],
   }, "atomic per-contract source provenance");
   equal(descriptor.permitAuthoritySourceProvenance.sourceCommitment,

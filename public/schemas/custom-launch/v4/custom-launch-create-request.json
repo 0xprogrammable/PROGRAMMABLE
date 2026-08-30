@@ -1056,11 +1056,18 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "sourcifyExactMatchCoveredContracts",
+                "sourcifyProviderMatchCoveredContracts",
+                "exactByteSourceBuildTransactionCoveredContracts",
                 "officialSourcePinnedCoveredContracts"
               ],
               "properties": {
-                "sourcifyExactMatchCoveredContracts": {
+                "sourcifyProviderMatchCoveredContracts": {
+                  "const": [
+                    "programmableLaunchStampRouter",
+                    "graphFactory"
+                  ]
+                },
+                "exactByteSourceBuildTransactionCoveredContracts": {
                   "const": [
                     "programmableLaunchStampRouter",
                     "graphFactory"

@@ -1755,11 +1755,18 @@
                     "type": "object",
                     "additionalProperties": false,
                     "required": [
-                      "sourcifyExactMatchCoveredContracts",
+                      "sourcifyProviderMatchCoveredContracts",
+                      "exactByteSourceBuildTransactionCoveredContracts",
                       "officialSourcePinnedCoveredContracts"
                     ],
                     "properties": {
-                      "sourcifyExactMatchCoveredContracts": {
+                      "sourcifyProviderMatchCoveredContracts": {
+                        "const": [
+                          "programmableLaunchStampRouter",
+                          "graphFactory"
+                        ]
+                      },
+                      "exactByteSourceBuildTransactionCoveredContracts": {
                         "const": [
                           "programmableLaunchStampRouter",
                           "graphFactory"
@@ -6524,11 +6531,18 @@
                         "type": "object",
                         "additionalProperties": false,
                         "required": [
-                          "sourcifyExactMatchCoveredContracts",
+                          "sourcifyProviderMatchCoveredContracts",
+                          "exactByteSourceBuildTransactionCoveredContracts",
                           "officialSourcePinnedCoveredContracts"
                         ],
                         "properties": {
-                          "sourcifyExactMatchCoveredContracts": {
+                          "sourcifyProviderMatchCoveredContracts": {
+                            "const": [
+                              "programmableLaunchStampRouter",
+                              "graphFactory"
+                            ]
+                          },
+                          "exactByteSourceBuildTransactionCoveredContracts": {
                             "const": [
                               "programmableLaunchStampRouter",
                               "graphFactory"
@@ -10187,11 +10201,18 @@
                     "type": "object",
                     "additionalProperties": false,
                     "required": [
-                      "sourcifyExactMatchCoveredContracts",
+                      "sourcifyProviderMatchCoveredContracts",
+                      "exactByteSourceBuildTransactionCoveredContracts",
                       "officialSourcePinnedCoveredContracts"
                     ],
                     "properties": {
-                      "sourcifyExactMatchCoveredContracts": {
+                      "sourcifyProviderMatchCoveredContracts": {
+                        "const": [
+                          "programmableLaunchStampRouter",
+                          "graphFactory"
+                        ]
+                      },
+                      "exactByteSourceBuildTransactionCoveredContracts": {
                         "const": [
                           "programmableLaunchStampRouter",
                           "graphFactory"
@@ -13829,11 +13850,18 @@
                             "type": "object",
                             "additionalProperties": false,
                             "required": [
-                              "sourcifyExactMatchCoveredContracts",
+                              "sourcifyProviderMatchCoveredContracts",
+                              "exactByteSourceBuildTransactionCoveredContracts",
                               "officialSourcePinnedCoveredContracts"
                             ],
                             "properties": {
-                              "sourcifyExactMatchCoveredContracts": {
+                              "sourcifyProviderMatchCoveredContracts": {
+                                "const": [
+                                  "programmableLaunchStampRouter",
+                                  "graphFactory"
+                                ]
+                              },
+                              "exactByteSourceBuildTransactionCoveredContracts": {
                                 "const": [
                                   "programmableLaunchStampRouter",
                                   "graphFactory"
@@ -18626,8 +18654,9 @@
                             "targetId",
                             "address",
                             "status",
-                            "exactMatchProvider",
-                            "evidenceDigest",
+                            "providerObservation",
+                            "exactSourceAuthority",
+                            "exactSourceBinding",
                             "updatedAt",
                             "nextAttemptAt"
                           ],
@@ -18643,10 +18672,13 @@
                             "status": {
                               "const": "queued"
                             },
-                            "exactMatchProvider": {
+                            "providerObservation": {
                               "type": "null"
                             },
-                            "evidenceDigest": {
+                            "exactSourceAuthority": {
+                              "type": "null"
+                            },
+                            "exactSourceBinding": {
                               "type": "null"
                             },
                             "updatedAt": {
@@ -18668,8 +18700,9 @@
                             "targetId",
                             "address",
                             "status",
-                            "exactMatchProvider",
-                            "evidenceDigest",
+                            "providerObservation",
+                            "exactSourceAuthority",
+                            "exactSourceBinding",
                             "updatedAt",
                             "nextAttemptAt"
                           ],
@@ -18685,10 +18718,13 @@
                             "status": {
                               "const": "retrying"
                             },
-                            "exactMatchProvider": {
+                            "providerObservation": {
                               "type": "null"
                             },
-                            "evidenceDigest": {
+                            "exactSourceAuthority": {
+                              "type": "null"
+                            },
+                            "exactSourceBinding": {
                               "type": "null"
                             },
                             "updatedAt": {
@@ -18710,8 +18746,9 @@
                             "targetId",
                             "address",
                             "status",
-                            "exactMatchProvider",
-                            "evidenceDigest",
+                            "providerObservation",
+                            "exactSourceAuthority",
+                            "exactSourceBinding",
                             "updatedAt"
                           ],
                           "properties": {
@@ -18726,12 +18763,80 @@
                             "status": {
                               "const": "exact_match"
                             },
-                            "exactMatchProvider": {
-                              "const": "sourcify-v2"
+                            "providerObservation": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "provider",
+                                "classification",
+                                "match",
+                                "creationMatch",
+                                "runtimeMatch",
+                                "releaseAuthority",
+                                "evidenceDigest"
+                              ],
+                              "properties": {
+                                "provider": {
+                                  "const": "sourcify-v2"
+                                },
+                                "classification": {
+                                  "const": "PARTIAL_NO_CBOR_EXACT_BYTES"
+                                },
+                                "creationMatch": {
+                                  "const": "match"
+                                },
+                                "runtimeMatch": {
+                                  "const": "match"
+                                },
+                                "match": {
+                                  "const": "match"
+                                },
+                                "releaseAuthority": {
+                                  "const": false
+                                },
+                                "evidenceDigest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[0-9a-f]{64}$"
+                                }
+                              }
                             },
-                            "evidenceDigest": {
-                              "type": "string",
-                              "pattern": "^sha256:[0-9a-f]{64}$"
+                            "exactSourceAuthority": {
+                              "const": "protected-hosted-build-finalized-transaction-bytecode"
+                            },
+                            "exactSourceBinding": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "schemaVersion",
+                                "authority",
+                                "coveredEvidence",
+                                "bindingDigest"
+                              ],
+                              "properties": {
+                                "schemaVersion": {
+                                  "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+                                },
+                                "authority": {
+                                  "const": "protected-hosted-build-finalized-transaction-bytecode"
+                                },
+                                "coveredEvidence": {
+                                  "const": [
+                                    "protected-source-tree",
+                                    "source-closure",
+                                    "hosted-build-artifact",
+                                    "standard-json-input",
+                                    "compiler-binary",
+                                    "compiler-settings",
+                                    "finalized-creation-transaction",
+                                    "creation-bytecode",
+                                    "runtime-bytecode"
+                                  ]
+                                },
+                                "bindingDigest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[0-9a-f]{64}$"
+                                }
+                              }
                             },
                             "updatedAt": {
                               "type": "string",
@@ -18747,8 +18852,9 @@
                             "targetId",
                             "address",
                             "status",
-                            "exactMatchProvider",
-                            "evidenceDigest",
+                            "providerObservation",
+                            "exactSourceAuthority",
+                            "exactSourceBinding",
                             "updatedAt"
                           ],
                           "properties": {
@@ -18763,10 +18869,13 @@
                             "status": {
                               "const": "needs_attention"
                             },
-                            "exactMatchProvider": {
+                            "providerObservation": {
                               "type": "null"
                             },
-                            "evidenceDigest": {
+                            "exactSourceAuthority": {
+                              "type": "null"
+                            },
+                            "exactSourceBinding": {
                               "type": "null"
                             },
                             "updatedAt": {
@@ -18788,7 +18897,7 @@
                     "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                   }
                 },
-                "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+                "description": "Server-authored post-finality exact-source state. Sourcify v2 match/match/match is explicitly non-authoritative provider observation; exact_match is emitted only after the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite binding closes. Provider retries and failures never alter launch finality.",
                 "x-programmable-order": "updatedAt == max components[*].updatedAt",
                 "allOf": [
                   {
@@ -20077,11 +20186,18 @@
                             "type": "object",
                             "additionalProperties": false,
                             "required": [
-                              "sourcifyExactMatchCoveredContracts",
+                              "sourcifyProviderMatchCoveredContracts",
+                              "exactByteSourceBuildTransactionCoveredContracts",
                               "officialSourcePinnedCoveredContracts"
                             ],
                             "properties": {
-                              "sourcifyExactMatchCoveredContracts": {
+                              "sourcifyProviderMatchCoveredContracts": {
+                                "const": [
+                                  "programmableLaunchStampRouter",
+                                  "graphFactory"
+                                ]
+                              },
+                              "exactByteSourceBuildTransactionCoveredContracts": {
                                 "const": [
                                   "programmableLaunchStampRouter",
                                   "graphFactory"
@@ -25014,11 +25130,18 @@
                     "type": "object",
                     "additionalProperties": false,
                     "required": [
-                      "sourcifyExactMatchCoveredContracts",
+                      "sourcifyProviderMatchCoveredContracts",
+                      "exactByteSourceBuildTransactionCoveredContracts",
                       "officialSourcePinnedCoveredContracts"
                     ],
                     "properties": {
-                      "sourcifyExactMatchCoveredContracts": {
+                      "sourcifyProviderMatchCoveredContracts": {
+                        "const": [
+                          "programmableLaunchStampRouter",
+                          "graphFactory"
+                        ]
+                      },
+                      "exactByteSourceBuildTransactionCoveredContracts": {
                         "const": [
                           "programmableLaunchStampRouter",
                           "graphFactory"
@@ -28188,11 +28311,18 @@
                     "type": "object",
                     "additionalProperties": false,
                     "required": [
-                      "sourcifyExactMatchCoveredContracts",
+                      "sourcifyProviderMatchCoveredContracts",
+                      "exactByteSourceBuildTransactionCoveredContracts",
                       "officialSourcePinnedCoveredContracts"
                     ],
                     "properties": {
-                      "sourcifyExactMatchCoveredContracts": {
+                      "sourcifyProviderMatchCoveredContracts": {
+                        "const": [
+                          "programmableLaunchStampRouter",
+                          "graphFactory"
+                        ]
+                      },
+                      "exactByteSourceBuildTransactionCoveredContracts": {
                         "const": [
                           "programmableLaunchStampRouter",
                           "graphFactory"
@@ -32765,11 +32895,18 @@
                     "type": "object",
                     "additionalProperties": false,
                     "required": [
-                      "sourcifyExactMatchCoveredContracts",
+                      "sourcifyProviderMatchCoveredContracts",
+                      "exactByteSourceBuildTransactionCoveredContracts",
                       "officialSourcePinnedCoveredContracts"
                     ],
                     "properties": {
-                      "sourcifyExactMatchCoveredContracts": {
+                      "sourcifyProviderMatchCoveredContracts": {
+                        "const": [
+                          "programmableLaunchStampRouter",
+                          "graphFactory"
+                        ]
+                      },
+                      "exactByteSourceBuildTransactionCoveredContracts": {
                         "const": [
                           "programmableLaunchStampRouter",
                           "graphFactory"
@@ -35994,11 +36131,18 @@
                     "type": "object",
                     "additionalProperties": false,
                     "required": [
-                      "sourcifyExactMatchCoveredContracts",
+                      "sourcifyProviderMatchCoveredContracts",
+                      "exactByteSourceBuildTransactionCoveredContracts",
                       "officialSourcePinnedCoveredContracts"
                     ],
                     "properties": {
-                      "sourcifyExactMatchCoveredContracts": {
+                      "sourcifyProviderMatchCoveredContracts": {
+                        "const": [
+                          "programmableLaunchStampRouter",
+                          "graphFactory"
+                        ]
+                      },
+                      "exactByteSourceBuildTransactionCoveredContracts": {
                         "const": [
                           "programmableLaunchStampRouter",
                           "graphFactory"
@@ -39573,11 +39717,18 @@
                         "type": "object",
                         "additionalProperties": false,
                         "required": [
-                          "sourcifyExactMatchCoveredContracts",
+                          "sourcifyProviderMatchCoveredContracts",
+                          "exactByteSourceBuildTransactionCoveredContracts",
                           "officialSourcePinnedCoveredContracts"
                         ],
                         "properties": {
-                          "sourcifyExactMatchCoveredContracts": {
+                          "sourcifyProviderMatchCoveredContracts": {
+                            "const": [
+                              "programmableLaunchStampRouter",
+                              "graphFactory"
+                            ]
+                          },
+                          "exactByteSourceBuildTransactionCoveredContracts": {
                             "const": [
                               "programmableLaunchStampRouter",
                               "graphFactory"
@@ -41721,8 +41872,9 @@
                         "targetId",
                         "address",
                         "status",
-                        "exactMatchProvider",
-                        "evidenceDigest",
+                        "providerObservation",
+                        "exactSourceAuthority",
+                        "exactSourceBinding",
                         "updatedAt",
                         "nextAttemptAt"
                       ],
@@ -41738,10 +41890,13 @@
                         "status": {
                           "const": "queued"
                         },
-                        "exactMatchProvider": {
+                        "providerObservation": {
                           "type": "null"
                         },
-                        "evidenceDigest": {
+                        "exactSourceAuthority": {
+                          "type": "null"
+                        },
+                        "exactSourceBinding": {
                           "type": "null"
                         },
                         "updatedAt": {
@@ -41763,8 +41918,9 @@
                         "targetId",
                         "address",
                         "status",
-                        "exactMatchProvider",
-                        "evidenceDigest",
+                        "providerObservation",
+                        "exactSourceAuthority",
+                        "exactSourceBinding",
                         "updatedAt",
                         "nextAttemptAt"
                       ],
@@ -41780,10 +41936,13 @@
                         "status": {
                           "const": "retrying"
                         },
-                        "exactMatchProvider": {
+                        "providerObservation": {
                           "type": "null"
                         },
-                        "evidenceDigest": {
+                        "exactSourceAuthority": {
+                          "type": "null"
+                        },
+                        "exactSourceBinding": {
                           "type": "null"
                         },
                         "updatedAt": {
@@ -41805,8 +41964,9 @@
                         "targetId",
                         "address",
                         "status",
-                        "exactMatchProvider",
-                        "evidenceDigest",
+                        "providerObservation",
+                        "exactSourceAuthority",
+                        "exactSourceBinding",
                         "updatedAt"
                       ],
                       "properties": {
@@ -41821,12 +41981,80 @@
                         "status": {
                           "const": "exact_match"
                         },
-                        "exactMatchProvider": {
-                          "const": "sourcify-v2"
+                        "providerObservation": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "provider",
+                            "classification",
+                            "match",
+                            "creationMatch",
+                            "runtimeMatch",
+                            "releaseAuthority",
+                            "evidenceDigest"
+                          ],
+                          "properties": {
+                            "provider": {
+                              "const": "sourcify-v2"
+                            },
+                            "classification": {
+                              "const": "PARTIAL_NO_CBOR_EXACT_BYTES"
+                            },
+                            "creationMatch": {
+                              "const": "match"
+                            },
+                            "runtimeMatch": {
+                              "const": "match"
+                            },
+                            "match": {
+                              "const": "match"
+                            },
+                            "releaseAuthority": {
+                              "const": false
+                            },
+                            "evidenceDigest": {
+                              "type": "string",
+                              "pattern": "^sha256:[0-9a-f]{64}$"
+                            }
+                          }
                         },
-                        "evidenceDigest": {
-                          "type": "string",
-                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        "exactSourceAuthority": {
+                          "const": "protected-hosted-build-finalized-transaction-bytecode"
+                        },
+                        "exactSourceBinding": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "schemaVersion",
+                            "authority",
+                            "coveredEvidence",
+                            "bindingDigest"
+                          ],
+                          "properties": {
+                            "schemaVersion": {
+                              "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+                            },
+                            "authority": {
+                              "const": "protected-hosted-build-finalized-transaction-bytecode"
+                            },
+                            "coveredEvidence": {
+                              "const": [
+                                "protected-source-tree",
+                                "source-closure",
+                                "hosted-build-artifact",
+                                "standard-json-input",
+                                "compiler-binary",
+                                "compiler-settings",
+                                "finalized-creation-transaction",
+                                "creation-bytecode",
+                                "runtime-bytecode"
+                              ]
+                            },
+                            "bindingDigest": {
+                              "type": "string",
+                              "pattern": "^sha256:[0-9a-f]{64}$"
+                            }
+                          }
                         },
                         "updatedAt": {
                           "type": "string",
@@ -41842,8 +42070,9 @@
                         "targetId",
                         "address",
                         "status",
-                        "exactMatchProvider",
-                        "evidenceDigest",
+                        "providerObservation",
+                        "exactSourceAuthority",
+                        "exactSourceBinding",
                         "updatedAt"
                       ],
                       "properties": {
@@ -41858,10 +42087,13 @@
                         "status": {
                           "const": "needs_attention"
                         },
-                        "exactMatchProvider": {
+                        "providerObservation": {
                           "type": "null"
                         },
-                        "evidenceDigest": {
+                        "exactSourceAuthority": {
+                          "type": "null"
+                        },
+                        "exactSourceBinding": {
                           "type": "null"
                         },
                         "updatedAt": {
@@ -41883,7 +42115,7 @@
                 "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
               }
             },
-            "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+            "description": "Server-authored post-finality exact-source state. Sourcify v2 match/match/match is explicitly non-authoritative provider observation; exact_match is emitted only after the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite binding closes. Provider retries and failures never alter launch finality.",
             "x-programmable-order": "updatedAt == max components[*].updatedAt",
             "allOf": [
               {
@@ -43165,11 +43397,18 @@
                           "type": "object",
                           "additionalProperties": false,
                           "required": [
-                            "sourcifyExactMatchCoveredContracts",
+                            "sourcifyProviderMatchCoveredContracts",
+                            "exactByteSourceBuildTransactionCoveredContracts",
                             "officialSourcePinnedCoveredContracts"
                           ],
                           "properties": {
-                            "sourcifyExactMatchCoveredContracts": {
+                            "sourcifyProviderMatchCoveredContracts": {
+                              "const": [
+                                "programmableLaunchStampRouter",
+                                "graphFactory"
+                              ]
+                            },
+                            "exactByteSourceBuildTransactionCoveredContracts": {
                               "const": [
                                 "programmableLaunchStampRouter",
                                 "graphFactory"
@@ -46807,11 +47046,18 @@
                                   "type": "object",
                                   "additionalProperties": false,
                                   "required": [
-                                    "sourcifyExactMatchCoveredContracts",
+                                    "sourcifyProviderMatchCoveredContracts",
+                                    "exactByteSourceBuildTransactionCoveredContracts",
                                     "officialSourcePinnedCoveredContracts"
                                   ],
                                   "properties": {
-                                    "sourcifyExactMatchCoveredContracts": {
+                                    "sourcifyProviderMatchCoveredContracts": {
+                                      "const": [
+                                        "programmableLaunchStampRouter",
+                                        "graphFactory"
+                                      ]
+                                    },
+                                    "exactByteSourceBuildTransactionCoveredContracts": {
                                       "const": [
                                         "programmableLaunchStampRouter",
                                         "graphFactory"
@@ -51604,8 +51850,9 @@
                                   "targetId",
                                   "address",
                                   "status",
-                                  "exactMatchProvider",
-                                  "evidenceDigest",
+                                  "providerObservation",
+                                  "exactSourceAuthority",
+                                  "exactSourceBinding",
                                   "updatedAt",
                                   "nextAttemptAt"
                                 ],
@@ -51621,10 +51868,13 @@
                                   "status": {
                                     "const": "queued"
                                   },
-                                  "exactMatchProvider": {
+                                  "providerObservation": {
                                     "type": "null"
                                   },
-                                  "evidenceDigest": {
+                                  "exactSourceAuthority": {
+                                    "type": "null"
+                                  },
+                                  "exactSourceBinding": {
                                     "type": "null"
                                   },
                                   "updatedAt": {
@@ -51646,8 +51896,9 @@
                                   "targetId",
                                   "address",
                                   "status",
-                                  "exactMatchProvider",
-                                  "evidenceDigest",
+                                  "providerObservation",
+                                  "exactSourceAuthority",
+                                  "exactSourceBinding",
                                   "updatedAt",
                                   "nextAttemptAt"
                                 ],
@@ -51663,10 +51914,13 @@
                                   "status": {
                                     "const": "retrying"
                                   },
-                                  "exactMatchProvider": {
+                                  "providerObservation": {
                                     "type": "null"
                                   },
-                                  "evidenceDigest": {
+                                  "exactSourceAuthority": {
+                                    "type": "null"
+                                  },
+                                  "exactSourceBinding": {
                                     "type": "null"
                                   },
                                   "updatedAt": {
@@ -51688,8 +51942,9 @@
                                   "targetId",
                                   "address",
                                   "status",
-                                  "exactMatchProvider",
-                                  "evidenceDigest",
+                                  "providerObservation",
+                                  "exactSourceAuthority",
+                                  "exactSourceBinding",
                                   "updatedAt"
                                 ],
                                 "properties": {
@@ -51704,12 +51959,80 @@
                                   "status": {
                                     "const": "exact_match"
                                   },
-                                  "exactMatchProvider": {
-                                    "const": "sourcify-v2"
+                                  "providerObservation": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "provider",
+                                      "classification",
+                                      "match",
+                                      "creationMatch",
+                                      "runtimeMatch",
+                                      "releaseAuthority",
+                                      "evidenceDigest"
+                                    ],
+                                    "properties": {
+                                      "provider": {
+                                        "const": "sourcify-v2"
+                                      },
+                                      "classification": {
+                                        "const": "PARTIAL_NO_CBOR_EXACT_BYTES"
+                                      },
+                                      "creationMatch": {
+                                        "const": "match"
+                                      },
+                                      "runtimeMatch": {
+                                        "const": "match"
+                                      },
+                                      "match": {
+                                        "const": "match"
+                                      },
+                                      "releaseAuthority": {
+                                        "const": false
+                                      },
+                                      "evidenceDigest": {
+                                        "type": "string",
+                                        "pattern": "^sha256:[0-9a-f]{64}$"
+                                      }
+                                    }
                                   },
-                                  "evidenceDigest": {
-                                    "type": "string",
-                                    "pattern": "^sha256:[0-9a-f]{64}$"
+                                  "exactSourceAuthority": {
+                                    "const": "protected-hosted-build-finalized-transaction-bytecode"
+                                  },
+                                  "exactSourceBinding": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "schemaVersion",
+                                      "authority",
+                                      "coveredEvidence",
+                                      "bindingDigest"
+                                    ],
+                                    "properties": {
+                                      "schemaVersion": {
+                                        "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+                                      },
+                                      "authority": {
+                                        "const": "protected-hosted-build-finalized-transaction-bytecode"
+                                      },
+                                      "coveredEvidence": {
+                                        "const": [
+                                          "protected-source-tree",
+                                          "source-closure",
+                                          "hosted-build-artifact",
+                                          "standard-json-input",
+                                          "compiler-binary",
+                                          "compiler-settings",
+                                          "finalized-creation-transaction",
+                                          "creation-bytecode",
+                                          "runtime-bytecode"
+                                        ]
+                                      },
+                                      "bindingDigest": {
+                                        "type": "string",
+                                        "pattern": "^sha256:[0-9a-f]{64}$"
+                                      }
+                                    }
                                   },
                                   "updatedAt": {
                                     "type": "string",
@@ -51725,8 +52048,9 @@
                                   "targetId",
                                   "address",
                                   "status",
-                                  "exactMatchProvider",
-                                  "evidenceDigest",
+                                  "providerObservation",
+                                  "exactSourceAuthority",
+                                  "exactSourceBinding",
                                   "updatedAt"
                                 ],
                                 "properties": {
@@ -51741,10 +52065,13 @@
                                   "status": {
                                     "const": "needs_attention"
                                   },
-                                  "exactMatchProvider": {
+                                  "providerObservation": {
                                     "type": "null"
                                   },
-                                  "evidenceDigest": {
+                                  "exactSourceAuthority": {
+                                    "type": "null"
+                                  },
+                                  "exactSourceBinding": {
                                     "type": "null"
                                   },
                                   "updatedAt": {
@@ -51766,7 +52093,7 @@
                           "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                         }
                       },
-                      "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+                      "description": "Server-authored post-finality exact-source state. Sourcify v2 match/match/match is explicitly non-authoritative provider observation; exact_match is emitted only after the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite binding closes. Provider retries and failures never alter launch finality.",
                       "x-programmable-order": "updatedAt == max components[*].updatedAt",
                       "allOf": [
                         {
@@ -53055,11 +53382,18 @@
                                   "type": "object",
                                   "additionalProperties": false,
                                   "required": [
-                                    "sourcifyExactMatchCoveredContracts",
+                                    "sourcifyProviderMatchCoveredContracts",
+                                    "exactByteSourceBuildTransactionCoveredContracts",
                                     "officialSourcePinnedCoveredContracts"
                                   ],
                                   "properties": {
-                                    "sourcifyExactMatchCoveredContracts": {
+                                    "sourcifyProviderMatchCoveredContracts": {
+                                      "const": [
+                                        "programmableLaunchStampRouter",
+                                        "graphFactory"
+                                      ]
+                                    },
+                                    "exactByteSourceBuildTransactionCoveredContracts": {
                                       "const": [
                                         "programmableLaunchStampRouter",
                                         "graphFactory"
@@ -58067,11 +58401,18 @@
                           "type": "object",
                           "additionalProperties": false,
                           "required": [
-                            "sourcifyExactMatchCoveredContracts",
+                            "sourcifyProviderMatchCoveredContracts",
+                            "exactByteSourceBuildTransactionCoveredContracts",
                             "officialSourcePinnedCoveredContracts"
                           ],
                           "properties": {
-                            "sourcifyExactMatchCoveredContracts": {
+                            "sourcifyProviderMatchCoveredContracts": {
+                              "const": [
+                                "programmableLaunchStampRouter",
+                                "graphFactory"
+                              ]
+                            },
+                            "exactByteSourceBuildTransactionCoveredContracts": {
                               "const": [
                                 "programmableLaunchStampRouter",
                                 "graphFactory"
@@ -61646,11 +61987,18 @@
                               "type": "object",
                               "additionalProperties": false,
                               "required": [
-                                "sourcifyExactMatchCoveredContracts",
+                                "sourcifyProviderMatchCoveredContracts",
+                                "exactByteSourceBuildTransactionCoveredContracts",
                                 "officialSourcePinnedCoveredContracts"
                               ],
                               "properties": {
-                                "sourcifyExactMatchCoveredContracts": {
+                                "sourcifyProviderMatchCoveredContracts": {
+                                  "const": [
+                                    "programmableLaunchStampRouter",
+                                    "graphFactory"
+                                  ]
+                                },
+                                "exactByteSourceBuildTransactionCoveredContracts": {
                                   "const": [
                                     "programmableLaunchStampRouter",
                                     "graphFactory"
@@ -63794,8 +64142,9 @@
                               "targetId",
                               "address",
                               "status",
-                              "exactMatchProvider",
-                              "evidenceDigest",
+                              "providerObservation",
+                              "exactSourceAuthority",
+                              "exactSourceBinding",
                               "updatedAt",
                               "nextAttemptAt"
                             ],
@@ -63811,10 +64160,13 @@
                               "status": {
                                 "const": "queued"
                               },
-                              "exactMatchProvider": {
+                              "providerObservation": {
                                 "type": "null"
                               },
-                              "evidenceDigest": {
+                              "exactSourceAuthority": {
+                                "type": "null"
+                              },
+                              "exactSourceBinding": {
                                 "type": "null"
                               },
                               "updatedAt": {
@@ -63836,8 +64188,9 @@
                               "targetId",
                               "address",
                               "status",
-                              "exactMatchProvider",
-                              "evidenceDigest",
+                              "providerObservation",
+                              "exactSourceAuthority",
+                              "exactSourceBinding",
                               "updatedAt",
                               "nextAttemptAt"
                             ],
@@ -63853,10 +64206,13 @@
                               "status": {
                                 "const": "retrying"
                               },
-                              "exactMatchProvider": {
+                              "providerObservation": {
                                 "type": "null"
                               },
-                              "evidenceDigest": {
+                              "exactSourceAuthority": {
+                                "type": "null"
+                              },
+                              "exactSourceBinding": {
                                 "type": "null"
                               },
                               "updatedAt": {
@@ -63878,8 +64234,9 @@
                               "targetId",
                               "address",
                               "status",
-                              "exactMatchProvider",
-                              "evidenceDigest",
+                              "providerObservation",
+                              "exactSourceAuthority",
+                              "exactSourceBinding",
                               "updatedAt"
                             ],
                             "properties": {
@@ -63894,12 +64251,80 @@
                               "status": {
                                 "const": "exact_match"
                               },
-                              "exactMatchProvider": {
-                                "const": "sourcify-v2"
+                              "providerObservation": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "provider",
+                                  "classification",
+                                  "match",
+                                  "creationMatch",
+                                  "runtimeMatch",
+                                  "releaseAuthority",
+                                  "evidenceDigest"
+                                ],
+                                "properties": {
+                                  "provider": {
+                                    "const": "sourcify-v2"
+                                  },
+                                  "classification": {
+                                    "const": "PARTIAL_NO_CBOR_EXACT_BYTES"
+                                  },
+                                  "creationMatch": {
+                                    "const": "match"
+                                  },
+                                  "runtimeMatch": {
+                                    "const": "match"
+                                  },
+                                  "match": {
+                                    "const": "match"
+                                  },
+                                  "releaseAuthority": {
+                                    "const": false
+                                  },
+                                  "evidenceDigest": {
+                                    "type": "string",
+                                    "pattern": "^sha256:[0-9a-f]{64}$"
+                                  }
+                                }
                               },
-                              "evidenceDigest": {
-                                "type": "string",
-                                "pattern": "^sha256:[0-9a-f]{64}$"
+                              "exactSourceAuthority": {
+                                "const": "protected-hosted-build-finalized-transaction-bytecode"
+                              },
+                              "exactSourceBinding": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "schemaVersion",
+                                  "authority",
+                                  "coveredEvidence",
+                                  "bindingDigest"
+                                ],
+                                "properties": {
+                                  "schemaVersion": {
+                                    "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+                                  },
+                                  "authority": {
+                                    "const": "protected-hosted-build-finalized-transaction-bytecode"
+                                  },
+                                  "coveredEvidence": {
+                                    "const": [
+                                      "protected-source-tree",
+                                      "source-closure",
+                                      "hosted-build-artifact",
+                                      "standard-json-input",
+                                      "compiler-binary",
+                                      "compiler-settings",
+                                      "finalized-creation-transaction",
+                                      "creation-bytecode",
+                                      "runtime-bytecode"
+                                    ]
+                                  },
+                                  "bindingDigest": {
+                                    "type": "string",
+                                    "pattern": "^sha256:[0-9a-f]{64}$"
+                                  }
+                                }
                               },
                               "updatedAt": {
                                 "type": "string",
@@ -63915,8 +64340,9 @@
                               "targetId",
                               "address",
                               "status",
-                              "exactMatchProvider",
-                              "evidenceDigest",
+                              "providerObservation",
+                              "exactSourceAuthority",
+                              "exactSourceBinding",
                               "updatedAt"
                             ],
                             "properties": {
@@ -63931,10 +64357,13 @@
                               "status": {
                                 "const": "needs_attention"
                               },
-                              "exactMatchProvider": {
+                              "providerObservation": {
                                 "type": "null"
                               },
-                              "evidenceDigest": {
+                              "exactSourceAuthority": {
+                                "type": "null"
+                              },
+                              "exactSourceBinding": {
                                 "type": "null"
                               },
                               "updatedAt": {
@@ -63956,7 +64385,7 @@
                       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                     }
                   },
-                  "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+                  "description": "Server-authored post-finality exact-source state. Sourcify v2 match/match/match is explicitly non-authoritative provider observation; exact_match is emitted only after the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite binding closes. Provider retries and failures never alter launch finality.",
                   "x-programmable-order": "updatedAt == max components[*].updatedAt",
                   "allOf": [
                     {
@@ -64182,8 +64611,9 @@
                     "targetId",
                     "address",
                     "status",
-                    "exactMatchProvider",
-                    "evidenceDigest",
+                    "providerObservation",
+                    "exactSourceAuthority",
+                    "exactSourceBinding",
                     "updatedAt",
                     "nextAttemptAt"
                   ],
@@ -64199,10 +64629,13 @@
                     "status": {
                       "const": "queued"
                     },
-                    "exactMatchProvider": {
+                    "providerObservation": {
                       "type": "null"
                     },
-                    "evidenceDigest": {
+                    "exactSourceAuthority": {
+                      "type": "null"
+                    },
+                    "exactSourceBinding": {
                       "type": "null"
                     },
                     "updatedAt": {
@@ -64224,8 +64657,9 @@
                     "targetId",
                     "address",
                     "status",
-                    "exactMatchProvider",
-                    "evidenceDigest",
+                    "providerObservation",
+                    "exactSourceAuthority",
+                    "exactSourceBinding",
                     "updatedAt",
                     "nextAttemptAt"
                   ],
@@ -64241,10 +64675,13 @@
                     "status": {
                       "const": "retrying"
                     },
-                    "exactMatchProvider": {
+                    "providerObservation": {
                       "type": "null"
                     },
-                    "evidenceDigest": {
+                    "exactSourceAuthority": {
+                      "type": "null"
+                    },
+                    "exactSourceBinding": {
                       "type": "null"
                     },
                     "updatedAt": {
@@ -64266,8 +64703,9 @@
                     "targetId",
                     "address",
                     "status",
-                    "exactMatchProvider",
-                    "evidenceDigest",
+                    "providerObservation",
+                    "exactSourceAuthority",
+                    "exactSourceBinding",
                     "updatedAt"
                   ],
                   "properties": {
@@ -64282,12 +64720,80 @@
                     "status": {
                       "const": "exact_match"
                     },
-                    "exactMatchProvider": {
-                      "const": "sourcify-v2"
+                    "providerObservation": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "provider",
+                        "classification",
+                        "match",
+                        "creationMatch",
+                        "runtimeMatch",
+                        "releaseAuthority",
+                        "evidenceDigest"
+                      ],
+                      "properties": {
+                        "provider": {
+                          "const": "sourcify-v2"
+                        },
+                        "classification": {
+                          "const": "PARTIAL_NO_CBOR_EXACT_BYTES"
+                        },
+                        "creationMatch": {
+                          "const": "match"
+                        },
+                        "runtimeMatch": {
+                          "const": "match"
+                        },
+                        "match": {
+                          "const": "match"
+                        },
+                        "releaseAuthority": {
+                          "const": false
+                        },
+                        "evidenceDigest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        }
+                      }
                     },
-                    "evidenceDigest": {
-                      "type": "string",
-                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    "exactSourceAuthority": {
+                      "const": "protected-hosted-build-finalized-transaction-bytecode"
+                    },
+                    "exactSourceBinding": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "schemaVersion",
+                        "authority",
+                        "coveredEvidence",
+                        "bindingDigest"
+                      ],
+                      "properties": {
+                        "schemaVersion": {
+                          "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+                        },
+                        "authority": {
+                          "const": "protected-hosted-build-finalized-transaction-bytecode"
+                        },
+                        "coveredEvidence": {
+                          "const": [
+                            "protected-source-tree",
+                            "source-closure",
+                            "hosted-build-artifact",
+                            "standard-json-input",
+                            "compiler-binary",
+                            "compiler-settings",
+                            "finalized-creation-transaction",
+                            "creation-bytecode",
+                            "runtime-bytecode"
+                          ]
+                        },
+                        "bindingDigest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        }
+                      }
                     },
                     "updatedAt": {
                       "type": "string",
@@ -64303,8 +64809,9 @@
                     "targetId",
                     "address",
                     "status",
-                    "exactMatchProvider",
-                    "evidenceDigest",
+                    "providerObservation",
+                    "exactSourceAuthority",
+                    "exactSourceBinding",
                     "updatedAt"
                   ],
                   "properties": {
@@ -64319,10 +64826,13 @@
                     "status": {
                       "const": "needs_attention"
                     },
-                    "exactMatchProvider": {
+                    "providerObservation": {
                       "type": "null"
                     },
-                    "evidenceDigest": {
+                    "exactSourceAuthority": {
+                      "type": "null"
+                    },
+                    "exactSourceBinding": {
                       "type": "null"
                     },
                     "updatedAt": {
@@ -64344,7 +64854,7 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
           }
         },
-        "description": "Server-authored post-finality exact-source verification state. Sourcify v2 is the only exact-match authority; provider retries and failures never alter launch finality.",
+        "description": "Server-authored post-finality exact-source state. Sourcify v2 match/match/match is explicitly non-authoritative provider observation; exact_match is emitted only after the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite binding closes. Provider retries and failures never alter launch finality.",
         "x-programmable-order": "updatedAt == max components[*].updatedAt",
         "allOf": [
           {
@@ -66799,11 +67309,18 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "sourcifyExactMatchCoveredContracts",
+                "sourcifyProviderMatchCoveredContracts",
+                "exactByteSourceBuildTransactionCoveredContracts",
                 "officialSourcePinnedCoveredContracts"
               ],
               "properties": {
-                "sourcifyExactMatchCoveredContracts": {
+                "sourcifyProviderMatchCoveredContracts": {
+                  "const": [
+                    "programmableLaunchStampRouter",
+                    "graphFactory"
+                  ]
+                },
+                "exactByteSourceBuildTransactionCoveredContracts": {
                   "const": [
                     "programmableLaunchStampRouter",
                     "graphFactory"

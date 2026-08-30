@@ -259,7 +259,8 @@ describe("planned Robinhood Chain V4 discovery", () => {
     expect(publicDocs).toContain(
       "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
     );
-    expect(publicDocs).toMatch(/Sourcify v2 exact match/iu);
+    expect(publicDocs).toMatch(/Sourcify v2 provider-native `match`/iu);
+    expect(publicDocs).toMatch(/protected-build\/finalized-bytecode binding/iu);
     expect(publicDocs).toMatch(/Blockscout/iu);
     expect(publicDocs).toMatch(/optional,? (?:currently )?unproven and degraded|optional-unproven-degraded/iu);
     expect(publicDocs).toMatch(/cannot support an exact-source claim/iu);

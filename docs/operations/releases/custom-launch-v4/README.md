@@ -43,10 +43,16 @@ closed.
 ## Per-contract deployment provenance
 
 The deployment evidence must preserve the source model of each root. A global “all contracts are
-Sourcify exact matches” claim is invalid.
+Sourcify exact matches” claim is both invalid and impossible for the reviewed no-CBOR compiler
+profile.
 
-- `ProgrammableLaunchStampRouter` and `GraphFactory` are the two Sourcify exact-match roots in the
-  atomic deployment receipt.
+- `ProgrammableLaunchStampRouter` and `GraphFactory` require Sourcify V2
+  `match`/`match`/`match` and classification `PARTIAL_NO_CBOR_EXACT_BYTES` because their pinned
+  Standard JSON inputs set `metadata.appendCBOR=false`. Sourcify is not the exact-source authority.
+  Their exact claim is a separate composite binding across the protected source revision/tree,
+  authenticated hosted reproduction build, pinned compiler settings and Standard JSON bytes,
+  creation bytes in the finalized atomic transaction, and runtime bytes independently read by dRPC
+  and Alchemy.
 - `PermitAuthority` is the Safe proxy root. It is bound to the pinned Safe 1.4.1 source commitment,
   exact singleton and fallback-handler runtimes, owners, threshold, modules, guard, storage words,
   ordered dRPC/Alchemy configuration observations, and the complete Robinhood L2 checkpoint to

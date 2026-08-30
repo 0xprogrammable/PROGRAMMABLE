@@ -1349,7 +1349,9 @@ function exactAtomicDeploymentEvidence(value: unknown) {
     "ethereumFinalityEvidence", "evidenceDigest", "sourceVerification",
   ]);
   const sourceVerification = exactRecord(evidence.sourceVerification, [
-    "sourcifyExactMatchCoveredContracts", "officialSourcePinnedCoveredContracts",
+    "sourcifyProviderMatchCoveredContracts",
+    "exactByteSourceBuildTransactionCoveredContracts",
+    "officialSourcePinnedCoveredContracts",
   ]);
   const transactionHash = exactLowerBytes32(evidence.transactionHash);
   const from = canonicalAddress(evidence.from);
@@ -1362,7 +1364,11 @@ function exactAtomicDeploymentEvidence(value: unknown) {
     || evidence.chainId !== CUSTOM_LAUNCH_ROBINHOOD_CHAIN_ID_V4
     || canonicalJson(evidence.coveredContracts)
       !== canonicalJson(["programmableLaunchStampRouter", "graphFactory", "permitAuthority"])
-    || canonicalJson(sourceVerification.sourcifyExactMatchCoveredContracts)
+    || canonicalJson(sourceVerification.sourcifyProviderMatchCoveredContracts)
+      !== canonicalJson(["programmableLaunchStampRouter", "graphFactory"])
+    || canonicalJson(
+      sourceVerification.exactByteSourceBuildTransactionCoveredContracts,
+    )
       !== canonicalJson(["programmableLaunchStampRouter", "graphFactory"])
     || canonicalJson(sourceVerification.officialSourcePinnedCoveredContracts)
       !== canonicalJson(["permitAuthority"])
@@ -1448,7 +1454,12 @@ function exactAtomicDeploymentEvidence(value: unknown) {
     resultingContracts,
     ethereumFinalityEvidence,
     sourceVerification: {
-      sourcifyExactMatchCoveredContracts: ["programmableLaunchStampRouter", "graphFactory"],
+      sourcifyProviderMatchCoveredContracts: [
+        "programmableLaunchStampRouter", "graphFactory",
+      ],
+      exactByteSourceBuildTransactionCoveredContracts: [
+        "programmableLaunchStampRouter", "graphFactory",
+      ],
       officialSourcePinnedCoveredContracts: ["permitAuthority"],
     },
   });

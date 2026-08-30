@@ -17,7 +17,7 @@ address, runtime hash, source-verification evidence, declared role and checkpoin
 not gain trust. External indexing availability is not guaranteed.
 The foundation source closure is pinned to
 `0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`, which is source identity rather than
-deployment evidence. Sourcify v2 exact match is required. Robinhood Blockscout remains optional, unproven and
+deployment evidence. Sourcify v2 provider-native `match` is required; exact source authority comes from the separate protected-build/finalized-bytecode binding. Robinhood Blockscout remains optional, unproven and
 degraded; it cannot support an exact-source claim or block or revise finality.
 
 CLI `3.3.9` remains the installable release for live Ethereum V3. Package `4.0.0` is a Robinhood V4 source candidate,

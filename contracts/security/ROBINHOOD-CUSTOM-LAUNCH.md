@@ -228,54 +228,58 @@ Ethereum-finalized checkpoint exist.
 
 ## Operator commands
 
-From `contracts/`, preparation and readback are read-only:
+Run the local preparation and source-input checks from the repository root.
+They are read-only and the npm commands keep their working directory explicit:
 
 ```sh
-ROBINHOOD_CUSTOM_LAUNCH_DEPLOYER=<one-exact-allowed-owner> \
-ROBINHOOD_MAINNET_RPC_URL=<authenticated-chain-4663-rpc> \
-forge script \
+ROBINHOOD_CUSTOM_LAUNCH_DEPLOYER='<one-exact-allowed-owner>' \
+ETH_RPC_URL="$ROBINHOOD_MAINNET_RPC_URL_PRIMARY" \
+forge script --root contracts \
   script/robinhood-custom-launch/PrepareRobinhoodCustomLaunchFoundationV1.s.sol:PrepareRobinhoodCustomLaunchFoundationV1 \
-  --sig run --rpc-url "$ROBINHOOD_MAINNET_RPC_URL" -vvvv
+  --sig run -vvvv
 
-ROBINHOOD_CUSTOM_LAUNCH_DEPLOYER=<one-exact-allowed-owner> \
-node scripts/prepare-robinhood-custom-launch-owner-transaction.mjs
+ROBINHOOD_CUSTOM_LAUNCH_DEPLOYER='<one-exact-allowed-owner>' \
+node contracts/scripts/prepare-robinhood-custom-launch-owner-transaction.mjs
 
-ROBINHOOD_CUSTOM_LAUNCH_DEPLOYER=<the-actual-sender> \
-ROBINHOOD_MAINNET_RPC_URL=<authenticated-chain-4663-rpc> \
-forge script \
+ROBINHOOD_CUSTOM_LAUNCH_DEPLOYER='<the-actual-sender>' \
+ETH_RPC_URL="$ROBINHOOD_MAINNET_RPC_URL_PRIMARY" \
+forge script --root contracts \
   script/robinhood-custom-launch/PrepareRobinhoodCustomLaunchFoundationV1.s.sol:PrepareRobinhoodCustomLaunchFoundationV1 \
-  --sig validate --rpc-url "$ROBINHOOD_MAINNET_RPC_URL" -vvvv
+  --sig validate -vvvv
 
-node scripts/verify-robinhood-custom-launch-bindings.mjs
-node scripts/verify-robinhood-custom-launch-router-abi.mjs
-node scripts/verify-robinhood-custom-launch-standard-json.mjs
+npm run contracts:robinhood:bindings:verify
+npm run contracts:robinhood:router-abi:verify
+npm run contracts:robinhood:source-inputs:verify
 ```
 
-There is intentionally no `--broadcast`, wallet flag or private-key input.
+Immediately before the owner opens the wallet, follow the complete
+[owner-wallet handoff](../../docs/operations/releases/custom-launch-v4/OWNER-WALLET-HANDOFF.md)
+from the repository root. It reads the exact credentialed dRPC-primary and
+Alchemy-secondary endpoints without placing them in shell history or command
+arguments, binds reviewed endpoint commitments, requires clean `HEAD` to equal
+canonical `origin/production`, and binds the successful protected hosted
+`Verify` run and immutable proof artifact for that exact commit and tree. The
+strict action-time verifier compares every canonical wallet request field.
+There is intentionally no balance read, wallet opening, signature, broadcast,
+bridge or transaction retry in that path.
 
 After the separately owner-signed transaction has an exact successful receipt, do not edit the
-predeployment JSON. From the repository root, use the offline postdeployment assembler described in
+predeployment JSON. From the repository root, use the exact Phase A commands described in
 [`docs/operations/releases/custom-launch-v4/POSTDEPLOYMENT.md`](../../docs/operations/releases/custom-launch-v4/POSTDEPLOYMENT.md):
 
 ```sh
-npm run contracts:robinhood:postdeploy:assemble -- \
-  --input /absolute/path/postdeployment-input.json \
-  --output /absolute/path/robinhood-mainnet-promotion-bundle.json \
-  --repository-root "$PWD"
-
-npm run contracts:robinhood:postdeploy:verify -- \
-  --bundle /absolute/path/robinhood-mainnet-promotion-bundle.json \
-  --repository-root "$PWD"
+npm run contracts:robinhood:postdeploy:test
+npm run release:custom-launch:v4:test
 ```
 
-The assembler pins the prepared artifact bytes, requires ordered dRPC/Alchemy L2 evidence and
+The production assembler pins the prepared artifact bytes, requires ordered dRPC/Alchemy L2 evidence and
 dRPC/QuickNode Ethereum evidence, checks the exact Multicall3 envelope, proves D-1 to D code
 transitions, checks the Router getters and full fresh Safe state, binds source closure, and derives
 the live descriptor plus digest. Applying the reviewed bundle is a separate explicit local command.
 It still does not activate any runtime or public path.
 
 The Standard JSON verifier consumes the two byte-canonical, one-LF artifacts
-under `spec/robinhood-custom-launch/standard-json/`. It checks their full
+under `contracts/spec/robinhood-custom-launch/standard-json/`. It checks their full
 source closures against the checkout, authenticates the pinned solc 0.8.26
 binary, compiles from an empty temporary directory, and re-derives the
 GraphFactory creation/runtime hashes, Router base creation/runtime hashes,
@@ -285,47 +289,102 @@ produces the exact reviewed canonical bytes and hashes; it never signs or
 broadcasts.
 
 After a finalized deployment, source publication is a separate explicitly
-authorized external action. Sourcify needs no API key; Blockscout's public
-chain endpoint currently needs no API key. Both require the finalized creation
-transaction hash, compiled artifacts and RPC access. Exact prepared invocations
-are:
+authorized external action. Because both reviewed inputs set
+`metadata.appendCBOR=false`, Sourcify V2 truthfully reports provider-native
+`match`/`match`/`match`, not `exact_match`. That response is required publication
+and source-closure evidence but is never release authority by itself. The exact
+release claim comes from the separately digested binding of the protected
+production revision/tree, authenticated hosted reproduction build, pinned
+Standard JSON/compiler settings, exact creation bytes in the finalized owner
+transaction and exact deployed runtime bytes from both L2 providers. Before publication,
+re-run `npm run contracts:robinhood:source-inputs:verify` from the repository
+root. The canonical publication operator uses no RPC credential, wallet,
+private key or signing input. Its `review` mode performs bounded GETs only,
+requires a stable clean `HEAD` equal to both the local tracking ref and a fresh
+`git ls-remote origin refs/heads/production` result, recompiles both exact Standard
+JSON inputs with the pinned solc binary, and writes a new mode-`0600` plan in an
+existing owner-only directory outside the repository and OS temporary tree:
 
 ```sh
-forge verify-contract 0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd \
-  src/ProgrammableCreate2GraphDeployerV1.sol:ProgrammableCreate2GraphDeployerV1 \
-  --chain 4663 --rpc-url "$ROBINHOOD_MAINNET_RPC_URL" \
-  --compiler-version 0.8.26 --num-of-optimizations 1000 --evm-version cancun \
+npm run contracts:robinhood:sourcify:review -- \
   --creation-transaction-hash "$ROBINHOOD_FOUNDATION_TX_HASH" \
-  --verifier sourcify --watch
-
-ROUTER_CONSTRUCTOR_ARGS=$(cast abi-encode 'constructor(address,address,address)' \
-  0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06 \
-  0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd \
-  0x8366a39CC670B4001A1121B8F6A443A643e40951)
-forge verify-contract 0x34965F2A2ee9254522232C32F02056E92BE0C98a \
-  src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol:ProgrammableLaunchStampRouterV1 \
-  --chain 4663 --rpc-url "$ROBINHOOD_MAINNET_RPC_URL" \
-  --compiler-version 0.8.26 --num-of-optimizations 1000 --evm-version cancun \
-  --constructor-args "$ROUTER_CONSTRUCTOR_ARGS" \
-  --creation-transaction-hash "$ROBINHOOD_FOUNDATION_TX_HASH" \
-  --verifier sourcify --watch
+  --output /absolute/owner-only/sourcify-review.json
 ```
 
-To submit the same sources to Robinhood Blockscout, replace `--verifier
-sourcify` with:
+Review the plan, legal notice, exact request-body hashes, both bytecode closures,
+`authorizationDigest` and the possible automatic Blockscout `writeOrWarn` side
+effect. `submit` is an irreversible public-source publication and license grant;
+it is an owner-only external action, never an automated continuation. Only
+after explicit approval of that exact plan may the owner run:
+
+```sh
+npm run contracts:robinhood:sourcify:submit -- \
+  --review-plan /absolute/owner-only/sourcify-review.json \
+  --acknowledge-publication-digest 'sha256:<exact-reviewed-digest>' \
+  --acknowledge-legal-effects \
+    I_ACCEPT_IRREVOCABLE_SOURCIFY_SOURCE_PUBLICATION_AND_POSSIBLE_BLOCKSCOUT_VERIFICATION_SUBMISSION \
+  --output /absolute/owner-only/sourcify-publication-receipt.json
+```
+
+The operator rechecks the protected tree before every POST, skips an already
+verified target, requires bounded post-submission readback and emits only
+`match`/`match`/`match` plus independently exact byte/source/build/transaction
+evidence. Before each possible POST it durably writes and file- plus
+directory-`fsync`s a digest-bound `externalActionPossible=true` marker at the
+requested output path. Every completed exact target readback is checkpointed
+through the same atomic write and directory-`fsync` discipline. After that boundary it never deletes the marker or a
+completed receipt. The final receipt is written through an owner-only sibling
+file, `fsync`ed, atomically renamed over the marker and followed by a parent
+directory `fsync`. It cannot sign or broadcast an onchain transaction.
+
+If submission becomes uncertain or partially succeeds, preserve both the
+protected review and marker. First perform a GET-only recovery attestation:
+
+```sh
+npm run contracts:robinhood:sourcify:recover -- \
+  --review-plan /absolute/owner-only/sourcify-review.json \
+  --recovery-marker /absolute/owner-only/sourcify-publication-receipt.json
+```
+
+Recovery never sends a POST. If both targets now have exact independently
+validated provider readbacks, it atomically replaces the marker with a
+`recovered-read-only` receipt. If either target is still missing, it fails and
+retains the marker. A later owner-authorized `submit` with the same still-valid
+review and acknowledgements must use a different absent output path; it GETs
+both targets first and never repeats a POST for an already verified target.
+Receipt-write or post-write source-drift failures retain the marker or completed
+receipt and remain promotion blockers until read-only recovery and review.
+
+Robinhood Blockscout is separate optional explorer publication. If it is
+explicitly authorized, the submission endpoint is:
 
 ```text
 --verifier blockscout --verifier-url https://robinhoodchain.blockscout.com/api/
 ```
 
-Post-publication evidence must query both providers by address and store exact
-match status. A successful submission alone is not verification evidence.
+The pinned Standard JSON inputs deliberately set `metadata.appendCBOR=false`.
+Blockscout v11.2.8 derives `FULL` from CBOR metadata matching, so these exact
+binaries are expected to remain provider-classified `PARTIAL` even when their
+creation bytes, deployed bytes, compiler settings and complete source closure
+match locally. Do not change compiler metadata, bytecode, CREATE2 addresses or
+owner calldata to appease the explorer. A successful submission, `is_verified`
+flag or provider `PARTIAL` result never satisfies an exact-source gate.
+
+The bounded optional Blockscout V2 observation command is documented in the
+postdeployment runbook. It records
+`PARTIAL_NO_CBOR_NOT_RELEASE_AUTHORITY`, rejects byte/source/settings drift,
+and remains outside every promotion requirement. Per-instance API availability
+and Cloudflare challenges are read failures only; they do not weaken or replace
+the required composite exact byte/source/build/transaction binding. Sourcify's
+corresponding provider classification is `PARTIAL_NO_CBOR_EXACT_BYTES`; neither
+provider's partial/no-CBOR label is allowed to satisfy that exact binding.
 
 ## Remaining external boundary
 
 Before live use, all of the following remain external gates: owner review and
 single transaction signature/broadcast; successful receipt; full Safe and
-Router postdeploy readback; exact source matches; Ethereum-finalized finality
+Router postdeploy readback; Sourcify provider match plus the independent exact
+byte/source/build/transaction binding; Ethereum-finalized finality
 evidence; indexer start block and replay; backend permit/signature conformance;
 product enforcement of CustomGraph-only and 3-16 targets; per-project hook,
 token, external-reference, gas and economic security review; monitoring and

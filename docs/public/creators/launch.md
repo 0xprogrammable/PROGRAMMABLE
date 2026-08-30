@@ -16,7 +16,7 @@ An external contract reference does not become trusted by being named in a V4 co
 blocks admission. This planned rule is not deployment or live-capability evidence.
 The reviewed foundation source commitment is
 `0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`; it is not a deployed-address claim.
-Sourcify v2 exact match is required for source verification. Robinhood Blockscout is optional, currently unproven and
+Sourcify v2 provider-native `match` is required for source publication evidence; exact source authority is the separate protected-build/finalized-bytecode binding. Robinhood Blockscout is optional, currently unproven and
 degraded, and cannot support an exact-source claim or block or revise finality.
 
 ## Prepare the source

@@ -489,6 +489,29 @@ test("resolver rejects a newer canceled run instead of falling back to old succe
   await assert.rejects(resolveFixtures(fixtures), /canceled, incomplete, or mismatched/u);
 });
 
+test("resolver revalidates an exact persisted run instead of drifting to a newer rerun", async () => {
+  const fixtures = validApiFixtures();
+  const newerCanceled = structuredClone(fixtures.runs.workflow_runs[0]);
+  newerCanceled.id += 1;
+  newerCanceled.status = "completed";
+  newerCanceled.conclusion = "cancelled";
+  newerCanceled.run_started_at = "2026-08-11T18:05:00Z";
+  newerCanceled.html_url =
+    `${REPOSITORY_URL}/actions/runs/${newerCanceled.id}`;
+  fixtures.runs.workflow_runs.push(newerCanceled);
+  fixtures.runs.total_count += 1;
+  const resolved = await resolveFixtures(fixtures, {
+    expectedRunId: RUN_ID,
+    expectedRunAttempt: RUN_ATTEMPT,
+  });
+  assert.equal(resolved.runId, RUN_ID);
+  assert.equal(resolved.runAttempt, RUN_ATTEMPT);
+  await assert.rejects(
+    resolveFixtures(fixtures, { expectedRunId: RUN_ID }),
+    /bound production Verify run identity/iu,
+  );
+});
+
 test("resolver rejects stale proof completion", async () => {
   const fixtures = validApiFixtures();
   const proofJob = fixtures.jobs.jobs.find(({ name }) => name === VERIFY_PROOF_JOB_NAME);
