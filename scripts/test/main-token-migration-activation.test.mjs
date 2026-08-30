@@ -17,7 +17,7 @@ const START = 1_900_000_000n;
 const ELIGIBILITY_HASH = `0x${"12".repeat(32)}`;
 const TARGET_TOKEN = "0x5555555555555555555555555555555555555555";
 const DISTRIBUTOR = "0x6666666666666666666666666666666666666666";
-const DISTRIBUTION_PLAN_SHA256 = `sha256:${"56".repeat(32)}`;
+const TARGET_DESIGN_SHA256 = `sha256:${"56".repeat(32)}`;
 
 function activeManifest(overrides = {}) {
   return {
@@ -38,7 +38,7 @@ function activeManifest(overrides = {}) {
     targetTokenRuntimeCodeKeccak256: `0x${"34".repeat(32)}`,
     migrationDistributorAddress: DISTRIBUTOR,
     migrationDistributorRuntimeCodeKeccak256: `0x${"78".repeat(32)}`,
-    distributionPlanSha256: DISTRIBUTION_PLAN_SHA256,
+    targetDesignSha256: TARGET_DESIGN_SHA256,
     migrationWallet: MAIN_TOKEN_MIGRATION_POLICY.migrationWallet,
     windowDurationSeconds:
       MAIN_TOKEN_MIGRATION_POLICY.windowSeconds.toString(),
@@ -86,8 +86,8 @@ test("accepts only the exact planned 96-hour activation and sponsor anchor", () 
   assert.equal(activation.targetTokenAddress, TARGET_TOKEN);
   assert.equal(activation.migrationDistributorAddress, DISTRIBUTOR);
   assert.equal(
-    activation.distributionPlanSha256,
-    DISTRIBUTION_PLAN_SHA256,
+    activation.targetDesignSha256,
+    TARGET_DESIGN_SHA256,
   );
 
   assert.throws(
@@ -123,9 +123,9 @@ test("accepts only the exact planned 96-hour activation and sponsor anchor", () 
   );
   assert.throws(
     () => parseMainTokenMigrationActivationManifest(activeManifest({
-      distributionPlanSha256: `sha256:${"0".repeat(63)}`,
+      targetDesignSha256: `sha256:${"0".repeat(63)}`,
     })),
-    /distribution plan SHA-256 is malformed/u,
+    /target design SHA-256 is malformed/u,
   );
   assert.throws(
     () => parseMainTokenMigrationActivationManifest({

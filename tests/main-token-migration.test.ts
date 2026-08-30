@@ -421,7 +421,7 @@ describe("main token migration page contract", () => {
       targetTokenRuntimeCodeKeccak256: string | null;
       migrationDistributorAddress: string | null;
       migrationDistributorRuntimeCodeKeccak256: string | null;
-      distributionPlanSha256: string | null;
+      targetDesignSha256: string | null;
       sponsorEligibilityBlockNumber: string | null;
       sponsorEligibilityBlockHash: string | null;
     };
@@ -477,7 +477,7 @@ describe("main token migration page contract", () => {
       targetTokenRuntimeCodeKeccak256: null,
       migrationDistributorAddress: null,
       migrationDistributorRuntimeCodeKeccak256: null,
-      distributionPlanSha256: null,
+      targetDesignSha256: null,
       sponsorEligibilityBlockNumber: null,
       sponsorEligibilityBlockHash: null,
     });

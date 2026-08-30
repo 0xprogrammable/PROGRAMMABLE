@@ -12,7 +12,7 @@ const ZERO_SHA256 = `sha256:${"0".repeat(64)}`;
 const ACTIVATION_KEYS = Object.freeze([
   "deadlineTimestampExclusive",
   "enabled",
-  "distributionPlanSha256",
+  "targetDesignSha256",
   "migrationWallet",
   "migrationDistributorAddress",
   "migrationDistributorRuntimeCodeKeccak256",
@@ -158,7 +158,7 @@ export function parseMainTokenMigrationActivationManifest(
     payload.targetTokenRuntimeCodeKeccak256,
     payload.migrationDistributorAddress,
     payload.migrationDistributorRuntimeCodeKeccak256,
-    payload.distributionPlanSha256,
+    payload.targetDesignSha256,
   ];
   if (payload.enabled === false) {
     if (mutableFields.some((value) => value !== null)) {
@@ -214,9 +214,9 @@ export function parseMainTokenMigrationActivationManifest(
     payload.migrationDistributorRuntimeCodeKeccak256,
     "migrationDistributorRuntimeCodeKeccak256",
   );
-  if (!SHA256.test(String(payload.distributionPlanSha256 ?? "")) ||
-    payload.distributionPlanSha256 === ZERO_SHA256) {
-    reject("distribution plan SHA-256 is malformed");
+  if (!SHA256.test(String(payload.targetDesignSha256 ?? "")) ||
+    payload.targetDesignSha256 === ZERO_SHA256) {
+    reject("target design SHA-256 is malformed");
   }
   if (windowStartTimestamp + MAIN_TOKEN_MIGRATION_POLICY.windowSeconds !==
     deadlineTimestampExclusive) {
@@ -238,7 +238,7 @@ export function parseMainTokenMigrationActivationManifest(
       MAIN_TOKEN_MIGRATION_POLICY.targetTokenTotalSupplyRaw,
     migrationDistributorAddress,
     migrationDistributorRuntimeCodeKeccak256,
-    distributionPlanSha256: payload.distributionPlanSha256,
+    targetDesignSha256: payload.targetDesignSha256,
     sponsorEligibilityBlockHash:
       payload.sponsorEligibilityBlockHash.toLowerCase(),
     sponsorEligibilityBlockNumber,

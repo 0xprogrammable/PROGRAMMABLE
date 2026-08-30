@@ -163,7 +163,7 @@ export function LandingPage() {
           {migrationAnnouncementVisible ? (
             <Link className={styles.migrationCta} href="/migration">
               <span>We are migrating</span>
-              <small>Ethereum → Robinhood Chain</small>
+              <small>Ethereum → Robinhood</small>
             </Link>
           ) : null}
         </div>

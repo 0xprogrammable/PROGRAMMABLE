@@ -480,7 +480,7 @@ function parseMigrationWindow(): MigrationWindow {
     targetTokenRuntimeCodeKeccak256: string | null;
     migrationDistributorAddress: string | null;
     migrationDistributorRuntimeCodeKeccak256: string | null;
-    distributionPlanSha256: string | null;
+    targetDesignSha256: string | null;
     migrationWallet: string;
     windowDurationSeconds: string;
     windowStartTimestamp: string | null;
@@ -560,9 +560,9 @@ function parseMigrationWindow(): MigrationWindow {
     bytes32Pattern.test(manifest.migrationDistributorRuntimeCodeKeccak256) &&
     manifest.migrationDistributorRuntimeCodeKeccak256.toLowerCase() !==
       zeroBytes32 &&
-    manifest.distributionPlanSha256 !== null &&
-    sha256Pattern.test(manifest.distributionPlanSha256) &&
-    manifest.distributionPlanSha256 !== zeroSha256;
+    manifest.targetDesignSha256 !== null &&
+    sha256Pattern.test(manifest.targetDesignSha256) &&
+    manifest.targetDesignSha256 !== zeroSha256;
 
   return Object.freeze({
     enabled:

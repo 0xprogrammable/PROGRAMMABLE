@@ -75,7 +75,7 @@ describe("main token migration gas sponsor activation contract", () => {
       targetTokenRuntimeCodeKeccak256: null,
       migrationDistributorAddress: null,
       migrationDistributorRuntimeCodeKeccak256: null,
-      distributionPlanSha256: null,
+      targetDesignSha256: null,
       sponsorEligibilityBlockNumber: null,
       sponsorEligibilityBlockHash: null,
     });

@@ -677,7 +677,7 @@ async function main() {
     true,
     {
       chainId: activation.targetChainId,
-      distributionPlanSha256: activation.distributionPlanSha256,
+      targetDesignSha256: activation.targetDesignSha256,
       distributorAddress: activation.migrationDistributorAddress,
       distributorRuntimeCodeKeccak256:
         activation.migrationDistributorRuntimeCodeKeccak256,
@@ -692,7 +692,7 @@ async function main() {
     true,
     {
       chainId: activation.targetChainId,
-      distributionPlanSha256: activation.distributionPlanSha256,
+      targetDesignSha256: activation.targetDesignSha256,
       distributorAddress: activation.migrationDistributorAddress,
       distributorRuntimeCodeKeccak256:
         activation.migrationDistributorRuntimeCodeKeccak256,

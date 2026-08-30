@@ -7,7 +7,7 @@ import migrationActivationManifest from "@/config/main-token-migration-activatio
 export const metadata: Metadata = {
   title: "V4 migration | Programmable",
   description:
-    "Prepare an Ethereum V4 transfer for an equal token-unit allocation to the same address on Robinhood Chain.",
+    "Send Ethereum V4 and receive the exact same V4 token amount at the same address on Robinhood.",
   robots: {
     index: false,
     follow: false,

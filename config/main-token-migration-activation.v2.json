@@ -13,7 +13,7 @@
   "targetTokenRuntimeCodeKeccak256": null,
   "migrationDistributorAddress": null,
   "migrationDistributorRuntimeCodeKeccak256": null,
-  "distributionPlanSha256": null,
+  "targetDesignSha256": null,
   "migrationWallet": "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
   "windowDurationSeconds": "345600",
   "windowStartTimestamp": null,

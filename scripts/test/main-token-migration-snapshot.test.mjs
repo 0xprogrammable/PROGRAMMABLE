@@ -19,7 +19,7 @@ const RELAYER = "0x4444444444444444444444444444444444444444";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const TARGET_DELIVERY = Object.freeze({
   chainId: MAIN_TOKEN_MIGRATION_POLICY.targetChainId,
-  distributionPlanSha256: `sha256:${"56".repeat(32)}`,
+  targetDesignSha256: `sha256:${"56".repeat(32)}`,
   distributorAddress: "0x6666666666666666666666666666666666666666",
   distributorRuntimeCodeKeccak256: `0x${"34".repeat(32)}`,
   tokenAddress: "0x5555555555555555555555555555555555555555",
@@ -478,7 +478,7 @@ test("emits byte-identical canonical JSON and a stable SHA-256 digest", () => {
   assert.equal(artifact.rpcAgreement.snapshotsIdentical, true);
   assert.deepEqual(artifact.targetDelivery, {
     chainId: "4663",
-    distributionPlanSha256: TARGET_DELIVERY.distributionPlanSha256,
+    targetDesignSha256: TARGET_DELIVERY.targetDesignSha256,
     distributorAddress: TARGET_DELIVERY.distributorAddress,
     distributorRuntimeCodeKeccak256:
       TARGET_DELIVERY.distributorRuntimeCodeKeccak256,

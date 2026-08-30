@@ -35,7 +35,7 @@ const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
 const ZERO_SHA256 = `sha256:${"0".repeat(64)}`;
 const TARGET_DELIVERY_KEYS = Object.freeze([
   "chainId",
-  "distributionPlanSha256",
+  "targetDesignSha256",
   "distributorAddress",
   "distributorRuntimeCodeKeccak256",
   "tokenAddress",
@@ -847,14 +847,14 @@ export function buildMainTokenMigrationSnapshotArtifact(
     ) ||
     targetDelivery.distributorRuntimeCodeKeccak256.toLowerCase() ===
       ZERO_BYTES32 ||
-    typeof targetDelivery.distributionPlanSha256 !== "string" ||
-    !SHA256.test(targetDelivery.distributionPlanSha256) ||
-    targetDelivery.distributionPlanSha256 === ZERO_SHA256) {
+    typeof targetDelivery.targetDesignSha256 !== "string" ||
+    !SHA256.test(targetDelivery.targetDesignSha256) ||
+    targetDelivery.targetDesignSha256 === ZERO_SHA256) {
     fail("target delivery commitment is incomplete or malformed");
   }
   const normalizedTargetDelivery = {
     chainId: MAIN_TOKEN_MIGRATION_POLICY.targetChainId.toString(),
-    distributionPlanSha256: targetDelivery.distributionPlanSha256,
+    targetDesignSha256: targetDelivery.targetDesignSha256,
     distributorAddress: targetDelivery.distributorAddress.toLowerCase(),
     distributorRuntimeCodeKeccak256:
       targetDelivery.distributorRuntimeCodeKeccak256.toLowerCase(),
