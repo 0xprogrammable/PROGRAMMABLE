@@ -125,6 +125,9 @@ describe("My projects editor opening", () => {
     const tokenAction = source.indexOf(
       "className={styles.viewTokenAction}",
     );
+    expect(source).toContain(
+      'href={`/token/${project.tokenAddress}?chain=${project.chainId}`}',
+    );
     expect(receiverAction).toBeGreaterThan(-1);
     expect(articleAction).toBeGreaterThan(receiverAction);
     expect(tokenAction).toBeGreaterThan(articleAction);

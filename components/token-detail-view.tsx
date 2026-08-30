@@ -81,6 +81,7 @@ import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
   "@/lib/creator-article/programmable-example-v1";
 import { PROGRAMMABLE_MAIN_TOKEN_PRESENTATION } from
   "@/lib/programmable-main-token-presentation";
+import type { ViewChainId } from "@/lib/view-chain";
 import type { PostLaunchAuthorityInventoryV1 } from "@/lib/custom-launch/contract-v2";
 import { parseLaunchPartnerAttributionV1 } from
   "@/lib/launch-partner-attribution";
@@ -2713,20 +2714,22 @@ function CustomProjectDetailContent({
 
 export function TokenDetailView({
   address,
+  chainId = 1,
   initialResponse,
 }: {
   address: string;
+  chainId?: ViewChainId;
   initialResponse?: TokenDetailInitialResponse;
 }) {
   const { wallet: activeWallet } = useWallet();
   const preview = useInterfacePreview();
   const normalizedAddress = isAddress(address) ? getAddress(address) : null;
   const previewToken =
-    preview && normalizedAddress
+    preview && chainId === 1 && normalizedAddress
       ? getExplorePreviewToken(normalizedAddress)
       : undefined;
   const previewCustomProject =
-    preview && normalizedAddress
+    preview && chainId === 1 && normalizedAddress
       ? getExplorePreviewCustomProject(normalizedAddress)
       : undefined;
   const [retryKey, setRetryKey] = useState(0);
@@ -2734,7 +2737,8 @@ export function TokenDetailView({
     enabled: normalizedAddress !== null && !preview,
     intervalMs: 60_000,
   });
-  const requestKey = `${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
+  const requestKey =
+    `${chainId}:${normalizedAddress ?? "invalid"}\u0000${retryKey}`;
   const [initialState] = useState(() =>
     createTokenDetailInitialState(initialResponse, normalizedAddress, requestKey)
   );
@@ -2756,7 +2760,10 @@ export function TokenDetailView({
 
     async function loadToken() {
       try {
-        const search = new URLSearchParams({ address: tokenAddress });
+        const search = new URLSearchParams({
+          address: tokenAddress,
+          chain: String(chainId),
+        });
         const response = await fetch(
           `/api/explore/token?${search.toString()}`,
           {
@@ -2797,6 +2804,7 @@ export function TokenDetailView({
     };
   }, [
     initialState,
+    chainId,
     normalizedAddress,
     preview,
     refreshKey,
@@ -2815,11 +2823,11 @@ export function TokenDetailView({
   if (previewToken) {
     return (
       <TokenDetailContent
-        key={`${previewToken.tokenAddress}:preview:${
+        key={`${chainId}:${previewToken.tokenAddress}:preview:${
           activeWallet?.account.toLowerCase() ?? "disconnected"
         }`}
         token={previewToken}
-        chainId={1}
+        chainId={chainId}
         preview
         creatorArticle={getExplorePreviewCreatorArticle(normalizedAddress)}
       />
@@ -2830,7 +2838,7 @@ export function TokenDetailView({
     return (
       <CustomProjectDetailContent
         project={previewCustomProject}
-        chainId={1}
+        chainId={chainId}
       />
     );
   }
@@ -2847,7 +2855,7 @@ export function TokenDetailView({
   if (activeState.phase === "ready") {
     return (
       <TokenDetailContent
-        key={`${activeState.token.tokenAddress}:${
+        key={`${activeState.chainId}:${activeState.token.tokenAddress}:${
           activeWallet?.account.toLowerCase() ?? "disconnected"
         }`}
         token={activeState.token}
@@ -2879,7 +2887,9 @@ export function TokenDetailView({
     activeState.phase === "not-found"
       ? "This token is not in the Programmable index yet"
       : activeState.phase === "not-deployed"
-        ? "No finalized token data is available"
+        ? chainId === 4663
+          ? "Robinhood Chain token discovery is planned but not deployed yet"
+          : "No finalized token data is available"
         : activeState.message;
 
   return (

@@ -3231,7 +3231,7 @@ export function ExploreView({
       >
         {cards.map((token, index) => {
           const href = token.tokenAddress
-            ? `/token/${token.tokenAddress}`
+            ? `/token/${token.tokenAddress}?chain=${viewChainId}`
             : null;
           const imageSource = getTokenCardImageSource(token.imageUrl);
           const preserveArtworkAspectRatio =
@@ -3299,6 +3299,7 @@ export function ExploreView({
                 <Link
                   className={styles.runnerHitArea}
                   href={href}
+                  prefetch={false}
                   aria-label={`Open ${token.name}`}
                 >
                   {cardContent}

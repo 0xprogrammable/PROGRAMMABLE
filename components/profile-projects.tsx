@@ -658,7 +658,7 @@ export function ProfileProjects({
                 </span>
                 <Link
                   className={styles.viewTokenAction}
-                  href={`/token/${project.tokenAddress}`}
+                  href={`/token/${project.tokenAddress}?chain=${project.chainId}`}
                 >
                   View token
                 </Link>

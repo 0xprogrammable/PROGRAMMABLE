@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { NextRequest } from "next/server";
 import { cache, Suspense } from "react";
 
@@ -11,6 +12,10 @@ import {
 import { TokenDetailShell } from "@/components/token-detail-shell";
 import { tokenDetailMetadataFromProjection } from
   "@/lib/token-detail-metadata";
+import {
+  tryParseViewChainId,
+  type ViewChainId,
+} from "@/lib/view-chain";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +23,17 @@ export const dynamic = "force-dynamic";
 // margin so a valid slow read is not aborted and immediately repeated by the
 // browser, while keeping the initial render strictly bounded.
 export const INITIAL_TOKEN_DETAIL_TIMEOUT_MS = 8_500;
+
+type TokenPageSearchParams = Promise<
+  Record<string, string | string[] | undefined>
+>;
+
+export function tokenDetailPageChainId(
+  value: string | string[] | undefined,
+): ViewChainId | null {
+  if (value === undefined) return 1;
+  return typeof value === "string" ? tryParseViewChainId(value) : null;
+}
 
 function unavailableInitialTokenDetailResponse(): TokenDetailInitialResponse {
   return {
@@ -50,8 +66,14 @@ export async function readInitialTokenDetailWithinDeadline(
   }
 }
 
-const readInitialTokenDetail = cache(async (address: string) => {
-  const search = new URLSearchParams({ address });
+const readInitialTokenDetail = cache(async (
+  address: string,
+  chainId: ViewChainId,
+) => {
+  const search = new URLSearchParams({
+    address,
+    chain: String(chainId),
+  });
   return await readInitialTokenDetailWithinDeadline(async (signal) => {
     const response = await readTokenDetailResponse(new NextRequest(
       `http://programmable.local/api/explore/token?${search.toString()}`,
@@ -67,36 +89,63 @@ const readInitialTokenDetail = cache(async (address: string) => {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ address: string }>;
+  searchParams: TokenPageSearchParams;
 }): Promise<Metadata> {
-  const { address } = await params;
+  const [{ address }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  const chainId = tokenDetailPageChainId(resolvedSearchParams.chain);
+  if (chainId === null) {
+    return tokenDetailMetadataFromProjection(address, {
+      status: 400,
+      body: { error: "Unsupported chain" },
+    });
+  }
   return tokenDetailMetadataFromProjection(
     address,
-    await readInitialTokenDetail(address),
+    await readInitialTokenDetail(address, chainId),
+    chainId,
   );
 }
 
 export default async function TokenPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ address: string }>;
+  searchParams: TokenPageSearchParams;
 }) {
-  const { address } = await params;
+  const [{ address }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  const chainId = tokenDetailPageChainId(resolvedSearchParams.chain);
+  if (chainId === null) notFound();
   return (
     <Suspense fallback={<TokenDetailShell />}>
-      <InitialTokenDetail address={address} />
+      <InitialTokenDetail address={address} chainId={chainId} />
     </Suspense>
   );
 }
 
-async function InitialTokenDetail({ address }: { address: string }) {
-  const initialResponse = await readInitialTokenDetail(address);
+async function InitialTokenDetail({
+  address,
+  chainId,
+}: {
+  address: string;
+  chainId: ViewChainId;
+}) {
+  const initialResponse = await readInitialTokenDetail(address, chainId);
 
   return (
     <TokenDetailView
-      key={address.toLowerCase()}
+      key={`${chainId}:${address.toLowerCase()}`}
       address={address}
+      chainId={chainId}
       initialResponse={initialResponse}
     />
   );

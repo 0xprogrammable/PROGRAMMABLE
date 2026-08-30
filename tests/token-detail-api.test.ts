@@ -247,6 +247,32 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     });
   });
 
+  it("returns an honest planned Robinhood state without reading Ethereum", async () => {
+    const response = await GET(request(entry.tokenAddress!, "&chain=4663"));
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toEqual({
+      status: "not-deployed",
+      activationStage: "planned-not-deployed",
+      chainId: 4663,
+      token: null,
+      customProject: null,
+      routerTradeProject: null,
+      platformFeeCertification: null,
+      sourceVerification: null,
+      creatorArticle: null,
+      snapshot: null,
+    });
+    expect(response.headers.get("x-programmable-chain-id")).toBe("4663");
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "planned-not-deployed",
+    );
+    expect(mocks.readCatalog).not.toHaveBeenCalled();
+    expect(mocks.readCustom).not.toHaveBeenCalled();
+    expect(mocks.readRouter).not.toHaveBeenCalled();
+    expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
   it("serves an independently verified Custom Registry identity fail-soft", async () => {
     mocks.customEnabled.mockReturnValue(true);
     mocks.readCustom.mockResolvedValue([customEntry]);
@@ -654,6 +680,8 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     ["0x1234", ""],
     [entry.tokenAddress!, "&unexpected=true"],
     [entry.tokenAddress!, `&address=${entry.tokenAddress}`],
+    [entry.tokenAddress!, "&chain=10"],
+    [entry.tokenAddress!, "&chain=1&chain=4663"],
   ])("rejects malformed or repeated input", async (address, extra) => {
     const response = await GET(request(address, extra));
     expect(response.status).toBe(400);

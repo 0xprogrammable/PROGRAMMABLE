@@ -13,6 +13,7 @@ import {
   utf8ByteLength,
 } from "./metadata-policy";
 import { safePublicImageUrl } from "./safe-public-image-url";
+import type { ViewChainId } from "./view-chain";
 
 const SITE_ORIGIN = "https://programmable.market";
 const SITE_DESCRIPTION = "Shape what assets can do";
@@ -96,9 +97,13 @@ function absolutePublicImageUrl(value: unknown) {
   }
 }
 
-function fallbackTokenCanonical(requestedAddress?: string) {
+function fallbackTokenCanonical(
+  requestedAddress?: string,
+  chainId: ViewChainId = 1,
+) {
   if (!requestedAddress || !isAddress(requestedAddress)) return SITE_ORIGIN;
-  return `${SITE_ORIGIN}/token/${getAddress(requestedAddress)}`;
+  const canonical = `${SITE_ORIGIN}/token/${getAddress(requestedAddress)}`;
+  return chainId === 1 ? canonical : `${canonical}?chain=${chainId}`;
 }
 
 function shouldNoIndexFallback(
@@ -108,7 +113,8 @@ function shouldNoIndexFallback(
   return !isAddress(requestedAddress) ||
     response.status === 400 ||
     response.status === 404 ||
-    response.status === 410;
+    response.status === 410 ||
+    (isRecord(response.body) && response.body.status === "not-deployed");
 }
 
 function projectedTokenMetadata(
@@ -183,8 +189,9 @@ function projectedTokenMetadata(
 export function genericTokenDetailMetadata(
   requestedAddress?: string,
   noIndex = false,
+  chainId: ViewChainId = 1,
 ): Metadata {
-  const canonical = fallbackTokenCanonical(requestedAddress);
+  const canonical = fallbackTokenCanonical(requestedAddress, chainId);
   const metadata: Metadata = {
     title: "Programmable",
     description: SITE_DESCRIPTION,
@@ -212,12 +219,14 @@ export function genericTokenDetailMetadata(
 export function tokenDetailMetadataFromProjection(
   requestedAddress: string,
   response: TokenDetailProjectionResponse,
+  chainId: ViewChainId = 1,
 ): Metadata {
   const projected = projectedTokenMetadata(requestedAddress, response);
   if (!projected) {
     return genericTokenDetailMetadata(
       requestedAddress,
       shouldNoIndexFallback(requestedAddress, response),
+      chainId,
     );
   }
 
@@ -230,7 +239,7 @@ export function tokenDetailMetadataFromProjection(
     ? `${projected.name} (${symbolLabel})`
     : projected.name;
   const title = `${identityLabel} | Programmable`;
-  const canonical = `${SITE_ORIGIN}/token/${projected.address}`;
+  const canonical = fallbackTokenCanonical(projected.address, chainId);
   const imageAlt = `${projected.name} artwork`;
 
   return {

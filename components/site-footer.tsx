@@ -60,6 +60,7 @@ export function SiteFooter() {
           <Link
             className={styles.brandLink}
             href="/"
+            prefetch={false}
             aria-label="Programmable home"
           >
             <Image
@@ -80,7 +81,9 @@ export function SiteFooter() {
           <ul>
             {productLinks.map((link) => (
               <li key={link.href}>
-                <Link href={link.href}>{link.label}</Link>
+                <Link href={link.href} prefetch={false}>
+                  {link.label}
+                </Link>
               </li>
             ))}
           </ul>

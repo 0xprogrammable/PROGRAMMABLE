@@ -155,6 +155,22 @@ describe("token detail metadata", () => {
     });
   });
 
+  it("keeps planned Robinhood metadata chain-scoped and out of search", () => {
+    expect(tokenDetailMetadataFromProjection(SHARD, {
+      status: 200,
+      body: {
+        status: "not-deployed",
+        activationStage: "planned-not-deployed",
+        chainId: 4663,
+      },
+    }, 4663)).toMatchObject({
+      alternates: {
+        canonical: `https://programmable.market/token/${SHARD}?chain=4663`,
+      },
+      robots: { index: false, follow: false },
+    });
+  });
+
   it("does not publish private or local crawler image targets", () => {
     for (const imageUrl of [
       "https://localhost/token.png",

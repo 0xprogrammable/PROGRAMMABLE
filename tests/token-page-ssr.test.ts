@@ -10,6 +10,7 @@ vi.mock("@/components/token-detail-view", () => ({
 import {
   INITIAL_TOKEN_DETAIL_TIMEOUT_MS,
   readInitialTokenDetailWithinDeadline,
+  tokenDetailPageChainId,
 } from
   "../app/token/[address]/page";
 
@@ -18,6 +19,14 @@ afterEach(() => {
 });
 
 describe("token detail initial server read", () => {
+  it("defaults only an omitted chain and rejects explicit invalid or repeated values", () => {
+    expect(tokenDetailPageChainId(undefined)).toBe(1);
+    expect(tokenDetailPageChainId("1")).toBe(1);
+    expect(tokenDetailPageChainId("4663")).toBe(4663);
+    expect(tokenDetailPageChainId("10")).toBeNull();
+    expect(tokenDetailPageChainId(["1", "4663"])).toBeNull();
+  });
+
   it("covers the API provider budget without allowing an unbounded render", () => {
     expect(INITIAL_TOKEN_DETAIL_TIMEOUT_MS).toBeGreaterThan(8_000);
     expect(INITIAL_TOKEN_DETAIL_TIMEOUT_MS).toBeLessThanOrEqual(9_000);
@@ -29,8 +38,14 @@ describe("token detail initial server read", () => {
       "utf8",
     );
     expect(source).toContain("<Suspense fallback={<TokenDetailShell />}> ".trim());
-    expect(source).toContain("<InitialTokenDetail address={address} />");
+    expect(source).toContain(
+      "<InitialTokenDetail address={address} chainId={chainId} />",
+    );
     expect(source).toContain("const readInitialTokenDetail = cache");
+    expect(source).toContain("chain: String(chainId)");
+    expect(source).toContain("readInitialTokenDetail(address, chainId)");
+    expect(source).toContain('key={`${chainId}:${address.toLowerCase()}`}');
+    expect(source).toContain("if (chainId === null) notFound()");
     expect(source).toContain("export async function generateMetadata");
     expect(source.match(/readTokenDetailResponse\(/gu)).toHaveLength(1);
   });

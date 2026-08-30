@@ -705,7 +705,7 @@ function profileClaimCapabilityMatchesToken(
 }
 
 function tokenHref(address: Address) {
-  return `/token/${address}`;
+  return `/token/${address}?chain=1`;
 }
 
 function parseInitialBuy(

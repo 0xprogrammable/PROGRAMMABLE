@@ -261,6 +261,12 @@ describe("Explore UI contract", () => {
     expect(source).not.toContain("<small>CA</small>");
     expect(source).toContain('<small title="Fully diluted valuation">FDV</small>');
     expect(source).toContain("formatExploreContractAddress(token.tokenAddress)");
+    expect(source).toContain(
+      '`/token/${token.tokenAddress}?chain=${viewChainId}`',
+    );
+    expect(source).toMatch(
+      /className=\{styles\.runnerHitArea\}[\s\S]{0,160}prefetch=\{false\}/u,
+    );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*12px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*12px;/s,
     );

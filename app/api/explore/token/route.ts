@@ -38,6 +38,7 @@ import { canonicalSha256 } from
   "../../../../lib/server/projection-target/hashing";
 import { platformFeeCertificationForTokenV1 } from
   "../../../../lib/platform-fee-certification";
+import { tryParseViewChainId } from "../../../../lib/view-chain";
 import type {
   CanonicalTokenExploreEntry,
   ExploreEntry,
@@ -65,6 +66,7 @@ function canonicalResponseHeaders(input: Readonly<{
 }>) {
   return {
     "Cache-Control": SUCCESS_CACHE_CONTROL,
+    "X-Programmable-Chain-Id": "1",
     "X-Programmable-Launch-Source": input.launchSource,
     "X-Programmable-Read-Source": `${input.launchSource}+dexscreener`,
     "X-Programmable-Market-Provider": "dexscreener",
@@ -108,8 +110,11 @@ export async function GET(request: NextRequest) {
   ]);
   const search = request.nextUrl.searchParams;
   if (
-    [...search.keys()].some((key) => key !== "address") ||
-    search.getAll("address").length !== 1
+    [...search.keys()].some(
+      (key) => key !== "address" && key !== "chain",
+    ) ||
+    search.getAll("address").length !== 1 ||
+    search.getAll("chain").length > 1
   ) {
     return NextResponse.json(
       { error: "Unsupported query parameters" },
@@ -125,8 +130,42 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const chainValue = search.get("chain");
+  const chain = chainValue === null ? 1 : tryParseViewChainId(chainValue);
+  if (chain === null) {
+    return NextResponse.json(
+      { error: "Unsupported chain" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   const requestedTokenAddress = getAddress(input);
   const address = requestedTokenAddress.toLowerCase();
+  if (chain === 4663) {
+    return NextResponse.json(
+      {
+        status: "not-deployed" as const,
+        activationStage: "planned-not-deployed" as const,
+        chainId: chain,
+        token: null,
+        customProject: null,
+        routerTradeProject: null,
+        platformFeeCertification: null,
+        sourceVerification: null,
+        creatorArticle: null,
+        snapshot: null,
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
+          "X-Programmable-Chain-Id": String(chain),
+          "X-Programmable-Read-Source": "planned-not-deployed",
+        },
+      },
+    );
+  }
+
   const catalogRead = readEnvioClassicV3CatalogV1({
     signal: readSignal,
     deadlineMs,
