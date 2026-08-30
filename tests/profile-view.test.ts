@@ -114,7 +114,7 @@ describe("profile editor composition", () => {
       githubUrl: "programmablehq",
     });
     expect(profileViewSource).toMatch(
-      /populateProfileDrafts\(latestProfileForEditor\(\)\)/u,
+      /function beginEditingProfile\(\)\s*\{\s*populateProfileDrafts\(latestProfileForEditor\(\)\);/u,
     );
   });
 
