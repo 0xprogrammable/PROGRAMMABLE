@@ -200,6 +200,15 @@
   font-size: 13.5px;
 }
 
+.lifecycleList > div {
+  grid-template-columns: minmax(244px, 0.48fr) minmax(0, 1fr);
+}
+
+.lifecycleList dt code {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .linkList {
   display: grid;
   gap: 24px;

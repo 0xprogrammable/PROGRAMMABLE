@@ -330,7 +330,7 @@ export default function CustomLaunchApiDocsPage() {
           evidence.
         </p>
 
-        <dl className={styles.resultList}>
+        <dl className={`${styles.resultList} ${styles.lifecycleList}`}>
           {robinhoodV4Lifecycle.map(([status, meaning]) => (
             <div key={status}>
               <dt>
@@ -880,7 +880,7 @@ export default function CustomLaunchApiDocsPage() {
           </p>
         </div>
 
-        <dl className={styles.resultList}>
+        <dl className={`${styles.resultList} ${styles.lifecycleList}`}>
           {lifecycle.map(([status, meaning]) => (
             <div key={status}>
               <dt>
