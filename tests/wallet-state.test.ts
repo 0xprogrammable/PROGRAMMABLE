@@ -199,6 +199,9 @@ describe("wallet recovery state", () => {
       "configuredSnapshot?.linkedWalletOnly === linkedWalletOnly",
     );
     expect(provider).toContain("onValueChange={acceptConfiguredValue}");
+    expect(provider).toContain(
+      "const ConfiguredWalletProvider = memo(function ConfiguredWalletProvider",
+    );
     expect(provider).not.toContain("if (!runtime) {");
     expect(provider).toContain("const hydrationPending = !authReady");
     expect(provider).toContain(
