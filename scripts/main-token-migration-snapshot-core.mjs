@@ -466,7 +466,6 @@ export function buildMainTokenMigrationSnapshot(input) {
 
   const openingBalanceRaw = unsignedBigInt(input.openingBalanceRaw, "openingBalanceRaw");
   const closingBalanceRaw = unsignedBigInt(input.closingBalanceRaw, "closingBalanceRaw");
-  if (openingBalanceRaw !== 0n) fail("migration wallet opening V4 balance is nonzero");
 
   const allInputLogs = [
     ...(Array.isArray(input.inboundLogs) ? input.inboundLogs : fail("inboundLogs is not an array")),

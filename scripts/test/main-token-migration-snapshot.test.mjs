@@ -815,13 +815,24 @@ test("fails closed on self-transfers and mint-to-wallet events", () => {
   );
 });
 
-test("requires zero opening balance and exact balance reconciliation", () => {
-  assert.throws(
-    () => buildMainTokenMigrationSnapshot(baseInput({ openingBalanceRaw: 1n })),
-    /opening V4 balance is nonzero/u,
+test("excludes the opening balance baseline and requires exact balance reconciliation", () => {
+  const input = baseInput();
+  const openingBalanceRaw = 1n;
+  const snapshot = buildMainTokenMigrationSnapshot(baseInput({
+    closingBalanceRaw: input.closingBalanceRaw + openingBalanceRaw,
+    openingBalanceRaw,
+  }));
+  assert.equal(snapshot.reconciliation.openingBalanceRaw, "1");
+  assert.equal(
+    snapshot.reconciliation.combinedAllocationRaw,
+    input.closingBalanceRaw.toString(),
+  );
+  assert.equal(
+    snapshot.reconciliation.expectedClosingBalanceRaw,
+    (input.closingBalanceRaw + openingBalanceRaw).toString(),
   );
   assert.throws(
-    () => buildMainTokenMigrationSnapshot(baseInput({ closingBalanceRaw: 1n })),
+    () => buildMainTokenMigrationSnapshot(baseInput({ openingBalanceRaw })),
     /do not reconcile/u,
   );
 });
