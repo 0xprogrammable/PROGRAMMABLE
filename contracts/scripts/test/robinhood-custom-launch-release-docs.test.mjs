@@ -94,6 +94,11 @@ test("operator runbooks use repo-root commands and independently frozen provider
   assert.match(handoff, /Programmable Production 3/u);
   assert.match(
     handoff,
+    /https:\/\/<HOOD_EXPLORER_INDEXER_ENDPOINT>\.robinhood-mainnet\.quiknode\.pro\/<TOKEN>\//u,
+  );
+  assert.match(handoff, /\.ethereum-mainnet\.quiknode\.pro` is rejected/u);
+  assert.match(
+    handoff,
     /sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910/u,
   );
   for (const historicalBoundary of [postdeployment, releaseReadme]) {

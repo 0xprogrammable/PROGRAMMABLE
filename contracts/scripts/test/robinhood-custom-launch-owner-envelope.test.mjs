@@ -55,7 +55,7 @@ const PREPARED_ADDRESSES = Object.freeze({
   router: "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
 });
 const RPC_URLS = Object.freeze([
-  "https://hood-explorer-indexer.quiknode.pro/0123456789abcdef/",
+  "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/0123456789abcdef/",
   "https://robinhood-mainnet.g.alchemy.com/v2/abcdef0123456789",
 ]);
 const RPC_COMMITMENTS = Object.freeze([
@@ -379,11 +379,11 @@ test("implementation inventory contains no balance, signing, or broadcast primit
   );
 });
 
-test("provider pins reject public, same-origin, unauthenticated, and unsafe endpoints", () => {
+test("provider pins accept the exact Robinhood QuickNode host and reject cross-network or unsafe endpoints", () => {
   assert.deepEqual(
     assertRobinhoodFoundationRpcProviders({
       rpcUrls: [
-        "https://hood-explorer-indexer-alt.quiknode.pro/credential_0123456789/",
+        "https://hood-explorer-indexer-alt.robinhood-mainnet.quiknode.pro/credential_0123456789/",
         RPC_URLS[1],
       ],
       endpointCommitments: [
@@ -391,7 +391,7 @@ test("provider pins reject public, same-origin, unauthenticated, and unsafe endp
           role: "primary",
           providerId: "quicknode",
           rpcUrl:
-            "https://hood-explorer-indexer-alt.quiknode.pro/credential_0123456789/",
+            "https://hood-explorer-indexer-alt.robinhood-mainnet.quiknode.pro/credential_0123456789/",
         }),
         RPC_COMMITMENTS[1],
       ],
@@ -406,7 +406,7 @@ test("provider pins reject public, same-origin, unauthenticated, and unsafe endp
           role: "primary",
           providerId: "quicknode",
           rpcUrl:
-            "https://hood-explorer-indexer-alt.quiknode.pro/credential_0123456789/",
+            "https://hood-explorer-indexer-alt.robinhood-mainnet.quiknode.pro/credential_0123456789/",
         }),
       },
       {
@@ -421,15 +421,50 @@ test("provider pins reject public, same-origin, unauthenticated, and unsafe endp
   const invalid = [
     ["https://rpc.mainnet.chain.robinhood.com", RPC_URLS[1]],
     ["https://lb.drpc.live/robinhood/0123456789abcdef", RPC_URLS[1]],
-    ["http://hood-explorer-indexer.quiknode.pro/0123456789abcdef/", RPC_URLS[1]],
     [
-      "https://user:secret@hood-explorer-indexer.quiknode.pro/0123456789abcdef/",
+      "http://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/0123456789abcdef/",
       RPC_URLS[1],
     ],
-    ["https://hood-explorer-indexer.quiknode.pro/", RPC_URLS[1]],
-    ["https://docs-demo.quiknode.pro/0123456789abcdef/", RPC_URLS[1]],
-    ["https://hood-explorer-indexer.quiknode.pro/short/", RPC_URLS[1]],
-    ["https://hood-explorer-indexer.quiknode.pro/0123456789abcdef", RPC_URLS[1]],
+    [
+      "https://user:secret@hood-explorer-indexer.robinhood-mainnet.quiknode.pro/0123456789abcdef/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://docs-demo.robinhood-mainnet.quiknode.pro/0123456789abcdef/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/short/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/0123456789abcdef",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro:443/0123456789abcdef/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/0123456789abcdef/extra/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer.quiknode.pro/0123456789abcdef/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer.ethereum-mainnet.quiknode.pro/0123456789abcdef/",
+      RPC_URLS[1],
+    ],
+    [
+      "https://hood-explorer-indexer-.robinhood-mainnet.quiknode.pro/0123456789abcdef/",
+      RPC_URLS[1],
+    ],
     [`${RPC_URLS[0]}?extra=1`, RPC_URLS[1]],
     [
       RPC_URLS[0],
@@ -622,7 +657,7 @@ test("RPC transport is strict, bounded, and redacts endpoint/error content", asy
   const responseBudget = { consumed: 0, limit: 4 * 1024 * 1024 };
   const result = await robinhoodFoundationRpc({
     providerId: "quicknode",
-    rpcUrl: `https://hood-explorer-indexer.quiknode.pro/${secret}/`,
+    rpcUrl: `https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/${secret}/`,
     method: "eth_chainId",
     responseBudget,
     fetchImpl: async () =>
@@ -639,7 +674,7 @@ test("RPC transport is strict, bounded, and redacts endpoint/error content", asy
     () =>
       robinhoodFoundationRpc({
         providerId: "quicknode",
-        rpcUrl: `https://hood-explorer-indexer.quiknode.pro/${secret}/`,
+        rpcUrl: `https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/${secret}/`,
         method: "eth_chainId",
         responseBudget: { consumed: 0, limit: 4 * 1024 * 1024 },
         fetchImpl: async () =>
@@ -814,7 +849,7 @@ test("read-only action-time verifier rebinds source, hosted CI, endpoints, and l
           env: {
             ...env,
             ROBINHOOD_MAINNET_RPC_URL_PRIMARY:
-              "https://hood-explorer-indexer.quiknode.pro/substitute_0123456789/",
+              "https://hood-explorer-indexer.robinhood-mainnet.quiknode.pro/substitute_0123456789/",
           },
           nowMilliseconds: FIXED_TIMESTAMP * 1_000,
           sourceIdentity: () => ({

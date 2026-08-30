@@ -71,7 +71,7 @@ The commitment helper accepts only the exact credential-bearing QuickNode
 primary and Alchemy secondary Robinhood URL forms:
 
 ```text
-https://<HOOD_EXPLORER_INDEXER_ENDPOINT>.quiknode.pro/<TOKEN>/
+https://<HOOD_EXPLORER_INDEXER_ENDPOINT>.robinhood-mainnet.quiknode.pro/<TOKEN>/
 https://robinhood-mainnet.g.alchemy.com/v2/<ALCHEMY_API_KEY>
 ```
 
@@ -81,7 +81,8 @@ Indexer** project. The secondary URL must be copied from the existing Alchemy
 provider URL shape, role, provider ID and trust domain; it cannot prove either
 dashboard display name, account ownership, plan or archive entitlement. Those
 facts and both providers' required historical reads remain separate release
-checks.
+checks. A legacy one-label QuickNode host or an Ethereum endpoint ending in
+`.ethereum-mainnet.quiknode.pro` is rejected in this Robinhood-only slot.
 
 This ordered role pair is compatible with backend provider-profile digest
 `sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910`.
