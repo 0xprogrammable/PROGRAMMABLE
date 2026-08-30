@@ -18,6 +18,7 @@ import {
   buildWalletSendCalls,
   confirmedBatchReceiptProof,
   confirmedTransactionReceiptMatches,
+  createLatestOperationGuard,
   createRefreshQueue,
   customClaimDefinitionClassification,
   customLaunchClassification,
@@ -96,7 +97,7 @@ const INTERACTIVE_WALLET_METHODS = new Set([
 const announcedWalletProviders = new Map();
 let boundWalletProvider = null;
 let walletAuthorizationRevision = 0;
-let walletSyncGeneration = 0;
+const walletSyncGuard = createLatestOperationGuard();
 
 function rememberAnnouncedWalletProvider(event) {
   const detail = event?.detail;
@@ -464,7 +465,7 @@ function clearWalletAuthorizationState() {
 
 function invalidateWalletAuthorizationState() {
   walletAuthorizationRevision += 1;
-  walletSyncGeneration += 1;
+  walletSyncGuard.invalidate();
   clearWalletAuthorizationState();
   return walletAuthorizationRevision;
 }
@@ -3101,15 +3102,26 @@ async function syncWallet({
   requestAccounts = false,
   expectedRevision = walletAuthorizationRevision,
 } = {}) {
-  const syncGeneration = ++walletSyncGeneration;
+  const syncOperation = walletSyncGuard.begin();
   const method = requestAccounts ? "eth_requestAccounts" : "eth_accounts";
-  const [accounts, chainId] = await Promise.all([
-    request(method),
-    request("eth_chainId"),
-  ]);
+  let accounts;
+  let chainId;
+  try {
+    [accounts, chainId] = await Promise.all([
+      request(method),
+      request("eth_chainId"),
+    ]);
+  } catch (error) {
+    if (
+      expectedRevision !== walletAuthorizationRevision ||
+      !syncOperation.isCurrent()
+    )
+      return false;
+    throw error;
+  }
   if (
     expectedRevision !== walletAuthorizationRevision ||
-    syncGeneration !== walletSyncGeneration
+    !syncOperation.isCurrent()
   )
     return false;
   state.account = Array.isArray(accounts) ? accounts[0] ?? null : null;

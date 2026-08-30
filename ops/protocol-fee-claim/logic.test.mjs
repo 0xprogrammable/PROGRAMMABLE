@@ -23,6 +23,7 @@ import {
   confirmedBatchReceiptProof,
   confirmedTransactionReceiptMatches,
   claimData,
+  createLatestOperationGuard,
   createRefreshQueue,
   customClaimDefinitionClassification,
   customLaunchClassification,
@@ -492,10 +493,14 @@ test("keeps the static Vercel scanner on wallet RPC and serializes refreshes", (
     app,
     /async function syncAfterWalletEvent\(\) \{\s*const revision = invalidateWalletAuthorizationState\(\);[\s\S]*await syncWallet\(\{ expectedRevision: revision \}\);\s*\} catch \{\s*if \(revision !== walletAuthorizationRevision\) return;\s*clearWalletAuthorizationState\(\);/,
   );
-  assert.match(app, /const syncGeneration = \+\+walletSyncGeneration;/);
+  assert.match(app, /const syncOperation = walletSyncGuard\.begin\(\);/);
   assert.match(
     app,
-    /expectedRevision !== walletAuthorizationRevision \|\|\s*syncGeneration !== walletSyncGeneration/,
+    /catch \(error\) \{\s*if \(\s*expectedRevision !== walletAuthorizationRevision \|\|\s*!syncOperation\.isCurrent\(\)[\s\S]*return false;\s*throw error;/,
+  );
+  assert.match(
+    app,
+    /expectedRevision !== walletAuthorizationRevision \|\|\s*!syncOperation\.isCurrent\(\)/,
   );
   assert.match(
     app,
@@ -766,6 +771,30 @@ test("runs a queued retry after the active refresh fails", async () => {
   await Promise.all([first, queued]);
 
   assert.deepEqual(runs, [1, 2]);
+});
+
+test("ignores an older wallet sync that rejects after the newest sync succeeds", async () => {
+  const guard = createLatestOperationGuard();
+  let rejectOlder;
+  const olderResponse = new Promise((_, reject) => {
+    rejectOlder = reject;
+  });
+  const publish = async (response) => {
+    const operation = guard.begin();
+    try {
+      const value = await response;
+      return operation.isCurrent() ? value : "stale";
+    } catch (error) {
+      if (!operation.isCurrent()) return "stale";
+      throw error;
+    }
+  };
+
+  const older = publish(olderResponse);
+  const newest = publish(Promise.resolve("reward-wallet"));
+  assert.equal(await newest, "reward-wallet");
+  rejectOlder(new Error("late wallet timeout"));
+  assert.equal(await older, "stale");
 });
 
 test("uses the deployed claim and read selectors", () => {

@@ -1181,6 +1181,23 @@ export function createRefreshQueue(run) {
   };
 }
 
+export function createLatestOperationGuard() {
+  let generation = 0;
+  return Object.freeze({
+    begin() {
+      const operationGeneration = ++generation;
+      return Object.freeze({
+        isCurrent() {
+          return operationGeneration === generation;
+        },
+      });
+    },
+    invalidate() {
+      generation += 1;
+    },
+  });
+}
+
 export function formatEth(value, maximumFractionDigits = 6) {
   return formatUnits(value, 18, maximumFractionDigits);
 }
