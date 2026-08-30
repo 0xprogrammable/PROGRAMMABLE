@@ -22,12 +22,14 @@ describe("Site footer", () => {
     expect(footerSource).toContain('label: "Analytics"');
   });
 
-  it("does not eagerly prefetch repeated internal footer destinations", () => {
-    expect(footerSource.match(/prefetch=\{false\}/gu)).toHaveLength(2);
+  it("does not prefetch internal footer destinations, including the analytics redirect", () => {
+    expect(footerSource.match(/prefetch=\{false\}/gu)).toHaveLength(3);
     expect(footerSource).toMatch(
       /className=\{styles\.brandLink\}[\s\S]{0,100}prefetch=\{false\}/u,
     );
-    expect(footerSource).toContain("<Link href={link.href}>");
+    expect(footerSource).toContain(
+      "<Link href={link.href} prefetch={false}>",
+    );
   });
 
   it("links the official Discord from Resources", () => {
