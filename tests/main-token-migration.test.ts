@@ -182,6 +182,24 @@ describe("main token migration transfer", () => {
       successHeader: "Migration transfer submitted",
     });
   });
+
+  it("revalidates the exact migration transfer at the wallet provider boundary", () => {
+    const walletProvider = readFileSync(
+      join(process.cwd(), "components/wallet-provider.tsx"),
+      "utf8",
+    );
+    const parsed = walletProvider.indexOf(
+      "const prepared = parsePreparedTransactionForAccount",
+    );
+    const exactMigrationCheck = walletProvider.indexOf(
+      "assertMainTokenMigrationTransaction(prepared, wallet.account)",
+    );
+    const walletSend = walletProvider.indexOf('method: "eth_sendTransaction"');
+
+    expect(parsed).toBeGreaterThan(0);
+    expect(exactMigrationCheck).toBeGreaterThan(parsed);
+    expect(walletSend).toBeGreaterThan(exactMigrationCheck);
+  });
 });
 
 describe("main token migration page contract", () => {
@@ -363,7 +381,7 @@ describe("main token migration page contract", () => {
     expect(page).toContain("96-hour");
     expect(page).toContain("<strong>96 hours</strong>");
     expect(page).toContain(
-      "Nothing is sent until you approve it in your wallet.",
+      "Nothing is sent until you confirm the transfer in your wallet.",
     );
     expect(page).toContain("1:1 V4 amount");
     expect(page).toContain("Do not send from an exchange, custodian or router");

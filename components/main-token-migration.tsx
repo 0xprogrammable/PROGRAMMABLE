@@ -651,7 +651,7 @@ function Countdown({ phase, remaining }: Readonly<{
         {phase === "checking"
           ? "Verifying the published UTC window"
           : phase === "preview"
-          ? "The final UTC deadline will be fixed before activation"
+          ? "96-hour transfer window"
           : `${phase === "upcoming" ? "Opens" : "Closes"} ${formatUtc(
               phase === "upcoming"
                 ? migrationWindow.startAt
@@ -1156,14 +1156,6 @@ export function MainTokenMigration() {
   }
 
   async function copyMigrationWallet() {
-    if (!canRevealDestination) {
-      setSubmission({
-        kind: "error",
-        message:
-          "The migration wallet is available only while the published transfer window is active.",
-      });
-      return;
-    }
     try {
       await navigator.clipboard.writeText(MAIN_TOKEN_MIGRATION_WALLET);
       setCopied(true);
@@ -1199,7 +1191,7 @@ export function MainTokenMigration() {
         kind: "error",
         account: account.toLowerCase(),
         message:
-          "Sponsored gas is available only for a verified self-custody EOA.",
+          "Sponsored gas is available only for a directly controlled wallet.",
         retryable: false,
       });
       focusSponsorshipActionOrStatus();
@@ -1334,7 +1326,7 @@ export function MainTokenMigration() {
       setSubmission({
         kind: "error",
         message:
-          "Confirm that this is a self-custody EOA you control on Robinhood Chain.",
+          "Confirm that you control this same wallet address on Robinhood.",
       });
       acknowledgementRef.current?.focus();
       return;
@@ -1346,7 +1338,7 @@ export function MainTokenMigration() {
         code = await readConnectedAccountCode();
       } catch {
         throw new Error(
-          "Unable to verify this is a no-code self-custody wallet. Nothing was sent. Try again before the window closes.",
+          "Unable to verify this wallet for the automatic path. Nothing was sent. Try again before the window closes.",
         );
       }
       if (code !== "0x") {
@@ -1492,22 +1484,35 @@ export function MainTokenMigration() {
           loading="eager"
           priority
         />
-        <p className={styles.eyebrow}>Ethereum → Robinhood Chain</p>
         <h1 id="migration-title">We are migrating</h1>
+        <div className={styles.chainFlow} aria-label="Ethereum to Robinhood">
+          <span className={styles.chainName}>
+            <svg
+              aria-hidden="true"
+              className={styles.ethereumMark}
+              viewBox="0 0 32 52"
+            >
+              <path d="M16 0 0 26.2 16 35.6 32 26.2 16 0Z" />
+              <path d="m0 29.2 16 22.6 16-22.6-16 9.4-16-9.4Z" />
+            </svg>
+            Ethereum
+          </span>
+          <span className={styles.chainArrow} aria-hidden="true">→</span>
+          <span className={styles.chainName}>Robinhood</span>
+        </div>
+        <Countdown phase={phase} remaining={remaining} />
         <p className={styles.heroCopy}>
-          Send V4 from your self-custody Ethereum wallet during the 96-hour
-          window. Confirmed transfers are used to calculate an equal V4
-          allocation to the exact same address on Robinhood Chain.
+          Send your V4 during the 96-hour window. You get the same number of V4
+          tokens sent to the same wallet when V4 launches on Robinhood.
         </p>
         <p className={styles.criticalCopy}>
-          1:1 by V4 amount. Price, dollar value, liquidity and tradability are
-          not carried over or guaranteed.
+          V4 launched with a total supply of 1 billion on Ethereum. V4 on
+          Robinhood will also have a total supply of 1 billion.
         </p>
         <p className={styles.officialNotice}>
           Use only <strong>programmable.market/migration</strong>. Programmable
           will never send a migration address by DM.
         </p>
-        <Countdown phase={phase} remaining={remaining} />
       </section>
 
       <section className={styles.migrationPanel} aria-labelledby="send-v4-title">
@@ -1522,9 +1527,9 @@ export function MainTokenMigration() {
         ) : null}
         <div className={styles.summary} aria-label="Migration terms">
           <div><span>Window</span><strong>96 hours</strong></div>
-          <div><span>Allocation basis</span><strong>1:1 V4 amount</strong></div>
-          <div><span>Recipient</span><strong>Same EVM address</strong></div>
-          <div><span>Automatic path</span><strong>Self-custody EOA</strong></div>
+          <div><span>You receive</span><strong>The same V4 amount</strong></div>
+          <div><span>Robinhood wallet</span><strong>The same address</strong></div>
+          <div><span>Total supply</span><strong>1 billion V4</strong></div>
         </div>
 
         <div className={styles.panelGrid}>
@@ -1553,7 +1558,7 @@ export function MainTokenMigration() {
               >
                 <strong>
                   {accountCodeStatus === "eoa"
-                    ? "Self-custody wallet detected"
+                    ? "Wallet ready"
                     : accountCodeStatus === "contract"
                       ? "Smart-contract wallet detected"
                       : accountCodeStatus === "unavailable"
@@ -1562,12 +1567,12 @@ export function MainTokenMigration() {
                 </strong>
                 <span>
                   {accountCodeStatus === "eoa"
-                    ? "No contract code is present at this Ethereum address. The wallet type is checked again before sending."
+                    ? "This address can use the automatic migration path. It is checked again before sending."
                     : accountCodeStatus === "contract"
                       ? "Do not send. Multisigs and smart-contract wallets require manual review and are not guaranteed an automatic allocation."
                       : accountCodeStatus === "unavailable"
                         ? "The automatic path remains blocked until the wallet type can be checked."
-                        : "Automatic allocation is available only to a no-code self-custody EOA."}
+                        : "Checking whether this address can use the automatic migration path."}
                 </span>
               </div>
             ) : null}
@@ -1820,9 +1825,8 @@ export function MainTokenMigration() {
                 }
               />
               <span>
-                I am sending directly from a self-custody EOA and control this
-                exact address on Robinhood Chain. I understand the allocation
-                cannot be redirected.
+                I control this wallet on Ethereum and will use the same address
+                on Robinhood. I understand the allocation cannot be redirected.
               </span>
             </label>
 
@@ -1877,7 +1881,7 @@ export function MainTokenMigration() {
             </button>
             <p className={styles.walletBoundary}>
               This is an irreversible ERC-20 transfer on Ethereum, not a
-              bridge. Nothing is sent until you approve it in your wallet.
+              bridge. Nothing is sent until you confirm the transfer in your wallet.
               The optional gas sponsor only sends ETH to this wallet and never
               initiates the V4 transfer. Verify the network, V4 token contract,
               full recipient and amount.
@@ -1959,21 +1963,22 @@ export function MainTokenMigration() {
               <p>Fixed destination</p>
               <h2 id="migration-wallet-title">Migration wallet</h2>
             </header>
-            {canRevealDestination ? (
-              <>
-                <p>
-                  Send only V4 directly from a self-custody EOA on Ethereum.
-                  This address is fixed for this migration release.
-                </p>
-                <div className={styles.addressBlock}>
-                  <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>
-                  <button
-                    type="button"
-                    onClick={() => void copyMigrationWallet()}
-                  >
-                    {copied ? "Address copied" : "Copy address"}
-                  </button>
-                </div>
+            <>
+              <p>
+                Send only V4 from the wallet that should receive the Robinhood
+                allocation. This address is fixed for the migration.
+              </p>
+              <div className={styles.addressBlock}>
+                <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>
+                <button
+                  type="button"
+                  onClick={() => void copyMigrationWallet()}
+                >
+                  {copied ? "Address copied" : "Copy address"}
+                </button>
+              </div>
+              {canRevealDestination ? (
+                <>
                 <dl className={styles.contractFacts}>
                   <div>
                     <dt>Eligible token contract</dt>
@@ -2008,17 +2013,13 @@ export function MainTokenMigration() {
                     and have no automatic allocation guarantee.
                   </p>
                 </div>
-              </>
-            ) : (
-              <div className={styles.destinationUnavailable}>
-                <strong>Destination hidden while transfers are closed</strong>
-                <span>
-                  The full address and copy action appear only during the
-                  published transfer window. Ignore migration addresses sent by
-                  DM or shown on another domain.
-                </span>
-              </div>
-            )}
+                </>
+              ) : (
+                <p className={styles.closedAddressNote}>
+                  Transfers count only during the published 96-hour window.
+                </p>
+              )}
+            </>
           </aside>
         </div>
       </section>
@@ -2029,15 +2030,13 @@ export function MainTokenMigration() {
           <h2 id="migration-process-title">How it works</h2>
         </header>
         <ol>
-          <li><strong>Send while active</strong><span>If needed, request sponsored gas first. Then transfer V4 directly from your self-custody EOA during the published window.</span></li>
+          <li><strong>Send while active</strong><span>If needed, request sponsored gas first. Then transfer V4 directly from your wallet during the published window.</span></li>
           <li><strong>Confirm on Ethereum</strong><span>Only confirmed Transfer events inside the window can enter the final snapshot.</span></li>
           <li><strong>Final snapshot</strong><span>Amounts are aggregated by exact event sender and reviewed before the Robinhood allocation.</span></li>
         </ol>
         <p className={styles.finalNote}>
-          A 1:1 allocation records token amount only. It does not preserve
-          price, dollar value, liquidity, market access or tradability.
-          Transfers from contract wallets or intermediaries require manual
-          review.
+          Your Robinhood allocation matches the exact V4 token amount recorded
+          from your Ethereum wallet.
         </p>
         <Link className={styles.backLink} href="/">
           Back to Programmable

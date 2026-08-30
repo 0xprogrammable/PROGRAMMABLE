@@ -56,6 +56,7 @@ import {
 } from "@/lib/custom-launch/wallet-handoff-v4";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
+import { assertMainTokenMigrationTransaction } from "@/lib/main-token-migration";
 import {
   buildPredictionPermitTypedData,
   buildUsdgPermitTypedData,
@@ -1733,6 +1734,9 @@ function PrivyWalletBridge({
         transaction,
         wallet.account,
       );
+      if (prepared.kind === "main-token-migration") {
+        assertMainTokenMigrationTransaction(prepared, wallet.account);
+      }
       const target =
         prepared.kind === "prediction-market-launch" ||
         prepared.kind === "prediction-market-action"
