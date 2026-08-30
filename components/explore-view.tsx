@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronDown,
@@ -562,23 +563,30 @@ function subscribeToExploreViewport(onChange: () => void) {
   return () => query.removeEventListener("change", onChange);
 }
 
-function exploreMobileViewportSnapshot() {
-  return window.matchMedia(EXPLORE_MOBILE_MEDIA_QUERY).matches;
+type ExploreViewportSnapshot = "pending" | "mobile" | "desktop";
+
+function exploreViewportSnapshot(): ExploreViewportSnapshot {
+  return window.matchMedia(EXPLORE_MOBILE_MEDIA_QUERY).matches
+    ? "mobile"
+    : "desktop";
 }
 
-function exploreMobileViewportServerSnapshot() {
-  return false;
+function exploreViewportServerSnapshot(): ExploreViewportSnapshot {
+  return "pending";
 }
 
-function useExploreTokensPerPage() {
-  const mobile = useSyncExternalStore(
+function useExplorePaginationViewport() {
+  const viewport = useSyncExternalStore(
     subscribeToExploreViewport,
-    exploreMobileViewportSnapshot,
-    exploreMobileViewportServerSnapshot,
+    exploreViewportSnapshot,
+    exploreViewportServerSnapshot,
   );
-  return mobile
-    ? EXPLORE_MOBILE_TOKENS_PER_PAGE
-    : EXPLORE_TOKENS_PER_PAGE;
+  return {
+    ready: viewport !== "pending",
+    pageSize: viewport === "mobile"
+      ? EXPLORE_MOBILE_TOKENS_PER_PAGE
+      : EXPLORE_TOKENS_PER_PAGE,
+  } as const;
 }
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
@@ -2609,6 +2617,7 @@ export function ExploreView({
   loadingOnly?: boolean;
   embedded?: boolean;
 }> = {}) {
+  const router = useRouter();
   const preview = useInterfacePreview();
   const {
     hydrated: viewChainReady,
@@ -2634,28 +2643,37 @@ export function ExploreView({
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>(
     initialModelFilter,
   );
+  const { pageSize, ready: exploreViewportReady } =
+    useExplorePaginationViewport();
   const [pageSelection, setPageSelection] = useState({
     chainId: viewChainId,
+    pageSize,
     page: 1,
   });
-  const currentPage = pageSelection.chainId === viewChainId
-    ? pageSelection.page
-    : 1;
+  const currentPage =
+    pageSelection.chainId === viewChainId &&
+      pageSelection.pageSize === pageSize
+      ? pageSelection.page
+      : 1;
   const setCurrentPage = useCallback(
     (nextPage: SetStateAction<number>) => {
       setPageSelection((current) => {
-        const activePage = current.chainId === viewChainId ? current.page : 1;
+        const activePage =
+          current.chainId === viewChainId && current.pageSize === pageSize
+            ? current.page
+            : 1;
         const page = typeof nextPage === "function"
           ? nextPage(activePage)
           : nextPage;
-        return current.chainId === viewChainId && current.page === page
+        return current.chainId === viewChainId &&
+            current.pageSize === pageSize &&
+            current.page === page
           ? current
-          : { chainId: viewChainId, page };
+          : { chainId: viewChainId, pageSize, page };
       });
     },
-    [viewChainId],
+    [pageSize, viewChainId],
   );
-  const pageSize = useExploreTokensPerPage();
   const [retryKey, setRetryKey] = useState(0);
   const [revalidationKey, setRevalidationKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
@@ -2750,10 +2768,6 @@ export function ExploreView({
 
     return () => window.clearTimeout(timer);
   }, [debouncedQuery, normalizedQuery, setCurrentPage]);
-
-  useEffect(() => {
-    return subscribeToExploreViewport(() => setCurrentPage(1));
-  }, [setCurrentPage]);
 
   useEffect(() => {
     function closeFilter(event: PointerEvent | KeyboardEvent) {
@@ -3071,6 +3085,23 @@ export function ExploreView({
   );
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
+  const paginationGeometryPending =
+    !exploreViewportReady ||
+    (displayState.phase === "ready" &&
+      displayState.payload.status === "ready" &&
+      displayState.payload.pageSize !== pageSize);
+  const pendingMobilePagination =
+    paginationGeometryPending &&
+    displayState.phase === "ready" &&
+    displayState.payload.status === "ready" &&
+    displayState.payload.total > EXPLORE_MOBILE_TOKENS_PER_PAGE;
+  const showPagination =
+    displayState.phase === "ready" &&
+    displayState.payload.status === "ready" &&
+    displayState.payload.total > 0 &&
+    (pageCount > 1 || pendingMobilePagination);
+  const mobileOnlyPaginationPlaceholder =
+    pendingMobilePagination && pageCount === 1;
   const resultLabel =
     displayState.phase === "error" ? "" : resultRangeLabel(payload);
   const busy =
@@ -3231,7 +3262,7 @@ export function ExploreView({
       >
         {cards.map((token, index) => {
           const href = token.tokenAddress
-            ? `/token/${token.tokenAddress}`
+            ? `/token/${token.tokenAddress}?chain=${viewChainId}`
             : null;
           const imageSource = getTokenCardImageSource(token.imageUrl);
           const preserveArtworkAspectRatio =
@@ -3299,7 +3330,10 @@ export function ExploreView({
                 <Link
                   className={styles.runnerHitArea}
                   href={href}
+                  prefetch={false}
                   aria-label={`Open ${token.name}`}
+                  onPointerEnter={() => router.prefetch(href)}
+                  onFocus={() => router.prefetch(href)}
                 >
                   {cardContent}
                 </Link>
@@ -3612,19 +3646,29 @@ export function ExploreView({
                     </div>
                   </details>
 
-                  {displayState.phase === "ready" &&
-                  displayState.payload.status === "ready" &&
-                  displayState.payload.total > 0 &&
-                  pageCount > 1 ? (
+                  {showPagination ? (
                     <nav
-                      className="token-pagination liquid-glass-control"
+                      className={`token-pagination liquid-glass-control ${
+                        paginationGeometryPending
+                          ? styles.viewportPendingPagination
+                          : ""
+                      } ${
+                        mobileOnlyPaginationPlaceholder
+                          ? styles.mobileOnlyPaginationPlaceholder
+                          : ""
+                      }`}
                       aria-label="Launch pages"
+                      aria-busy={paginationGeometryPending || undefined}
                     >
                       <button
                         type="button"
                         aria-label="Previous launch page"
-                        aria-disabled={activePage === 1 || busy}
-                        disabled={activePage === 1 || busy}
+                        aria-disabled={
+                          activePage === 1 || busy || paginationGeometryPending
+                        }
+                        disabled={
+                          activePage === 1 || busy || paginationGeometryPending
+                        }
                         onClick={() => {
                           if (busy) return;
                           setCurrentPage((page) => Math.max(1, page - 1));
@@ -3640,8 +3684,16 @@ export function ExploreView({
                       <button
                         type="button"
                         aria-label="Next launch page"
-                        aria-disabled={activePage === pageCount || busy}
-                        disabled={activePage === pageCount || busy}
+                        aria-disabled={
+                          activePage === pageCount ||
+                          busy ||
+                          paginationGeometryPending
+                        }
+                        disabled={
+                          activePage === pageCount ||
+                          busy ||
+                          paginationGeometryPending
+                        }
                         onClick={() => {
                           if (busy) return;
                           setCurrentPage((page) =>

@@ -389,7 +389,7 @@ export function deepV3CreatorTokenToProfileToken(
     name: token.tokenName,
     symbol: token.tokenSymbol,
     launchedAt: token.launchedAt,
-    href: `/token/${token.tokenAddress}`,
+    href: `/token/${token.tokenAddress}?chain=1`,
     ...(token.imageUrl ? { imageUrl: token.imageUrl } : {}),
     marketCapEthWei: token.marketCapNativeWad,
     launchModel: "deep",

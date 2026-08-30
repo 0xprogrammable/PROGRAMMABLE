@@ -229,8 +229,11 @@ export function shouldEagerLoadWalletRuntime(pathname: string) {
   );
 }
 
-export function shouldBackgroundLoadWalletRuntime(pathname: string) {
-  return !shouldEagerLoadWalletRuntime(pathname);
+export function shouldBackgroundLoadWalletRuntime(
+  pathname: string,
+  hasPersistedSessionHint: boolean,
+) {
+  return hasPersistedSessionHint && !shouldEagerLoadWalletRuntime(pathname);
 }
 
 if (
@@ -241,6 +244,7 @@ if (
 }
 
 const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
+const walletSessionHintStorageKey = "programmable:wallet-session:v1";
 const profileStoragePrefix = "programmable-profile";
 const profileUpdatedEvent = "programmable:profile-updated";
 const usernamePattern = /^[A-Za-z0-9]{3,12}$/;
@@ -252,6 +256,45 @@ const appChain =
 const appChainHex = `0x${appChain.id.toString(16)}`;
 const appNetworkName = appChain.id === sepolia.id ? "Sepolia" : "Ethereum";
 const robinhoodChainHex = `0x${robinhoodChain.id.toString(16)}`;
+
+export function isPersistedWalletSessionHint(value: string | null) {
+  return value === "authenticated";
+}
+
+function readPersistedWalletSessionHint() {
+  try {
+    return isPersistedWalletSessionHint(
+      window.localStorage.getItem(walletSessionHintStorageKey),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function persistWalletSessionHint(authenticated: boolean) {
+  try {
+    if (authenticated) {
+      window.localStorage.setItem(
+        walletSessionHintStorageKey,
+        "authenticated",
+      );
+    } else {
+      window.localStorage.removeItem(walletSessionHintStorageKey);
+    }
+  } catch {
+    // The hint is an optimization only. Privy remains authoritative.
+  }
+}
+
+function scheduleWalletRuntimeIdlePreload(preload: () => void) {
+  if (typeof window.requestIdleCallback === "function") {
+    const idleId = window.requestIdleCallback(preload, { timeout: 2_000 });
+    return () => window.cancelIdleCallback(idleId);
+  }
+
+  const timeoutId = window.setTimeout(preload, 1_200);
+  return () => window.clearTimeout(timeoutId);
+}
 
 function getWalletNetwork(expectedChainId?: string) {
   if (!expectedChainId || expectedChainId === String(appChain.id)) {
@@ -812,10 +855,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [runtime, setRuntime] = useState<WalletProviderRuntime | null>(null);
+  const [configuredSnapshot, setConfiguredSnapshot] = useState<{
+    linkedWalletOnly: boolean;
+    value: WalletContextValue;
+  } | null>(null);
+  const configuredValue =
+    configuredSnapshot?.linkedWalletOnly === linkedWalletOnly
+      ? configuredSnapshot.value
+      : null;
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   const active = eager || activationRequested;
+  const activateWalletRuntime = useCallback(
+    (action: "wallet" | "github") => {
+      setPendingAction(action);
+      setActivationRequested(true);
+      if (loadFailed) {
+        setLoadFailed(false);
+        setLoadAttempt((current) => current + 1);
+      }
+    },
+    [loadFailed],
+  );
+  const preloadWalletRuntime = useCallback(() => {
+    if (runtime) return;
+    void loadWalletProviderRuntime().then(
+      (loadedRuntime) => setRuntime(loadedRuntime),
+      () => setLoadFailed(true),
+    );
+  }, [runtime]);
+  const consumePendingAction = useCallback(() => {
+    setPendingAction(null);
+  }, []);
+  const acceptConfiguredValue = useCallback(
+    (value: WalletContextValue) => {
+      setConfiguredSnapshot({ linkedWalletOnly, value });
+    },
+    [linkedWalletOnly],
+  );
 
   useEffect(() => {
     if (!privyAppId || !active || runtime) return;
@@ -836,7 +914,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [active, loadAttempt, runtime]);
 
   useEffect(() => {
-    if (!privyAppId || runtime || !shouldBackgroundLoadWalletRuntime(pathname)) return;
+    if (
+      !privyAppId ||
+      runtime ||
+      !shouldBackgroundLoadWalletRuntime(
+        pathname,
+        readPersistedWalletSessionHint(),
+      )
+    ) return;
     let cancelled = false;
     const preload = () => {
       if (cancelled) return;
@@ -849,10 +934,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
       );
     };
-    const timeoutId = globalThis.setTimeout(preload, 0);
+    const cancelPreload = scheduleWalletRuntimeIdlePreload(preload);
     return () => {
       cancelled = true;
-      globalThis.clearTimeout(timeoutId);
+      cancelPreload();
     };
   }, [pathname, runtime]);
 
@@ -860,50 +945,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return <UnconfiguredWalletProvider>{children}</UnconfiguredWalletProvider>;
   }
 
-  if (!runtime) {
-    return (
-      <DeferredWalletProvider
-        active={active}
-        loadFailed={loadFailed}
-        onActivate={(action) => {
-          setPendingAction(action);
-          setActivationRequested(true);
-          if (loadFailed) {
-            setLoadFailed(false);
-            setLoadAttempt((current) => current + 1);
-          }
-        }}
-        onPreload={() => {
-          void loadWalletProviderRuntime().catch(() => undefined);
-        }}
-      >
-        {children}
-      </DeferredWalletProvider>
-    );
-  }
-
   return (
-    <ConfiguredWalletProvider
-      appId={privyAppId}
-      autoAction={pendingAction}
-      linkedWalletOnly={linkedWalletOnly}
-      onAutoActionConsumed={() => setPendingAction(null)}
-      runtime={runtime}
+    <DeferredWalletProvider
+      active={active}
+      configuredValue={configuredValue}
+      loadFailed={loadFailed}
+      onActivate={activateWalletRuntime}
+      onPreload={preloadWalletRuntime}
     >
       {children}
-    </ConfiguredWalletProvider>
+      {runtime ? (
+        <ConfiguredWalletProvider
+          appId={privyAppId}
+          autoAction={pendingAction}
+          linkedWalletOnly={linkedWalletOnly}
+          onAutoActionConsumed={consumePendingAction}
+          onValueChange={acceptConfiguredValue}
+          runtime={runtime}
+        />
+      ) : null}
+    </DeferredWalletProvider>
   );
 }
 
 function DeferredWalletProvider({
   active,
   children,
+  configuredValue,
   loadFailed,
   onActivate,
   onPreload,
 }: Readonly<{
   active: boolean;
   children: ReactNode;
+  configuredValue: WalletContextValue | null;
   loadFailed: boolean;
   onActivate: (action: "wallet" | "github") => void;
   onPreload: () => void;
@@ -976,7 +1051,11 @@ function DeferredWalletProvider({
     [active, loadFailed, onActivate, onPreload],
   );
 
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+  return (
+    <WalletContext.Provider value={configuredValue ?? value}>
+      {children}
+    </WalletContext.Provider>
+  );
 }
 
 function subscribeToTheme(callback: () => void) {
@@ -995,16 +1074,16 @@ function getServerThemeSnapshot(): ColorTheme {
 function ConfiguredWalletProvider({
   appId,
   autoAction,
-  children,
   linkedWalletOnly,
   onAutoActionConsumed,
+  onValueChange,
   runtime,
 }: {
   appId: string;
   autoAction: "wallet" | "github" | null;
-  children: ReactNode;
   linkedWalletOnly: boolean;
   onAutoActionConsumed: () => void;
+  onValueChange: (value: WalletContextValue) => void;
   runtime: WalletProviderRuntime;
 }) {
   const { PrivyProvider } = runtime;
@@ -1034,25 +1113,24 @@ function ConfiguredWalletProvider({
         autoAction={autoAction}
         linkedWalletOnly={linkedWalletOnly}
         onAutoActionConsumed={onAutoActionConsumed}
+        onValueChange={onValueChange}
         runtime={runtime}
-      >
-        {children}
-      </PrivyWalletBridge>
+      />
     </PrivyProvider>
   );
 }
 
 function PrivyWalletBridge({
   autoAction,
-  children,
   linkedWalletOnly,
   onAutoActionConsumed,
+  onValueChange,
   runtime,
 }: Readonly<{
   autoAction: "wallet" | "github" | null;
-  children: ReactNode;
   linkedWalletOnly: boolean;
   onAutoActionConsumed: () => void;
+  onValueChange: (value: WalletContextValue) => void;
   runtime: WalletProviderRuntime;
 }>) {
   const {
@@ -1151,6 +1229,10 @@ function PrivyWalletBridge({
   });
 
   const activeAuthenticated = authenticated && !sessionSuppressed;
+  useEffect(() => {
+    if (!ready) return;
+    persistWalletSessionHint(activeAuthenticated);
+  }, [activeAuthenticated, ready]);
   const githubAccount = user?.github;
   const githubConnected = Boolean(activeAuthenticated && githubAccount?.subject);
   const githubUserId = githubConnected ? githubAccount?.subject ?? "" : "";
@@ -2452,9 +2534,12 @@ function PrivyWalletBridge({
     ],
   );
 
+  useEffect(() => {
+    onValueChange(value);
+  }, [onValueChange, value]);
+
   return (
-    <WalletContext.Provider value={value}>
-      {children}
+    <>
       <span
         className="sr-only"
         role="status"
@@ -2487,7 +2572,7 @@ function PrivyWalletBridge({
           onSwitchNetwork={switchWalletNetwork}
         />
       ) : null}
-    </WalletContext.Provider>
+    </>
   );
 }
 

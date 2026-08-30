@@ -1435,6 +1435,10 @@
 }
 
 @media (max-width: 700px) {
+  .viewportPendingPagination {
+    visibility: hidden;
+  }
+
   .page {
     min-height: calc(100svh - 72px);
     padding-block: 16px 48px;
@@ -1582,6 +1586,12 @@
   .runnerSocialLink {
     height: 44px;
     width: 44px;
+  }
+}
+
+@media (min-width: 701px) {
+  .mobileOnlyPaginationPlaceholder {
+    display: none;
   }
 }
 

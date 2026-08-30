@@ -62,6 +62,8 @@ describe("Explore UI contract", () => {
     expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
     expect(source).not.toContain("ExploreModeSwitch");
     expect(source).toContain("const eagerImage = !embedded");
+    expect(source).toContain("onPointerEnter={() => router.prefetch(href)}");
+    expect(source).toContain("onFocus={() => router.prefetch(href)}");
     expect(source).toContain("function ExploreGridSkeleton");
     expect(source).toContain(
       "<ExploreGridSkeleton count={pageSize} />",
@@ -214,8 +216,15 @@ describe("Explore UI contract", () => {
 
     expect(source).toContain("export const EXPLORE_TOKENS_PER_PAGE = 9");
     expect(source).toContain("export const EXPLORE_MOBILE_TOKENS_PER_PAGE = 4");
-    expect(source).toContain("const pageSize = useExploreTokensPerPage()");
+    expect(source).toContain("useExplorePaginationViewport()");
     expect(source).toContain("limit: String(pageSize)");
+    expect(source.match(/subscribeToExploreViewport/gu)).toHaveLength(2);
+    expect(source).toContain("pageSelection.pageSize === pageSize");
+    expect(source).toContain("{ chainId: viewChainId, pageSize, page }");
+    expect(source).not.toContain("previousPageSize");
+    expect(source).toContain("displayState.payload.pageSize !== pageSize");
+    expect(source).toContain("pendingMobilePagination");
+    expect(source).toContain("styles.viewportPendingPagination");
     expect(styles).toMatch(
       /\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[^}]*width:\s*100%;/s,
     );
@@ -228,6 +237,12 @@ describe("Explore UI contract", () => {
     );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.viewportPendingPagination\s*\{[^}]*visibility:\s*hidden;/s,
+    );
+    expect(styles).toMatch(
+      /@media \(min-width: 701px\)[\s\S]*?\.mobileOnlyPaginationPlaceholder\s*\{[^}]*display:\s*none;/s,
     );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerContract\s*\{[^}]*display:\s*inline-flex;[^}]*order:\s*3;/s,
@@ -261,6 +276,12 @@ describe("Explore UI contract", () => {
     expect(source).not.toContain("<small>CA</small>");
     expect(source).toContain('<small title="Fully diluted valuation">FDV</small>');
     expect(source).toContain("formatExploreContractAddress(token.tokenAddress)");
+    expect(source).toContain(
+      '`/token/${token.tokenAddress}?chain=${viewChainId}`',
+    );
+    expect(source).toMatch(
+      /className=\{styles\.runnerHitArea\}[\s\S]{0,160}prefetch=\{false\}/u,
+    );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*12px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*12px;/s,
     );

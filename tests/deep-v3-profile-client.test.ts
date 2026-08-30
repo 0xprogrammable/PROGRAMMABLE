@@ -107,7 +107,7 @@ describe("Deep V3 creator profile client", () => {
       name: "Deep Token",
       symbol: "DEEP",
       launchedAt: "2026-07-29T12:00:00.000Z",
-      href: `/token/${TOKEN}`,
+      href: `/token/${TOKEN}?chain=1`,
       imageUrl: "https://programmable.family/deep.png",
       marketCapEthWei: (1_000n * 10n ** 18n).toString(),
       launchModel: "deep",

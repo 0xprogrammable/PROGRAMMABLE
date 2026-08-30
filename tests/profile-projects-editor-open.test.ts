@@ -125,6 +125,9 @@ describe("My projects editor opening", () => {
     const tokenAction = source.indexOf(
       "className={styles.viewTokenAction}",
     );
+    expect(source).toContain(
+      'href={`/token/${project.tokenAddress}?chain=${project.chainId}`}',
+    );
     expect(receiverAction).toBeGreaterThan(-1);
     expect(articleAction).toBeGreaterThan(receiverAction);
     expect(tokenAction).toBeGreaterThan(articleAction);
@@ -214,12 +217,27 @@ describe("My projects editor opening", () => {
     expect(source).toContain("const canEditArticle = editableTokens.has(");
     expect(source).toContain("{canEditArticle ? (");
     expect(source).toContain("className={styles.articleActionSlot}");
+    expect(source).toContain("className={styles.articleSummarySlot}");
+    expect(source).toContain('phase === "loading"');
     expect(source).toContain(': "Unavailable"}');
     expect(source).not.toMatch(
       /className=\{styles\.articleActionState\}[\s\S]{0,120}aria-hidden/u,
     );
     expect(source).toContain(
       "Launch details could not be refreshed. The current list is still shown.",
+    );
+    const styles = readFileSync(
+      join(process.cwd(), "components/profile-projects.module.css"),
+      "utf8",
+    );
+    expect(styles).toMatch(
+      /\.articleSummarySlot\s*\{[^}]*min-height:\s*1\.3em;/s,
+    );
+    expect(styles).toMatch(
+      /\.articleActionSlot\s*\{[^}]*min-height:\s*44px;/s,
+    );
+    expect(styles).toMatch(
+      /\.articleActionSlot\s*>\s*\*\s*\{[^}]*width:\s*100%;/s,
     );
   });
 

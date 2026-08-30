@@ -326,7 +326,7 @@ function HeaderChainSelector({
   triggerRef: RefObject<HTMLButtonElement | null>;
   onDismiss: () => void;
   onToggle: () => void;
-  onSelect: () => void;
+  onSelect: (viewChainId: ViewChainId) => void;
 }>) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
   const alternateViewChainId: ViewChainId = viewChainId === 1 ? 4663 : 1;
@@ -399,7 +399,7 @@ function HeaderChainSelector({
             data-view-chain-id={alternateViewChainId}
             onClick={() => {
               setViewChainId(alternateViewChainId);
-              onSelect();
+              onSelect(alternateViewChainId);
             }}
           >
             <span className={styles.chainOptionMark} aria-hidden="true">
@@ -418,6 +418,8 @@ function HeaderChainSelector({
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { preloadWallet } = useWallet();
   const menuId = useId();
   const chainPanelId = useId();
   const headerRef = useRef<HTMLElement>(null);
@@ -520,8 +522,18 @@ export function SiteHeader() {
               setMenuPath(null);
               setChainSelectorOpen((open) => !open);
             }}
-            onSelect={() => {
+            onSelect={(selectedViewChainId) => {
               setChainSelectorOpen(false);
+              if (pathname.startsWith("/token/")) {
+                const url = new URL(window.location.href);
+                url.searchParams.set("chain", String(selectedViewChainId));
+                const search = url.searchParams.toString();
+                router.replace(`${pathname}${search ? `?${search}` : ""}`);
+                window.requestAnimationFrame(() => {
+                  chainButtonRef.current?.focus({ preventScroll: true });
+                });
+                return;
+              }
               if (isRobinhoodUnavailableRoute(pathname)) return;
               window.requestAnimationFrame(() => {
                 chainButtonRef.current?.focus({ preventScroll: true });
@@ -535,7 +547,10 @@ export function SiteHeader() {
             aria-controls={menuId}
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
+            onFocus={preloadWallet}
+            onPointerEnter={preloadWallet}
             onClick={() => {
+              preloadWallet();
               setChainSelectorOpen(false);
               setMenuPath(menuOpen ? null : pathname);
             }}

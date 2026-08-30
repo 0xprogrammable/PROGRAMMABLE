@@ -259,7 +259,7 @@ describe("profile API client", () => {
         name: "Programmable",
         symbol: "PRG",
         launchedAt: "Jul 26, 2026",
-        href: `/token/${tokenAddress}`,
+        href: `/token/${tokenAddress}?chain=1`,
         imageUrl: "https://programmable.family/token.png",
         marketCapEthWei: "1200000000000000000",
         fdvUsdWad: "3600000000000000000000",
@@ -274,7 +274,7 @@ describe("profile API client", () => {
         positionRecipient,
         positionTokenId: "42",
         lockStatus: "permanently-locked",
-        href: `/token/${tokenAddress}`,
+        href: `/token/${tokenAddress}?chain=1`,
       },
     ]);
     expect(profile.claims).toEqual([
@@ -287,14 +287,18 @@ describe("profile API client", () => {
         tokenSymbol: "PRG",
         claimableWei: "200000000000000000",
         claimableEth: "0.2",
-        href: `/token/${tokenAddress}`,
+        href: `/token/${tokenAddress}?chain=1`,
       },
     ]);
     expect(profile.activity.map((item) => item.label)).toEqual([
       "Creator fees claimed",
       "Token launched",
     ]);
-    expect(profile.activity.every((item) => item.href === `/token/${tokenAddress}`))
+    expect(
+      profile.activity.every(
+        (item) => item.href === `/token/${tokenAddress}?chain=1`,
+      ),
+    )
       .toBe(true);
   });
 

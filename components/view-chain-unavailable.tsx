@@ -4,7 +4,7 @@ import styles from "@/components/view-chain-unavailable.module.css";
 import { useViewChain } from "@/components/view-chain";
 
 export function isRobinhoodUnavailableRoute(pathname: string): boolean {
-  return ["/profile", "/launch", "/token"].some(
+  return ["/profile", "/launch"].some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
 }

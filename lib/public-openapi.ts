@@ -20,7 +20,7 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.6.0",
+    version: "1.6.1",
     summary:
       "Verified launch discovery, live Ethereum V3 creation and planned Robinhood V4 integration.",
     description:
@@ -79,6 +79,13 @@ export const programmablePublicOpenApi = {
         security: [],
         parameters: [
           {
+            name: "chain",
+            in: "query",
+            description:
+              "Chain-scoped discovery. Ethereum Mainnet is live; Robinhood Chain currently returns an honest planned-not-deployed response with no catalog or tokens.",
+            schema: { type: "integer", enum: [1, 4663], default: 1 },
+          },
+          {
             name: "page",
             in: "query",
             description: "One-based result page.",
@@ -95,6 +102,12 @@ export const programmablePublicOpenApi = {
             in: "query",
             description: "Case-insensitive name, symbol, address, or Custom model search.",
             schema: { type: "string" },
+          },
+          {
+            name: "model",
+            in: "query",
+            description: "Limit results to one public launch category.",
+            schema: { type: "string", enum: ["classic", "custom"] },
           },
           {
             name: "socials",
@@ -123,7 +136,7 @@ export const programmablePublicOpenApi = {
         responses: {
           "200": jsonResponse(
             component("ExploreListResponse"),
-            "Verified launch page.",
+            "Verified launch page or an honest planned-not-deployed chain response.",
           ),
           "400": jsonResponse(component("ApiError"), "Invalid query shape."),
           "503": jsonResponse(
@@ -138,15 +151,22 @@ export const programmablePublicOpenApi = {
         operationId: "getVerifiedToken",
         summary: "Look up one verified token",
         description:
-          "Looks up an exact Ethereum token address. A 404 response is a completed verified lookup with no public identity, not a provider timeout.",
+          "Looks up an exact token identity on the selected chain. Ethereum Mainnet is live. Robinhood Chain currently returns an honest planned-not-deployed response without reading Ethereum. A 404 response is a completed verified lookup with no public identity, not a provider timeout.",
         tags: ["Discovery"],
         security: [],
         parameters: [
           {
+            name: "chain",
+            in: "query",
+            description:
+              "Identity namespace. Omit for the backward-compatible Ethereum Mainnet default.",
+            schema: { type: "integer", enum: [1, 4663], default: 1 },
+          },
+          {
             name: "address",
             in: "query",
             required: true,
-            description: "Ethereum token contract address.",
+            description: "EVM token contract address on the selected chain.",
             schema: component("EthereumAddress"),
             example: V4_TOKEN_ADDRESS,
           },
@@ -154,11 +174,11 @@ export const programmablePublicOpenApi = {
         responses: {
           "200": jsonResponse(
             component("TokenDetailResponse"),
-            "Verified token or Registry-verified Custom project.",
+            "Verified token, Registry-verified Custom project, or honest planned-not-deployed chain response.",
           ),
           "400": jsonResponse(component("ApiError"), "Invalid address or query shape."),
           "404": jsonResponse(
-            component("TokenDetailResponse"),
+            component("TokenDetailReadyResponse"),
             "Verified lookup completed but no public token identity matched.",
           ),
           "503": jsonResponse(
@@ -1530,9 +1550,16 @@ export const programmablePublicOpenApi = {
         additionalProperties: true,
       },
       ExploreListResponse: {
+        oneOf: [
+          component("ExploreReadyListResponse"),
+          component("ExplorePlannedListResponse"),
+        ],
+      },
+      ExploreReadyListResponse: {
         type: "object",
         required: [
           "status",
+          "chainId",
           "tokens",
           "page",
           "pageSize",
@@ -1544,6 +1571,7 @@ export const programmablePublicOpenApi = {
         ],
         properties: {
           status: { const: "ready" },
+          chainId: { const: 1 },
           tokens: { type: "array", items: component("ExploreEntry") },
           page: { type: "integer", minimum: 1 },
           pageSize: { type: "integer", minimum: 1, maximum: 100 },
@@ -1561,7 +1589,48 @@ export const programmablePublicOpenApi = {
         },
         additionalProperties: true,
       },
+      ExplorePlannedListResponse: {
+        type: "object",
+        required: [
+          "status",
+          "activationStage",
+          "chainId",
+          "tokens",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages",
+          "sort",
+          "query",
+        ],
+        properties: {
+          status: { const: "not-deployed" },
+          activationStage: { const: "planned-not-deployed" },
+          chainId: { const: 4663 },
+          tokens: {
+            type: "array",
+            items: component("ExploreEntry"),
+            maxItems: 0,
+          },
+          page: { const: 1 },
+          pageSize: { type: "integer", minimum: 1, maximum: 100 },
+          total: { const: 0 },
+          totalPages: { const: 0 },
+          sort: {
+            type: "string",
+            enum: ["newest", "oldest", "market-cap", "market-cap-asc"],
+          },
+          query: { type: "string" },
+        },
+        additionalProperties: false,
+      },
       TokenDetailResponse: {
+        oneOf: [
+          component("TokenDetailReadyResponse"),
+          component("TokenDetailPlannedResponse"),
+        ],
+      },
+      TokenDetailReadyResponse: {
         type: "object",
         required: ["status", "token", "customProject", "creatorArticle", "catalog"],
         properties: {
@@ -1577,6 +1646,34 @@ export const programmablePublicOpenApi = {
           catalog: component("CatalogBoundary"),
         },
         additionalProperties: true,
+      },
+      TokenDetailPlannedResponse: {
+        type: "object",
+        required: [
+          "status",
+          "activationStage",
+          "chainId",
+          "token",
+          "customProject",
+          "routerTradeProject",
+          "platformFeeCertification",
+          "sourceVerification",
+          "creatorArticle",
+          "snapshot",
+        ],
+        properties: {
+          status: { const: "not-deployed" },
+          activationStage: { const: "planned-not-deployed" },
+          chainId: { const: 4663 },
+          token: { type: "null" },
+          customProject: { type: "null" },
+          routerTradeProject: { type: "null" },
+          platformFeeCertification: { type: "null" },
+          sourceVerification: { type: "null" },
+          creatorArticle: { type: "null" },
+          snapshot: { type: "null" },
+        },
+        additionalProperties: false,
       },
       RegistryReadiness: {
         type: "object",

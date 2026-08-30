@@ -22,6 +22,14 @@ describe("Site footer", () => {
     expect(footerSource).toContain('label: "Analytics"');
   });
 
+  it("does not eagerly prefetch repeated internal footer destinations", () => {
+    expect(footerSource.match(/prefetch=\{false\}/gu)).toHaveLength(2);
+    expect(footerSource).toMatch(
+      /className=\{styles\.brandLink\}[\s\S]{0,100}prefetch=\{false\}/u,
+    );
+    expect(footerSource).toContain("<Link href={link.href}>");
+  });
+
   it("links the official Discord from Resources", () => {
     expect(footerSource).toContain(
       'href: "https://discord.com/invite/programmable"',
