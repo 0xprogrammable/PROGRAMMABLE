@@ -5,12 +5,43 @@ import {
   CustomLaunchWalletHandoffErrorV4,
   deriveCustomLaunchWalletExpectedV4,
 } from "../lib/custom-launch/wallet-handoff-v4";
-import {
+// @ts-expect-error -- this repository-local JavaScript test fixture has no declaration file.
+import * as untypedV4Fixtures from "../packages/launch/test/fixtures/v4.mjs";
+
+const {
   validCoordinatedGraphSubstitutionV4,
   validExactWalletTransaction,
   validV4Request,
   validV4Resource,
-} from "../packages/launch/test/fixtures/v4.mjs";
+} = untypedV4Fixtures;
+
+type ProviderIdentity = Readonly<{
+  providerId: string;
+  trustDomain: string;
+}>;
+
+type ParsedChainDeploymentProviderInventory = Readonly<{
+  deploymentEvidence: Readonly<{
+    providerReadbacks: readonly ProviderIdentity[];
+    resultingContracts: readonly Readonly<{
+      providerReadbacks: readonly ProviderIdentity[];
+    }>[];
+  }>;
+  permitAuthoritySourceProvenance: Readonly<{
+    configurationEvidence: Readonly<{
+      primaryProvider: ProviderIdentity;
+      ethereumFinalityEvidence: Readonly<{
+        l2Providers: readonly ProviderIdentity[];
+      }>;
+    }>;
+  }>;
+  externalRootDeploymentEvidence: readonly Readonly<{
+    providerReadbacks: readonly ProviderIdentity[];
+  }>[];
+  permit2GenesisProvenance: Readonly<{
+    providerReadbacks: readonly ProviderIdentity[];
+  }>;
+}>;
 
 function walletReadyResource() {
   const request = validV4Request({
@@ -39,7 +70,9 @@ function walletReadyResource() {
 describe("Robinhood V4 wallet handoff provider identity", () => {
   it("accepts the canonical QuickNode and Alchemy Phase-A deployment evidence", () => {
     const expected = deriveCustomLaunchWalletExpectedV4(walletReadyResource());
-    const deployment = expected.chainDeployment;
+    // The production parser has already validated this intentionally unknown wire value.
+    const deployment =
+      expected.chainDeployment as ParsedChainDeploymentProviderInventory;
     const primaryProviders = [
       deployment.deploymentEvidence.providerReadbacks[0],
       deployment.deploymentEvidence.resultingContracts[0].providerReadbacks[0],
