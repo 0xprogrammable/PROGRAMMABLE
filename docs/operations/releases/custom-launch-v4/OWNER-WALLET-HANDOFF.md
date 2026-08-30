@@ -31,14 +31,30 @@ overwrites or immediately sources. The live handoff must start from those
 already review-frozen values. Computing new hashes from the URLs being used and
 then accepting those same hashes proves only self-consistency, not review.
 
+Custody must retain those values as owner-only read-only `0400` regular files directly
+under one absolute, real, owner-only `0700` `ROBINHOOD_CUSTODY_ROOT` outside the
+repository and OS temporary roots. The only accepted ordered record basenames
+are:
+
+```text
+quicknode-hood-explorer-indexer-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+alchemy-programmable-production-3-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+```
+
+The retired generic QuickNode record
+`quicknode-hood-explorer-indexer-robinhood-mainnet-rpc-commitment.v1` is not a
+fallback and is rejected even when it contains a syntactically valid commitment.
+
 ## Secret-safe provider input
 
 Use an approved secret runner when one is available. The manual fallback below
 keeps credential URLs out of shell history and command arguments. Do not use it
 with shell tracing, paste a URL into an `export` command, store a URL in a repo
 `.env` file, pass a URL as a CLI flag, echo it, or capture an environment dump.
-Replace the two commitment placeholders only with the earlier review-frozen,
-non-secret SHA-256 values.
+Replace only the custody-root placeholder with the protected directory that
+contains the two exact versioned records above. The loader rejects symlinks,
+wrong owners or modes, repository/temp roots, renamed records and mixed direct
+commitment environment variables.
 
 ```sh
 set +x
@@ -52,11 +68,13 @@ cleanup_robinhood_owner_handoff() {
   unset ROBINHOOD_MAINNET_RPC_URL_SECONDARY
   unset ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY
   unset ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY
+  unset ROBINHOOD_CUSTODY_ROOT
 }
 trap cleanup_robinhood_owner_handoff EXIT HUP INT TERM
 
-export ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY='<review-frozen-sha256-primary>'
-export ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY='<review-frozen-sha256-secondary>'
+unset ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY
+unset ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY
+export ROBINHOOD_CUSTODY_ROOT='/absolute/owner-only/robinhood-provider-endpoints-20260830'
 
 IFS= read -r -s ROBINHOOD_MAINNET_RPC_URL_PRIMARY </dev/tty
 printf '\n' >/dev/tty
@@ -89,8 +107,8 @@ This ordered role pair is compatible with backend provider-profile digest
 `sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910`.
 That digest is not owner-envelope or backend-release evidence by itself; the
 cross-repository promotion must still bind the exact backend artifact and its
-attested runtime readiness. With the two review-frozen commitment variables
-present, the helper prints only
+attested runtime readiness. With the exact custody root present, the helper
+loads only the two versioned records and prints only
 `ROBINHOOD_RPC_PROVIDER_COMMITMENTS_MATCH_REVIEW` after an exact match.
 Replacing a credential URL, changing the QuickNode endpoint host or credential
 path, reversing provider roles, or substituting two new otherwise valid

@@ -56,6 +56,12 @@ before any provider request. Those credential-free commitments and the retained
 inventories describe the endpoints and providers that actually performed the
 postdeployment reads; fresh Phase B replay rechecks the same attested commitments.
 Commitments must never replace, relabel or re-hash the provider evidence itself.
+The protected handoff resolves them only from the version-qualified
+`public-production-2fb6a4e` QuickNode Hood Explorer Indexer and Alchemy
+Programmable Production 3 custody-record basenames. Local runs use an absolute,
+owner-only `ROBINHOOD_CUSTODY_ROOT`; the hosted capture maps only the matching
+version-qualified environment secrets. The retired generic QuickNode record is
+never an accepted fallback.
 
 ## Per-contract deployment provenance
 

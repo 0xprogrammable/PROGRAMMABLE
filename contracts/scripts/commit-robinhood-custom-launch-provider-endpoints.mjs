@@ -4,6 +4,10 @@ import {
   assertRobinhoodFoundationRpcProviders,
   robinhoodFoundationRpcEndpointCommitment,
 } from "./robinhood-custom-launch-owner-envelope-core.mjs";
+import { fileURLToPath } from "node:url";
+import { resolveReviewedRobinhoodProviderCommitments } from "./robinhood-custom-launch-provider-commitment-custody.mjs";
+
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 const rpcUrls = [
   process.env.ROBINHOOD_MAINNET_RPC_URL_PRIMARY,
@@ -22,10 +26,11 @@ try {
       rpcUrl: rpcUrls[1],
     }),
   ];
-  const reviewedEndpointCommitments = [
-    process.env.ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY,
-    process.env.ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY,
-  ];
+  const reviewedEndpointCommitments =
+    await resolveReviewedRobinhoodProviderCommitments({
+      env: process.env,
+      repositoryRoot,
+    });
   const reviewedCount = reviewedEndpointCommitments.filter(
     (value) => typeof value === "string" && value.length > 0,
   ).length;

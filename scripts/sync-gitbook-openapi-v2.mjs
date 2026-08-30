@@ -15,7 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const DEVELOPERS_SOURCE = Object.freeze({
   repository: "programmablehq/Developers",
-  commit: "edaa839148897781c710d92650dbf9f1f52a86e8",
+  commit: "218e780ed92dde950b275f56663ea58f0ab7969e",
   entrypoint: "openapi/programmable-v2.yaml",
   entrypointSha256:
     "2e6009eef6c926bea3f5723c8e7f819c811fa1ef91c20694c5927f284b1a2c6c",
@@ -52,8 +52,8 @@ const PINNED_DOCUMENTS = Object.freeze(
     ],
     [
       "schemas/v2/custom-launch-chain-deployment-v4.schema.json",
-      38_778,
-      "eda72f2214f3deef9ad0989cb1e2ed5488d674e4e6a282983de169d432a8bbaa",
+      40_861,
+      "914716cdea772723a9ed79dad7262fe27542be53d03b7cb54070993d5aebe4b6",
     ],
     [
       "schemas/v2/custom-launch-registry-record-v3.schema.json",
@@ -131,7 +131,7 @@ const PINNED_DOCUMENTS = Object.freeze(
 );
 
 const PINNED_CLOSURE_SHA256 =
-  "11fd2cf66ccf5801d31ff1f49ac198e9086625cd51bf7b00f77e0bc477d36bb9";
+  "271aaeecdcb3fdd4cf469dc05760d190ad6597a9d85af6328f06bf804f7ba909";
 const PINNED_BY_SOURCE_PATH = new Map(
   PINNED_DOCUMENTS.map((document) => [document.sourcePath, document]),
 );

@@ -161,6 +161,22 @@ ETHEREUM_MAINNET_RPC_URL_PRIMARY
 ETHEREUM_MAINNET_RPC_URL_SECONDARY
 ```
 
+For a manual protected run, leave the two direct Robinhood commitment variables unset and set
+`ROBINHOOD_CUSTODY_ROOT` to an absolute, real, owner-only `0700` directory outside the repository
+and OS temporary roots. The collector reads only owner-only read-only `0400` regular files with these exact
+ordered basenames:
+
+```text
+quicknode-hood-explorer-indexer-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+alchemy-programmable-production-3-robinhood-mainnet-rpc-commitment.public-production-2fb6a4e.v1
+```
+
+The generic QuickNode basename ending in `rpc-commitment.v1` is retired and cannot be selected.
+The protected GitHub environment maps those same records only through version-qualified secrets
+`ROBINHOOD_MAINNET_QUICKNODE_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E` and
+`ROBINHOOD_MAINNET_ALCHEMY_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E`; the workflow maps them to the
+two runtime commitment variables above. It never references an unversioned commitment secret.
+
 Before any capture or fresh replay request, code rejects every URL outside the reviewed credential
 forms. Robinhood QuickNode is exactly
 `https://{endpoint-name}.robinhood-mainnet.quiknode.pro/{credential}/`; Robinhood Alchemy is

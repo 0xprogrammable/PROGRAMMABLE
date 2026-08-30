@@ -1078,6 +1078,9 @@
         "address",
         "runtimeCodeHash",
         "transactionHash",
+        "previousBlockNumber",
+        "previousBlockHash",
+        "previousBlockRuntimeCodeHash",
         "startBlock",
         "blockHash",
         "registrySource",
@@ -1108,6 +1111,15 @@
         },
         "transactionHash": {
           "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "previousBlockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "previousBlockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "previousBlockRuntimeCodeHash": {
+          "const": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
         },
         "startBlock": {
           "$ref": "#/$defs/positiveDecimal"
@@ -1172,7 +1184,8 @@
           "$ref": "#/$defs/sha256"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-programmable-order": "previousBlockNumber + 1 == startBlock; previousBlockNumber == providerReadbacks[*].previousBlockNumber; previousBlockHash == providerReadbacks[*].previousBlockHash; startBlock == providerReadbacks[*].blockNumber; blockHash == providerReadbacks[*].blockHash; providerReadbacks[0].rawTransactionDigest == providerReadbacks[1].rawTransactionDigest; providerReadbacks[0].transactionDigest == providerReadbacks[1].transactionDigest; providerReadbacks[0].transactionReceiptDigest == providerReadbacks[1].transactionReceiptDigest"
     },
     "externalRootProviderReadback": {
       "type": "object",
@@ -1180,6 +1193,11 @@
         "providerId",
         "trustDomain",
         "transactionHash",
+        "rawTransactionDigest",
+        "transactionDigest",
+        "previousBlockNumber",
+        "previousBlockHash",
+        "previousBlockRuntimeCodeHash",
         "blockNumber",
         "blockHash",
         "runtimeCodeHash",
@@ -1195,6 +1213,21 @@
         },
         "transactionHash": {
           "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "rawTransactionDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "transactionDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "previousBlockNumber": {
+          "$ref": "#/$defs/positiveDecimal"
+        },
+        "previousBlockHash": {
+          "$ref": "#/$defs/lowerNonzeroHash32"
+        },
+        "previousBlockRuntimeCodeHash": {
+          "const": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
         },
         "blockNumber": {
           "$ref": "#/$defs/positiveDecimal"
@@ -1239,6 +1272,9 @@
                 "transactionHash": {
                   "const": "0x4fb28d4935866f462582c6c931c6f2705e55f5be5eb178c7d8d9329a95c44c41"
                 },
+                "previousBlockNumber": {
+                  "const": "9069"
+                },
                 "startBlock": {
                   "const": "9070"
                 }
@@ -1265,6 +1301,9 @@
                 },
                 "transactionHash": {
                   "const": "0x228c18ada6cb46b4fbcc18f4ec1519953415393e256fa8349aafbd5a2db037c8"
+                },
+                "previousBlockNumber": {
+                  "const": "9072"
                 },
                 "startBlock": {
                   "const": "9073"
@@ -1293,6 +1332,9 @@
                 "transactionHash": {
                   "const": "0x3d61e2c9eeb482385b1aa436b9e8f812167ea579cc390e4f93bc5abde00582f4"
                 },
+                "previousBlockNumber": {
+                  "const": "9074"
+                },
                 "startBlock": {
                   "const": "9075"
                 }
@@ -1320,6 +1362,9 @@
                 "transactionHash": {
                   "const": "0x6bf436d72a17f87284ddcab43094689bd320dfb39b535213b9a0b669fabc4ab4"
                 },
+                "previousBlockNumber": {
+                  "const": "9073"
+                },
                 "startBlock": {
                   "const": "9074"
                 }
@@ -1346,6 +1391,9 @@
                 },
                 "transactionHash": {
                   "const": "0xdfb76494e158d8dea4376160315239271636a18515207fd4526e574bc7eeb456"
+                },
+                "previousBlockNumber": {
+                  "const": "3347898"
                 },
                 "startBlock": {
                   "const": "3347899"

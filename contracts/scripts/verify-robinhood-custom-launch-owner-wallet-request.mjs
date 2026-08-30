@@ -16,9 +16,12 @@ import {
   exactRobinhoodFoundationSourceIdentity,
   resolveRobinhoodFoundationHostedVerify,
 } from "./refresh-robinhood-custom-launch-owner-envelope.mjs";
+import { resolveReviewedRobinhoodProviderCommitments } from "./robinhood-custom-launch-provider-commitment-custody.mjs";
 
 export const ROBINHOOD_OWNER_WALLET_REQUEST_SCHEMA =
   "programmable.robinhood-custom-launch.owner-wallet-request.v1";
+
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 const MAXIMUM_ENVELOPE_BYTES = 2 * 1024 * 1024;
 const MAXIMUM_WALLET_REQUEST_BYTES = 128 * 1024;
@@ -228,10 +231,11 @@ export async function verifyRobinhoodOwnerWalletRequest({
     env.ROBINHOOD_MAINNET_RPC_URL_PRIMARY,
     env.ROBINHOOD_MAINNET_RPC_URL_SECONDARY,
   ];
-  const endpointCommitments = [
-    env.ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY,
-    env.ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY,
-  ];
+  const endpointCommitments =
+    await resolveReviewedRobinhoodProviderCommitments({
+      env,
+      repositoryRoot,
+    });
   const bindings = assertRobinhoodFoundationRpcProviders({
     rpcUrls,
     endpointCommitments,

@@ -41,6 +41,7 @@ import {
   robinhoodRpcResponseLimit,
   validateRobinhoodCredentialedProviderEndpoint,
 } from "./robinhood-custom-launch-capture-v2.mjs";
+import { resolveReviewedRobinhoodProviderCommitments } from "./robinhood-custom-launch-provider-commitment-custody.mjs";
 
 const execFileAsync = promisify(execFile);
 const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
@@ -556,10 +557,11 @@ export async function captureRobinhoodPostdeployment(options) {
     l1: [process.env.ETHEREUM_MAINNET_RPC_URL_PRIMARY,
       process.env.ETHEREUM_MAINNET_RPC_URL_SECONDARY],
   };
-  const l2EndpointCommitments = [
-    process.env.ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY,
-    process.env.ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY,
-  ];
+  const l2EndpointCommitments =
+    await resolveReviewedRobinhoodProviderCommitments({
+      env: process.env,
+      repositoryRoot: options.repositoryRoot,
+    });
   if ([...endpoints.l2, ...endpoints.l1].some((value) => !value)) {
     throw new TypeError("capture requires four protected provider endpoints");
   }

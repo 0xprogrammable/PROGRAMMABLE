@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+
+import {
+  RETIRED_ROBINHOOD_QUICKNODE_COMMITMENT_RECORD_BASENAME,
+  ROBINHOOD_PROVIDER_COMMITMENT_RECORD_BASENAMES,
+  readReviewedRobinhoodProviderCommitments,
+} from "../robinhood-custom-launch-provider-commitment-custody.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -22,6 +29,7 @@ test("operator runbooks use repo-root commands and independently frozen provider
     phaseACapture,
     captureWorkflow,
     stageSchemaBytes,
+    commitmentCustody,
   ] = await Promise.all([
     repositoryText("contracts/security/ROBINHOOD-CUSTOM-LAUNCH.md"),
     repositoryText(
@@ -47,6 +55,9 @@ test("operator runbooks use repo-root commands and independently frozen provider
     repositoryText(
       "docs/operations/releases/custom-launch-v4/stage-bundle.schema.json",
     ),
+    repositoryText(
+      "contracts/scripts/robinhood-custom-launch-provider-commitment-custody.mjs",
+    ),
   ]);
   const packageJson = JSON.parse(packageBytes);
   const stageSchema = JSON.parse(stageSchemaBytes);
@@ -71,14 +82,8 @@ test("operator runbooks use repo-root commands and independently frozen provider
     handoff,
     /npm run --silent contracts:robinhood:provider-commitments/u,
   );
-  assert.match(
-    handoff,
-    /ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY='<review-frozen-sha256-primary>'/u,
-  );
-  assert.match(
-    handoff,
-    /ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY='<review-frozen-sha256-secondary>'/u,
-  );
+  assert.match(handoff, /ROBINHOOD_CUSTODY_ROOT='\/absolute\/owner-only\//u);
+  assert.doesNotMatch(handoff, /<review-frozen-sha256-(?:primary|secondary)>/u);
   assert.match(handoff, /not review/u);
   assert.doesNotMatch(handoff, /reviewed-provider-commitments\.env/u);
   assert.doesNotMatch(
@@ -101,6 +106,17 @@ test("operator runbooks use repo-root commands and independently frozen provider
   );
   assert.match(handoff, /Hood Explorer\s+Indexer/u);
   assert.match(handoff, /Programmable Production 3/u);
+  for (const basename of ROBINHOOD_PROVIDER_COMMITMENT_RECORD_BASENAMES) {
+    assert.ok(handoff.includes(basename));
+    assert.ok(postdeployment.includes(basename));
+    assert.ok(commitmentCustody.includes(`"${basename}"`));
+  }
+  assert.match(handoff, /retired generic QuickNode record[\s\S]*rejected/u);
+  assert.ok(
+    commitmentCustody.includes(
+      `"${RETIRED_ROBINHOOD_QUICKNODE_COMMITMENT_RECORD_BASENAME}"`,
+    ),
+  );
   assert.match(
     handoff,
     /https:\/\/<HOOD_EXPLORER_INDEXER_ENDPOINT>\.robinhood-mainnet\.quiknode\.pro\/<TOKEN>\//u,
@@ -129,22 +145,33 @@ test("operator runbooks use repo-root commands and independently frozen provider
   );
   assert.match(
     phaseACapture,
-    /ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY/u,
+    /resolveReviewedRobinhoodProviderCommitments/u,
   );
+  assert.match(commitmentCustody, /ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY/u);
   assert.match(
     phaseACapture,
     /assertRobinhoodCaptureL2EndpointCommitments/u,
   );
-  for (const commitmentSecret of [
-    "ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY",
-    "ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY",
+  for (const [runtimeVariable, commitmentSecret] of [
+    [
+      "ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY",
+      "ROBINHOOD_MAINNET_QUICKNODE_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E",
+    ],
+    [
+      "ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY",
+      "ROBINHOOD_MAINNET_ALCHEMY_RPC_COMMITMENT_PUBLIC_PRODUCTION_2FB6A4E",
+    ],
   ]) {
     assert.ok(
       captureWorkflow.includes(
-        `${commitmentSecret}: \${{ secrets.${commitmentSecret} }}`,
+        `${runtimeVariable}: \${{ secrets.${commitmentSecret} }}`,
       ),
     );
   }
+  assert.doesNotMatch(
+    captureWorkflow,
+    /secrets\.ROBINHOOD_MAINNET_RPC_COMMITMENT_(?:PRIMARY|SECONDARY)/u,
+  );
   assert.ok(
     stageSchema.$defs.captureClosure.required.includes(
       "l2ProviderEndpointCommitments",
@@ -196,6 +223,56 @@ test("operator runbooks use repo-root commands and independently frozen provider
   ]) {
     assert.equal(typeof packageJson.scripts[command], "string", command);
   }
+});
+
+test("provider commitment custody accepts only exact versioned records", async (t) => {
+  const custodyRoot = await mkdtemp(
+    path.join(os.homedir(), ".programmable-custody-test-"),
+  );
+  t.after(() => rm(custodyRoot, { recursive: true, force: true }));
+  await chmod(custodyRoot, 0o700);
+  const commitments = [`sha256:${"1".repeat(64)}`, `sha256:${"2".repeat(64)}`];
+  await Promise.all(
+    ROBINHOOD_PROVIDER_COMMITMENT_RECORD_BASENAMES.map(
+      async (basename, index) => {
+        const record = path.join(custodyRoot, basename);
+        await writeFile(record, `${commitments[index]}\n`, {
+          encoding: "utf8",
+          flag: "wx",
+          mode: 0o400,
+        });
+        await chmod(record, 0o400);
+      },
+    ),
+  );
+
+  assert.deepEqual(
+    await readReviewedRobinhoodProviderCommitments({
+      custodyRoot,
+      repositoryRoot,
+    }),
+    commitments,
+  );
+  await rm(
+    path.join(custodyRoot, ROBINHOOD_PROVIDER_COMMITMENT_RECORD_BASENAMES[0]),
+  );
+  const retiredRecord = path.join(
+    custodyRoot,
+    RETIRED_ROBINHOOD_QUICKNODE_COMMITMENT_RECORD_BASENAME,
+  );
+  await writeFile(retiredRecord, `${commitments[0]}\n`, {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o400,
+  });
+  await chmod(retiredRecord, 0o400);
+  await assert.rejects(
+    readReviewedRobinhoodProviderCommitments({
+      custodyRoot,
+      repositoryRoot,
+    }),
+    /retired generic QuickNode commitment record is forbidden/u,
+  );
 });
 
 test("both no-CBOR providers remain outside the independent exact binding", async () => {
