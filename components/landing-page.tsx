@@ -7,11 +7,12 @@ import Link from "next/link";
 import { LandingExploreGate } from "@/components/landing-explore-gate";
 import styles from "@/components/landing-page.module.css";
 import migrationActivationManifest from "@/config/main-token-migration-activation.v2.json";
+import { isMainTokenMigrationActivationEnabled } from "@/lib/main-token-migration-activation";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
 const HERO_TWINKLE_COUNT = 120;
 const migrationAnnouncementVisible =
-  migrationActivationManifest.enabled === true &&
+  isMainTokenMigrationActivationEnabled(migrationActivationManifest) &&
   process.env.NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_VISIBLE ===
   "true";
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { MainTokenMigration } from "@/components/main-token-migration";
 import migrationActivationManifest from "@/config/main-token-migration-activation.v2.json";
+import { isMainTokenMigrationActivationEnabled } from "@/lib/main-token-migration-activation";
 
 export const metadata: Metadata = {
   title: "V4 migration | Programmable",
@@ -20,7 +21,7 @@ export default function MigrationPage() {
     process.env.PROGRAMMABLE_MAIN_TOKEN_MIGRATION_LOCAL_PREVIEW === "true";
   const publicReleaseEnabled =
     process.env.PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_ENABLED === "true" &&
-    migrationActivationManifest.enabled === true;
+    isMainTokenMigrationActivationEnabled(migrationActivationManifest);
   if (!localPreview && !publicReleaseEnabled) {
     notFound();
   }

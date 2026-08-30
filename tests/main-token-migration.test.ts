@@ -22,6 +22,7 @@ import {
   MAIN_TOKEN_TOTAL_SUPPLY_RAW,
   parseMainTokenMigrationAmount,
 } from "../lib/main-token-migration";
+import { parseMainTokenMigrationActivation } from "../lib/main-token-migration-activation";
 import {
   buildEip1193TransactionRequest,
   getPreparedTransactionReview,
@@ -231,6 +232,7 @@ describe("main token migration transfer", () => {
 describe("main token migration page contract", () => {
   const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
   const page = read("components/main-token-migration.tsx");
+  const activationValidator = read("lib/main-token-migration-activation.ts");
 
   it("derives the countdown from one absolute window across reloads", () => {
     const startAt = Date.parse("2026-08-30T12:00:00.000Z");
@@ -307,7 +309,7 @@ describe("main token migration page contract", () => {
       sponsorEligibilityBlock: bigint | null,
       sponsorEligibilityBlockHash: string | null,
       releaseId: string,
-      boundaryRule = MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
+      boundaryRule: string = MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
       targetDeliveryReady = true,
     ) =>
       requested &&
@@ -394,12 +396,10 @@ describe("main token migration page contract", () => {
         "wrong-boundary-rule",
       ),
     ).toBe(false);
-    expect(page).toContain("manifest.enabled === true &&");
-    expect(page).toContain("exactPolicy &&");
-    expect(page).toContain("exactWindow &&");
-    expect(page).toContain("exactSponsorEligibilityBlock");
-    expect(page).toContain("exactTargetDelivery");
-    expect(page).toContain("MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE");
+    expect(page).toContain("parseMainTokenMigrationActivation");
+    expect(activationValidator).toContain("input.enabled === true &&");
+    expect(activationValidator).toContain("exactPolicy && exactWindow && exactSponsor && exactTarget");
+    expect(activationValidator).toContain("MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE");
   });
 
   it("stays local-safe until an exact V2 window and sponsor anchor are configured", () => {
@@ -427,9 +427,9 @@ describe("main token migration page contract", () => {
     };
 
     expect(page).toContain("main-token-migration-activation.v2.json");
-    expect(page).toContain("deadlineAt - startAt ===");
-    expect(page).toContain("exactSponsorEligibilityBlock");
-    expect(page).toContain("exactTargetDelivery");
+    expect(activationValidator).toContain("deadlineAt - startAt ===");
+    expect(activationValidator).toContain("const exactSponsor =");
+    expect(activationValidator).toContain("const exactTarget =");
     expect(page).toContain("Local preview · transfers disabled");
     expect(page).toContain("96-hour");
     expect(page).toContain("<strong>96 hours</strong>");
@@ -453,14 +453,14 @@ describe("main token migration page contract", () => {
     expect(route).toContain(
       "PROGRAMMABLE_MAIN_TOKEN_MIGRATION_LOCAL_PREVIEW",
     );
-    expect(route).toContain("migrationActivationManifest.enabled");
+    expect(route).toContain("isMainTokenMigrationActivationEnabled");
     expect(route).toContain("notFound()");
     expect(landing).toContain('href="/migration"');
     expect(landing).toContain("We are migrating");
     expect(landing).toContain(
       "NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_VISIBLE",
     );
-    expect(landing).toContain("migrationActivationManifest.enabled");
+    expect(landing).toContain("isMainTokenMigrationActivationEnabled");
     expect(activationManifest).toMatchObject({
       enabled: false,
       releaseId: MAIN_TOKEN_MIGRATION_RELEASE_ID,
@@ -481,5 +481,27 @@ describe("main token migration page contract", () => {
       sponsorEligibilityBlockNumber: null,
       sponsorEligibilityBlockHash: null,
     });
+    const start = 1_900_000_000;
+    const completeManifest = {
+      ...activationManifest,
+      enabled: true,
+      windowStartTimestamp: String(start),
+      deadlineTimestampExclusive: String(
+        start + MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
+      ),
+      sponsorEligibilityBlockNumber: "1",
+      sponsorEligibilityBlockHash: `0x${"11".repeat(32)}`,
+      targetTokenAddress: "0x5555555555555555555555555555555555555555",
+      targetTokenRuntimeCodeKeccak256: `0x${"22".repeat(32)}`,
+      migrationDistributorAddress:
+        "0x6666666666666666666666666666666666666666",
+      migrationDistributorRuntimeCodeKeccak256: `0x${"33".repeat(32)}`,
+      targetDesignSha256: `sha256:${"44".repeat(32)}`,
+    };
+    expect(parseMainTokenMigrationActivation(completeManifest).enabled).toBe(true);
+    expect(parseMainTokenMigrationActivation({
+      ...completeManifest,
+      unexpected: true,
+    }).enabled).toBe(false);
   });
 });

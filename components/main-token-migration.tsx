@@ -15,8 +15,8 @@ import { formatUnits, getAddress, isAddress, type Hex } from "viem";
 import styles from "@/components/main-token-migration.module.css";
 import { useWallet } from "@/components/wallet-provider";
 import migrationActivationManifest from "@/config/main-token-migration-activation.v2.json";
+import { parseMainTokenMigrationActivation } from "@/lib/main-token-migration-activation";
 import {
-  MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA,
   assertMainTokenMigrationBalance,
   assertMainTokenMigrationTransaction,
   buildMainTokenMigrationTransaction,
@@ -24,26 +24,15 @@ import {
   MAIN_TOKEN_DECIMALS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
   MAIN_TOKEN_MIGRATION_RELEASE_ID,
-  MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS,
-  MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE,
-  MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID,
-  MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW,
   MAIN_TOKEN_MIGRATION_WALLET,
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
-  MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
   MAIN_TOKEN_SYMBOL,
-  MAIN_TOKEN_TOTAL_SUPPLY_RAW,
   parseMainTokenMigrationAmount,
 } from "@/lib/main-token-migration";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
 const decimalIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
 const positiveIntegerPattern = /^[1-9][0-9]*$/u;
-const bytes32Pattern = /^0x[0-9a-fA-F]{64}$/u;
-const sha256Pattern = /^sha256:[0-9a-f]{64}$/u;
-const zeroAddress = "0x0000000000000000000000000000000000000000";
-const zeroBytes32 = `0x${"0".repeat(64)}`;
-const zeroSha256 = `sha256:${"0".repeat(64)}`;
 
 type MigrationPhase =
   | "checking"
@@ -51,12 +40,6 @@ type MigrationPhase =
   | "upcoming"
   | "active"
   | "closed";
-
-type MigrationWindow = Readonly<{
-  enabled: boolean;
-  startAt: number | null;
-  deadlineAt: number | null;
-}>;
 
 type SubmissionState =
   | { kind: "idle" }
@@ -464,119 +447,9 @@ function clearPersistedMigrationTransfer() {
   }
 }
 
-function parseMigrationWindow(): MigrationWindow {
-  const manifest = migrationActivationManifest as Readonly<{
-    schema: string;
-    releaseId: string;
-    enabled: boolean;
-    sourceChainId: string;
-    sourceTokenAddress: string;
-    sourceTokenRuntimeCodeKeccak256: string;
-    sourceTokenDecimals: string;
-    sourceTokenTotalSupplyRaw: string;
-    targetChainId: string;
-    targetTokenTotalSupplyRaw: string;
-    targetTokenAddress: string | null;
-    targetTokenRuntimeCodeKeccak256: string | null;
-    migrationDistributorAddress: string | null;
-    migrationDistributorRuntimeCodeKeccak256: string | null;
-    targetDesignSha256: string | null;
-    migrationWallet: string;
-    windowDurationSeconds: string;
-    windowStartTimestamp: string | null;
-    deadlineTimestampExclusive: string | null;
-    snapshotBoundaryRule: string;
-    minimumPublicLeadSeconds: string;
-    sponsorEligibilityBlockNumber: string | null;
-    sponsorEligibilityBlockHash: string | null;
-  }>;
-  const startSeconds =
-    manifest.windowStartTimestamp !== null &&
-    decimalIntegerPattern.test(manifest.windowStartTimestamp)
-      ? Number(manifest.windowStartTimestamp)
-      : Number.NaN;
-  const deadlineSeconds =
-    manifest.deadlineTimestampExclusive !== null &&
-    decimalIntegerPattern.test(manifest.deadlineTimestampExclusive)
-      ? Number(manifest.deadlineTimestampExclusive)
-      : Number.NaN;
-  const startAt = startSeconds * 1_000;
-  const deadlineAt = deadlineSeconds * 1_000;
-  const safeStartSeconds =
-    Number.isSafeInteger(startSeconds) &&
-    startSeconds <= Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
-  const safeDeadlineSeconds =
-    Number.isSafeInteger(deadlineSeconds) &&
-    deadlineSeconds <= Math.floor(Number.MAX_SAFE_INTEGER / 1_000);
-  const exactPolicy =
-    manifest.schema === MAIN_TOKEN_MIGRATION_ACTIVATION_SCHEMA &&
-    manifest.releaseId === MAIN_TOKEN_MIGRATION_RELEASE_ID &&
-    manifest.sourceChainId === String(MAIN_TOKEN_MIGRATION_CHAIN_ID) &&
-    manifest.sourceTokenAddress.toLowerCase() === MAIN_TOKEN_ADDRESS.toLowerCase() &&
-    manifest.sourceTokenRuntimeCodeKeccak256.toLowerCase() ===
-      MAIN_TOKEN_RUNTIME_CODE_KECCAK256 &&
-    manifest.sourceTokenDecimals === String(MAIN_TOKEN_DECIMALS) &&
-    manifest.sourceTokenTotalSupplyRaw === MAIN_TOKEN_TOTAL_SUPPLY_RAW.toString() &&
-    manifest.targetChainId === String(MAIN_TOKEN_MIGRATION_TARGET_CHAIN_ID) &&
-    manifest.targetTokenTotalSupplyRaw ===
-      MAIN_TOKEN_MIGRATION_TARGET_TOKEN_TOTAL_SUPPLY_RAW.toString() &&
-    manifest.migrationWallet.toLowerCase() ===
-      MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
-    manifest.windowDurationSeconds ===
-      String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS) &&
-    manifest.snapshotBoundaryRule ===
-      MAIN_TOKEN_MIGRATION_SNAPSHOT_BOUNDARY_RULE &&
-    manifest.minimumPublicLeadSeconds ===
-      String(MAIN_TOKEN_MIGRATION_MINIMUM_PUBLIC_LEAD_SECONDS);
-  const exactWindow =
-    safeStartSeconds &&
-    safeDeadlineSeconds &&
-    deadlineAt - startAt === MAIN_TOKEN_MIGRATION_WINDOW_SECONDS * 1_000;
-  const exactSponsorEligibilityBlock =
-    manifest.sponsorEligibilityBlockNumber !== null &&
-    positiveIntegerPattern.test(manifest.sponsorEligibilityBlockNumber) &&
-    manifest.sponsorEligibilityBlockHash !== null &&
-    bytes32Pattern.test(manifest.sponsorEligibilityBlockHash) &&
-    manifest.sponsorEligibilityBlockHash.toLowerCase() !== zeroBytes32;
-  const targetTokenAddress = manifest.targetTokenAddress?.toLowerCase() ?? null;
-  const migrationDistributorAddress =
-    manifest.migrationDistributorAddress?.toLowerCase() ?? null;
-  const exactTargetDelivery =
-    manifest.targetTokenAddress !== null &&
-    isAddress(manifest.targetTokenAddress, { strict: true }) &&
-    targetTokenAddress !== zeroAddress &&
-    targetTokenAddress !== MAIN_TOKEN_ADDRESS.toLowerCase() &&
-    targetTokenAddress !== MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
-    manifest.targetTokenRuntimeCodeKeccak256 !== null &&
-    bytes32Pattern.test(manifest.targetTokenRuntimeCodeKeccak256) &&
-    manifest.targetTokenRuntimeCodeKeccak256.toLowerCase() !== zeroBytes32 &&
-    manifest.migrationDistributorAddress !== null &&
-    isAddress(manifest.migrationDistributorAddress, { strict: true }) &&
-    migrationDistributorAddress !== zeroAddress &&
-    migrationDistributorAddress !== targetTokenAddress &&
-    migrationDistributorAddress !== MAIN_TOKEN_ADDRESS.toLowerCase() &&
-    migrationDistributorAddress !== MAIN_TOKEN_MIGRATION_WALLET.toLowerCase() &&
-    manifest.migrationDistributorRuntimeCodeKeccak256 !== null &&
-    bytes32Pattern.test(manifest.migrationDistributorRuntimeCodeKeccak256) &&
-    manifest.migrationDistributorRuntimeCodeKeccak256.toLowerCase() !==
-      zeroBytes32 &&
-    manifest.targetDesignSha256 !== null &&
-    sha256Pattern.test(manifest.targetDesignSha256) &&
-    manifest.targetDesignSha256 !== zeroSha256;
-
-  return Object.freeze({
-    enabled:
-      manifest.enabled === true &&
-      exactPolicy &&
-      exactWindow &&
-      exactSponsorEligibilityBlock &&
-      exactTargetDelivery,
-    startAt: safeStartSeconds ? startAt : null,
-    deadlineAt: safeDeadlineSeconds ? deadlineAt : null,
-  });
-}
-
-const migrationWindow = parseMigrationWindow();
+const migrationWindow = parseMainTokenMigrationActivation(
+  migrationActivationManifest,
+);
 
 function normalizeChainId(value: string) {
   if (value.startsWith("eip155:")) {
