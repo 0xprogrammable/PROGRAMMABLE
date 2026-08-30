@@ -74,6 +74,10 @@ const profileExperienceCss = readFileSync(
   new URL("../components/profile-experience.module.css", import.meta.url),
   "utf8",
 );
+const profileProjectsCss = readFileSync(
+  new URL("../components/profile-projects.module.css", import.meta.url),
+  "utf8",
+);
 const profileViewSource = readFileSync(
   new URL("../components/profile-view.tsx", import.meta.url),
   "utf8",
@@ -534,6 +538,18 @@ describe("profile workspace loading state", () => {
 
   it("holds cold profile geometry until wallet and local profile hydration settle", () => {
     expect(profileViewSource).toContain(
+      "clientHydrated &&",
+    );
+    expect(profileViewSource).toContain(
+      "requestedProfileAccount === null &&",
+    );
+    expect(profileViewSource).toContain(
+      "(hasSession || Boolean(account))",
+    );
+    expect(profileViewSource).toMatch(
+      /showDashboard \? \([\s\S]*?<ProfileLoadingSkeleton label="Loading profile" showHero \/>[\s\S]*?\) : \([\s\S]*?className=\{`\$\{styles\.connectCard\}/,
+    );
+    expect(profileViewSource).toContain(
       "showHero ? styles.profileSkeletonPage : styles.profileSkeletonInline",
     );
     expect(profileViewSource).toContain(
@@ -563,6 +579,9 @@ describe("profile workspace loading state", () => {
     expect(profileViewSource).toContain(
       "Array.from({ length: profileClaimPageSize }, (_, item)",
     );
+    expect(profileViewSource).toMatch(
+      /className=\{styles\.profileSkeletonClaims\}[\s\S]*?className=\{styles\.profileSkeletonSectionHeader\}[\s\S]*?className=\{styles\.profileSkeletonRows\}[\s\S]*?Array\.from\(\{ length: profileClaimPageSize \}/,
+    );
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonLaunch\s*\{[^}]*min-height:\s*463px;/s,
     );
@@ -574,7 +593,16 @@ describe("profile workspace loading state", () => {
       /\.profileSkeletonHero\s*\{[^}]*min-height:\s*282px;/s,
     );
     expect(profileExperienceCss).toMatch(
-      /\.profileSkeletonWorkspace\s*\{[^}]*min-height:\s*398px;/s,
+      /\.profileSkeletonWorkspace\s*\{[^}]*min-height:\s*360px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileSkeletonInline\s*\{[^}]*min-height:\s*360px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileSkeletonClaims\s*\{[^}]*align-content:\s*start;[^}]*gap:\s*12px;/s,
+    );
+    expect(profileExperienceCss).toMatch(
+      /\.profileSkeletonLaunch \.profileSkeletonRow\s*\{[^}]*gap:\s*9px;[^}]*grid-template-columns:\s*42px minmax\(0, 1fr\) 364px;[^}]*min-height:\s*71px;[^}]*padding:\s*7px 8px;/s,
     );
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonHero\s*\{[^}]*min-height:\s*350px;/s,
@@ -592,10 +620,25 @@ describe("profile workspace loading state", () => {
       /\.claimablePanel\[data-visible-count="4"\]\s*\{[^}]*min-height:\s*591px;/s,
     );
     expect(profileExperienceCss).toMatch(
-      /@media \(max-width:\s*42rem\)[\s\S]*?\.profileSkeletonLaunch \.profileSkeletonRow\s*\{[^}]*min-height:\s*142\.5px;/s,
+      /@media \(max-width:\s*42rem\)[\s\S]*?\.profileSkeletonLaunch \.profileSkeletonRow\s*\{[^}]*grid-template-columns:\s*42px minmax\(0, 1fr\);[^}]*min-height:\s*143px;/s,
     );
     expect(profileExperienceCss).not.toContain("profile-content-reveal");
-    expect(profileExperienceCss).toContain("profile-skeleton-pulse");
+    expect(profileExperienceCss).toContain(
+      "animation: profile-skeleton-pulse 1.35s ease-in-out infinite alternate",
+    );
+    expect(profileProjectsCss).toContain(
+      "animation: profile-project-skeleton 1.35s ease-in-out infinite alternate",
+    );
+    expect(profileExperienceCss).toContain("background: var(--skeleton-base)");
+    expect(profileProjectsCss).toContain("background: var(--skeleton-base)");
+    expect(profileExperienceCss).toContain(
+      "to { background-color: var(--skeleton-highlight); }",
+    );
+    expect(profileProjectsCss).toContain(
+      "to { background-color: var(--skeleton-highlight); }",
+    );
+    expect(profileExperienceCss).not.toContain("from { opacity: 0.48; }");
+    expect(profileProjectsCss).not.toContain("from { opacity: 0.48; }");
   });
 
   it("keeps warm reward refreshes visible, announced and motion-safe", () => {

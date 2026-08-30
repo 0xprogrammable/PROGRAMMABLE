@@ -2,11 +2,30 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useViewChain } from "@/components/view-chain";
+import {
+  isRobinhoodUnavailableRoute,
+  ViewChainPending,
+  ViewChainUnavailable,
+} from "@/components/view-chain-unavailable";
 
 export function RouteTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { hydrated, viewChainId } = useViewChain();
   const contentRef = useRef<HTMLDivElement>(null);
-  const previousPathname = useRef(pathname);
+  const routeRequiresResolvedChain = isRobinhoodUnavailableRoute(pathname);
+  const showChainPending = routeRequiresResolvedChain && !hydrated;
+  const showRobinhoodUnavailable =
+    hydrated && viewChainId === 4663 && routeRequiresResolvedChain;
+  const focusContext = `${pathname}\u0000${
+    showChainPending
+      ? "pending"
+      : showRobinhoodUnavailable
+        ? "unavailable"
+        : "route"
+  }`;
+  const previousFocusContext = useRef(focusContext);
+  const previousHydrated = useRef(hydrated);
   const previousMotionPathname = useRef(pathname);
   const routeAnimationRef = useRef<Animation | null>(null);
   const isDocsPath = pathname.startsWith("/docs");
@@ -58,8 +77,14 @@ export function RouteTransition({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (previousPathname.current === pathname) return;
-    previousPathname.current = pathname;
+    const resolvedInitialChain = !previousHydrated.current && hydrated;
+    previousHydrated.current = hydrated;
+    if (resolvedInitialChain) {
+      previousFocusContext.current = focusContext;
+      return;
+    }
+    if (previousFocusContext.current === focusContext) return;
+    previousFocusContext.current = focusContext;
     if (pathname.startsWith("/docs") && window.location.hash) return;
     const heading = contentRef.current?.querySelector<HTMLElement>("h1");
     if (heading) {
@@ -76,14 +101,20 @@ export function RouteTransition({ children }: { children: ReactNode }) {
     document.querySelector<HTMLElement>("#main-content")?.focus({
       preventScroll: true,
     });
-  }, [pathname]);
+  }, [focusContext, hydrated, pathname]);
 
   return (
     <div
       className={`route-transition${isDocsPath ? " route-transition-docs" : ""}`}
       ref={contentRef}
     >
-      {children}
+      {showChainPending ? (
+        <ViewChainPending />
+      ) : showRobinhoodUnavailable ? (
+        <ViewChainUnavailable />
+      ) : (
+        children
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/api/explore/route", () => ({ GET: vi.fn() }));
 vi.mock("@/components/explore-view", () => ({ ExploreView: () => null }));
-vi.mock("next/headers", () => ({ headers: vi.fn() }));
+vi.mock("next/headers", () => ({ cookies: vi.fn(), headers: vi.fn() }));
 
 import {
   INITIAL_EXPLORE_TIMEOUT_MS,
@@ -23,10 +23,11 @@ describe("Explore initial server read", () => {
     expect(INITIAL_EXPLORE_TIMEOUT_MS).toBeLessThanOrEqual(9_000);
   });
 
-  it("starts with the highest available FDV ranking", () => {
+  it("starts with the newest Ethereum identity page", () => {
     const query = new URLSearchParams(INITIAL_EXPLORE_QUERY);
 
-    expect(DEFAULT_EXPLORE_VIEW_SORT).toBe("market-cap");
+    expect(DEFAULT_EXPLORE_VIEW_SORT).toBe("newest");
+    expect(query.get("chain")).toBe("1");
     expect(query.get("sort")).toBe(DEFAULT_EXPLORE_VIEW_SORT);
   });
 
@@ -43,6 +44,9 @@ describe("Explore initial server read", () => {
     ).toBe("custom");
     expect(new URLSearchParams(initialExploreQuery("all")).has("model"))
       .toBe(false);
+    expect(
+      new URLSearchParams(initialExploreQuery("all", 4663)).get("chain"),
+    ).toBe("4663");
   });
 
   it("returns at the total deadline and safely consumes the aborted read", async () => {

@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type FocusEvent,
+  type RefObject,
 } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -20,6 +21,9 @@ import {
   NavigationCloseIcon,
   NavigationMenuIcon,
 } from "@/components/navigation-icons";
+import { useViewChain, type ViewChainId } from "@/components/view-chain";
+import { isRobinhoodUnavailableRoute } from
+  "@/components/view-chain-unavailable";
 import { useWallet } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
@@ -275,30 +279,182 @@ function DesktopNavigation() {
   );
 }
 
+function ViewChainMark({ viewChainId }: { viewChainId: ViewChainId }) {
+  if (viewChainId === 4663) {
+    return (
+      <span className={styles.robinhoodChainMark} aria-hidden="true">
+        R
+      </span>
+    );
+  }
+
+  return (
+    <svg
+      className={styles.ethereumChainMark}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M12 2 5.5 12.2 12 9.25l6.5 2.95L12 2Z" fill="currentColor" />
+      <path
+        d="m5.5 13.35 6.5 3.7 6.5-3.7L12 22 5.5 13.35Z"
+        fill="currentColor"
+        opacity="0.72"
+      />
+      <path d="m12 9.25-6.5 2.95L12 15.9l6.5-3.7L12 9.25Z" fill="currentColor" opacity="0.9" />
+    </svg>
+  );
+}
+
+function viewChainLabel(viewChainId: ViewChainId) {
+  return viewChainId === 1 ? "Ethereum" : "Robinhood";
+}
+
+function HeaderChainSelector({
+  open,
+  panelId,
+  rootRef,
+  triggerRef,
+  onDismiss,
+  onToggle,
+  onSelect,
+}: Readonly<{
+  open: boolean;
+  panelId: string;
+  rootRef: RefObject<HTMLDivElement | null>;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  onDismiss: () => void;
+  onToggle: () => void;
+  onSelect: () => void;
+}>) {
+  const { hydrated, viewChainId, setViewChainId } = useViewChain();
+  const alternateViewChainId: ViewChainId = viewChainId === 1 ? 4663 : 1;
+  const currentLabel = viewChainLabel(viewChainId);
+  const alternateLabel = viewChainLabel(alternateViewChainId);
+  const alternateStatus =
+    alternateViewChainId === 4663
+      ? "Public index coming soon"
+      : "View Ethereum Chain";
+
+  function closeOnFocusLeave(event: FocusEvent<HTMLDivElement>) {
+    if (!open) return;
+    if (
+      event.relatedTarget instanceof Node &&
+      event.currentTarget.contains(event.relatedTarget)
+    ) {
+      return;
+    }
+
+    const root = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      if (!root.contains(document.activeElement)) onDismiss();
+    });
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className={styles.chainSelector}
+      onBlur={closeOnFocusLeave}
+    >
+      <button
+        ref={triggerRef}
+        className={styles.chainTrigger}
+        type="button"
+        aria-controls={panelId}
+        aria-expanded={open}
+        aria-busy={!hydrated || undefined}
+        aria-label={
+          hydrated ? `Viewing ${currentLabel}. Change network` : "Loading network"
+        }
+        disabled={!hydrated}
+        title={hydrated ? currentLabel : undefined}
+        onClick={onToggle}
+      >
+        {hydrated ? (
+          <ViewChainMark viewChainId={viewChainId} />
+        ) : (
+          <span className={styles.chainMarkPlaceholder} aria-hidden="true" />
+        )}
+      </button>
+
+      <div
+        className={`${styles.chainPopover} ${
+          open ? styles.chainPopoverOpen : ""
+        }`}
+        aria-hidden={!open}
+        inert={open ? undefined : true}
+      >
+        <div
+          className={styles.chainPopoverSurface}
+          id={panelId}
+          role="group"
+          aria-label="Choose network"
+        >
+          <button
+            className={styles.chainOption}
+            type="button"
+            tabIndex={open ? undefined : -1}
+            data-view-chain-id={alternateViewChainId}
+            onClick={() => {
+              setViewChainId(alternateViewChainId);
+              onSelect();
+            }}
+          >
+            <span className={styles.chainOptionMark} aria-hidden="true">
+              <ViewChainMark viewChainId={alternateViewChainId} />
+            </span>
+            <span className={styles.chainOptionCopy}>
+              <strong>{alternateLabel}</strong>
+              <small>{alternateStatus}</small>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SiteHeader() {
   const pathname = usePathname();
   const menuId = useId();
+  const chainPanelId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const chainSelectorRef = useRef<HTMLDivElement>(null);
+  const chainButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPath, setMenuPath] = useState<string | null>(null);
+  const [chainSelectorOpen, setChainSelectorOpen] = useState(false);
   const menuOpen = menuPath === pathname;
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !chainSelectorOpen) return;
 
     const closeOnOutsidePress = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !headerRef.current?.contains(event.target)
-      ) {
+      if (!(event.target instanceof Node)) return;
+      if (menuOpen && !headerRef.current?.contains(event.target)) {
         setMenuPath(null);
+      }
+      if (
+        chainSelectorOpen &&
+        !chainSelectorRef.current?.contains(event.target)
+      ) {
+        setChainSelectorOpen(false);
       }
     };
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setMenuPath(null);
-      menuButtonRef.current?.focus();
+      if (chainSelectorOpen) {
+        setChainSelectorOpen(false);
+        chainButtonRef.current?.focus();
+        return;
+      }
+      if (menuOpen) {
+        setMenuPath(null);
+        menuButtonRef.current?.focus();
+      }
     };
 
     document.addEventListener("pointerdown", closeOnOutsidePress);
@@ -308,7 +464,7 @@ export function SiteHeader() {
       document.removeEventListener("pointerdown", closeOnOutsidePress);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [menuOpen]);
+  }, [chainSelectorOpen, menuOpen]);
 
   function closeOnFocusLeave(event: FocusEvent<HTMLElement>) {
     if (!menuOpen) return;
@@ -354,6 +510,24 @@ export function SiteHeader() {
         <DesktopNavigation />
 
         <div className={`header-actions ${styles.headerActions}`}>
+          <HeaderChainSelector
+            open={chainSelectorOpen}
+            panelId={chainPanelId}
+            rootRef={chainSelectorRef}
+            triggerRef={chainButtonRef}
+            onDismiss={() => setChainSelectorOpen(false)}
+            onToggle={() => {
+              setMenuPath(null);
+              setChainSelectorOpen((open) => !open);
+            }}
+            onSelect={() => {
+              setChainSelectorOpen(false);
+              if (isRobinhoodUnavailableRoute(pathname)) return;
+              window.requestAnimationFrame(() => {
+                chainButtonRef.current?.focus({ preventScroll: true });
+              });
+            }}
+          />
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
@@ -361,7 +535,10 @@ export function SiteHeader() {
             aria-controls={menuId}
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMenuPath(menuOpen ? null : pathname)}
+            onClick={() => {
+              setChainSelectorOpen(false);
+              setMenuPath(menuOpen ? null : pathname);
+            }}
           >
             <span className={styles.menuIcon} aria-hidden="true">
               <NavigationMenuIcon

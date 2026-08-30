@@ -1343,7 +1343,7 @@
 
 .profileSkeletonInline {
   margin-block-start: 34px;
-  min-height: 398px;
+  min-height: 360px;
   padding-block-start: 0;
 }
 
@@ -1369,8 +1369,8 @@
 .profileSkeletonBar,
 .profileSkeletonTabs,
 .profileSkeletonRow > span {
-  animation: profile-skeleton-pulse 1.4s ease-in-out infinite alternate;
-  background: color-mix(in srgb, var(--text) 9%, transparent);
+  animation: profile-skeleton-pulse 1.35s ease-in-out infinite alternate;
+  background: var(--skeleton-base);
 }
 
 .profileSkeletonBanner {
@@ -1420,7 +1420,7 @@
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-height: 398px;
+  min-height: 360px;
 }
 
 .profileSkeletonWorkspacePage {
@@ -1441,6 +1441,11 @@
 .profileSkeletonSummary,
 .profileSkeletonClaims {
   min-height: 360px;
+}
+
+.profileSkeletonClaims {
+  align-content: start;
+  gap: 12px;
 }
 
 .profileSkeletonSection {
@@ -1515,9 +1520,24 @@
   height: 44px;
 }
 
+.profileSkeletonLaunch .profileSkeletonRow {
+  gap: 9px;
+  grid-template-columns: 42px minmax(0, 1fr) 364px;
+  min-height: 71px;
+  padding: 7px 8px;
+}
+
+.profileSkeletonLaunch .profileSkeletonRow > span:first-child {
+  border-radius: 10px;
+  height: 42px;
+}
+
+.profileSkeletonLaunch .profileSkeletonRow > span:last-child {
+  border-radius: 10px;
+}
+
 @keyframes profile-skeleton-pulse {
-  from { opacity: 0.48; }
-  to { opacity: 0.9; }
+  to { background-color: var(--skeleton-highlight); }
 }
 
 .accountState {
@@ -2644,8 +2664,8 @@
   }
 
   .profileSkeletonLaunch .profileSkeletonRow {
-    grid-template-columns: 44px minmax(0, 1fr);
-    min-height: 142.5px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 143px;
   }
 
   .profileSkeletonLaunch .profileSkeletonRow > span:last-child {

@@ -42,6 +42,7 @@ import type { ExploreSort } from "../../../lib/onchain/types";
 import { canonicalSha256 } from
   "../../../lib/server/projection-target/hashing";
 import type { ExploreEntry } from "../../../lib/tokens";
+import { tryParseViewChainId } from "../../../lib/view-chain";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -86,6 +87,7 @@ function exploreLaunchSourceV1(input: Readonly<{
 }
 
 const EXPLORE_QUERY_PARAMETERS = new Set([
+  "chain",
   "limit",
   "model",
   "page",
@@ -346,8 +348,48 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const chainValue = search.get("chain");
+  const chain = chainValue === null ? 1 : tryParseViewChainId(chainValue);
+  if (chain === null) {
+    return NextResponse.json(
+      { error: "Unsupported chain" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  if (chain === 4663) {
+    const pageSize = positiveInteger(
+      integerQuery(search.get("limit"), 9),
+      9,
+      100,
+    );
+    return NextResponse.json(
+      {
+        status: "not-deployed" as const,
+        activationStage: "planned-not-deployed" as const,
+        chainId: chain,
+        tokens: [],
+        page: 1,
+        pageSize,
+        total: 0,
+        totalPages: 0,
+        sort: parseExploreSort(search.get("sort")),
+        query: search.get("q")?.trim() ?? "",
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
+          "X-Programmable-Chain-Id": String(chain),
+          "X-Programmable-Read-Source": "planned-not-deployed",
+        },
+      },
+    );
+  }
+
   try {
     const options = {
+      chain,
       query: search.get("q")?.trim() ?? "",
       sort: parseExploreSort(search.get("sort")),
       page: integerQuery(search.get("page"), 1),
@@ -476,17 +518,18 @@ export async function GET(request: NextRequest) {
     const identityAsOfBlockHash = routerOwnsAggregateBoundary
       ? acceptedRouterSnapshot!.asOfBlockHash
       : catalog!.asOfBlockHash;
-    const identityGeneratedAt = catalog?.generatedAt ??
-      acceptedRouterSnapshot!.generatedAt;
+    const identityGeneratedAt = routerOwnsAggregateBoundary
+      ? acceptedRouterSnapshot!.generatedAt
+      : catalog!.generatedAt;
     const publicIdentityEntries = publicExploreCatalogEntriesV1(
       identityEntries,
-    );
+    ).filter((entry) => entryChainId(entry) === String(options.chain));
     const presentedPublicEntries = publicIdentityEntries.map(
       publicExplorePresentationEntryV1,
     );
     const identityCommitment = catalog === null
       ? canonicalSha256("programmable.public-identity-fallback.v1", {
-          chainId: 1,
+          chainId: options.chain,
           launchSource: ROUTER_CUSTOM_LAUNCH_SOURCE,
           asOfBlock: identityAsOfBlock,
           entries: publicIdentityEntries,
@@ -594,6 +637,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         status: "ready" as const,
+        chainId: options.chain,
         ...paginated,
         tokens: pageEntries.map(publicExploreEntryV1),
         sort: options.sort,
@@ -670,6 +714,7 @@ export async function GET(request: NextRequest) {
           "Cache-Control":
             "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
           "X-Programmable-Data-Quality": dataQuality.status,
+          "X-Programmable-Chain-Id": String(options.chain),
           "X-Programmable-Launch-Source": launchSource,
           "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
           "X-Programmable-Market-Read-Status": marketRead.status,

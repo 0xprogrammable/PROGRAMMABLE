@@ -24,7 +24,20 @@ describe("Explore UI contract", () => {
     expect(page).not.toContain("AbortSignal.timeout(");
     expect(page).not.toContain('fetch("https://programmable.market');
     expect(page).toContain("initialResponse={initialResponse}");
+    expect(page).toContain("initialResponseChainId={viewChainId}");
     expect(page).toContain("initialModelFilter={modelFilter}");
+    expect(page).toContain("requestCookies.get(VIEW_CHAIN_COOKIE_NAME)");
+    expect(page).toContain("initialExploreQuery(modelFilter, viewChainId)");
+    expect(source).toContain("hydrated: viewChainReady");
+    expect(source).toContain("viewChainId: resolvedViewChainId");
+    expect(source).toContain(
+      "!viewChainReady && initialResponseChainId !== undefined",
+    );
+    expect(source).toContain("chain: String(viewChainId)");
+    expect(source).toContain("const chainContentKey = `${viewChainId}`");
+    expect(source).toContain(
+      'initialState?.phase === "ready" ? initialState : null',
+    );
     expect(source).not.toContain(
       "if (handledRequestKey.current === requestKey)",
     );
@@ -252,7 +265,7 @@ describe("Explore UI contract", () => {
       /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*12px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*12px;/s,
     );
     expect(source).toMatch(
-      /<small title="Fully diluted valuation">FDV<\/small>[\s\S]*?valuationLabel \?\? token\.marketStatus \?\? "Unavailable"/,
+      /<small title="Fully diluted valuation">FDV<\/small>[\s\S]*?<AnimatedMarketCap[\s\S]*?replayKey=\{token\.id\}[\s\S]*?token\.marketStatus \?\? "Unavailable"/,
     );
     expect(source).not.toContain(
       "exploreUnavailableFdvLabel(token.marketStatus)",

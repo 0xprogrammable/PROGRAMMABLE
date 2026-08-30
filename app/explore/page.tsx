@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextRequest } from "next/server";
 import { Suspense } from "react";
 
@@ -10,6 +10,11 @@ import type {
   ExploreModelFilter,
 } from "@/components/explore-view";
 import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
+import {
+  parseViewChainId,
+  VIEW_CHAIN_COOKIE_NAME,
+  type ViewChainId,
+} from "@/lib/view-chain";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +23,7 @@ export const dynamic = "force-dynamic";
 // browser, while keeping the initial render strictly bounded.
 export const INITIAL_EXPLORE_TIMEOUT_MS = 8_500;
 export const INITIAL_EXPLORE_QUERY = new URLSearchParams({
+  chain: "1",
   q: "",
   sort: DEFAULT_EXPLORE_VIEW_SORT,
   page: "1",
@@ -36,8 +42,12 @@ export function initialExploreModelFilter(
   return "all";
 }
 
-export function initialExploreQuery(modelFilter: ExploreModelFilter) {
+export function initialExploreQuery(
+  modelFilter: ExploreModelFilter,
+  viewChainId: ViewChainId = 1,
+) {
   const query = new URLSearchParams(INITIAL_EXPLORE_QUERY);
+  query.set("chain", String(viewChainId));
   if (modelFilter !== "all") {
     query.set(
       "model",
@@ -97,10 +107,15 @@ function isLocalPreviewHost(host: string | null) {
 async function InitialExploreView({
   searchParams,
 }: Readonly<{ searchParams: ExplorePageSearchParams }>) {
-  const [requestHeaders, resolvedSearchParams] = await Promise.all([
-    headers(),
-    searchParams,
-  ]);
+  const [requestHeaders, requestCookies, resolvedSearchParams] =
+    await Promise.all([
+      headers(),
+      cookies(),
+      searchParams,
+    ]);
+  const viewChainId = parseViewChainId(
+    requestCookies.get(VIEW_CHAIN_COOKIE_NAME)?.value,
+  );
   const modelFilter = initialExploreModelFilter(resolvedSearchParams.model);
   if (isLocalPreviewHost(requestHeaders.get("host"))) {
     return <ExploreView initialModelFilter={modelFilter} />;
@@ -110,7 +125,7 @@ async function InitialExploreView({
     async (signal) => {
       // prettier-ignore
       const response = await readExploreResponse(new NextRequest(
-        `http://programmable.local/api/explore?${initialExploreQuery(modelFilter)}`,
+        `http://programmable.local/api/explore?${initialExploreQuery(modelFilter, viewChainId)}`,
         {
           headers: { Accept: "application/json" },
           signal,
@@ -124,6 +139,7 @@ async function InitialExploreView({
   return (
     <ExploreView
       initialResponse={initialResponse}
+      initialResponseChainId={viewChainId}
       initialModelFilter={modelFilter}
     />
   );

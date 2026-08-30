@@ -113,12 +113,78 @@ describe("Explore background revalidation", () => {
     );
 
     expect(stable.tokens.map((token) => token.id)).toEqual([
-      "1:added",
       "1:known",
       "1:second",
     ]);
-    expect(stable.tokens[1]?.valuation).toEqual(known.valuation);
-    expect(stable.total).toBe(3);
+    expect(stable.tokens[0]?.valuation).toEqual(known.valuation);
+    expect(stable.total).toBe(2);
+  });
+
+  it("updates the public FDV compatibility value with an accepted observation", () => {
+    const previousToken = {
+      exploreKind: "token" as const,
+      id: "1:known",
+      tokenAddress: `0x${"11".repeat(20)}` as const,
+      fdvUsdWad: "1000000000000000000",
+      valuation: {
+        status: "available" as const,
+        metric: "fdv" as const,
+        supplyBasis: "total" as const,
+        currency: "usd" as const,
+        valueWad: "1000000000000000000",
+        freshness: "current" as const,
+      },
+    };
+    const incomingToken = {
+      ...previousToken,
+      fdvUsdWad: "2000000000000000000",
+      valuation: {
+        ...previousToken.valuation,
+        valueWad: "2000000000000000000",
+      },
+    };
+    const previous = {
+      ...explorePayload("ready"),
+      tokens: [previousToken],
+      total: 1,
+      totalPages: 1,
+    };
+    const incoming = {
+      ...previous,
+      tokens: [incomingToken],
+    };
+
+    const stable = stabilizeExploreRevalidationPayload(
+      previous as never,
+      incoming as never,
+    );
+
+    expect(stable.tokens[0]?.valuation).toEqual(incomingToken.valuation);
+    expect(
+      (stable.tokens[0] as typeof incomingToken | undefined)?.fdvUsdWad,
+    ).toBe(incomingToken.fdvUsdWad);
+  });
+
+  it("accepts an authoritative identity replacement when the commitment changes", () => {
+    const previous = {
+      ...explorePayload("ready"),
+      tokens: [{ id: "1:old", valuation: { status: "unavailable" } }],
+      total: 1,
+      totalPages: 1,
+    };
+    const incoming = {
+      ...previous,
+      tokens: [{ id: "1:new", valuation: { status: "unavailable" } }],
+      catalog: {
+        ...catalog,
+        identityCommitment: `sha256:${"ef".repeat(32)}`,
+      },
+    };
+
+    expect(stabilizeExploreRevalidationPayload(
+      previous as never,
+      incoming as never,
+    )).toBe(incoming);
   });
 
   it("runs only when the tab is visible, online and due", () => {
@@ -212,7 +278,7 @@ describe("Explore background revalidation", () => {
     const scheduler = createExploreRevalidationScheduler({
       visibilityState: () => "visible",
       online: () => true,
-      now: () => 20_000,
+      now: () => 5_000 + EXPLORE_REVALIDATION_INTERVAL_MS,
       lastRevalidationAt: 5_000,
       setTimeout(callback, delayMs) {
         timers.push({ callback, delayMs });
@@ -234,10 +300,18 @@ describe("Explore background revalidation", () => {
     };
 
     expect(
-      isExploreModelDatasetCacheFresh(cached, "combined-sort", 19_999),
+      isExploreModelDatasetCacheFresh(
+        cached,
+        "combined-sort",
+        5_000 + EXPLORE_REVALIDATION_INTERVAL_MS - 1,
+      ),
     ).toBe(true);
     expect(
-      isExploreModelDatasetCacheFresh(cached, "combined-sort", 20_000),
+      isExploreModelDatasetCacheFresh(
+        cached,
+        "combined-sort",
+        5_000 + EXPLORE_REVALIDATION_INTERVAL_MS,
+      ),
     ).toBe(false);
     expect(isExploreModelDatasetCacheFresh(cached, "other", 5_001)).toBe(
       false,
@@ -347,13 +421,13 @@ describe("Explore background revalidation", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("does not reorder a visible Explore page on an automatic timer", () => {
+  it("refreshes without putting background work in the visible request key", () => {
     const source = readFileSync(
       join(process.cwd(), "components/explore-view.tsx"),
       "utf8",
     );
 
-    expect(source).not.toContain(
+    expect(source).toContain(
       "const [revalidationKey, setRevalidationKey] = useState(0)",
     );
     expect(source).toContain(
@@ -367,10 +441,12 @@ describe("Explore background revalidation", () => {
     );
     expect(source).toContain("modelDatasetCache.current = null;");
     expect(source).toContain("updatedAt: Date.now(),");
-    expect(source).not.toContain("revalidationKey === 0");
-    expect(source).not.toContain('document.addEventListener("visibilitychange"');
-    expect(source).not.toContain('window.addEventListener("online"');
-    expect(source).not.toContain('window.addEventListener("offline"');
-    expect(source).not.toContain("scheduler.dispose();");
+    expect(source).toContain("revalidationKey === 0");
+    expect(source).toContain('document.addEventListener("visibilitychange"');
+    expect(source).toContain('window.addEventListener("focus"');
+    expect(source).toContain('window.addEventListener("online"');
+    expect(source).toContain('window.addEventListener("offline"');
+    expect(source).toContain("stabilizeExploreRevalidationPayload(");
+    expect(source).toContain("scheduler.dispose();");
   });
 });

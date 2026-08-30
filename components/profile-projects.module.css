@@ -347,8 +347,8 @@
 .skeletonArt,
 .skeletonCopy span,
 .skeletonAction {
-  animation: profile-project-skeleton 1.4s ease-in-out infinite alternate;
-  background: color-mix(in srgb, var(--text, #fff) 9%, transparent);
+  animation: profile-project-skeleton 1.35s ease-in-out infinite alternate;
+  background: var(--skeleton-base);
 }
 
 .skeletonArt {
@@ -393,8 +393,7 @@
 }
 
 @keyframes profile-project-skeleton {
-  from { opacity: 0.48; }
-  to { opacity: 0.9; }
+  to { background-color: var(--skeleton-highlight); }
 }
 
 .actions {

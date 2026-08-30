@@ -7,7 +7,7 @@
 }
 
 .headerActions.headerActions {
-  gap: 0;
+  gap: 4px;
   grid-column: 3;
 }
 
@@ -44,6 +44,172 @@
 .menuButton:focus-visible {
   outline: 2px solid var(--brand-ivory);
   outline-offset: 2px;
+}
+
+.chainSelector {
+  flex: none;
+  position: relative;
+}
+
+.chainTrigger {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--navigation-glass-ink);
+  display: inline-flex;
+  flex: none;
+  height: 48px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
+  width: 48px;
+}
+
+.chainTrigger:active {
+  transform: scale(0.96);
+}
+
+.chainTrigger:disabled {
+  cursor: wait;
+}
+
+.chainTrigger:focus-visible {
+  outline: 2px solid var(--brand-ivory);
+  outline-offset: 2px;
+}
+
+.ethereumChainMark {
+  display: block;
+  height: 23px;
+  width: 23px;
+}
+
+.chainMarkPlaceholder {
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 50%;
+  display: block;
+  height: 20px;
+  width: 20px;
+}
+
+.robinhoodChainMark {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  display: inline-flex;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  font-weight: 600;
+  height: 23px;
+  justify-content: center;
+  line-height: 1;
+  width: 23px;
+}
+
+.chainPopover {
+  inset-inline-end: -52px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  transform: translate3d(0, -4px, 0) scale(0.98);
+  transform-origin: top right;
+  transition:
+    opacity 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 180ms;
+  visibility: hidden;
+  width: min(236px, calc(100vw - 32px));
+  z-index: 100;
+}
+
+.chainPopoverOpen {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    opacity 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 0s;
+  visibility: visible;
+}
+
+.chainPopoverSurface {
+  -webkit-backdrop-filter: blur(28px) saturate(1.08);
+  backdrop-filter: blur(28px) saturate(1.08);
+  background: rgb(14 15 18 / 0.96);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 16px;
+  box-shadow: 0 20px 52px rgb(0 0 0 / 0.52);
+  padding: 6px;
+}
+
+.chainOption {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: var(--navigation-glass-ink);
+  display: flex;
+  font-family: var(--font-instrument), sans-serif;
+  gap: 10px;
+  min-height: 54px;
+  padding: 6px 9px;
+  text-align: start;
+  transition:
+    background-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
+  width: 100%;
+}
+
+.chainOption:active {
+  transform: scale(0.98);
+}
+
+.chainOption:focus-visible {
+  outline: 2px solid var(--brand-ivory);
+  outline-offset: -2px;
+}
+
+.chainOptionMark {
+  align-items: center;
+  background: rgb(255 255 255 / 0.055);
+  border: 1px solid rgb(255 255 255 / 0.09);
+  border-radius: 10px;
+  display: inline-flex;
+  flex: none;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.chainOptionMark .ethereumChainMark,
+.chainOptionMark .robinhoodChainMark {
+  height: 20px;
+  width: 20px;
+}
+
+.chainOptionCopy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chainOptionCopy strong {
+  font-size: 14px;
+  font-weight: 620;
+  line-height: 1.1;
+}
+
+.chainOptionCopy small {
+  color: var(--navigation-glass-ink-muted);
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .menuIcon {
@@ -332,9 +498,15 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .menuButton:hover {
+  .menuButton:hover,
+  .chainTrigger:hover {
     background: rgb(255 255 255 / 0.06);
     border-color: rgb(255 255 255 / 0.08);
+  }
+
+  .chainOption:hover {
+    background: rgb(255 255 255 / 0.065);
+    border-color: rgb(255 255 255 / 0.07);
   }
 
   .mobileSheet.mobileSheet :global(.mobile-nav a:hover) {
@@ -389,6 +561,9 @@
 @media (prefers-reduced-motion: reduce) {
   .menuButton,
   .menuIcon svg,
+  .chainTrigger,
+  .chainPopover,
+  .chainOption,
   .mobileSheet,
   .mobileSheet.mobileSheet :global(.mobile-nav a),
   .disconnectWallet {
@@ -400,12 +575,17 @@
 
 @media (forced-colors: active) {
   .menuButton,
+  .chainTrigger,
+  .chainPopoverSurface,
+  .chainOption,
   .mobileSheetSurface {
     border-color: CanvasText;
     box-shadow: none;
   }
 
   .menuButton:focus-visible,
+  .chainTrigger:focus-visible,
+  .chainOption:focus-visible,
   .mobileSheet.mobileSheet :global(.mobile-nav a:focus-visible),
   .disconnectWallet:focus-visible,
   .connectWallet:focus-visible {

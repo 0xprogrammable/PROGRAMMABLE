@@ -7,6 +7,8 @@ export type MarketCapMetric =
   | { kind: "eth"; value: number }
   | { kind: "quote"; symbol: string; value: number };
 
+export const MARKET_CAP_ANIMATION_DURATION_MS = 220;
+
 const useClientLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
 
@@ -61,14 +63,6 @@ export function formatMarketCapMetric(
   );
 }
 
-export function getMarketCapAnimationKey(
-  metric: MarketCapMetric,
-  replayKey: string,
-) {
-  const symbol = metric.kind === "quote" ? metric.symbol : "";
-  return `${replayKey}\u0000${metric.kind}\u0000${symbol}\u0000${metric.value}`;
-}
-
 function formatMarketCapValue(
   kind: MarketCapMetric["kind"],
   target: number,
@@ -87,6 +81,57 @@ function formatMarketCapValue(
   return `${formatted} ${kind === "eth" ? "ETH" : symbol}`;
 }
 
+function hasSameMetricIdentity(
+  previousMetric: MarketCapMetric,
+  nextMetric: MarketCapMetric,
+) {
+  if (previousMetric.kind !== nextMetric.kind) return false;
+
+  return previousMetric.kind !== "quote" ||
+    (nextMetric.kind === "quote" &&
+      previousMetric.symbol === nextMetric.symbol);
+}
+
+export function shouldAnimateMarketCapChange({
+  nextMetric,
+  nextReplayKey,
+  previousMetric,
+  previousReplayKey,
+  reducedMotion,
+}: Readonly<{
+  nextMetric: MarketCapMetric;
+  nextReplayKey: string;
+  previousMetric: MarketCapMetric | null;
+  previousReplayKey: string | null;
+  reducedMotion: boolean;
+}>) {
+  if (
+    previousMetric === null ||
+    previousReplayKey !== nextReplayKey ||
+    reducedMotion ||
+    !hasSameMetricIdentity(previousMetric, nextMetric) ||
+    !Number.isFinite(previousMetric.value) ||
+    !Number.isFinite(nextMetric.value) ||
+    previousMetric.value <= 0 ||
+    nextMetric.value <= 0 ||
+    Object.is(previousMetric.value, nextMetric.value)
+  ) {
+    return false;
+  }
+
+  return formatMarketCapMetric(previousMetric) !== formatMarketCapMetric(nextMetric);
+}
+
+export function interpolateMarketCapValue(
+  fromValue: number,
+  toValue: number,
+  progress: number,
+) {
+  const clampedProgress = Math.min(1, Math.max(0, progress));
+  const easedProgress = 1 - Math.pow(1 - clampedProgress, 3);
+  return fromValue + (toValue - fromValue) * easedProgress;
+}
+
 export function AnimatedMarketCap({
   delay = 0,
   metric,
@@ -97,91 +142,135 @@ export function AnimatedMarketCap({
   replayKey: string;
 }) {
   const valueRef = useRef<HTMLSpanElement>(null);
-  const completedAnimationKeyRef = useRef<string | null>(null);
+  const currentValueRef = useRef(metric.value);
+  const previousSnapshotRef = useRef<{
+    metric: MarketCapMetric;
+    replayKey: string;
+  } | null>(null);
   const kind = metric.kind;
   const value = metric.value;
   const symbol = metric.kind === "quote" ? metric.symbol : "";
-  const animationKey = getMarketCapAnimationKey(metric, replayKey);
-  const finalLabel = formatMarketCapValue(
-    kind,
-    value,
-    symbol,
-    value,
-  );
+  const finalLabel = formatMarketCapValue(kind, value, symbol, value);
 
   useClientLayoutEffect(() => {
     const element = valueRef.current;
     if (!element) return;
 
-    if (completedAnimationKeyRef.current === animationKey) {
-      element.textContent = finalLabel;
-      return;
-    }
-
+    const nextMetric: MarketCapMetric =
+      kind === "quote"
+        ? { kind, symbol, value }
+        : { kind, value };
+    const previousSnapshot = previousSnapshotRef.current;
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    if (reducedMotion || value <= 0) {
+    const shouldAnimate = shouldAnimateMarketCapChange({
+      nextMetric,
+      nextReplayKey: replayKey,
+      previousMetric: previousSnapshot?.metric ?? null,
+      previousReplayKey: previousSnapshot?.replayKey ?? null,
+      reducedMotion,
+    });
+    const fromValue = currentValueRef.current;
+
+    previousSnapshotRef.current = {
+      metric: nextMetric,
+      replayKey,
+    };
+
+    if (
+      !shouldAnimate ||
+      !Number.isFinite(fromValue) ||
+      Object.is(fromValue, value)
+    ) {
       element.textContent = finalLabel;
-      completedAnimationKeyRef.current = animationKey;
+      currentValueRef.current = value;
       return;
     }
 
     let animationFrame = 0;
     let delayTimer = 0;
-    const duration = 520;
+    const normalizedDelay = Number.isFinite(delay) ? Math.max(0, delay) : 0;
 
-    element.textContent = formatMarketCapValue(kind, value, symbol, 0);
+    element.textContent = formatMarketCapValue(
+      kind,
+      value,
+      symbol,
+      fromValue,
+    );
 
     delayTimer = window.setTimeout(() => {
       const start = performance.now();
 
       const tick = (now: number) => {
-        const elapsed = Math.min(1, (now - start) / duration);
-        const eased = 1 - Math.pow(1 - elapsed, 3);
+        const progress = (now - start) / MARKET_CAP_ANIMATION_DURATION_MS;
+        const nextValue = interpolateMarketCapValue(
+          fromValue,
+          value,
+          progress,
+        );
+
+        currentValueRef.current = nextValue;
         element.textContent = formatMarketCapValue(
           kind,
           value,
           symbol,
-          value * eased,
+          nextValue,
         );
 
-        if (elapsed < 1) {
+        if (progress < 1) {
           animationFrame = window.requestAnimationFrame(tick);
-        } else {
-          element.textContent = finalLabel;
-          completedAnimationKeyRef.current = animationKey;
+          return;
         }
+
+        currentValueRef.current = value;
+        element.textContent = finalLabel;
       };
 
       animationFrame = window.requestAnimationFrame(tick);
-    }, delay);
+    }, normalizedDelay);
 
     return () => {
       window.clearTimeout(delayTimer);
       window.cancelAnimationFrame(animationFrame);
     };
-  }, [
-    animationKey,
-    delay,
-    finalLabel,
-    kind,
-    symbol,
-    value,
-  ]);
+  }, [delay, finalLabel, kind, replayKey, symbol, value]);
 
   return (
     <strong
       className="animated-market-cap"
-      style={{ position: "relative" }}
+      style={{
+        display: "inline-grid",
+        fontVariantNumeric: "tabular-nums",
+        inlineSize: "100%",
+        maxInlineSize: "100%",
+        minInlineSize: "7ch",
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+      }}
+      title={finalLabel}
     >
-      <span aria-hidden="true" style={{ visibility: "hidden" }}>
+      <span
+        aria-hidden="true"
+        style={{
+          gridArea: "1 / 1",
+          minInlineSize: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          visibility: "hidden",
+        }}
+      >
         {finalLabel}
       </span>
       <span
         aria-hidden="true"
         ref={valueRef}
-        style={{ inset: 0, position: "absolute" }}
+        style={{
+          gridArea: "1 / 1",
+          minInlineSize: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
       >
         {finalLabel}
       </span>
