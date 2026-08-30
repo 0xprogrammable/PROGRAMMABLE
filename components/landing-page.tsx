@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-import { ExploreView } from "@/components/explore-view";
+import { LandingExploreGate } from "@/components/landing-explore-gate";
 import styles from "@/components/landing-page.module.css";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
@@ -48,6 +48,7 @@ export function LandingPage() {
 
       const chapter = document.getElementById("explore");
       const header = document.querySelector<HTMLElement>(".header-inner");
+      if (chapter) chapter.dataset.visible = "true";
       const target = chapter?.querySelector<HTMLElement>("[data-explore-heading]") ?? chapter;
       if (!target) return;
 
@@ -250,7 +251,7 @@ export function LandingPage() {
         id="explore"
         data-reveal-section
       >
-        <ExploreView embedded />
+        <LandingExploreGate />
       </div>
     </article>
   );

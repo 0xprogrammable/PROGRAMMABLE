@@ -64,7 +64,7 @@ describe("landing page contract", () => {
     expect(landing).toContain('id="what-is-programmable"');
     expect(landing).toContain('id="what-is-a-hook"');
     expect(landing).toContain('id="explore"');
-    expect(landing).toContain("<ExploreView embedded />");
+    expect(landing).toContain("<LandingExploreGate />");
     expect(landing).toContain('href="/docs"');
     expect(landing).toContain(
       'href="https://docs.uniswap.org/contracts/v4/overview"',
@@ -89,6 +89,38 @@ describe("landing page contract", () => {
         statSync(join(root, "public/brand/atmosphere", asset)).size,
       ).toBeLessThan(maximumBytes);
     }
+  });
+
+  it("loads the embedded Explore view near visibility without shifting its deep-link heading", () => {
+    const landing = read("components/landing-page.tsx");
+    const gate = read("components/landing-explore-gate.tsx");
+    const styles = read("components/landing-page.module.css");
+
+    expect(landing).not.toContain('from "@/components/explore-view"');
+    expect(landing).toContain(
+      'from "@/components/landing-explore-gate"',
+    );
+    expect(gate).toContain("if (!shouldLoad || ExploreComponent) return");
+    expect(gate).toContain('import("@/components/explore-view")');
+    expect(gate).toContain("setExploreComponent(() => module.ExploreView)");
+    expect(gate).toContain("Unable to load launches.");
+    expect(gate).toContain("Try again");
+    expect(gate).toContain('rootMargin: EXPLORE_LOAD_MARGIN');
+    expect(gate).toContain('const EXPLORE_LOAD_MARGIN = "720px 0px"');
+    expect(gate).toContain('window.location.hash === "#explore"');
+    expect(gate).toContain('window.addEventListener("hashchange"');
+    expect(gate).toContain('!("IntersectionObserver" in window)');
+    expect(gate).toContain("aria-busy={failed ? undefined : true}");
+    expect(gate).toContain('<h2 data-explore-heading>Explore</h2>');
+    expect(styles).toMatch(
+      /\.exploreGate\s*\{[^}]*min-height:\s*calc\(100svh - var\(--header-height\)\);/s,
+    );
+    expect(styles).toMatch(
+      /\.exploreFallback\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);[^}]*padding-block:\s*34px 70px;/s,
+    );
+    expect(styles).toMatch(
+      /\.exploreFallbackHeading\s*\{[^}]*min-height:\s*102px;/s,
+    );
   });
 
   it("keeps each landing chapter full-screen, readable and motion safe", () => {
@@ -123,6 +155,7 @@ describe("landing page contract", () => {
     expect(landing).toContain(
       'chapter?.querySelector<HTMLElement>("[data-explore-heading]")',
     );
+    expect(landing).toContain('chapter.dataset.visible = "true"');
     expect(landing).toContain('window.scrollTo({ behavior: "auto"');
     expect(landing).toContain("data-reveal-section");
     expect(landing).not.toContain('addEventListener("wheel"');

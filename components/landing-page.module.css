@@ -272,6 +272,69 @@
   scroll-margin-top: 88px;
 }
 
+.exploreGate {
+  min-height: calc(100svh - var(--header-height));
+}
+
+.exploreFallback {
+  min-height: calc(100svh - 88px);
+  padding-block: 34px 70px;
+}
+
+.exploreFallbackHeading {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
+  margin: 0;
+  max-width: none;
+  min-height: 102px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.exploreFallbackHeading h2 {
+  color: var(--webde-ink);
+  display: block;
+  font-size: clamp(58px, 6.5vw, 96px);
+  font-weight: 520;
+  letter-spacing: -0.062em;
+  line-height: 0.92;
+  margin: 0;
+  max-width: 100%;
+  text-shadow: none;
+  text-wrap: balance;
+}
+
+.exploreFallbackError {
+  color: var(--webde-muted);
+  font-size: 16px;
+  line-height: 1.5;
+  margin: -12px auto 0;
+  padding-inline: 24px;
+  text-align: center;
+}
+
+.exploreFallbackError button {
+  background: transparent;
+  border: 0;
+  color: var(--webde-ink);
+  cursor: pointer;
+  font: inherit;
+  min-height: 44px;
+  padding: 8px;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.exploreFallbackError button:focus-visible {
+  outline: 2px solid var(--webde-ink);
+  outline-offset: 2px;
+}
+
 @keyframes hero-reveal {
   from {
     opacity: 0;
@@ -460,6 +523,20 @@
   .exploreChapter {
     padding-top: 24px;
     scroll-margin-top: 72px;
+  }
+
+  .exploreFallback {
+    min-height: calc(100svh - 72px);
+    padding-block: 16px 48px;
+  }
+
+  .exploreFallbackHeading {
+    gap: 18px;
+    min-height: 0;
+  }
+
+  .exploreFallbackHeading h2 {
+    font-size: clamp(38px, 11vw, 48px);
   }
 }
 
