@@ -531,7 +531,7 @@ function authenticatedProviderBinding(pin, rpcUrl) {
     fail(`${pin.providerId} RPC endpoint violates its provider pin`);
   }
   const quicknode =
-    /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,62})\.quiknode\.pro\/[A-Za-z0-9_-]{16,256}\/$/u.test(
+    /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.robinhood-mainnet\.quiknode\.pro\/[A-Za-z0-9_-]{16,256}\/$/u.test(
       rpcUrl,
     ) &&
     !url.hostname.startsWith("docs-demo.") &&
