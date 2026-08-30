@@ -418,6 +418,7 @@ function HeaderChainSelector({
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const { preloadWallet } = useWallet();
   const menuId = useId();
   const chainPanelId = useId();
   const headerRef = useRef<HTMLElement>(null);
@@ -535,7 +536,10 @@ export function SiteHeader() {
             aria-controls={menuId}
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
+            onFocus={preloadWallet}
+            onPointerEnter={preloadWallet}
             onClick={() => {
+              preloadWallet();
               setChainSelectorOpen(false);
               setMenuPath(menuOpen ? null : pathname);
             }}

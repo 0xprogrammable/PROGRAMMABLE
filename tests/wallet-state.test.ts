@@ -8,7 +8,11 @@ import { ApplicantRefreshUserUnavailableErrorV1 } from
 
 type WalletProviderContract = {
   shouldEagerLoadWalletRuntime: (pathname: string) => boolean;
-  shouldBackgroundLoadWalletRuntime: (pathname: string) => boolean;
+  shouldBackgroundLoadWalletRuntime: (
+    pathname: string,
+    hasPersistedSessionHint: boolean,
+  ) => boolean;
+  isPersistedWalletSessionHint: (value: string | null) => boolean;
   assertExternalWalletAuthorityCurrent: (input: Readonly<{
     expectedAccount: `0x${string}`;
     expectedChainId: string;
@@ -156,15 +160,19 @@ describe("wallet recovery state", () => {
       "/admin/partners",
     ]) {
       expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(true);
-      expect(subject.shouldBackgroundLoadWalletRuntime(pathname)).toBe(false);
+      expect(subject.shouldBackgroundLoadWalletRuntime(pathname, true)).toBe(false);
     }
   });
 
-  it("hydrates browse-only routes in the background after first render", () => {
+  it("idle-loads browse-only routes only for a confirmed persisted session", () => {
     for (const pathname of ["/", "/explore", "/docs", "/docs/creators"]) {
       expect(subject.shouldEagerLoadWalletRuntime(pathname)).toBe(false);
-      expect(subject.shouldBackgroundLoadWalletRuntime(pathname)).toBe(true);
+      expect(subject.shouldBackgroundLoadWalletRuntime(pathname, false)).toBe(false);
+      expect(subject.shouldBackgroundLoadWalletRuntime(pathname, true)).toBe(true);
     }
+    expect(subject.isPersistedWalletSessionHint("authenticated")).toBe(true);
+    expect(subject.isPersistedWalletSessionHint("true")).toBe(false);
+    expect(subject.isPersistedWalletSessionHint(null)).toBe(false);
   });
 
   it("keeps Privy behind an explicit dynamic runtime boundary", () => {
@@ -176,11 +184,19 @@ describe("wallet recovery state", () => {
       join(process.cwd(), "components/wallet-provider-runtime.ts"),
       "utf8",
     );
+    const navigation = readFileSync(
+      join(process.cwd(), "components/site-navigation.tsx"),
+      "utf8",
+    );
 
     expect(provider).toContain('import("./wallet-provider-runtime")');
     expect(provider).toContain("onPointerEnter={preloadWallet}");
     expect(provider).toContain("onFocus={preloadWallet}");
-    expect(provider).toContain("globalThis.setTimeout(preload, 0)");
+    expect(provider).toContain("scheduleWalletRuntimeIdlePreload(preload)");
+    expect(provider).toContain("window.requestIdleCallback(preload");
+    expect(provider).toContain("configuredValue={configuredValue}");
+    expect(provider).toContain("onValueChange={setConfiguredValue}");
+    expect(provider).not.toContain("if (!runtime) {");
     expect(provider).toContain("const hydrationPending = !authReady");
     expect(provider).toContain(
       "const openingWallet = connecting && authReady",
@@ -188,7 +204,9 @@ describe("wallet recovery state", () => {
     expect(provider).toMatch(/openingWallet\s*\?\s*"Opening wallet"/u);
     expect(provider).toMatch(/hydrationPending\s*\?\s*"Loading wallet"/u);
     expect(provider).toContain("wallet-button-hydrating");
-    expect(provider).not.toContain("requestIdleCallback");
+    expect(navigation).toMatch(
+      /ref=\{menuButtonRef\}[\s\S]{0,300}onFocus=\{preloadWallet\}[\s\S]{0,120}onPointerEnter=\{preloadWallet\}/u,
+    );
     expect(provider).not.toMatch(
       /import\s*\{[\s\S]*?PrivyProvider[\s\S]*?\}\s*from\s*["']@privy-io\/react-auth["']/u,
     );

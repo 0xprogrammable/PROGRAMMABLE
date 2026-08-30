@@ -214,8 +214,13 @@ describe("Explore UI contract", () => {
 
     expect(source).toContain("export const EXPLORE_TOKENS_PER_PAGE = 9");
     expect(source).toContain("export const EXPLORE_MOBILE_TOKENS_PER_PAGE = 4");
-    expect(source).toContain("const pageSize = useExploreTokensPerPage()");
+    expect(source).toContain("useExplorePaginationViewport()");
     expect(source).toContain("limit: String(pageSize)");
+    expect(source.match(/subscribeToExploreViewport/gu)).toHaveLength(2);
+    expect(source).toContain("previousPageSize.current === pageSize");
+    expect(source).toContain("displayState.payload.pageSize !== pageSize");
+    expect(source).toContain("pendingMobilePagination");
+    expect(source).toContain("styles.viewportPendingPagination");
     expect(styles).toMatch(
       /\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[^}]*width:\s*100%;/s,
     );
@@ -228,6 +233,12 @@ describe("Explore UI contract", () => {
     );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 700px\)[\s\S]*?\.viewportPendingPagination\s*\{[^}]*visibility:\s*hidden;/s,
+    );
+    expect(styles).toMatch(
+      /@media \(min-width: 701px\)[\s\S]*?\.mobileOnlyPaginationPlaceholder\s*\{[^}]*display:\s*none;/s,
     );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerContract\s*\{[^}]*display:\s*inline-flex;[^}]*order:\s*3;/s,

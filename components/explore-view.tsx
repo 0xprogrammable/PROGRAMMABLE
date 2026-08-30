@@ -562,23 +562,30 @@ function subscribeToExploreViewport(onChange: () => void) {
   return () => query.removeEventListener("change", onChange);
 }
 
-function exploreMobileViewportSnapshot() {
-  return window.matchMedia(EXPLORE_MOBILE_MEDIA_QUERY).matches;
+type ExploreViewportSnapshot = "pending" | "mobile" | "desktop";
+
+function exploreViewportSnapshot(): ExploreViewportSnapshot {
+  return window.matchMedia(EXPLORE_MOBILE_MEDIA_QUERY).matches
+    ? "mobile"
+    : "desktop";
 }
 
-function exploreMobileViewportServerSnapshot() {
-  return false;
+function exploreViewportServerSnapshot(): ExploreViewportSnapshot {
+  return "pending";
 }
 
-function useExploreTokensPerPage() {
-  const mobile = useSyncExternalStore(
+function useExplorePaginationViewport() {
+  const viewport = useSyncExternalStore(
     subscribeToExploreViewport,
-    exploreMobileViewportSnapshot,
-    exploreMobileViewportServerSnapshot,
+    exploreViewportSnapshot,
+    exploreViewportServerSnapshot,
   );
-  return mobile
-    ? EXPLORE_MOBILE_TOKENS_PER_PAGE
-    : EXPLORE_TOKENS_PER_PAGE;
+  return {
+    ready: viewport !== "pending",
+    pageSize: viewport === "mobile"
+      ? EXPLORE_MOBILE_TOKENS_PER_PAGE
+      : EXPLORE_TOKENS_PER_PAGE,
+  } as const;
 }
 const QUERY_DEBOUNCE_MS = 200;
 const EXPLORE_REQUEST_TIMEOUT_MS = 12_000;
@@ -2655,7 +2662,8 @@ export function ExploreView({
     },
     [viewChainId],
   );
-  const pageSize = useExploreTokensPerPage();
+  const { pageSize, ready: exploreViewportReady } =
+    useExplorePaginationViewport();
   const [retryKey, setRetryKey] = useState(0);
   const [revalidationKey, setRevalidationKey] = useState(0);
   const [copyFeedback, setCopyFeedback] = useState("");
@@ -2751,9 +2759,12 @@ export function ExploreView({
     return () => window.clearTimeout(timer);
   }, [debouncedQuery, normalizedQuery, setCurrentPage]);
 
+  const previousPageSize = useRef(pageSize);
   useEffect(() => {
-    return subscribeToExploreViewport(() => setCurrentPage(1));
-  }, [setCurrentPage]);
+    if (previousPageSize.current === pageSize) return;
+    previousPageSize.current = pageSize;
+    setCurrentPage(1);
+  }, [pageSize, setCurrentPage]);
 
   useEffect(() => {
     function closeFilter(event: PointerEvent | KeyboardEvent) {
@@ -3071,6 +3082,23 @@ export function ExploreView({
   );
   const pageCount = Math.max(1, payload?.totalPages ?? 0);
   const activePage = Math.min(payload?.page ?? currentPage, pageCount);
+  const paginationGeometryPending =
+    !exploreViewportReady ||
+    (displayState.phase === "ready" &&
+      displayState.payload.status === "ready" &&
+      displayState.payload.pageSize !== pageSize);
+  const pendingMobilePagination =
+    paginationGeometryPending &&
+    displayState.phase === "ready" &&
+    displayState.payload.status === "ready" &&
+    displayState.payload.total > EXPLORE_MOBILE_TOKENS_PER_PAGE;
+  const showPagination =
+    displayState.phase === "ready" &&
+    displayState.payload.status === "ready" &&
+    displayState.payload.total > 0 &&
+    (pageCount > 1 || pendingMobilePagination);
+  const mobileOnlyPaginationPlaceholder =
+    pendingMobilePagination && pageCount === 1;
   const resultLabel =
     displayState.phase === "error" ? "" : resultRangeLabel(payload);
   const busy =
@@ -3613,19 +3641,29 @@ export function ExploreView({
                     </div>
                   </details>
 
-                  {displayState.phase === "ready" &&
-                  displayState.payload.status === "ready" &&
-                  displayState.payload.total > 0 &&
-                  pageCount > 1 ? (
+                  {showPagination ? (
                     <nav
-                      className="token-pagination liquid-glass-control"
+                      className={`token-pagination liquid-glass-control ${
+                        paginationGeometryPending
+                          ? styles.viewportPendingPagination
+                          : ""
+                      } ${
+                        mobileOnlyPaginationPlaceholder
+                          ? styles.mobileOnlyPaginationPlaceholder
+                          : ""
+                      }`}
                       aria-label="Launch pages"
+                      aria-busy={paginationGeometryPending || undefined}
                     >
                       <button
                         type="button"
                         aria-label="Previous launch page"
-                        aria-disabled={activePage === 1 || busy}
-                        disabled={activePage === 1 || busy}
+                        aria-disabled={
+                          activePage === 1 || busy || paginationGeometryPending
+                        }
+                        disabled={
+                          activePage === 1 || busy || paginationGeometryPending
+                        }
                         onClick={() => {
                           if (busy) return;
                           setCurrentPage((page) => Math.max(1, page - 1));
@@ -3641,8 +3679,16 @@ export function ExploreView({
                       <button
                         type="button"
                         aria-label="Next launch page"
-                        aria-disabled={activePage === pageCount || busy}
-                        disabled={activePage === pageCount || busy}
+                        aria-disabled={
+                          activePage === pageCount ||
+                          busy ||
+                          paginationGeometryPending
+                        }
+                        disabled={
+                          activePage === pageCount ||
+                          busy ||
+                          paginationGeometryPending
+                        }
                         onClick={() => {
                           if (busy) return;
                           setCurrentPage((page) =>
