@@ -1459,9 +1459,13 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
   rpcUrls,
   rpcEndpointCommitments,
   rpcClient = robinhoodFoundationRpc,
+  runtimeCodeHash = keccak256,
   requestTimeoutMs = ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_REQUEST_TIMEOUT_MS,
   clock = () => Date.now(),
 }) {
+  if (typeof runtimeCodeHash !== "function") {
+    fail("runtime code hasher is invalid");
+  }
   assertFreshRobinhoodFoundationOwnerEnvelope(receipt, clock());
   const operationSignal = AbortSignal.timeout(
     ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_OPERATION_MS,
@@ -1489,6 +1493,11 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
       { address },
     ]),
   );
+  const dependencyBindings = EXPECTED_DEPENDENCY_BINDINGS;
+  const codeBindings = {
+    ...dependencyBindings,
+    ...preparedBindings,
+  };
   const expectedNonce = parseQuantity(
     receipt.transaction.nonceQuantity,
     "owner-envelope nonce",
@@ -1584,7 +1593,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
         ),
         readCodes({
           provider,
-          bindings: preparedBindings,
+          bindings: codeBindings,
           blockTag: "pending",
           rpcClient,
           requestTimeoutMs,
@@ -1668,10 +1677,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     }
     verifyCodeSnapshot({
       snapshot: snapshot.codes,
-      dependencies: {},
+      dependencies: dependencyBindings,
       prepared: preparedBindings,
       label: `${providerId} action-time`,
-      runtimeCodeHash: keccak256,
+      runtimeCodeHash,
     });
     verifyVacancyNonces({
       snapshot: snapshot.vacancyNonces,
@@ -1760,7 +1769,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
           ),
           readCodes({
             provider,
-            bindings: preparedBindings,
+            bindings: codeBindings,
             blockTag: "pending",
             rpcClient,
             requestTimeoutMs,
@@ -1853,10 +1862,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     }
     verifyCodeSnapshot({
       snapshot: closing.codes,
-      dependencies: {},
+      dependencies: dependencyBindings,
       prepared: preparedBindings,
       label: `${providerId} action-time closing`,
-      runtimeCodeHash: keccak256,
+      runtimeCodeHash,
     });
     verifyVacancyNonces({
       snapshot: closing.vacancyNonces,

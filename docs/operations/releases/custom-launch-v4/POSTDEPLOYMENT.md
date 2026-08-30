@@ -155,6 +155,8 @@ URLs, paths, query credentials or tokens:
 ```text
 ROBINHOOD_MAINNET_RPC_URL_PRIMARY
 ROBINHOOD_MAINNET_RPC_URL_SECONDARY
+ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY
+ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY
 ETHEREUM_MAINNET_RPC_URL_PRIMARY
 ETHEREUM_MAINNET_RPC_URL_SECONDARY
 ```
@@ -168,9 +170,13 @@ forms. Robinhood QuickNode is exactly
 Ethereum QuickNode is
 `https://{endpoint-name}.ethereum-mainnet.quiknode.pro/{credential}/`. Userinfo, explicit ports,
 fragments, extra or reordered query parameters, wrong-chain paths and public endpoints fail before
-the first network request. The network-qualified hosts, chain IDs and complete retained readback
-inventories bind both QuickNode endpoints to their respective networks. Credential values and full
-URLs are never serialized or printed.
+the first network request. Before that request, the two Robinhood URLs must also hash to the exact
+review-frozen endpoint commitments. The two credential-free SHA-256 commitments are retained under
+`capture.l2ProviderEndpointCommitments` and therefore covered by the capture digest and portable
+attestation. Fresh Phase B replay hashes its supplied Robinhood URLs against those same attested
+commitments before its first provider request. The network-qualified hosts, chain IDs and complete
+retained readback inventories bind both QuickNode endpoints to their respective networks.
+Credential values and full URLs are never serialized or printed.
 
 The Phase A capture identities are Robinhood QuickNode **Hood Explorer Indexer** then Alchemy
 **Programmable Production 3**, and Ethereum dRPC then QuickNode. The Robinhood identities match the
@@ -359,7 +365,9 @@ sourceClosure
 capture
 ```
 
-`providers` contains normalized QuickNode then Alchemy L2 state. Those summaries are not authority.
+`capture.l2ProviderEndpointCommitments` contains exactly two distinct, ordered, review-frozen
+SHA-256 commitments for QuickNode then Alchemy. `providers` contains normalized QuickNode then
+Alchemy L2 state. Those summaries are not authority.
 Every claimed value is proven by both providers' ordered retained JSON-RPC inventory under
 `capture.l2ProviderReadbacks`: chain ID, raw and parsed transaction, successful receipt and logs,
 deployment/predecessor headers, D-1/D contract code, Safe configuration/storage, Router getters,

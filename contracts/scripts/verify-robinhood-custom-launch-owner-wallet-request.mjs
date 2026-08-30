@@ -205,6 +205,7 @@ export async function verifyRobinhoodOwnerWalletRequest({
   sourceIdentity = exactRobinhoodFoundationSourceIdentity,
   hostedVerifyResolver = resolveRobinhoodFoundationHostedVerify,
   rpcClient,
+  runtimeCodeHash,
   clock = () => Date.now(),
 } = {}) {
   const configuredRoot = env.ROBINHOOD_OWNER_ENVELOPE_ROOT;
@@ -264,6 +265,7 @@ export async function verifyRobinhoodOwnerWalletRequest({
       rpcUrls,
       rpcEndpointCommitments: endpointCommitments,
       ...(rpcClient ? { rpcClient } : {}),
+      ...(runtimeCodeHash ? { runtimeCodeHash } : {}),
       clock,
     });
   const closingSource = sourceIdentity();

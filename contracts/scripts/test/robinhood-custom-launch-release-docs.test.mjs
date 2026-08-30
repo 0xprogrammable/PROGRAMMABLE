@@ -20,6 +20,8 @@ test("operator runbooks use repo-root commands and independently frozen provider
     postdeployment,
     releaseReadme,
     phaseACapture,
+    captureWorkflow,
+    stageSchemaBytes,
   ] = await Promise.all([
     repositoryText("contracts/security/ROBINHOOD-CUSTOM-LAUNCH.md"),
     repositoryText(
@@ -39,8 +41,15 @@ test("operator runbooks use repo-root commands and independently frozen provider
     repositoryText(
       "contracts/scripts/capture-robinhood-custom-launch-postdeployment.mjs",
     ),
+    repositoryText(
+      ".github/workflows/capture-robinhood-custom-launch-postdeployment.yml",
+    ),
+    repositoryText(
+      "docs/operations/releases/custom-launch-v4/stage-bundle.schema.json",
+    ),
   ]);
   const packageJson = JSON.parse(packageBytes);
+  const stageSchema = JSON.parse(stageSchemaBytes);
 
   assert.match(
     security,
@@ -101,18 +110,50 @@ test("operator runbooks use repo-root commands and independently frozen provider
     handoff,
     /sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910/u,
   );
-  for (const historicalBoundary of [postdeployment, releaseReadme]) {
-    assert.match(historicalBoundary, /historical Phase A/u);
-    assert.match(historicalBoundary, /dRPC then\s+Alchemy/u);
-    assert.match(historicalBoundary, /QuickNode[\s\S]*Programmable Production 3/u);
+  for (const phaseABoundary of [postdeployment, releaseReadme]) {
+    assert.match(phaseABoundary, /Phase A[\s\S]*QuickNode[\s\S]*Alchemy/u);
+    assert.match(phaseABoundary, /owner(?:-wallet)? action-time/iu);
+    assert.match(phaseABoundary, /QuickNode[\s\S]*Programmable Production 3/u);
+    assert.doesNotMatch(
+      phaseABoundary,
+      /historical Phase A[\s\S]{0,200}dRPC then\s+Alchemy/u,
+    );
   }
   assert.match(
     phaseACapture,
-    /collectL2\(endpoints\.l2\[0\], \{ role: "primary", providerId: "drpc"/u,
+    /collectL2\(endpoints\.l2\[0\], \{ role: "primary", providerId: "quicknode"/u,
   );
   assert.match(
     phaseACapture,
     /collectL2\(endpoints\.l2\[1\], \{ role: "secondary", providerId: "alchemy"/u,
+  );
+  assert.match(
+    phaseACapture,
+    /ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY/u,
+  );
+  assert.match(
+    phaseACapture,
+    /assertRobinhoodCaptureL2EndpointCommitments/u,
+  );
+  for (const commitmentSecret of [
+    "ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY",
+    "ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY",
+  ]) {
+    assert.ok(
+      captureWorkflow.includes(
+        `${commitmentSecret}: \${{ secrets.${commitmentSecret} }}`,
+      ),
+    );
+  }
+  assert.ok(
+    stageSchema.$defs.captureClosure.required.includes(
+      "l2ProviderEndpointCommitments",
+    ),
+  );
+  assert.equal(
+    stageSchema.$defs.captureClosure.properties
+      .l2ProviderEndpointCommitments.uniqueItems,
+    true,
   );
   assert.doesNotMatch(security, /=<[^>]+>/u);
   assert.match(

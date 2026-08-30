@@ -51,9 +51,11 @@ but that digest is not backend readiness evidence by itself.
 
 Phase A deployment evidence uses the same ordered Robinhood provider identities,
 QuickNode then Alchemy, while Ethereum remains dRPC then QuickNode. Its separately
-supplied endpoints and retained inventories describe the providers that actually
-performed the postdeployment reads. Owner action-time commitments must never
-replace, relabel or re-hash that evidence.
+supplied endpoints must match the exact review-frozen owner action-time commitments
+before any provider request. Those credential-free commitments and the retained
+inventories describe the endpoints and providers that actually performed the
+postdeployment reads; fresh Phase B replay rechecks the same attested commitments.
+Commitments must never replace, relabel or re-hash the provider evidence itself.
 
 ## Per-contract deployment provenance
 

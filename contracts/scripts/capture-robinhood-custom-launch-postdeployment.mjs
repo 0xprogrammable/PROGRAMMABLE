@@ -33,6 +33,7 @@ import {
   ROBINHOOD_PRODUCTION_REPOSITORY_ID,
   ROBINHOOD_SEQUENCER_INBOX,
   SEQUENCER_BATCH_DELIVERED_TOPIC,
+  assertRobinhoodCaptureL2EndpointCommitments,
   buildRobinhoodPostdeploymentInput,
   buildRobinhoodPublicRpcEntry,
   createRobinhoodResponseBudget,
@@ -555,11 +556,18 @@ export async function captureRobinhoodPostdeployment(options) {
     l1: [process.env.ETHEREUM_MAINNET_RPC_URL_PRIMARY,
       process.env.ETHEREUM_MAINNET_RPC_URL_SECONDARY],
   };
+  const l2EndpointCommitments = [
+    process.env.ROBINHOOD_MAINNET_RPC_COMMITMENT_PRIMARY,
+    process.env.ROBINHOOD_MAINNET_RPC_COMMITMENT_SECONDARY,
+  ];
   if ([...endpoints.l2, ...endpoints.l1].some((value) => !value)) {
     throw new TypeError("capture requires four protected provider endpoints");
   }
-  validateRobinhoodCaptureEndpoint(endpoints.l2[0], "robinhood", "quicknode");
-  validateRobinhoodCaptureEndpoint(endpoints.l2[1], "robinhood", "alchemy");
+  const reviewedL2EndpointCommitments =
+    assertRobinhoodCaptureL2EndpointCommitments({
+      rpcUrls: endpoints.l2,
+      endpointCommitments: l2EndpointCommitments,
+    });
   validateRobinhoodCaptureEndpoint(endpoints.l1[0], "ethereum", "drpc");
   validateRobinhoodCaptureEndpoint(endpoints.l1[1], "ethereum", "quicknode");
   const observed = new Date();
@@ -595,6 +603,7 @@ export async function captureRobinhoodPostdeployment(options) {
     observedAt,
     expiresAt,
     providers: l2.map(({ normalized }) => normalized),
+    l2ProviderEndpointCommitments: reviewedL2EndpointCommitments,
     l2ProviderReadbacks: l2.map(({ readback }) => readback),
     ethereumProviderReadbacks: l1,
     sourcifyResponses,

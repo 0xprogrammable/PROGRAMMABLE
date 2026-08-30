@@ -349,6 +349,14 @@ function mockRpc(options = {}) {
   };
 }
 
+function actionTimeRpc(options = {}) {
+  const mock = mockRpc(options);
+  return {
+    rpcClient: mock.rpcClient,
+    runtimeCodeHash: mock.runtimeCodeHash,
+  };
+}
+
 async function prepareEnvelope({
   owner = OWNER_0,
   options = {},
@@ -1057,6 +1065,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
         return receipt.hostedVerify;
       },
       rpcClient: actionTimeMock.rpcClient,
+      runtimeCodeHash: actionTimeMock.runtimeCodeHash,
       clock: () => FIXED_TIMESTAMP * 1_000,
     });
     assert.equal(verified.receiptDigest, receipt.receiptDigest);
@@ -1109,7 +1118,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
           .map(({ method, params }) => ({ method, params })),
       ]),
     );
-    assert.equal(requestsByProvider.quicknode.length, 30);
+    assert.equal(requestsByProvider.quicknode.length, 42);
     assert.deepEqual(requestsByProvider.quicknode, requestsByProvider.alchemy);
     assert.ok(
       actionTimeMock.requestInventory.every(
@@ -1134,7 +1143,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
             clean: true,
           }),
           hostedVerifyResolver: async () => receipt.hostedVerify,
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /reviewed commitment/u,
@@ -1155,7 +1164,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
             ...receipt.hostedVerify,
             sourceCommit: "4".repeat(40),
           }),
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /protected source differs/u,
@@ -1175,6 +1184,16 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
         "target code",
         { providers: { quicknode: { occupiedCodeKey: "router" } } },
         /predicted address is occupied/u,
+      ],
+      [
+        "transaction target dependency code",
+        { providers: { quicknode: { codeDriftKey: "multicall3" } } },
+        /runtime code hash drifted/u,
+      ],
+      [
+        "non-transaction dependency code",
+        { providers: { alchemy: { codeDriftKey: "poolManager" } } },
+        /runtime code hash drifted/u,
       ],
       [
         "target nonce",
@@ -1258,7 +1277,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
               clean: true,
             }),
             hostedVerifyResolver: async () => receipt.hostedVerify,
-            rpcClient: mockRpc(rpcOptions).rpcClient,
+            ...actionTimeRpc(rpcOptions),
             clock: () => FIXED_TIMESTAMP * 1_000,
           }),
         pattern,
@@ -1285,7 +1304,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
             };
           },
           hostedVerifyResolver: async () => receipt.hostedVerify,
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /source changed during action-time/u,
@@ -1313,7 +1332,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
                   artifactDigest: `sha256:${"4".repeat(64)}`,
                 };
           },
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /hosted Verify proof changed during action-time/u,
@@ -1340,7 +1359,7 @@ test("read-only action-time verifier rebinds source, CI, endpoints, funding, fee
             };
           },
           hostedVerifyResolver: async () => receipt.hostedVerify,
-          rpcClient: mockRpc().rpcClient,
+          ...actionTimeRpc(),
           clock: () => FIXED_TIMESTAMP * 1_000,
         }),
       /source changed during hosted Verify revalidation/u,
@@ -1397,6 +1416,30 @@ test("action-time closing chain, target, simulation, and gas drift fail closed",
         /state changed during wallet verification/u,
       ],
       [
+        "closing transaction target dependency code",
+        {
+          providers: {
+            quicknode: {
+              closingCodeDriftKey: "multicall3",
+              closingCodeAfterReads: 1,
+            },
+          },
+        },
+        /state changed during wallet verification/u,
+      ],
+      [
+        "closing non-transaction dependency code",
+        {
+          providers: {
+            quicknode: {
+              closingCodeDriftKey: "poolManager",
+              closingCodeAfterReads: 1,
+            },
+          },
+        },
+        /state changed during wallet verification/u,
+      ],
+      [
         "closing target nonce",
         {
           providers: {
@@ -1434,7 +1477,7 @@ test("action-time closing chain, target, simulation, and gas drift fail closed",
                 clean: true,
               }),
               hostedVerifyResolver: async () => receipt.hostedVerify,
-              rpcClient: mockRpc(rpcOptions).rpcClient,
+              ...actionTimeRpc(rpcOptions),
               clock: () => FIXED_TIMESTAMP * 1_000,
             }),
           pattern,

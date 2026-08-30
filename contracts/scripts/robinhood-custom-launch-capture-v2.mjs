@@ -14,6 +14,8 @@ import {
 
 import { canonicalizeJson, parseStrictJson } from "../../packages/launch/src/canonical-json.mjs";
 import { assertExactKeys, decodeExactUtf8, sha256Digest } from "../../packages/launch/src/io.mjs";
+import { assertRobinhoodFoundationRpcProviders } from
+  "./robinhood-custom-launch-owner-envelope-core.mjs";
 
 export const ROBINHOOD_CAPTURE_SCHEMA =
   "programmable.robinhood-custom-launch.production-capture.v3";
@@ -175,6 +177,31 @@ export function validateRobinhoodCredentialedProviderEndpoint(value, layer, prov
     throw new TypeError(`${label} violates its exact credentialed endpoint pin`);
   }
   return url;
+}
+
+function exactL2EndpointCommitments(value, label) {
+  if (!Array.isArray(value) || value.length !== 2
+    || value.some((entry) => typeof entry !== "string"
+      || !/^sha256:[0-9a-f]{64}$/u.test(entry))
+    || new Set(value).size !== 2) {
+    throw new TypeError(`${label} must contain two distinct reviewed SHA-256 commitments`);
+  }
+  return Object.freeze([...value]);
+}
+
+export function assertRobinhoodCaptureL2EndpointCommitments({
+  rpcUrls,
+  endpointCommitments,
+}) {
+  const reviewed = exactL2EndpointCommitments(
+    endpointCommitments,
+    "Robinhood L2 endpoint commitments",
+  );
+  const bindings = assertRobinhoodFoundationRpcProviders({
+    rpcUrls,
+    endpointCommitments: reviewed,
+  });
+  return Object.freeze(bindings.map(({ endpointCommitment }) => endpointCommitment));
 }
 
 const L2_ENTRY_ORDER = Object.freeze([
@@ -1915,7 +1942,8 @@ export async function validateRobinhoodProductionCapture({
 }) {
   assertExactKeys(capture, [
     "schemaVersion", "captureId", "observedAt", "expiresAt", "profileDigest",
-    "sourceOrigin", "l2ProviderReadbacks", "ethereumProviderReadbacks",
+    "sourceOrigin", "l2ProviderEndpointCommitments", "l2ProviderReadbacks",
+    "ethereumProviderReadbacks",
     "sourcifyResponses", "captureInventoryDigest", "captureClosureDigest",
   ], "capture");
   if (capture.schemaVersion !== ROBINHOOD_CAPTURE_SCHEMA
@@ -1943,6 +1971,10 @@ export async function validateRobinhoodProductionCapture({
     throw new TypeError("capture is stale, future-dated, or has an excessive validity window");
   }
   const sourceOrigin = normalizeSourceOrigin(capture.sourceOrigin);
+  const l2ProviderEndpointCommitments = exactL2EndpointCommitments(
+    capture.l2ProviderEndpointCommitments,
+    "capture.l2ProviderEndpointCommitments",
+  );
   const subjectSha256 = sha256(captureBytes);
   const normalizedAuthorization = normalizeAuthorization(
     authorization,
@@ -2064,6 +2096,7 @@ export async function validateRobinhoodProductionCapture({
     profileDigest: capture.profileDigest,
     sourceOrigin,
     authorization: normalizedAuthorization,
+    l2ProviderEndpointCommitments,
     l2Checkpoint: {
       blockNumber: l2Providers[0].deploymentBlock.blockNumber,
       blockHash: l2Providers[0].deploymentBlock.blockHash,
@@ -2250,6 +2283,22 @@ export async function freshVerifyRobinhoodProviderReadbacks({
     || !Array.isArray(rpcUrls?.ethereum) || rpcUrls.ethereum.length !== 2) {
     throw new TypeError("fresh provider verification requires two L2 and two L1 RPC URLs");
   }
+  const capturedEndpointCommitments = exactL2EndpointCommitments(
+    capture?.l2ProviderEndpointCommitments,
+    "fresh capture L2 endpoint commitments",
+  );
+  const closedEndpointCommitments = exactL2EndpointCommitments(
+    captureClosure?.l2ProviderEndpointCommitments,
+    "fresh capture-closure L2 endpoint commitments",
+  );
+  if (canonicalizeJson(capturedEndpointCommitments)
+      !== canonicalizeJson(closedEndpointCommitments)) {
+    throw new TypeError("fresh L2 endpoint commitments differ from the attested capture");
+  }
+  assertRobinhoodCaptureL2EndpointCommitments({
+    rpcUrls: rpcUrls.robinhood,
+    endpointCommitments: closedEndpointCommitments,
+  });
   for (const layer of ["robinhood", "ethereum"]) {
     for (const [index, endpoint] of rpcUrls[layer].entries()) {
       const pin = PROVIDER_PINS[layer][index];
@@ -2440,6 +2489,7 @@ export async function buildRobinhoodPostdeploymentInput({
   observedAt,
   expiresAt,
   providers,
+  l2ProviderEndpointCommitments,
   l2ProviderReadbacks,
   ethereumProviderReadbacks,
   sourcifyResponses,
@@ -2454,6 +2504,10 @@ export async function buildRobinhoodPostdeploymentInput({
     || !Array.isArray(sourcifyResponses) || sourcifyResponses.length !== 2) {
     throw new TypeError("postdeployment input builder requires the complete source/provider closure");
   }
+  const reviewedL2EndpointCommitments = exactL2EndpointCommitments(
+    l2ProviderEndpointCommitments,
+    "postdeployment input L2 endpoint commitments",
+  );
   iso(observedAt, "postdeployment input observedAt");
   iso(expiresAt, "postdeployment input expiresAt");
   if ([...l2ProviderReadbacks, ...ethereumProviderReadbacks]
@@ -2610,6 +2664,7 @@ export async function buildRobinhoodPostdeploymentInput({
       tree,
       sourceClosureDigest: sourceClosure.sourceClosureDigest,
     },
+    l2ProviderEndpointCommitments: reviewedL2EndpointCommitments,
     l2ProviderReadbacks: structuredClone(l2ProviderReadbacks),
     ethereumProviderReadbacks: structuredClone(ethereumProviderReadbacks),
     sourcifyResponses: structuredClone(normalizedSourcify),
