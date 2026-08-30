@@ -142,6 +142,41 @@
   margin: 24px 0 0;
 }
 
+.migrationCta {
+  align-items: center;
+  background: rgb(0 0 0 / 0.56);
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 20px 56px rgb(0 0 0 / 0.28);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  margin-top: 40px;
+  min-height: 72px;
+  min-width: min(320px, calc(100vw - 40px));
+  padding: 12px 24px;
+  transition:
+    background 700ms var(--webde-ease),
+    border-color 700ms var(--webde-ease),
+    transform 700ms var(--webde-ease);
+}
+
+.migrationCta span {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.migrationCta small {
+  color: #c9c9c6;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
 .scrollCue {
   align-items: center;
   bottom: 25px;
@@ -404,6 +439,12 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .migrationCta:hover {
+    background: rgb(20 20 20 / 0.78);
+    border-color: rgb(255 255 255 / 0.42);
+    transform: translateY(-2px);
+  }
+
   .scrollCue:hover,
   .docsLink:hover,
   .inlineLink:hover {
@@ -415,7 +456,8 @@
 @media (prefers-reduced-motion: no-preference) {
   .heroLogo,
   .hero h1,
-  .heroContent > p {
+  .heroContent > p,
+  .migrationCta {
     animation: hero-reveal 1700ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
 
@@ -429,6 +471,10 @@
 
   .heroContent > p {
     animation-delay: 520ms;
+  }
+
+  .migrationCta {
+    animation-delay: 680ms;
   }
 
   .scrollCue {
