@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "programmable.production-verify-proof.v4",
+  "repository": {
+    "id": 1314365508,
+    "fullName": "programmablehq/programmable"
+  },
+  "source": {
+    "ref": "refs/heads/production",
+    "commitSha": "0acbfae6de4e5b7d33b0dfe7ec0e786d7e9eb8c3",
+    "treeSha": "a4d6ad16c5f8989959514db3f909681bc8784123"
+  },
+  "scope": {
+    "contracts": true,
+    "custom_v2": false,
+    "database": false,
+    "dependencies": false,
+    "indexer": false,
+    "interface": true,
+    "read_model": false
+  },
+  "workflow": {
+    "path": ".github/workflows/verify.yml",
+    "ref": "programmablehq/programmable/.github/workflows/verify.yml@refs/heads/production",
+    "sourceCommitSha": "0acbfae6de4e5b7d33b0dfe7ec0e786d7e9eb8c3",
+    "fileSha256": "sha256:181257de9959fc55d670fdd48fe7cebedf30905228a03fdbccb72f3127838238"
+  },
+  "run": {
+    "id": 33362900756,
+    "attempt": 1,
+    "event": "push",
+    "verificationMode": "change"
+  },
+  "checks": [
+    {
+      "id": "secret-scan",
+      "name": "Credential leak gate",
+      "required": true,
+      "conclusion": "success"
+    },
+    {
+      "id": "custom-v2",
+      "name": "Custom V2",
+      "required": false,
+      "conclusion": "skipped"
+    },
+    {
+      "id": "indexer",
+      "name": "Realtime indexer",
+      "required": false,
+      "conclusion": "skipped"
+    },
+    {
+      "id": "database-pglite",
+      "name": "Database (PGlite)",
+      "required": false,
+      "conclusion": "skipped"
+    },
+    {
+      "id": "interface",
+      "name": "Interface",
+      "required": true,
+      "conclusion": "success"
+    },
+    {
+      "id": "contracts",
+      "name": "Contracts",
+      "required": true,
+      "conclusion": "success"
+    }
+  ]
+}
