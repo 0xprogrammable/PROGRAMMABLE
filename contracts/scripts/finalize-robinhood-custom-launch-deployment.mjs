@@ -93,6 +93,15 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_STAGE_BUNDLE_PATH = ROBINHOOD_STAGE_BUNDLE_PATH;
 const DEFAULT_PROMOTION_BUNDLE_PATH = ROBINHOOD_PROMOTION_BUNDLE_PATH;
+
+export function canonicalRobinhoodVerifierInstant(now = () => new Date(), label = "verifier clock") {
+  const instant = now();
+  if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return new Date(Math.floor(instant.getTime() / 1_000) * 1_000).toISOString();
+}
+
 function usage() {
   return [
     "Usage:",
@@ -610,12 +619,7 @@ async function verifyGithubCaptureAttestation({
       portable,
       trustedRootPath,
     });
-    const verified = now();
-    if (!(verified instanceof Date) || !Number.isFinite(verified.getTime())) {
-      throw new TypeError("capture verifier clock is invalid");
-    }
-    const verifiedAt = new Date(Math.floor(verified.getTime() / 1000) * 1000)
-      .toISOString().replace(".000Z", "Z");
+    const verifiedAt = canonicalRobinhoodVerifierInstant(now, "capture verifier clock");
     return buildRobinhoodCaptureAuthorization({
       schemaVersion: ROBINHOOD_CAPTURE_AUTHORIZATION_SCHEMA,
       trustClass: "github-artifact-attestation",
@@ -759,12 +763,7 @@ async function verifySigstoreBackendCaptureAttestation({
       || Buffer.byteLength(result.stderr) > 16 * 1024 * 1024) {
       throw new TypeError("Cosign backend verification diagnostics exceeded their bound");
     }
-    const verifiedDate = now();
-    const verifiedAt = verifiedDate instanceof Date && Number.isFinite(verifiedDate.getTime())
-      ? new Date(Math.floor(verifiedDate.getTime() / 1000) * 1000)
-        .toISOString().replace(".000Z", "Z")
-      : null;
-    if (verifiedAt === null) throw new TypeError("backend verifier clock is invalid");
+    const verifiedAt = canonicalRobinhoodVerifierInstant(now, "backend verifier clock");
     return {
       authorization: buildRobinhoodBackendCaptureAuthorization({
         schemaVersion: ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
