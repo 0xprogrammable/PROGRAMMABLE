@@ -1,6 +1,6 @@
 ---
 description: Official documentation for launching, verifying and integrating Programmable products
-cover: .gitbook/assets/programmable-night-garden-v2.png
+cover: .gitbook/assets/programmable-warm-night-v3.gif
 coverY: 0
 ---
 
