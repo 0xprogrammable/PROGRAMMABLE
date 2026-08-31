@@ -606,6 +606,23 @@ describe("main token migration gas sponsor", () => {
       releaseId: "v4-ethereum-to-robinhood-72h-2026-v2",
       deadlineTimestampExclusive: start + 72 * 60 * 60,
     });
+    const afterDeadline = (start + MAIN_TOKEN_MIGRATION_WINDOW_SECONDS) * 1_000;
+    expect(readMainTokenMigrationGasSponsorConfigurationV1({
+      environment, manifest, nowMs: afterDeadline,
+    })).toBeNull();
+    expect(readMainTokenMigrationGasSponsorConfigurationV1({
+      environment, manifest, nowMs: afterDeadline,
+      allowClosedWindowReadback: true,
+    })).toMatchObject({ deadlineTimestampExclusive: afterDeadline / 1_000 });
+    for (const nowMs of [(start - 1) * 1_000, NaN, Infinity]) {
+      expect(readMainTokenMigrationGasSponsorConfigurationV1({
+        environment, manifest, nowMs, allowClosedWindowReadback: true,
+      })).toBeNull();
+    }
+    expect(readMainTokenMigrationGasSponsorConfigurationV1({
+      environment: { ...environment, MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED: "false" },
+      manifest, nowMs: afterDeadline, allowClosedWindowReadback: true,
+    })).toBeNull();
     expect(readMainTokenMigrationGasSponsorConfigurationV1({
       environment,
       manifest: {

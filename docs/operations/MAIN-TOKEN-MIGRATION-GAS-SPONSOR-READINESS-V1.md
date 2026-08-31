@@ -10,7 +10,7 @@ belong only in the deployment secret manager and private release evidence.
       exact finalized pre-window eligibility block number and hash.
 - [ ] The sponsor contract matches
       `config/main-token-migration-gas-sponsor-contract.v1.json` byte-for-byte in the candidate.
-- [ ] The delegated-wallet path matches
+- [ ] The current-holder gasless path matches
       `config/main-token-migration-gasless-transfer-contract.v1.json` byte-for-byte in the candidate.
 - [ ] The normalized provider readback exactly matches
       `config/main-token-migration-gas-sponsor-privy-policy.v2.json`.
@@ -42,17 +42,20 @@ belong only in the deployment secret manager and private release evidence.
 - [ ] Disabled manifest or disabled environment switch returns a fail-closed unavailable response and spends nothing.
 - [ ] An authenticated linked EOA that held the requested V4 amount at the eligibility block can receive only its bounded
       current gas deficit.
-- [ ] Unlinked wallets, smart-contract wallets, insufficient eligibility/current token balances, wrong eligibility block,
+- [ ] Unlinked wallets, unsupported smart-contract wallets, insufficient current token balances, wrong eligibility block for native top-ups,
       RPC disagreement, quotes above 20 gwei, exhausted budget and the final five minutes all fail closed.
 - [ ] Concurrent duplicate requests reserve and broadcast no more than one transfer.
 - [ ] An ambiguous Privy response is recorded as unknown and is not rebroadcast.
 - [ ] Dual-RPC readback confirms the exact transaction fields and successful receipt before status becomes confirmed.
-- [ ] A delegated EIP-7702 wallet signs the exact EIP-2612 domain/message, receives no ETH top-up, and the sponsor can
+- [ ] A plain EOA without gas or delegated EIP-7702 wallet, including a post-start buyer, signs the exact EIP-2612 domain/message, receives no ETH top-up, and the sponsor can
       relay only the signed amount through the pinned token to the fixed migration wallet.
 - [ ] The normal top-up endpoint rejects delegated wallets; both paths share one total budget and a gasless root guard
       blocks a later native reservation.
-- [ ] Wrong signer, token, spender, amount, nonce, deadline, destination, calldata, root eligibility or provider
+- [ ] Wrong signer, token, spender, amount, nonce, deadline, destination, calldata, native top-up root eligibility or provider
       reference fails closed without a token transfer.
+- [ ] Resume uses only the existing signed intent and exact account/amount/idempotency binding, even if its token balance is now lower.
+- [ ] Resume after the window is receipt-only; expired unsent permits and replaced provider hashes never cause blind resubmission.
+- [ ] Shared budget exhaustion fails closed. Current-holder eligibility is not an unlimited or Sybil-resistant gas guarantee.
 
 ## Release evidence
 

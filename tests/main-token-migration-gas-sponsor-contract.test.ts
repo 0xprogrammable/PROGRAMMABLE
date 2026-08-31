@@ -228,7 +228,7 @@ describe("main token migration gas sponsor activation contract", () => {
     );
   });
 
-  it("pins the delegated-wallet permit and fixed transfer destination", () => {
+  it("pins current-holder permits and the fixed transfer destination", () => {
     expect(gaslessContract).toMatchObject({
       schema: "programmable-main-token-migration-gasless-transfer-contract/v1",
       releaseId: contract.releaseId,
@@ -240,6 +240,9 @@ describe("main token migration gas sponsor activation contract", () => {
       tokenName: "Programmable",
       permitVersion: "1",
       migrationWallet: manifest.migrationWallet,
+      eligibleWalletCode: "plain-eoa-or-eip-7702-delegation-indicator",
+      holderEligibility: "current-token-balance-including-post-start-acquisitions",
+      actions: ["prepare", "submit", "resume"],
       walletReview: {
         standard: "EIP-2612 Permit",
         binds: [
@@ -266,15 +269,16 @@ describe("main token migration gas sponsor activation contract", () => {
     for (const boundary of [
       "authenticatedLinkedOwner",
       "sameOrigin",
-      "openingAndCurrentBalance",
+      "currentBalance",
       "dualRpcQuorum",
-      "eip7702WalletCode",
+      "plainEoaOrEip7702WalletCode",
       "exactPermitSigner",
       "exactPermitTypedData",
       "fixedToken",
       "fixedMigrationDestination",
       "sharedBudget",
-      "rootWalletReplayGuard",
+      "durableHolderReplayGuard",
+      "authenticatedExistingIntentResume",
       "exactTransactionReadback",
     ]) {
       expect(gaslessContract.serverEnforces).toContain(boundary);

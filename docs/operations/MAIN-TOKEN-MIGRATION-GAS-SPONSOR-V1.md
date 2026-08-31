@@ -6,15 +6,16 @@ release budget.
 
 ## Purpose
 
-This runbook defines two server-only gas paths during the exact 72-hour migration window. A normal EOA can receive
-one bounded Ethereum Mainnet gas top-up and then separately approve the V4 transfer. An eligible EIP-7702 delegated
-wallet, including wallets that automatically wrap incoming ETH, instead signs an exact EIP-2612 permit. The same
+This runbook defines two server-only gas paths during the exact 72-hour migration window. Current V4 holders using a
+normal EOA without enough ETH or an EIP-7702 delegated EOA sign an exact EIP-2612 permit. This includes tokens bought
+or received after the window opened. Funded normal EOAs can still use the direct wallet transfer. The same
 dedicated sponsor pays gas for the permit and an exact `transferFrom` to the fixed migration wallet. No private key is
-requested or exported, and neither path uses the migration recipient wallet as the sponsor.
+requested or exported, and neither path uses the migration recipient wallet as the sponsor. The legacy native ETH
+top-up endpoint retains its narrower pre-window ownership rules; widening the token-bound relay does not open an ETH faucet.
 
 The machine-readable companion is
 [`config/main-token-migration-gas-sponsor-contract.v1.json`](../../config/main-token-migration-gas-sponsor-contract.v1.json).
-The gasless delegated-wallet companion is
+The gasless current-holder companion is
 [`config/main-token-migration-gasless-transfer-contract.v1.json`](../../config/main-token-migration-gasless-transfer-contract.v1.json).
 The exact provider-enforced policy is
 [`config/main-token-migration-gas-sponsor-privy-policy.v2.json`](../../config/main-token-migration-gas-sponsor-privy-policy.v2.json).
@@ -74,20 +75,31 @@ the V4 token, total-supply ceiling and fixed migration destination. The server i
 exact signed amount, empty native calldata or byte-exact token calldata, sender, type-2 gas/fee fields and calculated
 value. Every submitted transaction is independently read back through two RPCs.
 
-## Delegated-wallet gasless path
+## Current-holder gasless path
 
-The gasless route is used only when the connected address has the canonical EIP-7702 delegation indicator. Both RPCs
-must agree on that code, the pinned token runtime, token name `Programmable`, permit domain separator, current nonce,
-current balance and pre-window eligibility. The wallet reviews an EIP-2612 permit binding chain ID 1, the pinned V4
+The gasless route accepts plain EOAs and addresses with the canonical EIP-7702 delegation indicator. Both RPCs
+must agree on that code, the pinned token runtime, token name `Programmable`, permit domain separator, current nonce
+and current balance. No historical balance or acquisition route is required. General smart-contract wallets are not
+supported by this token's EIP-2612 owner-signature path. The wallet reviews a permit binding chain ID 1, the pinned V4
 token, the dedicated sponsor as spender, exact raw amount, current nonce and a deadline of at most 20 minutes. The
 server recovers the exact connected owner before reserving anything.
 
 The private ledger stores one request binding plus separate deterministic provider references for `permit` and
 `transferFrom`. The sponsor first submits the byte-exact permit. Only after two providers confirm its successful
 receipt and the allowance is visible may the sponsor call `transferFrom(owner, fixedMigrationWallet, exactAmount)`.
-Both calls have zero native value, 100,000-gas ceilings and share the existing release budget and root-wallet replay
-guard. The ordinary ETH endpoint rejects delegated wallets, preventing a new wallet from claiming both paths. The UI
+Both calls have zero native value, 100,000-gas ceilings and share the existing release budget and durable holder replay
+guard. The ordinary ETH endpoint still rejects delegated wallets. The UI
 never signs automatically and never treats a provider response as a confirmed token transfer.
+
+An authenticated `resume` request binds the same linked holder, amount and idempotency key to an already signed private
+ledger intent. It cannot create a reservation or change the amount. It resumes without another signature or a fresh
+balance requirement, so a completed transfer remains recoverable after the wallet balance decreases. After the
+window closes, recovery only reads existing receipts and does not send transactions. Expired permits with no known
+submission and replaced or failed provider transactions require explicit support reconciliation, not blind resubmission.
+
+The release budget and per-holder/principal admission limits bound spending, but do not make arbitrary current-holder
+eligibility Sybil-resistant. Splitting tokens among many wallets can consume the finite budget. Keep funding bounded,
+monitor reservations and never present gas sponsorship as unlimited or guaranteed during provider outages.
 
 ## Fixed fee and budget boundaries
 
@@ -112,7 +124,7 @@ must cover the configured maximum top-up. It must also be
 chosen below the wallet's funded balance with an operator-owned safety margin; the absolute code cap is not a funding
 recommendation.
 
-## Eligibility and replay boundary
+## Native ETH top-up eligibility and replay boundary
 
 The endpoint authenticates the Privy access token and requires the requested address to be linked to that Privy
 principal. Both independent Ethereum providers must agree on chain ID, canonical head, the finalized pre-window

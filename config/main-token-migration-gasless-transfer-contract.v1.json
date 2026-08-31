@@ -10,7 +10,9 @@
   "permitVersion": "1",
   "permitDomainSeparator": "0xe2ac19a052ba41dccaaa930f489a94353d986c7769e416830273d9362ad26a47",
   "migrationWallet": "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
-  "eligibleWalletCode": "eip-7702-delegation-indicator",
+  "eligibleWalletCode": "plain-eoa-or-eip-7702-delegation-indicator",
+  "holderEligibility": "current-token-balance-including-post-start-acquisitions",
+  "actions": ["prepare", "submit", "resume"],
   "walletReview": {
     "standard": "EIP-2612 Permit",
     "binds": [
@@ -33,15 +35,16 @@
   "serverEnforces": [
     "authenticatedLinkedOwner",
     "sameOrigin",
-    "openingAndCurrentBalance",
+    "currentBalance",
     "dualRpcQuorum",
-    "eip7702WalletCode",
+    "plainEoaOrEip7702WalletCode",
     "exactPermitSigner",
     "exactPermitTypedData",
     "fixedToken",
     "fixedMigrationDestination",
     "sharedBudget",
-    "rootWalletReplayGuard",
+    "durableHolderReplayGuard",
+    "authenticatedExistingIntentResume",
     "exactTransactionReadback"
   ]
 }
