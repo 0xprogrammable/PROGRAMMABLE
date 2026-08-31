@@ -33,6 +33,7 @@ import {
 } from "@/lib/main-token-migration";
 
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
+const migrationSupportUrl = "https://discord.com/invite/programmable";
 const decimalIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
 const positiveIntegerPattern = /^[1-9][0-9]*$/u;
 const bytes32Pattern = /^0x[0-9a-fA-F]{64}$/u;
@@ -943,6 +944,26 @@ function phaseAt(now: number): MigrationPhase {
   if (now < migrationWindow.startAt) return "upcoming";
   if (now >= migrationWindow.deadlineAt) return "closed";
   return "active";
+}
+
+export function migrationWindowCopy(
+  phase: MigrationPhase,
+  transferWindowOpen: boolean,
+) {
+  switch (phase) {
+    case "checking":
+      return "Checking the migration window. Please wait before sending V4.";
+    case "preview":
+      return "The 72-hour migration window has not started. Please wait before sending V4.";
+    case "upcoming":
+      return "Migration opens when the countdown ends. Please wait before sending V4.";
+    case "closed":
+      return "The migration window has ended. Do not send any more V4.";
+    case "active":
+      return transferWindowOpen
+        ? "Send your V4 before the timer ends. You will receive the same number of V4 tokens on Robinhood at the same wallet address."
+        : "New transfers are paused. Any pending transfer must confirm before the deadline.";
+  }
 }
 
 function transferWindowOpenAt(now: number, uncertaintyMs = 0) {
@@ -2255,7 +2276,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                         : accountCodeStatus === "checking"
                           ? "Checking wallet type"
                           : accountCodeStatus === "contract"
-                            ? "Use manual transfer"
+                            ? "Contact migration support"
                             : !amount.trim()
                               ? "Enter amount"
                               : amountError
@@ -2329,8 +2350,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
           </p>
         ) : null}
         <p className={styles.heroCopy}>
-          When the window opens, send V4 from Ethereum. The same number of V4
-          tokens will go to that wallet on Robinhood.
+          {migrationWindowCopy(phase, transferWindowOpen)}
         </p>
         <p className={styles.officialNotice}>
           Use only <strong>programmable.market/migration</strong>. Programmable
@@ -2660,7 +2680,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                       </button>
                     ) : (
                       <a
-                        href="https://discord.com/invite/programmable"
+                        href={migrationSupportUrl}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -2693,7 +2713,16 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
               </label>
             ) : null}
 
-            {wallet ? (
+            {wallet && accountCodeStatus === "contract" ? (
+              <a
+                className={styles.secondaryAction}
+                href={migrationSupportUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Contact migration support
+              </a>
+            ) : wallet ? (
               <button
                 className={styles.primaryAction}
                 type="button"
@@ -2705,7 +2734,6 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                   submission.kind === "submitting" ||
                   hasTrackedTransfer ||
                   accountCodeStatus === "checking" ||
-                  accountCodeStatus === "contract" ||
                   (gaslessProgress !== null &&
                     gaslessProgress.account !== connectedAccount)
                 }
@@ -2806,17 +2834,46 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
           >
             <header className={styles.panelHeader}>
               <p>Manual transfer</p>
-              <h2 id="migration-wallet-title">Send V4 directly</h2>
+              <h2 id="migration-wallet-title">
+                {transferWindowOpen &&
+                accountCodeStatus !== "contract" &&
+                !unresolvedGaslessTransfer
+                  ? "Send V4 directly"
+                  : "Transfer destination"}
+              </h2>
             </header>
             <p>
               {unresolvedGaslessTransfer
-                ? "Finish the pending gasless transfer before using the manual path."
-                : "Prefer not to connect? Send V4 directly to this address."}
+                ? "A gasless transfer is already in progress. Do not send V4 separately."
+                : accountCodeStatus === "contract"
+                  ? "Contact migration support before sending from a smart-contract wallet."
+                  : transferWindowOpen
+                    ? "Prefer not to connect? Send V4 directly to this address."
+                    : "New transfers are not available. Do not send V4 to the migration wallet."}
             </p>
             {unresolvedGaslessTransfer ? (
               <p className={styles.closedAddressNote} role="status">
-                Select Resume gasless transfer. Do not send another transfer while
-                its outcome is being reconciled.
+                {!gaslessProgressForConnectedAccount
+                  ? "Reconnect the wallet used for the pending transfer. Do not send V4 again."
+                  : submission.kind === "submitting"
+                    ? "Your gasless transfer is being processed. Do not send V4 again."
+                    : !onMainnet
+                      ? "Switch this wallet to Ethereum before resuming. Do not send V4 again."
+                      : primaryLabel === "Resume gasless transfer"
+                        ? "Select Resume gasless transfer. Do not send V4 separately."
+                        : "Do not send V4 again. Contact migration support to check the pending transfer."}{" "}
+                <a
+                  href={migrationSupportUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Contact migration support
+                </a>
+              </p>
+            ) : accountCodeStatus === "contract" ? (
+              <p className={styles.closedAddressNote} role="status">
+                This wallet needs a manual review before any transfer. Do not
+                send V4 until support confirms the next step.
               </p>
             ) : canRevealDestination ? (
               <>
@@ -2834,8 +2891,9 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                   </p>
                 </div>
                 <p className={styles.manualWarning}>
-                  Send only V4 from the wallet that should receive the Robinhood
-                  allocation. Do not send ETH or use an exchange or router.
+                  {transferWindowOpen
+                    ? "Send only V4 from the wallet that should receive the Robinhood allocation. Do not send ETH or use an exchange or router."
+                    : "This address is shown for your existing transfer only. Do not send any more V4."}
                 </p>
               </>
             ) : (

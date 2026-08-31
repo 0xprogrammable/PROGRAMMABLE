@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   migrationTransferStorageKey,
+  migrationWindowCopy,
   restoreMigrationTransfer,
   storedMigrationTransfer,
 } from "../components/main-token-migration";
@@ -268,6 +269,44 @@ describe("main token migration page contract", () => {
       setItem: () => { throw new Error("Storage quota exceeded"); },
     }, sender)?.amount).toBe("2");
     expect(records.get(legacyKey)).toBe(receipt);
+  });
+
+  it("keeps the send instructions aligned with the verified migration window", () => {
+    expect(migrationWindowCopy("active", true)).toBe(
+      "Send your V4 before the timer ends. You will receive the same number of V4 tokens on Robinhood at the same wallet address.",
+    );
+    expect(migrationWindowCopy("active", false)).toBe(
+      "New transfers are paused. Any pending transfer must confirm before the deadline.",
+    );
+    for (const phase of ["checking", "preview", "upcoming"] as const) {
+      expect(migrationWindowCopy(phase, false)).toContain(
+        "Please wait before sending V4.",
+      );
+    }
+    expect(migrationWindowCopy("closed", false)).toBe(
+      "The migration window has ended. Do not send any more V4.",
+    );
+    expect(page).toContain("{migrationWindowCopy(phase, transferWindowOpen)}");
+    expect(page).not.toContain("When the window opens, send V4");
+  });
+
+  it("does not direct a blocked or unresolved wallet to send manually", () => {
+    expect(page).toMatch(
+      /transferWindowOpen &&\s+accountCodeStatus !== "contract" &&\s+!unresolvedGaslessTransfer\s+\? "Send V4 directly"\s+: "Transfer destination"/u,
+    );
+    expect(page).toContain(
+      "This address is shown for your existing transfer only. Do not send any more V4.",
+    );
+    expect(page).toContain('primaryLabel === "Resume gasless transfer"');
+    expect(page).toContain(
+      "Reconnect the wallet used for the pending transfer. Do not send V4 again.",
+    );
+    expect(page).toContain(
+      "Contact migration support to check the pending transfer.",
+    );
+    expect(page).toContain('{wallet && accountCodeStatus === "contract" ? (');
+    expect(page).toContain("href={migrationSupportUrl}");
+    expect(page).not.toContain('"Use manual transfer"');
   });
 
   it("derives the countdown from one absolute window across reloads", () => {
