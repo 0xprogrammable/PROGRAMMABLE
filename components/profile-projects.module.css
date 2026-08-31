@@ -1,4 +1,6 @@
 .section {
+  /* Five 71px rows with four 3px gaps, shared by every list state. */
+  --project-list-min-height: 367px;
   background: var(--webde-surface, var(--profile-panel, #111));
   border: 1px solid var(--webde-line, var(--profile-line, rgb(255 255 255 / 10%)));
   border-radius: var(--webde-radius-card, 17px);
@@ -228,8 +230,10 @@
 }
 
 .list {
+  align-content: start;
   display: grid;
   gap: 3px;
+  min-height: var(--project-list-min-height);
   min-width: 0;
 }
 
@@ -353,9 +357,10 @@
 }
 
 .skeletonList {
+  align-content: start;
   display: grid;
   gap: 3px;
-  min-height: 367px;
+  min-height: var(--project-list-min-height);
 }
 
 .skeletonProject {
@@ -497,6 +502,11 @@
   flex-direction: column;
   gap: 8px;
   justify-content: center;
+}
+
+.section > .empty,
+.section > .emptyError {
+  min-height: var(--project-list-min-height);
 }
 
 .empty p {
@@ -745,6 +755,8 @@
 
 @media (max-width: 42rem) {
   .section {
+    /* The same five slots at the existing 143px mobile row height. */
+    --project-list-min-height: 727px;
     padding: 16px;
   }
 

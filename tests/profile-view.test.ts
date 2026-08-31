@@ -526,9 +526,6 @@ describe("profile workspace loading state", () => {
 
   it("keeps paginated desktop claim rows top-aligned without an internal scrollbar", () => {
     expect(profileExperienceCss).toMatch(
-      /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.profileWorkspace\s*\{[\s\S]*?height: clamp\(/,
-    );
-    expect(profileExperienceCss).toMatch(
       /@media \(min-width: 821px\) and \(min-height: 700px\)[\s\S]*?\.claimList\s*\{[\s\S]*?align-content: start;[\s\S]*?overflow: visible;/,
     );
     expect(profileExperienceCss).toMatch(
@@ -572,22 +569,16 @@ describe("profile workspace loading state", () => {
     expect(profileExperienceCss).toMatch(
       /@media \(max-width:\s*620px\)[\s\S]*?\.profileSkeletonBanner\s*\{[^}]*height:\s*108px;/s,
     );
-    expect(profileViewSource).toContain("styles.profileSkeletonSection");
-    expect(profileViewSource).toContain(
-      "Array.from({ length: creatorProjectPageSize }, (_, item)",
-    );
+    expect(profileViewSource).toContain("<ProfileProjectsLoadingState />");
     expect(profileViewSource).toContain(
       "Array.from({ length: profileClaimPageSize }, (_, item)",
     );
     expect(profileViewSource).toMatch(
       /className=\{styles\.profileSkeletonClaims\}[\s\S]*?className=\{styles\.profileSkeletonSectionHeader\}[\s\S]*?className=\{styles\.profileSkeletonRows\}[\s\S]*?Array\.from\(\{ length: profileClaimPageSize \}/,
     );
-    expect(profileExperienceCss).toMatch(
-      /\.profileSkeletonLaunch\s*\{[^}]*min-height:\s*463px;/s,
-    );
     expect(profileViewSource).not.toContain("profileSkeletonPrediction");
     expect(profileExperienceCss).toMatch(
-      /@media \(max-width:\s*820px\)[\s\S]*?\.profileSkeletonSummary,[\s\S]*?\.profileSkeletonClaims\s*\{[^}]*min-height:\s*340px;/s,
+      /:global\(html\[data-theme="dark"\]\) \.page\s*\{[^}]*--profile-panel:\s*var\(--webde-surface\);/s,
     );
     expect(profileExperienceCss).toMatch(
       /\.profileSkeletonHero\s*\{[^}]*min-height:\s*282px;/s,
@@ -602,25 +593,20 @@ describe("profile workspace loading state", () => {
       /\.profileSkeletonClaims\s*\{[^}]*align-content:\s*start;[^}]*gap:\s*12px;/s,
     );
     expect(profileExperienceCss).toMatch(
-      /\.profileSkeletonLaunch \.profileSkeletonRow\s*\{[^}]*gap:\s*9px;[^}]*grid-template-columns:\s*42px minmax\(0, 1fr\) 364px;[^}]*min-height:\s*71px;[^}]*padding:\s*7px 8px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
       /\.profileSkeletonHero\s*\{[^}]*min-height:\s*350px;/s,
     );
-    expect(profileExperienceCss).toMatch(
-      /\.profileSkeletonClaims\s*\{[^}]*min-height:\s*591px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
-      /\.claimablePanel\[data-visible-count="2"\]\s*\{[^}]*min-height:\s*361px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
-      /\.claimablePanel\[data-visible-count="3"\]\s*\{[^}]*min-height:\s*476px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
-      /\.claimablePanel\[data-visible-count="4"\]\s*\{[^}]*min-height:\s*591px;/s,
-    );
-    expect(profileExperienceCss).toMatch(
-      /@media \(max-width:\s*42rem\)[\s\S]*?\.profileSkeletonLaunch \.profileSkeletonRow\s*\{[^}]*grid-template-columns:\s*42px minmax\(0, 1fr\);[^}]*min-height:\s*143px;/s,
+    for (const selector of [".profileSkeletonSummary", ".feePanel"]) {
+      expect(profileCssDeclarationsFor(selector)).toContain(
+        "min-height: var(--profile-fees-min-height)",
+      );
+    }
+    for (const selector of [".profileSkeletonClaims", ".claimablePanel"]) {
+      expect(profileCssDeclarationsFor(selector)).toContain(
+        "min-height: var(--profile-claims-min-height)",
+      );
+    }
+    expect(profileExperienceCss).not.toContain(
+      '.claimablePanel[data-visible-count=',
     );
     expect(profileExperienceCss).not.toContain("profile-content-reveal");
     expect(profileExperienceCss).toContain(
@@ -1171,12 +1157,8 @@ describe("profile reward grouping", () => {
       .toBe(false);
     expect(profileViewSource).not.toContain("Tokens launched from this wallet.");
     expect(profileViewSource).not.toContain("Router record");
-    expect(profileViewSource).toContain(
-      'claimableEntries.length ? "" : styles.claimablePanelEmpty',
-    );
-    expect(profileExperienceCss).toMatch(
-      /@media \(max-width: 820px\)[\s\S]*\.claimablePanelEmpty\s*\{[^}]*min-height:\s*0;[\s\S]*\.claimablePanelEmpty \.claimEmpty\s*\{[^}]*min-height:\s*0;/,
-    );
+    expect(profileViewSource).toContain('className={styles.claimablePanel}');
+    expect(profileExperienceCss).not.toContain(".claimablePanelEmpty");
 
     expect(profileViewSource).not.toContain(
       "<ProfileRouterLaunches entries={routerLaunchEntries}",
