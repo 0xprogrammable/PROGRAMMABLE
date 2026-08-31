@@ -132,6 +132,7 @@ export type GasSponsorshipState =
       account: string;
       message: string;
       retryable: boolean;
+      retryMode: "check" | "submit";
     };
 
 type GasSponsorshipEndpointResult = Readonly<{
@@ -280,18 +281,14 @@ export async function gasSponsorshipFailure(
     // Use a stable status-specific recovery message below.
   }
 
-  const terminal = [
-    "submission_unknown",
-    "sponsorship_closed",
-    "sponsorship_failed",
-  ].includes(code);
+  const terminal = ["sponsorship_closed", "sponsorship_failed"].includes(code);
   const fallback =
     response.status === 401 || response.status === 403
       ? "Reconnect this wallet before requesting sponsored gas."
       : response.status === 429
         ? "Gas sponsorship is temporarily rate limited. Wait a moment and try again."
         : code === "submission_unknown"
-          ? "The gas top-up needs a status review. No second top-up was sent."
+          ? "The gas top-up status could not be confirmed. Check again shortly. No second top-up will be sent."
           : code === "sponsorship_closed"
             ? "Gas sponsorship is closed for this migration window."
             : code === "sponsorship_failed"
@@ -313,6 +310,7 @@ export async function gasSponsorshipErrorMessage(response: Response) {
 function gasSponsorshipError(
   error: unknown,
   account: string,
+  retryMode: "check" | "submit" = "check",
 ): GasSponsorshipState {
   return {
     kind: "error",
@@ -320,6 +318,7 @@ function gasSponsorshipError(
     message: migrationErrorMessage(error),
     retryable:
       !(error instanceof GasSponsorshipEndpointError) || error.retryable,
+    retryMode,
   };
 }
 
@@ -365,18 +364,32 @@ export function gasSponsorshipDisplayKind(
   return state.kind;
 }
 
-function gasSponsorshipIdempotencyKey(account: string) {
+function gasSponsorshipIdempotencyKey(
+  account: string,
+  fallbackKeys: Map<string, string>,
+) {
   const normalizedAccount = getAddress(account).toLowerCase();
   const storageKey = `programmable:main-token-migration:gas-sponsor:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${normalizedAccount}`;
+  const fallback = fallbackKeys.get(storageKey);
+  if (fallback && /^[a-zA-Z0-9:_-]{16,200}$/u.test(fallback)) {
+    return fallback;
+  }
   try {
     const stored = window.localStorage.getItem(storageKey);
-    if (stored && /^[a-zA-Z0-9:_-]{16,200}$/u.test(stored)) return stored;
+    if (stored && /^[a-zA-Z0-9:_-]{16,200}$/u.test(stored)) {
+      fallbackKeys.set(storageKey, stored);
+      return stored;
+    }
     const random = window.crypto.randomUUID();
     const created = `migration-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${random}`;
+    fallbackKeys.set(storageKey, created);
     window.localStorage.setItem(storageKey, created);
     return created;
   } catch {
-    return `migration-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
+    const created =
+      `migration-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
+    fallbackKeys.set(storageKey, created);
+    return created;
   }
 }
 
@@ -745,6 +758,7 @@ export function MainTokenMigration() {
   const sponsorButtonRef = useRef<HTMLButtonElement>(null);
   const sponsorshipRegionRef = useRef<HTMLDivElement>(null);
   const trustedClockRef = useRef<TrustedClock | null>(null);
+  const sponsorshipIdempotencyKeysRef = useRef(new Map<string, string>());
 
   const readTrustedNow = useCallback(() => {
     const clock = trustedClockRef.current;
@@ -1333,6 +1347,7 @@ export function MainTokenMigration() {
         message:
           "Sponsored gas is available only for a directly controlled wallet.",
         retryable: false,
+        retryMode: "check",
       });
       focusSponsorshipActionOrStatus();
       return;
@@ -1362,7 +1377,10 @@ export function MainTokenMigration() {
           Accept: "application/json",
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          "Idempotency-Key": gasSponsorshipIdempotencyKey(account),
+          "Idempotency-Key": gasSponsorshipIdempotencyKey(
+            account,
+            sponsorshipIdempotencyKeysRef.current,
+          ),
         },
         body: JSON.stringify(body),
       });
@@ -1383,7 +1401,9 @@ export function MainTokenMigration() {
       }
       focusSponsorshipActionOrStatus();
     } catch (error) {
-      setGasSponsorship(gasSponsorshipError(error, account.toLowerCase()));
+      setGasSponsorship(
+        gasSponsorshipError(error, account.toLowerCase(), "submit"),
+      );
       focusSponsorshipActionOrStatus();
     }
   }
@@ -1920,7 +1940,7 @@ export function MainTokenMigration() {
                     className={`${styles.transactionStatus} ${styles.revertedStatus}`}
                     role="alert"
                   >
-                    <strong>Sponsored gas unavailable</strong>
+                    <strong>Unable to check gas sponsorship</strong>
                     <p>
                       {sponsorshipForConnectedAccount &&
                       gasSponsorship.kind === "error"
@@ -1934,9 +1954,15 @@ export function MainTokenMigration() {
                         ref={sponsorButtonRef}
                         className={styles.secondaryAction}
                         type="button"
-                        onClick={() => void recheckSponsoredGas()}
+                        onClick={() =>
+                          void (gasSponsorship.retryMode === "submit"
+                            ? requestSponsoredGas()
+                            : recheckSponsoredGas())
+                        }
                       >
-                        Check sponsorship status
+                        {gasSponsorship.retryMode === "submit"
+                          ? "Retry gas sponsorship"
+                          : "Check sponsorship status"}
                       </button>
                     ) : (
                       <a

@@ -27,8 +27,11 @@ const ADMISSION_LIMITS = Object.freeze({
   read: Object.freeze({ holder: 8, principal: 12 }),
   submit: Object.freeze({ holder: 2, principal: 3 }),
 });
+const ROOT_GUARD_TOP_UP_WEI = 1n;
+const ROOT_GUARD_FEE_PER_GAS_WEI = 1n;
 
 export const MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1 = 21_000n;
+export const MAIN_TOKEN_MIGRATION_GAS_SPONSOR_MAX_GAS_LIMIT_V1 = 100_000n;
 
 export type MainTokenMigrationGasSponsorIntentV1 = Readonly<{
   schema: "programmable-main-token-migration-gas-sponsorship-intent/v1";
@@ -55,6 +58,14 @@ export type MainTokenMigrationGasSponsorRecordV1 = Readonly<{
   transactionHash: Hex | null;
 }>;
 
+export type MainTokenMigrationGasSponsorEligibilityV1 = Readonly<{
+  rootWalletAddress: Address;
+  walletAddress: Address;
+  transferHash: Hex | null;
+  transferBlockNumber: string | null;
+  transferLogIndex: string | null;
+}>;
+
 type CompletionV1 = Readonly<{
   schema: "programmable-main-token-migration-gas-sponsorship-completion/v1";
   providerReferenceId: string;
@@ -65,6 +76,17 @@ type AliasV1 = Readonly<{
   schema: "programmable-main-token-migration-gas-sponsorship-idempotency/v1";
   holderCredentialId: string;
   requestBindingHash: `sha256:${string}`;
+}>;
+
+type EligibilityAliasV1 = Readonly<{
+  schema: "programmable-main-token-migration-gas-sponsorship-eligibility/v1";
+  holderCredentialId: string;
+  requestBindingHash: `sha256:${string}`;
+  rootWalletAddress: Address;
+  walletAddress: Address;
+  transferHash: Hex | null;
+  transferBlockNumber: string | null;
+  transferLogIndex: string | null;
 }>;
 
 type AdmissionOperation = "read" | "submit";
@@ -103,6 +125,7 @@ export interface MainTokenMigrationGasSponsorStoreV1 {
     lookup: Lookup;
     idempotencyBindingHash: `sha256:${string}`;
     requestBindingHash: `sha256:${string}`;
+    eligibility: MainTokenMigrationGasSponsorEligibilityV1;
     intent: MainTokenMigrationGasSponsorIntentV1;
   }>): Promise<Readonly<{
     kind: "created" | "existing";
@@ -120,6 +143,7 @@ type ReserveInput = Readonly<{
   lookup: Lookup;
   idempotencyBindingHash: `sha256:${string}`;
   requestBindingHash: `sha256:${string}`;
+  eligibility: MainTokenMigrationGasSponsorEligibilityV1;
   intent: MainTokenMigrationGasSponsorIntentV1;
 }>;
 type CompleteInput = Readonly<{
@@ -206,6 +230,7 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
         || !DIGEST.test(input.requestBindingHash)) {
         throw new TypeError("Gas sponsor reservation is invalid");
       }
+      const eligibility = validateEligibility(input.eligibility, input.lookup);
       const intent = validateIntent(input.intent, input.lookup);
       if (intent.requestBindingHash !== input.requestBindingHash) {
         throw new TypeError("Gas sponsor reservation binding is invalid");
@@ -214,25 +239,56 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
       return transaction(pool, input.lookup.releaseId, async (client) => {
         const holder = holderId(input.lookup);
         const alias = aliasId(input.lookup.releaseId, input.idempotencyBindingHash);
-        const ids = [holder, completionId(input.lookup), alias];
+        const eligibilityAlias = eligibilityId(
+          input.lookup.releaseId,
+          eligibility.rootWalletAddress,
+        );
+        const rootHolder = holderId({
+          releaseId: input.lookup.releaseId,
+          walletAddress: eligibility.rootWalletAddress,
+        });
+        const ids = [
+          holder,
+          rootHolder,
+          completionId(input.lookup),
+          alias,
+          eligibilityAlias,
+        ];
         const existing = await selectRows(client, ids);
         const aliasRow = existing.find((row) => row.credential_id === alias);
+        const eligibilityRow = existing.find(
+          (row) => row.credential_id === eligibilityAlias,
+        );
         const holderRow = existing.find((row) => row.credential_id === holder);
+        const rootHolderRow = existing.find(
+          (row) => row.credential_id === rootHolder,
+        );
         if (aliasRow) {
           const value = parseAlias(aliasRow);
           if (value.holderCredentialId !== holder
             || value.requestBindingHash !== input.requestBindingHash
             || !holderRow) throw conflict();
         }
+        if (eligibilityRow) {
+          const value = parseEligibilityAlias(eligibilityRow);
+          if (value.holderCredentialId !== holder
+            || !holderRow) throw conflict();
+        }
         const existingRecord = recordFromRows(existing, input.lookup);
         if (existingRecord) {
+          if (existingRecord.intent.requestBindingHash
+            !== input.requestBindingHash) throw conflict();
           return Object.freeze({ kind: "existing" as const, record: existingRecord });
         }
-        if (aliasRow) throw conflict();
+        if (rootHolder !== holder && rootHolderRow) throw conflict();
+        if (aliasRow || eligibilityRow) throw conflict();
         const releaseIntents = await selectReleaseIntents(
           client,
           input.lookup.releaseId,
         );
+        const rootGuard = rootHolder === holder
+          ? null
+          : createRootGuardIntent(intent, eligibility);
         const reservedWei = releaseIntents.reduce((total, row) => {
           const existingIntent = parseIntent(row);
           if (existingIntent.releaseId !== input.lookup.releaseId
@@ -241,12 +297,29 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
           }
           return total + BigInt(existingIntent.reservedTotalWei);
         }, 0n);
-        if (reservedWei + BigInt(intent.reservedTotalWei)
+        const requestedReservationWei = BigInt(intent.reservedTotalWei)
+          + (rootGuard ? BigInt(rootGuard.reservedTotalWei) : 0n);
+        if (reservedWei + requestedReservationWei
           > BigInt(intent.totalBudgetWei)) {
           throw budgetExhausted();
         }
         await insertRow(client, holder, input.requestBindingHash, intent);
         await insertAlias(client, alias, holder, input.requestBindingHash);
+        await insertEligibilityAlias(
+          client,
+          eligibilityAlias,
+          holder,
+          input.requestBindingHash,
+          eligibility,
+        );
+        if (rootGuard) {
+          await insertRow(
+            client,
+            rootHolder,
+            rootGuard.requestBindingHash,
+            rootGuard,
+          );
+        }
         return Object.freeze({
           kind: "created" as const,
           record: Object.freeze({ intent, transactionHash: null }),
@@ -468,6 +541,22 @@ async function insertAlias(
   await insertRow(client, credentialId, requestBindingHash, alias);
 }
 
+async function insertEligibilityAlias(
+  client: ProjectionTargetPostgresClientV1,
+  credentialId: string,
+  holderCredentialId: string,
+  requestBindingHash: `sha256:${string}`,
+  eligibility: MainTokenMigrationGasSponsorEligibilityV1,
+) {
+  const alias: EligibilityAliasV1 = Object.freeze({
+    schema: "programmable-main-token-migration-gas-sponsorship-eligibility/v1",
+    holderCredentialId,
+    requestBindingHash,
+    ...eligibility,
+  });
+  await insertRow(client, credentialId, requestBindingHash, alias);
+}
+
 function recordFromRows(rows: readonly Row[], lookup: Lookup) {
   const holder = rows.find((row) => row.credential_id === holderId(lookup));
   if (!holder) return null;
@@ -496,6 +585,83 @@ function validateIntent(value: MainTokenMigrationGasSponsorIntentV1, lookup: Loo
     throw new TypeError("Gas sponsor intent lookup is invalid");
   }
   return parsed;
+}
+
+function validateEligibility(
+  input: MainTokenMigrationGasSponsorEligibilityV1,
+  lookup: Lookup,
+) {
+  if (!input || typeof input !== "object"
+    || !isAddress(input.rootWalletAddress, { strict: true })
+    || !isAddress(input.walletAddress, { strict: true })
+    || input.walletAddress.toLowerCase() !== lookup.walletAddress.toLowerCase()) {
+    throw new TypeError("Gas sponsor eligibility is invalid");
+  }
+  const rootWalletAddress = getAddress(input.rootWalletAddress);
+  const walletAddress = getAddress(input.walletAddress);
+  const direct = rootWalletAddress.toLowerCase() === walletAddress.toLowerCase();
+  if (direct) {
+    if (input.transferHash !== null
+      || input.transferBlockNumber !== null
+      || input.transferLogIndex !== null) {
+      throw new TypeError("Gas sponsor eligibility is invalid");
+    }
+  } else if (input.transferHash === null || !HASH.test(input.transferHash)
+    || input.transferBlockNumber === null
+    || !positiveDecimal(input.transferBlockNumber)
+    || input.transferLogIndex === null
+    || !decimal(input.transferLogIndex)) {
+    throw new TypeError("Gas sponsor eligibility is invalid");
+  }
+  return Object.freeze({
+    rootWalletAddress,
+    walletAddress,
+    transferHash: input.transferHash,
+    transferBlockNumber: input.transferBlockNumber,
+    transferLogIndex: input.transferLogIndex,
+  });
+}
+
+function createRootGuardIntent(
+  intent: MainTokenMigrationGasSponsorIntentV1,
+  eligibility: MainTokenMigrationGasSponsorEligibilityV1,
+) {
+  const rootWalletAddress = getAddress(eligibility.rootWalletAddress);
+  const requestBindingHash = canonicalSha256(
+    "programmable.main-token-migration.gas-sponsor.root-guard.v1",
+    {
+      releaseId: intent.releaseId,
+      rootWalletAddress,
+      walletAddress: eligibility.walletAddress,
+    },
+  );
+  const identity = rootWalletAddress.toLowerCase().slice(2);
+  const reservedTotalWei = ROOT_GUARD_TOP_UP_WEI
+    + MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1
+      * ROOT_GUARD_FEE_PER_GAS_WEI;
+  return validateIntent({
+    schema: "programmable-main-token-migration-gas-sponsorship-intent/v1",
+    releaseId: intent.releaseId,
+    walletAddress: rootWalletAddress,
+    sponsorAddress: intent.sponsorAddress,
+    amountRaw: "1",
+    topUpWei: ROOT_GUARD_TOP_UP_WEI.toString(),
+    totalBudgetWei: intent.totalBudgetWei,
+    sponsorGasLimit:
+      MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1.toString(),
+    sponsorMaxFeePerGasWei: ROOT_GUARD_FEE_PER_GAS_WEI.toString(),
+    sponsorMaxPriorityFeePerGasWei: "0",
+    reservedTotalWei: reservedTotalWei.toString(),
+    estimatedTransferGas: "1",
+    feePerGasWei: ROOT_GUARD_FEE_PER_GAS_WEI.toString(),
+    requestBindingHash,
+    providerIdempotencyKey: `mtmgs-root-guard-${identity}`,
+    providerReferenceId: `mtmgs-root-guard-${identity}`,
+    reservedAt: intent.reservedAt,
+  }, {
+    releaseId: intent.releaseId,
+    walletAddress: rootWalletAddress,
+  });
 }
 
 function parseIntent(row: Row) {
@@ -530,7 +696,8 @@ function parseIntentValue(input: JsonValue): MainTokenMigrationGasSponsorIntentV
   const sponsorGasLimit = BigInt(value.sponsorGasLimit);
   const sponsorMaxFeePerGasWei = BigInt(value.sponsorMaxFeePerGasWei);
   const sponsorMaxPriorityFeePerGasWei = BigInt(value.sponsorMaxPriorityFeePerGasWei);
-  if (sponsorGasLimit !== MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1
+  if (sponsorGasLimit < MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1
+    || sponsorGasLimit > MAIN_TOKEN_MIGRATION_GAS_SPONSOR_MAX_GAS_LIMIT_V1
     || sponsorMaxPriorityFeePerGasWei > sponsorMaxFeePerGasWei
     || BigInt(value.reservedTotalWei)
       !== BigInt(value.topUpWei) + sponsorGasLimit * sponsorMaxFeePerGasWei
@@ -586,6 +753,40 @@ function parseAlias(row: Row): AliasV1 {
   });
 }
 
+function parseEligibilityAlias(row: Row): EligibilityAliasV1 {
+  const value = object(parseCanonical(row.canonical_use));
+  exactKeys(value, [
+    "holderCredentialId", "requestBindingHash", "rootWalletAddress", "schema",
+    "transferBlockNumber", "transferHash", "transferLogIndex", "walletAddress",
+  ]);
+  if (value.schema
+      !== "programmable-main-token-migration-gas-sponsorship-eligibility/v1"
+    || typeof value.holderCredentialId !== "string"
+    || typeof value.requestBindingHash !== "string"
+    || !DIGEST.test(value.requestBindingHash)
+    || row.request_binding_hash !== value.requestBindingHash
+    || typeof value.rootWalletAddress !== "string"
+    || !isAddress(value.rootWalletAddress, { strict: true })
+    || typeof value.walletAddress !== "string"
+    || !isAddress(value.walletAddress, { strict: true })) throw unavailable();
+  const eligibility = validateEligibility({
+    rootWalletAddress: getAddress(value.rootWalletAddress),
+    walletAddress: getAddress(value.walletAddress),
+    transferHash: value.transferHash as Hex | null,
+    transferBlockNumber: value.transferBlockNumber as string | null,
+    transferLogIndex: value.transferLogIndex as string | null,
+  }, {
+    releaseId: "validation-only",
+    walletAddress: getAddress(value.walletAddress),
+  });
+  return Object.freeze({
+    schema: value.schema,
+    holderCredentialId: value.holderCredentialId,
+    requestBindingHash: value.requestBindingHash as `sha256:${string}`,
+    ...eligibility,
+  });
+}
+
 function parseCanonical(source: string) {
   const value = parseStrictJson(source, { maximumBytes: 16_384, maximumDepth: 8 });
   if (canonicalizeJson(value) !== source) throw unavailable();
@@ -637,6 +838,10 @@ function completionId(input: Lookup) {
 
 function aliasId(releaseId: string, binding: string) {
   return `${PREFIX}:idempotency:${releaseId}:${binding.slice("sha256:".length)}`;
+}
+
+function eligibilityId(releaseId: string, rootWalletAddress: Address) {
+  return `${PREFIX}:eligibility:${releaseId}:${rootWalletAddress.toLowerCase()}`;
 }
 
 function conflict() {

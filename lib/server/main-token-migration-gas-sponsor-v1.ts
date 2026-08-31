@@ -5,11 +5,14 @@ import { randomUUID } from "node:crypto";
 import { PrivyClient } from "@privy-io/node";
 import {
   createPublicClient,
+  decodeFunctionData,
+  encodeFunctionData,
   getAddress,
   http,
   isAddress,
   keccak256,
   parseAbi,
+  parseAbiItem,
   toHex,
   type Address,
   type Hex,
@@ -40,7 +43,9 @@ import { canonicalSha256 } from "./projection-target/hashing";
 import {
   getProductionMainTokenMigrationGasSponsorStoreV1,
   MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1,
+  MAIN_TOKEN_MIGRATION_GAS_SPONSOR_MAX_GAS_LIMIT_V1,
   MainTokenMigrationGasSponsorStoreErrorV1,
+  type MainTokenMigrationGasSponsorEligibilityV1,
   type MainTokenMigrationGasSponsorIntentV1,
   type MainTokenMigrationGasSponsorRecordV1,
   type MainTokenMigrationGasSponsorStoreV1,
@@ -50,6 +55,9 @@ const ERC20_ABI = parseAbi([
   "function balanceOf(address account) view returns (uint256)",
   "function transfer(address to,uint256 amount) returns (bool)",
 ]);
+const ERC20_TRANSFER_EVENT = parseAbiItem(
+  "event Transfer(address indexed from,address indexed to,uint256 value)",
+);
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/u;
 const DECIMAL = /^[1-9][0-9]{0,77}$/u;
 const HASH = /^0x[0-9a-f]{64}$/u;
@@ -61,6 +69,30 @@ const MAXIMUM_FEE_PER_GAS_WEI = 20_000_000_000n;
 const ABSOLUTE_TOP_UP_CAP_WEI = 2_000_000_000_000_000n;
 const ABSOLUTE_TOTAL_BUDGET_CAP_WEI = 1_000_000_000_000_000_000n;
 const DEADLINE_SAFETY_SECONDS = 5 * 60;
+const MAXIMUM_RELOCATION_LOGS = 64;
+const RELOCATION_LOG_BLOCK_RANGE = 5_000n;
+const PROVIDER_IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1_000;
+const PROVIDER_IDEMPOTENCY_SAFETY_MS = 5 * 60 * 1_000;
+const MAXIMUM_PROVIDER_RESPONSE_BYTES = 32_768;
+
+const PROVIDER_TRANSACTION_STATUSES = Object.freeze([
+  "broadcasted",
+  "confirmed",
+  "execution_reverted",
+  "failed",
+  "replaced",
+  "finalized",
+  "provider_error",
+  "pending",
+] as const);
+
+type MainTokenMigrationGasSponsorProviderStatusV1 =
+  typeof PROVIDER_TRANSACTION_STATUSES[number];
+
+type MainTokenMigrationGasSponsorProviderRecordV1 = Readonly<{
+  status: MainTokenMigrationGasSponsorProviderStatusV1;
+  transactionHash: Hex | null;
+}>;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -90,6 +122,7 @@ export type MainTokenMigrationGasSponsorObservationV1 = Readonly<{
   maxPriorityFeePerGasWei: bigint;
   nativeBalanceWei: bigint;
   sponsorBalanceWei: bigint;
+  eligibility: MainTokenMigrationGasSponsorEligibilityV1;
 }>;
 
 export interface MainTokenMigrationGasSponsorChainV1 {
@@ -97,6 +130,11 @@ export interface MainTokenMigrationGasSponsorChainV1 {
     configuration: MainTokenMigrationGasSponsorConfigurationV1;
     request: MainTokenMigrationGasSponsorRequestV1;
   }>): Promise<MainTokenMigrationGasSponsorObservationV1>;
+  sponsorGasLimit(input: Readonly<{
+    configuration: MainTokenMigrationGasSponsorConfigurationV1;
+    walletAddress: Address;
+    topUpWei: bigint;
+  }>): Promise<bigint>;
   status(
     record: MainTokenMigrationGasSponsorRecordV1,
   ): Promise<"pending" | "confirmed" | "failed">;
@@ -104,6 +142,9 @@ export interface MainTokenMigrationGasSponsorChainV1 {
 
 export interface MainTokenMigrationGasSponsorSenderV1 {
   assertReady(): Promise<void>;
+  lookup(
+    intent: MainTokenMigrationGasSponsorIntentV1,
+  ): Promise<MainTokenMigrationGasSponsorProviderRecordV1 | null>;
   send(intent: MainTokenMigrationGasSponsorIntentV1): Promise<Hex>;
 }
 
@@ -216,7 +257,9 @@ export function deriveMainTokenMigrationSponsorBindingsV1(input: Readonly<{
     idempotencyBindingHash,
     requestBindingHash,
     providerIdempotencyKey: `mtmgs-${providerBinding}`,
-    providerReferenceId: `mtmgs-${providerBinding}`,
+    // Privy caps reference IDs at 64 characters. This preserves 232 bits of
+    // the independently bound release + wallet digest.
+    providerReferenceId: `mtmgs-${providerBinding.slice(0, 58)}`,
   });
 }
 
@@ -442,7 +485,26 @@ export function createMainTokenMigrationGasSponsorV1(input: Readonly<{
           walletAddress: sponsorRequest.walletAddress,
           operation: "submit",
         });
-        if (existing) return await existingResponse(existing, input.chain);
+        if (existing) {
+          if (existing.intent.requestBindingHash !== bindings.requestBindingHash) {
+            throw new MainTokenMigrationGasSponsorErrorV1(
+              409,
+              "idempotency_conflict",
+            );
+          }
+          if (existing.transactionHash !== null) {
+            return await existingResponse(existing, input.chain);
+          }
+          assertBroadcastableSponsorIntent(existing.intent);
+          await input.sender.assertReady();
+          return await resumeReservedSponsorIntent({
+            chain: input.chain,
+            now: now(),
+            record: existing,
+            sender: input.sender,
+            store: input.store,
+          });
+        }
         await input.sender.assertReady();
         const observation = await input.chain.observe({
           configuration: input.configuration,
@@ -470,9 +532,13 @@ export function createMainTokenMigrationGasSponsorV1(input: Readonly<{
             "gas_quote_unavailable",
           );
         }
+        const sponsorGasLimit = await input.chain.sponsorGasLimit({
+          configuration: input.configuration,
+          walletAddress: sponsorRequest.walletAddress,
+          topUpWei: quote.topUpWei,
+        });
         const reservedTotalWei = quote.topUpWei
-          + MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1
-            * observation.feePerGasWei;
+          + sponsorGasLimit * observation.feePerGasWei;
         if (observation.sponsorBalanceWei < reservedTotalWei) {
           throw new MainTokenMigrationGasSponsorErrorV1(503, "sponsor_balance_low");
         }
@@ -484,8 +550,7 @@ export function createMainTokenMigrationGasSponsorV1(input: Readonly<{
           amountRaw: sponsorRequest.amountRaw.toString(),
           topUpWei: quote.topUpWei.toString(),
           totalBudgetWei: input.configuration.totalBudgetWei.toString(),
-          sponsorGasLimit:
-            MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1.toString(),
+          sponsorGasLimit: sponsorGasLimit.toString(),
           sponsorMaxFeePerGasWei: observation.feePerGasWei.toString(),
           sponsorMaxPriorityFeePerGasWei:
             observation.maxPriorityFeePerGasWei.toString(),
@@ -504,37 +569,27 @@ export function createMainTokenMigrationGasSponsorV1(input: Readonly<{
           },
           idempotencyBindingHash: bindings.idempotencyBindingHash,
           requestBindingHash: bindings.requestBindingHash,
+          eligibility: observation.eligibility,
           intent,
         });
         if (reservation.record.transactionHash !== null) {
           return await existingResponse(reservation.record, input.chain);
         }
-        if (reservation.kind !== "created") {
-          throw new MainTokenMigrationGasSponsorErrorV1(
-            503,
-            "submission_unknown",
-          );
+        assertBroadcastableSponsorIntent(reservation.record.intent);
+        if (reservation.kind === "existing") {
+          return await resumeReservedSponsorIntent({
+            chain: input.chain,
+            now: now(),
+            record: reservation.record,
+            sender: input.sender,
+            store: input.store,
+          });
         }
-        let hash: Hex;
-        try {
-          hash = await input.sender.send(reservation.record.intent);
-        } catch {
-          throw new MainTokenMigrationGasSponsorErrorV1(503, "submission_unknown");
-        }
-        const completed = await input.store.complete({
-          lookup: {
-            releaseId: input.configuration.releaseId,
-            walletAddress: sponsorRequest.walletAddress,
-          },
-          providerReferenceId: reservation.record.intent.providerReferenceId,
-          transactionHash: hash,
-        });
-        return response({
-          status: "submitted",
-          walletAddress: completed.intent.walletAddress,
-          topUpWei: completed.intent.topUpWei,
-          transactionHash: completed.transactionHash,
-          estimatedTransferGas: completed.intent.estimatedTransferGas,
+        return await submitReservedSponsorIntent({
+          chain: input.chain,
+          record: reservation.record,
+          sender: input.sender,
+          store: input.store,
         });
       } catch (error) {
         return errorResponse(error);
@@ -579,6 +634,124 @@ async function existingResponse(
     transactionHash: record.transactionHash,
     estimatedTransferGas: record.intent.estimatedTransferGas,
   });
+}
+
+async function resumeReservedSponsorIntent(input: Readonly<{
+  chain: MainTokenMigrationGasSponsorChainV1;
+  now: Date;
+  record: MainTokenMigrationGasSponsorRecordV1;
+  sender: MainTokenMigrationGasSponsorSenderV1;
+  store: MainTokenMigrationGasSponsorStoreV1;
+}>) {
+  assertBroadcastableSponsorIntent(input.record.intent);
+  const providerRecord = await input.sender.lookup(input.record.intent);
+  if (providerRecord?.transactionHash) {
+    const completed = await completeSponsorIntent(
+      input.store,
+      input.record.intent,
+      providerRecord.transactionHash,
+    );
+    return existingResponse(completed, input.chain);
+  }
+  if (providerRecord !== null) {
+    if (providerRecord.status === "failed"
+      || providerRecord.status === "provider_error"
+      || providerRecord.status === "execution_reverted") {
+      throw new MainTokenMigrationGasSponsorErrorV1(
+        503,
+        "sponsorship_failed",
+      );
+    }
+    throw new MainTokenMigrationGasSponsorErrorV1(503, "submission_unknown");
+  }
+  const reservedAtMs = new Date(input.record.intent.reservedAt).getTime();
+  const ageMs = input.now.getTime() - reservedAtMs;
+  if (!Number.isFinite(ageMs) || ageMs < 0
+    || ageMs >= PROVIDER_IDEMPOTENCY_WINDOW_MS
+      - PROVIDER_IDEMPOTENCY_SAFETY_MS) {
+    throw new MainTokenMigrationGasSponsorErrorV1(503, "submission_unknown");
+  }
+  return submitReservedSponsorIntent(input);
+}
+
+async function submitReservedSponsorIntent(input: Readonly<{
+  chain: MainTokenMigrationGasSponsorChainV1;
+  record: MainTokenMigrationGasSponsorRecordV1;
+  sender: MainTokenMigrationGasSponsorSenderV1;
+  store: MainTokenMigrationGasSponsorStoreV1;
+}>) {
+  assertBroadcastableSponsorIntent(input.record.intent);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const hash = await input.sender.send(input.record.intent);
+      const completed = await completeSponsorIntent(
+        input.store,
+        input.record.intent,
+        hash,
+      );
+      return response({
+        status: "submitted",
+        walletAddress: completed.intent.walletAddress,
+        topUpWei: completed.intent.topUpWei,
+        transactionHash: completed.transactionHash,
+        estimatedTransferGas: completed.intent.estimatedTransferGas,
+      });
+    } catch {
+      try {
+        const providerRecord = await input.sender.lookup(input.record.intent);
+        if (providerRecord?.transactionHash) {
+          const completed = await completeSponsorIntent(
+            input.store,
+            input.record.intent,
+            providerRecord.transactionHash,
+          );
+          return existingResponse(completed, input.chain);
+        }
+        if (providerRecord !== null) break;
+      } catch {
+        // A second send uses the identical persisted body and idempotency key.
+        // Privy guarantees it cannot execute twice inside its 24-hour window.
+      }
+    }
+  }
+  throw new MainTokenMigrationGasSponsorErrorV1(503, "submission_unknown");
+}
+
+async function completeSponsorIntent(
+  store: MainTokenMigrationGasSponsorStoreV1,
+  intent: MainTokenMigrationGasSponsorIntentV1,
+  transactionHash: Hex,
+) {
+  return store.complete({
+    lookup: {
+      releaseId: intent.releaseId,
+      walletAddress: intent.walletAddress,
+    },
+    providerReferenceId: intent.providerReferenceId,
+    transactionHash,
+  });
+}
+
+function assertBroadcastableSponsorIntent(
+  intent: MainTokenMigrationGasSponsorIntentV1,
+) {
+  const rootGuardPrefix = "mtmgs-root-guard-";
+  if (intent.providerIdempotencyKey.startsWith(rootGuardPrefix)
+    || intent.providerReferenceId.startsWith(rootGuardPrefix)) {
+    const identity = intent.walletAddress.toLowerCase().slice(2);
+    const expected = `${rootGuardPrefix}${identity}`;
+    const exactRootGuard = intent.providerIdempotencyKey === expected
+      && intent.providerReferenceId === expected
+      && intent.topUpWei === "1"
+      && intent.sponsorGasLimit === "21000"
+      && intent.sponsorMaxFeePerGasWei === "1"
+      && intent.sponsorMaxPriorityFeePerGasWei === "0"
+      && intent.reservedTotalWei === "21001";
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      exactRootGuard ? 409 : 503,
+      exactRootGuard ? "idempotency_conflict" : "sponsor_intent_mismatch",
+    );
+  }
 }
 
 function response(input: Readonly<{
@@ -654,7 +827,7 @@ function publicGasSponsorshipFailureMessage(
     return "This wallet is not eligible for automatic gas sponsorship.";
   }
   if (failure.code === "submission_unknown") {
-    return "The gas top-up needs a status review. No second top-up was sent.";
+    return "The gas top-up status could not be confirmed. Check again shortly. No second top-up will be sent.";
   }
   if (failure.code === "sponsorship_closed") {
     return "Gas sponsorship is closed for this migration window.";
@@ -757,13 +930,66 @@ function createProductionSender(
       const wallet = await privy.wallets().get(configuration.sponsorWalletId);
       assertMainTokenMigrationPrivySponsorWalletV1(wallet, configuration);
     },
+    async lookup(intent: MainTokenMigrationGasSponsorIntentV1) {
+      assertBroadcastableSponsorIntent(intent);
+      const url = new URL("https://api.privy.io/v1/transactions");
+      url.searchParams.set("reference_id", intent.providerReferenceId);
+      const authorization = Buffer.from(
+        `${appId}:${appSecret}`,
+        "utf8",
+      ).toString("base64");
+      const result = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          authorization: `Basic ${authorization}`,
+          "privy-app-id": appId,
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!result.ok) {
+        throw new MainTokenMigrationGasSponsorErrorV1(
+          503,
+          "provider_reconciliation_unavailable",
+        );
+      }
+      const contentLength = result.headers.get("content-length");
+      if (contentLength && (!/^[0-9]+$/u.test(contentLength)
+        || Number(contentLength) > MAXIMUM_PROVIDER_RESPONSE_BYTES)) {
+        throw new MainTokenMigrationGasSponsorErrorV1(
+          503,
+          "provider_response_invalid",
+        );
+      }
+      const source = await result.text();
+      if (Buffer.byteLength(source, "utf8") > MAXIMUM_PROVIDER_RESPONSE_BYTES) {
+        throw new MainTokenMigrationGasSponsorErrorV1(
+          503,
+          "provider_response_invalid",
+        );
+      }
+      return parsePrivySponsorTransactionLookupV1(
+        parseStrictJson(source, {
+          maximumBytes: MAXIMUM_PROVIDER_RESPONSE_BYTES,
+          maximumDepth: 8,
+        }),
+        {
+          referenceId: intent.providerReferenceId,
+          sponsorWalletId: configuration.sponsorWalletId,
+        },
+      );
+    },
     async send(intent: MainTokenMigrationGasSponsorIntentV1) {
+      assertBroadcastableSponsorIntent(intent);
       if (intent.sponsorAddress !== configuration.sponsorAddress
         || intent.releaseId !== configuration.releaseId
         || BigInt(intent.topUpWei) > configuration.maximumTopUpWei
         || BigInt(intent.totalBudgetWei) !== configuration.totalBudgetWei
         || BigInt(intent.sponsorGasLimit)
-          !== MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1
+          < MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1
+        || BigInt(intent.sponsorGasLimit)
+          > MAIN_TOKEN_MIGRATION_GAS_SPONSOR_MAX_GAS_LIMIT_V1
         || BigInt(intent.sponsorMaxFeePerGasWei)
           > MAXIMUM_FEE_PER_GAS_WEI
         || BigInt(intent.sponsorMaxPriorityFeePerGasWei)
@@ -793,7 +1019,6 @@ function createProductionSender(
           },
           idempotency_key: intent.providerIdempotencyKey,
           reference_id: intent.providerReferenceId,
-          request_expiry: Date.now() + 30_000,
         },
       );
       if (result.caip2 !== "eip155:1" || !HASH.test(result.hash)
@@ -803,6 +1028,281 @@ function createProductionSender(
       return result.hash as Hex;
     },
   });
+}
+
+export function parsePrivySponsorTransactionLookupV1(
+  input: unknown,
+  expected: Readonly<{
+    referenceId: string;
+    sponsorWalletId: string;
+  }>,
+): MainTokenMigrationGasSponsorProviderRecordV1 | null {
+  if (!input || Array.isArray(input) || typeof input !== "object") {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "provider_response_invalid",
+    );
+  }
+  const transactions = (input as Record<string, unknown>).transactions;
+  if (!Array.isArray(transactions) || transactions.length > 1) {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "provider_response_invalid",
+    );
+  }
+  if (transactions.length === 0) return null;
+  const transaction = transactions[0];
+  if (!transaction || Array.isArray(transaction)
+    || typeof transaction !== "object") {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "provider_response_invalid",
+    );
+  }
+  const value = transaction as Record<string, unknown>;
+  if (value.wallet_id !== expected.sponsorWalletId
+    || value.caip2 !== "eip155:1"
+    || value.reference_id !== expected.referenceId
+    || typeof value.status !== "string"
+    || !PROVIDER_TRANSACTION_STATUSES.some(
+      (status) => status === value.status,
+    )
+    || (value.transaction_hash !== null
+      && (typeof value.transaction_hash !== "string"
+        || !HASH.test(value.transaction_hash)))) {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "provider_response_invalid",
+    );
+  }
+  return Object.freeze({
+    status: value.status as MainTokenMigrationGasSponsorProviderStatusV1,
+    transactionHash: value.transaction_hash as Hex | null,
+  });
+}
+
+type RelocationTransferV1 = Readonly<{
+  blockHash: Hex;
+  blockNumber: bigint;
+  from: Address;
+  logIndex: number;
+  to: Address;
+  transactionHash: Hex;
+  value: bigint;
+}>;
+
+async function readRelocationTransfersV1(
+  client: PublicClient,
+  input: Readonly<{
+    fromBlock: bigint;
+    minimumValue: bigint;
+    toBlock: bigint;
+    walletAddress: Address;
+  }>,
+) {
+  if (input.fromBlock > input.toBlock) return [] as RelocationTransferV1[];
+  const transfers: RelocationTransferV1[] = [];
+  let cursor = input.fromBlock;
+  while (cursor <= input.toBlock) {
+    const rangeEnd = cursor + RELOCATION_LOG_BLOCK_RANGE - 1n < input.toBlock
+      ? cursor + RELOCATION_LOG_BLOCK_RANGE - 1n
+      : input.toBlock;
+    const logs = await client.getLogs({
+      address: MAIN_TOKEN_ADDRESS,
+      event: ERC20_TRANSFER_EVENT,
+      args: { to: input.walletAddress },
+      fromBlock: cursor,
+      toBlock: rangeEnd,
+      strict: true,
+    });
+    for (const log of logs) {
+      const { from, to, value } = log.args;
+      if (log.removed || log.blockHash === null || log.blockNumber === null
+        || log.transactionHash === null || log.logIndex === null
+        || !isAddress(from, { strict: true })
+        || !isAddress(to, { strict: true })
+        || getAddress(to) !== input.walletAddress
+        || typeof value !== "bigint" || value <= 0n) {
+        throw new MainTokenMigrationGasSponsorErrorV1(
+          503,
+          "eligibility_history_unavailable",
+        );
+      }
+      if (value < input.minimumValue) continue;
+      transfers.push(Object.freeze({
+        blockHash: log.blockHash.toLowerCase() as Hex,
+        blockNumber: log.blockNumber,
+        from: getAddress(from),
+        logIndex: log.logIndex,
+        to: getAddress(to),
+        transactionHash: log.transactionHash.toLowerCase() as Hex,
+        value,
+      }));
+      transfers.sort((left, right) => {
+        if (left.value !== right.value) return left.value > right.value ? -1 : 1;
+        if (left.blockNumber !== right.blockNumber) {
+          return left.blockNumber > right.blockNumber ? -1 : 1;
+        }
+        return right.logIndex - left.logIndex;
+      });
+      if (transfers.length > MAXIMUM_RELOCATION_LOGS) transfers.pop();
+    }
+    cursor = rangeEnd + 1n;
+  }
+  transfers.sort((left, right) => {
+    if (left.blockNumber !== right.blockNumber) {
+      return left.blockNumber < right.blockNumber ? -1 : 1;
+    }
+    return left.logIndex - right.logIndex;
+  });
+  return transfers;
+}
+
+function relocationTransferFingerprintV1(transfer: RelocationTransferV1) {
+  return [
+    transfer.blockHash,
+    transfer.blockNumber.toString(),
+    transfer.from.toLowerCase(),
+    String(transfer.logIndex),
+    transfer.to.toLowerCase(),
+    transfer.transactionHash,
+    transfer.value.toString(),
+  ].join(":");
+}
+
+async function isExactDirectRelocationTransferV1(
+  clients: readonly [PublicClient, PublicClient],
+  transfer: RelocationTransferV1,
+) {
+  const transactions = await Promise.all(clients.map((client) =>
+    client.getTransaction({ hash: transfer.transactionHash })));
+  const [left, right] = transactions;
+  if (!left || !right || left.hash !== right.hash
+    || left.blockHash !== right.blockHash
+    || left.blockNumber !== right.blockNumber
+    || left.from.toLowerCase() !== right.from.toLowerCase()
+    || left.to?.toLowerCase() !== right.to?.toLowerCase()
+    || left.input !== right.input || left.value !== right.value
+    || left.hash !== transfer.transactionHash
+    || left.blockHash !== transfer.blockHash
+    || left.blockNumber !== transfer.blockNumber) {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "rpc_quorum_unavailable",
+    );
+  }
+  if (left.from.toLowerCase() !== transfer.from.toLowerCase()
+    || left.to?.toLowerCase() !== MAIN_TOKEN_ADDRESS.toLowerCase()
+    || left.value !== 0n) return false;
+  try {
+    const decoded = decodeFunctionData({ abi: ERC20_ABI, data: left.input });
+    if (decoded.functionName !== "transfer" || decoded.args.length !== 2) {
+      return false;
+    }
+    const [recipient, amount] = decoded.args;
+    if (typeof recipient !== "string" || typeof amount !== "bigint") {
+      return false;
+    }
+    const normalizedRecipient = getAddress(recipient);
+    const canonicalInput = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: "transfer",
+      args: [normalizedRecipient, amount],
+    });
+    return normalizedRecipient.toLowerCase() === transfer.to.toLowerCase()
+      && amount === transfer.value
+      && canonicalInput.toLowerCase() === left.input.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+export async function resolveMainTokenMigrationSponsorEligibilityV1(input: Readonly<{
+  clients: readonly [PublicClient, PublicClient];
+  configuration: MainTokenMigrationGasSponsorConfigurationV1;
+  request: MainTokenMigrationGasSponsorRequestV1;
+  blockNumber: bigint;
+  provenanceBlockNumber: bigint;
+  directOpeningBalances: readonly [bigint, bigint];
+}>) : Promise<MainTokenMigrationGasSponsorEligibilityV1 | null> {
+  if (input.directOpeningBalances[0] >= input.request.amountRaw
+    && input.directOpeningBalances[1] >= input.request.amountRaw) {
+    return Object.freeze({
+      rootWalletAddress: input.request.walletAddress,
+      walletAddress: input.request.walletAddress,
+      transferHash: null,
+      transferBlockNumber: null,
+      transferLogIndex: null,
+    });
+  }
+  const logs = await Promise.all(input.clients.map((client) =>
+    readRelocationTransfersV1(client, {
+      fromBlock: input.configuration.startBlockNumber + 1n,
+      minimumValue: input.request.amountRaw,
+      toBlock: input.provenanceBlockNumber,
+      walletAddress: input.request.walletAddress,
+    })));
+  const leftFingerprint = logs[0].map(relocationTransferFingerprintV1);
+  const rightFingerprint = logs[1].map(relocationTransferFingerprintV1);
+  if (leftFingerprint.length !== rightFingerprint.length
+    || leftFingerprint.some((value, index) => value !== rightFingerprint[index])) {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "rpc_quorum_unavailable",
+    );
+  }
+  const prioritized = [...logs[0]].sort((left, right) => {
+    if (left.value !== right.value) return left.value > right.value ? -1 : 1;
+    if (left.blockNumber !== right.blockNumber) {
+      return left.blockNumber > right.blockNumber ? -1 : 1;
+    }
+    return right.logIndex - left.logIndex;
+  });
+  for (const transfer of prioritized) {
+    if (!await isExactDirectRelocationTransferV1(input.clients, transfer)) {
+      continue;
+    }
+    const sourceStates = await Promise.all(input.clients.map(async (client) => {
+      const [currentCode, openingCode, openingBalance] = await Promise.all([
+        client.getCode({
+          address: transfer.from,
+          blockNumber: input.blockNumber,
+        }),
+        client.getCode({
+          address: transfer.from,
+          blockNumber: input.configuration.startBlockNumber,
+        }),
+        client.readContract({
+          address: MAIN_TOKEN_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "balanceOf",
+          args: [transfer.from],
+          blockNumber: input.configuration.startBlockNumber,
+        }),
+      ]);
+      return { currentCode, openingCode, openingBalance };
+    }));
+    const [left, right] = sourceStates;
+    if (!left || !right || left.currentCode !== right.currentCode
+      || left.openingCode !== right.openingCode
+      || left.openingBalance !== right.openingBalance) {
+      throw new MainTokenMigrationGasSponsorErrorV1(
+        503,
+        "rpc_quorum_unavailable",
+      );
+    }
+    if (!isMainTokenMigrationWalletCodeEligible(left.currentCode)
+      || !isMainTokenMigrationWalletCodeEligible(left.openingCode)
+      || left.openingBalance < transfer.value) continue;
+    return Object.freeze({
+      rootWalletAddress: transfer.from,
+      walletAddress: input.request.walletAddress,
+      transferHash: transfer.transactionHash,
+      transferBlockNumber: transfer.blockNumber.toString(),
+      transferLogIndex: String(transfer.logIndex),
+    });
+  }
+  return null;
 }
 
 export function createMainTokenMigrationGasSponsorChainV1(
@@ -825,16 +1325,31 @@ export function createMainTokenMigrationGasSponsorChainV1(
       request: MainTokenMigrationGasSponsorRequestV1;
     }>) {
       try {
-        const heads = await Promise.all(clients.map((client) => client.getBlockNumber()));
+        const [heads, finalizedHeads] = await Promise.all([
+          Promise.all(clients.map((client) => client.getBlockNumber())),
+          Promise.all(clients.map((client) =>
+            client.getBlock({ blockTag: "finalized" }))),
+        ]);
         const blockNumber = heads[0] < heads[1] ? heads[0] : heads[1];
+        const finalizedNumbers = finalizedHeads.map((block) => block.number);
+        if (finalizedNumbers[0] === null || finalizedNumbers[1] === null) {
+          throw new MainTokenMigrationGasSponsorErrorV1(
+            503,
+            "rpc_quorum_unavailable",
+          );
+        }
+        const provenanceBlockNumber = finalizedNumbers[0]
+          < finalizedNumbers[1]
+          ? finalizedNumbers[0]
+          : finalizedNumbers[1];
         const observations = await Promise.all(clients.map(async (client) => {
-          const [chainId, block, finalizedBlock, startBlock,
+          const [chainId, block, provenanceBlock, startBlock,
             tokenCode, holderCode, startHolderCode,
             sponsorCode, currentBalance, openingBalance, nativeBalance, sponsorBalance,
             fees] = await Promise.all([
             client.getChainId(),
             client.getBlock({ blockNumber }),
-            client.getBlock({ blockTag: "finalized" }),
+            client.getBlock({ blockNumber: provenanceBlockNumber }),
             client.getBlock({ blockNumber: configuration.startBlockNumber }),
             client.getCode({ address: MAIN_TOKEN_ADDRESS, blockNumber }),
             client.getCode({ address: request.walletAddress, blockNumber }),
@@ -849,7 +1364,7 @@ export function createMainTokenMigrationGasSponsorChainV1(
             client.getBalance({ address: configuration.sponsorAddress, blockNumber }),
             client.estimateFeesPerGas(),
           ]);
-          return { chainId, block, finalizedBlock, startBlock,
+          return { chainId, block, provenanceBlock, startBlock,
             tokenCode, holderCode, startHolderCode,
             sponsorCode,
             currentBalance, openingBalance, nativeBalance, sponsorBalance,
@@ -865,22 +1380,32 @@ export function createMainTokenMigrationGasSponsorChainV1(
                 number: left.startBlock.number,
                 hash: left.startBlock.hash,
                 timestamp: left.startBlock.timestamp,
-                finalizedBlockNumber: left.finalizedBlock.number,
+                finalizedBlockNumber: left.provenanceBlock.number,
               },
               {
                 number: right.startBlock.number,
                 hash: right.startBlock.hash,
                 timestamp: right.startBlock.timestamp,
-                finalizedBlockNumber: right.finalizedBlock.number,
+                finalizedBlockNumber: right.provenanceBlock.number,
               },
             ],
           );
         }
         if (!left || !right || left.chainId !== 1 || right.chainId !== 1
           || left.block.hash !== right.block.hash
+          || left.provenanceBlock.number !== provenanceBlockNumber
+          || right.provenanceBlock.number !== provenanceBlockNumber
+          || left.provenanceBlock.hash !== right.provenanceBlock.hash
           || !left.tokenCode || !right.tokenCode
           || keccak256(left.tokenCode) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256
           || keccak256(right.tokenCode) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256
+          || left.holderCode !== right.holderCode
+          || left.startHolderCode !== right.startHolderCode
+          || left.sponsorCode !== right.sponsorCode
+          || left.currentBalance !== right.currentBalance
+          || left.openingBalance !== right.openingBalance
+          || left.nativeBalance !== right.nativeBalance
+          || left.sponsorBalance !== right.sponsorBalance
           || !left.fee || !right.fee
           || left.priorityFee === undefined || right.priorityFee === undefined) {
           throw new MainTokenMigrationGasSponsorErrorV1(
@@ -893,8 +1418,19 @@ export function createMainTokenMigrationGasSponsorChainV1(
           || !isMainTokenMigrationWalletCodeEligible(left.startHolderCode)
           || !isMainTokenMigrationWalletCodeEligible(right.startHolderCode)
           || left.sponsorCode !== "0x" || right.sponsorCode !== "0x"
-          || left.currentBalance < request.amountRaw || right.currentBalance < request.amountRaw
-          || left.openingBalance < request.amountRaw || right.openingBalance < request.amountRaw) {
+          || left.currentBalance < request.amountRaw
+          || right.currentBalance < request.amountRaw) {
+          throw new MainTokenMigrationGasSponsorErrorV1(422, "wallet_not_eligible");
+        }
+        const eligibility = await resolveMainTokenMigrationSponsorEligibilityV1({
+          clients,
+          configuration,
+          request,
+          blockNumber,
+          provenanceBlockNumber,
+          directOpeningBalances: [left.openingBalance, right.openingBalance],
+        });
+        if (!eligibility) {
           throw new MainTokenMigrationGasSponsorErrorV1(422, "wallet_not_eligible");
         }
         return Object.freeze({
@@ -907,14 +1443,83 @@ export function createMainTokenMigrationGasSponsorChainV1(
           feePerGasWei: left.fee > right.fee ? left.fee : right.fee,
           maxPriorityFeePerGasWei: left.priorityFee > right.priorityFee
             ? left.priorityFee : right.priorityFee,
-          nativeBalanceWei: left.nativeBalance > right.nativeBalance
-            ? left.nativeBalance : right.nativeBalance,
-          sponsorBalanceWei: left.sponsorBalance < right.sponsorBalance
-            ? left.sponsorBalance : right.sponsorBalance,
+          nativeBalanceWei: left.nativeBalance,
+          sponsorBalanceWei: left.sponsorBalance,
+          eligibility,
         });
       } catch (error) {
         if (error instanceof MainTokenMigrationGasSponsorErrorV1) throw error;
         throw new MainTokenMigrationGasSponsorErrorV1(503, "rpc_quorum_unavailable");
+      }
+    },
+    async sponsorGasLimit({ configuration, walletAddress, topUpWei }: Readonly<{
+      configuration: MainTokenMigrationGasSponsorConfigurationV1;
+      walletAddress: Address;
+      topUpWei: bigint;
+    }>) {
+      try {
+        if (topUpWei <= 0n || topUpWei > configuration.maximumTopUpWei) {
+          throw new MainTokenMigrationGasSponsorErrorV1(
+            503,
+            "gas_quote_unavailable",
+          );
+        }
+        const heads = await Promise.all(clients.map(
+          (client) => client.getBlockNumber(),
+        ));
+        const blockNumber = heads[0] < heads[1] ? heads[0] : heads[1];
+        const states = await Promise.all(clients.map(async (client) => {
+          const [chainId, block, walletCode, sponsorCode] = await Promise.all([
+            client.getChainId(),
+            client.getBlock({ blockNumber }),
+            client.getCode({ address: walletAddress, blockNumber }),
+            client.getCode({
+              address: configuration.sponsorAddress,
+              blockNumber,
+            }),
+          ]);
+          return { chainId, block, walletCode, sponsorCode };
+        }));
+        const [left, right] = states;
+        if (!left || !right || left.chainId !== 1 || right.chainId !== 1
+          || left.block.hash !== right.block.hash
+          || left.walletCode !== right.walletCode
+          || left.sponsorCode !== "0x" || right.sponsorCode !== "0x"
+          || !isMainTokenMigrationWalletCodeEligible(left.walletCode)) {
+          throw new MainTokenMigrationGasSponsorErrorV1(
+            503,
+            "rpc_quorum_unavailable",
+          );
+        }
+        if (left.walletCode === "0x") {
+          return MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1;
+        }
+        const estimates = await Promise.all(clients.map((client) =>
+          client.estimateGas({
+            account: configuration.sponsorAddress,
+            to: walletAddress,
+            value: topUpWei,
+            data: "0x",
+            blockNumber,
+          })));
+        const estimate = estimates[0] > estimates[1]
+          ? estimates[0]
+          : estimates[1];
+        const gasLimit = divCeil(estimate * GAS_MULTIPLIER_BPS, BPS);
+        if (estimate < MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1
+          || gasLimit > MAIN_TOKEN_MIGRATION_GAS_SPONSOR_MAX_GAS_LIMIT_V1) {
+          throw new MainTokenMigrationGasSponsorErrorV1(
+            422,
+            "wallet_not_eligible",
+          );
+        }
+        return gasLimit;
+      } catch (error) {
+        if (error instanceof MainTokenMigrationGasSponsorErrorV1) throw error;
+        throw new MainTokenMigrationGasSponsorErrorV1(
+          503,
+          "gas_quote_unavailable",
+        );
       }
     },
     async status(record: MainTokenMigrationGasSponsorRecordV1) {
