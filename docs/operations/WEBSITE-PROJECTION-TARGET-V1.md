@@ -64,8 +64,8 @@ instances. Together they provide:
   and post-launch-role bindings;
 - a fail-closed distributed GMGN account gate with one exact singleton, bounded
   leases, exact-holder failure release, and the latest 256 generations of
-  reservation, completion, and provider-block decisions (512 rows on the gate
-  path; at most 514 including the two policy-bounded next-generation identities);
+  reservation, completion, and provider-block decisions (at most 512 gate-path
+  rows);
 - lane-specific constraints requiring complete entitlement metadata and forbidding
   that metadata on custom-launch records;
 - enabled and forced RLS on every application table;

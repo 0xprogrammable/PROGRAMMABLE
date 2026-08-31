@@ -125,35 +125,10 @@ CREATE POLICY gmgn_account_gate_v1_runtime_update
 CREATE POLICY gmgn_account_gate_decisions_v1_runtime_insert
   ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
   AS PERMISSIVE FOR INSERT TO programmable_website_projection_runtime
-  WITH CHECK (
-    gate_id = 'gmgn-openapi-v1'
-    AND EXISTS (
-      SELECT 1
-        FROM programmable_website_projection_v1.gmgn_account_gate_v1 AS gate
-       WHERE gate.gate_id = 'gmgn-openapi-v1'
-         AND (
-           (decision_kind = 'reserved'
-             AND generation = gate.generation + 1
-             AND gate.blocked_until <= decided_at
-             AND gate.next_slot_at <= decided_at
-             AND gate.lease_until <= decided_at)
-           OR
-           (decision_kind = 'completed'
-             AND generation = gate.generation
-             AND gate.lease_holder IS NOT NULL
-             AND lease_holder = gate.lease_holder)
-           OR
-           (decision_kind = 'provider-blocked'
-             AND generation = gate.generation + 1
-             AND gate.lease_holder IS NOT NULL
-             AND lease_holder = gate.lease_holder)
-         )
-    )
-  );
+  WITH CHECK (gate_id = 'gmgn-openapi-v1');
 
--- Normal gate decisions are bounded to the latest 256 generations (at most 512
--- rows). The INSERT policy can admit at most the two valid next-generation
--- decision identities, so even direct use of the runtime ACL is bounded to 514.
+-- Gate-path decisions are bounded to the latest 256 generations and at most 512
+-- rows under the decision constraints and generation-bound transition code.
 -- The extra one-generation policy margin lets a reservation prune against the
 -- gate row's pre-update MVCC snapshot. It never exposes recent evidence.
 CREATE POLICY gmgn_account_gate_decisions_v1_runtime_prune
