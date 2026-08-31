@@ -55,20 +55,24 @@ describe("main token migration gas sponsor activation contract", () => {
     "docs/operations/MAIN-TOKEN-MIGRATION-GAS-SPONSOR-READINESS-V1.md",
   );
 
-  it("pins the checked-in release window while keeping operational sponsor values blank", () => {
+  it("pins the exact checked-in release window while keeping operational sponsor values blank", () => {
     expect(contract.releaseId).toBe(
       "v4-ethereum-to-robinhood-72h-2026-v2",
     );
     expect(manifest).toMatchObject({
       schema: "programmable-main-token-migration-activation/v1",
       releaseId: contract.releaseId,
-      enabled: false,
+      enabled: true,
       windowDurationSeconds: "259200",
-      windowStartTimestamp: null,
-      deadlineTimestampExclusive: null,
-      startBlockNumber: null,
-      startBlockHash: null,
     });
+    expect(manifest.windowStartTimestamp).toMatch(/^[1-9][0-9]*$/u);
+    expect(manifest.deadlineTimestampExclusive).toMatch(/^[1-9][0-9]*$/u);
+    expect(
+      Number(manifest.deadlineTimestampExclusive) -
+        Number(manifest.windowStartTimestamp),
+    ).toBe(259_200);
+    expect(manifest.startBlockNumber).toMatch(/^[1-9][0-9]*$/u);
+    expect(manifest.startBlockHash).toMatch(/^0x[0-9a-f]{64}$/u);
 
     expect(environment).toContain(
       `${contract.environment.enabled.name}=${contract.environment.enabled.disabledValue}`,
