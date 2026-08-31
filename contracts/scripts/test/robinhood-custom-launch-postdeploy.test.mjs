@@ -576,6 +576,34 @@ test("canonical verifier timestamps remain valid through Phase A stage assembly"
   }
 });
 
+test("production capture builder binds the exact protected Git source closure", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const base = await buildInput(fixture);
+    const input = await buildWithProductionInputBuilder(fixture);
+    const bytes = Buffer.from(`${JSON.stringify(input, null, 2)}\n`, "utf8");
+    const authorization = buildRobinhoodCaptureAuthorization({
+      ...structuredClone(base.authorization),
+      subjectSha256: sha256CaptureBytes(bytes),
+      sourceClosureDigest: input.capture.sourceOrigin.sourceClosureDigest,
+      verificationDigest: null,
+    });
+    const bundle = await materializeRobinhoodStageBundle({
+      repositoryRoot: fixture.root,
+      input,
+      inputBytes: bytes,
+      captureAuthorization: authorization,
+      captureDependencies: testCaptureDependencies,
+    });
+    assert.equal(
+      bundle.sourceClosure.sourceClosureDigest,
+      input.capture.sourceOrigin.sourceClosureDigest,
+    );
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("accepts alternate self-consistent no-CBOR provider context without granting source authority", async () => {
   const fixture = await fixtureRepository();
   try {
