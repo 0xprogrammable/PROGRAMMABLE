@@ -1,0 +1,63 @@
+name: Seal existing Custom Launch key for backend
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: programmable-production
+  cancel-in-progress: false
+
+jobs:
+  seal-existing-key:
+    name: Check existing key eligibility and seal for the fixed backend environment
+    if: >-
+      github.repository_id == 1314365508 &&
+      github.repository == 'programmablehq/PROGRAMMABLE' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/production' &&
+      github.ref_protected == true &&
+      github.actor == 'hazarxyz' &&
+      github.actor_id == '258789013' &&
+      github.triggering_actor == 'hazarxyz' &&
+      github.run_attempt == 1 &&
+      github.event.sender.login == 'hazarxyz' &&
+      github.event.sender.id == 258789013
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - name: Check out exact protected production source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          lfs: false
+          submodules: false
+          sparse-checkout: scripts/relay-existing-custom-launch-key.py
+          sparse-checkout-cone-mode: false
+
+      - name: Verify source and preinstalled sealed-box runtime without the API key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I -B scripts/relay-existing-custom-launch-key.py preflight
+
+      - name: Prove existing read and create admission, then seal to the fixed recipient
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RELAY_SOURCE_API_KEY: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_V3_CANARY_API_KEY }}
+        run: python3 -I -B scripts/relay-existing-custom-launch-key.py seal
+
+      - name: Preserve only the sealed value and non-secret provenance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: existing-custom-launch-key-relay-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/existing-custom-launch-key-relay.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
