@@ -23,6 +23,8 @@ export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_HEAD_GAP = 4n;
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_GAS_HEADROOM_BPS = 500n;
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_FIXED_GAS_HEADROOM = 25_000n;
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_GAS_LIMIT = 10_000_000n;
+export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_ESTIMATE_DRIFT_GAS = 1_000n;
+export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_ESTIMATE_DRIFT_BPS = 1n;
 
 const CHAIN_ID = 4_663n;
 const CHAIN_ID_HEX = "0x1237";
@@ -585,7 +587,21 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
     const gasEstimateArrays = [
       simulation.gasEstimates,
       simulation.closingGasEstimates,
-    ];
+    ].map((values, arrayIndex) => {
+      if (!Array.isArray(values) || values.length !== providerIds.length) {
+        fail("receipt gas estimate provider count is invalid");
+      }
+      return values.map((value, providerIndex) => {
+        const parsed = parseDecimalWei(
+          value,
+          `receipt ${arrayIndex === 0 ? "opening" : "closing"} ${providerIds[providerIndex]} gas estimate`,
+        );
+        if (value !== parsed.toString()) {
+          fail("receipt gas estimate is not canonical decimal text");
+        }
+        return parsed;
+      });
+    });
     const expectedReturnedAddresses = Object.values(EXPECTED_PREPARED_ADDRESSES);
     const pendingBaseFeeMaximum = [
       ...openingPendingBlocks,
@@ -682,9 +698,11 @@ export function assertFreshRobinhoodFoundationOwnerEnvelope(
       ) &&
       gasEstimateArrays.every(
         (values) =>
-          Array.isArray(values) &&
-          values.length === providerIds.length &&
-          values.every((value) => value === agreedGasEstimate.toString()),
+          conservativeRobinhoodFoundationGasEstimate(values) ===
+          agreedGasEstimate,
+      ) &&
+      gasEstimateArrays[0].every(
+        (value, index) => value === gasEstimateArrays[1][index],
       ) &&
       reviewedRobinhoodFoundationGasLimit(agreedGasEstimate) ===
         reviewedGasLimit &&
@@ -932,6 +950,30 @@ export function reviewedRobinhoodFoundationGasLimit(estimatedGas) {
     fail("foundation gas limit exceeds the reviewed 10,000,000 gas cap");
   }
   return reviewed;
+}
+
+export function conservativeRobinhoodFoundationGasEstimate(values) {
+  if (
+    !Array.isArray(values) ||
+    values.length !== 2 ||
+    values.some(
+      (value) =>
+        typeof value !== "bigint" || value <= 0n || value > UINT64_MAXIMUM,
+    )
+  ) {
+    fail("foundation provider gas estimates are invalid");
+  }
+  const minimum = values[0] < values[1] ? values[0] : values[1];
+  const maximum = values[0] > values[1] ? values[0] : values[1];
+  const drift = maximum - minimum;
+  if (
+    drift > ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_ESTIMATE_DRIFT_GAS ||
+    drift * BASIS_POINTS >
+      minimum * ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_ESTIMATE_DRIFT_BPS
+  ) {
+    fail("foundation provider gas estimates exceed the reviewed drift bound");
+  }
+  return maximum;
 }
 
 function authenticatedProviderBinding(pin, rpcUrl) {
@@ -1562,6 +1604,20 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     receipt.simulation.agreedGasEstimate,
     "owner-envelope gas estimate",
   );
+  const expectedProviderGasEstimates = receipt.simulation.gasEstimates.map(
+    (value, index) =>
+      parseDecimalWei(
+        value,
+        `${providers[index].providerId} owner-envelope gas estimate`,
+      ),
+  );
+  if (
+    conservativeRobinhoodFoundationGasEstimate(
+      expectedProviderGasEstimates,
+    ) !== expectedGasEstimate
+  ) {
+    fail("owner-envelope conservative gas estimate is invalid");
+  }
   const reviewedGasLimit = parseQuantity(
     receipt.transaction.gasQuantity,
     "owner-envelope gas limit",
@@ -1752,7 +1808,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
       snapshot.callResult !== snapshots[0].callResult ||
       JSON.stringify(returnedAddresses) !==
         JSON.stringify(receipt.simulation.returnedAddresses) ||
-      snapshot.estimatedGas !== expectedGasEstimate ||
+      snapshot.estimatedGas !== expectedProviderGasEstimates[index] ||
       snapshot.estimatedGas > reviewedGasLimit
     ) {
       fail(
@@ -1769,10 +1825,16 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
       JSON.stringify(snapshots[1].codes) ||
     JSON.stringify(snapshots[0].vacancyNonces) !==
       JSON.stringify(snapshots[1].vacancyNonces) ||
-    snapshots[0].callResult !== snapshots[1].callResult ||
-    snapshots[0].estimatedGas !== snapshots[1].estimatedGas
+    snapshots[0].callResult !== snapshots[1].callResult
   ) {
     fail("Robinhood RPCs disagree on action-time owner-wallet state");
+  }
+  if (
+    conservativeRobinhoodFoundationGasEstimate(
+      snapshots.map(({ estimatedGas }) => estimatedGas),
+    ) !== expectedGasEstimate
+  ) {
+    fail("action-time conservative gas estimate differs from the envelope");
   }
 
   const closings = await Promise.all(
@@ -1915,7 +1977,6 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
       closing.callResult !== snapshots[index].callResult ||
       closing.callResult !== snapshots[0].callResult ||
       closing.estimatedGas !== snapshots[index].estimatedGas ||
-      closing.estimatedGas !== expectedGasEstimate ||
       closing.estimatedGas > reviewedGasLimit
     ) {
       fail(`${providerId} action-time state changed during wallet verification`);
@@ -1941,10 +2002,18 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     JSON.stringify(closings[0].codes) !== JSON.stringify(closings[1].codes) ||
     JSON.stringify(closings[0].vacancyNonces) !==
       JSON.stringify(closings[1].vacancyNonces) ||
-    closings[0].callResult !== closings[1].callResult ||
-    closings[0].estimatedGas !== closings[1].estimatedGas
+    closings[0].callResult !== closings[1].callResult
   ) {
     fail("Robinhood RPCs disagree on action-time closing owner-wallet state");
+  }
+  if (
+    conservativeRobinhoodFoundationGasEstimate(
+      closings.map(({ estimatedGas }) => estimatedGas),
+    ) !== expectedGasEstimate
+  ) {
+    fail(
+      "action-time closing conservative gas estimate differs from the envelope",
+    );
   }
   const feeObservations = [...snapshots, ...closings];
   const observedPendingBaseFeePerGas = feeObservations.reduce(
@@ -2350,15 +2419,16 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
       JSON.stringify(pendingSnapshots[1].codes) ||
     JSON.stringify(pendingSnapshots[0].vacancyNonces) !==
       JSON.stringify(pendingSnapshots[1].vacancyNonces) ||
-    pendingSnapshots[0].callResult !== pendingSnapshots[1].callResult ||
-    pendingSnapshots[0].estimatedGas !== pendingSnapshots[1].estimatedGas
+    pendingSnapshots[0].callResult !== pendingSnapshots[1].callResult
   ) {
-    fail("Robinhood RPCs disagree on pending state, simulation, or gas");
+    fail("Robinhood RPCs disagree on pending state or simulation");
   }
   const returnedAddresses = decodeSimulationReturn(
     pendingSnapshots[0].callResult,
   );
-  const estimatedGas = pendingSnapshots[0].estimatedGas;
+  const estimatedGas = conservativeRobinhoodFoundationGasEstimate(
+    pendingSnapshots.map(({ estimatedGas: value }) => value),
+  );
   const gasLimit = reviewedRobinhoodFoundationGasLimit(estimatedGas);
   if (
     commonBlocks.some((block) => gasLimit > block.gasLimit) ||
@@ -2508,7 +2578,6 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
         JSON.stringify(pendingSnapshots[index].vacancyNonces) ||
       closing.callResult !== pendingSnapshots[index].callResult ||
       closing.estimatedGas !== pendingSnapshots[index].estimatedGas ||
-      closing.estimatedGas !== estimatedGas ||
       gasLimit > closing.pendingBlock.gasLimit
     ) {
       fail(`${providers[index].providerId} state changed during preflight`);
@@ -2532,12 +2601,18 @@ export async function prepareRobinhoodFoundationOwnerEnvelope({
     JSON.stringify(closings[0].codes) !== JSON.stringify(closings[1].codes) ||
     JSON.stringify(closings[0].vacancyNonces) !==
       JSON.stringify(closings[1].vacancyNonces) ||
-    closings[0].callResult !== closings[1].callResult ||
-    closings[0].estimatedGas !== closings[1].estimatedGas
+    closings[0].callResult !== closings[1].callResult
   ) {
     fail(
-      "Robinhood RPCs disagree on closing nonce, code, vacancy, simulation, or gas",
+      "Robinhood RPCs disagree on closing nonce, code, vacancy, or simulation",
     );
+  }
+  if (
+    conservativeRobinhoodFoundationGasEstimate(
+      closings.map(({ estimatedGas: value }) => value),
+    ) !== estimatedGas
+  ) {
+    fail("conservative gas estimate changed during preflight");
   }
   const feeObservations = [...pendingSnapshots, ...closings];
   const maxPriorityFeePerGas = feeObservations.reduce(
