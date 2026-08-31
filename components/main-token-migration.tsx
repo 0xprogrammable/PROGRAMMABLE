@@ -173,6 +173,7 @@ export type GasSponsorshipState =
 
 type GaslessTransferStatus =
   | "signature_required"
+  | "recovery_available"
   | "permit_submitted"
   | "permit_pending"
   | "transfer_submitted"
@@ -191,15 +192,34 @@ type GaslessTransferResponse = Readonly<{
   permitTransactionHash: Hex | null;
   transferTransactionHash: Hex | null;
   transferBlockNumber: string | null;
+  previousRequestBindingHash?: `sha256:${string}`;
 }>;
 
 type GaslessStage = "idle" | "preparing" | "signing" | "relaying" | "reconciling";
 
-type StoredGaslessTransferProgress = Readonly<{
-  schema: "programmable-main-token-migration-gasless-ui/v1";
+export type StoredGaslessTransferProgress = Readonly<{
   account: string;
   amountRaw: string;
+} & ({ schema: "programmable-main-token-migration-gasless-ui/v1" } | {
+  schema: "programmable-main-token-migration-gasless-ui/v2";
+  idempotencyKey: string;
+  previousRequestBindingHash: `sha256:${string}`;
+})>;
+
+type GaslessRecoveryReview = Readonly<{
+  progress: StoredGaslessTransferProgress;
+  idempotencyKey: string;
+  previousRequestBindingHash: `sha256:${string}` | null;
 }>;
+
+export function gaslessRecoveryIdempotencyKey(previousRequestBindingHash: `sha256:${string}`) {
+  if (!/^sha256:[0-9a-f]{64}$/u.test(previousRequestBindingHash)) {
+    throw new Error("The previous transfer binding is invalid.");
+  }
+  // Tabs recovering the same parent must never save competing request keys.
+  // This is an idempotency locator, not a credential or authorization token.
+  return `gasless-recovery-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${previousRequestBindingHash.slice(7)}`;
+}
 
 type GasSponsorshipEndpointResult = Readonly<{
   body: MainTokenGasSponsorshipResponse;
@@ -266,33 +286,104 @@ function clearGaslessTransferProgress() {
   window.dispatchEvent(new Event(migrationRecoveryEvent));
 }
 
-function storedGaslessTransferProgress(): StoredGaslessTransferProgress | null {
+export function storedGaslessTransferProgress(): StoredGaslessTransferProgress | null {
   try {
     const source = window.localStorage.getItem(gaslessTransferProgressStorageKey);
     if (!source) return null;
     const value = JSON.parse(source) as Record<string, unknown>;
-    if (Object.keys(value).sort().join("\0") !==
-        ["account", "amountRaw", "schema"].sort().join("\0") ||
-      value.schema !== "programmable-main-token-migration-gasless-ui/v1" ||
+    const recovery = value.schema === "programmable-main-token-migration-gasless-ui/v2";
+    const keys = recovery
+      ? ["account", "amountRaw", "schema", "idempotencyKey", "previousRequestBindingHash"]
+      : ["account", "amountRaw", "schema"];
+    if (Object.keys(value).sort().join("\0") !== keys.sort().join("\0") ||
+      (!recovery && value.schema !== "programmable-main-token-migration-gasless-ui/v1") ||
       typeof value.account !== "string" ||
       !isAddress(value.account, { strict: true }) ||
       value.account !== getAddress(value.account).toLowerCase() ||
       typeof value.amountRaw !== "string" ||
-      !positiveIntegerPattern.test(value.amountRaw)) return null;
-    return Object.freeze({
-      schema: value.schema,
+      !positiveIntegerPattern.test(value.amountRaw) ||
+      migrationGaslessResumeAmount({ account: value.account, amountRaw: value.amountRaw }, value.account) === null ||
+      (recovery && (typeof value.idempotencyKey !== "string" ||
+        !/^[a-zA-Z0-9:_-]{16,200}$/u.test(value.idempotencyKey) ||
+        typeof value.previousRequestBindingHash !== "string" ||
+        !digestPattern.test(value.previousRequestBindingHash)))) return null;
+    const common = {
       account: value.account,
       amountRaw: value.amountRaw,
-    });
+    };
+    return recovery
+      ? Object.freeze({ ...common,
+          schema: "programmable-main-token-migration-gasless-ui/v2",
+          idempotencyKey: value.idempotencyKey as string,
+          previousRequestBindingHash: value.previousRequestBindingHash as `sha256:${string}`,
+        })
+      : Object.freeze({ ...common, schema: "programmable-main-token-migration-gasless-ui/v1" });
   } catch {
     return null;
   }
+}
+
+function sameGaslessProgress(
+  current: StoredGaslessTransferProgress | null,
+  expected: StoredGaslessTransferProgress,
+) {
+  return current !== null && current.schema === expected.schema &&
+    current.account === expected.account && current.amountRaw === expected.amountRaw &&
+    (current.schema !== "programmable-main-token-migration-gasless-ui/v2" ||
+      (expected.schema === current.schema && current.idempotencyKey === expected.idempotencyKey &&
+        current.previousRequestBindingHash === expected.previousRequestBindingHash));
+}
+
+export function assertGaslessRecoveryProgress(expected: StoredGaslessTransferProgress) {
+  if (!sameGaslessProgress(storedGaslessTransferProgress(), expected)) {
+    throw new Error("This saved transfer changed in another tab. Refresh and check it before continuing.");
+  }
+}
+
+export function persistGaslessRecoveryProgress(
+  previous: StoredGaslessTransferProgress,
+  idempotencyKey: string,
+  previousRequestBindingHash: `sha256:${string}`,
+): StoredGaslessTransferProgress {
+  assertGaslessRecoveryProgress(previous);
+  if (!/^[a-zA-Z0-9:_-]{16,200}$/u.test(idempotencyKey) ||
+    !digestPattern.test(previousRequestBindingHash)) {
+    throw new Error("The new transfer recovery details are invalid. Nothing was submitted.");
+  }
+  const value: StoredGaslessTransferProgress = {
+    schema: "programmable-main-token-migration-gasless-ui/v2",
+    account: previous.account,
+    amountRaw: previous.amountRaw,
+    idempotencyKey,
+    previousRequestBindingHash,
+  };
+  const source = JSON.stringify(value);
+  const previousSource = window.localStorage.getItem(gaslessTransferProgressStorageKey);
+  try {
+    // The key and predecessor travel in one atomic marker, never separate writes.
+    window.localStorage.setItem(gaslessTransferProgressStorageKey, source);
+    if (window.localStorage.getItem(gaslessTransferProgressStorageKey) !== source) {
+      throw new Error("Recovery state was not persisted");
+    }
+  } catch {
+    if (previousSource !== null) {
+      try {
+        if (window.localStorage.getItem(gaslessTransferProgressStorageKey) === source) {
+          window.localStorage.setItem(gaslessTransferProgressStorageKey, previousSource);
+        }
+      } catch { /* No new submit is allowed. */ }
+    }
+    throw new Error("This browser could not save the new request. Nothing was submitted. Keep this page open and contact migration support.");
+  }
+  window.dispatchEvent(new Event(migrationRecoveryEvent));
+  return value;
 }
 
 export function parseGaslessTransferResponse(
   input: unknown,
   expectedAccount: string,
   expectedAmountRaw: bigint,
+  expectedPreviousRequestBindingHash?: `sha256:${string}`,
 ): GaslessTransferResponse {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("The gasless transfer response is invalid.");
@@ -304,10 +395,20 @@ export function parseGaslessTransferResponse(
     "transferBlockNumber", "transferTransactionHash", "walletAddress",
   ];
   const statuses: readonly GaslessTransferStatus[] = [
-    "signature_required", "permit_submitted", "permit_pending",
+    "signature_required", "recovery_available", "permit_submitted", "permit_pending",
     "transfer_submitted", "transfer_pending", "confirmed",
   ];
   const status = value.status as GaslessTransferStatus;
+  const hasPredecessor = Object.hasOwn(value, "previousRequestBindingHash");
+  if (hasPredecessor) exactKeys.push("previousRequestBindingHash");
+  const predecessorValid = hasPredecessor
+    ? typeof value.previousRequestBindingHash === "string" &&
+      digestPattern.test(value.previousRequestBindingHash) &&
+      (status === "recovery_available"
+        ? value.previousRequestBindingHash === value.requestBindingHash
+        : status === "signature_required" &&
+          value.previousRequestBindingHash === expectedPreviousRequestBindingHash)
+    : status !== "recovery_available" && expectedPreviousRequestBindingHash === undefined;
   const permitHashValid = value.permitTransactionHash === null ||
     (typeof value.permitTransactionHash === "string" &&
       transactionHashPattern.test(value.permitTransactionHash));
@@ -317,7 +418,9 @@ export function parseGaslessTransferResponse(
   const transferBlockValid = value.transferBlockNumber === null ||
     (typeof value.transferBlockNumber === "string" &&
       positiveIntegerPattern.test(value.transferBlockNumber));
-  const statusHashesValid = status === "signature_required"
+  const statusHashesValid = status === "recovery_available"
+    ? value.transferTransactionHash === null
+    : status === "signature_required"
     ? value.permitTransactionHash === null &&
       value.transferTransactionHash === null
     : status === "permit_submitted" || status === "permit_pending"
@@ -344,7 +447,7 @@ export function parseGaslessTransferResponse(
     !positiveIntegerPattern.test(value.permitDeadline) ||
     typeof value.requestBindingHash !== "string" ||
     !digestPattern.test(value.requestBindingHash) ||
-    !permitHashValid || !transferHashValid || !transferBlockValid ||
+    !predecessorValid || !permitHashValid || !transferHashValid || !transferBlockValid ||
     (status !== "confirmed" && value.transferBlockNumber !== null) ||
     !statusHashesValid) {
     throw new Error("The gasless transfer response is invalid.");
@@ -365,6 +468,9 @@ export function parseGaslessTransferResponse(
       ? null
       : (value.transferTransactionHash as string).toLowerCase() as Hex,
     transferBlockNumber: value.transferBlockNumber as string | null,
+    ...(hasPredecessor ? {
+      previousRequestBindingHash: value.previousRequestBindingHash as `sha256:${string}`,
+    } : {}),
   });
 }
 
@@ -1196,6 +1302,9 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
   const [gaslessStage, setGaslessStage] = useState<GaslessStage>("idle");
   const [gaslessProgress, setGaslessProgress] =
     useState<StoredGaslessTransferProgress | null>(null);
+  const [gaslessRecoveryReview, setGaslessRecoveryReview] =
+    useState<GaslessRecoveryReview | null>(null);
+  const [gaslessNeedsSupport, setGaslessNeedsSupport] = useState(false);
   const [accountCodeObservation, setAccountCodeObservation] =
     useState<AccountCodeObservation | null>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
@@ -1439,6 +1548,8 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
     const restore = () => {
       const restored = storedGaslessTransferProgress();
       setGaslessProgress(restored);
+      setGaslessRecoveryReview((current) => current && sameGaslessProgress(restored, current.progress)
+        ? current : null);
       if (restored && !hasTrackedTransfer) {
         if (wallet?.account.toLowerCase() === restored.account) {
           setAmount(formatUnits(BigInt(restored.amountRaw), MAIN_TOKEN_DECIMALS));
@@ -1961,16 +2072,27 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
     amountRaw: bigint,
     resumeExisting = false,
     preservePendingRequest = false,
+    recoveryReview: GaslessRecoveryReview | null = null,
   ) {
     const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error("Reconnect this wallet before using the gasless transfer.");
     }
-    const idempotencyKey = gaslessTransferIdempotencyKey(
-      account,
-      gaslessIdempotencyKeysRef.current,
-      resumeExisting || preservePendingRequest,
-    );
+    const savedProgress = storedGaslessTransferProgress();
+    if (resumeExisting || preservePendingRequest || recoveryReview) {
+      if (!savedProgress || migrationGaslessResumeAmount(savedProgress, account) !== amountRaw) {
+        throw new Error("The saved transfer is unavailable. Refresh and check it before continuing.");
+      }
+      if (recoveryReview) assertGaslessRecoveryProgress(recoveryReview.progress);
+    }
+    const idempotencyKey = recoveryReview?.idempotencyKey ??
+      (savedProgress?.schema === "programmable-main-token-migration-gasless-ui/v2"
+        ? savedProgress.idempotencyKey
+        : gaslessTransferIdempotencyKey(
+            account,
+            gaslessIdempotencyKeysRef.current,
+            resumeExisting || preservePendingRequest,
+          ));
     const headers = {
       Accept: "application/json",
       Authorization: `Bearer ${accessToken}`,
@@ -1978,13 +2100,18 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       "Idempotency-Key": idempotencyKey,
     };
     setSubmission({ kind: "submitting" });
+    setGaslessNeedsSupport(false);
     let submitBody: string;
+    let submittedProgress: StoredGaslessTransferProgress | null = null;
     if (resumeExisting) {
       setGaslessStage("reconciling");
       submitBody = JSON.stringify({
         action: "resume",
         walletAddress: account,
         amountRaw: amountRaw.toString(),
+        ...(savedProgress?.schema === "programmable-main-token-migration-gasless-ui/v2"
+          ? { previousRequestBindingHash: savedProgress.previousRequestBindingHash }
+          : {}),
       });
     } else {
       if (!trustedTransferWindowOpen()) {
@@ -1992,9 +2119,12 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       }
       setGaslessStage("preparing");
       const prepareBody = JSON.stringify({
-        action: "prepare",
+        action: recoveryReview?.previousRequestBindingHash ? "prepare_recovery" : "prepare",
         walletAddress: account,
         amountRaw: amountRaw.toString(),
+        ...(recoveryReview?.previousRequestBindingHash
+          ? { previousRequestBindingHash: recoveryReview.previousRequestBindingHash }
+          : {}),
       });
       let prepared: GaslessTransferResponse | null = null;
       let prepareFailure = "The gasless transfer is temporarily unavailable.";
@@ -2010,11 +2140,17 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
             await response.json(),
             account,
             amountRaw,
+            recoveryReview?.previousRequestBindingHash ?? undefined,
           );
           break;
         }
         prepareFailure = (await gaslessTransferFailure(response)).message;
         if ((response.status !== 429 && response.status !== 503) || attempt === 4) {
+          if (recoveryReview && (response.status === 409 || response.status === 422)) {
+            // The server no longer offers this recovery. Keep the durable marker
+            // and return to checking its status, never blindly re-sign it.
+            setGaslessRecoveryReview(null);
+          }
           throw new Error(prepareFailure);
         }
         await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
@@ -2023,6 +2159,10 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       if (prepared.status !== "signature_required") {
         throw new Error("The gasless transfer request is not ready for review.");
       }
+      if (!trustedTransferWindowOpen()) {
+        throw new Error("New transfers are closed. Your previous request is still saved.");
+      }
+      if (recoveryReview) assertGaslessRecoveryProgress(recoveryReview.progress);
       if (!sessionActiveRef.current) return;
       setGaslessStage("signing");
       const permit = await signMainTokenMigrationPermit({
@@ -2031,22 +2171,36 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
         spender: getAddress(prepared.sponsorAddress),
         value: amountRaw,
       });
+      if (!sessionActiveRef.current) return;
+      if (!trustedTransferWindowOpen()) {
+        throw new Error("New transfers closed during wallet review. Nothing new was submitted.");
+      }
+      if (recoveryReview) assertGaslessRecoveryProgress(recoveryReview.progress);
       // An unsigned request cannot transfer V4 and must not leave a stuck marker.
       // Persist before submit so a lost response always resumes this exact intent.
-      const progress = persistGaslessTransferProgress(account, amountRaw);
+      const progress = recoveryReview?.previousRequestBindingHash
+        ? persistGaslessRecoveryProgress(recoveryReview.progress, idempotencyKey,
+            recoveryReview.previousRequestBindingHash)
+        : persistGaslessTransferProgress(account, amountRaw);
       setGaslessProgress(progress);
+      submittedProgress = progress;
+      setGaslessRecoveryReview(null);
       setGaslessStage("relaying");
       submitBody = JSON.stringify({
-        action: "submit",
+        action: recoveryReview?.previousRequestBindingHash ? "submit_recovery" : "submit",
         walletAddress: account,
         amountRaw: amountRaw.toString(),
         nonce: prepared.nonce,
         permitDeadline: prepared.permitDeadline,
         permitSignature: permit.signature,
         requestBindingHash: prepared.requestBindingHash,
+        ...(recoveryReview?.previousRequestBindingHash
+          ? { previousRequestBindingHash: recoveryReview.previousRequestBindingHash }
+          : {}),
       });
     }
     for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (submittedProgress) assertGaslessRecoveryProgress(submittedProgress);
       const response = await fetch(gaslessTransferEndpoint, {
         method: "POST",
         cache: "no-store",
@@ -2057,14 +2211,27 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
         const failure = await gaslessTransferFailure(response);
         if (resumeExisting && response.status === 409 &&
           failure.code === "gasless_request_not_found" && trustedTransferWindowOpen()) {
-          // A crash before the first submit can leave only the local marker.
-          // Retry once with its same binding; never clear it or start a second key.
-          await reviewGaslessTransfer(account, amountRaw, false, true);
+          // A crash before submit may leave only the local marker. Offer a
+          // separate wallet review using its SAME key; status checks never sign.
+          if (!savedProgress) throw new Error(failure.message);
+          assertGaslessRecoveryProgress(savedProgress);
+          setGaslessRecoveryReview({
+            progress: savedProgress,
+            idempotencyKey,
+            previousRequestBindingHash:
+              savedProgress.schema === "programmable-main-token-migration-gasless-ui/v2"
+                ? savedProgress.previousRequestBindingHash : null,
+          });
+          setSubmission({ kind: "idle" });
+          setGaslessStage("idle");
           return;
         }
         if ((response.status === 429 || response.status === 503) && attempt < 59) {
           await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
           continue;
+        }
+        if (failure.code === "relay_needs_attention" || failure.code === "permit_expired") {
+          setGaslessNeedsSupport(true);
         }
         throw new Error(failure.message);
       }
@@ -2073,6 +2240,20 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
         account,
         amountRaw,
       );
+      if (result.status === "recovery_available") {
+        if (!resumeExisting || !savedProgress || !result.previousRequestBindingHash) {
+          throw new Error("Check the previous transfer before reviewing a new approval.");
+        }
+        assertGaslessRecoveryProgress(savedProgress);
+        setGaslessRecoveryReview({
+          progress: savedProgress,
+          idempotencyKey: gaslessRecoveryIdempotencyKey(result.previousRequestBindingHash),
+          previousRequestBindingHash: result.previousRequestBindingHash,
+        });
+        setSubmission({ kind: "idle" });
+        setGaslessStage("idle");
+        return;
+      }
       if (result.status === "signature_required") {
         throw new Error("The existing transfer could not be reconciled. Contact migration support before sending again.");
       }
@@ -2088,6 +2269,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
         persistMigrationTransfer(confirmed);
         clearGaslessTransferProgress();
         setGaslessProgress(null);
+        setGaslessRecoveryReview(null);
         setConfirmationIssue("");
         setSubmission(confirmed);
         setGaslessStage("idle");
@@ -2122,6 +2304,16 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       try {
         if (!onMainnet) {
           await switchNetwork(String(MAIN_TOKEN_MIGRATION_CHAIN_ID));
+          return;
+        }
+        if (gaslessRecoveryReview && trustedTransferWindowOpen()) {
+          if (!acknowledged) {
+            setSubmission({ kind: "error", message: "Confirm that you control this same wallet address on Robinhood." });
+            acknowledgementRef.current?.focus();
+            return;
+          }
+          await reviewGaslessTransfer(getAddress(wallet.account), resumeAmountRaw,
+            false, true, gaslessRecoveryReview);
           return;
         }
         // Resume uses only the stored signed intent. It may read receipts after
@@ -2286,8 +2478,14 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
         ? !onMainnet
           ? switchingNetwork ? "Switching network" : "Switch to Ethereum"
           : visibleSubmission.kind === "submitting"
-            ? "Checking previous transfer"
-            : "Resume gasless transfer"
+            ? gaslessStage === "signing"
+              ? "Confirm exact amount in wallet"
+              : gaslessStage === "relaying"
+                ? "Relaying gasless transfer"
+                : "Checking previous transfer"
+            : gaslessRecoveryReview && transferWindowOpen
+              ? "Review new transfer"
+              : "Resume gasless transfer"
       : phase === "checking"
       ? "Checking migration window"
       : phase === "preview"
@@ -2544,18 +2742,29 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                 {gaslessTransferPath ? (
                   <div
                     className={styles.walletTypeStatus}
-                    data-status="eoa"
+                    data-status={canResumeGaslessTransfer ? "unavailable" : "eoa"}
                     role="status"
                   >
-                    <strong>{canResumeGaslessTransfer
-                      ? "Previous transfer"
+                    <strong>{gaslessRecoveryReview
+                      ? gaslessRecoveryReview.previousRequestBindingHash
+                        ? "Previous approval expired" : "New wallet review needed"
+                      : gaslessNeedsSupport ? "Transfer needs support"
+                      : canResumeGaslessTransfer ? "Previous transfer"
                       : gaslessStage === "signing"
                         ? "Ready for wallet review"
                         : gaslessStage === "relaying"
                           ? "Transfer in progress"
                           : "Gasless transfer checks"}</strong>
                     <span>
-                      {canResumeGaslessTransfer
+                      {gaslessRecoveryReview
+                        ? !transferWindowOpen
+                          ? "New transfers are closed. Your previous request is saved; contact migration support."
+                          : gaslessRecoveryReview.previousRequestBindingHash
+                            ? "The previous approval expired without a transfer. Select Review new transfer to approve the same amount again in your wallet."
+                            : "No submitted request was found. Select Review new transfer to approve the saved amount again in your wallet."
+                        : gaslessNeedsSupport
+                          ? "The previous request could not be safely restarted. Contact migration support before sending again."
+                        : canResumeGaslessTransfer
                         ? "Check the saved request. Submitted transfers need no new signature. After the deadline, only existing transactions can be checked."
                         : "Select Check gasless transfer. Your current V4 balance and sponsorship are checked before wallet review. No ETH top-up is needed."}
                     </span>
@@ -2878,7 +3087,9 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
             </header>
             <p>
               {unresolvedGaslessTransfer
-                ? "A gasless transfer is already in progress. Do not send V4 separately."
+                ? gaslessRecoveryReview
+                  ? "Your previous request is saved. Use the wallet transfer steps to review a new approval. Do not send V4 separately."
+                  : "A gasless transfer still needs to be checked. Do not send V4 separately."
                 : accountCodeStatus === "contract"
                   ? "Contact migration support before sending from a smart-contract wallet."
                   : transferWindowOpen
@@ -2893,6 +3104,8 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                     ? "Your gasless transfer is being processed. Do not send V4 again."
                     : !onMainnet
                       ? "Switch this wallet to Ethereum before resuming. Do not send V4 again."
+                      : gaslessRecoveryReview && transferWindowOpen
+                        ? "Select Review new transfer to approve the saved amount in your wallet."
                       : primaryLabel === "Resume gasless transfer"
                         ? "Select Resume gasless transfer. Do not send V4 separately."
                         : "Do not send V4 again. Contact migration support to check the pending transfer."}{" "}
