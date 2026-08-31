@@ -199,8 +199,8 @@ describe("interaction accessibility", () => {
       '.querySelector<HTMLElement>("a, button:not(:disabled)")',
     );
     expect(source).toContain("menuButtonRef.current?.focus()");
-    expect(source).toContain('aria-haspopup="dialog"');
-    expect(source).toContain("onOpen();\n        openWallet();");
+    expect(source).toContain('aria-haspopup={wallet ? undefined : "dialog"}');
+    expect(source).toContain("aria-expanded={wallet ? menuOpen : undefined}");
   });
 
   it("keeps the sticky header and its wallet disclosure above page content", () => {

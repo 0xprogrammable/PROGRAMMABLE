@@ -93,8 +93,8 @@
 
 .headerWalletButton {
   align-items: center;
-  background: rgb(255 255 255 / 0.055);
-  border: 1px solid rgb(255 255 255 / 0.09);
+  background: transparent;
+  border: 0;
   border-radius: 12px;
   color: var(--navigation-glass-ink);
   display: inline-flex;
@@ -106,10 +106,78 @@
   justify-content: center;
   padding: 0 12px;
   transition:
-    background-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 160ms cubic-bezier(0.32, 0.72, 0, 1),
     transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
   white-space: nowrap;
   width: 144px;
+}
+
+.headerWallet {
+  flex: none;
+  position: relative;
+}
+
+.headerChain {
+  display: flex;
+  flex: none;
+}
+
+.walletMenu,
+.chainFeedback {
+  background: rgb(14 15 18 / 0.98);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 16px;
+  box-shadow: 0 20px 48px rgb(0 0 0 / 0.45);
+  color: var(--navigation-glass-ink);
+  position: absolute;
+  z-index: 91;
+}
+
+.walletMenu {
+  display: grid;
+  gap: 2px;
+  inset-inline-end: 0;
+  padding: 8px;
+  top: calc(100% + 8px);
+  width: 216px;
+}
+
+.walletMenu > a,
+.walletMenu > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  color: inherit;
+  display: flex;
+  font: inherit;
+  font-size: 14px;
+  min-height: 44px;
+  padding: 8px 12px;
+  text-align: start;
+  text-decoration: none;
+}
+
+.walletMenu > :is(a, button):focus-visible {
+  outline: 2px solid var(--brand-ivory);
+  outline-offset: -2px;
+}
+
+.walletMenu > button[aria-disabled="true"] { opacity: 0.6; }
+
+.walletFeedback,
+.chainFeedback {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 8px 12px;
+}
+
+.chainFeedback {
+  inset-inline-end: 16px;
+  top: calc(100% + 4px);
+  width: min(320px, calc(100vw - 32px));
 }
 
 .headerWalletButton:disabled {
@@ -304,10 +372,12 @@
   }
 
   .mobileSocials :global(.header-social-link:hover),
-  .headerWalletButton:hover:not(:disabled) {
+  .walletMenu > :is(a, button):hover:not(:disabled) {
     background: rgb(255 255 255 / 0.09);
     color: var(--navigation-glass-ink);
   }
+
+  .headerWalletButton:hover:not(:disabled) { opacity: 0.72; }
 }
 
 @media (max-width: 60rem) {

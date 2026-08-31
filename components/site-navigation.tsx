@@ -119,7 +119,19 @@ function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function HeaderWalletButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
+function HeaderWalletButton({
+  open,
+  triggerRef,
+  onOpen,
+  onToggle,
+  onClose,
+}: Readonly<{
+  open: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  onOpen: () => void;
+  onToggle: () => void;
+  onClose: () => void;
+}>) {
   const {
     wallet,
     hasSession,
@@ -127,7 +139,24 @@ function HeaderWalletButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
     disconnecting,
     openWallet,
     preloadWallet,
+    disconnect,
   } = useWallet();
+  const menuId = useId();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const busyRef = useRef(false);
+  const [feedback, setFeedback] = useState("");
+  const menuOpen = open && wallet !== null;
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (event.target instanceof Node && !wrapperRef.current?.contains(event.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePress);
+  }, [menuOpen, onClose]);
   const label = disconnecting
     ? "Disconnecting"
     : connecting
@@ -139,22 +168,72 @@ function HeaderWalletButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
           : "Connect wallet";
 
   return (
-    <button
-      className={styles.headerWalletButton}
-      type="button"
-      disabled={connecting || disconnecting}
-      aria-busy={connecting || disconnecting || undefined}
-      aria-haspopup="dialog"
-      aria-label={wallet ? `Manage wallet ${shortenAddress(wallet.account)}` : label}
-      onFocus={preloadWallet}
-      onPointerEnter={preloadWallet}
-      onClick={() => {
-        onOpen();
-        openWallet();
+    <div
+      className={styles.headerWallet}
+      ref={wrapperRef}
+      onBlur={(event) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        window.requestAnimationFrame(() => {
+          if (!wrapperRef.current?.contains(document.activeElement)) onClose();
+        });
       }}
     >
-      {label}
-    </button>
+      <button
+        ref={triggerRef}
+        className={styles.headerWalletButton}
+        type="button"
+        disabled={connecting || disconnecting}
+        aria-busy={connecting || disconnecting || undefined}
+        aria-haspopup={wallet ? undefined : "dialog"}
+        aria-controls={wallet ? menuId : undefined}
+        aria-expanded={wallet ? menuOpen : undefined}
+        aria-label={wallet ? `Wallet ${shortenAddress(wallet.account)}` : label}
+        onFocus={preloadWallet}
+        onPointerEnter={preloadWallet}
+        onClick={() => {
+          setFeedback("");
+          onOpen();
+          if (wallet) onToggle();
+          else {
+            onClose();
+            openWallet();
+          }
+        }}
+      >
+        {label}
+      </button>
+      {menuOpen && wallet ? (
+        <div className={styles.walletMenu} id={menuId} role="group" aria-label="Wallet actions">
+          <Link href="/profile" prefetch={false} onClick={onClose}>Profile</Link>
+          <button type="button" onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(wallet.account);
+              setFeedback("Address copied");
+            } catch {
+              setFeedback("Could not copy address. Try again.");
+            }
+          }}>Copy Address</button>
+          <button type="button" aria-disabled={disconnecting || undefined} aria-busy={disconnecting || undefined} onClick={async () => {
+            if (busyRef.current) return;
+            busyRef.current = true;
+            setFeedback("");
+            try {
+              if (await disconnect({ showDialogOnFailure: false })) {
+                onClose();
+                window.requestAnimationFrame(() => triggerRef.current?.focus());
+              } else {
+                setFeedback("Unable to disconnect. Try again.");
+              }
+            } catch {
+              setFeedback("Unable to disconnect. Try again.");
+            } finally {
+              busyRef.current = false;
+            }
+          }}>{disconnecting ? "Disconnecting…" : "Disconnect"}</button>
+          <p className={feedback ? styles.walletFeedback : "sr-only"} role="status" aria-live="polite">{feedback}</p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -230,32 +309,67 @@ function viewChainLabel(viewChainId: ViewChainId) {
 
 function HeaderChainToggle({
   triggerRef,
+  onStart,
   onSelect,
 }: Readonly<{
   triggerRef: RefObject<HTMLButtonElement | null>;
+  onStart: () => void;
   onSelect: (viewChainId: ViewChainId) => void;
 }>) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
+  const { wallet, authReady, hasSession, connecting, disconnecting, switchingNetwork, switchNetwork } = useWallet();
+  const pendingRef = useRef(false);
+  const accountRef = useRef(wallet?.account);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    accountRef.current = wallet?.account;
+  }, [wallet?.account]);
   const alternateViewChainId: ViewChainId = viewChainId === 1 ? 4663 : 1;
   const currentLabel = viewChainLabel(viewChainId);
   const alternateLabel = viewChainLabel(alternateViewChainId);
 
   return (
-    <button
-      ref={triggerRef}
-      className={styles.chainTrigger}
-      type="button"
-      aria-busy={!hydrated || undefined}
-      aria-label={`Viewing ${currentLabel}. Switch to ${alternateLabel}`}
-      disabled={!hydrated}
-      title={`Switch to ${alternateLabel}`}
-      onClick={() => {
-        setViewChainId(alternateViewChainId);
-        onSelect(alternateViewChainId);
-      }}
-    >
-      <ViewChainMark viewChainId={viewChainId} />
-    </button>
+    <div className={styles.headerChain}>
+      <button
+        ref={triggerRef}
+        className={styles.chainTrigger}
+        type="button"
+        aria-busy={!hydrated || pending || switchingNetwork || undefined}
+        aria-label={`Viewing ${currentLabel}. Switch to ${alternateLabel}`}
+        disabled={!hydrated || (hasSession && !authReady) || connecting || disconnecting || pending || switchingNetwork}
+        title={`Switch to ${alternateLabel}`}
+        onClick={async () => {
+          if (pendingRef.current) return;
+          onStart();
+          setError("");
+          pendingRef.current = true;
+          setPending(true);
+          try {
+            if (wallet && !(await switchNetwork(String(alternateViewChainId)))) {
+              setError(`Network unchanged. Confirm ${alternateLabel} in your wallet and try again.`);
+              return;
+            }
+            if (accountRef.current !== wallet?.account) {
+              setError("Your wallet changed. Please try again.");
+              return;
+            }
+            setViewChainId(alternateViewChainId);
+            onSelect(alternateViewChainId);
+          } catch {
+            setError("Network unchanged. Please try again.");
+          } finally {
+            pendingRef.current = false;
+            setPending(false);
+          }
+        }}
+      >
+        <ViewChainMark viewChainId={viewChainId} />
+      </button>
+      <p className={error ? styles.chainFeedback : "sr-only"} role="status" aria-live="polite">
+        {error || (pending ? `Confirm ${alternateLabel} in your wallet` : "")}
+      </p>
+    </div>
   );
 }
 
@@ -266,16 +380,20 @@ export function SiteHeader() {
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const chainButtonRef = useRef<HTMLButtonElement>(null);
+  const walletButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPath, setMenuPath] = useState<string | null>(null);
+  const [walletMenuPath, setWalletMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
+  const walletMenuOpen = walletMenuPath === pathname;
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !walletMenuOpen) return;
 
     const closeOnOutsidePress = (event: PointerEvent) => {
       if (!(event.target instanceof Node)) return;
-      if (menuOpen && !headerRef.current?.contains(event.target)) {
+      if (!headerRef.current?.contains(event.target)) {
         setMenuPath(null);
+        setWalletMenuPath(null);
       }
     };
 
@@ -284,6 +402,10 @@ export function SiteHeader() {
       if (menuOpen) {
         setMenuPath(null);
         menuButtonRef.current?.focus();
+      }
+      if (walletMenuOpen) {
+        setWalletMenuPath(null);
+        walletButtonRef.current?.focus();
       }
     };
 
@@ -294,7 +416,7 @@ export function SiteHeader() {
       document.removeEventListener("pointerdown", closeOnOutsidePress);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [menuOpen]);
+  }, [menuOpen, walletMenuOpen]);
 
   function closeOnFocusLeave(event: FocusEvent<HTMLElement>) {
     if (!menuOpen) return;
@@ -342,6 +464,10 @@ export function SiteHeader() {
         <div className={`header-actions ${styles.headerActions}`}>
           <HeaderChainToggle
             triggerRef={chainButtonRef}
+            onStart={() => {
+              setMenuPath(null);
+              setWalletMenuPath(null);
+            }}
             onSelect={(selectedViewChainId) => {
               setMenuPath(null);
               if (pathname.startsWith("/token/")) {
@@ -360,7 +486,15 @@ export function SiteHeader() {
               });
             }}
           />
-          <HeaderWalletButton onOpen={() => setMenuPath(null)} />
+          <HeaderWalletButton
+            triggerRef={walletButtonRef}
+            open={walletMenuOpen}
+            onOpen={() => setMenuPath(null)}
+            onToggle={() => {
+              setWalletMenuPath(walletMenuOpen ? null : pathname);
+            }}
+            onClose={() => setWalletMenuPath(null)}
+          />
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
@@ -369,6 +503,7 @@ export function SiteHeader() {
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             onClick={() => {
+              setWalletMenuPath(null);
               setMenuPath(menuOpen ? null : pathname);
             }}
           >
