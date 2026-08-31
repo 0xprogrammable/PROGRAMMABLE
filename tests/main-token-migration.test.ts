@@ -366,7 +366,7 @@ describe("main token migration page contract", () => {
     expect(page).toContain("startBlockHash !== null");
   });
 
-  it("publishes a fail-closed 72-hour preparation page until an exact Ethereum anchor is set", () => {
+  it("publishes a fail-closed 72-hour page with an exact activation manifest", () => {
     const route = read("app/migration/page.tsx");
     const landing = read("components/landing-page.tsx");
     const activationManifest = JSON.parse(
@@ -412,14 +412,20 @@ describe("main token migration page contract", () => {
       "programmable-main-token-migration-window-time/v1",
     );
     expect(activationManifest).toMatchObject({
-      enabled: false,
+      enabled: true,
       releaseId: MAIN_TOKEN_MIGRATION_RELEASE_ID,
       windowDurationSeconds: String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
-      windowStartTimestamp: null,
-      deadlineTimestampExclusive: null,
-      startBlockNumber: null,
-      startBlockHash: null,
     });
+    expect(activationManifest.windowStartTimestamp).toMatch(/^[1-9][0-9]*$/u);
+    expect(activationManifest.deadlineTimestampExclusive).toMatch(
+      /^[1-9][0-9]*$/u,
+    );
+    expect(
+      Number(activationManifest.deadlineTimestampExclusive) -
+        Number(activationManifest.windowStartTimestamp),
+    ).toBe(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS);
+    expect(activationManifest.startBlockNumber).toMatch(/^[1-9][0-9]*$/u);
+    expect(activationManifest.startBlockHash).toMatch(/^0x[0-9a-f]{64}$/u);
     expect(page).toContain("return false");
     expect(page).toContain("const canCopyDestination = transferWindowOpen;");
   });
