@@ -1417,7 +1417,8 @@ export function createMainTokenMigrationGasSponsorChainV1(
           || !isMainTokenMigrationWalletCodeEligible(right.holderCode)
           || !isMainTokenMigrationWalletCodeEligible(left.startHolderCode)
           || !isMainTokenMigrationWalletCodeEligible(right.startHolderCode)
-          || left.sponsorCode !== "0x" || right.sponsorCode !== "0x"
+          || !isMainTokenMigrationWalletCodeEligible(left.sponsorCode)
+          || !isMainTokenMigrationWalletCodeEligible(right.sponsorCode)
           || left.currentBalance < request.amountRaw
           || right.currentBalance < request.amountRaw) {
           throw new MainTokenMigrationGasSponsorErrorV1(422, "wallet_not_eligible");
@@ -1484,7 +1485,8 @@ export function createMainTokenMigrationGasSponsorChainV1(
         if (!left || !right || left.chainId !== 1 || right.chainId !== 1
           || left.block.hash !== right.block.hash
           || left.walletCode !== right.walletCode
-          || left.sponsorCode !== "0x" || right.sponsorCode !== "0x"
+          || !isMainTokenMigrationWalletCodeEligible(left.sponsorCode)
+          || !isMainTokenMigrationWalletCodeEligible(right.sponsorCode)
           || !isMainTokenMigrationWalletCodeEligible(left.walletCode)) {
           throw new MainTokenMigrationGasSponsorErrorV1(
             503,

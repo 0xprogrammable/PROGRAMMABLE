@@ -44,8 +44,10 @@ export type MainTokenMigrationTransaction = Extract<
 export function isMainTokenMigrationWalletCodeEligible(
   code: Hex | undefined,
 ) {
-  return code === "0x" ||
-    (code !== undefined && EIP_7702_DELEGATION_INDICATOR.test(code));
+  // viem normalizes the canonical `eth_getCode` result `0x` to `undefined`.
+  // Both representations therefore mean a normal EOA with no runtime code.
+  return code === undefined || code === "0x" ||
+    EIP_7702_DELEGATION_INDICATOR.test(code);
 }
 
 export function parseMainTokenMigrationAmount(value: string): bigint {
