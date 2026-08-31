@@ -444,6 +444,9 @@ function robinhoodCaptureFailures(value) {
   if (value.split(cleanCheckoutAssertion).length - 1 !== 2) {
     missing.push("exactly two initial/final clean-checkout assertions");
   }
+  if (value.split('--github-output "$GITHUB_OUTPUT"').length - 1 !== 2) {
+    missing.push("resolve and verify GitHub output bindings");
+  }
   return missing;
 }
 
@@ -474,6 +477,11 @@ test("Robinhood Phase A workflow contract mutations fail closed", () => {
     robinhoodCaptureSource.replace("node-version: 24.14.0", "node-version: latest"),
     robinhoodCaptureSource.replace("gh attestation download \"$proof\"", "echo skipped"),
     robinhoodCaptureSource.replace("test \"${#bundle_files[@]}\" = \"1\"", "true"),
+    replaceLast(
+      robinhoodCaptureSource,
+      '--github-output "$GITHUB_OUTPUT"',
+      "--github-output missing",
+    ),
     robinhoodCaptureSource.replaceAll("--header \"X-GitHub-Api-Version: 2026-03-10\"", ""),
     robinhoodCaptureSource.replace(
       "ROBINHOOD_MAINNET_RPC_URL_SECONDARY: ${{ secrets.ROBINHOOD_MAINNET_RPC_URL_SECONDARY }}",

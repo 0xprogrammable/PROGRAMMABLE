@@ -177,7 +177,8 @@ jobs:
             --run-id "$VERIFY_RUN_ID" \
             --run-attempt "$VERIFY_RUN_ATTEMPT" \
             --artifact-digest "$ARTIFACT_DIGEST" \
-            --verification-mode change
+            --verification-mode change \
+            --github-output "$GITHUB_OUTPUT"
           jq --null-input \
             --arg runId "$VERIFY_RUN_ID" \
             --arg runAttempt "$VERIFY_RUN_ATTEMPT" \
