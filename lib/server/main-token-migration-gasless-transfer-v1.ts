@@ -186,7 +186,7 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
           walletAddress: parsed.walletAddress,
         };
         const existing = await input.store.get(lookup);
-        if (parsed.action === "prepare" || parsed.action === "resume") {
+        if (parsed.action !== "submit") {
           if (existing) {
             const binding = deriveMainTokenMigrationGaslessBindingV1({
               baseRequestBindingHash: baseBindings.requestBindingHash,
