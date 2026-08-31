@@ -12,7 +12,17 @@
   "migrationWallet": "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
   "eligibleWalletCode": "plain-eoa-or-eip-7702-delegation-indicator",
   "holderEligibility": "current-token-balance-including-post-start-acquisitions",
-  "actions": ["prepare", "submit", "resume"],
+  "actions": ["prepare", "submit", "resume", "prepare_recovery", "submit_recovery"],
+  "expiredPermitRecovery": {
+    "maximumAttemptsPerHolder": 3,
+    "requiresFreshWalletSignature": true,
+    "requiresFinalizedExpiry": true,
+    "requiresUnchangedPermitNonce": true,
+    "requiresZeroSponsorAllowance": true,
+    "requiresNoTransferSubmission": true,
+    "history": "append-only-predecessor-bound-attempts",
+    "budget": "all-attempt-reservations-remain-counted"
+  },
   "walletReview": {
     "standard": "EIP-2612 Permit",
     "binds": [
@@ -45,6 +55,10 @@
     "sharedBudget",
     "durableHolderReplayGuard",
     "authenticatedExistingIntentResume",
+    "finalizedExpiredPermitRecovery",
+    "freshRecoverySignature",
+    "appendOnlyAttemptHistory",
+    "atomicPredecessorBinding",
     "exactTransactionReadback"
   ]
 }

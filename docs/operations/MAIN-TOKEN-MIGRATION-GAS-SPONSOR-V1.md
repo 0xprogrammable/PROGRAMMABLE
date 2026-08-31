@@ -84,7 +84,7 @@ supported by this token's EIP-2612 owner-signature path. The wallet reviews a pe
 token, the dedicated sponsor as spender, exact raw amount, current nonce and a deadline of at most 20 minutes. The
 server recovers the exact connected owner before reserving anything.
 
-The private ledger stores one request binding plus separate deterministic provider references for `permit` and
+The private ledger stores each signed attempt with its request binding and separate deterministic provider references for `permit` and
 `transferFrom`. The sponsor first submits the byte-exact permit. Only after two providers confirm its successful
 receipt and the allowance is visible may the sponsor call `transferFrom(owner, fixedMigrationWallet, exactAmount)`.
 Both calls have zero native value, 100,000-gas ceilings and share the existing release budget and durable holder replay
@@ -94,8 +94,35 @@ never signs automatically and never treats a provider response as a confirmed to
 An authenticated `resume` request binds the same linked holder, amount and idempotency key to an already signed private
 ledger intent. It cannot create a reservation or change the amount. It resumes without another signature or a fresh
 balance requirement, so a completed transfer remains recoverable after the wallet balance decreases. After the
-window closes, recovery only reads existing receipts and does not send transactions. Expired permits with no known
-submission and replaced or failed provider transactions require explicit support reconciliation, not blind resubmission.
+window closes, recovery only reads existing receipts and does not send transactions.
+
+### Expired, unused permit recovery
+
+During the open window, an authenticated resume may return `recovery_available`. This is an offer to review a new
+attempt, not a successful transfer and not permission to reuse the old signature. The server must first establish
+all of these facts:
+
+- Two independent RPCs agree on a finalized canonical block whose timestamp is past the old permit deadline.
+- The holder's permit nonce still equals the old signed nonce and its allowance to the sponsor is zero.
+- No transfer transaction is stored or returned for the old provider reference. Provider errors, ambiguous lookups
+  and any possible transfer submission stop recovery.
+- The holder, release, sponsor, amount and predecessor request binding are unchanged, and the release is still open.
+
+`prepare_recovery` and `submit_recovery` carry `previousRequestBindingHash` and a fresh idempotency key. Preparation
+does not consume a budget reservation. The holder explicitly reviews and signs a fresh permit; submit rechecks the
+recovery conditions. An atomic predecessor check under the shared release advisory lock appends the new attempt and
+its history edge. No previous intent, signature, completion or alias is deleted or rewritten. Each attempt has its
+own provider references and completion records, and stale predecessor requests cannot send for the successor.
+
+At most three signed attempts exist per holder, including the original. All reservations remain counted against
+the shared gas budget; recovery does not reset spending limits or the native ETH faucet guard. The browser preserves
+its old marker on cancellation and writes an atomic successor marker only after signing and before submitting.
+Lost responses resume the exact successor rather than silently starting another attempt. It stores no permit
+signature in browser storage.
+
+An executed permit, changed nonce, nonzero sponsor allowance, possible transfer submission, exhausted attempt limit
+or unavailable proof still requires support. A provider status of `replaced` by itself is never sufficient evidence
+to restart. No new attempt can start after the migration window closes.
 
 The release budget and per-holder/principal admission limits bound spending, but do not make arbitrary current-holder
 eligibility Sybil-resistant. Splitting tokens among many wallets can consume the finite budget. Keep funding bounded,

@@ -242,7 +242,17 @@ describe("main token migration gas sponsor activation contract", () => {
       migrationWallet: manifest.migrationWallet,
       eligibleWalletCode: "plain-eoa-or-eip-7702-delegation-indicator",
       holderEligibility: "current-token-balance-including-post-start-acquisitions",
-      actions: ["prepare", "submit", "resume"],
+      actions: ["prepare", "submit", "resume", "prepare_recovery", "submit_recovery"],
+      expiredPermitRecovery: {
+        maximumAttemptsPerHolder: 3,
+        requiresFreshWalletSignature: true,
+        requiresFinalizedExpiry: true,
+        requiresUnchangedPermitNonce: true,
+        requiresZeroSponsorAllowance: true,
+        requiresNoTransferSubmission: true,
+        history: "append-only-predecessor-bound-attempts",
+        budget: "all-attempt-reservations-remain-counted",
+      },
       walletReview: {
         standard: "EIP-2612 Permit",
         binds: [
@@ -279,6 +289,10 @@ describe("main token migration gas sponsor activation contract", () => {
       "sharedBudget",
       "durableHolderReplayGuard",
       "authenticatedExistingIntentResume",
+      "finalizedExpiredPermitRecovery",
+      "freshRecoverySignature",
+      "appendOnlyAttemptHistory",
+      "atomicPredecessorBinding",
       "exactTransactionReadback",
     ]) {
       expect(gaslessContract.serverEnforces).toContain(boundary);
