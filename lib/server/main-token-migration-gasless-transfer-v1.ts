@@ -41,6 +41,7 @@ import {
   createMainTokenMigrationGasSponsorChainV1,
   deriveMainTokenMigrationSponsorBindingsV1,
   deriveMainTokenMigrationSponsorPrincipalBindingV1,
+  MainTokenMigrationGasSponsorErrorV1,
   parsePrivySponsorTransactionLookupV1,
   readMainTokenMigrationGasSponsorConfigurationV1,
   type MainTokenMigrationGasSponsorConfigurationV1,
@@ -837,7 +838,8 @@ function errorResponse(error: unknown) {
             error.code === "conflict" ? 409 : 503,
             error.code,
           )
-        : error instanceof MainTokenMigrationGaslessErrorV1
+        : error instanceof MainTokenMigrationGaslessErrorV1 ||
+            error instanceof MainTokenMigrationGasSponsorErrorV1
           ? error
           : new MainTokenMigrationGaslessErrorV1(503, "gasless_unavailable");
   if (failure.status >= 500) {
@@ -870,7 +872,7 @@ function errorResponse(error: unknown) {
     failure.status, failure.status === 429
       ? { "retry-after": String(failure.retryAfterSeconds ?? 60) }
       : failure.status === 503
-        ? { "retry-after": "5" }
+        ? { "retry-after": String(failure.retryAfterSeconds ?? 5) }
         : {});
 }
 
