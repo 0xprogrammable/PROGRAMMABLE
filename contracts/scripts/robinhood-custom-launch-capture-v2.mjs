@@ -76,14 +76,20 @@ const SAFE_OWNERS = Object.freeze([
   "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
   "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
 ]);
+const ROBINHOOD_PHASE_A_TRANSACTION_HASH =
+  "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d";
+const ROBINHOOD_PHASE_A_BLOCK_NUMBER = "50469365";
+const ROBINHOOD_PHASE_A_TRANSACTION_INDEX = "9";
+const ROBINHOOD_PHASE_A_DEPLOYER =
+  "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
 const MAX_RPC_BYTES = 8 * 1024 * 1024;
 const MAX_SOURCIFY_BYTES = 32 * 1024 * 1024;
 const MAX_FRESH_CAPTURE_BYTES = 96 * 1024 * 1024;
 const MAX_PUBLIC_CAPTURE_BYTES = 128 * 1024 * 1024;
 const SOURCIFY_NORMALIZED_RESPONSE_DOMAIN =
-  "programmable.robinhood-custom-launch.sourcify-normalized-response.v2";
+  "programmable.robinhood-custom-launch.sourcify-normalized-response.v3";
 const SOURCIFY_RESPONSE_CLOSURE_DOMAIN =
-  "programmable.robinhood-custom-launch.sourcify-response-closure.v5";
+  "programmable.robinhood-custom-launch.sourcify-response-closure.v6";
 const SOURCIFY_PROVIDER_CLASSIFICATION = "PARTIAL_NO_CBOR_EXACT_BYTES";
 const CAPTURE_INVENTORY_DOMAIN =
   "programmable.robinhood-custom-launch.capture-inventory.v4";
@@ -1678,7 +1684,7 @@ function normalizeL1Provider(value, index, batchNumber) {
   });
 }
 
-function normalizeRawSourcify(value, index, repositoryRoot, expected, readFile, observedAt) {
+function normalizeRawSourcify(value, index, expected, observedAt) {
   const label = `capture.sourcifyResponses[${index}]`;
   assertExactKeys(value, [
     "contract", "urlPath", "httpStatus", "contentType", "responseBase64",
@@ -1705,34 +1711,59 @@ function normalizeRawSourcify(value, index, repositoryRoot, expected, readFile, 
     );
   }
   providerRfc3339(response.verifiedAt, `${label}.verifiedAt`);
+  if (!/^[1-9][0-9]*$/u.test(response.matchId)) {
+    throw new TypeError(`${label}.matchId must be a canonical positive decimal identifier`);
+  }
+  const deployment = plainObject(response.deployment, `${label}.deployment`);
+  assertExactKeys(deployment, [
+    "transactionHash", "blockNumber", "transactionIndex", "deployer",
+  ], `${label}.deployment`);
+  if (deployment.transactionHash !== ROBINHOOD_PHASE_A_TRANSACTION_HASH
+    || deployment.blockNumber !== ROBINHOOD_PHASE_A_BLOCK_NUMBER
+    || deployment.transactionIndex !== ROBINHOOD_PHASE_A_TRANSACTION_INDEX
+    || deployment.deployer !== ROBINHOOD_PHASE_A_DEPLOYER) {
+    throw new TypeError(`${label}.deployment differs from the finalized Phase A transaction`);
+  }
   const compilation = plainObject(response.compilation, `${label}.compilation`);
   if (compilation.language !== "Solidity" || compilation.compiler !== "solc"
     || compilation.compilerVersion !== "0.8.26+commit.8a97fa7a"
     || compilation.name !== expected.name
-    || compilation.fullyQualifiedName !== expected.fullyQualifiedName
-    || typeof compilation.compilerSettings !== "object" || compilation.compilerSettings === null) {
+    || typeof compilation.fullyQualifiedName !== "string"
+    || compilation.fullyQualifiedName.length <= expected.name.length + 1
+    || compilation.fullyQualifiedName.length > 4_096
+    || !compilation.fullyQualifiedName.endsWith(`:${expected.name}`)) {
     throw new TypeError(`${label} compiler/contract identity differs`);
   }
+  const compilerSettings = plainObject(
+    compilation.compilerSettings,
+    `${label}.compilation.compilerSettings`,
+  );
   const stdJsonInput = plainObject(response.stdJsonInput, `${label}.stdJsonInput`);
-  const localBytes = readFile(repositoryRoot, expected.standardJsonInputPath);
-  const localInput = parseStrictJson(decodeExactUtf8(localBytes, expected.standardJsonInputPath), {
-    maximumBytes: localBytes.byteLength,
-  });
-  if (canonicalizeJson(stdJsonInput) !== canonicalizeJson(localInput)) {
-    throw new TypeError(`${label} Standard JSON input differs from the exact repository input`);
-  }
-  if (canonicalizeJson(compilation.compilerSettings)
-      !== canonicalizeJson(localInput.settings)) {
-    throw new TypeError(`${label} compiler settings differ from the exact repository input`);
+  const stdJsonSettings = plainObject(stdJsonInput.settings, `${label}.stdJsonInput.settings`);
+  const stdJsonSources = plainObject(stdJsonInput.sources, `${label}.stdJsonInput.sources`);
+  const providerSourcePath = compilation.fullyQualifiedName.slice(
+    0,
+    compilation.fullyQualifiedName.length - expected.name.length - 1,
+  );
+  if (stdJsonInput.language !== "Solidity"
+    || stdJsonSettings.metadata?.appendCBOR !== false
+    || !Object.hasOwn(stdJsonSources, providerSourcePath)
+    || canonicalizeJson(compilerSettings) !== canonicalizeJson(stdJsonSettings)) {
+    throw new TypeError(`${label} provider compiler settings and Standard JSON differ`);
   }
   const sources = plainObject(response.sources, `${label}.sources`);
-  const sourceNames = Object.keys(stdJsonInput.sources ?? {}).sort();
+  const sourceNames = Object.keys(stdJsonSources).sort();
   if (sourceNames.length === 0 || Object.keys(sources).sort().join("\0") !== sourceNames.join("\0")) {
-    throw new TypeError(`${label} source-file closure differs from Standard JSON`);
+    throw new TypeError(`${label} provider source-file closure differs from Standard JSON`);
   }
   for (const sourceName of sourceNames) {
-    if (sources[sourceName]?.content !== stdJsonInput.sources[sourceName]?.content) {
-      throw new TypeError(`${label} source ${sourceName} differs from Standard JSON`);
+    const source = plainObject(sources[sourceName], `${label}.sources[${sourceName}]`);
+    const inputSource = plainObject(
+      stdJsonSources[sourceName],
+      `${label}.stdJsonInput.sources[${sourceName}]`,
+    );
+    if (typeof source.content !== "string" || source.content !== inputSource.content) {
+      throw new TypeError(`${label} provider source ${sourceName} differs from Standard JSON`);
     }
   }
   const normalized = {
@@ -1746,7 +1777,9 @@ function normalizeRawSourcify(value, index, repositoryRoot, expected, readFile, 
     providerClassification: SOURCIFY_PROVIDER_CLASSIFICATION,
     providerReleaseAuthority: false,
     observedAt: iso(observedAt, `${label}.observedAt`),
-    compiler: Object.freeze({
+    providerMatchId: response.matchId,
+    providerVerifiedAt: response.verifiedAt,
+    providerCompiler: Object.freeze({
       language: "Solidity",
       compiler: "solc",
       compilerVersion: compilation.compilerVersion,
@@ -1754,15 +1787,23 @@ function normalizeRawSourcify(value, index, repositoryRoot, expected, readFile, 
       fullyQualifiedName: compilation.fullyQualifiedName,
       compilerSettingsDigest: framedSha256(
         "programmable.robinhood-custom-launch.sourcify-compiler-settings.v1",
-        compilation.compilerSettings,
+        compilerSettings,
       ),
     }),
-    sourceFilesDigest: framedSha256(
+    providerSourceFilesDigest: framedSha256(
       "programmable.robinhood-custom-launch.sourcify-source-files.v1",
       sources,
     ),
-    standardJsonInputPath: expected.standardJsonInputPath,
-    standardJsonInputSha256: sha256(localBytes),
+    providerStandardJsonInputDigest: framedSha256(
+      "programmable.robinhood-custom-launch.sourcify-standard-json-input.v1",
+      stdJsonInput,
+    ),
+    providerDeployment: Object.freeze({
+      transactionHash: deployment.transactionHash,
+      blockNumber: deployment.blockNumber,
+      transactionIndex: deployment.transactionIndex,
+      deployer: deployment.deployer,
+    }),
     urlPath: value.urlPath,
     httpStatus: 200,
     contentType: "application/json",
@@ -1778,33 +1819,37 @@ function normalizeRawSourcify(value, index, repositoryRoot, expected, readFile, 
 function validateNormalizedSourcify(
   value,
   index,
-  repositoryRoot,
   expected,
-  readFile,
   observedAt,
 ) {
   const label = `capture.sourcifyResponses[${index}]`;
   assertExactKeys(value, [
     "contract", "provider", "chainId", "address", "match", "creationMatch",
     "runtimeMatch", "providerClassification", "providerReleaseAuthority",
-    "observedAt", "compiler", "sourceFilesDigest",
-    "standardJsonInputPath", "standardJsonInputSha256", "urlPath", "httpStatus",
+    "observedAt", "providerMatchId", "providerVerifiedAt", "providerCompiler",
+    "providerSourceFilesDigest", "providerStandardJsonInputDigest",
+    "providerDeployment", "urlPath", "httpStatus",
     "contentType", "normalizedVerificationDigest",
   ], label);
-  assertExactKeys(value.compiler, [
+  assertExactKeys(value.providerCompiler, [
     "language", "compiler", "compilerVersion", "name", "fullyQualifiedName",
     "compilerSettingsDigest",
-  ], `${label}.compiler`);
-  const localBytes = readFile(repositoryRoot, expected.standardJsonInputPath);
-  const localInput = parseStrictJson(decodeExactUtf8(localBytes, expected.standardJsonInputPath), {
-    maximumBytes: localBytes.byteLength,
-  });
-  const expectedSources = plainObject(localInput.sources, `${label} local sources`);
+  ], `${label}.providerCompiler`);
+  assertExactKeys(value.providerDeployment, [
+    "transactionHash", "blockNumber", "transactionIndex", "deployer",
+  ], `${label}.providerDeployment`);
   if (value.match !== "match" || value.creationMatch !== "match"
     || value.runtimeMatch !== "match" || value.address !== expected.address) {
     throw new TypeError(
       `${label} is not the required provider match/match/match for appendCBOR=false`,
     );
+  }
+  providerRfc3339(value.providerVerifiedAt, `${label}.providerVerifiedAt`);
+  if (value.providerDeployment.transactionHash !== ROBINHOOD_PHASE_A_TRANSACTION_HASH
+    || value.providerDeployment.blockNumber !== ROBINHOOD_PHASE_A_BLOCK_NUMBER
+    || value.providerDeployment.transactionIndex !== ROBINHOOD_PHASE_A_TRANSACTION_INDEX
+    || value.providerDeployment.deployer !== ROBINHOOD_PHASE_A_DEPLOYER) {
+    throw new TypeError(`${label}.providerDeployment differs from the finalized Phase A transaction`);
   }
   if (value.contract !== expected.contract || value.provider !== "sourcify-v2"
     || value.chainId !== "4663" || value.address !== expected.address
@@ -1812,20 +1857,20 @@ function validateNormalizedSourcify(
     || value.runtimeMatch !== "match"
     || value.providerClassification !== SOURCIFY_PROVIDER_CLASSIFICATION
     || value.providerReleaseAuthority !== false || value.observedAt !== observedAt
-    || value.compiler.language !== "Solidity" || value.compiler.compiler !== "solc"
-    || value.compiler.compilerVersion !== "0.8.26+commit.8a97fa7a"
-    || value.compiler.name !== expected.name
-    || value.compiler.fullyQualifiedName !== expected.fullyQualifiedName
-    || value.compiler.compilerSettingsDigest !== framedSha256(
-      "programmable.robinhood-custom-launch.sourcify-compiler-settings.v1",
-      localInput.settings,
+    || !/^[1-9][0-9]*$/u.test(value.providerMatchId)
+    || value.providerCompiler.language !== "Solidity"
+    || value.providerCompiler.compiler !== "solc"
+    || value.providerCompiler.compilerVersion !== "0.8.26+commit.8a97fa7a"
+    || value.providerCompiler.name !== expected.name
+    || typeof value.providerCompiler.fullyQualifiedName !== "string"
+    || value.providerCompiler.fullyQualifiedName.length <= expected.name.length + 1
+    || value.providerCompiler.fullyQualifiedName.length > 4_096
+    || !value.providerCompiler.fullyQualifiedName.endsWith(`:${expected.name}`)
+    || !/^sha256:[0-9a-f]{64}$/u.test(
+      value.providerCompiler.compilerSettingsDigest,
     )
-    || value.sourceFilesDigest !== framedSha256(
-      "programmable.robinhood-custom-launch.sourcify-source-files.v1",
-      expectedSources,
-    )
-    || value.standardJsonInputPath !== expected.standardJsonInputPath
-    || value.standardJsonInputSha256 !== sha256(localBytes)
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.providerSourceFilesDigest)
+    || !/^sha256:[0-9a-f]{64}$/u.test(value.providerStandardJsonInputDigest)
     || value.urlPath !== `/server/v2/contract/4663/${expected.address}?fields=all`
     || value.httpStatus !== 200 || value.contentType !== "application/json"
     || value.normalizedVerificationDigest !== framedSha256(
@@ -2033,9 +2078,7 @@ export async function validateRobinhoodProductionCapture({
     validateNormalizedSourcify(
       response,
       index,
-      repositoryRoot,
       sourceTargets[index],
-      readFile,
       observedAt,
     ));
   if (l2Providers[0].transactionHash !== l2Providers[1].transactionHash
@@ -2124,9 +2167,7 @@ export async function validateRobinhoodProductionCapture({
 }
 
 export async function freshVerifyRobinhoodSourcify({
-  repositoryRoot,
   captureClosure,
-  readFile,
   fetch: request = fetch,
   now = () => new Date(),
 }) {
@@ -2173,16 +2214,29 @@ export async function freshVerifyRobinhoodSourcify({
       contentType: response.headers.get("content-type") ?? "",
       responseBase64: bytes.toString("base64"),
       responseSha256: sha256(bytes),
-    }, index, repositoryRoot, target, readFile, freshObservedAt));
+    }, index, target, freshObservedAt));
   }
-  const semantic = (entry) => {
-    const {
-      observedAt: _observedAt,
-      normalizedVerificationDigest: _normalizedVerificationDigest,
-      ...stable
-    } = entry;
-    return stable;
-  };
+  const semantic = (entry) => ({
+    contract: entry.contract,
+    provider: entry.provider,
+    chainId: entry.chainId,
+    address: entry.address,
+    match: entry.match,
+    creationMatch: entry.creationMatch,
+    runtimeMatch: entry.runtimeMatch,
+    providerClassification: entry.providerClassification,
+    providerReleaseAuthority: entry.providerReleaseAuthority,
+    providerCompiler: {
+      language: entry.providerCompiler.language,
+      compiler: entry.providerCompiler.compiler,
+      compilerVersion: entry.providerCompiler.compilerVersion,
+      name: entry.providerCompiler.name,
+    },
+    providerDeployment: structuredClone(entry.providerDeployment),
+    urlPath: entry.urlPath,
+    httpStatus: entry.httpStatus,
+    contentType: entry.contentType,
+  });
   if (canonicalizeJson(fresh.map(semantic))
       !== canonicalizeJson(captureClosure.sourcify.map(semantic))) {
     throw new TypeError("fresh Sourcify V2 closure differs from the attested capture");
@@ -2542,9 +2596,7 @@ export async function buildRobinhoodPostdeploymentInput({
     normalizeRawSourcify(
       response,
       index,
-      repositoryRoot,
       sourceTargets[index],
-      readFile,
       observedAt,
     ));
   if (testOnlyDependencies !== undefined && testOnlyDependencies?.allowTestOnly !== true) {

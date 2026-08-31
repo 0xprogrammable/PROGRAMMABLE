@@ -451,11 +451,16 @@ GET /server/v2/contract/4663/{EIP55Address}?fields=all
 `providerClassification=PARTIAL_NO_CBOR_EXACT_BYTES` and
 `providerReleaseAuthority=false`. `exact_match` is rejected: the pinned Standard JSON inputs set
 `metadata.appendCBOR=false`, so Sourcify cannot produce its metadata-backed exact classification.
-The provider validator still binds compiler settings, metadata, sources and the repository Standard
-JSON input into the source-verification closure.
+The provider validator binds a self-consistent provider-reported compiler, Standard JSON and source
+closure plus the exact finalized deployment transaction tuple. Provider-only fields are explicitly
+prefixed and contain no protected-repository path or digest. Because no-CBOR bytecode does not commit
+to source paths or an equivalent build context, that provider-reported context is deliberately not
+required to equal the protected repository context and never becomes release authority. Fresh
+corroboration compares only stable chain, address, match, compiler/contract identity and deployment
+facts; a later self-consistent provider build layout may differ.
 
 The release-authoritative exact claim is a separate
-`programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1` record. It
+`programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v2` record. It
 binds the protected revision/tree and capture authorization, the attested hosted Verify proof and
 pinned Linux solc binary, both Standard JSON/compiler-settings digests, exact creation-code hashes,
 the owner transaction hash/data hash and finalized block, and exact deployed runtime hashes observed
@@ -665,10 +670,10 @@ The relevant domains are:
 ```text
 programmable.robinhood-custom-launch.capture-authorization.v2
 programmable.robinhood-custom-launch.capture-closure.v3
-programmable.robinhood-custom-launch.sourcify-normalized-response.v2
-programmable.robinhood-custom-launch.sourcify-response-closure.v5
-programmable.robinhood-custom-launch.source-verification-closure.v5
-programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1
+programmable.robinhood-custom-launch.sourcify-normalized-response.v3
+programmable.robinhood-custom-launch.sourcify-response-closure.v6
+programmable.robinhood-custom-launch.source-verification-closure.v6
+programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v2
 programmable.robinhood-custom-launch.backend-promotion-input.v1
 programmable.robinhood-custom-launch.backend-promotion-public-input.v2
 programmable.robinhood-custom-launch.backend-promotion-semantic-input.v1

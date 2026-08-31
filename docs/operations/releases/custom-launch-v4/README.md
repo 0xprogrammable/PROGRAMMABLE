@@ -72,6 +72,9 @@ profile.
 - `ProgrammableLaunchStampRouter` and `GraphFactory` require Sourcify V2
   `match`/`match`/`match` and classification `PARTIAL_NO_CBOR_EXACT_BYTES` because their pinned
   Standard JSON inputs set `metadata.appendCBOR=false`. Sourcify is not the exact-source authority.
+  An alternate self-consistent Sourcify build context that produces the same no-CBOR creation and
+  runtime bytes remains provider evidence only; it cannot supply compiler settings to the exact
+  source binding.
   Their exact claim is a separate composite binding across the protected source revision/tree,
   authenticated hosted reproduction build, pinned compiler settings and Standard JSON bytes,
   creation bytes in the finalized atomic transaction, and runtime bytes independently read by

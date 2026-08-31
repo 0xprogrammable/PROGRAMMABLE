@@ -80,6 +80,8 @@ const PREDEPLOYMENT_SHA256 =
 const CHAIN_DEPLOYMENT_ID = "robinhood-mainnet-custom-launch-v1";
 const CHAIN_ID = "4663";
 const CAIP2 = "eip155:4663";
+const ROBINHOOD_BACKEND_PROVIDER_PROFILE_DIGEST =
+  "sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910";
 const FOUNDATION_SOURCE_COMMITMENT =
   "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730";
 const EMPTY_RUNTIME_CODE_HASH =
@@ -177,21 +179,41 @@ const ROOTS = Object.freeze({
 const EXACT_SOURCE_BUILD_TARGETS = Object.freeze([
   Object.freeze({
     contract: "programmableLaunchStampRouter",
+    name: "ProgrammableLaunchStampRouterV1",
+    fullyQualifiedName:
+      "src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol:ProgrammableLaunchStampRouterV1",
+    standardJsonInputPath:
+      "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
+    sourcePath: "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
+    sourceSha256:
+      "sha256:ef87aa9338c364634bffda64423bd3fb096c1630a45cc58ecf854d24959ff163",
     address: ROOTS.programmableLaunchStampRouter.address,
     standardJsonInputSha256:
       "sha256:6abca24d06b013599f4ff63e049976419c3f17455fa9bc343b15ec0d6e6a078a",
     creationCodeHash:
       "0xf4176bf15de19a93b76cd138d6525a30d68efdad356e831f6d8449659959eb39",
     runtimeCodeHash: ROOTS.programmableLaunchStampRouter.runtimeCodeHash,
+    compilerSettingsDigest:
+      "sha256:0ae76a7ec92d6bb3c4612261fb06ccffe41fa34dfdd2fb1c3362f7a0b7d7b3ac",
   }),
   Object.freeze({
     contract: "graphFactory",
+    name: "ProgrammableCreate2GraphDeployerV1",
+    fullyQualifiedName:
+      "src/ProgrammableCreate2GraphDeployerV1.sol:ProgrammableCreate2GraphDeployerV1",
+    standardJsonInputPath:
+      "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
+    sourcePath: "contracts/src/ProgrammableCreate2GraphDeployerV1.sol",
+    sourceSha256:
+      "sha256:06a3acaf9beeb68647af231f5524c5a34dc013d99611a1b2d0a6c80895f595e9",
     address: ROOTS.graphFactory.address,
     standardJsonInputSha256:
       "sha256:8ab811a215d70b1d5aef0c71a47153173953ee78d7632725413833888369ec4d",
     creationCodeHash:
       "0x84f7cb8e9e445d3322249dbc2b9efc65bb9c7a8ba26902aafef9b0552f4bc208",
     runtimeCodeHash: ROOTS.graphFactory.runtimeCodeHash,
+    compilerSettingsDigest:
+      "sha256:0ae76a7ec92d6bb3c4612261fb06ccffe41fa34dfdd2fb1c3362f7a0b7d7b3ac",
   }),
 ]);
 const HOSTED_REPRODUCTION_COMPILER_SHA256 =
@@ -253,9 +275,9 @@ const DOMAINS = Object.freeze({
   permit2: "programmable.custom-launch-genesis-provenance.v1",
   externalReadback: "programmable.custom-launch-deployment-provider-readback.v2",
   sourceVerification:
-    "programmable.robinhood-custom-launch.source-verification-closure.v5",
+    "programmable.robinhood-custom-launch.source-verification-closure.v6",
   exactSourceBinding:
-    "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1",
+    "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v2",
   backendReleaseAssets:
     "programmable.robinhood-custom-launch.backend-release-assets.v1",
   stageBundle: ROBINHOOD_STAGE_BUNDLE_SCHEMA,
@@ -834,18 +856,13 @@ function normalizeFinalityInput(value, profile, blockNumber, blockHash) {
 
 function exactSourceBindingFromCapture(captureClosure) {
   const provider = captureClosure.l2ProviderReadbacks[0];
-  const compilerSettingsByContract = new Map(
-    captureClosure.sourcify.map((entry) => [
-      entry.contract,
-      entry.compiler.compilerSettingsDigest,
-    ]),
-  );
   const normalized = {
     schemaVersion: DOMAINS.exactSourceBinding,
     authority: "protected-hosted-build-finalized-transaction-bytecode",
     coveredContracts: EXACT_SOURCE_BUILD_TARGETS.map(({ contract }) => contract),
     sourceRevision: captureClosure.sourceOrigin.revision,
     sourceTree: captureClosure.sourceOrigin.tree,
+    sourceClosureDigest: captureClosure.sourceOrigin.sourceClosureDigest,
     captureAuthorizationDigest: captureClosure.authorization.verificationDigest,
     productionVerifyProofSha256:
       captureClosure.authorization.productionVerifyProofSha256,
@@ -857,16 +874,9 @@ function exactSourceBindingFromCapture(captureClosure) {
     deploymentBlockNumber: provider.deploymentBlock.blockNumber,
     deploymentBlockHash: provider.deploymentBlock.blockHash,
     ownerTransactionDataHash: OWNER_CALLDATA_HASH,
-    contracts: EXACT_SOURCE_BUILD_TARGETS.map((target) => ({
-      ...target,
-      compilerSettingsDigest: compilerSettingsByContract.get(target.contract),
-    })),
+    contracts: EXACT_SOURCE_BUILD_TARGETS.map((target) => ({ ...target })),
     bindingDigest: null,
   };
-  if (normalized.contracts.some(({ compilerSettingsDigest }) =>
-    typeof compilerSettingsDigest !== "string")) {
-    throw new TypeError("exact source binding is missing compiler settings evidence");
-  }
   normalized.bindingDigest = framedSha256(
     DOMAINS.exactSourceBinding,
     { ...normalized, bindingDigest: null },
@@ -890,17 +900,11 @@ function normalizeSourceVerification(value, captureClosure) {
   const sourceRoots = {
     graphFactory: {
       ...ROOTS.graphFactory,
-      standardJsonInputPath:
-        "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
-      standardJsonInputSha256:
-        "sha256:8ab811a215d70b1d5aef0c71a47153173953ee78d7632725413833888369ec4d",
+      name: "ProgrammableCreate2GraphDeployerV1",
     },
     programmableLaunchStampRouter: {
       ...ROOTS.programmableLaunchStampRouter,
-      standardJsonInputPath:
-        "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
-      standardJsonInputSha256:
-        "sha256:6abca24d06b013599f4ff63e049976419c3f17455fa9bc343b15ec0d6e6a078a",
+      name: "ProgrammableLaunchStampRouterV1",
     },
   };
   const normalizedRoots = Object.fromEntries(Object.entries(sourceRoots).map(([name, expected]) => {
@@ -909,20 +913,51 @@ function normalizeSourceVerification(value, captureClosure) {
     assertExactKeys(entry, [
       "chainId", "address", "match", "creationMatch", "runtimeMatch", "observedAt",
       "providerClassification", "providerReleaseAuthority",
-      "compiler", "sourceFilesDigest", "urlPath", "httpStatus",
-      "contentType", "standardJsonInputPath",
-      "standardJsonInputSha256", "normalizedVerificationDigest",
+      "providerMatchId", "providerVerifiedAt", "providerCompiler",
+      "providerSourceFilesDigest", "providerStandardJsonInputDigest",
+      "providerDeployment", "urlPath", "httpStatus", "contentType",
+      "normalizedVerificationDigest",
     ], entryLabel);
-    assertExactKeys(entry.compiler, [
+    assertExactKeys(entry.providerCompiler, [
       "language", "compiler", "compilerVersion", "name", "fullyQualifiedName",
       "compilerSettingsDigest",
-    ], `${entryLabel}.compiler`);
+    ], `${entryLabel}.providerCompiler`);
+    assertExactKeys(entry.providerDeployment, [
+      "transactionHash", "blockNumber", "transactionIndex", "deployer",
+    ], `${entryLabel}.providerDeployment`);
+    const captured = captureClosure.sourcify.find(({ contract }) => contract === name);
+    const capturedEntry = captured === undefined ? null : {
+      chainId: captured.chainId,
+      address: captured.address,
+      match: captured.match,
+      creationMatch: captured.creationMatch,
+      runtimeMatch: captured.runtimeMatch,
+      providerClassification: captured.providerClassification,
+      providerReleaseAuthority: captured.providerReleaseAuthority,
+      observedAt: captured.observedAt,
+      providerMatchId: captured.providerMatchId,
+      providerVerifiedAt: captured.providerVerifiedAt,
+      providerCompiler: structuredClone(captured.providerCompiler),
+      providerSourceFilesDigest: captured.providerSourceFilesDigest,
+      providerStandardJsonInputDigest: captured.providerStandardJsonInputDigest,
+      providerDeployment: structuredClone(captured.providerDeployment),
+      urlPath: captured.urlPath,
+      httpStatus: captured.httpStatus,
+      contentType: captured.contentType,
+      normalizedVerificationDigest: captured.normalizedVerificationDigest,
+    };
     if (entry.chainId !== CHAIN_ID || entry.match !== "match"
       || entry.creationMatch !== "match" || entry.runtimeMatch !== "match"
       || entry.providerClassification !== "PARTIAL_NO_CBOR_EXACT_BYTES"
       || entry.providerReleaseAuthority !== false
       || entry.httpStatus !== 200 || entry.contentType !== "application/json"
-      || entry.standardJsonInputPath !== expected.standardJsonInputPath) {
+      || entry.providerCompiler.language !== "Solidity"
+      || entry.providerCompiler.compiler !== "solc"
+      || entry.providerCompiler.compilerVersion !== "0.8.26+commit.8a97fa7a"
+      || entry.providerCompiler.name !== expected.name
+      || typeof entry.providerCompiler.fullyQualifiedName !== "string"
+      || !entry.providerCompiler.fullyQualifiedName.endsWith(`:${expected.name}`)
+      || canonicalizeJson(entry) !== canonicalizeJson(capturedEntry)) {
       throw new TypeError(`${entryLabel} is not the no-CBOR provider source match`);
     }
     return [name, {
@@ -934,27 +969,49 @@ function normalizeSourceVerification(value, captureClosure) {
       providerClassification: "PARTIAL_NO_CBOR_EXACT_BYTES",
       providerReleaseAuthority: false,
       observedAt: isoDate(entry.observedAt, `${entryLabel}.observedAt`),
-      compiler: {
-        language: entry.compiler.language,
-        compiler: entry.compiler.compiler,
-        compilerVersion: entry.compiler.compilerVersion,
-        name: entry.compiler.name,
-        fullyQualifiedName: entry.compiler.fullyQualifiedName,
+      providerMatchId: entry.providerMatchId,
+      providerVerifiedAt: entry.providerVerifiedAt,
+      providerCompiler: {
+        language: entry.providerCompiler.language,
+        compiler: entry.providerCompiler.compiler,
+        compilerVersion: entry.providerCompiler.compilerVersion,
+        name: entry.providerCompiler.name,
+        fullyQualifiedName: entry.providerCompiler.fullyQualifiedName,
         compilerSettingsDigest: exactSha256(
-          entry.compiler.compilerSettingsDigest,
-          `${entryLabel}.compiler.compilerSettingsDigest`,
+          entry.providerCompiler.compilerSettingsDigest,
+          `${entryLabel}.providerCompiler.compilerSettingsDigest`,
         ),
       },
-      sourceFilesDigest: exactSha256(entry.sourceFilesDigest, `${entryLabel}.sourceFilesDigest`),
+      providerSourceFilesDigest: exactSha256(
+        entry.providerSourceFilesDigest,
+        `${entryLabel}.providerSourceFilesDigest`,
+      ),
+      providerStandardJsonInputDigest: exactSha256(
+        entry.providerStandardJsonInputDigest,
+        `${entryLabel}.providerStandardJsonInputDigest`,
+      ),
+      providerDeployment: {
+        transactionHash: exactHex32(
+          entry.providerDeployment.transactionHash,
+          `${entryLabel}.providerDeployment.transactionHash`,
+        ),
+        blockNumber: decimal(
+          entry.providerDeployment.blockNumber,
+          `${entryLabel}.providerDeployment.blockNumber`,
+          { positive: true },
+        ),
+        transactionIndex: decimal(
+          entry.providerDeployment.transactionIndex,
+          `${entryLabel}.providerDeployment.transactionIndex`,
+        ),
+        deployer: exactAddress(
+          entry.providerDeployment.deployer,
+          `${entryLabel}.providerDeployment.deployer`,
+        ),
+      },
       urlPath: entry.urlPath,
       httpStatus: 200,
       contentType: "application/json",
-      standardJsonInputPath: expected.standardJsonInputPath,
-      standardJsonInputSha256: exactSha256(
-        entry.standardJsonInputSha256,
-        `${entryLabel}.standardJsonInputSha256`,
-        expected.standardJsonInputSha256,
-      ),
       normalizedVerificationDigest: exactSha256(
         entry.normalizedVerificationDigest,
         `${entryLabel}.normalizedVerificationDigest`,
@@ -1295,13 +1352,15 @@ function sourceVerificationFromCapture(captureClosure) {
     providerClassification: entry.providerClassification,
     providerReleaseAuthority: entry.providerReleaseAuthority,
     observedAt: entry.observedAt,
-    compiler: structuredClone(entry.compiler),
-    sourceFilesDigest: entry.sourceFilesDigest,
+    providerMatchId: entry.providerMatchId,
+    providerVerifiedAt: entry.providerVerifiedAt,
+    providerCompiler: structuredClone(entry.providerCompiler),
+    providerSourceFilesDigest: entry.providerSourceFilesDigest,
+    providerStandardJsonInputDigest: entry.providerStandardJsonInputDigest,
+    providerDeployment: structuredClone(entry.providerDeployment),
     urlPath: entry.urlPath,
     httpStatus: entry.httpStatus,
     contentType: entry.contentType,
-    standardJsonInputPath: entry.standardJsonInputPath,
-    standardJsonInputSha256: entry.standardJsonInputSha256,
     normalizedVerificationDigest: entry.normalizedVerificationDigest,
   }]));
   return {
@@ -1503,38 +1562,39 @@ function buildSourceClosure(
 }
 
 function bindSourceVerificationToClosure(repositoryRoot, sourceVerification, sourceClosure) {
-  const bindings = [
-    {
-      contract: "graphFactory",
-      standardJsonPath:
-        "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
-      sourcePath: "contracts/src/ProgrammableCreate2GraphDeployerV1.sol",
-      compilerSourcePath: "src/ProgrammableCreate2GraphDeployerV1.sol",
-    },
-    {
-      contract: "programmableLaunchStampRouter",
-      standardJsonPath:
-        "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
-      sourcePath: "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
-      compilerSourcePath: "src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
-    },
-  ];
+  if (sourceVerification.exactSourceBinding.sourceClosureDigest
+      !== sourceClosure.sourceClosureDigest) {
+    throw new TypeError("exact source binding differs from the production source closure");
+  }
+  const bindings = EXACT_SOURCE_BUILD_TARGETS.map((target) => ({
+    ...target,
+    compilerSourcePath: target.fullyQualifiedName.split(":", 1)[0],
+  }));
+  const exactBindings = new Map(
+    sourceVerification.exactSourceBinding.contracts.map((entry) => [entry.contract, entry]),
+  );
   const entries = new Map(sourceClosure.entries.map((entry) => [entry.path, entry]));
   for (const binding of bindings) {
-    const standardJsonEntry = entries.get(binding.standardJsonPath);
+    const exactBinding = exactBindings.get(binding.contract);
+    const standardJsonEntry = entries.get(binding.standardJsonInputPath);
     const sourceEntry = entries.get(binding.sourcePath);
     if (standardJsonEntry?.sha256
-        !== sourceVerification[binding.contract].standardJsonInputSha256) {
+        !== exactBinding?.standardJsonInputSha256) {
       throw new TypeError(
         `${binding.contract} source verification does not bind the production Standard JSON bytes`,
       );
     }
     const standardJson = JSON.parse(
-      readFileSync(resolveInside(repositoryRoot, binding.standardJsonPath), "utf8"),
+      readFileSync(resolveInside(repositoryRoot, binding.standardJsonInputPath), "utf8"),
     );
     const sourceContent = standardJson?.sources?.[binding.compilerSourcePath]?.content;
     if (typeof sourceContent !== "string"
-      || sourceEntry?.sha256 !== sha256Digest(Buffer.from(sourceContent, "utf8"))) {
+      || sourceEntry?.sha256 !== exactBinding?.sourceSha256
+      || sourceEntry.sha256 !== sha256Digest(Buffer.from(sourceContent, "utf8"))
+      || exactBinding?.compilerSettingsDigest !== framedSha256(
+        "programmable.robinhood-custom-launch.sourcify-compiler-settings.v1",
+        standardJson.settings,
+      )) {
       throw new TypeError(
         `${binding.contract} production source differs from its verified Standard JSON closure`,
       );
@@ -1604,8 +1664,9 @@ function buildBackendReleaseAssets({
   descriptorDigest,
   captureClosure,
 }) {
-  const sourceByContract = Object.fromEntries(
-    captureClosure.sourcify.map((entry) => [entry.contract, entry]),
+  const exactSourceBinding = exactSourceBindingFromCapture(captureClosure);
+  const exactByContract = new Map(
+    exactSourceBinding.contracts.map((entry) => [entry.contract, entry]),
   );
   const transactionHash = descriptor.deploymentEvidence.transactionHash;
   const finalizedBlockNumber = descriptor.deploymentEvidence.blockNumber;
@@ -1631,43 +1692,43 @@ function buildBackendReleaseAssets({
     },
   ];
   const standardJsonInputs = targets.map((target) => {
-    const source = sourceByContract[target.captureKey];
-    if (source === undefined) {
+    const exact = exactByContract.get(target.captureKey);
+    if (exact === undefined) {
       throw new TypeError(`backend source asset is missing ${target.captureKey}`);
     }
-    const bytes = readFileSync(resolveInside(repositoryRoot, source.standardJsonInputPath));
-    if (sha256Digest(bytes) !== source.standardJsonInputSha256) {
+    const bytes = readFileSync(resolveInside(repositoryRoot, exact.standardJsonInputPath));
+    if (sha256Digest(bytes) !== exact.standardJsonInputSha256) {
       throw new TypeError(`backend source asset changed for ${target.captureKey}`);
     }
     return {
       target,
-      source,
+      exact,
       artifact: binaryArtifact(target.backendPath, bytes),
     };
   });
-  const jobs = standardJsonInputs.map(({ target, source }) => ({
+  const jobs = standardJsonInputs.map(({ target, exact }) => ({
     contract: target.contract,
     verificationJobId:
       `robinhood-v4-${target.contract}-${captureClosure.captureId.slice(0, 16)}`,
     requestId: captureClosure.captureId,
     attemptNumber: 1,
     targetId: target.targetId,
-    address: source.address,
+    address: exact.address,
     expectedRuntimeCodeHash: descriptor.contracts[target.captureKey].runtimeCodeHash,
-    compilerVersion: source.compiler.compilerVersion,
+    compilerVersion: exactSourceBinding.compilerVersion,
     standardJsonInputPath: target.backendPath.slice("release/".length),
-    standardJsonInputSha256: source.standardJsonInputSha256,
-    sourcePath: source.compiler.fullyQualifiedName.split(":", 1)[0],
-    contractName: source.compiler.name,
+    standardJsonInputSha256: exact.standardJsonInputSha256,
+    sourcePath: exact.fullyQualifiedName.split(":", 1)[0],
+    contractName: exact.name,
     constructorArguments: target.constructorArguments,
     artifactHash: framedSha256(
       "programmable.robinhood-custom-launch.backend-source-job-artifact.v1",
       {
         chainDeploymentDescriptorDigest: descriptorDigest,
         contract: target.contract,
-        address: source.address,
+        address: exact.address,
         runtimeCodeHash: descriptor.contracts[target.captureKey].runtimeCodeHash,
-        standardJsonInputSha256: source.standardJsonInputSha256,
+        standardJsonInputSha256: exact.standardJsonInputSha256,
       },
     ),
     verificationBundleHash: captureClosure.sourceVerificationClosureDigest,
@@ -1676,7 +1737,7 @@ function buildBackendReleaseAssets({
   }));
   const sourceManifest = artifact(ROBINHOOD_BACKEND_SOURCE_MANIFEST_PATH, {
     schemaVersion: "programmable.robinhood-prepared-root-source-manifest.v1",
-    providerProfileDigest: captureClosure.profileDigest,
+    providerProfileDigest: ROBINHOOD_BACKEND_PROVIDER_PROFILE_DIGEST,
     jobs,
   });
   const normalized = {
