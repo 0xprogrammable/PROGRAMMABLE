@@ -1,6 +1,7 @@
 export {
   getIdentityToken,
   PrivyProvider,
+  useAuthorizationSignature,
   useIdentityToken,
   useLinkAccount,
   useLogin,

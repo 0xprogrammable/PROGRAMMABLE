@@ -20,6 +20,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -96,6 +97,11 @@ import {
   type BrowserWalletLoginLease,
 } from "../lib/wallet-login-lock";
 import { runWithBrowserWalletRequestLock } from "../lib/wallet-request-lock";
+import type {
+  PrivyPolicyOwnerOperation,
+  PrivyPolicyOwnerReview,
+  PrivyPolicyOwnerSession,
+} from "@/lib/privy-policy-owner/handoff";
 import {
   loginConnectedEthereumWalletWithSiwe,
   selectInjectedEthereumProvider,
@@ -172,6 +178,15 @@ type WalletContextValue = {
   reauthorizeGithub: () => Promise<void>;
   setUsername: (username: string) => void;
   signLaunchMessage: (signingMessageBase64Url: string) => Promise<string>;
+  reviewPrivyPolicyOwnerRequest: (input: Readonly<{
+    text: string;
+    operation: PrivyPolicyOwnerOperation;
+  }>) => Promise<PrivyPolicyOwnerReview>;
+  signPrivyPolicyOwnerRequest: (input: Readonly<{
+    text: string;
+    operation: PrivyPolicyOwnerOperation;
+    reviewedRequestArtifactSha256: string;
+  }>) => Promise<string>;
   signPredictionPermit: (input: Readonly<{
     deadline: bigint;
     factoryAddress: Address;
@@ -240,6 +255,7 @@ export function shouldEagerLoadWalletRuntime(pathname: string) {
     "/token",
     "/developers/api-keys",
     "/admin/partners",
+    "/ops/privy-policy-owner",
   ].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
@@ -1033,6 +1049,12 @@ function DeferredWalletProvider({
       signLaunchMessage: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
+      reviewPrivyPolicyOwnerRequest: async () => {
+        throw new Error("OWNER_HANDOFF_SESSION_CHANGED");
+      },
+      signPrivyPolicyOwnerRequest: async () => {
+        throw new Error("OWNER_HANDOFF_SESSION_CHANGED");
+      },
       signPredictionPermit: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
@@ -1159,6 +1181,7 @@ function PrivyWalletBridge({
 }>) {
   const {
     getIdentityToken: getPrivyIdentityToken,
+    useAuthorizationSignature,
     useIdentityToken,
     useLinkAccount,
     useLogin,
@@ -1198,6 +1221,7 @@ function PrivyWalletBridge({
   }, [identityToken]);
   const { sendTransaction: sendPrivyTransaction } = usePrivySendTransaction();
   const { signMessage: signPrivyMessage } = usePrivySignMessage();
+  const { generateAuthorizationSignature } = useAuthorizationSignature();
   const { ready: walletsReady, wallets } = useWallets();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1253,6 +1277,66 @@ function PrivyWalletBridge({
   });
 
   const activeAuthenticated = authenticated && !sessionSuppressed;
+  const ownerUserId = user?.id ?? null;
+  const ownerSessionRef = useRef<PrivyPolicyOwnerSession>({
+    ready: false,
+    authenticated: false,
+    userId: null,
+  });
+  const ownerSigningRef = useRef(false);
+  useLayoutEffect(() => {
+    ownerSessionRef.current = {
+      ready,
+      authenticated: activeAuthenticated,
+      userId: ownerUserId,
+    };
+    return () => {
+      ownerSessionRef.current = { ready: false, authenticated: false, userId: null };
+    };
+  }, [activeAuthenticated, ready, ownerUserId]);
+  const reviewPrivyPolicyOwnerRequest = useCallback(async (input: Readonly<{
+    text: string;
+    operation: PrivyPolicyOwnerOperation;
+  }>) => {
+    const session = ownerSessionRef.current;
+    if (!ready || !activeAuthenticated || !ownerUserId
+      || !session.ready || !session.authenticated || !session.userId
+      || session.userId !== ownerUserId) {
+      throw new Error("OWNER_HANDOFF_SESSION_CHANGED");
+    }
+    const { reviewPrivyPolicyOwnerRequest: review } = await import(
+      "@/lib/privy-policy-owner/handoff"
+    );
+    const result = await review({ ...input, userId: session.userId, nowMilliseconds: Date.now() });
+    const current = ownerSessionRef.current;
+    if (!current.ready || !current.authenticated || current.userId !== session.userId) {
+      throw new Error("OWNER_HANDOFF_SESSION_CHANGED");
+    }
+    if (Date.now() >= Date.parse(result.artifact.expiresAt)) {
+      throw new Error("OWNER_HANDOFF_REQUEST_EXPIRED_OR_CLOCK_INVALID");
+    }
+    return result;
+  }, [activeAuthenticated, ready, ownerUserId]);
+  const signPrivyPolicyOwnerRequest = useCallback(async (input: Readonly<{
+    text: string;
+    operation: PrivyPolicyOwnerOperation;
+    reviewedRequestArtifactSha256: string;
+  }>) => {
+    if (ownerSigningRef.current) throw new Error("OWNER_HANDOFF_SIGNING_IN_PROGRESS");
+    ownerSigningRef.current = true;
+    try {
+      const { signReviewedPrivyPolicyOwnerRequest } = await import(
+        "@/lib/privy-policy-owner/handoff"
+      );
+      return await signReviewedPrivyPolicyOwnerRequest({
+        ...input,
+        readSession: () => ownerSessionRef.current,
+        signAuthorization: generateAuthorizationSignature,
+      });
+    } finally {
+      ownerSigningRef.current = false;
+    }
+  }, [generateAuthorizationSignature]);
   useEffect(() => {
     if (!ready) return;
     persistWalletSessionHint(activeAuthenticated);
@@ -2607,6 +2691,8 @@ function PrivyWalletBridge({
       reauthorizeGithub,
       setUsername,
       signLaunchMessage,
+      reviewPrivyPolicyOwnerRequest,
+      signPrivyPolicyOwnerRequest,
       signPredictionPermit,
       signPredictionTokenPermit,
       signMainTokenMigrationPermit,
@@ -2650,6 +2736,8 @@ function PrivyWalletBridge({
       sendPredictionV2Transaction,
       sendTransaction,
       signLaunchMessage,
+      reviewPrivyPolicyOwnerRequest,
+      signPrivyPolicyOwnerRequest,
       signPredictionPermit,
       signPredictionTokenPermit,
       signMainTokenMigrationPermit,
@@ -2741,6 +2829,12 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       setUsername: () => undefined,
       signLaunchMessage: async () => {
         throw new Error("Wallet sign-in is unavailable");
+      },
+      reviewPrivyPolicyOwnerRequest: async () => {
+        throw new Error("OWNER_HANDOFF_SESSION_CHANGED");
+      },
+      signPrivyPolicyOwnerRequest: async () => {
+        throw new Error("OWNER_HANDOFF_SESSION_CHANGED");
       },
       signPredictionPermit: async () => {
         throw new Error("Wallet sign-in is unavailable");

@@ -1,0 +1,82 @@
+.page {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 64px 24px 96px;
+  color: var(--text);
+}
+
+.header { max-width: 680px; }
+.eyebrow {
+  margin: 0 0 16px;
+  color: var(--text-soft);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.header h1 {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 40px;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.intro { margin: 24px 0 0; font-size: 18px; line-height: 28px; color: var(--text-soft); text-wrap: pretty; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; margin-top: 48px; }
+.page h2 { margin: 0 0 24px; font-size: 20px; line-height: 28px; font-weight: 600; }
+.operations { display: grid; gap: 8px; padding: 0; margin: 0 0 24px; border: 0; }
+.operations legend { margin-bottom: 8px; color: var(--text-soft); font-size: 14px; line-height: 20px; }
+.operations label { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 8px; cursor: pointer; }
+.operations label:has(:checked) { background: var(--surface); border-color: var(--text-soft); }
+.operations input, .acknowledgement input { appearance: auto; -webkit-appearance: auto; width: 20px; height: 20px; flex: 0 0 auto; margin: 0; padding: 0; border: initial; background: initial; accent-color: var(--text); }
+.consequence { font-size: 18px; line-height: 28px; margin: 0 0 24px; text-wrap: pretty; }
+.facts { margin: 0; display: grid; gap: 16px; }
+.facts > div { min-width: 0; }
+.facts dt { color: var(--text-soft); font-size: 12px; line-height: 16px; margin-bottom: 4px; }
+.facts dd { margin: 0; font-size: 14px; line-height: 20px; }
+.facts dd span { display: block; margin-top: 4px; color: var(--text-soft); }
+.page code { overflow-wrap: anywhere; font-family: var(--font-plex-mono), monospace; font-size: 12px; line-height: 20px; }
+.explanation { color: var(--text-soft); font-size: 14px; line-height: 20px; text-wrap: pretty; margin: 24px 0 0; }
+.details { margin-top: 24px; }
+.details summary { cursor: pointer; min-height: 44px; padding-block: 12px; font-size: 14px; line-height: 20px; text-decoration: underline; text-underline-offset: 4px; }
+.details .facts { margin-top: 16px; }
+.console { min-width: 0; padding: 32px; border: 1px solid var(--panel-border); border-radius: 16px; background: var(--surface); }
+.console > .explanation { margin-top: 0; }
+.session { margin-top: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 14px; line-height: 20px; }
+.secondary, .primary { min-height: 44px; padding: 8px 12px; border: 1px solid var(--text); border-radius: 8px; font: inherit; font-size: 16px; font-weight: 600; line-height: 24px; cursor: pointer; }
+.secondary { background: var(--surface-raised); color: var(--text); }
+.primary { width: 100%; background: var(--text); color: var(--body-background); }
+.primary:disabled, .secondary:disabled, .fileInput:disabled { cursor: not-allowed; opacity: 0.55; }
+.hint { color: var(--text-soft); font-size: 12px; line-height: 20px; margin: 12px 0 0; text-wrap: pretty; }
+.acknowledgement { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; margin-top: 24px; cursor: pointer; font-size: 14px; line-height: 20px; }
+.console .importHeading { margin: 32px 0 16px; }
+.fileLabel { display: block; font-size: 14px; line-height: 20px; margin-bottom: 8px; }
+.fileInput { display: block; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--text); font-size: 16px; line-height: 24px; padding: 8px; }
+.fileInput::file-selector-button { padding: 4px 8px; margin-inline-end: 8px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.request { margin-top: 24px; padding: 16px; border: 1px solid var(--border-strong); border-radius: 8px; }
+.timer { font-size: 14px; font-weight: 600; line-height: 20px; margin: 0 0 16px; font-variant-numeric: tabular-nums; }
+.error { color: var(--danger); font-size: 14px; line-height: 20px; margin: 16px 0; }
+.error:empty { margin-block: 24px 0; }
+.status { color: var(--text); font-size: 14px; line-height: 20px; margin: 16px 0 0; text-wrap: pretty; }
+.status:empty { margin: 0; }
+.back { display: inline-flex; align-items: center; min-height: 44px; margin-top: 32px; color: var(--text-soft); font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
+.page :is(button, input, a, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+@media (hover: hover) and (pointer: fine) {
+  .secondary:not(:disabled):hover, .operations label:hover { background: var(--surface-soft); }
+  .primary:not(:disabled):hover { opacity: 0.88; }
+}
+@media (max-width: 54rem) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .page { padding-top: 40px; }
+  .console { padding: 24px; }
+}
+@media (max-width: 25rem) {
+  .page { padding-inline: 16px; }
+  .header h1 { font-size: 30px; line-height: 36px; }
+  .console { padding: 16px; }
+}
+@media (forced-colors: active) {
+  .page :is(button, input, a, summary):focus-visible { outline-color: Highlight; }
+}
