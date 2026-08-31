@@ -97,13 +97,6 @@ export async function readExploreMarketEntriesV1(
       gmgnQualifiedCount += 1;
     } else {
       fallbackEntries.push(entry);
-      if (snapshot) {
-        gmgnEntries.set(entry.id, {
-          ...entry,
-          valuation: { status: "unavailable", reason: "liquidity-unavailable" },
-          gmgnMarketData: snapshot,
-        });
-      }
     }
   }
 
@@ -119,11 +112,7 @@ export async function readExploreMarketEntriesV1(
     const gmgn = gmgnEntries.get(entry.id);
     if (gmgn?.valuation.status === "available") return gmgn;
     const dexscreener = fallbackById.get(entry.id);
-    if (dexscreener?.valuation.status === "available") {
-      return gmgn?.gmgnMarketData
-        ? { ...dexscreener, gmgnMarketData: gmgn.gmgnMarketData }
-        : dexscreener;
-    }
+    if (dexscreener?.valuation.status === "available") return dexscreener;
     return gmgn ?? dexscreener ?? unavailableEntry(entry);
   });
   const qualifiedCount = gmgnQualifiedCount + fallbackQualifiedCount;

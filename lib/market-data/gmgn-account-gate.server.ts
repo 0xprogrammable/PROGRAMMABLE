@@ -9,6 +9,7 @@ import {
 
 const GATE_ID = "gmgn-openapi-v1" as const;
 const MAXIMUM_BLOCK_MS = 5 * 60_000;
+const HISTORY_RETENTION_GENERATIONS = 256;
 
 export type GmgnAccountGateReservationV1 = Readonly<{
   kind: "reserved";
@@ -73,6 +74,13 @@ const RESERVE_SLOT_SQL = `
     RETURNING gate.gate_id, gate.generation, authority.decided_at,
               gate.next_slot_at, gate.blocked_until, gate.lease_holder,
               gate.lease_until
+  ), pruned AS (
+    DELETE FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+      AS history
+     USING reservation
+     WHERE history.gate_id = reservation.gate_id
+       AND history.generation <=
+         reservation.generation - ${HISTORY_RETENTION_GENERATIONS}
   ), history AS (
     INSERT INTO programmable_website_projection_v1.gmgn_account_gate_decisions_v1 (
       gate_id, generation, decision_kind, decided_at, next_slot_at,
@@ -121,6 +129,13 @@ const BLOCK_UNTIL_SQL = `
        AND gate.lease_holder = $5::uuid
     RETURNING gate.gate_id, gate.generation, authority.decided_at,
               gate.next_slot_at, gate.blocked_until, gate.lease_until
+  ), pruned AS (
+    DELETE FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+      AS history
+     USING decision
+     WHERE history.gate_id = decision.gate_id
+       AND history.generation <=
+         decision.generation - ${HISTORY_RETENTION_GENERATIONS}
   ), history AS (
     INSERT INTO programmable_website_projection_v1.gmgn_account_gate_decisions_v1 (
       gate_id, generation, decision_kind, decided_at, next_slot_at,
@@ -154,6 +169,13 @@ const COMPLETE_SQL = `
        AND gate.lease_holder = $3::uuid
     RETURNING gate.gate_id, gate.generation, authority.decided_at,
               gate.next_slot_at, gate.blocked_until, gate.lease_until
+  ), pruned AS (
+    DELETE FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+      AS history
+     USING decision
+     WHERE history.gate_id = decision.gate_id
+       AND history.generation <=
+         decision.generation - ${HISTORY_RETENTION_GENERATIONS}
   ), history AS (
     INSERT INTO programmable_website_projection_v1.gmgn_account_gate_decisions_v1 (
       gate_id, generation, decision_kind, decided_at, next_slot_at,

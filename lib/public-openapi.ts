@@ -214,7 +214,10 @@ export const programmablePublicOpenApi = {
               component("ExploreListResponse"),
               "Verified launch page or an honest planned-not-deployed chain response.",
             ),
-            headers: exploreMarketResponseHeaders,
+            headers: {
+              ...exploreIdentityResponseHeaders,
+              ...exploreMarketResponseHeaders,
+            },
           },
           "400": jsonResponse(component("ApiError"), "Invalid query shape."),
           "503": jsonResponse(

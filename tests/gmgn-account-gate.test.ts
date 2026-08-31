@@ -127,7 +127,22 @@ describe("GMGN account gate", () => {
           'INSERT') AS runtime_history_insert,
         has_table_privilege('programmable_website_projection_runtime',
           'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+          'DELETE') AS runtime_history_delete,
+        has_table_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
           'SELECT') AS runtime_history_select,
+        has_table_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+          'UPDATE') AS runtime_history_update,
+        has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+          'gate_id', 'SELECT')
+          AND has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+          'generation', 'SELECT') AS runtime_history_prune_columns,
+        has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+          'decision_kind', 'SELECT') AS runtime_history_decision_select,
         has_table_privilege('anon',
           'programmable_website_projection_v1.gmgn_account_gate_v1',
           'SELECT,INSERT,UPDATE,DELETE') AS anon_any,
@@ -145,7 +160,11 @@ describe("GMGN account gate", () => {
       runtime_state_insert: false,
       runtime_state_delete: false,
       runtime_history_insert: true,
+      runtime_history_delete: true,
       runtime_history_select: false,
+      runtime_history_update: false,
+      runtime_history_prune_columns: true,
+      runtime_history_decision_select: false,
       anon_any: false,
       state_rls_forced: true,
       history_rls_forced: true,
@@ -216,6 +235,99 @@ describe("GMGN account gate", () => {
       requestsPerSecond: 50,
       deadlineMs: Date.now() + 100,
     })).resolves.toBeNull();
+  });
+
+  it("cannot release a successor lease after an exact-holder race", async () => {
+    const { database, pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const lease = await gate.reserveSlot({
+      requestsPerSecond: 50,
+      deadlineMs: Date.now() + 1_000,
+    });
+    if (lease?.kind !== "reserved") throw new Error("test lease unavailable");
+    const successorHolder = "22222222-2222-4222-8222-222222222222";
+    await database.exec(`
+      RESET ROLE;
+      UPDATE programmable_website_projection_v1.gmgn_account_gate_v1
+         SET generation = generation + 1,
+             lease_holder = '${successorHolder}',
+             lease_until = clock_timestamp() + INTERVAL '5 minutes',
+             updated_at = clock_timestamp()
+       WHERE gate_id = 'gmgn-openapi-v1';
+      SET ROLE programmable_website_projection_runtime;
+    `);
+
+    await expect(gate.complete(lease)).rejects.toThrow(
+      "lease is stale or unavailable",
+    );
+    await database.exec("RESET ROLE");
+    const state = await database.query<{
+      generation: number;
+      lease_holder: string;
+    }>(`
+      SELECT generation, lease_holder
+        FROM programmable_website_projection_v1.gmgn_account_gate_v1
+    `);
+    expect(state.rows[0]).toMatchObject({
+      generation: lease.generation + 1,
+      lease_holder: successorHolder,
+    });
+  });
+
+  it("prunes decision history to the latest 256 generations", async () => {
+    const { database, pool } = await migratedGate();
+    const holder = "33333333-3333-4333-8333-333333333333";
+    await database.exec(`
+      RESET ROLE;
+      INSERT INTO programmable_website_projection_v1.gmgn_account_gate_decisions_v1 (
+        gate_id, generation, decision_kind, decided_at, next_slot_at,
+        blocked_until, lease_holder, lease_until, interval_ms,
+        retry_after_ms, provider_signal
+      )
+      SELECT 'gmgn-openapi-v1', generation, 'reserved',
+             TIMESTAMPTZ '2026-01-01 00:00:00+00',
+             TIMESTAMPTZ '2026-01-01 00:00:01+00', TIMESTAMPTZ 'epoch',
+             '${holder}'::uuid, TIMESTAMPTZ '2026-01-01 00:05:00+00',
+             20, 0, NULL
+        FROM generate_series(1, 300) AS generation
+      UNION ALL
+      SELECT 'gmgn-openapi-v1', generation, 'completed',
+             TIMESTAMPTZ '2026-01-01 00:00:02+00',
+             TIMESTAMPTZ '2026-01-01 00:00:01+00', TIMESTAMPTZ 'epoch',
+             '${holder}'::uuid, TIMESTAMPTZ 'epoch', NULL, 0, NULL
+        FROM generate_series(1, 299) AS generation;
+      UPDATE programmable_website_projection_v1.gmgn_account_gate_v1
+         SET generation = 300,
+             lease_holder = '${holder}',
+             lease_until = clock_timestamp() + INTERVAL '5 minutes',
+             updated_at = clock_timestamp()
+       WHERE gate_id = 'gmgn-openapi-v1';
+      SET ROLE programmable_website_projection_runtime;
+    `);
+
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    await gate.complete({
+      kind: "reserved",
+      generation: 300,
+      holder,
+      reservedAtMs: Date.now(),
+    });
+
+    await database.exec("RESET ROLE");
+    const retained = await database.query<{
+      count: number;
+      minimum_generation: number;
+      maximum_generation: number;
+    }>(`
+      SELECT count(*) AS count, min(generation) AS minimum_generation,
+             max(generation) AS maximum_generation
+        FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+    `);
+    expect(retained.rows[0]).toEqual({
+      count: 512,
+      minimum_generation: 45,
+      maximum_generation: 300,
+    });
   });
 });
 

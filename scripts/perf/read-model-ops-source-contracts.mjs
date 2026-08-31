@@ -924,14 +924,20 @@ function exactFalseEnvironmentKey(source, name) {
 
 const EXACT_MANUAL_VERCEL_PROMOTION =
   'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"';
+const EXACT_MANUAL_VERCEL_PRODUCTION_PULL =
+  'vercel pull --yes --environment=production --token="$VERCEL_TOKEN"';
 const EXACT_REAL_BLOCK_SLA_OUTPUT =
   "/secure/cutover/real-block-sla-db-attestation.json";
 const MANUAL_PROMOTION_SEQUENCE = Object.freeze([
   "npm run perf:read-model:real-block-sla-operator --",
   "npm run perf:read-model:real-block-sla --",
+  EXACT_MANUAL_VERCEL_PRODUCTION_PULL,
+  "env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module",
+  'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"',
   "npm run perf:read-model:staged-deployment --",
   EXACT_MANUAL_VERCEL_PROMOTION,
   "npm run perf:read-model:post-promotion --",
+  '--require-gmgn-market "$REQUIRE_GMGN_MARKET"',
 ]);
 
 function manualPromotionSequenceIsFailClosed(source) {
@@ -961,9 +967,14 @@ function manualPromotionSequenceIsFailClosed(source) {
   const activePromotionCommands = shellCommands.filter((line) =>
     /\bvercel\s+promote(?:\s|$)/u.test(line),
   );
+  const activeProductionPulls = shellCommands.filter((line) =>
+    /\bvercel\s+pull(?:\s|$)/u.test(line),
+  );
   return (
     activePromotionCommands.length === 1 &&
-    activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION
+    activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION &&
+    activeProductionPulls.length === 1 &&
+    activeProductionPulls[0] === EXACT_MANUAL_VERCEL_PRODUCTION_PULL
   );
 }
 
@@ -2124,6 +2135,7 @@ export function evaluateReadModelOperationsSourceContracts(
       ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
   const stagedProviderHandoff = includesEverySourceFragment(deployWorkflow, [
+    "GMGN_MARKET_REQUIRED: $\{{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
     "MARKET_PROVIDER: $\{{ steps.public-provider-smoke.outputs.market_provider }}",
     "MARKET_READ_STATUS: $\{{ steps.public-provider-smoke.outputs.market_read_status }}",
     "DETAIL_MARKET_PROVIDER: $\{{ steps.public-provider-smoke.outputs.detail_market_provider }}",
@@ -2134,6 +2146,7 @@ export function evaluateReadModelOperationsSourceContracts(
     'echo "- Token detail market provider: \\`${DETAIL_MARKET_PROVIDER:-not-run}\\`"',
     'echo "- Token detail smoke: \\`${DETAIL_SMOKE_STATUS:-not-run}\\`"',
     'echo "- Full-catalog FDV ranking provider: Dexscreener"',
+    'echo "- GMGN market required by staged public smoke: \\`$GMGN_MARKET_REQUIRED\\`"',
     'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
   ]);
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
@@ -2276,6 +2289,8 @@ export function evaluateReadModelOperationsSourceContracts(
       "!poolBaseQuoteMatchesV1(data.pool, identity)",
       "!providerSupplyMatchesCanonical(",
       'headers: { Accept: "application/json", "X-APIKEY": apiKey }',
+      'redirect: "error"',
+      'credentials: "omit"',
       "const bytes = await readBoundedResponseBytes(",
       "const rateLimited = response.status === 429 || isRateLimitedEnvelope(value);",
       '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
@@ -2864,17 +2879,35 @@ export function evaluateReadModelOperationsSourceContracts(
       retiredCandidateCutoverIsFailClosed(retiredCandidateCutover) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
+      stagedProviderHandoff &&
+      includesEverySourceFragment(postPromotion, [
+        "export function parsePostPromotionArguments(argv)",
+        '"require-gmgn-market"',
+        '!["true", "false"].includes(result["require-gmgn-market"])',
+        'requireGmgnMarket: result["require-gmgn-market"] === "true"',
+        "requireGmgnMarket: args.requireGmgnMarket",
+      ]) &&
       includesEverySourceFragment(postPromotionVerifierBlock, [
         'target.toString() !== `${PRODUCTION_ORIGIN}/`',
+        'typeof input.requireGmgnMarket !== "boolean"',
+        'throw new Error("an explicit GMGN market requirement boolean is required")',
         'throw new Error("exact production deployment binding is required")',
         "verifyProductionDeploymentBinding({",
-        "const environment = input.environment ?? process.env",
-        '(environment.GMGN_API_KEY ?? "").trim() !== ""',
         "runProductionStaticDexscreenerSmokeV1({",
-        "PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(requireGmgnMarket)",
+        "PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(input.requireGmgnMarket)",
         'id: "production-static-identity-dexscreener-public-apis"',
       ]) &&
-      (postPromotionVerifierBlock.match(/GMGN_API_KEY/gu)?.length ?? 0) === 1 &&
+      !postPromotion.includes("GMGN_API_KEY") &&
+      !postPromotion.includes("input.environment") &&
+      includesEverySourceFragment(operationsRunbook, [
+        'vercel pull --yes --environment=production --token="$VERCEL_TOKEN"',
+        "env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module",
+        '(process.env.GMGN_API_KEY ?? "").trim() !== ""',
+        'process.stdout.write(requireGmgnMarket ? "true" : "false")',
+        'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"',
+        '--require-gmgn-market "$REQUIRE_GMGN_MARKET"',
+      ]) &&
+      !/set -x|echo[^\n]*GMGN_API_KEY|console\.log/u.test(operationsRunbook) &&
       !/runtimeProductionProviderEndpoints|verifyBitquery|stateview|chainlink|\/api\/ops\/health|\/api\/explore\/token\/chart/iu.test(
         postPromotionVerifierBlock,
       ) &&
@@ -2886,7 +2919,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !operationsRunbook.includes(
         '--evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"',
       ),
-    "the workflow is stage-only and the manual promotion sequence verifies exact deployment binding plus the committed identity and fail-soft Dex public contract",
+    "the workflow is stage-only and the manual promotion sequence binds a secret-safe current Production GMGN requirement to the staged and post-promotion public checks",
   );
   check(
     "ops-vercel-project-prerequisite",

@@ -48,9 +48,9 @@ profile index with the wallet-derived profile index. `0003` adds the separate
 Registry-current-state materialization. `0004` adds approval-v3 artifact
 commitments. `0005` adds the Generic V2 launch, reconciliation, and
 reconciliation-attempt materializations. `0006` adds the private singleton and
-append-only decision history used to serialize GMGN account-wide reservations,
-leases, completions, and provider cooldowns across production instances. Together
-they provide:
+bounded decision history used to serialize GMGN account-wide reservations,
+leases, completions, provider failures, and provider cooldowns across production
+instances. Together they provide:
 
 - a primary key on `(lane, projection_key)`;
 - a global unique index on `idempotency_key`;
@@ -63,13 +63,14 @@ they provide:
   finality, provider/model, GitHub revision, approval/launch-plan, runtime, fee,
   and post-launch-role bindings;
 - a fail-closed distributed GMGN account gate with one exact singleton, bounded
-  leases, and durable reservation, completion, and provider-block decisions;
+  leases, exact-holder failure release, and the latest 256 generations of
+  reservation, completion, and provider-block decisions (512 rows on the gate
+  path; at most 514 including the two policy-bounded next-generation identities);
 - lane-specific constraints requiring complete entitlement metadata and forbidding
   that metadata on custom-launch records;
 - enabled and forced RLS on every application table;
-- no delete path in application code, immutable projection and credential rows,
-  and only the narrow Registry, reconciliation, and GMGN gate updates listed
-  below.
+- immutable projection and credential rows, and only the narrow Registry,
+  reconciliation, GMGN gate updates, and old GMGN history pruning listed below.
 
 The runtime resolves both the lane/key identity and idempotency identity inside
 one PostgreSQL transaction. A first write returns `201`; an exact retry returns
@@ -115,7 +116,7 @@ GRANT UPDATE (
   generation, next_slot_at, blocked_until, lease_holder, lease_until, updated_at
 ) ON programmable_website_projection_v1.gmgn_account_gate_v1
   TO programmable_website_projection_runtime;
-GRANT INSERT
+GRANT INSERT, DELETE
   ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
   TO programmable_website_projection_runtime;
 GRANT EXECUTE ON FUNCTION
@@ -124,12 +125,20 @@ GRANT EXECUTE ON FUNCTION
 ```
 
 Do not grant `UPDATE` on the immutable projection or credential tables. Do not
-grant `DELETE`, `TRUNCATE`, schema creation, role management, or access to
-approval-service tables. The narrowly scoped column-level `UPDATE` grant on the
+grant `DELETE` except on the GMGN decision history, or grant `TRUNCATE`, schema
+creation, role management, or access to approval-service tables. The narrowly
+scoped column-level `UPDATE` grant on the
 Registry materialization is required to hide a record immediately after a correction,
 revocation, or reorg. The GMGN runtime may read and update only the singleton;
-it may append decisions but cannot read or change decision history. The runtime
-attests the exact current role,
+it may append decisions and delete only generations made eligible by the RLS
+retention policy. Its two column-level `SELECT` grants expose only the gate ID
+and generation of those already-prunable rows; it cannot read decision contents,
+update, truncate, or trigger against decision history. Each reserve, complete,
+and provider-block statement prunes generations
+older than the latest 256 in the same serialized gate path. Fetch and timeout
+failures complete only the exact generation-and-holder lease; an observed 429 or
+provider ban instead advances the generation and publishes the bounded shared
+cooldown. The runtime attests the exact current role,
 grants, RLS/force-RLS state, policies, provider-role exclusion, table ownership,
 and live `pg_stat_ssl` connection before serving requests.
 

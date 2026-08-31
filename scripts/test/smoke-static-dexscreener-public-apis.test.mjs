@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { runStagedStaticDexscreenerSmokeV1 } from
   "../smoke-static-dexscreener-public-apis.mjs";
-import { verifyPostPromotion } from
+import { parsePostPromotionArguments, verifyPostPromotion } from
   "../perf/read-model-post-promotion.mjs";
 
 const NOW = new Date().toISOString();
@@ -2356,7 +2356,7 @@ test("post-promotion binds the exact deployment to the same public fast lane", a
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
-    environment: {},
+    requireGmgnMarket: false,
     fetchImpl,
   });
   assert.equal(result.ok, true);
@@ -2388,7 +2388,7 @@ test("post-promotion fails an exact deployment-id mismatch", async () => {
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
-    environment: {},
+    requireGmgnMarket: false,
     fetchImpl,
   });
   assert.equal(result.ok, false);
@@ -2404,7 +2404,7 @@ test("post-promotion rejects a non-production origin before fetching", async () 
       token: "vercel-test-token",
       teamId: "team_programmable_test",
       projectId: "prj_programmable_test",
-      environment: {},
+      requireGmgnMarket: false,
       fetchImpl: async () => {
         throw new Error("fetch must not run");
       },
@@ -2413,7 +2413,7 @@ test("post-promotion rejects a non-production origin before fetching", async () 
   );
 });
 
-test("post-promotion resolves and enforces the production GMGN requirement", async () => {
+test("post-promotion enforces an explicit production GMGN requirement", async () => {
   const routeFetch = gmgnStagedFetch();
   const fetchImpl = async (url, init) => {
     const target = new URL(String(url));
@@ -2434,14 +2434,14 @@ test("post-promotion resolves and enforces the production GMGN requirement", asy
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
-    environment: { GMGN_API_KEY: "configured-server-only-key" },
+    requireGmgnMarket: true,
     fetchImpl,
   });
   assert.equal(result.ok, true);
   assert.deepEqual(result.failures, []);
 });
 
-test("post-promotion fails Dexscreener-only detail when GMGN is configured", async () => {
+test("post-promotion fails Dexscreener-only detail when GMGN is required", async () => {
   const routeFetch = stagedFetch();
   const fetchImpl = async (url, init) => {
     const target = new URL(String(url));
@@ -2462,13 +2462,83 @@ test("post-promotion fails Dexscreener-only detail when GMGN is configured", asy
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
-    environment: { GMGN_API_KEY: "configured-server-only-key" },
+    requireGmgnMarket: true,
     fetchImpl,
   });
   assert.equal(result.ok, false);
   assert.ok(result.failures.some(({ id }) =>
     id === "production-static-identity-dexscreener-public-apis"
   ));
+});
+
+test("post-promotion rejects an omitted or non-Boolean GMGN requirement", async () => {
+  const base = {
+    targetUrl: "https://programmable.market/",
+    expectedDeploymentId: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+    expectedGitHead: "b".repeat(40),
+    token: "vercel-test-token",
+    teamId: "team_programmable_test",
+    projectId: "prj_programmable_test",
+    fetchImpl: async () => {
+      throw new Error("fetch must not run");
+    },
+  };
+  await assert.rejects(
+    verifyPostPromotion(base),
+    /explicit GMGN market requirement boolean/u,
+  );
+  await assert.rejects(
+    verifyPostPromotion({ ...base, requireGmgnMarket: "false" }),
+    /explicit GMGN market requirement boolean/u,
+  );
+});
+
+test("post-promotion has no local GMGN requirement source", () => {
+  const source = readFileSync(
+    "scripts/perf/read-model-post-promotion.mjs",
+    "utf8",
+  );
+  assert.doesNotMatch(source, /GMGN_API_KEY|input\.environment/u);
+  assert.match(source, /String\(input\.requireGmgnMarket\)/u);
+});
+
+test("post-promotion CLI requires one exact GMGN Boolean argument", () => {
+  const base = [
+    "--target-url",
+    "https://programmable.market",
+    "--deployment-id",
+    "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "--git-head",
+    "b".repeat(40),
+  ];
+  assert.throws(
+    () => parsePostPromotionArguments(base),
+    /--require-gmgn-market are required/u,
+  );
+  assert.throws(
+    () => parsePostPromotionArguments([
+      ...base,
+      "--require-gmgn-market",
+      "enabled",
+    ]),
+    /must be exactly true or false/u,
+  );
+  assert.equal(
+    parsePostPromotionArguments([
+      ...base,
+      "--require-gmgn-market",
+      "true",
+    ]).requireGmgnMarket,
+    true,
+  );
+  assert.equal(
+    parsePostPromotionArguments([
+      ...base,
+      "--require-gmgn-market",
+      "false",
+    ]).requireGmgnMarket,
+    false,
+  );
 });
 
 test("the executable smoke contains no direct RPC or Bitquery reader", () => {

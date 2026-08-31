@@ -93,6 +93,8 @@ extends Record<string, unknown> {
   gmgn_gate_update: boolean;
   gmgn_gate_forbidden_mutate: boolean;
   gmgn_history_insert: boolean;
+  gmgn_history_delete: boolean;
+  gmgn_history_prune_columns: boolean;
   gmgn_history_forbidden_access: boolean;
   gmgn_gate_rls: boolean;
   gmgn_gate_force_rls: boolean;
@@ -627,7 +629,22 @@ implements ProductionProjectionTargetPostgresPoolV1 {
                  'INSERT') AS gmgn_history_insert,
                has_table_privilege(current_user,
                  'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
-                 'SELECT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                 'DELETE') AS gmgn_history_delete,
+               (
+                 SELECT count(*) = 2
+                    AND string_agg(privilege.column_name, ','
+                      ORDER BY privilege.column_name) = 'gate_id,generation'
+                   FROM information_schema.column_privileges AS privilege
+                  WHERE privilege.table_schema =
+                    'programmable_website_projection_v1'
+                    AND privilege.table_name =
+                      'gmgn_account_gate_decisions_v1'
+                    AND privilege.grantee = current_user
+                    AND privilege.privilege_type = 'SELECT'
+               ) AS gmgn_history_prune_columns,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+                 'SELECT,UPDATE,TRUNCATE,REFERENCES,TRIGGER')
                  AS gmgn_history_forbidden_access,
                gmgn_gate.relrowsecurity AS gmgn_gate_rls,
                gmgn_gate.relforcerowsecurity AS gmgn_gate_force_rls,
@@ -640,14 +657,14 @@ implements ProductionProjectionTargetPostgresPoolV1 {
                    FROM programmable_website_projection_v1.gmgn_account_gate_v1
                ) AS gmgn_gate_singleton,
                (
-                 SELECT count(*) = 3
+                 SELECT count(*) = 5
                     AND bool_and(
                       policies.roles = ARRAY['programmable_website_projection_runtime']::name[]
                     )
                     AND string_agg(
                       policies.policyname || ':' || policies.cmd,
                       ',' ORDER BY policies.policyname
-                    ) = 'gmgn_account_gate_decisions_v1_runtime_insert:INSERT,gmgn_account_gate_v1_runtime_select:SELECT,gmgn_account_gate_v1_runtime_update:UPDATE'
+                    ) = 'gmgn_account_gate_decisions_v1_runtime_insert:INSERT,gmgn_account_gate_decisions_v1_runtime_prune:DELETE,gmgn_account_gate_decisions_v1_runtime_prune_select:SELECT,gmgn_account_gate_v1_runtime_select:SELECT,gmgn_account_gate_v1_runtime_update:UPDATE'
                    FROM pg_policies AS policies
                   WHERE policies.schemaname = 'programmable_website_projection_v1'
                     AND policies.tablename IN (
@@ -756,6 +773,7 @@ export function assertGmgnAccountGateSecurityAttestationV1(
     || !value.schema_usage || value.schema_create
     || !value.gmgn_gate_select || !value.gmgn_gate_update
     || value.gmgn_gate_forbidden_mutate || !value.gmgn_history_insert
+    || !value.gmgn_history_delete || !value.gmgn_history_prune_columns
     || value.gmgn_history_forbidden_access
     || !value.gmgn_gate_rls || !value.gmgn_gate_force_rls
     || !value.gmgn_history_rls || !value.gmgn_history_force_rls

@@ -1537,6 +1537,7 @@ jobs:
           STABLE_PREVIEW_URL: ${{ steps.stable-preview.outputs.stable_preview_url }}
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
+          GMGN_MARKET_REQUIRED: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
           CUSTOM_LAUNCH_V3_RELEASE: ${{ inputs.custom_launch_v3_release }}
           MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.market_provider }}
@@ -1558,6 +1559,7 @@ jobs:
             echo "- Stable protected preview: $STABLE_PREVIEW_URL"
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
+            echo "- GMGN market required by staged public smoke: \`$GMGN_MARKET_REQUIRED\`"
             echo "- Launch identities: validated current Classic or bounded Router fallback"
             echo "- Catalog mode: \`$CATALOG_MODE\`"
             echo "- Catalog progress block: \`$CATALOG_BLOCK_NUMBER\`"

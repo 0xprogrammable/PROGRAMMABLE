@@ -301,7 +301,10 @@ GRANT UPDATE (
   generation, next_slot_at, blocked_until, lease_holder, lease_until, updated_at
 ) ON programmable_website_projection_v1.gmgn_account_gate_v1
   TO programmable_website_projection_runtime;
-GRANT INSERT
+GRANT INSERT, DELETE
+  ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+  TO programmable_website_projection_runtime;
+GRANT SELECT (gate_id, generation)
   ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
   TO programmable_website_projection_runtime;
 `;

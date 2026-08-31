@@ -431,9 +431,7 @@ export async function GET(request: NextRequest) {
   ) {
     return unavailableResponse({
       "X-Programmable-Launch-Source": launchSource,
-      "X-Programmable-Read-Source":
-        `${launchSource}+${configuredMarketProviderV1()}`,
-      "X-Programmable-Market-Provider": configuredMarketProviderV1(),
+      "X-Programmable-Read-Source": launchSource,
       "X-Programmable-Router-Read-Status": routerCustomStatus,
     });
   }
@@ -441,9 +439,7 @@ export async function GET(request: NextRequest) {
     if (canonicalReadFailed || registryReadFailed || routerReadFailed) {
       return unavailableResponse({
         "X-Programmable-Launch-Source": launchSource,
-        "X-Programmable-Read-Source":
-          `${launchSource}+${configuredMarketProviderV1()}`,
-        "X-Programmable-Market-Provider": configuredMarketProviderV1(),
+        "X-Programmable-Read-Source": launchSource,
         "X-Programmable-Router-Read-Status": routerCustomStatus,
       });
     }

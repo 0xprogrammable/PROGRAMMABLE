@@ -282,7 +282,7 @@ describe("token detail metrics", () => {
     expect(marketDataProviderLabel({
       valuation: dexscreenerValuation,
       gmgnMarketData,
-    })).toBe("GMGN + Dexscreener");
+    })).toBe("Dexscreener");
     expect(marketDataProviderLabel({
       valuation: dexscreenerValuation,
     })).toBe("Dexscreener");
@@ -290,14 +290,19 @@ describe("token detail metrics", () => {
       valuation: { ...gmgnValuation, source: "bitquery" },
     })).toBeNull();
 
-    expect(buildTokenDetailMetrics({
+    const fallbackMetrics = buildTokenDetailMetrics({
       ...token,
       valuation: dexscreenerValuation,
       gmgnMarketData,
-    })).toContainEqual({
-      label: "Provider",
-      value: "GMGN + Dexscreener",
     });
+    expect(fallbackMetrics).toContainEqual({
+      label: "Provider",
+      value: "Dexscreener",
+    });
+    expect(fallbackMetrics.find((metric) => metric.label === "24h volume"))
+      .toBeUndefined();
+    expect(fallbackMetrics.find((metric) => metric.label === "Liquidity"))
+      .toBeUndefined();
   });
 
   it("attributes a displayed chart-range volume to Bitquery", () => {

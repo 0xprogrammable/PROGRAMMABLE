@@ -571,6 +571,24 @@ describe("Explore static identity and Dexscreener market contract", () => {
     );
   });
 
+  it("reports only identity sources when no validated identity snapshot exists", async () => {
+    mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
+    mocks.readRouter.mockRejectedValue(new Error("Router unavailable"));
+
+    const response = await GET(request("sort=newest&page=1&limit=9"));
+
+    expect(response.status).toBe(503);
+    expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "envio-classic-v3",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    expect(response.headers.get("x-programmable-market-as-of")).toBeNull();
+  });
+
   it("uses the durable catalog when a cold Envio read is unavailable", async () => {
     mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
     mocks.readLastGoodCatalog.mockResolvedValue(durableCatalog());

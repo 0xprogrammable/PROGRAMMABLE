@@ -318,7 +318,10 @@ async function gmgnJsonRequest(
   }
   const nowMs = now().getTime();
   const remaining = requestDeadlineMs - nowMs;
-  if (!Number.isFinite(remaining) || remaining <= 0) return null;
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    await completeProviderRequest(accountGate, reservation);
+    return null;
+  }
   const url = new URL(path, GMGN_API_ORIGIN);
   for (const [key, value] of Object.entries(query)) {
     url.searchParams.set(key, value);
@@ -336,10 +339,13 @@ async function gmgnJsonRequest(
     response = await fetchImpl(url, {
       method: "GET",
       headers: { Accept: "application/json", "X-APIKEY": apiKey },
+      redirect: "error",
+      credentials: "omit",
       cache: "no-store",
       signal,
     });
   } catch {
+    await completeProviderRequest(accountGate, reservation);
     return null;
   }
   const declaredLength = Number(response.headers.get("Content-Length"));

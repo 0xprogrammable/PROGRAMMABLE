@@ -1194,7 +1194,16 @@ test("exact retained 0001-0005 adoption evidence advances only through 0006", as
         'INSERT') AS history_insert,
       has_table_privilege('programmable_website_projection_runtime',
         'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
-        'SELECT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS history_forbidden
+        'DELETE') AS history_delete,
+      has_column_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+        'gate_id', 'SELECT')
+        AND has_column_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+        'generation', 'SELECT') AS history_prune_columns,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+        'SELECT,UPDATE,TRUNCATE,REFERENCES,TRIGGER') AS history_forbidden
   `)).rows[0];
   assert.deepEqual(privileges, {
     gate_select: true,
@@ -1202,6 +1211,8 @@ test("exact retained 0001-0005 adoption evidence advances only through 0006", as
     gate_id_update: false,
     gate_forbidden: false,
     history_insert: true,
+    history_delete: true,
+    history_prune_columns: true,
     history_forbidden: false,
   });
 });

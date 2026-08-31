@@ -155,6 +155,15 @@ describe("public Explore OpenAPI contract", () => {
       .toContain("Omitted when no valuation qualified");
     expect(response.headers["X-Programmable-Market-As-Of"].schema)
       .toEqual({ type: "string", format: "date-time" });
+    expect(response.headers["X-Programmable-Chain-Id"]).toBeDefined();
+    expect(response.headers["X-Programmable-Launch-Source"]).toBeDefined();
+    expect(response.headers["X-Programmable-Read-Source"]).toBeDefined();
+    expect(response.headers["X-Programmable-Canonical-Read-Status"])
+      .toBeDefined();
+    expect(response.headers["X-Programmable-Router-Read-Status"])
+      .toBeDefined();
+    expect(response.headers["X-Programmable-Identity-Last-Indexed-At"])
+      .toBeDefined();
   });
 
   it("documents every accepted list query including chain and model", () => {

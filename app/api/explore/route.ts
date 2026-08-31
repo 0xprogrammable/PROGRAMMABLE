@@ -15,8 +15,6 @@ import {
   readExploreMarketEntriesV1,
   type ExploreMarketReadV1,
 } from "../../../lib/market-data/explore-market.server";
-import { gmgnMarketDataConfiguredV1 } from
-  "../../../lib/market-data/gmgn.server";
 import {
   envioClassicV3IdentityCommitmentV1,
   mergeEnvioClassicV3CatalogEntriesV1,
@@ -751,9 +749,6 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("Explore read failed", safeOperationalRpcError(error));
-    const configuredProvider = gmgnMarketDataConfiguredV1()
-      ? "gmgn+dexscreener"
-      : "dexscreener";
     return NextResponse.json(
       { error: "Token data is temporarily unavailable" },
       {
@@ -762,9 +757,7 @@ export async function GET(request: NextRequest) {
           "Cache-Control": "no-store",
           "Retry-After": "5",
           "X-Programmable-Launch-Source": "envio-classic-v3",
-          "X-Programmable-Read-Source":
-            `envio-classic-v3+${configuredProvider}`,
-          "X-Programmable-Market-Provider": configuredProvider,
+          "X-Programmable-Read-Source": "envio-classic-v3",
         },
       },
     );

@@ -22,6 +22,14 @@ The operator refuses pooled endpoints, a different target, server major version
 below 15, session change, role/privilege/catalog drift, partial evidence, or any
 migration history other than the exact reviewed prefix.
 
+Migration `0006` installs the GMGN singleton and a forced-RLS decision history.
+The final grant reset permits the runtime to select and update only the singleton,
+insert decisions, and delete only history generations admitted by the bounded
+retention policy. Each gate transition prunes to the latest 256 generations, so
+the normal gate path contains at most 512 decision rows. The insert policy admits
+only exact current/next-generation outcomes, keeping the hard runtime-ACL bound
+at 514 without an owner cron or broad maintenance privilege.
+
 ## One bounded existing-prefix adoption
 
 `adopt-existing` is a one-source recovery path, not a generic migration-history

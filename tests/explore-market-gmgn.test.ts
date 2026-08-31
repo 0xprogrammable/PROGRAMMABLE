@@ -215,7 +215,7 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
 
   afterEach(() => vi.useRealTimers());
 
-  it("keeps canonical order and falls back per unqualified identity", async () => {
+  it("falls back without exposing an unqualified GMGN snapshot", async () => {
     const first = entry(1);
     const second = entry(2);
     mocks.readGmgn.mockResolvedValue(new Map([
@@ -233,9 +233,7 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
       source: "dexscreener",
       valueWad: "1900000000000000000000",
     });
-    expect(result.entries[1]?.gmgnMarketData?.liquidityUsdWad).toBe(
-      "8000000000000000000000",
-    );
+    expect(result.entries[1]?.gmgnMarketData).toBeUndefined();
     expect(mocks.readDex).toHaveBeenCalledWith(
       [second],
       expect.any(Object),
@@ -257,6 +255,32 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
       "gmgn",
       "dexscreener",
     ]);
+  });
+
+  it("does not attach a stale GMGN snapshot to a Dexscreener fallback", async () => {
+    const first = entry(4);
+    mocks.readGmgn.mockResolvedValue(new Map([
+      [first.id, {
+        ...snapshot(first, "12000000000000000000000"),
+        fetchedAt: "2026-08-30T11:00:00.000Z",
+      }],
+    ]));
+
+    const result = await readExploreMarketEntriesV1([first]);
+
+    expect(result.entries[0]?.valuation).toMatchObject({
+      status: "available",
+      source: "dexscreener",
+    });
+    expect(result.entries[0]?.gmgnMarketData).toBeUndefined();
+    expect(result.marketRead).toMatchObject({
+      observedCount: 1,
+      qualifiedCount: 1,
+      gmgnObservedCount: 1,
+      gmgnQualifiedCount: 0,
+      fallbackObservedCount: 1,
+      fallbackQualifiedCount: 1,
+    });
   });
 
   it("retains an observed Dexscreener fallback that did not qualify", async () => {
@@ -289,6 +313,7 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     const result = await readExploreMarketEntriesV1([first]);
 
     expect(result.entries[0]?.valuation.status).toBe("unavailable");
+    expect(result.entries[0]?.gmgnMarketData).toBeUndefined();
     expect(result.marketRead).toMatchObject({
       observedCount: 1,
       qualifiedCount: 0,

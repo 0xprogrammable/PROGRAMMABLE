@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createServer } from "node:http";
 
 vi.mock("server-only", () => ({}));
 
@@ -226,6 +227,72 @@ describe("GMGN canonical market enrichment", () => {
     expect(url.searchParams.get("timestamp")).toBe("1788091200");
     expect(url.searchParams.get("client_id")).toMatch(/^[0-9a-f-]{36}$/u);
     expect(new Headers(init?.headers).get("X-APIKEY")).toBe("test-server-key");
+    expect(init?.redirect).toBe("error");
+    expect(init?.credentials).toBe("omit");
+  });
+
+  it("never forwards X-APIKEY to a redirect target origin", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const redirectKeys: Array<string | string[] | undefined> = [];
+    const targetKeys: Array<string | string[] | undefined> = [];
+    const target = createServer((request, response) => {
+      targetKeys.push(request.headers["x-apikey"]);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ code: 0, data: providerData(token(120)) }));
+    });
+    const redirector = createServer((request, response) => {
+      redirectKeys.push(request.headers["x-apikey"]);
+      const targetAddress = target.address();
+      if (targetAddress === null || typeof targetAddress === "string") {
+        response.writeHead(500).end();
+        return;
+      }
+      response.writeHead(302, {
+        Location: `http://127.0.0.1:${targetAddress.port}/redirect-target`,
+      });
+      response.end();
+    });
+    const listen = (server: typeof target) => new Promise<void>(
+      (resolve, reject) => {
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", resolve);
+      },
+    );
+    const close = (server: typeof target) => new Promise<void>(
+      (resolve, reject) => server.close((error) =>
+        error ? reject(error) : resolve()
+      ),
+    );
+    await listen(target);
+    await listen(redirector);
+    const redirectAddress = redirector.address();
+    if (redirectAddress === null || typeof redirectAddress === "string") {
+      await Promise.all([close(redirector), close(target)]);
+      throw new Error("Redirect test server did not bind a TCP address");
+    }
+    const nativeFetch = globalThis.fetch;
+    const fetchImpl = vi.fn((
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => nativeFetch(
+      `http://127.0.0.1:${redirectAddress.port}/gmgn`,
+      init,
+    ));
+
+    try {
+      await expect(readGmgnMarketSnapshotV1(token(120), {
+        fetchImpl: fetchImpl as typeof fetch,
+        now: () => NOW,
+        deadlineMs: NOW.getTime() + 2_000,
+      })).resolves.toBeNull();
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(fetchImpl.mock.calls[0]?.[1]?.redirect).toBe("error");
+      expect(fetchImpl.mock.calls[0]?.[1]?.credentials).toBe("omit");
+      expect(redirectKeys).toEqual(["test-server-key"]);
+      expect(targetKeys).toEqual([]);
+    } finally {
+      await Promise.all([close(redirector), close(target)]);
+    }
   });
 
   it("fails closed on an unsealed provider response", async () => {
@@ -269,12 +336,13 @@ describe("GMGN canonical market enrichment", () => {
       blockedUntilMs: NOW.getTime() + 2_000,
       retryAfterMs: 2_000,
     }));
+    const complete = vi.fn();
     const accountGate: GmgnAccountGateV1 = {
       reserveSlot: vi.fn(async () => ({
         ...GATE_RESERVATION,
       })),
       blockUntil,
-      complete: vi.fn(),
+      complete,
     };
 
     await expect(readGmgnMarketSnapshotV1(token(6), {
@@ -290,6 +358,7 @@ describe("GMGN canonical market enrichment", () => {
       blockedUntilMs: NOW.getTime() + 2_000,
       providerSignal: "http-429",
     });
+    expect(complete).not.toHaveBeenCalled();
   });
 
   it("bounds provider reset_at before publishing it to the gate", async () => {
@@ -409,9 +478,9 @@ describe("GMGN canonical market enrichment", () => {
     })).resolves.toBeNull();
   });
 
-  it("does not release the lease when the provider fetch fails", async () => {
+  it("releases the exact lease when the provider fetch fails", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
-    const complete = vi.fn();
+    const complete = vi.fn(async () => {});
     const blockUntil = vi.fn();
     const accountGate: GmgnAccountGateV1 = {
       reserveSlot: vi.fn(async () => GATE_RESERVATION),
@@ -428,8 +497,33 @@ describe("GMGN canonical market enrichment", () => {
       now: () => NOW,
       deadlineMs: NOW.getTime() + 1_500,
     })).resolves.toBeNull();
-    expect(complete).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledWith(GATE_RESERVATION);
     expect(blockUntil).not.toHaveBeenCalled();
+  });
+
+  it("fails soft when an errored fetch races a stale exact lease", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const complete = vi.fn(async () => {
+      throw new Error("lease is stale or unavailable");
+    });
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => GATE_RESERVATION),
+      blockUntil: vi.fn(),
+      complete,
+    };
+    const fetchImpl = vi.fn(async () => {
+      throw new DOMException("timed out", "AbortError");
+    });
+
+    await expect(readGmgnMarketSnapshotV1(token(110), {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 1_500,
+    })).resolves.toBeNull();
+    expect(complete).toHaveBeenCalledWith(GATE_RESERVATION);
+    expect(accountGate.blockUntil).not.toHaveBeenCalled();
   });
 
   it.each([

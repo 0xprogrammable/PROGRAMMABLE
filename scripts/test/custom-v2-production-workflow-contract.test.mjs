@@ -449,6 +449,11 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   const handoff = stepBlock(deploy, "Record staged candidate handoff");
   assert.match(
     handoff,
+    /GMGN_MARKET_REQUIRED: \$\{\{ steps\.gmgn-market-requirement\.outputs\.require_gmgn_market \}\}/u,
+  );
+  assert.match(handoff, /GMGN market required by staged public smoke:/u);
+  assert.match(
+    handoff,
     /Launch identities: validated current Classic or bounded Router fallback/u,
   );
   assert.match(handoff, /Catalog mode:/u);

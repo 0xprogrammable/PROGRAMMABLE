@@ -1402,6 +1402,8 @@ describe("Website projection target", () => {
     for (const mutation of [
       { gmgn_gate_select: false },
       { gmgn_gate_update: false },
+      { gmgn_history_delete: false },
+      { gmgn_history_prune_columns: false },
       { gmgn_history_forbidden_access: true },
       { gmgn_gate_singleton: false },
       { expected_policies: false },
@@ -1892,6 +1894,8 @@ GmgnAccountGateSecurityAttestationRowV1 {
     gmgn_gate_update: true,
     gmgn_gate_forbidden_mutate: false,
     gmgn_history_insert: true,
+    gmgn_history_delete: true,
+    gmgn_history_prune_columns: true,
     gmgn_history_forbidden_access: false,
     gmgn_gate_rls: true,
     gmgn_gate_force_rls: true,

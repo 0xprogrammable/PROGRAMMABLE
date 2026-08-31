@@ -9,24 +9,41 @@ import { runProductionStaticDexscreenerSmokeV1 } from
 
 const PRODUCTION_ORIGIN = "https://programmable.market";
 
-function argumentsFrom(argv) {
+const REQUIRED_ARGUMENTS = Object.freeze([
+  "target-url",
+  "deployment-id",
+  "git-head",
+  "require-gmgn-market",
+]);
+
+export function parsePostPromotionArguments(argv) {
   const result = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index];
     const value = argv[index + 1];
-    if (!name?.startsWith("--") || !value || value.startsWith("--")) {
+    const key = name?.startsWith("--") ? name.slice(2) : "";
+    if (
+      !REQUIRED_ARGUMENTS.includes(key) ||
+      result[key] !== undefined ||
+      !value ||
+      value.startsWith("--")
+    ) {
       throw new Error("arguments must be --name value pairs");
     }
-    result[name.slice(2)] = value;
+    result[key] = value;
   }
-  if (
-    !result["target-url"] ||
-    !result["deployment-id"] ||
-    !result["git-head"]
-  ) {
-    throw new Error("--target-url, --deployment-id and --git-head are required");
+  if (REQUIRED_ARGUMENTS.some((name) => result[name] === undefined)) {
+    throw new Error(
+      "--target-url, --deployment-id, --git-head and --require-gmgn-market are required",
+    );
   }
-  return result;
+  if (!["true", "false"].includes(result["require-gmgn-market"])) {
+    throw new Error("--require-gmgn-market must be exactly true or false");
+  }
+  return Object.freeze({
+    ...result,
+    requireGmgnMarket: result["require-gmgn-market"] === "true",
+  });
 }
 
 async function retry(operation, attempts = 12, delayMs = 5_000) {
@@ -92,6 +109,9 @@ export async function verifyPostPromotion(input) {
       "post-promotion target must be the programmable.market production origin",
     );
   }
+  if (typeof input.requireGmgnMarket !== "boolean") {
+    throw new Error("an explicit GMGN market requirement boolean is required");
+  }
   if (
     !/^dpl_[A-Za-z0-9]{20,80}$/u.test(input.expectedDeploymentId ?? "") ||
     !/^[0-9a-f]{40}$/u.test(input.expectedGitHead ?? "") ||
@@ -102,9 +122,6 @@ export async function verifyPostPromotion(input) {
     throw new Error("exact production deployment binding is required");
   }
   const fetchImpl = input.fetchImpl ?? fetch;
-  const environment = input.environment ?? process.env;
-  const requireGmgnMarket =
-    (environment.GMGN_API_KEY ?? "").trim() !== "";
   const checks = await verifyProductionDeploymentBinding({
     targetUrl: target.toString(),
     expectedDeploymentId: input.expectedDeploymentId,
@@ -119,7 +136,7 @@ export async function verifyPostPromotion(input) {
     await runProductionStaticDexscreenerSmokeV1({
       fetchImpl,
       environment: {
-        PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(requireGmgnMarket),
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(input.requireGmgnMarket),
       },
     });
     publicSurface = true;
@@ -144,7 +161,7 @@ export async function verifyPostPromotion(input) {
 }
 
 async function main() {
-  const args = argumentsFrom(process.argv.slice(2));
+  const args = parsePostPromotionArguments(process.argv.slice(2));
   const result = await retry(() =>
     verifyPostPromotion({
       targetUrl: args["target-url"],
@@ -153,6 +170,7 @@ async function main() {
       token: process.env.VERCEL_TOKEN,
       teamId: process.env.VERCEL_ORG_ID,
       projectId: process.env.VERCEL_PROJECT_ID,
+      requireGmgnMarket: args.requireGmgnMarket,
     }),
   );
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

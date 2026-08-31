@@ -1298,8 +1298,7 @@ export function marketDataProviderLabel(input: Readonly<{
   const valuationSource = input.valuation?.status === "available"
     ? input.valuation.source
     : undefined;
-  const usesGmgn = input.gmgnMarketData !== undefined ||
-    valuationSource === "gmgn";
+  const usesGmgn = valuationSource === "gmgn";
   const usesDexscreener = valuationSource === "dexscreener";
   const chartVolumeMetric = buildChartVolumeMetric(input.chartVolume ?? null);
   const usesBitquery = input.chartVolume?.source === "bitquery" &&
@@ -1312,6 +1311,21 @@ export function marketDataProviderLabel(input: Readonly<{
     ...(usesBitquery ? ["Bitquery"] : []),
   ];
   return providers.length > 0 ? providers.join(" + ") : null;
+}
+
+function gmgnSnapshotForValuation(
+  valuation: ExploreValuation | undefined,
+  snapshot: GmgnMarketSnapshotV1 | undefined,
+): GmgnMarketSnapshotV1 | undefined {
+  if (snapshot === undefined) return undefined;
+  return valuation?.status === "available" &&
+      valuation.metric === "fdv" &&
+      valuation.currency === "usd" &&
+      valuation.source === "gmgn" &&
+      valuation.asOfTime === snapshot.fetchedAt &&
+      valuation.valueWad === snapshot.fdvUsdWad
+    ? snapshot
+    : undefined;
 }
 
 export function buildTokenDetailMetrics(
@@ -1327,19 +1341,23 @@ export function buildTokenDetailMetrics(
   const primaryMarket = token.marketData?.pools.find(
     (pool) => pool.identity.poolId === token.marketData?.primaryPoolId,
   );
-  const marketVolumeUsd = formatUsdWadAmount(
-    token.gmgnMarketData?.volume24hUsdWad ?? primaryMarket?.volume24hUsdWad,
-  );
-  const marketLiquidityUsd = formatUsdWadAmount(
-    token.gmgnMarketData?.liquidityUsdWad ??
-      (primaryMarket?.liquidity?.freshness === "current"
-        ? primaryMarket.liquidity.valueUsdWad
-        : undefined),
-  );
   const explicitValuation = (token as { valuation?: unknown }).valuation;
   const valuation = isExploreValuation(explicitValuation)
     ? explicitValuation
     : exploreValuation(token);
+  const qualifiedGmgnSnapshot = gmgnSnapshotForValuation(
+    valuation,
+    token.gmgnMarketData,
+  );
+  const marketVolumeUsd = formatUsdWadAmount(
+    qualifiedGmgnSnapshot?.volume24hUsdWad ?? primaryMarket?.volume24hUsdWad,
+  );
+  const marketLiquidityUsd = formatUsdWadAmount(
+    qualifiedGmgnSnapshot?.liquidityUsdWad ??
+      (primaryMarket?.liquidity?.freshness === "current"
+        ? primaryMarket.liquidity.valueUsdWad
+        : undefined),
+  );
   const safeFdvOverride = valuation.status === "available" &&
       valuation.metric === "fdv" &&
       fdvOverride?.trim() &&
@@ -2451,6 +2469,10 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
     (pool) => pool.identity.poolId === project.marketData?.primaryPoolId,
   );
   const valuation = project.valuation;
+  const qualifiedGmgnSnapshot = gmgnSnapshotForValuation(
+    valuation,
+    project.gmgnMarketData,
+  );
   const valuationValue = valuation?.status === "available"
     ? valuation.currency === "usd"
       ? formatUsd(valuation.valueWad, "amount")
@@ -2480,21 +2502,21 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
       ? [{ label: "Provider", value: marketProvider }]
       : []),
     { label: "Market data", value: marketStatus },
-    ...((project.gmgnMarketData?.volume24hUsdWad ?? primary?.volume24hUsdWad)
+    ...((qualifiedGmgnSnapshot?.volume24hUsdWad ?? primary?.volume24hUsdWad)
       ? [{
           label: "24h volume",
           value: formatUsdWadAmount(
-            project.gmgnMarketData?.volume24hUsdWad ??
+            qualifiedGmgnSnapshot?.volume24hUsdWad ??
               primary?.volume24hUsdWad,
           ) ?? "",
         }]
       : []),
-    ...((project.gmgnMarketData?.liquidityUsdWad ||
+    ...((qualifiedGmgnSnapshot?.liquidityUsdWad ||
       primary?.liquidity?.freshness === "current")
       ? [{
           label: "Liquidity",
           value: formatUsdWadAmount(
-            project.gmgnMarketData?.liquidityUsdWad ??
+            qualifiedGmgnSnapshot?.liquidityUsdWad ??
               primary?.liquidity?.valueUsdWad,
           ) ?? "",
         }]

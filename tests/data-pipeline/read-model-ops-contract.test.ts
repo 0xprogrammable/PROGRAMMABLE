@@ -882,6 +882,18 @@ describe("read-model operations source contract", () => {
       "fetchImpl === fetch",
     ],
     [
+      "a credential-forwarding redirect policy",
+      "lib/market-data/gmgn.server.ts",
+      'redirect: "error"',
+      'redirect: "follow"',
+    ],
+    [
+      "ambient credentials on a provider request",
+      "lib/market-data/gmgn.server.ts",
+      'credentials: "omit"',
+      'credentials: "include"',
+    ],
+    [
       "no account-wide provider reservation",
       "lib/market-data/gmgn.server.ts",
       "accountGate.reserveSlot({",
@@ -1212,8 +1224,13 @@ describe("read-model operations source contract", () => {
       "Promise.resolve()",
     ],
     [
-      "the production GMGN requirement resolution",
-      '(environment.GMGN_API_KEY ?? "").trim() !== ""',
+      "the explicit production GMGN requirement Boolean",
+      'typeof input.requireGmgnMarket !== "boolean"',
+      "false",
+    ],
+    [
+      "the strict CLI GMGN requirement handoff",
+      "requireGmgnMarket: args.requireGmgnMarket",
       "false",
     ],
     [
@@ -1223,6 +1240,52 @@ describe("read-model operations source contract", () => {
     ],
   ])("rejects a post-promotion verifier without %s", (_label, needle, replacement) => {
     const path = "scripts/perf/read-model-post-promotion.mjs";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
+  it("rejects a post-promotion verifier that reads a local GMGN key", () => {
+    const path = "scripts/perf/read-model-post-promotion.mjs";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const needle = "const fetchImpl = input.fetchImpl ?? fetch;";
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: source.replace(
+          needle,
+          `const localRequirement = Boolean(process.env.GMGN_API_KEY);\n  ${needle}`,
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
+  it.each([
+    [
+      "current Vercel Production configuration pull",
+      'vercel pull --yes --environment=production --token="$VERCEL_TOKEN"',
+      "true",
+    ],
+    [
+      "staged/current GMGN requirement equality gate",
+      'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"',
+      "true",
+    ],
+    [
+      "explicit post-promotion GMGN requirement argument",
+      '--require-gmgn-market "$REQUIRE_GMGN_MARKET"',
+      '--require-gmgn-market "false"',
+    ],
+  ])("rejects a manual promotion runbook without %s", (_label, needle, replacement) => {
+    const path = "docs/operations/read-model-scheduler-cutover.md";
     const source = readFileSync(resolve(ROOT, path), "utf8");
     expect(source).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
@@ -1304,6 +1367,16 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
+    [
+      "staged GMGN requirement output",
+      "GMGN_MARKET_REQUIRED: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
+      "GMGN_MARKET_REQUIRED: false",
+    ],
+    [
+      "staged GMGN requirement summary",
+      "GMGN market required by staged public smoke:",
+      "GMGN market requirement omitted:",
+    ],
     [
       "visible market provider output",
       "MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.market_provider }}",
