@@ -27,7 +27,7 @@ jobs:
       github.event.sender.login == 'hazarxyz' &&
       github.event.sender.id == 258789013
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     environment: production
     steps:
       - name: Check out exact protected production source
@@ -39,6 +39,26 @@ jobs:
           submodules: false
           sparse-checkout: scripts/relay-existing-custom-launch-key.py
           sparse-checkout-cone-mode: false
+
+      - name: Provision the sealed-box runtime before API-key injection
+        run: |
+          set -euo pipefail
+          sudo env DEBIAN_FRONTEND=noninteractive \
+            apt-get update -qq -o Acquire::Retries=3
+          sudo env DEBIAN_FRONTEND=noninteractive \
+            apt-get install -y -qq --no-install-recommends libsodium23
+          python3 -I -B - <<'PY'
+          import ctypes
+          import ctypes.util
+
+          library = ctypes.util.find_library("sodium")
+          if not library:
+              raise SystemExit("SEALED_BOX_RUNTIME_UNAVAILABLE")
+          sodium = ctypes.CDLL(library)
+          sodium.sodium_init.restype = ctypes.c_int
+          if sodium.sodium_init() < 0:
+              raise SystemExit("SEALED_BOX_RUNTIME_UNAVAILABLE")
+          PY
 
       - name: Verify source and preinstalled sealed-box runtime without the API key
         env:
