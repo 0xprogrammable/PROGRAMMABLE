@@ -653,7 +653,9 @@ function projectRpcReceipt(value, label, key) {
   if (!Array.isArray(value.logs)) throw new TypeError(`${label}.logs must be an array`);
   const contractAddress = value.contractAddress === null
     ? null : rpcAddress(value.contractAddress, `${label}.contractAddress`);
-  const logs = value.logs.map((log, index) => projectRpcLog(log, `${label}.logs[${index}]`));
+  const projectedLogs = value.logs.map((log, index) =>
+    projectRpcLog(log, `${label}.logs[${index}]`));
+  let logs = projectedLogs;
   if (key === "receipt") {
     projectFoundationReceiptLogs(logs, `${label}.logs`);
   } else if (/^(?:poolManager|positionManager|stateView|v4Quoter|universalRouter)Receipt$/u
@@ -676,10 +678,12 @@ function projectRpcReceipt(value, label, key) {
       throw new TypeError(`${label} external deployment receipt has unexpected logs`);
     }
   } else if (key === "postingReceipt") {
-    if (logs.length !== 1 || logs[0].address !== ROBINHOOD_SEQUENCER_INBOX
-      || logs[0].topics.length !== 4
-      || logs[0].topics[0] !== SEQUENCER_BATCH_DELIVERED_TOPIC) {
-      throw new TypeError(`${label} must contain only the pinned SequencerBatchDelivered log`);
+    logs = projectedLogs.filter((log) =>
+      log.address === ROBINHOOD_SEQUENCER_INBOX
+      && log.topics.length === 4
+      && log.topics[0] === SEQUENCER_BATCH_DELIVERED_TOPIC);
+    if (logs.length !== 1) {
+      throw new TypeError(`${label} must contain exactly one pinned SequencerBatchDelivered log`);
     }
   } else {
     throw new TypeError(`${label} has an unsupported receipt evidence key`);

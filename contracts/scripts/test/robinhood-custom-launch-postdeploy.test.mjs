@@ -374,14 +374,18 @@ test("checked-in postdeployment handoff schemas compile under strict Ajv", async
 test("public v3 RPC evidence drops provider bytes and credential-like endpoint components", async () => {
   const fixture = await fixtureRepository();
   const canary = "provider-secret-canary-do-not-publish";
+  const postingLogCanary = stringToHex("provider-secret-posting-log");
   try {
     const built = await buildInput(fixture, {
       rpcResultCanary: canary,
       l1ConfirmationsCanary: canary,
+      extraPostingReceiptLog: true,
     });
     const bundle = await materialize(fixture, built);
     assert.equal(JSON.stringify(built.input).includes(canary), false);
     assert.equal(JSON.stringify(bundle).includes(canary), false);
+    assert.equal(JSON.stringify(built.input).includes(postingLogCanary), false);
+    assert.equal(JSON.stringify(bundle).includes(postingLogCanary), false);
     assert.deepEqual(Object.keys(built.input.capture.l2ProviderReadbacks[0].entries[2]), [
       "key", "method", "params", "requestId", "requestSha256", "normalizedResultSha256",
       "result",
@@ -395,6 +399,14 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
         .includes(canary),
       false,
     );
+    const [postingLog] =
+      built.input.capture.ethereumProviderReadbacks[0].entries[2].result.logs;
+    assert.equal(
+      built.input.capture.ethereumProviderReadbacks[0].entries[2].result.logs.length,
+      1,
+    );
+    assert.equal(postingLog.address, ROBINHOOD_SEQUENCER_INBOX);
+    assert.equal(postingLog.topics[0], SEQUENCER_BATCH_DELIVERED_TOPIC);
     const ambiguous = Buffer.from(JSON.stringify({
       jsonrpc: "2.0", id: 1, result: "0x1", error: { message: canary },
     }), "utf8");
@@ -1246,7 +1258,11 @@ test("rejects recomputed adversarial raw capture variants", async () => {
     ["PoolManager ownership log data", { wrongPoolManagerLogData: true }, /OwnershipTransferred/u],
     ["PoolManager ownership log inclusion", { wrongPoolManagerLogInclusion: true }, /OwnershipTransferred/u],
     ["extra Safe receipt log", { extraSafeReceiptLog: true }, /SafeSetup \+ ProxyCreation/u],
-    ["extra posting receipt log", { extraPostingReceiptLog: true }, /SequencerBatchDelivered/u],
+    [
+      "duplicate posting receipt event",
+      { duplicatePostingReceiptLog: true },
+      /exactly one pinned SequencerBatchDelivered/u,
+    ],
   ];
   for (const [label, options, expected] of cases) {
     const fixture = await fixtureRepository();
@@ -2360,6 +2376,18 @@ function l1Capture(index, options) {
     hash: finalizedHash,
     parentHash: hash32("finalized-parent"),
   };
+  const postingReceiptLogs = [log];
+  if (options.extraPostingReceiptLog) {
+    postingReceiptLogs.push({
+      ...log,
+      address: ROOTS.poolManager.address,
+      data: stringToHex("provider-secret-posting-log"),
+      logIndex: "0xa",
+    });
+  }
+  if (options.duplicatePostingReceiptLog) {
+    postingReceiptLogs.push({ ...log, logIndex: "0xa" });
+  }
   const entries = [
     rpcEntry("chainId", "eth_chainId", [], "0x1", 1),
     rpcEntry("postingLogs", "eth_getLogs", [{
@@ -2377,12 +2405,7 @@ function l1Capture(index, options) {
       transactionIndex: "0x3",
       blockNumber: toQuantity(postingBlock),
       blockHash: postingBlockHash,
-      logs: options.extraPostingReceiptLog ? [log, {
-        ...log,
-        address: ROOTS.poolManager.address,
-        data: stringToHex("provider-secret-posting-log"),
-        logIndex: "0xa",
-      }] : [log],
+      logs: postingReceiptLogs,
     }, 3, options.rpcResultCanary ? { providerSecret: options.rpcResultCanary } : {}),
     rpcEntry("postingBlock", "eth_getBlockByHash", [postingBlockHash, false], {
       number: toQuantity(postingBlock),
