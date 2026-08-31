@@ -15,7 +15,7 @@ import {
   readProtectedDerivationInput,
   sha256Bytes,
 } from "../custom-v2-read-model-contract-v2.mjs";
-import { discoverWebsiteProjectionPlan } from
+import { discoverRetainedWebsiteProjectionPlan } from
   "../website-projection-db-operator-core.mjs";
 
 const DIGEST = (label) => sha256Bytes(Buffer.from(label, "utf8"));
@@ -113,7 +113,7 @@ async function fixture() {
     sha256: sha256Bytes(Buffer.from(files[path], "utf8")),
     gitBlobOid: sha256Bytes(Buffer.from(files[path], "utf8")).slice(7, 47),
   });
-  const plan = await discoverWebsiteProjectionPlan({
+  const plan = await discoverRetainedWebsiteProjectionPlan({
     workspace: repoRoot,
     repositoryCommit: websiteSource.commit,
     repositoryTree: websiteSource.tree,

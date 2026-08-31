@@ -449,6 +449,8 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       "unavailable",
     );
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
   });
 
   it("does not publish a Registry-only identity without an onchain boundary", async () => {
@@ -461,6 +463,11 @@ describe("Token detail static identity and Dexscreener market contract", () => {
 
     expect(response.status).toBe(503);
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).not.toContain(
+      "dexscreener",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
   });
 
   it("attaches a trade project only to the exact finalized FADE Router stamp", async () => {
@@ -571,6 +578,8 @@ describe("Token detail static identity and Dexscreener market contract", () => {
 
     expect(response.status).toBe(503);
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
   });
 
   it("does not claim absence from a last-known-good Router snapshot", async () => {
@@ -584,6 +593,7 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       "last-known-good",
     );
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
   });
 
   it("does not claim absence from a last-known-good Envio catalog", async () => {
@@ -596,6 +606,7 @@ describe("Token detail static identity and Dexscreener market contract", () => {
 
     expect(response.status).toBe(503);
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
   });
 
   it("keeps a canonical identity visible when the Custom Registry is unavailable", async () => {
@@ -674,6 +685,14 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     expect(response.status).toBe(404);
     expect(await json(response)).toMatchObject({ token: null, customProject: null });
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "envio-classic-v3+canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    expect(response.headers.get("x-programmable-market-as-of")).toBeNull();
   });
 
   it.each([
@@ -697,5 +716,10 @@ describe("Token detail static identity and Dexscreener market contract", () => {
       error: "Token data is temporarily unavailable",
     });
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
   });
 });

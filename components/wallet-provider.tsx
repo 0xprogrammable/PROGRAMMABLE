@@ -879,7 +879,7 @@ export function requiresLinkedWallet(pathname: string) {
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const eager = shouldEagerLoadWalletRuntime(pathname);
   const linkedWalletOnly = requiresLinkedWallet(pathname);
   const [activationRequested, setActivationRequested] = useState(false);

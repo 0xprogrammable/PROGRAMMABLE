@@ -1524,6 +1524,11 @@ describe("Explore refresh state", () => {
     };
     expect(getExploreValuationMetric(entry)).toEqual({ kind: "usd", value: 125 });
     expect(exploreMarketStatusLabel(entry)).toBe("Provider recent");
+    expect(getTokenCards([entry])[0]?.valuationProvider).toBe("Dexscreener");
+    expect(getTokenCards([{
+      ...entry,
+      valuation: { ...entry.valuation, source: "gmgn" as const },
+    }])[0]?.valuationProvider).toBe("GMGN");
   });
 
   it("keeps the last valid page when a background refresh fails", () => {
@@ -2189,6 +2194,52 @@ describe("Explore refresh state", () => {
     expect(exploreAppliedSortLabel("market-cap", result.ranking)).toBe(
       "Highest valuation",
     );
+  });
+
+  it("accepts an observed but unqualified Dexscreener fallback in a GMGN read", async () => {
+    const gmgnPayload = {
+      ...unvaluedMarketPayload,
+      dataQuality: unavailableMarketDataQuality,
+      marketRead: {
+        provider: "gmgn",
+        fallbackProvider: "dexscreener",
+        status: "complete",
+        currency: "USD",
+        requestedCount: 1,
+        observedCount: 1,
+        qualifiedCount: 0,
+        unavailableCount: 1,
+        gmgnObservedCount: 0,
+        gmgnQualifiedCount: 0,
+        fallbackRequestedCount: 1,
+        fallbackObservedCount: 1,
+        fallbackQualifiedCount: 0,
+        oldestFetchedAt: "2026-08-16T08:00:00.000Z",
+        newestFetchedAt: "2026-08-16T08:00:00.000Z",
+      },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(gmgnPayload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Programmable-Market-Read-Status": "complete",
+        },
+      }),
+    );
+
+    const result = await loadExplorePayload(
+      "gmgn-unqualified-dex-observation",
+      new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
+    );
+
+    expect(result.marketRead).toMatchObject({
+      provider: "gmgn",
+      observedCount: 1,
+      qualifiedCount: 0,
+      fallbackObservedCount: 1,
+      fallbackQualifiedCount: 0,
+    });
   });
 
   it("retains all 351 identities for a complete sparse 20-pair Dexscreener read", async () => {

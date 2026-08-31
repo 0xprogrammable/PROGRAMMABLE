@@ -401,6 +401,7 @@ function json(value: unknown, status = 200) {
 function harness(input: {
   launches?: ReturnType<typeof launchFixture>[];
   catalogBinding?: EnvioClassicCatalogBinding;
+  rpcHeadBlock?: number;
   mutateEvents?: (
     events: Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>,
   ) => Array<ReturnType<typeof eventFixture> | ReturnType<typeof custodyEventFixture>>;
@@ -456,7 +457,9 @@ function harness(input: {
     anchorBlock: string;
     tokens: readonly `0x${string}`[];
   }) => ({
-    headBlock: String(ANCHOR_BLOCK + selectedRelease.confirmations),
+    headBlock: String(
+      input.rpcHeadBlock ?? ANCHOR_BLOCK + selectedRelease.confirmations,
+    ),
     anchorBlockHash: hex32(60_000),
     anchorBlockTimestamp: "1785480010",
     metadata: new Map(tokens.map((token, index) => [token.toLowerCase(), {
@@ -490,6 +493,35 @@ describe("Envio Classic V3 public catalog", () => {
   it("bounds RPC metadata work to 96 calls and two concurrent batches", () => {
     expect(ENVIO_CLASSIC_V3_TOKEN_METADATA_BATCH_SIZE).toBe(24);
     expect(ENVIO_CLASSIC_V3_TOKEN_METADATA_CONCURRENCY).toBe(2);
+  });
+
+  it("requires the catalog anchor to have the configured RPC confirmation depth", async () => {
+    const tooRecent = harness({
+      rpcHeadBlock: ANCHOR_BLOCK + release.confirmations - 1,
+    });
+    await expect(createEnvioClassicV3CatalogReaderV1(tooRecent)({
+      deadlineMs: Date.now() + 5_000,
+    })).rejects.toThrow(/RPC freshness or metadata coverage failed/u);
+
+    const exactlyConfirmed = harness({
+      rpcHeadBlock: ANCHOR_BLOCK + release.confirmations,
+    });
+    await expect(createEnvioClassicV3CatalogReaderV1(exactlyConfirmed)({
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toMatchObject({
+      status: "current",
+      asOfBlock: String(ANCHOR_BLOCK),
+    });
+  });
+
+  it("retains the maximum RPC anchor-age bound", async () => {
+    const tooOld = harness({
+      rpcHeadBlock: ANCHOR_BLOCK + release.confirmations + 9,
+    });
+
+    await expect(createEnvioClassicV3CatalogReaderV1(tooOld)({
+      deadlineMs: Date.now() + 5_000,
+    })).rejects.toThrow(/RPC freshness or metadata coverage failed/u);
   });
 
   it("paginates, exactly binds occurrences, and exposes only Classic V3 scope", async () => {

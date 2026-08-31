@@ -6,8 +6,9 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 import {
-  validateWebsiteProjectionPlan,
+  validateRetainedWebsiteProjectionPlan,
   WEBSITE_PROJECTION_ADOPTION_TARGET_PROJECT_REF,
+  WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT,
   WEBSITE_PROJECTION_MIGRATION_FILES,
   WEBSITE_PROJECTION_MIGRATION_ROOT,
 } from "./website-projection-db-operator-core.mjs";
@@ -32,7 +33,10 @@ const IMPLEMENTATION_ARTIFACTS = Object.freeze([
 ]);
 const PERSISTENCE_ARTIFACTS = Object.freeze([
   "lib/server/custom-launch/generic-launch-postgres-v2.ts",
-  ...WEBSITE_PROJECTION_MIGRATION_FILES.map(
+  ...WEBSITE_PROJECTION_MIGRATION_FILES.slice(
+    0,
+    WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT,
+  ).map(
     (file) => `${WEBSITE_PROJECTION_MIGRATION_ROOT}/${file}`,
   ),
 ]);
@@ -654,7 +658,7 @@ async function hostedPersistenceEvidence(raw, expectedIdentity) {
       readProtectedEvidenceArtifact(value.apply, "hosted apply evidence"),
       readProtectedEvidenceArtifact(value.verify, "hosted verify evidence"),
     ]);
-  const plan = validateWebsiteProjectionPlan(planArtifact.value);
+  const plan = validateRetainedWebsiteProjectionPlan(planArtifact.value);
   const adoption = operatorResult(adoptionArtifact.value, "adopt-existing");
   const apply = operatorResult(applyArtifact.value, "apply");
   const verify = operatorResult(verifyArtifact.value, "verify");

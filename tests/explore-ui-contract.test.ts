@@ -274,7 +274,12 @@ describe("Explore UI contract", () => {
       /\.runnerImagePreserved\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
     );
     expect(source).not.toContain("<small>CA</small>");
-    expect(source).toContain('<small title="Fully diluted valuation">FDV</small>');
+    expect(source).toContain("title={token.valuationProvider");
+    expect(source).toContain(
+      "`Fully diluted valuation from ${token.valuationProvider}`",
+    );
+    expect(source).toContain("FDV{token.valuationProvider");
+    expect(source).toContain("` · ${token.valuationProvider}`");
     expect(source).toContain("formatExploreContractAddress(token.tokenAddress)");
     expect(source).toContain(
       '`/token/${token.tokenAddress}?chain=${viewChainId}`',
@@ -286,7 +291,7 @@ describe("Explore UI contract", () => {
       /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*12px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*12px;/s,
     );
     expect(source).toMatch(
-      /<small title="Fully diluted valuation">FDV<\/small>[\s\S]*?<AnimatedMarketCap[\s\S]*?replayKey=\{token\.id\}[\s\S]*?token\.marketStatus \?\? "Unavailable"/,
+      /<small[\s\S]*?title=\{token\.valuationProvider[\s\S]*?FDV\{token\.valuationProvider[\s\S]*?<\/small>[\s\S]*?<AnimatedMarketCap[\s\S]*?replayKey=\{token\.id\}[\s\S]*?token\.marketStatus \?\? "Unavailable"/,
     );
     expect(source).not.toContain(
       "exploreUnavailableFdvLabel(token.marketStatus)",

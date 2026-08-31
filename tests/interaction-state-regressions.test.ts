@@ -219,9 +219,12 @@ describe("interaction state regressions", () => {
     expect(exploreSource).not.toContain("<dt>Market cap</dt>");
     expect(exploreSource).toContain("runnerMeta");
     expect(exploreSource).toContain("runnerData");
+    expect(exploreSource).toContain("title={token.valuationProvider");
     expect(exploreSource).toContain(
-      '<small title="Fully diluted valuation">FDV</small>',
+      "`Fully diluted valuation from ${token.valuationProvider}`",
     );
+    expect(exploreSource).toContain("FDV{token.valuationProvider");
+    expect(exploreSource).toContain("` · ${token.valuationProvider}`");
     expect(exploreSource).toContain("token.valuation ? (");
     expect(exploreSource).toContain("<AnimatedMarketCap");
     expect(exploreSource).toContain("metric={token.valuation}");

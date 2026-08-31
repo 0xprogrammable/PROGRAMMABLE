@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   readCustom: vi.fn(),
   readRouter: vi.fn(),
   routerStatus: vi.fn((): "current" | "last-known-good" => "current"),
+  gmgnConfigured: vi.fn(() => false),
+  readGmgn: vi.fn(),
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -37,6 +39,10 @@ vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
 }));
 vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
   readDexscreenerExploreEntriesV1: mocks.readDex,
+}));
+vi.mock("../lib/market-data/gmgn.server", () => ({
+  gmgnMarketDataConfiguredV1: mocks.gmgnConfigured,
+  readGmgnExploreSnapshotsV1: mocks.readGmgn,
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
@@ -274,6 +280,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     mocks.readCustom.mockResolvedValue([]);
     mocks.readRouter.mockResolvedValue([]);
     mocks.routerStatus.mockReturnValue("current");
+    mocks.gmgnConfigured.mockReturnValue(false);
     mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
       entries: valued(input),
       marketRead: marketRead({ requested: input.length, qualified: input.length }),
@@ -562,6 +569,24 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(response.headers.get("x-programmable-canonical-read-status")).toBe(
       "unavailable",
     );
+  });
+
+  it("reports only identity sources when no validated identity snapshot exists", async () => {
+    mocks.readCatalog.mockRejectedValue(new Error("Envio unavailable"));
+    mocks.readRouter.mockRejectedValue(new Error("Router unavailable"));
+
+    const response = await GET(request("sort=newest&page=1&limit=9"));
+
+    expect(response.status).toBe(503);
+    expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "envio-classic-v3",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    expect(response.headers.get("x-programmable-market-as-of")).toBeNull();
   });
 
   it("uses the durable catalog when a cold Envio read is unavailable", async () => {
@@ -899,7 +924,9 @@ describe("Explore static identity and Dexscreener market contract", () => {
       expect(source).not.toMatch(/bitquery/iu);
       expect(source).not.toContain("readPrimaryRpcExploreEntriesV1");
       expect(source).toContain("readEnvioClassicV3CatalogV1");
-      expect(source).toContain("readDexscreenerExploreEntriesV1");
+      expect(source).toMatch(
+        /read(?:DexscreenerExploreEntriesV1|ExploreMarketEntriesV1)/u,
+      );
     }
   });
 });

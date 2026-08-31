@@ -78,6 +78,37 @@ extends Record<string, unknown> {
   ssl_bits: number | null;
 }
 
+export interface GmgnAccountGateSecurityAttestationRowV1
+extends Record<string, unknown> {
+  runtime_role: string;
+  session_role: string;
+  rolsuper: boolean;
+  rolcreaterole: boolean;
+  rolcreatedb: boolean;
+  rolreplication: boolean;
+  rolbypassrls: boolean;
+  schema_usage: boolean;
+  schema_create: boolean;
+  gmgn_gate_select: boolean;
+  gmgn_gate_update: boolean;
+  gmgn_gate_forbidden_mutate: boolean;
+  gmgn_history_insert: boolean;
+  gmgn_history_delete: boolean;
+  gmgn_history_prune_columns: boolean;
+  gmgn_history_forbidden_access: boolean;
+  gmgn_gate_rls: boolean;
+  gmgn_gate_force_rls: boolean;
+  gmgn_history_rls: boolean;
+  gmgn_history_force_rls: boolean;
+  gmgn_gate_singleton: boolean;
+  expected_policies: boolean;
+  provider_roles_excluded: boolean;
+  ssl: boolean;
+  ssl_version: string | null;
+  ssl_cipher: string | null;
+  ssl_bits: number | null;
+}
+
 export interface VerifiedPostgresTlsConfigurationV1 {
   readonly connectionString: string;
   readonly servername: string;
@@ -337,6 +368,7 @@ export function verifiedPostgresTlsConfigurationV1(
 interface ProductionProjectionTargetPostgresPoolV1
 extends ProjectionTargetPostgresPoolV1 {
   assertProductionReadiness(): Promise<void>;
+  assertGmgnAccountGateReadiness(): Promise<void>;
 }
 
 class NodePostgresProjectionTargetPoolV1
@@ -345,6 +377,8 @@ implements ProductionProjectionTargetPostgresPoolV1 {
   readonly #expectedRuntimeRole: string;
   #readiness: Promise<void> | null = null;
   #readinessAttestedAtMs = 0;
+  #gmgnReadiness: Promise<void> | null = null;
+  #gmgnReadinessAttestedAtMs = 0;
 
   constructor(pool: Pool, expectedRuntimeRole: string) {
     this.#pool = pool;
@@ -367,6 +401,25 @@ implements ProductionProjectionTargetPostgresPoolV1 {
       throw error;
     } finally {
       this.#readiness = null;
+    }
+  }
+
+  async assertGmgnAccountGateReadiness(): Promise<void> {
+    if (
+      this.#gmgnReadinessAttestedAtMs > 0
+      && Date.now() - this.#gmgnReadinessAttestedAtMs < 30_000
+    ) return;
+    this.#gmgnReadiness ??= this.#performGmgnAccountGateReadinessAttestation()
+      .then(() => {
+        this.#gmgnReadinessAttestedAtMs = Date.now();
+      });
+    try {
+      await this.#gmgnReadiness;
+    } catch (error) {
+      this.#gmgnReadinessAttestedAtMs = 0;
+      throw error;
+    } finally {
+      this.#gmgnReadiness = null;
     }
   }
 
@@ -528,6 +581,142 @@ implements ProductionProjectionTargetPostgresPoolV1 {
     }
   }
 
+  async #performGmgnAccountGateReadinessAttestation(): Promise<void> {
+    const client = await this.#pool.connect();
+    try {
+      const result = await client.query<GmgnAccountGateSecurityAttestationRowV1>(`
+        SELECT current_user::text AS runtime_role,
+               session_user::text AS session_role,
+               role.rolsuper, role.rolcreaterole, role.rolcreatedb,
+               role.rolreplication, role.rolbypassrls,
+               has_schema_privilege(current_user,
+                 'programmable_website_projection_v1', 'USAGE') AS schema_usage,
+               has_schema_privilege(current_user,
+                 'programmable_website_projection_v1', 'CREATE') AS schema_create,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.gmgn_account_gate_v1',
+                 'SELECT') AS gmgn_gate_select,
+               (
+                 has_column_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'generation', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'next_slot_at', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'blocked_until', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'lease_holder', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'lease_until', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'updated_at', 'UPDATE')
+               ) AS gmgn_gate_update,
+               (
+                 has_table_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'INSERT,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                 OR has_column_privilege(current_user,
+                   'programmable_website_projection_v1.gmgn_account_gate_v1',
+                   'gate_id', 'UPDATE')
+               ) AS gmgn_gate_forbidden_mutate,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+                 'INSERT') AS gmgn_history_insert,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+                 'DELETE') AS gmgn_history_delete,
+               (
+                 SELECT count(*) = 2
+                    AND string_agg(privilege.column_name, ','
+                      ORDER BY privilege.column_name) = 'gate_id,generation'
+                   FROM information_schema.column_privileges AS privilege
+                  WHERE privilege.table_schema =
+                    'programmable_website_projection_v1'
+                    AND privilege.table_name =
+                      'gmgn_account_gate_decisions_v1'
+                    AND privilege.grantee = current_user
+                    AND privilege.privilege_type = 'SELECT'
+               ) AS gmgn_history_prune_columns,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+                 'SELECT,UPDATE,TRUNCATE,REFERENCES,TRIGGER')
+                 AS gmgn_history_forbidden_access,
+               gmgn_gate.relrowsecurity AS gmgn_gate_rls,
+               gmgn_gate.relforcerowsecurity AS gmgn_gate_force_rls,
+               gmgn_history.relrowsecurity AS gmgn_history_rls,
+               gmgn_history.relforcerowsecurity AS gmgn_history_force_rls,
+               (
+                 SELECT count(*) = 1
+                    AND min(gate_id) = 'gmgn-openapi-v1'
+                    AND min(generation) >= 0
+                   FROM programmable_website_projection_v1.gmgn_account_gate_v1
+               ) AS gmgn_gate_singleton,
+               (
+                 SELECT count(*) = 5
+                    AND bool_and(
+                      policies.roles = ARRAY['programmable_website_projection_runtime']::name[]
+                    )
+                    AND string_agg(
+                      policies.policyname || ':' || policies.cmd,
+                      ',' ORDER BY policies.policyname
+                    ) = 'gmgn_account_gate_decisions_v1_runtime_insert:INSERT,gmgn_account_gate_decisions_v1_runtime_prune:DELETE,gmgn_account_gate_decisions_v1_runtime_prune_select:SELECT,gmgn_account_gate_v1_runtime_select:SELECT,gmgn_account_gate_v1_runtime_update:UPDATE'
+                   FROM pg_policies AS policies
+                  WHERE policies.schemaname = 'programmable_website_projection_v1'
+                    AND policies.tablename IN (
+                      'gmgn_account_gate_v1',
+                      'gmgn_account_gate_decisions_v1'
+                    )
+               ) AS expected_policies,
+               NOT EXISTS (
+                 SELECT 1
+                   FROM pg_roles AS provider_role
+                  WHERE provider_role.rolname IN ('anon', 'authenticated', 'service_role')
+                    AND (
+                      has_table_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.gmgn_account_gate_v1',
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                      OR has_table_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    )
+               ) AS provider_roles_excluded,
+               COALESCE(ssl.ssl, false) AS ssl,
+               ssl.version AS ssl_version,
+               ssl.cipher AS ssl_cipher,
+               ssl.bits AS ssl_bits
+          FROM pg_roles AS role
+          JOIN pg_namespace AS schema
+            ON schema.nspname = 'programmable_website_projection_v1'
+          JOIN pg_class AS gmgn_gate
+            ON gmgn_gate.relnamespace = schema.oid
+           AND gmgn_gate.relname = 'gmgn_account_gate_v1'
+          JOIN pg_class AS gmgn_history
+            ON gmgn_history.relnamespace = schema.oid
+           AND gmgn_history.relname = 'gmgn_account_gate_decisions_v1'
+          LEFT JOIN pg_stat_ssl AS ssl ON ssl.pid = pg_backend_pid()
+         WHERE role.rolname = current_user
+           AND pg_get_userbyid(schema.nspowner) <> current_user
+           AND pg_get_userbyid(gmgn_gate.relowner) <> current_user
+           AND pg_get_userbyid(gmgn_history.relowner) <> current_user
+      `);
+      const value = result.rows[0];
+      if (result.rows.length !== 1 || value === undefined) {
+        throw new TypeError("GMGN account gate database attestation failed");
+      }
+      assertGmgnAccountGateSecurityAttestationV1(
+        value,
+        this.#expectedRuntimeRole,
+      );
+    } finally {
+      client.release();
+    }
+  }
+
   async connect(): Promise<ProjectionTargetPostgresClientV1> {
     const client = await this.#pool.connect();
     return new NodePostgresProjectionTargetClientV1(client);
@@ -569,6 +758,30 @@ export function assertProjectionTargetSecurityAttestationV1(
     || !value.ssl || value.ssl_version === null
     || value.ssl_cipher === null || (value.ssl_bits ?? 0) < 128
   ) throw new TypeError("website projection database attestation failed");
+}
+
+export function assertGmgnAccountGateSecurityAttestationV1(
+  value: Readonly<GmgnAccountGateSecurityAttestationRowV1>,
+  expectedRuntimeRole: string,
+): void {
+  if (
+    value.runtime_role !== expectedRuntimeRole
+    || value.runtime_role !== "programmable_website_projection_runtime"
+    || value.session_role !== value.runtime_role
+    || value.rolsuper || value.rolcreaterole || value.rolcreatedb
+    || value.rolreplication || value.rolbypassrls
+    || !value.schema_usage || value.schema_create
+    || !value.gmgn_gate_select || !value.gmgn_gate_update
+    || value.gmgn_gate_forbidden_mutate || !value.gmgn_history_insert
+    || !value.gmgn_history_delete || !value.gmgn_history_prune_columns
+    || value.gmgn_history_forbidden_access
+    || !value.gmgn_gate_rls || !value.gmgn_gate_force_rls
+    || !value.gmgn_history_rls || !value.gmgn_history_force_rls
+    || !value.gmgn_gate_singleton
+    || !value.expected_policies || !value.provider_roles_excluded
+    || !value.ssl || value.ssl_version === null
+    || value.ssl_cipher === null || (value.ssl_bits ?? 0) < 128
+  ) throw new TypeError("GMGN account gate database attestation failed");
 }
 
 class NodePostgresProjectionTargetClientV1

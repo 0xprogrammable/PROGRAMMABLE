@@ -7,7 +7,7 @@ import { isRobinhoodUnavailableRoute } from
   "@/components/view-chain-unavailable";
 
 export function RouteTransition({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const { hydrated, viewChainId } = useViewChain();
   const contentRef = useRef<HTMLDivElement>(null);
   const routeUsesChainBoundary = isRobinhoodUnavailableRoute(pathname);

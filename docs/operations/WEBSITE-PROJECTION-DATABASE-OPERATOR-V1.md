@@ -1,7 +1,7 @@
 # Website projection database operator v1
 
-This is the repository operator for the Generic V2 Website projection database
-migrations `0001` through `0005`. It does not deploy the Website, change stage
+This is the repository operator for the Website projection database migrations
+`0001` through `0006`. It does not deploy the Website, change stage
 workflows, or configure Custom bindings. Run it only from the exact reviewed
 production commit, with a fresh secret-manager session and an independently
 verified production target identity.
@@ -21,6 +21,13 @@ verified production target identity.
 The operator refuses pooled endpoints, a different target, server major version
 below 15, session change, role/privilege/catalog drift, partial evidence, or any
 migration history other than the exact reviewed prefix.
+
+Migration `0006` installs the GMGN singleton and a forced-RLS decision history.
+The final grant reset permits the runtime to select and update only the singleton,
+insert decisions, and delete only history generations admitted by the bounded
+retention policy. Each gate transition prunes to the latest 256 generations, so
+the gate path contains at most 512 decision rows without an owner cron or broad
+maintenance privilege.
 
 ## One bounded existing-prefix adoption
 
@@ -57,8 +64,9 @@ repair. It accepts only all of these exact facts:
   membership with `INHERIT FALSE`, `SET FALSE`, and grantor `supabase_admin`.
 
 The protected operator checkout may be a clean reviewed successor commit only
-when all five migration file/execution hashes still equal the source plan. The
-command takes the migration advisory lock and one database transaction, locks
+when all five frozen source-plan migration file/execution hashes (`0001` through
+`0005`) still equal the source plan. The command takes the migration advisory
+lock and one database transaction, locks
 all three application tables, then re-reads every precondition. It changes only
 the runtime role to `NOINHERIT`, creates private operator/adoption evidence, and
 records a distinct `adopted-existing-prefix-v1` prefix for `0001` through
@@ -91,9 +99,9 @@ npm run --silent db:website-projection:operator -- adopt-existing \
 Any row, extra object, missing object, alternate membership, other role-bit
 drift, partial evidence, lock race, or re-read drift rolls the complete
 transaction back. After a successful adoption, retain its JSON result, run the
-normal `apply` command with the same exact successor plan to apply only `0004` and
-`0005`, then run `verify`. Adoption, apply, and verify remain database evidence
-only; they do not enable Custom or authorize a Website deployment.
+normal `apply` command with the same exact successor plan to apply only `0004`
+through `0006`, then run `verify`. Adoption, apply, and verify remain database
+evidence only; they do not enable Custom or authorize a Website deployment.
 
 ## Secret-manager session
 
@@ -117,7 +125,7 @@ npm run --silent db:website-projection:operator -- dry-run \
   --expected-project-ref '<verified-project-ref>'
 ```
 
-Review the full Git commit/tree, five ordered file/execution hashes, and
+Review the full Git commit/tree, six ordered file/execution hashes, and
 `planSha256`. Plan generation requires an exact clean, tracked migration
 directory. Dry-run connects without mutations and fails closed on unproven
 objects, non-prefix evidence, target mismatch, role drift, or catalog drift.
@@ -151,7 +159,7 @@ npm run --silent db:website-projection:operator -- verify \
   --expected-project-ref '<verified-project-ref>'
 ```
 
-Success requires `current`, five exact evidence rows, the constrained role graph,
+Success requires `current`, six exact evidence rows, the constrained role graph,
 and application/operator catalog fingerprints matching the last atomic evidence
 row. Pending exits 2; drift is an error. Retain the verify JSON with the plan,
 dry-run result, and apply result.
@@ -189,7 +197,7 @@ current in the database, while its migration order and byte commitments must
 match the current rotation checkout.
 
 The operator reuses the authenticated migration boundary above, requires the
-exact current five-row migration evidence and catalog fingerprints, takes a
+exact current six-row migration evidence and catalog fingerprints, takes a
 shared migration advisory lock, and changes only the password with `ALTER ROLE`
 inside one database transaction. It then authenticates a fresh connection through the
 exact Frankfurt Supavisor transaction endpoint as

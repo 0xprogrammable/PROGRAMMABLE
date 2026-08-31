@@ -250,7 +250,7 @@ function isCurrent(pathname: string, item: (typeof desktopNavItems)[number]) {
 }
 
 function DesktopNavigation() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const router = useRouter();
 
   return (
@@ -374,7 +374,7 @@ function HeaderChainToggle({
 }
 
 export function SiteHeader() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const router = useRouter();
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
@@ -550,7 +550,7 @@ export function MobileNavigation({
   open = false,
   onNavigate,
 }: MobileNavigationProps = {}) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const router = useRouter();
 
   // AppShell retains this export for compatibility. The responsive navigation

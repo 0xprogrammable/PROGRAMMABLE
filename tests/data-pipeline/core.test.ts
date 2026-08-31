@@ -93,6 +93,11 @@ describe("data-pipeline configuration", () => {
     ).toThrowError(DataPipelineError);
     expect(() =>
       loadDataPipelineConfig({
+        NEXT_PUBLIC_GMGN_API_KEY: "public-gmgn-key",
+      }),
+    ).toThrowError(DataPipelineError);
+    expect(() =>
+      loadDataPipelineConfig({
         PROGRAMMABLE_POSTGRES_MAX_CONNECTIONS: "6",
       }),
     ).toThrowError(DataPipelineError);

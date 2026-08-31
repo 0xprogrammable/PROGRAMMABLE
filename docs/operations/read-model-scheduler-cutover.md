@@ -235,11 +235,37 @@ npm run perf:read-model:real-block-sla -- \
 ```
 
 The staging workflow stops here and records the exact deployment ID, URL and
-previous production binding. Only after the command above succeeds, reverify
-the same immutable deployment immediately before the manual promotion, then
-verify the production binding and public routes immediately afterward:
+previous production binding. It also records the exact `true` or `false` GMGN
+market requirement used by the staged public smoke. Set
+`STAGED_REQUIRE_GMGN_MARKET` to that Boolean from the exact staged-candidate
+handoff; do not infer it from the operator's existing environment. Only after
+the command above succeeds, pull the current Vercel Production configuration,
+derive only the GMGN requirement Boolean without printing the key, and require
+it to equal the staged value. A mismatch means Production configuration changed
+after staging, so stop and stage a new candidate. Then reverify the same
+immutable deployment immediately before the manual promotion and pass that
+same Boolean explicitly to the post-promotion gate:
 
 ```sh
+umask 077
+case "${STAGED_REQUIRE_GMGN_MARKET:-}" in
+  true|false) ;;
+  *) echo "The staged GMGN market requirement is missing or invalid" >&2; exit 1 ;;
+esac
+vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+REQUIRE_GMGN_MARKET="$(
+  env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module -e '
+    const requireGmgnMarket =
+      (process.env.GMGN_API_KEY ?? "").trim() !== "";
+    process.stdout.write(requireGmgnMarket ? "true" : "false");
+  '
+)"
+case "$REQUIRE_GMGN_MARKET" in
+  true|false) ;;
+  *) echo "The current GMGN market requirement is invalid" >&2; exit 1 ;;
+esac
+test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"
+
 test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"
 npm run perf:read-model:staged-deployment -- \
   --target-url "$STAGED_TARGET_URL" \
@@ -252,7 +278,8 @@ vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
 npm run perf:read-model:post-promotion -- \
   --target-url "https://programmable.market" \
   --deployment-id "$STAGED_DEPLOYMENT_ID" \
-  --git-head "$GITHUB_SHA"
+  --git-head "$GITHUB_SHA" \
+  --require-gmgn-market "$REQUIRE_GMGN_MARKET"
 ```
 
 If the promotion command or post-promotion gate returns an uncertain result,
@@ -261,6 +288,10 @@ staged deployment, using the exact previous deployment recorded by the
 staging workflow, then reverify its deployment ID and Git commit. Keep the
 current database release and public-read flags fenced throughout that recovery.
 
+The Vercel pull writes the current Production environment to the normal local
+`.vercel` file with the restrictive operator umask. The derivation unsets any
+inherited `GMGN_API_KEY`; its captured stdout is exactly `true` or `false`, and
+neither the runbook nor the post-promotion verifier prints or receives the key.
 The earlier real-block SLA commands require
 `PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` so the exported HMAC can be verified
 without exposing the secret. The post-promotion command does not reload the

@@ -40,6 +40,32 @@ export interface CreatorArticleAuthorityReaderV1 {
   read(signal: AbortSignal): Promise<readonly CreatorArticleAuthorityV1[]>;
 }
 
+type CreatorArticleAuthorityCandidateV1 = Readonly<{
+  lane: "classic" | "custom" | "router";
+  authority: CreatorArticleAuthorityV1;
+  poolId: string | null;
+}>;
+
+function mergeCreatorArticleAuthorityCandidateV1(
+  existing: CreatorArticleAuthorityCandidateV1,
+  candidate: CreatorArticleAuthorityCandidateV1,
+) {
+  const isRegistryRouterDuplicate =
+    (existing.lane === "custom" && candidate.lane === "router")
+    || (existing.lane === "router" && candidate.lane === "custom");
+  if (
+    isRegistryRouterDuplicate
+    && existing.authority.creatorAddress.toLowerCase()
+      === candidate.authority.creatorAddress.toLowerCase()
+    && existing.poolId !== null
+    && candidate.poolId !== null
+    && existing.poolId === candidate.poolId
+  ) {
+    return existing.lane === "router" ? existing : candidate;
+  }
+  throw new TypeError("Creator article token authority is ambiguous");
+}
+
 export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
   readClassic(signal: AbortSignal): Promise<readonly ExploreEntry[]>;
   readCustom(signal: AbortSignal): Promise<readonly ExploreEntry[]>;
@@ -52,8 +78,7 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
         input.readCustom(signal).catch(() => Object.freeze([])),
         input.readRouter(signal).catch(() => Object.freeze([])),
       ]);
-      const projects: CreatorArticleAuthorityV1[] = [];
-      const seen = new Set<string>();
+      const projects = new Map<string, CreatorArticleAuthorityCandidateV1>();
       const entries = [
         ...classic.map((entry) => Object.freeze({ lane: "classic" as const, entry })),
         ...custom.map((entry) => Object.freeze({ lane: "custom" as const, entry })),
@@ -64,6 +89,7 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
         const tokenAddress = getAddress(entry.tokenAddress);
         let creatorAddress: `0x${string}` | null = null;
         let source: CreatorArticleAuthorityV1["source"] | null = null;
+        let poolId: string | null = null;
         if (lane === "classic" && entry.exploreKind === "token") {
           if (!entry.creatorAddress || !isAddress(entry.creatorAddress)) continue;
           creatorAddress = getAddress(entry.creatorAddress);
@@ -76,11 +102,18 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
         } else if (lane === "custom" && entry.exploreKind === "custom-project") {
           if (
             entry.chainId !== "1"
+            || entry.launchCategoryProvenance.category !== "custom"
+            || entry.launchCategoryProvenance.source !== "registry.custom-launched"
             || entry.launchingWallet.namespace !== "eip155:1"
             || !isAddress(entry.launchingWallet.value)
           ) continue;
           creatorAddress = getAddress(entry.launchingWallet.value);
           source = "registry.custom-launched";
+          const poolIds = [...new Set(
+            entry.markets.flatMap((market) =>
+              market.poolId ? [market.poolId.toLowerCase()] : []),
+          )];
+          poolId = poolIds.length === 1 ? poolIds[0] : null;
         } else if (
           lane === "router"
           && entry.exploreKind === "token"
@@ -99,26 +132,39 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
         ) {
           creatorAddress = getAddress(entry.launchStampProvenance.launchWallet);
           source = "canonical-launch-stamp-router";
+          poolId = entry.poolId.toLowerCase();
         }
         if (source === null || creatorAddress === null) continue;
-        const key = tokenAddress.toLowerCase();
-        if (seen.has(key)) throw new TypeError("Creator article token authority is ambiguous");
-        seen.add(key);
-        projects.push(Object.freeze({
-          chainId: 1 as const,
-          tokenAddress,
-          creatorAddress,
-          source,
-          name: entry.name,
-          symbol: entry.symbol ?? null,
-          imageUrl: entry.imageUrl ?? null,
-          ...(entry.partnerAttribution
-            ? { partnerAttribution: entry.partnerAttribution }
-            : {}),
-        }));
+        const key = `1:${tokenAddress.toLowerCase()}`;
+        const candidate = Object.freeze({
+          lane,
+          poolId,
+          authority: Object.freeze({
+            chainId: 1 as const,
+            tokenAddress,
+            creatorAddress,
+            source,
+            name: entry.name,
+            symbol: entry.symbol ?? null,
+            imageUrl: entry.imageUrl ?? null,
+            ...(entry.partnerAttribution
+              ? { partnerAttribution: entry.partnerAttribution }
+              : {}),
+          }),
+        });
+        const existing = projects.get(key);
+        projects.set(
+          key,
+          existing
+            ? mergeCreatorArticleAuthorityCandidateV1(existing, candidate)
+            : candidate,
+        );
       }
-      return Object.freeze(projects.sort((left, right) =>
-        left.tokenAddress.toLowerCase().localeCompare(right.tokenAddress.toLowerCase())));
+      const authorities = [...projects.values()].map(({ authority }) => authority);
+      return Object.freeze(authorities.sort((left, right) =>
+        left.tokenAddress.toLowerCase().localeCompare(
+          right.tokenAddress.toLowerCase(),
+        )));
     },
   });
 }

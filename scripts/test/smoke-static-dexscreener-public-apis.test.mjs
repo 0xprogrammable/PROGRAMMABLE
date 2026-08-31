@@ -4,10 +4,10 @@ import test from "node:test";
 
 import { runStagedStaticDexscreenerSmokeV1 } from
   "../smoke-static-dexscreener-public-apis.mjs";
-import { verifyPostPromotion } from
+import { parsePostPromotionArguments, verifyPostPromotion } from
   "../perf/read-model-post-promotion.mjs";
 
-const NOW = "2026-08-16T08:00:00.000Z";
+const NOW = new Date().toISOString();
 const TOKEN = "0x1111111111111111111111111111111111111111";
 const CREATOR = "0x2222222222222222222222222222222222222222";
 const POOL = `0x${"33".repeat(32)}`;
@@ -58,6 +58,17 @@ function entry(index) {
     launchedAt: new Date(Date.parse(NOW) - index * 1_000).toISOString(),
     launchModel: "classic",
     launchModelVersion: "classic-v3",
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "classic",
+      source: "canonical-launch-read-model",
+      recordId: `1:${tokenAddress}`,
+      modelId: "classic",
+      modelVersion: "classic-v3",
+    },
+    totalSupplyRaw: (1_000_000n * 10n ** 18n).toString(),
+    tokenDecimals: 18,
+    quoteAssetAddress: NATIVE_CURRENCY_ADDRESS,
     valuation: { status: "unavailable", reason: "source-unavailable" },
   };
 }
@@ -95,6 +106,10 @@ function classicV4Entry({ custodyMode = "unlocked" } = {}) {
   const token = entry(0);
   return {
     ...token,
+    launchCategoryProvenance: {
+      ...token.launchCategoryProvenance,
+      modelVersion: "classic-v4",
+    },
     hookAddress: CLASSIC_V4_HOOK,
     creatorAddress: CREATOR,
     rewardVaultAddress: CLASSIC_V4_REWARD_VAULT,
@@ -293,16 +308,62 @@ function marketRead(requestedCount) {
     observedCount: 0,
     qualifiedCount: 0,
     unavailableCount: requestedCount,
+    oldestFetchedAt: null,
+    newestFetchedAt: null,
   };
 }
 
-function explore(sort) {
+function gmgnValuedEntry(baseEntry = entry(0)) {
+  const totalSupplyRaw = (1_000_000n * 10n ** 18n).toString();
+  const tokenDecimals = 18;
+  const priceUsdWad = "1000000000000000000";
+  const fdvUsdWad = (
+    BigInt(priceUsdWad) * BigInt(totalSupplyRaw) /
+    (10n ** BigInt(tokenDecimals))
+  ).toString();
+  return {
+    ...baseEntry,
+    totalSupplyRaw,
+    tokenDecimals,
+    valuation: {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      freshness: "provider-recent",
+      source: "gmgn",
+      valueWad: fdvUsdWad,
+      asOfTime: NOW,
+    },
+    fdvUsdWad,
+    gmgnMarketData: {
+      schemaVersion: "programmable.gmgn-market-snapshot.v1",
+      source: "gmgn",
+      currency: "USD",
+      fetchedAt: NOW,
+      identity: {
+        chainId: "1",
+        tokenAddress: baseEntry.tokenAddress,
+        poolId: baseEntry.poolId,
+        quoteAddress: NATIVE_CURRENCY_ADDRESS,
+        protocol: "uniswap_v4",
+      },
+      priceUsdWad,
+      fdvUsdWad,
+      liquidityUsdWad: "1000000000000000000000",
+      volume24hUsdWad: "0",
+      swapCount24h: 0,
+    },
+  };
+}
+
+function explore(sort, pageSize = 20) {
   const tokens = [entry(0), entry(1)];
   return {
     status: "ready",
     tokens,
     page: 1,
-    pageSize: 20,
+    pageSize,
     total: 2,
     totalPages: 1,
     sort,
@@ -313,6 +374,16 @@ function explore(sort) {
         canonical: "last-known-good",
         custom: "unavailable",
         ageMs: 1_000,
+      },
+      valuation: {
+        status: "unavailable",
+        metric: "fdv",
+        available: 0,
+        unavailable: 2,
+        stale: 0,
+        unknown: 0,
+        asOfBlock: null,
+        asOfTime: null,
       },
     },
     catalog: catalog(),
@@ -397,7 +468,10 @@ function stagedFetch(
         checkedAt: NOW,
       };
     } else if (url.pathname === "/api/explore") {
-      body = explore(url.searchParams.get("sort"));
+      body = explore(
+        url.searchParams.get("sort"),
+        Number(url.searchParams.get("limit") ?? "20"),
+      );
     } else if (url.pathname === "/api/explore/token") {
       body = url.searchParams.get("address")?.toLowerCase() === SHARD_TOKEN
         ? shardTradeDetail()
@@ -441,6 +515,14 @@ function stagedFetch(
     }
     const transformed = transform({ body, url });
     const observed = transformed?.marketRead?.observedCount ?? 0;
+    const visibleEntries = Array.isArray(transformed?.tokens)
+      ? transformed.tokens
+      : [transformed?.token ?? transformed?.customProject].filter(Boolean);
+    const marketAsOf = visibleEntries
+      .map((token) => token?.valuation?.asOfTime)
+      .filter((value) => typeof value === "string")
+      .sort()
+      .at(-1) ?? null;
     const extraHeaders = {
       ...(transformed?.marketRead?.status
         ? {
@@ -470,6 +552,9 @@ function stagedFetch(
             "x-programmable-price-source": "dexscreener",
           }
         : {}),
+      ...(marketAsOf === null
+        ? {}
+        : { "x-programmable-market-as-of": marketAsOf }),
     };
     const omittedHeaders = url.pathname === "/api/explore/token/chart"
       ? [
@@ -490,6 +575,92 @@ function stagedFetch(
       transformedHeaders.omittedHeaders,
     );
   };
+}
+
+function gmgnStagedFetch(options = {}) {
+  const visibleToken = options.visibleToken ?? gmgnValuedEntry();
+  const detailToken = options.detailToken ?? visibleToken;
+  const detailReadStatus = options.detailReadStatus ?? "complete";
+  const detailProvider = options.detailProvider ?? "gmgn";
+  const visibleOldestFetchedAt = options.visibleOldestFetchedAt ?? NOW;
+  const visibleNewestFetchedAt = options.visibleNewestFetchedAt ?? NOW;
+  return stagedFetch(
+    ({ body, url }) => {
+      if (
+        url.pathname === "/api/explore" &&
+        url.searchParams.get("sort") === "newest"
+      ) {
+        return {
+          ...body,
+          tokens: [visibleToken, entry(1)],
+          marketRead: {
+            provider: "gmgn",
+            fallbackProvider: "dexscreener",
+            status: "partial",
+            currency: "USD",
+            requestedCount: 2,
+            observedCount: 1,
+            qualifiedCount: 1,
+            unavailableCount: 1,
+            gmgnObservedCount: 1,
+            gmgnQualifiedCount: 1,
+            fallbackRequestedCount: 1,
+            fallbackQualifiedCount: 0,
+            oldestFetchedAt: visibleOldestFetchedAt,
+            newestFetchedAt: visibleNewestFetchedAt,
+          },
+          dataQuality: {
+            ...body.dataQuality,
+            valuation: {
+              ...body.dataQuality.valuation,
+              status: "provider-recent",
+              available: 1,
+              unavailable: 1,
+              asOfTime: NOW,
+            },
+          },
+        };
+      }
+      if (url.pathname === "/api/explore/token") {
+        if (body.routerTradeProject) return body;
+        return { ...body, token: detailToken };
+      }
+      return body;
+    },
+    ({ extraHeaders, omittedHeaders, url }) => {
+      const newest = url.pathname === "/api/explore" &&
+        url.searchParams.get("sort") === "newest";
+      const detail = url.pathname === "/api/explore/token";
+      if (!newest && !detail) return { extraHeaders, omittedHeaders };
+      const provider = newest ? "gmgn+dexscreener" : detailProvider;
+      const detailUsesGmgn = newest || detailProvider === "gmgn";
+      return {
+        extraHeaders: {
+          ...extraHeaders,
+          "x-programmable-read-source": `envio-classic-v3+${provider}`,
+          "x-programmable-market-provider": provider,
+          "x-programmable-market-read-status": newest
+            ? "partial"
+            : detailReadStatus,
+          ...(detailUsesGmgn
+            ? {
+                "x-programmable-market-source": "gmgn",
+                "x-programmable-price-source": "gmgn",
+              }
+            : {}),
+          "x-programmable-market-as-of": NOW,
+        },
+        omittedHeaders: detailUsesGmgn
+          ? omittedHeaders
+          : [
+              ...omittedHeaders,
+              "x-programmable-market-source",
+              "x-programmable-price-source",
+              "x-programmable-market-as-of",
+            ],
+      };
+    },
+  );
 }
 
 function classicV4StagedFetch({
@@ -651,7 +822,7 @@ function pagedCatalogTransform(allEntries, options = {}) {
         (page - 1) * pageSize,
         page * pageSize,
       );
-      if (options.phantomNewest && sort === "newest" && pageSize === 20) {
+      if (options.phantomNewest && sort === "newest" && pageSize === 9) {
         tokens[0] = entry(98);
       }
       if (options.phantomHighest && sort === "market-cap") {
@@ -665,7 +836,9 @@ function pagedCatalogTransform(allEntries, options = {}) {
             freshness: "provider-recent",
             source: "dexscreener",
             valueWad: "1000000000000000000",
+            asOfTime: NOW,
           },
+          fdvUsdWad: "1000000000000000000",
         };
       }
       if (options.duplicateHighest && sort === "market-cap") {
@@ -680,7 +853,9 @@ function pagedCatalogTransform(allEntries, options = {}) {
               freshness: "provider-recent",
               source: "dexscreener",
               valueWad: String(1_000 - index),
+              asOfTime: NOW,
             },
+            fdvUsdWad: String(1_000 - index),
           };
         }
         tokens[1] = tokens[0];
@@ -709,7 +884,23 @@ function pagedCatalogTransform(allEntries, options = {}) {
                 observedCount: qualifiedCount,
                 qualifiedCount,
                 unavailableCount: requestedCount - qualifiedCount,
+                oldestFetchedAt: NOW,
+                newestFetchedAt: NOW,
               }),
+        },
+        dataQuality: {
+          ...body.dataQuality,
+          valuation: {
+            ...body.dataQuality.valuation,
+            ...(qualifiedCount === 0
+              ? {}
+              : {
+                  status: "provider-recent",
+                  available: qualifiedCount,
+                  unavailable: allEntries.length - qualifiedCount,
+                  asOfTime: NOW,
+                }),
+          },
         },
         catalog: {
           ...body.catalog,
@@ -757,16 +948,202 @@ test("staged smoke accepts identity-only Explore and token responses", async () 
     environment: {
       STAGED_TARGET_URL: "https://candidate.vercel.app/",
       VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false",
       GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
     },
     fetchImpl: stagedFetch(),
     appendOutput: (...args) => output.push(args),
   });
   assert.equal(result.marketProvider, "dexscreener");
+  assert.equal(result.detailMarketProvider, "dexscreener");
   assert.equal(result.marketReadStatus, "unavailable");
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
   assert.equal(output.length, 1);
+  assert.match(output[0][1], /market_provider=dexscreener/u);
   assert.match(output[0][1], /market_read_status=unavailable/u);
+  assert.match(output[0][1], /detail_market_provider=dexscreener/u);
+});
+
+test("staged smoke reports GMGN visible and detail providers dynamically", async () => {
+  const output = [];
+  const requests = [];
+  const gmgnToken = gmgnValuedEntry();
+  const fetchImpl = gmgnStagedFetch({ visibleToken: gmgnToken });
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: (url, init) => {
+      requests.push(new URL(String(url)));
+      return fetchImpl(url, init);
+    },
+    appendOutput: (...args) => output.push(args),
+  });
+
+  assert.equal(result.marketProvider, "gmgn+dexscreener");
+  assert.equal(result.detailMarketProvider, "gmgn");
+  assert.equal(result.marketReadStatus, "partial");
+  assert.equal(result.detailStatus, "verified-gmgn-market");
+  assert.match(output[0][1], /market_provider=gmgn\+dexscreener/u);
+  assert.match(output[0][1], /detail_market_provider=gmgn/u);
+  assert.match(output[0][1], /detail_status=verified-gmgn-market/u);
+  assert.ok(requests.some((url) =>
+    url.pathname === "/api/explore" &&
+    url.searchParams.get("limit") === "9" &&
+    url.searchParams.get("sort") === "newest" &&
+    url.searchParams.get("model") === null
+  ));
+  assert.ok(requests.some((url) =>
+    url.pathname === "/api/explore" &&
+    url.searchParams.get("limit") === "9" &&
+    url.searchParams.get("sort") === "newest" &&
+    url.searchParams.get("model") === "classic"
+  ));
+});
+
+test("staged smoke requires a complete GMGN detail runtime read", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({ detailReadStatus: "unavailable" }),
+      appendOutput: () => undefined,
+    }),
+    /Token detail GMGN market contract is required/u,
+  );
+});
+
+test("staged smoke rejects Dexscreener detail fallback when GMGN is required", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        detailToken: entry(0),
+        detailProvider: "dexscreener",
+        detailReadStatus: "unavailable",
+      }),
+      appendOutput: () => undefined,
+    }),
+    /Token detail GMGN market contract is required/u,
+  );
+});
+
+test("staged smoke rejects a GMGN detail snapshot bound to another pool", async () => {
+  const detailToken = gmgnValuedEntry();
+  detailToken.gmgnMarketData = {
+    ...detailToken.gmgnMarketData,
+    identity: {
+      ...detailToken.gmgnMarketData.identity,
+      poolId: `0x${"56".repeat(32)}`,
+    },
+  };
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({ detailToken }),
+      appendOutput: () => undefined,
+    }),
+    /Token detail identity or market contract is invalid/u,
+  );
+});
+
+test("staged smoke rejects non-ISO market-read timestamps", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        visibleOldestFetchedAt: new Date(NOW).toUTCString(),
+      }),
+      appendOutput: () => undefined,
+    }),
+    /Newest launches response contract is invalid/u,
+  );
+});
+
+test("staged smoke rejects stale GMGN valuation and snapshot evidence", async () => {
+  const staleTime = new Date(Date.parse(NOW) - 5 * 60_000 - 1).toISOString();
+  const staleToken = gmgnValuedEntry();
+  staleToken.valuation = { ...staleToken.valuation, asOfTime: staleTime };
+  staleToken.gmgnMarketData = {
+    ...staleToken.gmgnMarketData,
+    fetchedAt: staleTime,
+  };
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        visibleToken: staleToken,
+        detailToken: staleToken,
+        visibleOldestFetchedAt: staleTime,
+        visibleNewestFetchedAt: staleTime,
+      }),
+      appendOutput: () => undefined,
+    }),
+    /Newest launches response contract is invalid/u,
+  );
+});
+
+test("staged smoke rejects GMGN compatibility FDV drift", async () => {
+  const drifted = gmgnValuedEntry();
+  drifted.fdvUsdWad = (BigInt(drifted.fdvUsdWad) + 1n).toString();
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({ visibleToken: drifted, detailToken: drifted }),
+      appendOutput: () => undefined,
+    }),
+    /Newest launches response contract is invalid/u,
+  );
+});
+
+test("staged smoke rejects an invalid GMGN requirement flag before fetching", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "enabled",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: async () => {
+        throw new Error("fetch must not run");
+      },
+      appendOutput: () => undefined,
+    }),
+    /GMGN market requirement is invalid/u,
+  );
 });
 
 test("staged smoke accepts exact canonical Classic V4 custody shapes", async () => {
@@ -1214,7 +1591,7 @@ test("staged smoke retries a valid Router-only fallback after Envio drops", asyn
           ...body,
           tokens: [routerCustomEntry()],
           page: 1,
-          pageSize: 20,
+          pageSize: Number(url.searchParams.get("limit")),
           total: 1,
           totalPages: 1,
           dataQuality: {
@@ -1678,6 +2055,8 @@ test("staged smoke accepts Registry-current and Router-unavailable catalog", asy
               observedCount: 2,
               qualifiedCount: 2,
               unavailableCount: 1,
+              oldestFetchedAt: NOW,
+              newestFetchedAt: NOW,
             },
             catalog: {
               ...body.catalog,
@@ -1699,10 +2078,13 @@ test("staged smoke accepts Registry-current and Router-unavailable catalog", asy
           };
         }
         if (url.pathname === "/api/explore/token") {
+          const customSelected =
+            url.searchParams.get("address")?.toLowerCase() === CUSTOM_TOKEN;
           return {
             ...body,
-            token: null,
-            customProject: project,
+            ...(customSelected
+              ? { token: null, customProject: project }
+              : { token: entry(1), customProject: null }),
             catalog: {
               ...body.catalog,
               launchSource: "envio-classic-v3+registry.custom-launched",
@@ -1739,7 +2121,7 @@ test("staged smoke accepts Registry-current and Router-unavailable catalog", asy
     appendOutput: () => undefined,
   });
   assert.equal(result.catalogSource, "envio-classic-v3");
-  assert.equal(result.tokenAddress, CUSTOM_TOKEN);
+  assert.equal(result.tokenAddress, entry(1).tokenAddress);
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
 });
 
@@ -1974,6 +2356,7 @@ test("post-promotion binds the exact deployment to the same public fast lane", a
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
+    requireGmgnMarket: false,
     fetchImpl,
   });
   assert.equal(result.ok, true);
@@ -2005,6 +2388,7 @@ test("post-promotion fails an exact deployment-id mismatch", async () => {
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
+    requireGmgnMarket: false,
     fetchImpl,
   });
   assert.equal(result.ok, false);
@@ -2020,11 +2404,140 @@ test("post-promotion rejects a non-production origin before fetching", async () 
       token: "vercel-test-token",
       teamId: "team_programmable_test",
       projectId: "prj_programmable_test",
+      requireGmgnMarket: false,
       fetchImpl: async () => {
         throw new Error("fetch must not run");
       },
     }),
     /production origin/u,
+  );
+});
+
+test("post-promotion enforces an explicit production GMGN requirement", async () => {
+  const routeFetch = gmgnStagedFetch();
+  const fetchImpl = async (url, init) => {
+    const target = new URL(String(url));
+    if (target.hostname === "api.vercel.com") {
+      return Response.json({
+        id: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+        projectId: "prj_programmable_test",
+        readyState: "READY",
+        meta: { githubCommitSha: "b".repeat(40) },
+      });
+    }
+    return routeFetch(target, init);
+  };
+  const result = await verifyPostPromotion({
+    targetUrl: "https://programmable.market/",
+    expectedDeploymentId: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+    expectedGitHead: "b".repeat(40),
+    token: "vercel-test-token",
+    teamId: "team_programmable_test",
+    projectId: "prj_programmable_test",
+    requireGmgnMarket: true,
+    fetchImpl,
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.failures, []);
+});
+
+test("post-promotion fails Dexscreener-only detail when GMGN is required", async () => {
+  const routeFetch = stagedFetch();
+  const fetchImpl = async (url, init) => {
+    const target = new URL(String(url));
+    if (target.hostname === "api.vercel.com") {
+      return Response.json({
+        id: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+        projectId: "prj_programmable_test",
+        readyState: "READY",
+        meta: { githubCommitSha: "b".repeat(40) },
+      });
+    }
+    return routeFetch(target, init);
+  };
+  const result = await verifyPostPromotion({
+    targetUrl: "https://programmable.market/",
+    expectedDeploymentId: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+    expectedGitHead: "b".repeat(40),
+    token: "vercel-test-token",
+    teamId: "team_programmable_test",
+    projectId: "prj_programmable_test",
+    requireGmgnMarket: true,
+    fetchImpl,
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.failures.some(({ id }) =>
+    id === "production-static-identity-dexscreener-public-apis"
+  ));
+});
+
+test("post-promotion rejects an omitted or non-Boolean GMGN requirement", async () => {
+  const base = {
+    targetUrl: "https://programmable.market/",
+    expectedDeploymentId: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+    expectedGitHead: "b".repeat(40),
+    token: "vercel-test-token",
+    teamId: "team_programmable_test",
+    projectId: "prj_programmable_test",
+    fetchImpl: async () => {
+      throw new Error("fetch must not run");
+    },
+  };
+  await assert.rejects(
+    verifyPostPromotion(base),
+    /explicit GMGN market requirement boolean/u,
+  );
+  await assert.rejects(
+    verifyPostPromotion({ ...base, requireGmgnMarket: "false" }),
+    /explicit GMGN market requirement boolean/u,
+  );
+});
+
+test("post-promotion has no local GMGN requirement source", () => {
+  const source = readFileSync(
+    "scripts/perf/read-model-post-promotion.mjs",
+    "utf8",
+  );
+  assert.doesNotMatch(source, /GMGN_API_KEY|input\.environment/u);
+  assert.match(source, /String\(input\.requireGmgnMarket\)/u);
+});
+
+test("post-promotion CLI requires one exact GMGN Boolean argument", () => {
+  const base = [
+    "--target-url",
+    "https://programmable.market",
+    "--deployment-id",
+    "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "--git-head",
+    "b".repeat(40),
+  ];
+  assert.throws(
+    () => parsePostPromotionArguments(base),
+    /--require-gmgn-market are required/u,
+  );
+  assert.throws(
+    () => parsePostPromotionArguments([
+      ...base,
+      "--require-gmgn-market",
+      "enabled",
+    ]),
+    /must be exactly true or false/u,
+  );
+  assert.equal(
+    parsePostPromotionArguments([
+      ...base,
+      "--require-gmgn-market",
+      "true",
+    ]).requireGmgnMarket,
+    true,
+  );
+  assert.equal(
+    parsePostPromotionArguments([
+      ...base,
+      "--require-gmgn-market",
+      "false",
+    ]).requireGmgnMarket,
+    false,
   );
 });
 
@@ -2038,6 +2551,33 @@ test("the executable smoke contains no direct RPC or Bitquery reader", () => {
     /PROGRAMMABLE_WEBSITE_MAINNET_RPC|readPrimaryRpc|readBitquery|https?:\/\/[^"'\s]+rpc/iu,
   );
   assert.match(source, /catalogSource/u);
-  assert.match(source, /marketProvider: "dexscreener"/u);
+  assert.match(
+    source,
+    /exactVisibleMarketRead\(newest, newestTokens, validationNowMs\)/u,
+  );
+  assert.match(
+    source,
+    /exactDexscreenerMarketRead\(\s*highest,\s*completeCatalogTokens,/u,
+  );
+  assert.match(source, /exactDetailMarketRead\(/u);
+  assert.match(source, /environment\.PROGRAMMABLE_REQUIRE_GMGN_MARKET/u);
+  assert.match(source, /requireGmgnMarket &&/u);
+  assert.match(source, /detailMarketProvider !== "gmgn"/u);
+  assert.match(
+    source,
+    /!qualifiedGmgnFdv\(detailToken, now\(\)\.getTime\(\)\)/u,
+  );
+  assert.match(source, /VISIBLE_EXPLORE_PAGE_SIZE = 9/u);
+  assert.match(source, /model=classic/u);
+  assert.match(source, /exactGmgnEligibleCanonicalToken/u);
+  assert.match(
+    source,
+    /x-programmable-market-read-status"\) !==\s*"complete"/u,
+  );
+  assert.match(
+    source,
+    /marketProvider: newest\.headers\.get\("x-programmable-market-provider"\)/u,
+  );
+  assert.match(source, /marketReadStatus: newest\.body\.marketRead\.status/u);
   assert.match(source, /verified-identity-market-unavailable/u);
 });

@@ -10,12 +10,15 @@ import {
   formatPreparedMinimum,
   formatStockPairedGrossVolume,
   getValuationMetricLabel,
+  marketDataProviderLabel,
   parseDetailPayload,
   platformFeePolicyDisclosure,
   TOKEN_DETAIL_REQUEST_TIMEOUT_MS,
 } from "../components/token-detail-view";
 import type { PreparedTokenTrade } from "../components/token-trade";
 import type { TokenMarketDataV1 } from "../lib/market-data/market-data-v1";
+import type { GmgnMarketSnapshotV1 } from
+  "../lib/market-data/gmgn-market-data-v1";
 import type { CanonicalTokenExploreEntry, LauncherToken } from "../lib/tokens";
 import { customGraphToken } from "./launch-stamp-surface-fixture";
 import { confirmedPlatformFeePolicyV2 } from "./platform-fee-policy-fixture";
@@ -236,6 +239,108 @@ describe("token detail metrics", () => {
       valueWad: "1",
       freshness: "unknown",
     })).toBe("Market cap");
+  });
+
+  it("names only the market providers used by the detail response", () => {
+    const gmgnMarketData = {
+      schemaVersion: "programmable.gmgn-market-snapshot.v1",
+      source: "gmgn",
+      currency: "USD",
+      fetchedAt: "2026-08-31T12:00:00.000Z",
+      identity: {
+        chainId: "1",
+        tokenAddress: token.tokenAddress,
+        poolId: token.poolId,
+        quoteAddress: "0x0000000000000000000000000000000000000000",
+        protocol: "uniswap_v4",
+      },
+      priceUsdWad: parseEther("6").toString(),
+      fdvUsdWad: parseEther("168560").toString(),
+      liquidityUsdWad: parseEther("98765").toString(),
+      volume24hUsdWad: parseEther("1234567").toString(),
+      swapCount24h: 42,
+    } as const satisfies GmgnMarketSnapshotV1;
+    const gmgnValuation = {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: gmgnMarketData.fdvUsdWad,
+      freshness: "provider-recent",
+      source: "gmgn",
+      asOfTime: gmgnMarketData.fetchedAt,
+    } as const;
+    const dexscreenerValuation = {
+      ...gmgnValuation,
+      source: "dexscreener",
+    } as const;
+
+    expect(marketDataProviderLabel({
+      valuation: gmgnValuation,
+      gmgnMarketData,
+    })).toBe("GMGN");
+    expect(marketDataProviderLabel({
+      valuation: dexscreenerValuation,
+      gmgnMarketData,
+    })).toBe("Dexscreener");
+    expect(marketDataProviderLabel({
+      valuation: dexscreenerValuation,
+    })).toBe("Dexscreener");
+    expect(marketDataProviderLabel({
+      valuation: { ...gmgnValuation, source: "bitquery" },
+    })).toBeNull();
+
+    const fallbackMetrics = buildTokenDetailMetrics({
+      ...token,
+      valuation: dexscreenerValuation,
+      gmgnMarketData,
+    });
+    expect(fallbackMetrics).toContainEqual({
+      label: "Provider",
+      value: "Dexscreener",
+    });
+    expect(fallbackMetrics.find((metric) => metric.label === "24h volume"))
+      .toBeUndefined();
+    expect(fallbackMetrics.find((metric) => metric.label === "Liquidity"))
+      .toBeUndefined();
+  });
+
+  it("attributes a displayed chart-range volume to Bitquery", () => {
+    const dexscreenerValuation = {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: parseEther("168560").toString(),
+      freshness: "provider-recent",
+      source: "dexscreener",
+      asOfTime: "2026-08-31T12:00:00.000Z",
+    } as const;
+    const chartVolume = {
+      range: "1d",
+      pending: false,
+      source: "bitquery",
+      volumeUsdWad: parseEther("43750").toString(),
+    } as const;
+    const metric = buildChartVolumeMetric(chartVolume);
+
+    expect(marketDataProviderLabel({
+      valuation: dexscreenerValuation,
+      chartVolume,
+    })).toBe("Dexscreener + Bitquery");
+    expect(buildTokenDetailMetrics(
+      { ...token, valuation: dexscreenerValuation },
+      null,
+      metric,
+      chartVolume,
+    )).toEqual(expect.arrayContaining([
+      { label: "Provider", value: "Dexscreener + Bitquery" },
+      { label: "Volume 1D", value: "$43.8K" },
+    ]));
+    expect(marketDataProviderLabel({
+      valuation: dexscreenerValuation,
+      chartVolume: { ...chartVolume, pending: true },
+    })).toBe("Dexscreener");
   });
 
   it("ignores legacy market volume without Bitquery provenance", () => {

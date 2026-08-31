@@ -37,6 +37,16 @@ export const WEBSITE_PROJECTION_ADOPTION_LEGACY_INVENTORY_SHA256 =
 export const WEBSITE_PROJECTION_ADOPTION_LEGACY_PUBLIC_SHA256 =
   "0x93e41eab957ab8add897a8b277bcaaa0a5f10eebeb27f47db5bc0e59640484a2";
 export const WEBSITE_PROJECTION_ADOPTION_PREFIX_COUNT = 3;
+export const WEBSITE_PROJECTION_ADOPTION_SOURCE_MIGRATION_COUNT = 5;
+export const WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT =
+  "c235fbd55259f76d8356d6f07073c48b00eb294d";
+export const WEBSITE_PROJECTION_RETAINED_PLAN_TREE =
+  "57d09edb4793d6fe9f8a3bfad8e311accbb4caec";
+export const WEBSITE_PROJECTION_RETAINED_PLAN_SHA256 =
+  "0xbcdb49c686413cd5eab15514e0182eb929f5771e58059ce0fe59f928c44e6f3f";
+export const WEBSITE_PROJECTION_RETAINED_ORDER_SHA256 =
+  "0xce50954bfa6ff3b66b849bb5b53e8f1adf93abbe12cf865c19375100f2571cc2";
+export const WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT = 5;
 export const WEBSITE_PROJECTION_ADOPTION_TARGET_PROJECT_REF =
   "mnnvlrqwhfoppogslsje";
 export const WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_COMMIT =
@@ -50,12 +60,13 @@ export const WEBSITE_PROJECTION_MIGRATION_FILES = Object.freeze([
   "0003_registry_custom_public_read_v1.sql",
   "0004_approval_v3_artifacts_v1.sql",
   "0005_generic_launch_materializations_v2.sql",
+  "0006_gmgn_account_gate_v1.sql",
 ]);
 
 const GIT_OBJECT = /^[0-9a-f]{40}$/u;
 const HEX_SHA256 = /^0x[0-9a-f]{64}$/u;
 const PROJECT_REF = /^[a-z0-9]{20}$/u;
-const MIGRATION_FILE = /^(000[1-5])_([a-z][a-z0-9_]*)\.sql$/u;
+const MIGRATION_FILE = /^(000[1-6])_([a-z][a-z0-9_]*)\.sql$/u;
 const TRANSACTION_WRAPPER = /^BEGIN;\r?\n([\s\S]+)\r?\nCOMMIT;\r?\n?$/u;
 
 function isPlainObject(value) {
@@ -107,11 +118,11 @@ function planPayload(plan) {
   };
 }
 
-export async function discoverWebsiteProjectionPlan({
+async function discoverWebsiteProjectionPlanFiles({
   workspace,
   repositoryCommit,
   repositoryTree,
-}) {
+}, migrationFiles) {
   if (!GIT_OBJECT.test(repositoryCommit ?? "")
     || !GIT_OBJECT.test(repositoryTree ?? "")) {
     throw new Error("repository commit and tree must be exact full Git objects");
@@ -124,14 +135,17 @@ export async function discoverWebsiteProjectionPlan({
   }
   const entries = await readdir(rootPath, { withFileTypes: true });
   const names = entries.map(({ name }) => name).sort();
-  if (names.length !== WEBSITE_PROJECTION_MIGRATION_FILES.length
+  if (names.length !== migrationFiles.length
     || names.some((name, index) =>
-      name !== WEBSITE_PROJECTION_MIGRATION_FILES[index])) {
-    throw new Error("migration directory must contain exactly the five canonical files");
+      name !== migrationFiles[index])) {
+    const count = migrationFiles.length === 6 ? "six" : "five";
+    throw new Error(
+      `migration directory must contain exactly the ${count} canonical files`,
+    );
   }
 
   const migrations = [];
-  for (const [index, fileName] of WEBSITE_PROJECTION_MIGRATION_FILES.entries()) {
+  for (const [index, fileName] of migrationFiles.entries()) {
     const entry = entries.find(({ name }) => name === fileName);
     const absolutePath = path.join(rootPath, fileName);
     const metadata = await lstat(absolutePath);
@@ -185,7 +199,24 @@ export async function discoverWebsiteProjectionPlan({
   });
 }
 
-export function validateWebsiteProjectionPlan(value) {
+export async function discoverWebsiteProjectionPlan(input) {
+  return discoverWebsiteProjectionPlanFiles(
+    input,
+    WEBSITE_PROJECTION_MIGRATION_FILES,
+  );
+}
+
+export async function discoverRetainedWebsiteProjectionPlan(input) {
+  return discoverWebsiteProjectionPlanFiles(
+    input,
+    WEBSITE_PROJECTION_MIGRATION_FILES.slice(
+      0,
+      WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT,
+    ),
+  );
+}
+
+function validateWebsiteProjectionPlanFiles(value, migrationFiles) {
   if (!isPlainObject(value)
     || value.kind !== WEBSITE_PROJECTION_PLAN_KIND
     || value.schemaVersion !== 1
@@ -195,15 +226,15 @@ export function validateWebsiteProjectionPlan(value) {
     || value.applicationSchema !== WEBSITE_PROJECTION_APPLICATION_SCHEMA
     || value.evidenceTable !== WEBSITE_PROJECTION_EVIDENCE_TABLE
     || value.runtimeRole !== WEBSITE_PROJECTION_RUNTIME_ROLE
-    || value.migrationCount !== WEBSITE_PROJECTION_MIGRATION_FILES.length
+    || value.migrationCount !== migrationFiles.length
     || !HEX_SHA256.test(value.orderSha256 ?? "")
     || !HEX_SHA256.test(value.planSha256 ?? "")
     || !Array.isArray(value.migrations)
-    || value.migrations.length !== WEBSITE_PROJECTION_MIGRATION_FILES.length) {
+    || value.migrations.length !== migrationFiles.length) {
     throw new Error("website projection migration plan is invalid");
   }
   for (const [index, migration] of value.migrations.entries()) {
-    const fileName = WEBSITE_PROJECTION_MIGRATION_FILES[index];
+    const fileName = migrationFiles[index];
     const match = MIGRATION_FILE.exec(fileName);
     if (!isPlainObject(migration)
       || migration.ordinal !== index + 1
@@ -226,9 +257,79 @@ export function validateWebsiteProjectionPlan(value) {
   return value;
 }
 
+export function validateWebsiteProjectionPlan(value) {
+  if (value?.migrationCount === WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT) {
+    validateRetainedWebsiteProjectionPlan(value);
+    if (
+      value.repositoryCommit !== WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT
+      || value.repositoryTree !== WEBSITE_PROJECTION_RETAINED_PLAN_TREE
+      || value.planSha256 !== WEBSITE_PROJECTION_RETAINED_PLAN_SHA256
+      || value.orderSha256 !== WEBSITE_PROJECTION_RETAINED_ORDER_SHA256
+    ) {
+      throw new Error("website projection retained migration plan is invalid");
+    }
+    return value;
+  }
+  return validateWebsiteProjectionPlanFiles(
+    value,
+    WEBSITE_PROJECTION_MIGRATION_FILES,
+  );
+}
+
+export function validateRetainedWebsiteProjectionPlan(value) {
+  return validateWebsiteProjectionPlanFiles(
+    value,
+    WEBSITE_PROJECTION_MIGRATION_FILES.slice(
+      0,
+      WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT,
+    ),
+  );
+}
+
+function retainedWebsiteProjectionPlan(successorPlan) {
+  if (successorPlan?.migrationCount === WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT) {
+    return validateWebsiteProjectionPlan(successorPlan);
+  }
+  validateWebsiteProjectionPlan(successorPlan);
+  const migrations = Object.freeze(successorPlan.migrations.slice(
+    0,
+    WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT,
+  ));
+  const retained = {
+    ...successorPlan,
+    repositoryCommit: WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT,
+    repositoryTree: WEBSITE_PROJECTION_RETAINED_PLAN_TREE,
+    migrationCount: WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT,
+    orderSha256: WEBSITE_PROJECTION_RETAINED_ORDER_SHA256,
+    migrations,
+  };
+  const plan = Object.freeze({
+    ...retained,
+    planSha256: sha256(canonicalJson(planPayload(retained))),
+  });
+  validateRetainedWebsiteProjectionPlan(plan);
+  if (
+    plan.planSha256 !== WEBSITE_PROJECTION_RETAINED_PLAN_SHA256
+    || migrationOrderSha256(plan.migrations)
+      !== WEBSITE_PROJECTION_RETAINED_ORDER_SHA256
+  ) {
+    throw new Error(
+      "website projection successor does not preserve the retained 0001-0005 plan",
+    );
+  }
+  return plan;
+}
+
 export function assertWebsiteProjectionAdoptionSourcePlan(plan) {
-  validateWebsiteProjectionPlan(plan);
-  if (plan.orderSha256 !== WEBSITE_PROJECTION_ADOPTION_SOURCE_ORDER_SHA256) {
+  if (plan?.migrationCount === WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT) {
+    validateRetainedWebsiteProjectionPlan(plan);
+  } else {
+    validateWebsiteProjectionPlan(plan);
+  }
+  if (migrationOrderSha256(plan.migrations.slice(
+    0,
+    WEBSITE_PROJECTION_ADOPTION_SOURCE_MIGRATION_COUNT,
+  )) !== WEBSITE_PROJECTION_ADOPTION_SOURCE_ORDER_SHA256) {
     throw new Error(
       "adopt-existing successor must preserve the exact reviewed migration source",
     );
@@ -332,8 +433,16 @@ export function compareWebsiteProjectionEvidence({
     throw new Error("migration evidence exists without the application schema");
   }
   let adoption = null;
+  const retainedPlan = evidenceRows[0]?.plan_sha256 ===
+      WEBSITE_PROJECTION_RETAINED_PLAN_SHA256
+    ? retainedWebsiteProjectionPlan(plan)
+    : null;
   for (const [index, row] of evidenceRows.entries()) {
-    const migration = plan.migrations[index];
+    const evidencePlan = retainedPlan !== null
+        && index < WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT
+      ? retainedPlan
+      : plan;
+    const migration = evidencePlan.migrations[index];
     if (!migration || !isPlainObject(row)
       || Number(row.ordinal) !== migration.ordinal
       || row.version !== migration.version
@@ -341,9 +450,9 @@ export function compareWebsiteProjectionEvidence({
       || row.file_name !== path.posix.basename(migration.file)
       || row.file_sha256 !== migration.fileSha256
       || row.execution_sha256 !== migration.executionSha256
-      || row.plan_sha256 !== plan.planSha256
-      || row.repository_commit !== plan.repositoryCommit
-      || row.repository_tree !== plan.repositoryTree
+      || row.plan_sha256 !== evidencePlan.planSha256
+      || row.repository_commit !== evidencePlan.repositoryCommit
+      || row.repository_tree !== evidencePlan.repositoryTree
       || !HEX_SHA256.test(row.catalog_sha256 ?? "")
       || !HEX_SHA256.test(row.operator_catalog_sha256 ?? "")
       || !["applied", "adopted-existing-prefix-v1"].includes(
@@ -398,6 +507,7 @@ export function compareWebsiteProjectionEvidence({
     }
   }
   if (adoption !== null) {
+    const adoptionPlan = retainedPlan ?? plan;
     const adoptionRow = adoptionRows[0];
     if (evidenceRows.length < WEBSITE_PROJECTION_ADOPTION_PREFIX_COUNT
       || adoptionRows.length !== 1
@@ -431,10 +541,11 @@ export function compareWebsiteProjectionEvidence({
         !== WEBSITE_PROJECTION_ADOPTION_SOURCE_COMMIT
       || adoptionRow.source_repository_tree
         !== WEBSITE_PROJECTION_ADOPTION_SOURCE_TREE
-      || adoptionRow.successor_plan_sha256 !== plan.planSha256
-      || adoptionRow.successor_order_sha256 !== plan.orderSha256
-      || adoptionRow.successor_repository_commit !== plan.repositoryCommit
-      || adoptionRow.successor_repository_tree !== plan.repositoryTree
+      || adoptionRow.successor_plan_sha256 !== adoptionPlan.planSha256
+      || adoptionRow.successor_order_sha256 !== adoptionPlan.orderSha256
+      || adoptionRow.successor_repository_commit
+        !== adoptionPlan.repositoryCommit
+      || adoptionRow.successor_repository_tree !== adoptionPlan.repositoryTree
       || adoptionRow.target_project_ref !== expectedProjectRef
       || adoptionRow.operator_commit !== adoption.operatorCommit
       || adoptionRow.operator_tree !== adoption.operatorTree
@@ -444,7 +555,7 @@ export function compareWebsiteProjectionEvidence({
       || adoptionRow.runtime_rolinherit_before !== true
       || adoptionRow.runtime_rolinherit_after !== false
       || websiteProjectionAdoptionAttestationSha256({
-        plan,
+        plan: adoptionPlan,
         expectedProjectRef,
         sourceSnapshotSha256: adoption.sourceSnapshotSha256,
         sourceCatalogSha256: adoption.sourceCatalogSha256,

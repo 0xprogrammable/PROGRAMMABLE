@@ -1,6 +1,8 @@
 import { createTestIndexer } from "envio";
 import { describe, expect, it } from "vitest";
 
+import { SOURCE_REGISTRY } from "../src/lib/release-map.js";
+
 const DEPLOYER = "0x1111111111111111111111111111111111111111";
 const TOKEN = "0x2222222222222222222222222222222222222222";
 const HOOK = "0x35fe236ea82f7cf525c9719d7df8f49f94d720cc";
@@ -22,11 +24,99 @@ const BLOCK_HASH =
 const TRANSACTION_HASH =
   "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 const BLOCK_NUMBER = 25_650_010;
+const CLASSIC_V3_LAUNCHER_SOURCE = SOURCE_REGISTRY.find(
+  ({ contractName }) => contractName === "ClassicV3Launcher",
+)!;
 
 const block = { number: BLOCK_NUMBER, timestamp: 1_800_000_010, hash: BLOCK_HASH };
 const transaction = { hash: TRANSACTION_HASH, transactionIndex: 2 };
 
+function classicV3LaunchEvent(input: {
+  blockNumber: number;
+  srcAddress: `0x${string}`;
+}) {
+  return {
+    contract: "ClassicV3Launcher" as const,
+    event: "MemeTokenLaunchedV2" as const,
+    srcAddress: input.srcAddress,
+    logIndex: 30,
+    block: { ...block, number: input.blockNumber },
+    transaction,
+    params: {
+      deployer: DEPLOYER,
+      token: TOKEN,
+      poolId: POOL_ID,
+      feeHook: HOOK,
+      rewardVault: VAULT,
+      positionRecipient: POSITION_RECIPIENT,
+      positionTokenId: 42n,
+      buySwapFeeBps: 100n,
+      sellSwapFeeBps: 200n,
+      rewardConfigurationHash: CONFIGURATION_HASH,
+      launchHash: LAUNCH_HASH,
+    },
+  } as const;
+}
+
+const rejectedClassicV3LauncherSources = [
+  {
+    label: "a non-release source",
+    blockNumber: CLASSIC_V3_LAUNCHER_SOURCE.startBlock,
+    srcAddress: DEPLOYER,
+  },
+  {
+    label: "a pre-start block",
+    blockNumber: CLASSIC_V3_LAUNCHER_SOURCE.startBlock - 1,
+    srcAddress: CLASSIC_V3_LAUNCHER_SOURCE.address,
+  },
+] as const satisfies readonly {
+  label: string;
+  blockNumber: number;
+  srcAddress: `0x${string}`;
+}[];
+
 describe("Classic V3 handlers", () => {
+  it("accepts the exact pinned launcher source at its inclusive start block", async () => {
+    const indexer = createTestIndexer();
+    await indexer.process({
+      chains: {
+        1: {
+          startBlock: CLASSIC_V3_LAUNCHER_SOURCE.startBlock,
+          endBlock: CLASSIC_V3_LAUNCHER_SOURCE.startBlock + 12,
+          simulate: [classicV3LaunchEvent({
+            blockNumber: CLASSIC_V3_LAUNCHER_SOURCE.startBlock,
+            srcAddress: CLASSIC_V3_LAUNCHER_SOURCE.address,
+          })],
+        },
+      },
+    });
+
+    expect(await indexer.ChainEvent.getAll()).toEqual([
+      expect.objectContaining({
+        sourceAddress: CLASSIC_V3_LAUNCHER_SOURCE.address,
+        blockNumber: BigInt(CLASSIC_V3_LAUNCHER_SOURCE.startBlock),
+        releaseVersion: "classic-v3",
+      }),
+    ]);
+  });
+
+  it.each(rejectedClassicV3LauncherSources)(
+    "rejects the Classic V3 launcher from $label",
+    async ({ blockNumber, srcAddress }) => {
+      const indexer = createTestIndexer();
+
+      await expect(indexer.process({
+        chains: {
+          1: {
+            startBlock: blockNumber,
+            endBlock: blockNumber + 12,
+            simulate: [classicV3LaunchEvent({ blockNumber, srcAddress })],
+          },
+        },
+      })).rejects.toThrow(/worker exited with code 1/i);
+    },
+  );
+
   it("registers a vault in the factory block and preserves custody mode as uint8", async () => {
     const indexer = createTestIndexer();
     const result = await indexer.process({

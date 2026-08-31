@@ -1748,7 +1748,7 @@ async function readUncached(
   });
   const rpcLag = BigInt(rpc.headBlock) - BigInt(progress.progressBlock);
   if (
-    rpcLag < 0n ||
+    rpcLag < BigInt(release.confirmations) ||
     rpcLag > BigInt(release.confirmations) + MAXIMUM_RPC_HEAD_SKEW_BLOCKS ||
     rpc.metadata.size !== rows.launches.length + 1
   ) {

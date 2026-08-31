@@ -64,6 +64,7 @@ export type ChartRange = "1h" | "1d" | "1w" | "all";
 export type TokenChartVolume = {
   range: ChartRange;
   pending: boolean;
+  source?: "bitquery";
   volumeEth?: string;
   volumeUsdWad?: string;
 };
@@ -741,6 +742,9 @@ export function TokenPriceChart({
     onVolumeChange?.({
       range,
       pending: false,
+      ...(payload.marketData?.source === "bitquery"
+        ? { source: "bitquery" as const }
+        : {}),
       volumeEth: payload.volumeEth,
       volumeUsdWad: payload.volumeUsdWad,
     });

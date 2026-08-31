@@ -94,8 +94,8 @@ CREATE TABLE programmable_website_projection_migrations.migration_evidence_v1 (
   CONSTRAINT migration_evidence_v1_pk PRIMARY KEY (ordinal),
   CONSTRAINT migration_evidence_v1_version_unique UNIQUE (version),
   CONSTRAINT migration_evidence_v1_file_unique UNIQUE (file_name),
-  CONSTRAINT migration_evidence_v1_ordinal_check CHECK (ordinal BETWEEN 1 AND 5),
-  CONSTRAINT migration_evidence_v1_version_check CHECK (version ~ '^000[1-5]$'),
+  CONSTRAINT migration_evidence_v1_ordinal_check CHECK (ordinal BETWEEN 1 AND 6),
+  CONSTRAINT migration_evidence_v1_version_check CHECK (version ~ '^000[1-6]$'),
   CONSTRAINT migration_evidence_v1_file_hash_check
     CHECK (file_sha256 ~ '^0x[0-9a-f]{64}$'),
   CONSTRAINT migration_evidence_v1_execution_hash_check
@@ -201,8 +201,7 @@ CREATE TABLE programmable_website_projection_migrations.adoption_evidence_v1 (
     successor_plan_sha256 ~ '^0x[0-9a-f]{64}$'
   ),
   successor_order_sha256 text NOT NULL CHECK (
-    successor_order_sha256 =
-      '0xce50954bfa6ff3b66b849bb5b53e8f1adf93abbe12cf865c19375100f2571cc2'
+    successor_order_sha256 = '__SUCCESSOR_ORDER_SHA256__'
   ),
   successor_repository_commit text NOT NULL CHECK (
     successor_repository_commit ~ '^[0-9a-f]{40}$'
@@ -236,6 +235,24 @@ REVOKE ALL ON programmable_website_projection_migrations.adoption_evidence_v1
        programmable_website_projection_runtime;
 `;
 
+const EVIDENCE_0006_DDL = `
+ALTER TABLE programmable_website_projection_migrations.migration_evidence_v1
+  DROP CONSTRAINT migration_evidence_v1_ordinal_check,
+  DROP CONSTRAINT migration_evidence_v1_version_check,
+  ADD CONSTRAINT migration_evidence_v1_ordinal_check
+    CHECK (ordinal BETWEEN 1 AND 6),
+  ADD CONSTRAINT migration_evidence_v1_version_check
+    CHECK (version ~ '^000[1-6]$');
+`;
+
+function evidenceDdl(plan) {
+  validateWebsiteProjectionPlan(plan);
+  return EVIDENCE_DDL.replace(
+    "__SUCCESSOR_ORDER_SHA256__",
+    plan.orderSha256,
+  );
+}
+
 const FINAL_PRIVILEGES = `
 REVOKE ALL ON SCHEMA programmable_website_projection_v1
   FROM PUBLIC, anon, authenticated, service_role,
@@ -268,12 +285,27 @@ GRANT UPDATE (
 GRANT UPDATE (attempted_at)
   ON programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2
   TO programmable_website_projection_runtime;
-
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA programmable_website_projection_v1
   FROM PUBLIC, anon, authenticated, service_role,
        programmable_website_projection_runtime;
 GRANT EXECUTE ON FUNCTION
   programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
+  TO programmable_website_projection_runtime;
+`;
+
+const FINAL_GMGN_PRIVILEGES = `
+GRANT SELECT
+  ON programmable_website_projection_v1.gmgn_account_gate_v1
+  TO programmable_website_projection_runtime;
+GRANT UPDATE (
+  generation, next_slot_at, blocked_until, lease_holder, lease_until, updated_at
+) ON programmable_website_projection_v1.gmgn_account_gate_v1
+  TO programmable_website_projection_runtime;
+GRANT INSERT, DELETE
+  ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+  TO programmable_website_projection_runtime;
+GRANT SELECT (gate_id, generation)
+  ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
   TO programmable_website_projection_runtime;
 `;
 
@@ -1655,11 +1687,17 @@ async function applyOneMigration({
       await bootstrapRuntimeRole(transaction, bootstrapRuntimePassword);
     }
     if (migration.ordinal === 1) {
-      await executeSimple(transaction, EVIDENCE_DDL);
+      await executeSimple(transaction, evidenceDdl(plan));
+    }
+    if (migration.ordinal === 6) {
+      await executeSimple(transaction, EVIDENCE_0006_DDL);
     }
     await executeSimple(transaction, executionSource);
     if (migration.ordinal === plan.migrationCount) {
       await executeSimple(transaction, FINAL_PRIVILEGES);
+      if (plan.migrationCount === 6) {
+        await executeSimple(transaction, FINAL_GMGN_PRIVILEGES);
+      }
     }
     const roleGraph = await readRoleGraph(transaction, migration.ordinal);
     const catalogSha256 = catalogSnapshotSha256(
@@ -1843,7 +1881,7 @@ export async function adoptExistingWebsiteProjectionDatabase({
         throw new Error("adopt-existing data changed during role correction");
       }
 
-      await executeSimple(transaction, EVIDENCE_DDL);
+      await executeSimple(transaction, evidenceDdl(plan));
       const operatorCatalogSha256 = catalogSnapshotSha256(
         await readEvidenceCatalogSnapshot(transaction),
       );
@@ -1901,7 +1939,8 @@ export async function adoptExistingWebsiteProjectionDatabase({
         adoptionRows: afterPresence.adoptionRows,
       });
       if (state.appliedCount !== WEBSITE_PROJECTION_ADOPTION_PREFIX_COUNT
-        || state.pending.length !== 2) {
+        || state.pending.length !==
+          plan.migrationCount - WEBSITE_PROJECTION_ADOPTION_PREFIX_COUNT) {
         throw new Error("adopt-existing did not create the exact evidence prefix");
       }
       const finalRoleGraph = await readRoleGraph(
