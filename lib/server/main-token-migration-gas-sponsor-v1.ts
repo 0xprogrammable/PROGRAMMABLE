@@ -385,6 +385,9 @@ export function readMainTokenMigrationGasSponsorConfigurationV1(input: Readonly<
   environment: Environment;
   manifest: unknown;
   nowMs: number;
+  // Only constructs the gasless handler for receipt-only recovery. Send paths
+  // still enforce their own window; native top-ups never opt in.
+  allowClosedWindowReadback?: boolean;
 }>): MainTokenMigrationGasSponsorConfigurationV1 | null {
   if (input.environment.MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED !== "true") {
     return null;
@@ -414,8 +417,10 @@ export function readMainTokenMigrationGasSponsorConfigurationV1(input: Readonly<
   const deadline = Number(manifest.deadlineTimestampExclusive);
   const now = Math.floor(input.nowMs / 1_000);
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(deadline)
+    || !Number.isSafeInteger(now)
     || deadline - start !== MAIN_TOKEN_MIGRATION_WINDOW_SECONDS
-    || now < start || now >= deadline - DEADLINE_SAFETY_SECONDS) return null;
+    || now < start || (!input.allowClosedWindowReadback &&
+      now >= deadline - DEADLINE_SAFETY_SECONDS)) return null;
   const walletId = input.environment.MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_WALLET_ID?.trim() ?? "";
   const policyId = input.environment.MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_POLICY_ID?.trim() ?? "";
   const sponsorAddressValue = input.environment.MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ADDRESS?.trim() ?? "";

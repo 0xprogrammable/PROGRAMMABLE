@@ -73,6 +73,36 @@ type AccountCodeObservation = Readonly<{
   status: "eoa" | "delegated" | "contract" | "unavailable";
 }>;
 
+export function migrationGaslessResumeAmount(
+  progress: Readonly<{ account: string; amountRaw: string }> | null,
+  connectedAccount: string | null,
+): bigint | null {
+  if (!progress || !connectedAccount ||
+    progress.account.toLowerCase() !== connectedAccount.toLowerCase() ||
+    !/^[1-9][0-9]*$/u.test(progress.amountRaw) || progress.amountRaw.length > 28) {
+    return null;
+  }
+  const amountRaw = BigInt(progress.amountRaw);
+  return amountRaw <= MAIN_TOKEN_TOTAL_SUPPLY_RAW ? amountRaw : null;
+}
+
+export function migrationTransferRoute(input: Readonly<{
+  accountCodeStatus: AccountCodeObservation["status"] | "idle" | "checking";
+  nativeBalanceWei: bigint | null;
+  gasPriceWei: bigint | null;
+  resumingGasless: boolean;
+}>): "gasless" | "wallet" | "checking" | "unsupported" {
+  if (input.accountCodeStatus === "contract") return "unsupported";
+  if (input.resumingGasless) return "gasless";
+  if (input.accountCodeStatus === "delegated") return "gasless";
+  if (input.accountCodeStatus !== "eoa" || input.nativeBalanceWei === null ||
+    input.gasPriceWei === null || input.nativeBalanceWei < 0n ||
+    input.gasPriceWei <= 0n) return "checking";
+  return hasEnoughMigrationGas(input.nativeBalanceWei, input.gasPriceWei)
+    ? "wallet"
+    : "gasless";
+}
+
 const gasSponsorshipEndpoint =
   "/api/main-token-migration/gas-sponsorship" as const;
 const gasSponsorshipSchema =
@@ -163,7 +193,7 @@ type GaslessTransferResponse = Readonly<{
   transferBlockNumber: string | null;
 }>;
 
-type GaslessStage = "idle" | "preparing" | "signing" | "relaying";
+type GaslessStage = "idle" | "preparing" | "signing" | "relaying" | "reconciling";
 
 type StoredGaslessTransferProgress = Readonly<{
   schema: "programmable-main-token-migration-gasless-ui/v1";
@@ -220,7 +250,7 @@ function persistGaslessTransferProgress(
     }
   } catch {
     throw new Error(
-      "Gasless transfer recovery is unavailable in this browser. No signature was requested.",
+      "This browser could not save transfer recovery. This attempt was not submitted. Contact migration support before trying again.",
     );
   }
   window.dispatchEvent(new Event(migrationRecoveryEvent));
@@ -569,13 +599,16 @@ export async function gasSponsorshipErrorMessage(response: Response) {
   return (await gasSponsorshipFailure(response)).message;
 }
 
-async function gaslessTransferFailure(response: Response) {
+export async function gaslessTransferFailure(response: Response) {
+  let code = "";
   let message = "The gasless transfer is temporarily unavailable.";
   let requestId = "";
   try {
     const body = await response.json() as {
-      error?: { message?: unknown; requestId?: unknown };
+      error?: { code?: unknown; message?: unknown; requestId?: unknown };
     };
+    if (typeof body.error?.code === "string" &&
+      /^[a-z_]{1,80}$/u.test(body.error.code)) code = body.error.code;
     if (typeof body.error?.message === "string" &&
       body.error.message.length <= 240) message = body.error.message;
     if (typeof body.error?.requestId === "string" &&
@@ -585,7 +618,10 @@ async function gaslessTransferFailure(response: Response) {
   } catch {
     // Keep the stable recovery message.
   }
-  return requestId ? `${message} Request ID: ${requestId}` : message;
+  return {
+    code,
+    message: requestId ? `${message} Request ID: ${requestId}` : message,
+  };
 }
 
 function gasSponsorshipError(
@@ -674,9 +710,10 @@ function gasSponsorshipIdempotencyKey(
   }
 }
 
-function gaslessTransferIdempotencyKey(
+export function gaslessTransferIdempotencyKey(
   account: string,
   fallbackKeys: Map<string, string>,
+  requireExisting = false,
 ) {
   const normalizedAccount = getAddress(account).toLowerCase();
   const storageKey = `programmable:main-token-migration:gasless:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${normalizedAccount}`;
@@ -688,12 +725,18 @@ function gaslessTransferIdempotencyKey(
       fallbackKeys.set(storageKey, stored);
       return stored;
     }
+    if (requireExisting) {
+      throw new Error("The saved migration request key is unavailable. Contact migration support before sending again.");
+    }
     const created =
       `gasless-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
     fallbackKeys.set(storageKey, created);
     window.localStorage.setItem(storageKey, created);
     return created;
   } catch {
+    if (requireExisting) {
+      throw new Error("The saved migration request key is unavailable. Contact migration support before sending again.");
+    }
     const created =
       `gasless-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
     fallbackKeys.set(storageKey, created);
@@ -1253,10 +1296,6 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       : sponsorshipForConnectedAccount
         ? gasSponsorship.kind
         : "idle";
-  const terminalSponsorshipFailure =
-    sponsorshipForConnectedAccount &&
-    gasSponsorship.kind === "error" &&
-    !gasSponsorship.retryable;
   const sponsorReceiptConfirmed =
     sponsorshipForConnectedAccount &&
     (gasSponsorship.kind === "balance-confirming" ||
@@ -1269,11 +1308,19 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       gasSponsorship.kind === "ready")
       ? gasSponsorship.transactionHash
       : null;
-  const sponsoredGasReady = hasEnoughObservedGas;
-  const delegatedWallet = accountCodeStatus === "delegated";
   const unresolvedGaslessTransfer = gaslessProgress !== null;
   const gaslessProgressForConnectedAccount =
     connectedAccount !== null && gaslessProgress?.account === connectedAccount;
+  const resumeAmountRaw = migrationGaslessResumeAmount(gaslessProgress, connectedAccount);
+  const canResumeGaslessTransfer = resumeAmountRaw !== null &&
+    accountCodeStatus !== "contract";
+  const transferRoute = migrationTransferRoute({
+    accountCodeStatus,
+    nativeBalanceWei: nativeBalance,
+    gasPriceWei: gasPrice,
+    resumingGasless: canResumeGaslessTransfer,
+  });
+  const gaslessTransferPath = transferRoute === "gasless";
   const parsedAmount = useMemo(() => {
     if (!amount.trim()) return null;
     try {
@@ -1283,17 +1330,18 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
     }
   }, [amount]);
   const amountError = useMemo(() => {
+    if (hasTrackedTransfer) return "";
     if (!amount.trim()) return "";
     try {
       const amountRaw = parseMainTokenMigrationAmount(amount);
-      if (balance !== null) {
+      if (balance !== null && amountRaw !== resumeAmountRaw) {
         assertMainTokenMigrationBalance(amountRaw, balance);
       }
       return "";
     } catch (error) {
       return migrationErrorMessage(error);
     }
-  }, [amount, balance]);
+  }, [amount, balance, hasTrackedTransfer, resumeAmountRaw]);
 
   useEffect(() => {
     if (!migrationWindow.enabled) return;
@@ -1537,52 +1585,8 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
     [getAccessToken, sponsorshipRequestGate],
   );
 
-  useEffect(() => {
-    if (
-      !transferWindowOpen ||
-      !wallet ||
-      !onMainnet ||
-      accountCodeStatus !== "eoa" ||
-      nativeBalance === null ||
-      gasPrice === null ||
-      hasEnoughObservedGas ||
-      hasTrackedTransfer ||
-      sponsorshipForConnectedAccount ||
-      submission.kind === "submitting"
-    ) {
-      return;
-    }
-
-    const account = wallet.account.toLowerCase();
-    const controller = new AbortController();
-    void readGasSponsorship(account, controller.signal)
-      .then(({ body }) => {
-        if (controller.signal.aborted) return;
-        setGasSponsorship(gasSponsorshipState(body));
-        if (body.status === "confirmed" || body.status === "not_needed") {
-          void refreshBalance();
-        }
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        setGasSponsorship(gasSponsorshipError(error, account));
-      });
-    return () => controller.abort();
-  }, [
-    accountCodeStatus,
-    gasPrice,
-    hasEnoughObservedGas,
-    hasTrackedTransfer,
-    nativeBalance,
-    onMainnet,
-    transferWindowOpen,
-    readGasSponsorship,
-    refreshBalance,
-    sponsorshipForConnectedAccount,
-    submission.kind,
-    wallet,
-  ]);
-
+  // New gasless transfers use the token-bound endpoint, never ETH-faucet eligibility.
+  // Retain reconciliation for an ETH top-up already started in this page session.
   useEffect(() => {
     if (!sponsorshipPollingAccount) return;
 
@@ -1952,7 +1956,12 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
     }
   }
 
-  async function reviewGaslessTransfer(account: `0x${string}`, amountRaw: bigint) {
+  async function reviewGaslessTransfer(
+    account: `0x${string}`,
+    amountRaw: bigint,
+    resumeExisting = false,
+    preservePendingRequest = false,
+  ) {
     const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error("Reconnect this wallet before using the gasless transfer.");
@@ -1960,6 +1969,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
     const idempotencyKey = gaslessTransferIdempotencyKey(
       account,
       gaslessIdempotencyKeysRef.current,
+      resumeExisting || preservePendingRequest,
     );
     const headers = {
       Accept: "application/json",
@@ -1968,66 +1978,74 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       "Idempotency-Key": idempotencyKey,
     };
     setSubmission({ kind: "submitting" });
-    setGaslessStage("preparing");
-    const prepareBody = JSON.stringify({
-      action: "prepare",
-      walletAddress: account,
-      amountRaw: amountRaw.toString(),
-    });
-    let prepared: GaslessTransferResponse | null = null;
-    let prepareFailure = "The gasless transfer is temporarily unavailable.";
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const response = await fetch(gaslessTransferEndpoint, {
-        method: "POST",
-        cache: "no-store",
-        headers,
-        body: prepareBody,
+    let submitBody: string;
+    if (resumeExisting) {
+      setGaslessStage("reconciling");
+      submitBody = JSON.stringify({
+        action: "resume",
+        walletAddress: account,
+        amountRaw: amountRaw.toString(),
       });
-      if (response.ok) {
-        prepared = parseGaslessTransferResponse(
-          await response.json(),
-          account,
-          amountRaw,
-        );
-        break;
+    } else {
+      if (!trustedTransferWindowOpen()) {
+        throw new Error("New transfers are closed. Contact migration support about this saved request.");
       }
-      prepareFailure = await gaslessTransferFailure(response);
-      if ((response.status !== 429 && response.status !== 503) || attempt === 4) {
-        throw new Error(prepareFailure);
+      setGaslessStage("preparing");
+      const prepareBody = JSON.stringify({
+        action: "prepare",
+        walletAddress: account,
+        amountRaw: amountRaw.toString(),
+      });
+      let prepared: GaslessTransferResponse | null = null;
+      let prepareFailure = "The gasless transfer is temporarily unavailable.";
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const response = await fetch(gaslessTransferEndpoint, {
+          method: "POST",
+          cache: "no-store",
+          headers,
+          body: prepareBody,
+        });
+        if (response.ok) {
+          prepared = parseGaslessTransferResponse(
+            await response.json(),
+            account,
+            amountRaw,
+          );
+          break;
+        }
+        prepareFailure = (await gaslessTransferFailure(response)).message;
+        if ((response.status !== 429 && response.status !== 503) || attempt === 4) {
+          throw new Error(prepareFailure);
+        }
+        await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
       }
-      await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
-    }
-    if (!prepared) throw new Error(prepareFailure);
-    if (prepared.status !== "signature_required") {
-      throw new Error("The gasless transfer request is not ready for review.");
-    }
-    if (!sessionActiveRef.current) return;
-    const progress = persistGaslessTransferProgress(account, amountRaw);
-    setGaslessProgress(progress);
-    setGaslessStage("signing");
-    let permit;
-    try {
-      permit = await signMainTokenMigrationPermit({
+      if (!prepared) throw new Error(prepareFailure);
+      if (prepared.status !== "signature_required") {
+        throw new Error("The gasless transfer request is not ready for review.");
+      }
+      if (!sessionActiveRef.current) return;
+      setGaslessStage("signing");
+      const permit = await signMainTokenMigrationPermit({
         deadline: BigInt(prepared.permitDeadline),
         nonce: BigInt(prepared.nonce),
         spender: getAddress(prepared.sponsorAddress),
         value: amountRaw,
       });
-    } catch (error) {
-      clearGaslessTransferProgress();
-      setGaslessProgress(null);
-      throw error;
+      // An unsigned request cannot transfer V4 and must not leave a stuck marker.
+      // Persist before submit so a lost response always resumes this exact intent.
+      const progress = persistGaslessTransferProgress(account, amountRaw);
+      setGaslessProgress(progress);
+      setGaslessStage("relaying");
+      submitBody = JSON.stringify({
+        action: "submit",
+        walletAddress: account,
+        amountRaw: amountRaw.toString(),
+        nonce: prepared.nonce,
+        permitDeadline: prepared.permitDeadline,
+        permitSignature: permit.signature,
+        requestBindingHash: prepared.requestBindingHash,
+      });
     }
-    setGaslessStage("relaying");
-    const submitBody = JSON.stringify({
-      action: "submit",
-      walletAddress: account,
-      amountRaw: amountRaw.toString(),
-      nonce: prepared.nonce,
-      permitDeadline: prepared.permitDeadline,
-      permitSignature: permit.signature,
-      requestBindingHash: prepared.requestBindingHash,
-    });
     for (let attempt = 0; attempt < 60; attempt += 1) {
       const response = await fetch(gaslessTransferEndpoint, {
         method: "POST",
@@ -2037,17 +2055,27 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       });
       if (!response.ok) {
         const failure = await gaslessTransferFailure(response);
+        if (resumeExisting && response.status === 409 &&
+          failure.code === "gasless_request_not_found" && trustedTransferWindowOpen()) {
+          // A crash before the first submit can leave only the local marker.
+          // Retry once with its same binding; never clear it or start a second key.
+          await reviewGaslessTransfer(account, amountRaw, false, true);
+          return;
+        }
         if ((response.status === 429 || response.status === 503) && attempt < 59) {
           await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
           continue;
         }
-        throw new Error(failure);
+        throw new Error(failure.message);
       }
       const result = parseGaslessTransferResponse(
         await response.json(),
         account,
         amountRaw,
       );
+      if (result.status === "signature_required") {
+        throw new Error("The existing transfer could not be reconciled. Contact migration support before sending again.");
+      }
       if (result.status === "confirmed" && result.transferTransactionHash &&
         result.transferBlockNumber) {
         const confirmed: Extract<SubmissionState, { kind: "confirmed" }> = {
@@ -2090,6 +2118,31 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
   }
 
   async function reviewTransferOnce() {
+    if (canResumeGaslessTransfer && wallet && resumeAmountRaw !== null) {
+      try {
+        if (!onMainnet) {
+          await switchNetwork(String(MAIN_TOKEN_MIGRATION_CHAIN_ID));
+          return;
+        }
+        // Resume uses only the stored signed intent. It may read receipts after
+        // the window closes and must not depend on V4 already spent by that intent.
+        await reviewGaslessTransfer(getAddress(wallet.account), resumeAmountRaw, true);
+      } catch (error) {
+        setSubmission({ kind: "error", message: migrationErrorMessage(error) });
+      }
+      return;
+    }
+    if (unresolvedGaslessTransfer) {
+      if (!wallet) {
+        openWallet();
+        return;
+      }
+      setSubmission({
+        kind: "error",
+        message: "Reconnect the wallet used for the pending transfer. Do not send V4 separately.",
+      });
+      return;
+    }
     if (!trustedTransferWindowOpen()) {
       setSubmission({
         kind: "error",
@@ -2177,29 +2230,11 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
       setGasPrice(freshBalances.gasPriceWei);
       assertMainTokenMigrationBalance(amountRaw, freshBalances.tokenBalanceRaw);
       const account = getAddress(wallet.account);
-      if (delegated) {
+      if (delegated || !hasEnoughMigrationGas(
+        freshBalances.nativeBalanceWei,
+        freshBalances.gasPriceWei,
+      )) {
         await reviewGaslessTransfer(account, amountRaw);
-        return;
-      }
-      if (
-        !hasEnoughMigrationGas(
-          freshBalances.nativeBalanceWei,
-          freshBalances.gasPriceWei,
-        )
-      ) {
-        setSubmission({
-          kind: "error",
-          message:
-            sponsorshipKind === "requesting" ||
-            sponsorshipKind === "requested" ||
-            sponsorshipKind === "funding-confirming" ||
-            sponsorshipKind === "balance-confirming"
-              ? "The sponsored ETH is not available yet. Wait for confirmation and try again."
-              : sponsorshipKind === "ready"
-                ? "This wallet no longer has enough ETH for the transfer. Add ETH and try again."
-                : "This wallet needs ETH for gas. Request sponsored gas before sending V4.",
-        });
-        focusSponsorshipActionOrStatus();
         return;
       }
       const finalCheckTime = readTrustedNow();
@@ -2245,7 +2280,15 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
   }
 
   const primaryLabel =
-    phase === "checking"
+    unresolvedGaslessTransfer && !wallet
+      ? connecting ? "Opening wallet" : "Connect wallet"
+      : canResumeGaslessTransfer
+        ? !onMainnet
+          ? switchingNetwork ? "Switching network" : "Switch to Ethereum"
+          : visibleSubmission.kind === "submitting"
+            ? "Checking previous transfer"
+            : "Resume gasless transfer"
+      : phase === "checking"
       ? "Checking migration window"
       : phase === "preview"
         ? "Migration not open"
@@ -2288,26 +2331,10 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                                     : gaslessProgress &&
                                         gaslessProgress.account !== connectedAccount
                                       ? "Reconnect pending wallet"
-                                    : delegatedWallet
-                                      ? gaslessProgressForConnectedAccount
-                                        ? "Resume gasless transfer"
-                                        : "Review gasless transfer"
-                                    : !sponsoredGasReady
-                                      ? sponsorshipKind === "eligible"
-                                        ? "Request sponsored gas first"
-                                        : sponsorshipKind === "requesting"
-                                          ? "Requesting sponsored gas"
-                                          : sponsorshipKind === "requested" ||
-                                              sponsorshipKind ===
-                                                "funding-confirming" ||
-                                              sponsorshipKind ===
-                                                "balance-confirming"
-                                            ? "Waiting for sponsored gas"
-                                            : sponsorshipKind === "error"
-                                              ? terminalSponsorshipFailure
-                                                ? "Check ETH and continue"
-                                                : "Check gas sponsorship"
-                                              : "Checking gas balance"
+                                    : gaslessTransferPath
+                                      ? "Check gasless transfer"
+                                    : transferRoute === "checking"
+                                      ? "Check gas balance"
                                       : "Review transfer in wallet";
 
   return (
@@ -2426,7 +2453,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                 className={styles.primaryAction}
                 type="button"
                 onClick={() => void reviewTransfer()}
-                disabled={!transferWindowOpen || connecting}
+                disabled={(!transferWindowOpen && !unresolvedGaslessTransfer) || connecting}
               >
                 {primaryLabel}
               </button>
@@ -2465,6 +2492,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                     !wallet ||
                     !transferWindowOpen ||
                     hasTrackedTransfer ||
+                    unresolvedGaslessTransfer ||
                     submission.kind === "submitting"
                   }
                   aria-describedby={
@@ -2484,6 +2512,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                     balanceLoading ||
                     !transferWindowOpen ||
                     hasTrackedTransfer ||
+                    unresolvedGaslessTransfer ||
                     submission.kind === "submitting"
                   }
                 >
@@ -2506,24 +2535,29 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
               accountCodeStatus === "delegated") &&
             parsedAmount !== null &&
             !amountError &&
-            balance !== null ? (
+            (balance !== null || canResumeGaslessTransfer) ? (
               <div
                 ref={sponsorshipRegionRef}
                 tabIndex={-1}
                 aria-label="Gas sponsorship status"
               >
-                {delegatedWallet ? (
+                {gaslessTransferPath ? (
                   <div
                     className={styles.walletTypeStatus}
                     data-status="eoa"
                     role="status"
                   >
-                    <strong>Gasless transfer available</strong>
+                    <strong>{canResumeGaslessTransfer
+                      ? "Previous transfer"
+                      : gaslessStage === "signing"
+                        ? "Ready for wallet review"
+                        : gaslessStage === "relaying"
+                          ? "Transfer in progress"
+                          : "Gasless transfer checks"}</strong>
                     <span>
-                      Review the exact V4 amount in your wallet. Programmable
-                      pays the Ethereum gas and sends only that amount to the
-                      fixed migration address. Use Max to move your full balance
-                      in one gasless transfer.
+                      {canResumeGaslessTransfer
+                        ? "Check the saved request. Submitted transfers need no new signature. After the deadline, only existing transactions can be checked."
+                        : "Select Check gasless transfer. Your current V4 balance and sponsorship are checked before wallet review. No ETH top-up is needed."}
                     </span>
                   </div>
                 ) : sponsorshipKind === "not-needed" ? (
@@ -2728,12 +2762,12 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                 type="button"
                 onClick={() => void reviewTransfer()}
                 disabled={
-                  !transferWindowOpen ||
+                  (!transferWindowOpen && !canResumeGaslessTransfer) ||
                   connecting ||
                   switchingNetwork ||
                   submission.kind === "submitting" ||
                   hasTrackedTransfer ||
-                  accountCodeStatus === "checking" ||
+                  (accountCodeStatus === "checking" && !canResumeGaslessTransfer) ||
                   (gaslessProgress !== null &&
                     gaslessProgress.account !== connectedAccount)
                 }
@@ -2793,7 +2827,7 @@ function MainTokenMigrationSession({ sponsorshipRequestGate }: {
                   >
                     View on Etherscan
                   </a>
-                  {transferWindowOpen && !delegatedWallet ? (
+                  {transferWindowOpen && transferRoute === "wallet" ? (
                     <button
                       className={styles.secondaryAction}
                       type="button"

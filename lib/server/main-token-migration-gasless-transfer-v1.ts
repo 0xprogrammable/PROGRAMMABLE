@@ -9,6 +9,7 @@ import {
   getAddress,
   http,
   isAddress,
+  keccak256,
   parseAbi,
   recoverTypedDataAddress,
   toHex,
@@ -21,11 +22,13 @@ import { mainnet } from "viem/chains";
 import activationManifest from "@/config/main-token-migration-activation.v1.json";
 import {
   buildMainTokenMigrationPermitTypedData,
-  isMainTokenMigrationDelegatedWalletCode,
+  isMainTokenMigrationWalletCodeEligible,
   MAIN_TOKEN_ADDRESS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
   MAIN_TOKEN_MIGRATION_WALLET,
+  MAIN_TOKEN_NAME,
   MAIN_TOKEN_PERMIT_DOMAIN_SEPARATOR,
+  MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
   MAIN_TOKEN_TOTAL_SUPPLY_RAW,
   parseMainTokenMigrationPermitSignature,
 } from "@/lib/main-token-migration";
@@ -38,7 +41,6 @@ import {
 import {
   assertMainTokenMigrationPrivySponsorWalletV1,
   assertMainTokenMigrationPrivySponsorPolicyV2,
-  createMainTokenMigrationGasSponsorChainV1,
   deriveMainTokenMigrationSponsorBindingsV1,
   deriveMainTokenMigrationSponsorPrincipalBindingV1,
   MainTokenMigrationGasSponsorErrorV1,
@@ -66,6 +68,7 @@ import { canonicalSha256 } from "./projection-target/hashing";
 
 const TOKEN_ABI = parseAbi([
   "function name() view returns (string)",
+  "function balanceOf(address owner) view returns (uint256)",
   "function DOMAIN_SEPARATOR() view returns (bytes32)",
   "function nonces(address owner) view returns (uint256)",
   "function allowance(address owner,address spender) view returns (uint256)",
@@ -98,7 +101,7 @@ type ProviderStatus = Readonly<{
 type TransactionKind = "permit" | "transfer";
 
 type PrepareRequest = Readonly<{
-  action: "prepare";
+  action: "prepare" | "resume";
   walletAddress: Address;
   amountRaw: bigint;
 }>;
@@ -148,10 +151,10 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
   return Object.freeze({
     async post(request: Request) {
       try {
-        assertWindowOpen(input.configuration, now());
         requireSameOrigin(request);
         const principal = await input.authenticator.authenticate(request);
         const parsed = parseRequest(await boundedJson(request));
+        if (parsed.action !== "resume") assertWindowOpen(input.configuration, now());
         assertLinkedWallet(principal.wallets, parsed.walletAddress);
         const idempotencyKey = request.headers.get("idempotency-key") ?? "";
         if (!IDEMPOTENCY_KEY.test(idempotencyKey)) {
@@ -183,7 +186,7 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
           walletAddress: parsed.walletAddress,
         };
         const existing = await input.store.get(lookup);
-        if (parsed.action === "prepare") {
+        if (parsed.action !== "submit") {
           if (existing) {
             const binding = deriveMainTokenMigrationGaslessBindingV1({
               baseRequestBindingHash: baseBindings.requestBindingHash,
@@ -197,7 +200,25 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
                 "idempotency_conflict",
               );
             }
+            if (parsed.action === "resume") {
+              const allowSend = windowOpen(input.configuration, now());
+              if (allowSend) await input.sender.assertReady();
+              return await progressTransfer({
+                chain: input.chain,
+                configuration: input.configuration,
+                now: now(),
+                record: existing,
+                sender: input.sender,
+                store: input.store,
+                allowSend,
+              });
+            }
             return prepareResponse(existing.intent);
+          }
+          if (parsed.action === "resume") {
+            throw new MainTokenMigrationGaslessErrorV1(
+              409, "gasless_request_not_found",
+            );
           }
           const observation = await input.chain.prepare({
             configuration: input.configuration,
@@ -325,6 +346,8 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
               `mtmgt-${providerBinding.slice(0, 58)}`,
             reservedAt: now().toISOString(),
           });
+          // An unavailable sponsor must not consume the wallet's durable slot.
+          await input.sender.assertReady();
           record = (await input.store.reserve({
             lookup,
             idempotencyBindingHash: baseBindings.idempotencyBindingHash,
@@ -335,8 +358,9 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
           record.intent.nonce !== parsed.nonce.toString() ||
           record.intent.permitDeadline !== parsed.permitDeadline.toString()) {
           throw new MainTokenMigrationGaslessErrorV1(409, "idempotency_conflict");
+        } else {
+          await input.sender.assertReady();
         }
-        await input.sender.assertReady();
         return await progressTransfer({
           chain: input.chain,
           configuration: input.configuration,
@@ -359,12 +383,22 @@ async function progressTransfer(input: Readonly<{
   record: MainTokenMigrationGaslessRecordV1;
   sender: ReturnType<typeof createMainTokenMigrationGaslessSenderV1>;
   store: MainTokenMigrationGaslessStoreV1;
+  allowSend?: boolean;
 }>) {
   let record = input.record;
   if (!record.permitTransactionHash) {
     const reconciled = await input.sender.lookup("permit", record.intent);
     const recoveredHash = providerHashOrNull(reconciled);
-    if (!recoveredHash) assertProviderRetryWindow(record.intent, input.now);
+    if (!recoveredHash) {
+      if (input.allowSend === false) {
+        throw new MainTokenMigrationGaslessErrorV1(409, "relay_needs_attention");
+      }
+      if (BigInt(record.intent.permitDeadline) <=
+        BigInt(Math.floor(input.now.getTime() / 1_000))) {
+        throw new MainTokenMigrationGaslessErrorV1(422, "permit_expired");
+      }
+      assertProviderRetryWindow(record.intent, input.now);
+    }
     const hash = recoveredHash ?? await input.sender.send("permit", record.intent);
     record = await input.store.complete({
       lookup: {
@@ -385,12 +419,16 @@ async function progressTransfer(input: Readonly<{
     throw new MainTokenMigrationGaslessErrorV1(409, "permit_reverted");
   }
   if (permitStatus === "pending") {
+    assertProviderNotTerminal(await input.sender.lookup("permit", record.intent));
     return transferResponse("permit_pending", record, 10);
   }
   if (!record.transferTransactionHash) {
     const reconciled = await input.sender.lookup("transfer", record.intent);
     const recoveredHash = providerHashOrNull(reconciled);
     if (!recoveredHash) {
+      if (input.allowSend === false) {
+        throw new MainTokenMigrationGaslessErrorV1(409, "relay_needs_attention");
+      }
       assertProviderRetryWindow(record.intent, input.now);
       // transferFrom consumes the exact allowance. A known transaction must
       // be reconciled by its receipt, not rejected for already using it.
@@ -415,6 +453,9 @@ async function progressTransfer(input: Readonly<{
   if (transferStatus === "failed") {
     throw new MainTokenMigrationGaslessErrorV1(409, "transfer_reverted");
   }
+  if (transferStatus === "pending") {
+    assertProviderNotTerminal(await input.sender.lookup("transfer", record.intent));
+  }
   return typeof transferStatus === "object"
     ? transferResponse(
         "confirmed",
@@ -425,13 +466,16 @@ async function progressTransfer(input: Readonly<{
     : transferResponse("transfer_pending", record, 5);
 }
 
+function assertProviderNotTerminal(record: ProviderStatus | null) {
+  if (record && ["replaced", "failed", "provider_error", "execution_reverted"]
+    .includes(record.status)) {
+    throw new MainTokenMigrationGaslessErrorV1(409, "relay_needs_attention");
+  }
+}
+
 function providerHashOrNull(record: ProviderStatus | null) {
   if (record === null) return null;
-  if (["failed", "provider_error", "execution_reverted"].includes(
-    record.status,
-  )) {
-    throw new MainTokenMigrationGaslessErrorV1(503, "provider_failed");
-  }
+  assertProviderNotTerminal(record);
   if (record.transactionHash) return record.transactionHash;
   throw new MainTokenMigrationGaslessErrorV1(503, "submission_unknown");
 }
@@ -465,73 +509,112 @@ export function createMainTokenMigrationGaslessChainV1(
       transport: http(providers[1]!.endpoint, { retryCount: 1, timeout: 12_000 }),
     }),
   ];
-  const eligibilityChain = createMainTokenMigrationGasSponsorChainV1(providers);
   return Object.freeze({
     async prepare(input: Readonly<{
       configuration: MainTokenMigrationGasSponsorConfigurationV1;
       walletAddress: Address;
       amountRaw: bigint;
     }>) {
-      const eligibility = await eligibilityChain.observe({
-        configuration: input.configuration,
-        request: {
-          walletAddress: input.walletAddress,
-          amountRaw: input.amountRaw,
-        },
-      });
-      const heads = await Promise.all(clients.map((client) =>
-        client.getBlockNumber()));
-      const blockNumber = heads[0] < heads[1] ? heads[0] : heads[1];
-      const states = await Promise.all(clients.map(async (client) => {
-        const [chainId, block, code, tokenCode, name, domainSeparator, nonce] =
-          await Promise.all([
-            client.getChainId(),
-            client.getBlock({ blockNumber }),
-            client.getCode({ address: input.walletAddress, blockNumber }),
-            client.getCode({ address: MAIN_TOKEN_ADDRESS, blockNumber }),
-            client.readContract({
-              address: MAIN_TOKEN_ADDRESS,
-              abi: TOKEN_ABI,
-              functionName: "name",
-              blockNumber,
-            }),
-            client.readContract({
-              address: MAIN_TOKEN_ADDRESS,
-              abi: TOKEN_ABI,
-              functionName: "DOMAIN_SEPARATOR",
-              blockNumber,
-            }),
-            client.readContract({
-              address: MAIN_TOKEN_ADDRESS,
-              abi: TOKEN_ABI,
-              functionName: "nonces",
-              args: [input.walletAddress],
-              blockNumber,
-            }),
-          ]);
-        return { chainId, block, code, tokenCode, name, domainSeparator, nonce };
-      }));
-      const [left, right] = states;
-      if (!left || !right || left.chainId !== MAIN_TOKEN_MIGRATION_CHAIN_ID ||
-        right.chainId !== MAIN_TOKEN_MIGRATION_CHAIN_ID ||
-        left.block.hash !== right.block.hash || left.code !== right.code ||
-        left.tokenCode !== right.tokenCode || left.name !== right.name ||
-        left.domainSeparator !== right.domainSeparator || left.nonce !== right.nonce ||
-        !left.tokenCode || !right.tokenCode ||
-        !isMainTokenMigrationDelegatedWalletCode(left.code) ||
-        !isMainTokenMigrationDelegatedWalletCode(right.code) ||
-        left.name !== "Programmable" ||
-        left.domainSeparator.toLowerCase() !==
-          MAIN_TOKEN_PERMIT_DOMAIN_SEPARATOR.toLowerCase()) {
-        throw new MainTokenMigrationGaslessErrorV1(422, "gasless_wallet_unsupported");
+      if (input.amountRaw <= 0n || input.amountRaw > MAIN_TOKEN_TOTAL_SUPPLY_RAW) {
+        throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
       }
-      return Object.freeze({
-        nonce: left.nonce,
-        feePerGasWei: eligibility.feePerGasWei,
-        maxPriorityFeePerGasWei: eligibility.maxPriorityFeePerGasWei,
-        sponsorBalanceWei: eligibility.sponsorBalanceWei,
-        rootWalletAddress: eligibility.eligibility.rootWalletAddress,
-      });
+      try {
+        const heads = await Promise.all(clients.map((client) =>
+          client.getBlockNumber()));
+        const blockNumber = heads[0] < heads[1] ? heads[0] : heads[1];
+        const states = await Promise.all(clients.map(async (client) => {
+          const [chainId, block, code, tokenCode, sponsorCode, name,
+            domainSeparator, nonce, balance, sponsorBalance, fees] =
+            await Promise.all([
+              client.getChainId(),
+              client.getBlock({ blockNumber }),
+              client.getCode({ address: input.walletAddress, blockNumber }),
+              client.getCode({ address: MAIN_TOKEN_ADDRESS, blockNumber }),
+              client.getCode({ address: input.configuration.sponsorAddress, blockNumber }),
+              client.readContract({
+                address: MAIN_TOKEN_ADDRESS,
+                abi: TOKEN_ABI,
+                functionName: "name",
+                blockNumber,
+              }),
+              client.readContract({
+                address: MAIN_TOKEN_ADDRESS,
+                abi: TOKEN_ABI,
+                functionName: "DOMAIN_SEPARATOR",
+                blockNumber,
+              }),
+              client.readContract({
+                address: MAIN_TOKEN_ADDRESS,
+                abi: TOKEN_ABI,
+                functionName: "nonces",
+                args: [input.walletAddress],
+                blockNumber,
+              }),
+              client.readContract({
+                address: MAIN_TOKEN_ADDRESS,
+                abi: TOKEN_ABI,
+                functionName: "balanceOf",
+                args: [input.walletAddress],
+                blockNumber,
+              }),
+              client.getBalance({ address: input.configuration.sponsorAddress, blockNumber }),
+              client.estimateFeesPerGas(),
+            ]);
+          return {
+            chainId, block, code: code ?? "0x", tokenCode,
+            sponsorCode: sponsorCode ?? "0x", name, domainSeparator,
+            nonce, balance, sponsorBalance,
+            fee: fees.maxFeePerGas,
+            priorityFee: fees.maxPriorityFeePerGas,
+          };
+        }));
+        const [left, right] = states;
+        if (!left || !right || left.chainId !== MAIN_TOKEN_MIGRATION_CHAIN_ID ||
+          right.chainId !== MAIN_TOKEN_MIGRATION_CHAIN_ID ||
+          left.block.number !== blockNumber || right.block.number !== blockNumber ||
+          !left.block.hash || left.block.hash !== right.block.hash ||
+          left.block.timestamp !== right.block.timestamp || left.code !== right.code ||
+          left.sponsorCode !== right.sponsorCode ||
+          left.tokenCode !== right.tokenCode || left.name !== right.name ||
+          left.domainSeparator !== right.domainSeparator || left.nonce !== right.nonce ||
+          left.balance !== right.balance || left.sponsorBalance !== right.sponsorBalance ||
+          !left.tokenCode || !right.tokenCode) {
+          throw new MainTokenMigrationGaslessErrorV1(503, "rpc_quorum_unavailable");
+        }
+        if (keccak256(left.tokenCode) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256 ||
+          left.name !== MAIN_TOKEN_NAME ||
+          left.domainSeparator.toLowerCase() !==
+            MAIN_TOKEN_PERMIT_DOMAIN_SEPARATOR.toLowerCase()) {
+          throw new MainTokenMigrationGaslessErrorV1(503, "token_binding_mismatch");
+        }
+        if (left.sponsorCode !== "0x") {
+          throw new MainTokenMigrationGaslessErrorV1(503, "sponsor_wallet_mismatch");
+        }
+        if (!isMainTokenMigrationWalletCodeEligible(left.code)) {
+          throw new MainTokenMigrationGaslessErrorV1(422, "gasless_wallet_unsupported");
+        }
+        if (left.balance < input.amountRaw) {
+          throw new MainTokenMigrationGaslessErrorV1(422, "insufficient_balance");
+        }
+        if (!left.fee || !right.fee || left.fee < 0n || right.fee < 0n ||
+          left.priorityFee === undefined || right.priorityFee === undefined ||
+          left.priorityFee < 0n || right.priorityFee < 0n) {
+          throw new MainTokenMigrationGaslessErrorV1(503, "gas_quote_unavailable");
+        }
+        return Object.freeze({
+          nonce: left.nonce,
+          feePerGasWei: left.fee > right.fee ? left.fee : right.fee,
+          maxPriorityFeePerGasWei: left.priorityFee > right.priorityFee
+            ? left.priorityFee : right.priorityFee,
+          sponsorBalanceWei: left.sponsorBalance,
+          // Gasless support binds the current holder; the separate ETH faucet
+          // retains its historical eligibility and relocation guards.
+          rootWalletAddress: getAddress(input.walletAddress),
+        });
+      } catch (error) {
+        if (error instanceof MainTokenMigrationGaslessErrorV1) throw error;
+        throw new MainTokenMigrationGaslessErrorV1(503, "rpc_quorum_unavailable");
+      }
     },
 
     async assertPermitEffect(record: MainTokenMigrationGaslessRecordV1) {
@@ -744,12 +827,13 @@ function parseRequest(input: unknown): PrepareRequest | SubmitRequest {
     throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
   }
   const value = input as Record<string, unknown>;
-  const common = value.action === "prepare"
+  const common = value.action === "prepare" || value.action === "resume"
     ? ["action", "amountRaw", "walletAddress"]
     : ["action", "amountRaw", "nonce", "permitDeadline", "permitSignature",
       "requestBindingHash", "walletAddress"];
   if (Object.keys(value).sort().join("\0") !== common.sort().join("\0") ||
-    (value.action !== "prepare" && value.action !== "submit") ||
+    (value.action !== "prepare" && value.action !== "resume" &&
+      value.action !== "submit") ||
     typeof value.walletAddress !== "string" ||
     !isAddress(value.walletAddress, { strict: true }) ||
     typeof value.amountRaw !== "string" || !DECIMAL.test(value.amountRaw)) {
@@ -760,8 +844,8 @@ function parseRequest(input: unknown): PrepareRequest | SubmitRequest {
     throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
   }
   const walletAddress = getAddress(value.walletAddress);
-  if (value.action === "prepare") {
-    return Object.freeze({ action: "prepare", walletAddress, amountRaw });
+  if (value.action === "prepare" || value.action === "resume") {
+    return Object.freeze({ action: value.action, walletAddress, amountRaw });
   }
   if (typeof value.nonce !== "string" || !ZERO_DECIMAL.test(value.nonce) ||
     typeof value.permitDeadline !== "string" || !DECIMAL.test(value.permitDeadline) ||
@@ -856,6 +940,16 @@ function errorResponse(error: unknown) {
   }
   const message = failure.status === 401 || failure.status === 403
     ? "Reconnect this wallet and try again."
+    : failure.code === "relay_needs_attention" || failure.code === "permit_expired"
+      ? "This gasless request needs migration support. Do not send V4 again; contact support with this request ID."
+    : failure.code === "gasless_request_not_found"
+      ? "No stored signed gasless request was found. Contact migration support before starting again."
+    : failure.code === "insufficient_balance"
+      ? "This wallet does not hold the requested V4 amount. Refresh your balance before starting a new transfer."
+    : failure.code === "budget_exhausted"
+      ? "The gas sponsorship budget is exhausted. No new gasless transfer can start."
+    : failure.code === "sponsor_balance_low"
+      ? "Gas sponsorship needs more ETH before a new transfer can start. Contact migration support."
     : failure.code === "permit_reverted" ||
         failure.code === "transfer_reverted"
       ? "The gasless relay reverted and cannot be retried automatically. Do not send again; contact migration support with this request ID."
@@ -949,12 +1043,19 @@ function assertWindowOpen(
   configuration: MainTokenMigrationGasSponsorConfigurationV1,
   now: Date,
 ) {
-  const nowSeconds = Math.floor(now.getTime() / 1_000);
-  if (!Number.isFinite(nowSeconds) ||
-    nowSeconds >= configuration.deadlineTimestampExclusive -
-      DEADLINE_SAFETY_SECONDS) {
+  if (!windowOpen(configuration, now)) {
     throw new MainTokenMigrationGaslessErrorV1(503, "sponsorship_closed");
   }
+}
+
+function windowOpen(
+  configuration: MainTokenMigrationGasSponsorConfigurationV1,
+  now: Date,
+) {
+  const nowSeconds = Math.floor(now.getTime() / 1_000);
+  return Number.isFinite(nowSeconds) &&
+    nowSeconds >= configuration.windowStartTimestamp &&
+    nowSeconds < configuration.deadlineTimestampExclusive - DEADLINE_SAFETY_SECONDS;
 }
 
 function divCeil(value: bigint, denominator: bigint) {
@@ -977,6 +1078,7 @@ export function getProductionMainTokenMigrationGaslessTransferV1() {
     environment: process.env,
     manifest: activationManifest,
     nowMs: Date.now(),
+    allowClosedWindowReadback: true,
   });
   if (!configuration) {
     throw new MainTokenMigrationGaslessErrorV1(503, "sponsorship_disabled");

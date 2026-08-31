@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,13 +7,21 @@ import {
   gasSponsorshipErrorMessage,
   gasSponsorshipFailure,
   gasSponsorshipState,
+  gaslessTransferFailure,
+  gaslessTransferIdempotencyKey,
   hasEnoughMigrationGas,
+  migrationGaslessResumeAmount,
+  migrationTransferRoute,
   parseGasSponsorshipResponse,
   sponsorshipRetryAfterMs,
   waitForMigrationRetry,
   type MainTokenGasSponsorshipResponse,
   type MainTokenGasSponsorshipStatus,
 } from "../components/main-token-migration";
+import {
+  MAIN_TOKEN_MIGRATION_RELEASE_ID,
+  MAIN_TOKEN_TOTAL_SUPPLY_RAW,
+} from "../lib/main-token-migration";
 
 const SCHEMA =
   "programmable-main-token-migration-gas-sponsorship/v1" as const;
@@ -39,6 +48,7 @@ describe("main token migration gas sponsorship UI contract", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("accepts only the exact schema and connected wallet", () => {
@@ -110,6 +120,140 @@ describe("main token migration gas sponsorship UI contract", () => {
     expect(hasEnoughMigrationGas(0n, gasPriceWei)).toBe(false);
     expect(hasEnoughMigrationGas(exactReserveWei, 0n)).toBe(false);
     expect(hasEnoughMigrationGas(-1n, gasPriceWei)).toBe(false);
+  });
+
+  it("routes current EOAs without ETH to token-bound gasless checks", () => {
+    const input = {
+      accountCodeStatus: "eoa" as const,
+      nativeBalanceWei: 0n,
+      gasPriceWei: 2_000_000_000n,
+      resumingGasless: false,
+    };
+    expect(migrationTransferRoute(input)).toBe("gasless");
+    expect(migrationTransferRoute({
+      ...input,
+      nativeBalanceWei: 100_000n * input.gasPriceWei,
+    })).toBe("wallet");
+    expect(migrationTransferRoute({
+      ...input,
+      accountCodeStatus: "delegated",
+      nativeBalanceWei: 100_000n * input.gasPriceWei,
+    })).toBe("gasless");
+    expect(migrationTransferRoute({
+      ...input,
+      accountCodeStatus: "contract",
+    })).toBe("unsupported");
+  });
+
+  it("does not infer readiness from an unknown gas balance or wallet code", () => {
+    const input = {
+      accountCodeStatus: "eoa" as const,
+      nativeBalanceWei: 0n,
+      gasPriceWei: 2_000_000_000n,
+      resumingGasless: false,
+    };
+    for (const change of [
+      { nativeBalanceWei: null },
+      { nativeBalanceWei: -1n },
+      { gasPriceWei: null },
+      { gasPriceWei: 0n },
+      { accountCodeStatus: "unavailable" as const },
+      { accountCodeStatus: "checking" as const },
+    ]) {
+      expect(migrationTransferRoute({ ...input, ...change })).toBe("checking");
+    }
+    expect(migrationTransferRoute({
+      ...input,
+      accountCodeStatus: "checking",
+      nativeBalanceWei: null,
+      gasPriceWei: null,
+      resumingGasless: true,
+    })).toBe("gasless");
+    expect(migrationTransferRoute({
+      ...input,
+      accountCodeStatus: "contract",
+      resumingGasless: true,
+    })).toBe("unsupported");
+  });
+
+  it("resumes only the same wallet's exact saved amount even after its balance is spent", () => {
+    const saved = { account: WALLET, amountRaw: "2000000000000000000" };
+    expect(migrationGaslessResumeAmount(saved, WALLET)).toBe(2_000_000_000_000_000_000n);
+    expect(migrationGaslessResumeAmount(saved, OTHER_WALLET)).toBeNull();
+    expect(migrationGaslessResumeAmount(saved, null)).toBeNull();
+    expect(migrationGaslessResumeAmount(null, WALLET)).toBeNull();
+    const account = `0x${"ab".repeat(20)}`;
+    expect(migrationGaslessResumeAmount({ ...saved, account },
+      `0x${"AB".repeat(20)}`)).toBe(2_000_000_000_000_000_000n);
+    for (const amountRaw of ["0", "01", "-1", "1e18", " 1", "9".repeat(29),
+      (MAIN_TOKEN_TOTAL_SUPPLY_RAW + 1n).toString()]) {
+      expect(migrationGaslessResumeAmount({ ...saved, amountRaw }, WALLET)).toBeNull();
+    }
+  });
+
+  it("never replaces a missing saved gasless request key while resuming", () => {
+    const localStorage = { getItem: vi.fn(() => null), setItem: vi.fn() };
+    const randomUUID = vi.fn(() => "new-key-must-not-be-used");
+    vi.stubGlobal("window", { localStorage, crypto: { randomUUID } });
+    const keys = new Map<string, string>();
+    expect(() => gaslessTransferIdempotencyKey(WALLET, keys, true)).toThrow(
+      "saved migration request key is unavailable",
+    );
+    expect(randomUUID).not.toHaveBeenCalled();
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(keys.size).toBe(0);
+    localStorage.getItem.mockImplementation(() => { throw new Error("Storage unavailable"); });
+    expect(() => gaslessTransferIdempotencyKey(WALLET, keys, true)).toThrow(
+      "saved migration request key is unavailable",
+    );
+    expect(randomUUID).not.toHaveBeenCalled();
+  });
+
+  it("reuses the saved gasless request key for every reconciliation", () => {
+    const key = "gasless-existing-request-123456789";
+    const localStorage = { getItem: vi.fn(() => key), setItem: vi.fn() };
+    vi.stubGlobal("window", { localStorage });
+    const keys = new Map<string, string>();
+    expect(gaslessTransferIdempotencyKey(WALLET, keys, true)).toBe(key);
+    expect(localStorage.getItem).toHaveBeenCalledWith(
+      `programmable:main-token-migration:gasless:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${WALLET}`,
+    );
+    expect(gaslessTransferIdempotencyKey(WALLET, keys, true)).toBe(key);
+    expect(localStorage.getItem).toHaveBeenCalledOnce();
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+  });
+
+  it("recognizes only the exact server missing-request code for bounded pre-submit recovery", async () => {
+    const requestId = "123e4567-e89b-12d3-a456-426614174000";
+    await expect(gaslessTransferFailure(new Response(JSON.stringify({
+      error: { code: "gasless_request_not_found", message: "Saved request not found.", requestId },
+    }), { status: 409 }))).resolves.toEqual({
+      code: "gasless_request_not_found",
+      message: `Saved request not found. Request ID: ${requestId}`,
+    });
+    await expect(gaslessTransferFailure(new Response(JSON.stringify({
+      error: { code: "gasless_request_not_found\n", message: "x".repeat(241) },
+    }), { status: 409 }))).resolves.toEqual({
+      code: "",
+      message: "The gasless transfer is temporarily unavailable.",
+    });
+  });
+
+  it("persists only signed requests and never drops a pending marker on cancellation", () => {
+    const source = readFileSync(new URL("../components/main-token-migration.tsx", import.meta.url), "utf8");
+    const review = source.slice(source.indexOf("  async function reviewGaslessTransfer("),
+      source.indexOf("  async function reviewTransfer()"));
+    expect(review.indexOf("const permit = await signMainTokenMigrationPermit")).toBeLessThan(
+      review.indexOf("const progress = persistGaslessTransferProgress"),
+    );
+    const beforeConfirmation = review.slice(0, review.indexOf('result.status === "confirmed"'));
+    expect(beforeConfirmation).not.toContain("clearGaslessTransferProgress()");
+    expect(review).toContain('action: "resume"');
+    expect(review).toContain("resumeExisting || preservePendingRequest");
+    expect(review).toContain('resumeExisting && response.status === 409 &&');
+    expect(review).toContain('failure.code === "gasless_request_not_found" && trustedTransferWindowOpen()');
+    expect(review).toContain("reviewGaslessTransfer(account, amountRaw, false, true)");
+    expect(source).not.toContain('Gasless transfer available');
   });
 
   it("honors the full Retry-After minimum and falls back safely", () => {

@@ -68,6 +68,117 @@ function request(body: unknown) {
   });
 }
 
+async function recoveryFixture() {
+  const permitDeadline = BigInt(Math.floor(now.getTime() / 1_000) + 600);
+  const baseBindings = deriveMainTokenMigrationSponsorBindingsV1({
+    releaseId: configuration.releaseId,
+    walletAddress: account.address,
+    amountRaw: 100n,
+    idempotencyKey,
+  });
+  const requestBindingHash = deriveMainTokenMigrationGaslessBindingV1({
+    baseRequestBindingHash: baseBindings.requestBindingHash,
+    nonce: 0n,
+    permitDeadline,
+  });
+  const permitSignature = await account.signTypedData(
+    buildMainTokenMigrationPermitTypedData({
+      owner: account.address, spender: sponsorAddress, value: 100n,
+      nonce: 0n, deadline: permitDeadline,
+    }),
+  );
+  type ReceiptStatus = "pending" | "failed" |
+    { status: "confirmed"; blockNumber: bigint };
+  type ProviderStatus = { status: string; transactionHash: `0x${string}` | null };
+  const state: {
+    now: Date;
+    record: MainTokenMigrationGaslessRecordV1 | null;
+    permitStatus: ReceiptStatus;
+    transferStatus: ReceiptStatus;
+    permitProvider: ProviderStatus | null;
+    transferProvider: ProviderStatus | null;
+  } = {
+    now,
+    record: {
+      intent: {
+        schema: "programmable-main-token-migration-gasless-intent/v1",
+        releaseId: configuration.releaseId,
+        walletAddress: account.address,
+        rootWalletAddress: account.address,
+        sponsorAddress,
+        amountRaw: "100",
+        nonce: "0",
+        permitDeadline: permitDeadline.toString(),
+        permitSignature,
+        permitGasLimit: "100000",
+        transferGasLimit: "100000",
+        maxFeePerGasWei: "1000000000",
+        maxPriorityFeePerGasWei: "100000000",
+        reservedTotalWei: "200000000000000",
+        totalBudgetWei: configuration.totalBudgetWei.toString(),
+        requestBindingHash,
+        providerPermitIdempotencyKey: "mtmgp-recovery-fixture",
+        providerPermitReferenceId: "mtmgp-recovery-fixture",
+        providerTransferIdempotencyKey: "mtmgt-recovery-fixture",
+        providerTransferReferenceId: "mtmgt-recovery-fixture",
+        reservedAt: now.toISOString(),
+      },
+      permitTransactionHash: permitHash,
+      transferTransactionHash: transferHash,
+    },
+    permitStatus: { status: "confirmed", blockNumber: 25_900_001n },
+    transferStatus: { status: "confirmed", blockNumber: 25_900_002n },
+    permitProvider: null,
+    transferProvider: null,
+  };
+  const store = {
+    get: vi.fn(async () => state.record),
+    reserve: vi.fn(async () => { throw new Error("resume must not reserve"); }),
+    complete: vi.fn(async (input: {
+      kind: "permit" | "transfer"; transactionHash: `0x${string}`;
+    }) => {
+      if (!state.record) throw new Error("missing signed request");
+      state.record = {
+        ...state.record,
+        permitTransactionHash: input.kind === "permit"
+          ? input.transactionHash : state.record.permitTransactionHash,
+        transferTransactionHash: input.kind === "transfer"
+          ? input.transactionHash : state.record.transferTransactionHash,
+      };
+      return state.record;
+    }),
+  };
+  const chain = {
+    prepare: vi.fn(async () => { throw new Error("resume must not recheck balance"); }),
+    assertPermitEffect: vi.fn(async () => {}),
+    transactionStatus: vi.fn(async (kind: "permit" | "transfer") =>
+      kind === "permit" ? state.permitStatus : state.transferStatus),
+  };
+  const sender = {
+    assertReady: vi.fn(async () => {}),
+    lookup: vi.fn(async (kind: "permit" | "transfer") =>
+      kind === "permit" ? state.permitProvider : state.transferProvider),
+    send: vi.fn(async (kind: "permit" | "transfer") =>
+      kind === "permit" ? permitHash : transferHash),
+  };
+  const handler = createMainTokenMigrationGaslessTransferV1({
+    configuration,
+    authenticator: {
+      async authenticate() {
+        return {
+          privyUserId: "did:privy:test", privySessionId: "session-test",
+          wallets: [account.address],
+        };
+      },
+    },
+    admissionStore: { async admit() {} } as never,
+    store: store as never, chain: chain as never, sender: sender as never,
+    now: () => state.now,
+  });
+  const resume = { action: "resume", walletAddress: account.address, amountRaw: "100" };
+  return { state, handler, store, chain, sender, resume };
+}
+
 describe("main token migration gasless permit transfer", () => {
   it("finishes the exact relay without counting progress as new transfer requests", async () => {
     const database = new PGlite();
@@ -451,7 +562,7 @@ describe("main token migration gasless permit transfer", () => {
           error: { code, message, requestId: expect.any(String) },
         });
       }
-      expect(reserve).toHaveBeenCalledTimes(boundary === "provider" ? 1 : 0);
+      expect(reserve).not.toHaveBeenCalled();
       expect(complete).not.toHaveBeenCalled();
       expect(lookup).not.toHaveBeenCalled();
       expect(send).not.toHaveBeenCalled();
@@ -464,6 +575,125 @@ describe("main token migration gasless permit transfer", () => {
       errors.mockRestore();
       warnings.mockRestore();
     }
+  });
+
+  it("resumes a completed signed transfer without balance checks or another signature", async () => {
+    const { handler, chain, sender, store, resume } = await recoveryFixture();
+    const response = await handler.post(request(resume));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "confirmed", transferTransactionHash: transferHash,
+      transferBlockNumber: "25900002",
+    });
+    expect(chain.prepare).not.toHaveBeenCalled();
+    expect(chain.assertPermitEffect).not.toHaveBeenCalled();
+    expect(store.reserve).not.toHaveBeenCalled();
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+
+  it("resumes only the already-authorized transfer during the open window", async () => {
+    const { state, handler, chain, sender, store, resume } = await recoveryFixture();
+    state.record = { ...state.record!, transferTransactionHash: null };
+    const response = await handler.post(request(resume));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "transfer_submitted", transferTransactionHash: transferHash,
+    });
+    expect(chain.prepare).not.toHaveBeenCalled();
+    expect(chain.assertPermitEffect).toHaveBeenCalledOnce();
+    expect(store.reserve).not.toHaveBeenCalled();
+    expect(sender.send).toHaveBeenCalledExactlyOnceWith("transfer", state.record!.intent);
+  });
+
+  it("reads known receipts after closing without a provider send, policy call or reservation", async () => {
+    const { state, handler, chain, sender, store, resume } = await recoveryFixture();
+    state.now = new Date((configuration.deadlineTimestampExclusive + 60) * 1_000);
+    const response = await handler.post(request(resume));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "confirmed" });
+    state.transferStatus = "pending";
+    expect(await (await handler.post(request(resume))).json()).toMatchObject({
+      status: "transfer_pending",
+    });
+    expect(chain.prepare).not.toHaveBeenCalled();
+    expect(sender.assertReady).not.toHaveBeenCalled();
+    expect(sender.lookup).toHaveBeenCalledExactlyOnceWith("transfer", state.record!.intent);
+    expect(sender.send).not.toHaveBeenCalled();
+    expect(store.reserve).not.toHaveBeenCalled();
+    expect(store.complete).not.toHaveBeenCalled();
+  });
+
+  it("recovers a previously sent hash after closing but never sends a missing transaction", async () => {
+    const { state, handler, chain, sender, store, resume } = await recoveryFixture();
+    state.now = new Date((configuration.deadlineTimestampExclusive + 60) * 1_000);
+    state.record = { ...state.record!, transferTransactionHash: null };
+    state.transferProvider = { status: "broadcasted", transactionHash: transferHash };
+    expect(await (await handler.post(request(resume))).json()).toMatchObject({
+      status: "transfer_submitted", transferTransactionHash: transferHash,
+    });
+    expect(await (await handler.post(request(resume))).json()).toMatchObject({ status: "confirmed" });
+    expect(store.complete).toHaveBeenCalledOnce();
+    state.record = { ...state.record!, transferTransactionHash: null };
+    state.transferProvider = null;
+    const response = await handler.post(request(resume));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "relay_needs_attention" } });
+    expect(chain.prepare).not.toHaveBeenCalled();
+    expect(chain.assertPermitEffect).not.toHaveBeenCalled();
+    expect(sender.assertReady).not.toHaveBeenCalled();
+    expect(sender.send).not.toHaveBeenCalled();
+    expect(store.reserve).not.toHaveBeenCalled();
+  });
+
+  it("refuses missing or changed resume bindings without signing, reserving or sending", async () => {
+    const { state, handler, chain, sender, store, resume } = await recoveryFixture();
+    const changed = await handler.post(request({ ...resume, amountRaw: "101" }));
+    expect(changed.status).toBe(409);
+    const differentKey = request(resume);
+    differentKey.headers.set("idempotency-key", "different-request-key-0001");
+    expect((await handler.post(differentKey)).status).toBe(409);
+    state.record = null;
+    const missing = await handler.post(request(resume));
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({
+      error: { code: "gasless_request_not_found" },
+    });
+    expect(chain.prepare).not.toHaveBeenCalled();
+    expect(sender.send).not.toHaveBeenCalled();
+    expect(store.reserve).not.toHaveBeenCalled();
+  });
+
+  it("does not first-send an expired permit but recovers its already-known provider hash", async () => {
+    const { state, handler, sender, resume } = await recoveryFixture();
+    state.now = new Date((Number(state.record!.intent.permitDeadline) + 1) * 1_000);
+    state.record = { ...state.record!, permitTransactionHash: null, transferTransactionHash: null };
+    const expired = await handler.post(request(resume));
+    expect(expired.status).toBe(422);
+    expect(await expired.json()).toMatchObject({ error: { code: "permit_expired" } });
+    expect(sender.lookup).toHaveBeenCalledOnce();
+    expect(sender.send).not.toHaveBeenCalled();
+    state.permitProvider = { status: "broadcasted", transactionHash: permitHash };
+    expect(await (await handler.post(request(resume))).json()).toMatchObject({
+      status: "permit_submitted", permitTransactionHash: permitHash,
+    });
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("stops a replaced provider transaction without adopting or resending it (known=%s)", async (known) => {
+    const { state, handler, sender, store, resume } = await recoveryFixture();
+    state.record = {
+      ...state.record!, permitTransactionHash: known ? permitHash : null,
+      transferTransactionHash: null,
+    };
+    state.permitStatus = "pending";
+    state.permitProvider = { status: "replaced", transactionHash: permitHash };
+    const response = await handler.post(request(resume));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "relay_needs_attention", message: expect.stringContaining("Do not send V4 again") },
+    });
+    expect(store.complete).not.toHaveBeenCalled();
+    expect(sender.send).not.toHaveBeenCalled();
   });
 
   it("durably binds one root wallet and both exact relayer transactions", async () => {
