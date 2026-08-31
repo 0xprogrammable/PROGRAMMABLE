@@ -603,7 +603,7 @@ function transferWindowOpenAt(now: number, uncertaintyMs = 0) {
 }
 
 function remainingAt(now: number, phase: MigrationPhase) {
-  if (phase === "preview") return MAIN_TOKEN_MIGRATION_WINDOW_SECONDS;
+  if (phase === "preview") return null;
   const target =
     phase === "upcoming" ? migrationWindow.startAt : migrationWindow.deadlineAt;
   if (target === null) return 0;
@@ -674,7 +674,7 @@ function Countdown({
         : phase === "upcoming"
           ? "Migration opens in"
           : phase === "preview"
-            ? "Planned migration window"
+            ? "72-hour migration window"
             : "Migration closes in";
 
   return (
@@ -687,33 +687,39 @@ function Countdown({
       }
     >
       <span className={styles.countdownLabel}>{label}</span>
-      <div className={styles.clock} aria-hidden="true">
-        <span>
-          <strong>{parts?.hours ?? "––"}</strong>
-          <small>Hours</small>
-        </span>
-        <i>:</i>
-        <span>
-          <strong>{parts?.minutes ?? "––"}</strong>
-          <small>Minutes</small>
-        </span>
-        <i>:</i>
-        <span>
-          <strong>{parts?.seconds ?? "––"}</strong>
-          <small>Seconds</small>
-        </span>
-      </div>
-      <span className={styles.absoluteDeadline}>
-        {phase === "checking"
-          ? "Verifying the published UTC window"
-          : phase === "preview"
-            ? "96-hour transfer window"
-            : `${phase === "upcoming" ? "Opens" : "Closes"} ${formatUtc(
-                phase === "upcoming"
-                  ? migrationWindow.startAt
-                  : migrationWindow.deadlineAt,
-              )}`}
-      </span>
+      {phase === "preview" ? (
+        <strong className={styles.previewCountdown}>
+          The countdown has not started
+        </strong>
+      ) : (
+        <>
+          <div className={styles.clock} aria-hidden="true">
+            <span>
+              <strong>{parts?.hours ?? "––"}</strong>
+              <small>Hours</small>
+            </span>
+            <i>:</i>
+            <span>
+              <strong>{parts?.minutes ?? "––"}</strong>
+              <small>Minutes</small>
+            </span>
+            <i>:</i>
+            <span>
+              <strong>{parts?.seconds ?? "––"}</strong>
+              <small>Seconds</small>
+            </span>
+          </div>
+          <span className={styles.absoluteDeadline}>
+            {phase === "checking"
+              ? "Verifying the published UTC window"
+              : `${phase === "upcoming" ? "Opens" : "Closes"} ${formatUtc(
+                  phase === "upcoming"
+                    ? migrationWindow.startAt
+                    : migrationWindow.deadlineAt,
+                )}`}
+          </span>
+        </>
+      )}
     </div>
   );
 }
@@ -782,7 +788,11 @@ export function MainTokenMigration() {
     });
   }, []);
 
-  const phase = now === null ? "checking" : phaseAt(now);
+  const phase = !migrationWindow.enabled
+    ? "preview"
+    : now === null
+      ? "checking"
+      : phaseAt(now);
   const remaining = now === null ? null : remainingAt(now, phase);
   const onMainnet =
     wallet !== null &&
@@ -863,6 +873,7 @@ export function MainTokenMigration() {
   }, [amount, balance]);
 
   useEffect(() => {
+    if (!migrationWindow.enabled) return;
     let cancelled = false;
     const synchronize = async () => {
       const requestStartedAt = performance.now();
@@ -1646,7 +1657,7 @@ export function MainTokenMigration() {
     <article className={styles.page}>
       <section className={styles.hero} aria-labelledby="migration-title">
         <div className={styles.previewFlag} hidden={phase !== "preview"}>
-          Local preview · transfers disabled
+          No action required right now
         </div>
         <Image
           className={styles.loopMark}
@@ -1676,14 +1687,14 @@ export function MainTokenMigration() {
           <span className={styles.chainName}>Robinhood</span>
         </div>
         <Countdown phase={phase} remaining={remaining} />
-        {clockIssue ? (
+        {phase !== "preview" && clockIssue ? (
           <p className={styles.clockIssue} role="status">
             {clockIssue}
           </p>
         ) : null}
         <p className={styles.heroCopy}>
-          Send V4 during the active window. The same token amount will be sent
-          to the same wallet on Robinhood.
+          When the window opens, send V4 from Ethereum. The same number of V4
+          tokens will go to that wallet on Robinhood.
         </p>
         <p className={styles.officialNotice}>
           Use only <strong>programmable.market/migration</strong>. Programmable
@@ -1691,10 +1702,42 @@ export function MainTokenMigration() {
         </p>
       </section>
 
-      <section
-        className={styles.migrationPanel}
-        aria-labelledby="send-v4-title"
-      >
+      {phase === "preview" ? (
+        <section
+          className={`${styles.migrationPanel} ${styles.previewPanel}`}
+          aria-labelledby="migration-preview-title"
+        >
+          <header className={styles.previewPanelHeader}>
+            <p>Migration opens soon</p>
+            <h2 id="migration-preview-title">Two simple ways to send V4</h2>
+            <span>
+              The timer, official address and transfer buttons will appear here
+              when the window starts.
+            </span>
+          </header>
+          <div className={styles.previewOptions}>
+            <div>
+              <strong>Connect your wallet</strong>
+              <span>
+                Choose an amount or select Max. If you have no ETH,
+                Programmable can sponsor the gas. You still approve the V4
+                transfer in your wallet.
+              </span>
+            </div>
+            <div>
+              <strong>Send V4 manually</strong>
+              <span>
+                Prefer not to connect? Copy the official address here and send
+                V4 from the wallet that should receive the Robinhood tokens.
+              </span>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section
+          className={styles.migrationPanel}
+          aria-labelledby="send-v4-title"
+        >
         {phase === "closed" ? (
           <div className={styles.closedNotice} role="alert">
             <strong>Migration closed</strong>
@@ -2139,7 +2182,8 @@ export function MainTokenMigration() {
             )}
           </aside>
         </div>
-      </section>
+        </section>
+      )}
     </article>
   );
 }

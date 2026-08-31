@@ -11,9 +11,9 @@ import migrationActivationManifest from "@/config/main-token-migration-activatio
 const loopMark = "/brand/loop/programmable-loop-mark-header-white-v1-1536.png";
 const HERO_TWINKLE_COUNT = 120;
 const migrationAnnouncementVisible =
-  migrationActivationManifest.enabled === true &&
   process.env.NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_VISIBLE ===
   "true";
+const migrationWindowActive = migrationActivationManifest.enabled === true;
 
 type HeroStarStyle = CSSProperties & {
   "--hero-star-delay": string;
@@ -161,9 +161,16 @@ export function LandingPage() {
           <h1 id="landing-title">Programmable</h1>
           <p>Build and launch custom Uniswap v4 hooks</p>
           {migrationAnnouncementVisible ? (
-            <Link className={styles.migrationCta} href="/migration">
-              <span>We are migrating</span>
-              <small>Ethereum → Robinhood Chain</small>
+            <Link
+              className={styles.migrationCta}
+              href="/migration"
+            >
+              <span>V4 is moving to Robinhood</span>
+              <small>
+                {migrationWindowActive
+                  ? "Migration window open · View details"
+                  : "Migration opens soon · View details"}
+              </small>
             </Link>
           ) : null}
         </div>

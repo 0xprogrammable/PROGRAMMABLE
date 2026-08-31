@@ -1,12 +1,13 @@
 # Main Token Migration Gas Sponsor V1
 
-Status: release-live. The checked-in activation manifest binds the exact migration window. No committed file contains
-the operational Privy wallet ID, policy ID, sponsor address or release budget.
+Status: preparation-ready, activation-blocked. The checked-in activation manifest binds the 72-hour release policy,
+but it intentionally contains no start time, deadline or eligibility-block anchor yet. No committed file contains the
+operational Privy wallet ID, policy ID, sponsor address or release budget.
 
 ## Purpose
 
 This runbook defines the server-only activation contract for one bounded Ethereum Mainnet gas top-up per eligible
-V4 holder during the exact 96-hour migration window. The sponsor sends native ETH only to the authenticated holder
+V4 holder during the exact 72-hour migration window. The sponsor sends native ETH only to the authenticated holder
 wallet so that the holder can separately approve the exact V4 token transfer in their own wallet. It never sends V4,
 never submits the holder's token transfer, and never uses the migration recipient wallet as the sponsor.
 
@@ -46,7 +47,7 @@ Activation additionally requires the normal runtime dependencies:
 | `PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT` | Commitment to the secondary endpoint |
 
 The root migration manifest must independently bind the exact release, token, runtime-code hash, migration wallet,
-96-hour timestamps, finalized pre-window eligibility block number and block hash. Sponsor configuration is accepted only while that
+72-hour timestamps, finalized pre-window eligibility block number and block hash. Sponsor configuration is accepted only while that
 manifest has `enabled: true`, the current time is inside the window, and at least five minutes remain.
 
 ## Privy wallet and policy
@@ -128,7 +129,7 @@ value, fee fields, gas limit, empty calldata and successful receipt on the same 
 5. Configure the Privy secret, projection database bindings and exact independent RPC commitments on the immutable
    deployment candidate.
 6. Before the migration opens, record one exact block number/hash already finalized by both providers and calculate
-   timestamps whose exclusive deadline is exactly 345,600 seconds after the start.
+   timestamps whose exclusive deadline is exactly 259,200 seconds after the start.
 7. Only the integration owner may change the reviewed activation manifest to `enabled: true`, inject all six sponsor
    values with `MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED=true`, and deploy the exact reviewed `production` commit.
 8. Run the separate readiness checklist before exposing the migration entry point.

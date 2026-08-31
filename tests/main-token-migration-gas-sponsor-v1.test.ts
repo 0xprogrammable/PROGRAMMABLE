@@ -53,7 +53,7 @@ const TEST_ERC20_ABI = parseAbi([
   "function transferFrom(address from,address to,uint256 amount) returns (bool)",
 ]);
 const CONFIGURATION: MainTokenMigrationGasSponsorConfigurationV1 = {
-  releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
+  releaseId: "v4-ethereum-to-robinhood-72h-2026-v2",
   windowStartTimestamp: 1_899_654_400,
   startBlockNumber: 100n,
   startBlockHash: `0x${"12".repeat(32)}`,
@@ -528,7 +528,7 @@ describe("main token migration gas sponsor", () => {
     }
   });
 
-  it("accepts only the exact 96-hour release identity and window", () => {
+  it("accepts only the exact 72-hour release identity and window", () => {
     const start = Math.floor(NOW.getTime() / 1_000) - 60;
     const manifest = {
       schema: "programmable-main-token-migration-activation/v1",
@@ -565,8 +565,8 @@ describe("main token migration gas sponsor", () => {
       manifest,
       nowMs: NOW.getTime(),
     })).toMatchObject({
-      releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
-      deadlineTimestampExclusive: start + 96 * 60 * 60,
+      releaseId: "v4-ethereum-to-robinhood-72h-2026-v2",
+      deadlineTimestampExclusive: start + 72 * 60 * 60,
     });
     expect(readMainTokenMigrationGasSponsorConfigurationV1({
       environment,

@@ -57,18 +57,17 @@ describe("main token migration gas sponsor activation contract", () => {
 
   it("pins the checked-in release window while keeping operational sponsor values blank", () => {
     expect(contract.releaseId).toBe(
-      "v4-ethereum-to-robinhood-96h-2026-v1",
+      "v4-ethereum-to-robinhood-72h-2026-v2",
     );
     expect(manifest).toMatchObject({
       schema: "programmable-main-token-migration-activation/v1",
       releaseId: contract.releaseId,
-      enabled: true,
-      windowDurationSeconds: "345600",
-      windowStartTimestamp: "1788125400",
-      deadlineTimestampExclusive: "1788471000",
-      startBlockNumber: "25870405",
-      startBlockHash:
-        "0xe4f50afeba1884b8354b3c962f99a258f2901f9768ec8da8ad05391761ff57de",
+      enabled: false,
+      windowDurationSeconds: "259200",
+      windowStartTimestamp: null,
+      deadlineTimestampExclusive: null,
+      startBlockNumber: null,
+      startBlockHash: null,
     });
 
     expect(environment).toContain(
@@ -108,9 +107,9 @@ describe("main token migration gas sponsor activation contract", () => {
       expect(runbook).toContain(`\`${name}\``);
     }
     expect(readiness).toContain("If any item is false or unknown");
-    expect(runbook).toContain("exact 96-hour migration window");
-    expect(runbook).toContain("exactly 345,600 seconds after the start");
-    expect(readiness).toContain("has a 345,600-second window");
+    expect(runbook).toContain("exact 72-hour migration window");
+    expect(runbook).toContain("exactly 259,200 seconds after the start");
+    expect(readiness).toContain("has a 259,200-second window");
   });
 
   it("binds the documented wallet, fee, budget and deadline limits to code", () => {

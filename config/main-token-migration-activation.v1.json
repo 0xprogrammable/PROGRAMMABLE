@@ -1,16 +1,16 @@
 {
   "schema": "programmable-main-token-migration-activation/v1",
-  "releaseId": "v4-ethereum-to-robinhood-96h-2026-v1",
-  "enabled": true,
+  "releaseId": "v4-ethereum-to-robinhood-72h-2026-v2",
+  "enabled": false,
   "sourceChainId": "1",
   "sourceTokenAddress": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
   "sourceTokenRuntimeCodeKeccak256": "0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad",
   "sourceTokenDecimals": "18",
   "sourceTokenTotalSupplyRaw": "1000000000000000000000000000",
   "migrationWallet": "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
-  "windowDurationSeconds": "345600",
-  "windowStartTimestamp": "1788125400",
-  "deadlineTimestampExclusive": "1788471000",
-  "startBlockNumber": "25870405",
-  "startBlockHash": "0xe4f50afeba1884b8354b3c962f99a258f2901f9768ec8da8ad05391761ff57de"
+  "windowDurationSeconds": "259200",
+  "windowStartTimestamp": null,
+  "deadlineTimestampExclusive": null,
+  "startBlockNumber": null,
+  "startBlockHash": null
 }

@@ -28,7 +28,7 @@ const transferAbi = parseAbi([
   "function transfer(address to,uint256 amount) returns (bool)",
 ]);
 const migrationWallet = "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D";
-const migrationWindowSeconds = 96 * 60 * 60;
+const migrationWindowSeconds = 72 * 60 * 60;
 
 describe("main token migration transfer", () => {
   it("accepts empty or exact EIP-7702 delegated EOA code only", () => {
@@ -48,7 +48,7 @@ describe("main token migration transfer", () => {
     }
   });
 
-  it("freezes the 96-hour Ethereum migration identities", () => {
+  it("freezes the 72-hour Ethereum migration identities", () => {
     expect(MAIN_TOKEN_MIGRATION_CHAIN_ID).toBe(1);
     expect(MAIN_TOKEN_ADDRESS).toBe(
       "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
@@ -58,7 +58,7 @@ describe("main token migration transfer", () => {
     expect(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS).toBe(migrationWindowSeconds);
 
     expect(MAIN_TOKEN_MIGRATION_RELEASE_ID).toBe(
-      "v4-ethereum-to-robinhood-96h-2026-v1",
+      "v4-ethereum-to-robinhood-72h-2026-v2",
     );
   });
 
@@ -179,8 +179,8 @@ describe("main token migration page contract", () => {
       Math.max(0, Math.ceil((deadlineAt - now) / 1_000));
 
     expect(remainingAt(startAt)).toBe(migrationWindowSeconds);
-    expect(remainingAt(startAt + 12 * 60 * 60 * 1_000)).toBe(84 * 60 * 60);
-    expect(remainingAt(startAt + 85 * 60 * 60 * 1_000)).toBe(11 * 60 * 60);
+    expect(remainingAt(startAt + 12 * 60 * 60 * 1_000)).toBe(60 * 60 * 60);
+    expect(remainingAt(startAt + 61 * 60 * 60 * 1_000)).toBe(11 * 60 * 60);
     expect(page).toContain("trustedClockEndpoint");
     expect(page).toContain("performance.now()");
     expect(page).toContain("setNow(readTrustedNow())");
@@ -280,7 +280,7 @@ describe("main token migration page contract", () => {
     );
   });
 
-  it("activates only with the exact 96-hour window, start block and release", () => {
+  it("activates only with the exact 72-hour window, start block and release", () => {
     const startAt = Date.parse("2026-08-30T12:00:00.000Z");
     const activation = (
       requested: boolean,
@@ -366,7 +366,7 @@ describe("main token migration page contract", () => {
     expect(page).toContain("startBlockHash !== null");
   });
 
-  it("binds the public page to the exact 96-hour window and finalized Ethereum anchor", () => {
+  it("publishes a fail-closed 72-hour preparation page until an exact Ethereum anchor is set", () => {
     const route = read("app/migration/page.tsx");
     const landing = read("components/landing-page.tsx");
     const activationManifest = JSON.parse(
@@ -384,7 +384,8 @@ describe("main token migration page contract", () => {
     expect(page).toContain("main-token-migration-activation.v1.json");
     expect(page).toContain("deadlineAt - startAt ===");
     expect(page).toContain("startBlock !== null");
-    expect(page).toContain("Local preview · transfers disabled");
+    expect(page).toContain("No action required right now");
+    expect(page).toContain("const phase = !migrationWindow.enabled");
     expect(page).toContain(
       "Nothing is sent until you approve the V4 transfer in your wallet.",
     );
@@ -400,30 +401,26 @@ describe("main token migration page contract", () => {
     expect(route).toContain("follow: false");
     expect(route).toContain("PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_ENABLED");
     expect(route).toContain("PROGRAMMABLE_MAIN_TOKEN_MIGRATION_LOCAL_PREVIEW");
-    expect(route).toContain("migrationActivationManifest.enabled");
     expect(route).toContain("notFound()");
     expect(landing).toContain('href="/migration"');
-    expect(landing).toContain("We are migrating");
+    expect(landing).toContain("V4 is moving to Robinhood");
     expect(landing).toContain(
       "NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_VISIBLE",
     );
-    expect(landing).toContain("migrationActivationManifest.enabled");
+    expect(landing).toContain("migrationWindowActive");
     expect(read("app/api/main-token-migration/window-time/route.ts")).toContain(
       "programmable-main-token-migration-window-time/v1",
     );
     expect(activationManifest).toMatchObject({
-      enabled: true,
+      enabled: false,
       releaseId: MAIN_TOKEN_MIGRATION_RELEASE_ID,
       windowDurationSeconds: String(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS),
-      windowStartTimestamp: "1788125400",
-      deadlineTimestampExclusive: "1788471000",
-      startBlockNumber: "25870405",
-      startBlockHash:
-        "0xe4f50afeba1884b8354b3c962f99a258f2901f9768ec8da8ad05391761ff57de",
+      windowStartTimestamp: null,
+      deadlineTimestampExclusive: null,
+      startBlockNumber: null,
+      startBlockHash: null,
     });
-    expect(
-      Number(activationManifest.deadlineTimestampExclusive) -
-        Number(activationManifest.windowStartTimestamp),
-    ).toBe(MAIN_TOKEN_MIGRATION_WINDOW_SECONDS);
+    expect(page).toContain("return false");
+    expect(page).toContain("const canCopyDestination = transferWindowOpen;");
   });
 });

@@ -7,7 +7,7 @@ and private release evidence.
 ## Candidate identity
 
 - [ ] The candidate is an immutable build from the exact reviewed `production` commit.
-- [ ] `config/main-token-migration-activation.v1.json` binds the reviewed release and has a 345,600-second window,
+- [ ] `config/main-token-migration-activation.v1.json` binds the reviewed release and has a 259,200-second window,
       exact finalized pre-window eligibility block number and hash.
 - [ ] The sponsor contract matches
       `config/main-token-migration-gas-sponsor-contract.v1.json` byte-for-byte in the candidate.
@@ -50,7 +50,8 @@ and private release evidence.
 - [ ] Privy wallet/policy readback is captured privately without credentials.
 - [ ] Candidate route readback, sponsor balance, durable-store readiness and independent RPC identity are captured at
       the activation time.
-- [ ] Public page visibility is enabled only after the activation manifest, server-time readback and sponsor readiness
+- [ ] The inactive public preview exposes no timer, address or transfer action. The timer, official address, wallet
+      actions and sponsor become visible only after the activation manifest, server-time readback and sponsor readiness
       gates pass.
 - [ ] Post-window disablement and Privy policy revocation have named owners.
 
