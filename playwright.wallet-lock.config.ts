@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/browser",
-  testMatch: "wallet-request-lock.spec.ts",
+  testMatch: ["wallet-request-lock.spec.ts", "site-header.spec.ts"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
