@@ -19,6 +19,8 @@ import {
   type MarketPoolDataV1,
   type TokenMarketDataV1,
 } from "./market-data/market-data-v1";
+import type { GmgnMarketSnapshotV1 } from
+  "./market-data/gmgn-market-data-v1";
 
 export const EXPLORE_DATA_QUALITY_SCHEMA_VERSION =
   "programmable.explore-data-quality.v1" as const;
@@ -60,7 +62,7 @@ export type ExploreValuation =
       valueWad: string;
       quoteSymbol?: string;
       freshness: "current" | "provider-recent" | "stale" | "unknown";
-      source?: "bitquery" | "dexscreener" | "stateview-chainlink";
+      source?: "bitquery" | "dexscreener" | "gmgn" | "stateview-chainlink";
       asOfTime?: string;
       asOfBlock?: string;
       asOfBlockHash?: `0x${string}`;
@@ -83,6 +85,7 @@ export type ValuedExploreEntry<T extends ExploreEntry = ExploreEntry> =
   T & Readonly<{
     valuation: ExploreValuation;
     marketData?: TokenMarketDataV1;
+    gmgnMarketData?: GmgnMarketSnapshotV1;
     liquidityEvidence?: OfficialV4LiquidityEvidenceV1;
   }>;
 
@@ -822,7 +825,8 @@ export function isExploreValuationQualifiedV1(
 ): value is Extract<ExploreValuation, { status: "available" }> {
   return value.status === "available" && (
     value.freshness === "current" ||
-    (value.freshness === "provider-recent" && value.source === "dexscreener")
+    (value.freshness === "provider-recent" &&
+      (value.source === "dexscreener" || value.source === "gmgn"))
   );
 }
 
@@ -979,7 +983,7 @@ export function isExploreValuation(value: unknown): value is ExploreValuation {
       String(candidate.freshness),
     ) &&
     (candidate.freshness !== "provider-recent" ||
-      (candidate.source === "dexscreener" &&
+      ((candidate.source === "dexscreener" || candidate.source === "gmgn") &&
         typeof candidate.asOfTime === "string")) &&
     (candidate.currency !== "quote" ||
       (typeof candidate.quoteSymbol === "string" &&
@@ -987,6 +991,7 @@ export function isExploreValuation(value: unknown): value is ExploreValuation {
     (candidate.source === undefined ||
       candidate.source === "bitquery" ||
       candidate.source === "dexscreener" ||
+      candidate.source === "gmgn" ||
       candidate.source === "stateview-chainlink") &&
     (candidate.asOfTime === undefined ||
       (typeof candidate.asOfTime === "string" &&

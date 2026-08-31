@@ -58,6 +58,10 @@ import {
   type TokenMarketDataV1,
 } from "@/lib/market-data/market-data-v1";
 import {
+  isGmgnMarketSnapshotV1,
+  type GmgnMarketSnapshotV1,
+} from "@/lib/market-data/gmgn-market-data-v1";
+import {
   applyTokenImageFallback,
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -95,11 +99,13 @@ import styles from "./token-experience.module.css";
 type DetailToken = LauncherToken & Readonly<{
   valuation: ExploreValuation;
   marketData?: TokenMarketDataV1;
+  gmgnMarketData?: GmgnMarketSnapshotV1;
 }>;
 
 type DetailCustomProject = CustomProjectExploreEntry & Readonly<{
   valuation?: ExploreValuation;
   marketData?: TokenMarketDataV1;
+  gmgnMarketData?: GmgnMarketSnapshotV1;
 }>;
 
 type RouterTradeProject = Pick<
@@ -549,12 +555,18 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     : isTokenMarketDataV1(value.marketData)
       ? value.marketData
       : null;
-  return valuation === null || marketData === null
+  const gmgnMarketData = value.gmgnMarketData === undefined
+    ? undefined
+    : isGmgnMarketSnapshotV1(value.gmgnMarketData)
+      ? value.gmgnMarketData
+      : null;
+  return valuation === null || marketData === null || gmgnMarketData === null
     ? null
     : {
         ...token,
         valuation,
         ...(marketData === undefined ? {} : { marketData }),
+        ...(gmgnMarketData === undefined ? {} : { gmgnMarketData }),
       };
 }
 
@@ -720,7 +732,14 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
     : isTokenMarketDataV1(value.marketData)
       ? value.marketData
       : null;
-  if (valuation === null || marketData === null) return null;
+  const gmgnMarketData = value.gmgnMarketData === undefined
+    ? undefined
+    : isGmgnMarketSnapshotV1(value.gmgnMarketData)
+      ? value.gmgnMarketData
+      : null;
+  if (valuation === null || marketData === null || gmgnMarketData === null) {
+    return null;
+  }
   return {
     exploreKind: "custom-project",
     id: value.id,
@@ -754,6 +773,7 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
     launchCategoryProvenance: value.launchCategoryProvenance as CustomProjectExploreEntry["launchCategoryProvenance"],
     ...(valuation === undefined ? {} : { valuation }),
     ...(marketData === undefined ? {} : { marketData }),
+    ...(gmgnMarketData === undefined ? {} : { gmgnMarketData }),
   };
 }
 
@@ -1266,6 +1286,7 @@ export function buildTokenDetailMetrics(
   token: LauncherToken & Readonly<{
     valuation?: ExploreValuation;
     marketData?: TokenMarketDataV1;
+    gmgnMarketData?: GmgnMarketSnapshotV1;
   }>,
   fdvOverride?: string | null,
   volumeOverride?: TokenMetric,
@@ -1273,10 +1294,15 @@ export function buildTokenDetailMetrics(
   const primaryMarket = token.marketData?.pools.find(
     (pool) => pool.identity.poolId === token.marketData?.primaryPoolId,
   );
-  const marketVolumeUsd = formatUsdWadAmount(primaryMarket?.volume24hUsdWad);
-  const marketLiquidityUsd = primaryMarket?.liquidity?.freshness === "current"
-    ? formatUsdWadAmount(primaryMarket.liquidity.valueUsdWad)
-    : null;
+  const marketVolumeUsd = formatUsdWadAmount(
+    token.gmgnMarketData?.volume24hUsdWad ?? primaryMarket?.volume24hUsdWad,
+  );
+  const marketLiquidityUsd = formatUsdWadAmount(
+    token.gmgnMarketData?.liquidityUsdWad ??
+      (primaryMarket?.liquidity?.freshness === "current"
+        ? primaryMarket.liquidity.valueUsdWad
+        : undefined),
+  );
   const explicitValuation = (token as { valuation?: unknown }).valuation;
   const valuation = isExploreValuation(explicitValuation)
     ? explicitValuation
@@ -2403,16 +2429,23 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
       value: valuationValue ?? "",
     },
     { label: "Market data", value: marketStatus },
-    ...(primary?.volume24hUsdWad
+    ...((project.gmgnMarketData?.volume24hUsdWad ?? primary?.volume24hUsdWad)
       ? [{
           label: "24h volume",
-          value: formatUsdWadAmount(primary.volume24hUsdWad) ?? "",
+          value: formatUsdWadAmount(
+            project.gmgnMarketData?.volume24hUsdWad ??
+              primary?.volume24hUsdWad,
+          ) ?? "",
         }]
       : []),
-    ...(primary?.liquidity?.freshness === "current"
+    ...((project.gmgnMarketData?.liquidityUsdWad ||
+      primary?.liquidity?.freshness === "current")
       ? [{
           label: "Liquidity",
-          value: formatUsdWadAmount(primary.liquidity.valueUsdWad) ?? "",
+          value: formatUsdWadAmount(
+            project.gmgnMarketData?.liquidityUsdWad ??
+              primary?.liquidity?.valueUsdWad,
+          ) ?? "",
         }]
       : []),
   ];

@@ -786,7 +786,7 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("accepts the exact Envio identity and Dexscreener split", () => {
+  it("accepts the exact Envio identity and bounded Ethereum market-provider split", () => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT);
     expect(result.failures.map(({ id }: { id: string }) => id)).not.toContain(
       "ops-public-provider-split-source-contract",
@@ -811,7 +811,7 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a different market provider",
-      '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Market-Provider": "unknown"',
     ],
     [
@@ -825,6 +825,36 @@ describe("read-model operations source contract", () => {
     expect(route).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: route.replaceAll(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    [
+      "a Robinhood GMGN slug",
+      "lib/market-data/gmgn.server.ts",
+      'return String(chainId) === "1" ? "eth" : null;',
+      'return String(chainId) === "4663" ? "robinhood" : null;',
+    ],
+    [
+      "an unbounded visible-page fanout",
+      "lib/market-data/explore-market.server.ts",
+      "if (!gmgnMarketDataConfiguredV1() || entries.length > 9)",
+      "if (!gmgnMarketDataConfiguredV1())",
+    ],
+    [
+      "a missing production PoolManager provenance gate",
+      "lib/market-data/gmgn.server.ts",
+      "!productionPoolManagerBoundV1(entry)",
+      "false",
+    ],
+  ])("rejects GMGN enrichment with %s", (_label, path, needle, replacement) => {
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(needle, replacement) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-public-provider-split-source-contract",

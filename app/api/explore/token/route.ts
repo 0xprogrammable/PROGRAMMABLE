@@ -4,8 +4,14 @@ import { getAddress, isAddress } from "viem";
 import {
   publicExploreEntryV1,
 } from "../../../../lib/explore-financial-data";
-import { readDexscreenerExploreEntriesV1 } from
-  "../../../../lib/market-data/dexscreener-explore.server";
+import {
+  exploreMarketProviderHeaderV1,
+  exploreMarketPriceSourcesV1,
+  exploreMarketSourcesV1,
+  readExploreMarketEntriesV1,
+} from "../../../../lib/market-data/explore-market.server";
+import { gmgnMarketDataConfiguredV1 } from
+  "../../../../lib/market-data/gmgn.server";
 import {
   envioClassicV3IdentityCommitmentV1,
   mergeEnvioClassicV3CatalogEntriesV1,
@@ -57,33 +63,43 @@ function tokenAddress(entry: ExploreEntry): string | null {
 
 function canonicalResponseHeaders(input: Readonly<{
   marketAsOf?: string;
-  hasDexscreenerPrice: boolean;
+  hasMarketPrice: boolean;
   marketStatus: "complete" | "partial" | "unavailable";
+  marketProvider?: "dexscreener" | "gmgn" | "gmgn+dexscreener";
+  marketSources?: string;
+  priceSources?: string;
   launchSource: string;
   lastIndexedAt: string;
   canonicalStatus: "current" | "last-known-good" | "unavailable";
   routerStatus: "current" | "last-known-good" | "unavailable";
 }>) {
+  const marketProvider = input.marketProvider ?? configuredMarketProviderV1();
+  const marketSources = input.marketSources;
+  const priceSources = input.priceSources;
   return {
     "Cache-Control": SUCCESS_CACHE_CONTROL,
     "X-Programmable-Chain-Id": "1",
     "X-Programmable-Launch-Source": input.launchSource,
-    "X-Programmable-Read-Source": `${input.launchSource}+dexscreener`,
-    "X-Programmable-Market-Provider": "dexscreener",
+    "X-Programmable-Read-Source": `${input.launchSource}+${marketProvider}`,
+    "X-Programmable-Market-Provider": marketProvider,
     "X-Programmable-Market-Read-Status": input.marketStatus,
     "X-Programmable-Canonical-Read-Status": input.canonicalStatus,
     "X-Programmable-Router-Read-Status": input.routerStatus,
     "X-Programmable-Identity-Last-Indexed-At": input.lastIndexedAt,
-    ...(input.hasDexscreenerPrice
-      ? { "X-Programmable-Market-Source": "dexscreener" }
+    ...(marketSources
+      ? { "X-Programmable-Market-Source": marketSources }
       : {}),
     ...(input.marketAsOf
       ? { "X-Programmable-Market-As-Of": input.marketAsOf }
       : {}),
-    ...(input.hasDexscreenerPrice
-      ? { "X-Programmable-Price-Source": "dexscreener" }
+    ...(input.hasMarketPrice && priceSources
+      ? { "X-Programmable-Price-Source": priceSources }
       : {}),
   };
+}
+
+function configuredMarketProviderV1(): "dexscreener" | "gmgn+dexscreener" {
+  return gmgnMarketDataConfiguredV1() ? "gmgn+dexscreener" : "dexscreener";
 }
 
 function unavailableResponse(
@@ -403,8 +419,9 @@ export async function GET(request: NextRequest) {
   ) {
     return unavailableResponse({
       "X-Programmable-Launch-Source": launchSource,
-      "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
-      "X-Programmable-Market-Provider": "dexscreener",
+      "X-Programmable-Read-Source":
+        `${launchSource}+${configuredMarketProviderV1()}`,
+      "X-Programmable-Market-Provider": configuredMarketProviderV1(),
       "X-Programmable-Router-Read-Status": routerCustomStatus,
     });
   }
@@ -412,8 +429,9 @@ export async function GET(request: NextRequest) {
     if (canonicalReadFailed || registryReadFailed || routerReadFailed) {
       return unavailableResponse({
         "X-Programmable-Launch-Source": launchSource,
-        "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
-        "X-Programmable-Market-Provider": "dexscreener",
+        "X-Programmable-Read-Source":
+          `${launchSource}+${configuredMarketProviderV1()}`,
+        "X-Programmable-Market-Provider": configuredMarketProviderV1(),
         "X-Programmable-Router-Read-Status": routerCustomStatus,
       });
     }
@@ -432,7 +450,7 @@ export async function GET(request: NextRequest) {
       {
         status: 404,
         headers: canonicalResponseHeaders({
-          hasDexscreenerPrice: false,
+          hasMarketPrice: false,
           marketStatus: "complete",
           launchSource,
           lastIndexedAt: identityGeneratedAt,
@@ -462,13 +480,18 @@ export async function GET(request: NextRequest) {
     const creatorArticlePromise = readPublicCreatorArticleV1(
       entry.tokenAddress!,
     );
-    const market = await readDexscreenerExploreEntriesV1([entry], {
+    const market = await readExploreMarketEntriesV1([entry], {
       signal: readSignal,
       deadlineMs,
     });
     const valuedEntry = market.entries[0];
-    if (!valuedEntry) throw new Error("Dexscreener identity mapping failed");
-    const hasDexscreenerPrice = valuedEntry.valuation.status === "available";
+    if (!valuedEntry) throw new Error("Market identity mapping failed");
+    const hasMarketPrice = valuedEntry.valuation.status === "available";
+    const marketProvider = exploreMarketProviderHeaderV1(market.marketRead);
+    const marketSources = exploreMarketSourcesV1(market.marketRead).join("+");
+    const priceSources = exploreMarketPriceSourcesV1(
+      market.marketRead,
+    ).join("+");
     const marketAsOf = valuedEntry.valuation.status === "available"
       ? valuedEntry.valuation.asOfTime
       : undefined;
@@ -497,8 +520,11 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: canonicalResponseHeaders({
-          hasDexscreenerPrice,
+          hasMarketPrice,
           marketStatus: market.marketRead.status,
+          marketProvider,
+          ...(marketSources ? { marketSources } : {}),
+          ...(priceSources ? { priceSources } : {}),
           launchSource,
           lastIndexedAt: identityGeneratedAt,
           canonicalStatus: catalog?.status ?? "unavailable",
@@ -540,7 +566,7 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: canonicalResponseHeaders({
-          hasDexscreenerPrice: false,
+          hasMarketPrice: false,
           marketStatus: "unavailable",
           launchSource,
           lastIndexedAt: identityGeneratedAt,

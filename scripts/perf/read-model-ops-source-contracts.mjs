@@ -1951,6 +1951,11 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/market-data/dexscreener-explore.server.ts") ?? "";
   const dexscreenerShadow =
     source("lib/market-data/dexscreener-shadow.server.ts") ?? "";
+  const exploreMarket =
+    source("lib/market-data/explore-market.server.ts") ?? "";
+  const gmgnMarket = source("lib/market-data/gmgn.server.ts") ?? "";
+  const gmgnSnapshot =
+    source("lib/market-data/gmgn-market-data-v1.ts") ?? "";
   const stagedPublicSmokeScript =
     source("scripts/smoke-static-dexscreener-public-apis.mjs") ?? "";
   const publicCreatorProfile = source("app/api/explore/profile/route.ts") ?? "";
@@ -2216,6 +2221,45 @@ export function evaluateReadModelOperationsSourceContracts(
       "const cache = new Map<string, CachedSnapshot>()",
       "const inFlight = new Map<string, Promise<DexscreenerShadowSnapshotV1>>()",
     ]) &&
+    includesEverySourceFragment(exploreMarket, [
+      "if (!gmgnMarketDataConfiguredV1() || entries.length > 9)",
+      "return readDexscreenerExploreEntriesV1(entries, wait);",
+      "snapshots = await readGmgnExploreSnapshotsV1(entries, wait);",
+      "const fallback = await readDexscreenerExploreEntriesV1(fallbackEntries, wait);",
+      "const valuedEntries = entries.map((entry): ValuedExploreEntry => {",
+      'provider: "gmgn"',
+      'fallbackProvider: "dexscreener"',
+      "if (marketRead.gmgnQualifiedCount > 0) sources.push(\"gmgn\");",
+      "if (marketRead.fallbackQualifiedCount > 0) sources.push(\"dexscreener\");",
+    ]) &&
+    includesEverySourceFragment(gmgnMarket, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 1_500",
+      "const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000",
+      "const GMGN_MAXIMUM_CONCURRENCY = 3",
+      'return String(chainId) === "1" ? "eth" : null;',
+      "!productionPoolManagerBoundV1(entry)",
+      '"/v1/token/info"',
+      'candidate.protocol === "uniswap_v4"',
+      "candidate.tokenAddress === tokenAddress",
+      "candidate.poolId === poolId",
+      "candidate.quoteAddress === quoteAddress",
+      'String(data.pool.exchange).toLowerCase() !== "uniswap_v4"',
+      "!poolBaseQuoteMatchesV1(data.pool, identity)",
+      "!providerSupplyMatchesCanonical(",
+      'headers: { Accept: "application/json", "X-APIKEY": apiKey }',
+      "const bytes = await readBoundedResponseBytes(",
+      "const rateLimited = response.status === 429 || isRateLimitedEnvelope(value);",
+      "process.env.GMGN_API_KEY?.trim()",
+    ]) &&
+    includesEverySourceFragment(gmgnSnapshot, [
+      '"programmable.gmgn-market-snapshot.v1" as const',
+      'return value.chainId === "1"',
+      'value.protocol === "uniswap_v4"',
+      "positiveInteger(value.priceUsdWad)",
+      "positiveInteger(value.fdvUsdWad)",
+      "positiveInteger(value.liquidityUsdWad)",
+    ]) &&
     includesEverySourceFragment(publicExplore, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
@@ -2227,15 +2271,15 @@ export function evaluateReadModelOperationsSourceContracts(
       'routerCustomStatus === "last-known-good"',
       "envioClassicV3IdentityCommitmentV1(",
       "readDexscreenerExploreEntriesV1(filtered, {",
-      "readDexscreenerExploreEntriesV1(\n        identityPage.tokens,",
+      "readExploreMarketEntriesV1(\n        identityPage.tokens,",
       'registryCustomStatus === "current" && routerCustomStatus === "current"',
       'requested: "fdv" as const',
       'applied: rankingStatus === "complete"',
       '"qualified-fdv-then-launch-order" as const',
       '"launch-order" as const',
       '"X-Programmable-Launch-Source": launchSource',
-      '"X-Programmable-Read-Source": `${launchSource}+dexscreener`',
-      '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Read-Source": `${launchSource}+${marketProvider}`',
+      '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Router-Read-Status": routerCustomStatus',
       '"X-Programmable-Identity-Last-Indexed-At": identityGeneratedAt',
     ]) &&
@@ -2257,10 +2301,10 @@ export function evaluateReadModelOperationsSourceContracts(
       "identityCount: publicIdentityEntries.length",
       "const projectedRouterIdentityCount = publicIdentityEntries.filter(",
       "const entry: ExploreEntry | null = identityEntries.find(",
-      "readDexscreenerExploreEntriesV1([entry], {",
+      "readExploreMarketEntriesV1([entry], {",
       '"X-Programmable-Launch-Source": input.launchSource',
-      '"X-Programmable-Read-Source": `${input.launchSource}+dexscreener`',
-      '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Read-Source": `${input.launchSource}+${marketProvider}`',
+      '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Router-Read-Status": input.routerStatus',
       'valuation: { status: "unavailable", reason: "source-unavailable" }',
     ]) &&
@@ -2306,7 +2350,7 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list, token detail and creator identity combine the validated Envio Classic V3 catalog with the bounded durable Router Custom snapshot; Dexscreener remains bounded exact-identity enrichment, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
+    "Explore list, token detail and creator identity combine the validated Envio Classic V3 catalog with the bounded durable Router Custom snapshot; Ethereum-only GMGN and Dexscreener remain bounded exact-identity enrichment, market-cap ordering stays Dexscreener-bound, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
