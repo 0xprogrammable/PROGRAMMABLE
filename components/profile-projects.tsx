@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { getAddress, isAddress } from "viem";
@@ -471,56 +472,13 @@ export function ProfileProjects({
 
   if (!wallet || walletAccount === null) return null;
   return (
-    <section className={styles.section} aria-labelledby="profile-launches-title">
-      <header className={styles.heading}>
-        <h2 id="profile-launches-title">Launches</h2>
-        <div className={styles.headerActions}>
-          <button
-            className={styles.refresh}
-            type="button"
-            aria-busy={refreshInProgress}
-            aria-label={refreshInProgress
-              ? "Refreshing launches"
-              : "Refresh launches"}
-            data-loading={refreshInProgress}
-            onClick={refreshProjects}
-            disabled={refreshInProgress}
-          >
-            <span className={styles.refreshIcon} aria-hidden="true">
-              <RefreshCw size={15} strokeWidth={1.8} />
-            </span>
-            <span className={styles.refreshLabel}>
-              {refreshInProgress ? "Refreshing…" : "Refresh"}
-            </span>
-          </button>
-          {pageData.totalPages > 1 ? (
-            <nav className={styles.pagination} aria-label="Creator project pages">
-              <button
-                type="button"
-                aria-label="Previous creator projects page"
-                disabled={pageData.currentPage === 1}
-                onClick={() => setProjectPage(Math.max(1, pageData.currentPage - 1))}
-              >
-                <ChevronLeft aria-hidden="true" size={17} strokeWidth={1.8} />
-              </button>
-              <span aria-live="polite" aria-atomic="true">
-                {pageData.currentPage} / {pageData.totalPages}
-              </span>
-              <button
-                type="button"
-                aria-label="Next creator projects page"
-                disabled={pageData.currentPage === pageData.totalPages}
-                onClick={() => setProjectPage(Math.min(
-                  pageData.totalPages,
-                  pageData.currentPage + 1,
-                ))}
-              >
-                <ChevronRight aria-hidden="true" size={17} strokeWidth={1.8} />
-              </button>
-            </nav>
-          ) : null}
-        </div>
-      </header>
+    <ProfileProjectsSection
+      refreshInProgress={refreshInProgress}
+      onRefresh={refreshProjects}
+      currentPage={pageData.currentPage}
+      totalPages={pageData.totalPages}
+      onPageChange={setProjectPage}
+    >
       <span className={styles.visuallyHidden} role="status" aria-live="polite">
         {refreshInProgress
           ? "Refreshing launches"
@@ -539,7 +497,7 @@ export function ProfileProjects({
       {phase === "loading" && visibleProjects.length === 0 ? (
         <ProfileProjectsSkeleton />
       ) : phase === "error" && visibleProjects.length === 0 ? (
-        <p className={styles.error} role="alert">
+        <p className={`${styles.error} ${styles.emptyError}`} role="alert">
           {scopedProjectError
             || "Launches could not be refreshed. Select Refresh to try again."}
         </p>
@@ -553,11 +511,6 @@ export function ProfileProjects({
       ) : (
         <div className={styles.list}>
           {pageData.items.map((project) => {
-            const launchType =
-              project.source === "registry.custom-launched" ||
-              project.source === "canonical-launch-stamp-router"
-                ? "Custom"
-                : "Classic";
             const canEditArticle = editableTokens.has(
               project.tokenAddress.toLowerCase(),
             );
@@ -577,51 +530,13 @@ export function ProfileProjects({
               manageableReward && onChangeRewardReceiver,
             );
             return (
-            <article className={styles.project} key={project.tokenAddress}>
-              <div className={styles.art}>
-                {project.imageUrl ? (
-                  <Image src={project.imageUrl} alt="" fill sizes="64px" unoptimized />
-                ) : <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>}
-              </div>
-              <div className={styles.copy}>
-                <strong>{project.name}</strong>
-                <span>
-                  {project.symbol ? `$${project.symbol}` : "Finalized launch"}
-                  <small className={styles.launchType}>{launchType}</small>
-                </span>
-                {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label ? (
-                  <small>
-                    Market cap {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label}
-                  </small>
-                ) : null}
-                <small
-                  aria-hidden={project.article ? undefined : true}
-                  className={styles.articleSummarySlot}
-                  data-state={
-                    project.article
-                      ? "ready"
-                      : phase === "loading"
-                        ? "loading"
-                        : "empty"
-                  }
-                >
-                  {project.article
-                    ? `Updated ${formatDate(project.article.updatedAt)}`
-                    : "Article details"}
-                </small>
-                {project.partnerAttribution ? (
-                  <PartnerLaunchAttribution
-                    attribution={project.partnerAttribution}
-                    compact
-                  />
-                ) : null}
-              </div>
-              <div
-                className={styles.actions}
-                data-reward-action={
-                  canChangeRewardReceiver ? "available" : "unavailable"
-                }
-              >
+            <ProfileProjectCard
+              key={project.tokenAddress}
+              project={project}
+              phase={phase}
+              marketCapLabel={marketCapByToken.get(project.tokenAddress.toLowerCase())?.label}
+              rewardReceiverAvailable={canChangeRewardReceiver}
+            >
                 {canChangeRewardReceiver && manageableReward ? (
                   <button
                     className={styles.rewardReceiverAction}
@@ -676,8 +591,7 @@ export function ProfileProjects({
                 >
                   View token
                 </Link>
-              </div>
-            </article>
+            </ProfileProjectCard>
             );
           })}
         </div>
@@ -734,7 +648,145 @@ export function ProfileProjects({
             )}
         />
       ) : null}
+    </ProfileProjectsSection>
+  );
+}
+
+export function ProfileProjectsSection({
+  children,
+  refreshInProgress = false,
+  onRefresh,
+  currentPage = 1,
+  totalPages = 1,
+  onPageChange,
+}: Readonly<{
+  children: ReactNode;
+  refreshInProgress?: boolean;
+  onRefresh?: () => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
+}>) {
+  return (
+    <section className={styles.section} aria-labelledby="profile-launches-title">
+      <header className={styles.heading}>
+        <h2 id="profile-launches-title">Launches</h2>
+        <div className={styles.headerActions}>
+          <button
+            className={styles.refresh}
+            type="button"
+            aria-busy={refreshInProgress}
+            aria-label={refreshInProgress
+              ? "Refreshing launches"
+              : "Refresh launches"}
+            data-loading={refreshInProgress}
+            onClick={onRefresh}
+            disabled={refreshInProgress}
+          >
+            <span className={styles.refreshIcon} aria-hidden="true">
+              <RefreshCw size={15} strokeWidth={1.8} />
+            </span>
+            <span className={styles.refreshLabel}>
+              {refreshInProgress ? "Refreshing…" : "Refresh"}
+            </span>
+          </button>
+          {totalPages > 1 ? (
+            <nav className={styles.pagination} aria-label="Creator project pages">
+              <button
+                type="button"
+                aria-label="Previous creator projects page"
+                disabled={currentPage === 1}
+                onClick={() => onPageChange?.(Math.max(1, currentPage - 1))}
+              >
+                <ChevronLeft aria-hidden="true" size={17} strokeWidth={1.8} />
+              </button>
+              <span aria-live="polite" aria-atomic="true">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                aria-label="Next creator projects page"
+                disabled={currentPage === totalPages}
+                onClick={() => onPageChange?.(Math.min(totalPages, currentPage + 1))}
+              >
+                <ChevronRight aria-hidden="true" size={17} strokeWidth={1.8} />
+              </button>
+            </nav>
+          ) : null}
+        </div>
+      </header>
+      {children}
     </section>
+  );
+}
+
+export function ProfileProjectsLoadingState() {
+  return (
+    <ProfileProjectsSection refreshInProgress>
+      <ProfileProjectsSkeleton />
+    </ProfileProjectsSection>
+  );
+}
+
+export function ProfileProjectCard({
+  project,
+  phase,
+  marketCapLabel,
+  rewardReceiverAvailable,
+  children,
+}: Readonly<{
+  project: CreatorProjectSummaryV1;
+  phase: CreatorProjectOwnerStateV1["phase"];
+  marketCapLabel?: string | null;
+  rewardReceiverAvailable: boolean;
+  children: ReactNode;
+}>) {
+  const launchType =
+    project.source === "registry.custom-launched" ||
+    project.source === "canonical-launch-stamp-router"
+      ? "Custom"
+      : "Classic";
+
+  return (
+    <article className={styles.project}>
+      <div className={styles.art}>
+        {project.imageUrl ? (
+          <Image src={project.imageUrl} alt="" fill sizes="64px" unoptimized />
+        ) : <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>}
+      </div>
+      <div className={styles.copy}>
+        <strong>{project.name}</strong>
+        <span>
+          {project.symbol ? `$${project.symbol}` : "Finalized launch"}
+          <small className={styles.launchType}>{launchType}</small>
+        </span>
+        {marketCapLabel ? <small>Market cap {marketCapLabel}</small> : null}
+        <small
+          aria-hidden={project.article ? undefined : true}
+          className={styles.articleSummarySlot}
+          data-state={
+            project.article
+              ? "ready"
+              : phase === "loading"
+                ? "loading"
+                : "empty"
+          }
+        >
+          {project.article
+            ? `Updated ${formatDate(project.article.updatedAt)}`
+            : "Article details"}
+        </small>
+        {project.partnerAttribution ? (
+          <PartnerLaunchAttribution attribution={project.partnerAttribution} compact />
+        ) : null}
+      </div>
+      <div
+        className={styles.actions}
+        data-reward-action={rewardReceiverAvailable ? "available" : "unavailable"}
+      >
+        {children}
+      </div>
+    </article>
   );
 }
 

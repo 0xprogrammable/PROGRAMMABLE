@@ -19,8 +19,8 @@ import {
 
 import { useWallet } from "@/components/wallet-provider";
 import {
-  creatorProjectPageSize,
   ProfileProjects,
+  ProfileProjectsLoadingState,
   rewardReceiverActionKeyV1,
   type CreatorProjectMarketCapV1,
   type CreatorProjectSummaryV1,
@@ -4554,7 +4554,7 @@ function ProfileLoadingState() {
   return <ProfileLoadingSkeleton label="Loading profile" />;
 }
 
-function ProfileLoadingSkeleton({
+export function ProfileLoadingSkeleton({
   label,
   showHero = false,
 }: {
@@ -4582,25 +4582,7 @@ function ProfileLoadingSkeleton({
           </span>
         </div>
       ) : null}
-      {showHero ? (
-        <div
-          className={`${styles.profileSkeletonSection} ${styles.profileSkeletonLaunch}`}
-          aria-hidden="true"
-        >
-          <span className={styles.profileSkeletonSectionHeader}>
-            <span className={styles.profileSkeletonHeading} />
-          </span>
-          <span className={styles.profileSkeletonRows}>
-            {Array.from({ length: creatorProjectPageSize }, (_, item) => (
-              <span className={styles.profileSkeletonRow} key={item}>
-                <span />
-                <span />
-                <span />
-              </span>
-            ))}
-          </span>
-        </div>
-      ) : null}
+      {showHero ? <ProfileProjectsLoadingState /> : null}
       <div
         className={`${styles.profileSkeletonWorkspace} ${
           showHero ? styles.profileSkeletonWorkspacePage : ""
@@ -4798,7 +4780,7 @@ function PublicCreatorProfile({
   );
 }
 
-function ProfileAccountWorkspace({
+export function ProfileAccountWorkspace({
   connected,
   data,
   account,
@@ -5031,9 +5013,7 @@ function ProfileAccountWorkspace({
         />
 
         <section
-          className={`${styles.claimablePanel} ${
-            claimableEntries.length ? "" : styles.claimablePanelEmpty
-          }`}
+          className={styles.claimablePanel}
           aria-labelledby="profile-claimable-title"
           data-visible-count={claimPageData.items.length}
         >

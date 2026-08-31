@@ -296,7 +296,8 @@ describe("My projects editor opening", () => {
     expect(source).toContain(
       "Launch refresh took too long. Select Refresh to try again.",
     );
-    expect(source).toContain("onClick={refreshProjects}");
+    expect(source).toContain("onRefresh={refreshProjects}");
+    expect(source).toContain("onClick={onRefresh}");
   });
 
   it("bounds a stalled authentication read before the network request starts", async () => {
@@ -342,12 +343,17 @@ describe("My projects editor opening", () => {
     expect(source).toContain(
       "Array.from({ length: creatorProjectPageSize }, (_, item)",
     );
-    expect(styles).toMatch(/\.skeletonList\s*\{[^}]*min-height:\s*367px;/s);
     expect(styles).toMatch(
-      /@media \(max-width:\s*42rem\)[\s\S]*?\.project\s*\{[^}]*min-height:\s*143px;/s,
+      /\.skeletonList\s*\{[^}]*min-height:\s*var\(--project-list-min-height\);/s,
     );
     expect(styles).toMatch(
-      /@media \(max-width:\s*42rem\)[\s\S]*?\.skeletonProject\s*\{[^}]*min-height:\s*143px;/s,
+      /\.list\s*\{[^}]*min-height:\s*var\(--project-list-min-height\);/s,
+    );
+    expect(styles).toMatch(
+      /\.project\s*\{[^}]*min-height:\s*var\(--project-row-min-height\);/s,
+    );
+    expect(styles).toMatch(
+      /\.skeletonProject\s*\{[^}]*min-height:\s*var\(--project-row-min-height\);/s,
     );
     expect(source).toContain(
       'phase === "loading" && visibleProjects.length === 0',

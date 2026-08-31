@@ -1335,8 +1335,6 @@
 }
 
 .profileSkeleton {
-  display: grid;
-  gap: 16px;
   min-width: 0;
   padding-block-start: 12px;
 }
@@ -1424,12 +1422,11 @@
 }
 
 .profileSkeletonWorkspacePage {
-  margin-block-start: 18px;
+  margin-block-start: 34px;
 }
 
 .profileSkeletonSummary,
-.profileSkeletonClaims,
-.profileSkeletonSection {
+.profileSkeletonClaims {
   background: var(--profile-panel);
   border: 1px solid var(--profile-line);
   border-radius: var(--webde-radius-card, 17px);
@@ -1438,24 +1435,14 @@
   padding: 20px;
 }
 
-.profileSkeletonSummary,
-.profileSkeletonClaims {
-  min-height: 360px;
+.profileSkeletonSummary {
+  min-height: var(--profile-fees-min-height);
 }
 
 .profileSkeletonClaims {
   align-content: start;
   gap: 12px;
-}
-
-.profileSkeletonSection {
-  align-content: start;
-  gap: 12px;
-}
-
-.profileSkeletonLaunch {
-  margin-block-start: 40px;
-  min-height: 463px;
+  min-height: var(--profile-claims-min-height);
 }
 
 .profileSkeletonSectionHeader {
@@ -1518,22 +1505,6 @@
 .profileSkeletonRow > span:last-child {
   border-radius: 12px;
   height: 44px;
-}
-
-.profileSkeletonLaunch .profileSkeletonRow {
-  gap: 9px;
-  grid-template-columns: 42px minmax(0, 1fr) 364px;
-  min-height: 71px;
-  padding: 7px 8px;
-}
-
-.profileSkeletonLaunch .profileSkeletonRow > span:first-child {
-  border-radius: 10px;
-  height: 42px;
-}
-
-.profileSkeletonLaunch .profileSkeletonRow > span:last-child {
-  border-radius: 10px;
 }
 
 @keyframes profile-skeleton-pulse {
@@ -1703,15 +1674,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .profileSkeletonSummary,
-  .profileSkeletonClaims {
-    min-height: 340px;
-  }
-
-  .profileSkeletonSummary {
-    min-height: 370px;
-  }
-
   .customProjects {
     border-radius: 20px;
     padding: 16px;
@@ -1723,16 +1685,6 @@
 
   .claimablePanel {
     min-height: 340px;
-  }
-
-  .claimablePanelEmpty {
-    min-height: 0;
-  }
-
-  .claimablePanelEmpty .claimEmpty {
-    flex: none;
-    min-height: 0;
-    padding-block: 28px 12px;
   }
 
   .feeChart {
@@ -2029,13 +1981,23 @@
 }
 
 /* Final profile direction. */
-.page {
+.page,
+:global(html[data-theme="dark"]) .page {
+  /* Keep the first claims page reserved while sources settle or pages change. */
+  --profile-fees-min-height: 379px;
+  --profile-claims-min-height: 379px;
   --profile-panel: var(--webde-surface);
   --profile-subtle: var(--webde-surface-raised);
   --profile-line: var(--webde-line);
   max-width: 1280px;
   min-height: calc(100svh - 88px);
   padding-block: 22px 56px;
+}
+
+.hero,
+.profileSkeletonHero {
+  align-content: start;
+  min-height: 282px;
 }
 
 .hero {
@@ -2371,8 +2333,15 @@
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-card);
   height: 100% !important;
-  min-height: 360px;
   padding: 20px;
+}
+
+.feePanel {
+  min-height: var(--profile-fees-min-height);
+}
+
+.claimablePanel {
+  min-height: var(--profile-claims-min-height);
 }
 
 .feeChart {
@@ -2510,12 +2479,15 @@
 }
 
 @media (max-width: 820px) {
-  .page {
+  .page,
+  :global(html[data-theme="dark"]) .page {
+    --profile-fees-min-height: 340px;
     min-height: calc(100svh - 72px);
     padding-block: 16px 42px;
   }
 
-  .profileBanner {
+  .profileBanner,
+  .profileSkeletonBanner {
     height: 122px;
   }
 
@@ -2526,11 +2498,20 @@
   .feePanel,
   .claimablePanel {
     height: auto !important;
-    min-height: 340px;
   }
 }
 
 @media (max-width: 620px) {
+  .page,
+  :global(html[data-theme="dark"]) .page {
+    --profile-claims-min-height: 591px;
+  }
+
+  .hero,
+  .profileSkeletonHero {
+    min-height: 350px;
+  }
+
   .hero {
     gap: 0 14px;
     grid-template-columns: 76px minmax(0, 1fr);
@@ -2605,7 +2586,7 @@
   }
 
   .profileSkeletonWorkspacePage {
-    margin-block-start: 12px;
+    margin-block-start: 28px;
   }
 
   .profileSkeletonHero {
@@ -2614,24 +2595,8 @@
     min-height: 350px;
   }
 
-  .profileSkeletonClaims {
-    min-height: 591px;
-  }
-
   .profileSkeletonClaims .profileSkeletonRow {
     min-height: 112px;
-  }
-
-  .claimablePanel[data-visible-count="2"] {
-    min-height: 361px;
-  }
-
-  .claimablePanel[data-visible-count="3"] {
-    min-height: 476px;
-  }
-
-  .claimablePanel[data-visible-count="4"] {
-    min-height: 591px;
   }
 
   .profileSkeletonBanner {
@@ -2657,18 +2622,18 @@
   }
 }
 
-@media (max-width: 42rem) {
-  .profileSkeletonLaunch {
-    margin-block-start: 16px;
-    padding: 16px;
+/* Keep the stacked claim header and wrapped amounts stable on narrow screens. */
+@media (max-width: 360px) {
+  .page,
+  :global(html[data-theme="dark"]) .page {
+    --profile-claims-min-height: 704px;
   }
 
-  .profileSkeletonLaunch .profileSkeletonRow {
-    grid-template-columns: 42px minmax(0, 1fr);
-    min-height: 143px;
+  .profileSkeletonClaims .profileSkeletonSectionHeader {
+    min-height: 80px;
   }
 
-  .profileSkeletonLaunch .profileSkeletonRow > span:last-child {
-    grid-column: 1 / -1;
+  .profileSkeletonClaims .profileSkeletonRow {
+    min-height: 140px;
   }
 }
