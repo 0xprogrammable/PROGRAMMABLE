@@ -204,7 +204,7 @@ def verify_source(environment):
             event = strict_json(event_file.read(262145))
     finally:
         os.close(event_descriptor)
-    require(isinstance(event, dict) and event.get("ref") == "production")
+    require(isinstance(event, dict) and event.get("ref") == REF)
     require(event.get("inputs") in (None, {}))
     require(
         event.get("repository", {}).get("id") == SOURCE_REPOSITORY_ID

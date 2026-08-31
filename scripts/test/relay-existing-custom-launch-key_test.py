@@ -3,7 +3,9 @@
 import base64
 import ctypes
 import importlib.util
+import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -116,6 +118,71 @@ class ExistingKeyRelayTest(unittest.TestCase):
             'run.get("path") in (WORKFLOW, f"{WORKFLOW}@production")', source
         )
         self.assertNotIn("endswith(", source)
+
+    def test_verify_source_accepts_only_full_dispatch_ref_before_git_or_api(self):
+        class EventAccepted(Exception):
+            pass
+
+        source = {
+            "repository": RELAY.SOURCE_REPOSITORY,
+            "repositoryId": RELAY.SOURCE_REPOSITORY_ID,
+            "environment": "production",
+            "secret": RELAY.SOURCE_SECRET,
+            "ref": RELAY.REF,
+            "commit": "a" * 40,
+            "workflow": RELAY.WORKFLOW,
+            "workflowCommit": "a" * 40,
+            "runId": "1234",
+            "runAttempt": 1,
+            "actor": "hazarxyz",
+            "actorId": "258789013",
+        }
+        event = {
+            "inputs": None,
+            "ref": RELAY.REF,
+            "repository": {
+                "id": RELAY.SOURCE_REPOSITORY_ID,
+                "full_name": RELAY.SOURCE_REPOSITORY,
+            },
+            "sender": {"login": "hazarxyz", "id": 258789013},
+            "workflow": RELAY.WORKFLOW,
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            event_path = Path(directory) / "event.json"
+            environment = {
+                "GITHUB_WORKSPACE": directory,
+                "GITHUB_EVENT_PATH": str(event_path),
+                "GH_TOKEN": "x",
+            }
+            with patch.object(
+                RELAY, "context_from_environment", return_value=source
+            ):
+                event_path.write_text(json.dumps(event), encoding="utf-8")
+                with patch.object(
+                    RELAY.subprocess, "run", side_effect=EventAccepted
+                ) as git, patch.object(RELAY, "request_json") as request:
+                    with self.assertRaises(EventAccepted):
+                        RELAY.verify_source(environment)
+                    self.assertEqual(git.call_count, 1)
+                    request.assert_not_called()
+
+                for invalid_ref in (
+                    "production",
+                    "refs/heads/main",
+                    "refs/tags/production",
+                ):
+                    event_path.write_text(
+                        json.dumps({**event, "ref": invalid_ref}),
+                        encoding="utf-8",
+                    )
+                    with self.subTest(ref=invalid_ref), patch.object(
+                        RELAY.subprocess, "run"
+                    ) as git, patch.object(RELAY, "request_json") as request:
+                        with self.assertRaises(RELAY.RelayRejected):
+                            RELAY.verify_source(environment)
+                        git.assert_not_called()
+                        request.assert_not_called()
 
     def test_workflow_has_no_recipient_input_or_write_token(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
