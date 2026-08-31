@@ -2621,3 +2621,19 @@
     width: 62%;
   }
 }
+
+/* Keep the stacked claim header and wrapped amounts stable on narrow screens. */
+@media (max-width: 360px) {
+  .page,
+  :global(html[data-theme="dark"]) .page {
+    --profile-claims-min-height: 704px;
+  }
+
+  .profileSkeletonClaims .profileSkeletonSectionHeader {
+    min-height: 80px;
+  }
+
+  .profileSkeletonClaims .profileSkeletonRow {
+    min-height: 140px;
+  }
+}
