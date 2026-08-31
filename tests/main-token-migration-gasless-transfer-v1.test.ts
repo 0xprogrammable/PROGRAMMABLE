@@ -22,6 +22,7 @@ import {
 } from "../lib/server/main-token-migration-gasless-transfer-store-v1";
 import {
   deriveMainTokenMigrationSponsorBindingsV1,
+  MainTokenMigrationGasSponsorErrorV1,
 } from "../lib/server/main-token-migration-gas-sponsor-v1";
 import {
   createMainTokenMigrationGasSponsorPostgresStoreV1,
@@ -331,6 +332,138 @@ describe("main token migration gasless permit transfer", () => {
     expect(await response.json()).toMatchObject({
       error: { code: "signature_invalid" },
     });
+  });
+
+  it.each([
+    {
+      status: 503,
+      code: "sponsor_policy_mismatch",
+      boundary: "provider",
+      retryAfterSeconds: 7,
+      message: "The gasless transfer is temporarily unavailable.",
+    },
+    {
+      status: 422,
+      code: "wallet_not_eligible",
+      boundary: "eligibility",
+      retryAfterSeconds: undefined,
+      message: "This wallet cannot use the gasless transfer path.",
+    },
+    {
+      status: 429,
+      code: "rate_limited",
+      boundary: "provider",
+      retryAfterSeconds: 60,
+      message: "Migration checks are briefly paused. Wait before resuming this same request.",
+    },
+  ] as const)("preserves sponsor $code without leaking details or rebroadcasting", async ({
+    status, code, boundary, retryAfterSeconds, message,
+  }) => {
+    const privateDetail = "private-sponsor-error-canary";
+    const failure = new MainTokenMigrationGasSponsorErrorV1(
+      status, code, retryAfterSeconds,
+    );
+    failure.message = privateDetail;
+    failure.cause = { authorization: privateDetail };
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      let record: MainTokenMigrationGaslessRecordV1 | null = null;
+      const reserve = vi.fn(async (input: {
+        intent: MainTokenMigrationGaslessRecordV1["intent"];
+      }) => {
+        record = {
+          intent: input.intent,
+          permitTransactionHash: null,
+          transferTransactionHash: null,
+        };
+        return { kind: "created" as const, record };
+      });
+      const complete = vi.fn();
+      const lookup = vi.fn();
+      const send = vi.fn();
+      const handler = createMainTokenMigrationGaslessTransferV1({
+        configuration,
+        authenticator: {
+          async authenticate() {
+            return {
+              privyUserId: "did:privy:test",
+              privySessionId: "session-test",
+              wallets: [account.address],
+            };
+          },
+        },
+        admissionStore: { async admit() {} } as never,
+        store: { async get() { return record; }, reserve, complete } as never,
+        chain: {
+          async prepare() {
+            if (boundary === "eligibility") throw failure;
+            return {
+              nonce: 0n,
+              feePerGasWei: 1_000_000_000n,
+              maxPriorityFeePerGasWei: 100_000_000n,
+              sponsorBalanceWei: 1_000_000_000_000_000_000n,
+              rootWalletAddress: account.address,
+            };
+          },
+        } as never,
+        sender: {
+          async assertReady() { throw failure; }, lookup, send,
+        } as never,
+        now: () => now,
+      });
+      const deadline = BigInt(Math.floor(now.getTime() / 1_000) + 600);
+      const bindings = deriveMainTokenMigrationSponsorBindingsV1({
+        releaseId: MAIN_TOKEN_MIGRATION_RELEASE_ID,
+        walletAddress: account.address,
+        amountRaw: 100n,
+        idempotencyKey,
+      });
+      const signature = await account.signTypedData(
+        buildMainTokenMigrationPermitTypedData({
+          owner: account.address,
+          spender: sponsorAddress,
+          value: 100n,
+          nonce: 0n,
+          deadline,
+        }),
+      );
+      const body = {
+        action: "submit",
+        walletAddress: account.address,
+        amountRaw: "100",
+        nonce: "0",
+        permitDeadline: deadline.toString(),
+        permitSignature: signature,
+        requestBindingHash: deriveMainTokenMigrationGaslessBindingV1({
+          baseRequestBindingHash: bindings.requestBindingHash,
+          nonce: 0n,
+          permitDeadline: deadline,
+        }),
+      };
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await handler.post(request(body));
+        expect(response.status).toBe(status);
+        expect(response.headers.get("retry-after")).toBe(
+          retryAfterSeconds === undefined ? null : String(retryAfterSeconds),
+        );
+        expect(await response.json()).toEqual({
+          error: { code, message, requestId: expect.any(String) },
+        });
+      }
+      expect(reserve).toHaveBeenCalledTimes(boundary === "provider" ? 1 : 0);
+      expect(complete).not.toHaveBeenCalled();
+      expect(lookup).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      const diagnostics = JSON.stringify([...errors.mock.calls, ...warnings.mock.calls]);
+      expect(diagnostics).not.toContain(privateDetail);
+      expect(diagnostics).not.toContain(signature);
+      expect(errors).toHaveBeenCalledTimes(status === 503 ? 2 : 0);
+      expect(warnings).toHaveBeenCalledTimes(status === 429 ? 2 : 0);
+    } finally {
+      errors.mockRestore();
+      warnings.mockRestore();
+    }
   });
 
   it("durably binds one root wallet and both exact relayer transactions", async () => {
