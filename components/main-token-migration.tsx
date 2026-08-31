@@ -364,18 +364,32 @@ export function gasSponsorshipDisplayKind(
   return state.kind;
 }
 
-function gasSponsorshipIdempotencyKey(account: string) {
+function gasSponsorshipIdempotencyKey(
+  account: string,
+  fallbackKeys: Map<string, string>,
+) {
   const normalizedAccount = getAddress(account).toLowerCase();
   const storageKey = `programmable:main-token-migration:gas-sponsor:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${normalizedAccount}`;
+  const fallback = fallbackKeys.get(storageKey);
+  if (fallback && /^[a-zA-Z0-9:_-]{16,200}$/u.test(fallback)) {
+    return fallback;
+  }
   try {
     const stored = window.localStorage.getItem(storageKey);
-    if (stored && /^[a-zA-Z0-9:_-]{16,200}$/u.test(stored)) return stored;
+    if (stored && /^[a-zA-Z0-9:_-]{16,200}$/u.test(stored)) {
+      fallbackKeys.set(storageKey, stored);
+      return stored;
+    }
     const random = window.crypto.randomUUID();
     const created = `migration-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${random}`;
+    fallbackKeys.set(storageKey, created);
     window.localStorage.setItem(storageKey, created);
     return created;
   } catch {
-    return `migration-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
+    const created =
+      `migration-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
+    fallbackKeys.set(storageKey, created);
+    return created;
   }
 }
 
@@ -744,6 +758,7 @@ export function MainTokenMigration() {
   const sponsorButtonRef = useRef<HTMLButtonElement>(null);
   const sponsorshipRegionRef = useRef<HTMLDivElement>(null);
   const trustedClockRef = useRef<TrustedClock | null>(null);
+  const sponsorshipIdempotencyKeysRef = useRef(new Map<string, string>());
 
   const readTrustedNow = useCallback(() => {
     const clock = trustedClockRef.current;
@@ -1362,7 +1377,10 @@ export function MainTokenMigration() {
           Accept: "application/json",
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          "Idempotency-Key": gasSponsorshipIdempotencyKey(account),
+          "Idempotency-Key": gasSponsorshipIdempotencyKey(
+            account,
+            sponsorshipIdempotencyKeysRef.current,
+          ),
         },
         body: JSON.stringify(body),
       });

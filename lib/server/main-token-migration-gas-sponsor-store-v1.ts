@@ -276,6 +276,8 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
         }
         const existingRecord = recordFromRows(existing, input.lookup);
         if (existingRecord) {
+          if (existingRecord.intent.requestBindingHash
+            !== input.requestBindingHash) throw conflict();
           return Object.freeze({ kind: "existing" as const, record: existingRecord });
         }
         if (rootHolder !== holder && rootHolderRow) throw conflict();

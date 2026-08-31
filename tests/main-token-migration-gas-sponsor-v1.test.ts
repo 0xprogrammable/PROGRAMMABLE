@@ -112,6 +112,9 @@ class MemoryStore implements MainTokenMigrationGasSponsorStoreV1 {
       }
       const existing = this.records.get(recordKey);
       if (existing) {
+        if (existing.intent.requestBindingHash !== input.requestBindingHash) {
+          throw new MainTokenMigrationGasSponsorStoreErrorV1("conflict");
+        }
         return { kind: "existing" as const, record: existing };
       }
       const reservedWei = [...this.records.values()]
@@ -813,7 +816,7 @@ describe("main token migration gas sponsor", () => {
         amountRaw: 100n,
         idempotencyKey: "migration-request-00000012",
       });
-      expect((await store.reserve({
+      await expect(store.reserve({
         lookup: {
           releaseId: CONFIGURATION.releaseId,
           walletAddress: WALLET,
@@ -822,7 +825,7 @@ describe("main token migration gas sponsor", () => {
         requestBindingHash: replayBindings.requestBindingHash,
         eligibility: directEligibility(WALLET),
         intent: testIntent(replayBindings.requestBindingHash),
-      })).kind).toBe("existing");
+      })).rejects.toMatchObject({ code: "conflict" });
       const aliases = await database.query<{ count: string }>(`
         SELECT count(*)::text AS count
           FROM programmable_website_projection_v1.credential_uses
