@@ -55,6 +55,16 @@ belong only in the deployment secret manager and private release evidence.
       reference fails closed without a token transfer.
 - [ ] Resume uses only the existing signed intent and exact account/amount/idempotency binding, even if its token balance is now lower.
 - [ ] Resume after the window is receipt-only; expired unsent permits and replaced provider hashes never cause blind resubmission.
+- [ ] Recovery is offered only after dual-RPC finalized expiry, unchanged permit nonce, zero sponsor allowance and
+      absence of any stored/provider transfer submission. Ambiguous lookups and RPC disagreement block recovery.
+- [ ] A new attempt requires explicit fresh wallet approval and is bound to the exact predecessor, holder, amount,
+      release and sponsor. Preparation alone reserves nothing; submit rechecks the proof.
+- [ ] Concurrent recovery requests append at most one successor. Older requests cannot overwrite or send for a newer
+      attempt. Immutable original intents, aliases, completions and recovery history remain available.
+- [ ] All attempt reservations still count against the shared native/gasless budget, the original faucet guard remains,
+      and no holder exceeds three total signed attempts.
+- [ ] Cancelling fresh approval or a browser-storage failure preserves the existing marker. A lost response resumes the
+      exact successor without an automatic additional signature or another attempt.
 - [ ] Shared budget exhaustion fails closed. Current-holder eligibility is not an unlimited or Sybil-resistant gas guarantee.
 
 ## Release evidence

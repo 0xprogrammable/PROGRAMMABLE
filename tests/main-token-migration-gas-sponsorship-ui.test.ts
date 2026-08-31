@@ -2,21 +2,27 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  assertGaslessRecoveryProgress,
   createMigrationRequestGate,
   gasSponsorshipDisplayKind,
   gasSponsorshipErrorMessage,
   gasSponsorshipFailure,
   gasSponsorshipState,
   gaslessTransferFailure,
+  gaslessRecoveryIdempotencyKey,
   gaslessTransferIdempotencyKey,
   hasEnoughMigrationGas,
   migrationGaslessResumeAmount,
   migrationTransferRoute,
+  parseGaslessTransferResponse,
   parseGasSponsorshipResponse,
+  persistGaslessRecoveryProgress,
   sponsorshipRetryAfterMs,
   waitForMigrationRetry,
+  storedGaslessTransferProgress,
   type MainTokenGasSponsorshipResponse,
   type MainTokenGasSponsorshipStatus,
+  type StoredGaslessTransferProgress,
 } from "../components/main-token-migration";
 import {
   MAIN_TOKEN_MIGRATION_RELEASE_ID,
@@ -28,6 +34,39 @@ const SCHEMA =
 const WALLET = "0x1111111111111111111111111111111111111111";
 const OTHER_WALLET = "0x2222222222222222222222222222222222222222";
 const TX_HASH = `0x${"ab".repeat(32)}` as const;
+const PARENT_BINDING = `sha256:${"ac".repeat(32)}` as const;
+const CHILD_BINDING = `sha256:${"bc".repeat(32)}` as const;
+const PROGRESS_KEY = `programmable:main-token-migration:gasless-progress:${MAIN_TOKEN_MIGRATION_RELEASE_ID}`;
+const NEW_REQUEST_KEY = "gasless-new-request-123456789";
+
+function gaslessResponse(status: string, overrides: Record<string, unknown> = {}) {
+  return {
+    schema: "programmable-main-token-migration-gasless-transfer/v1",
+    status,
+    walletAddress: WALLET,
+    amountRaw: "100",
+    sponsorAddress: OTHER_WALLET,
+    nonce: "0",
+    permitDeadline: "1788160000",
+    requestBindingHash: PARENT_BINDING,
+    permitTransactionHash: TX_HASH,
+    transferTransactionHash: null,
+    transferBlockNumber: null,
+    previousRequestBindingHash: PARENT_BINDING,
+    ...overrides,
+  };
+}
+
+function recoveryStorage(progress: StoredGaslessTransferProgress) {
+  const values = new Map<string, string>([[PROGRESS_KEY, JSON.stringify(progress)]]);
+  const localStorage = {
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => { values.set(key, value); }),
+    removeItem: vi.fn((key: string) => { values.delete(key); }),
+  };
+  vi.stubGlobal("window", { localStorage, dispatchEvent: vi.fn() });
+  return { values, localStorage };
+}
 
 function response(
   status: MainTokenGasSponsorshipStatus,
@@ -244,16 +283,128 @@ describe("main token migration gas sponsorship UI contract", () => {
     const review = source.slice(source.indexOf("  async function reviewGaslessTransfer("),
       source.indexOf("  async function reviewTransfer()"));
     expect(review.indexOf("const permit = await signMainTokenMigrationPermit")).toBeLessThan(
-      review.indexOf("const progress = persistGaslessTransferProgress"),
+      review.indexOf("const progress = recoveryReview?.previousRequestBindingHash"),
+    );
+    expect(review.indexOf("persistGaslessRecoveryProgress(recoveryReview.progress")).toBeLessThan(
+      review.indexOf('action: recoveryReview?.previousRequestBindingHash ? "submit_recovery" : "submit"'),
     );
     const beforeConfirmation = review.slice(0, review.indexOf('result.status === "confirmed"'));
     expect(beforeConfirmation).not.toContain("clearGaslessTransferProgress()");
     expect(review).toContain('action: "resume"');
+    const resume = review.slice(review.indexOf("if (resumeExisting)"), review.indexOf("} else {"));
+    expect(resume).toContain("previousRequestBindingHash: savedProgress.previousRequestBindingHash");
     expect(review).toContain("resumeExisting || preservePendingRequest");
     expect(review).toContain('resumeExisting && response.status === 409 &&');
     expect(review).toContain('failure.code === "gasless_request_not_found" && trustedTransferWindowOpen()');
-    expect(review).toContain("reviewGaslessTransfer(account, amountRaw, false, true)");
+    expect(review).not.toContain("await reviewGaslessTransfer(");
+    expect(review).toContain("setGaslessRecoveryReview({");
     expect(source).not.toContain('Gasless transfer available');
+  });
+
+  it("accepts recovery only with an exact server predecessor and no possible transfer hash", () => {
+    const offer = gaslessResponse("recovery_available");
+    expect(parseGaslessTransferResponse(offer, WALLET, 100n).status).toBe("recovery_available");
+    for (const change of [
+      { previousRequestBindingHash: CHILD_BINDING },
+      { previousRequestBindingHash: undefined },
+      { requestBindingHash: CHILD_BINDING },
+      { transferTransactionHash: TX_HASH },
+      { transferBlockNumber: "10" },
+      { walletAddress: OTHER_WALLET },
+      { amountRaw: "101" },
+      { extra: true },
+    ]) {
+      expect(() => parseGaslessTransferResponse({ ...offer, ...change }, WALLET, 100n)).toThrow();
+    }
+    expect(parseGaslessTransferResponse({ ...offer, permitTransactionHash: null }, WALLET, 100n)
+      .permitTransactionHash).toBeNull();
+  });
+
+  it("binds recovery wallet review to the exact parent rather than accepting any fresh approval", () => {
+    const prepared = gaslessResponse("signature_required", {
+      requestBindingHash: CHILD_BINDING,
+      permitTransactionHash: null,
+    });
+    expect(parseGaslessTransferResponse(prepared, WALLET, 100n, PARENT_BINDING)
+      .previousRequestBindingHash).toBe(PARENT_BINDING);
+    expect(() => parseGaslessTransferResponse(prepared, WALLET, 100n, CHILD_BINDING)).toThrow();
+    expect(() => parseGaslessTransferResponse(prepared, WALLET, 100n)).toThrow();
+    const withoutParent: Record<string, unknown> = { ...prepared };
+    delete withoutParent.previousRequestBindingHash;
+    expect(() => parseGaslessTransferResponse(withoutParent, WALLET, 100n, PARENT_BINDING)).toThrow();
+    expect(parseGaslessTransferResponse(withoutParent, WALLET, 100n).status).toBe("signature_required");
+  });
+
+  it("atomically saves a recovery key with its parent and restores that exact request after refresh", () => {
+    const old: StoredGaslessTransferProgress = {
+      schema: "programmable-main-token-migration-gasless-ui/v1", account: WALLET, amountRaw: "100",
+    };
+    const { localStorage, values } = recoveryStorage(old);
+    expect(storedGaslessTransferProgress()).toEqual(old);
+    const recovered = persistGaslessRecoveryProgress(old, NEW_REQUEST_KEY, PARENT_BINDING);
+    expect(recovered).toEqual({ ...old, schema: "programmable-main-token-migration-gasless-ui/v2",
+      idempotencyKey: NEW_REQUEST_KEY, previousRequestBindingHash: PARENT_BINDING });
+    expect(localStorage.setItem).toHaveBeenCalledOnce();
+    expect(localStorage.setItem).toHaveBeenCalledWith(PROGRESS_KEY, JSON.stringify(recovered));
+    expect(storedGaslessTransferProgress()).toEqual(recovered);
+    expect(values.get(PROGRESS_KEY)).not.toContain("permitSignature");
+    expect(localStorage.removeItem).not.toHaveBeenCalled();
+  });
+
+  it("uses the same fresh recovery key across tabs for one parent and a new key for the next parent", () => {
+    const firstTab = gaslessRecoveryIdempotencyKey(PARENT_BINDING);
+    const secondTab = gaslessRecoveryIdempotencyKey(PARENT_BINDING);
+    expect(firstTab).toBe(secondTab);
+    expect(firstTab).toMatch(/^[a-zA-Z0-9:_-]{16,200}$/u);
+    expect(firstTab).not.toBe(gaslessRecoveryIdempotencyKey(CHILD_BINDING));
+    expect(() => gaslessRecoveryIdempotencyKey("sha256:invalid")).toThrow();
+  });
+
+  it("preserves the original request when saving a signed recovery fails", () => {
+    const old: StoredGaslessTransferProgress = {
+      schema: "programmable-main-token-migration-gasless-ui/v1", account: WALLET, amountRaw: "100",
+    };
+    const { localStorage, values } = recoveryStorage(old);
+    localStorage.setItem.mockImplementation(() => { throw new Error("Storage is full"); });
+    expect(() => persistGaslessRecoveryProgress(old, NEW_REQUEST_KEY, PARENT_BINDING))
+      .toThrow("Nothing was submitted");
+    expect(values.get(PROGRESS_KEY)).toBe(JSON.stringify(old));
+    expect(storedGaslessTransferProgress()).toEqual(old);
+    expect(localStorage.removeItem).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a newer attempt from another tab or accept malformed v2 progress", () => {
+    const old: StoredGaslessTransferProgress = {
+      schema: "programmable-main-token-migration-gasless-ui/v1", account: WALLET, amountRaw: "100",
+    };
+    const { values, localStorage } = recoveryStorage(old);
+    const newer = persistGaslessRecoveryProgress(old, NEW_REQUEST_KEY, PARENT_BINDING);
+    localStorage.setItem.mockClear();
+    expect(() => assertGaslessRecoveryProgress(old)).toThrow("changed in another tab");
+    expect(() => persistGaslessRecoveryProgress(old, "gasless-third-request-123456789", CHILD_BINDING)).toThrow();
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+    expect(storedGaslessTransferProgress()).toEqual(newer);
+    for (const change of [{ idempotencyKey: "short" }, { previousRequestBindingHash: "wrong" },
+      { amountRaw: (MAIN_TOKEN_TOTAL_SUPPLY_RAW + 1n).toString() }, { permitSignature: TX_HASH }]) {
+      values.set(PROGRESS_KEY, JSON.stringify({ ...newer, ...change }));
+      expect(storedGaslessTransferProgress()).toBeNull();
+    }
+  });
+
+  it("requires a distinct user action for fresh recovery and keeps status checks available after closure", () => {
+    const source = readFileSync(new URL("../components/main-token-migration.tsx", import.meta.url), "utf8");
+    expect(source).toContain('gaslessRecoveryReview && trustedTransferWindowOpen()');
+    expect(source).toContain('gaslessRecoveryReview && transferWindowOpen');
+    expect(source).toContain('"Review new transfer"');
+    expect(source).toContain('data-status={canResumeGaslessTransfer ? "unavailable" : "eoa"}');
+    const click = source.slice(source.indexOf("  async function reviewTransfer()"),
+      source.indexOf("  async function reviewTransferOnce()"));
+    expect(click.indexOf("transferInFlightRef.current = true")).toBeLessThan(click.indexOf("await reviewTransferOnce()"));
+    const sign = source.slice(source.indexOf("const permit = await signMainTokenMigrationPermit"),
+      source.indexOf('for (let attempt = 0; attempt < 60; attempt += 1)'));
+    expect(sign.indexOf("!trustedTransferWindowOpen()")).toBeLessThan(sign.indexOf("persistGaslessRecoveryProgress("));
+    expect(sign).not.toContain("clearGaslessTransferProgress");
+    expect(source).toContain('(!transferWindowOpen && !canResumeGaslessTransfer)');
   });
 
   it("honors the full Retry-After minimum and falls back safely", () => {
