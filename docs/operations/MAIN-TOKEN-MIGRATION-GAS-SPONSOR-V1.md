@@ -1,18 +1,23 @@
 # Main Token Migration Gas Sponsor V1
 
-Status: preparation-ready, activation-blocked. The checked-in activation manifest binds the 72-hour release policy,
-but it intentionally contains no start time, deadline or eligibility-block anchor yet. No committed file contains the
-operational Privy wallet ID, policy ID, sponsor address or release budget.
+Status: active for the checked-in 72-hour migration window. The activation manifest binds the exact start, exclusive
+deadline and finalized eligibility block. No committed file contains the operational Privy wallet ID, policy ID or
+release budget.
 
 ## Purpose
 
-This runbook defines the server-only activation contract for one bounded Ethereum Mainnet gas top-up per eligible
-V4 holder during the exact 72-hour migration window. The sponsor sends native ETH only to the authenticated holder
-wallet so that the holder can separately approve the exact V4 token transfer in their own wallet. It never sends V4,
-never submits the holder's token transfer, and never uses the migration recipient wallet as the sponsor.
+This runbook defines two server-only gas paths during the exact 72-hour migration window. A normal EOA can receive
+one bounded Ethereum Mainnet gas top-up and then separately approve the V4 transfer. An eligible EIP-7702 delegated
+wallet, including wallets that automatically wrap incoming ETH, instead signs an exact EIP-2612 permit. The same
+dedicated sponsor pays gas for the permit and an exact `transferFrom` to the fixed migration wallet. No private key is
+requested or exported, and neither path uses the migration recipient wallet as the sponsor.
 
 The machine-readable companion is
 [`config/main-token-migration-gas-sponsor-contract.v1.json`](../../config/main-token-migration-gas-sponsor-contract.v1.json).
+The gasless delegated-wallet companion is
+[`config/main-token-migration-gasless-transfer-contract.v1.json`](../../config/main-token-migration-gasless-transfer-contract.v1.json).
+The exact provider-enforced policy is
+[`config/main-token-migration-gas-sponsor-privy-policy.v2.json`](../../config/main-token-migration-gas-sponsor-privy-policy.v2.json).
 The release activation source is
 [`config/main-token-migration-activation.v1.json`](../../config/main-token-migration-activation.v1.json).
 
@@ -53,20 +58,36 @@ manifest has `enabled: true`, the current time is inside the window, and at leas
 ## Privy wallet and policy
 
 Use a dedicated Privy Ethereum EOA. It must not be the V4 token contract or the migration recipient wallet. Before
-every eligibility response and transfer, the server re-reads the wallet from Privy and requires all of the following:
+every eligibility response and transfer, the server re-reads the wallet and policy from Privy and requires all of the
+following:
 
 - the returned wallet ID equals `MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_WALLET_ID`;
 - `chain_type` is `ethereum` and the returned address equals the configured checksummed address; and
 - exactly one policy is attached and its ID equals `MAIN_TOKEN_MIGRATION_GAS_SPONSOR_PRIVY_POLICY_ID`.
+- the policy has no owner, is Ethereum policy version 1.0, and its normalized rules exactly match the checked-in V2
+  policy contract; an extra, missing or broader rule fails closed.
 
-The attached policy must allow only `eth_sendTransaction` for Ethereum Mainnet (`eip155:1`), native value no greater
-than the configured top-up cap and never greater than 0.002 ETH; its default action must deny unrelated wallet
-methods. Privy's transaction-policy fields do not attest calldata or the dynamic holder recipient. The server
-therefore independently constructs a type-2 transaction with chain ID 1, empty calldata, the sponsor as `from`, the
-authenticated eligible holder as `to`, and the exact calculated deficit as `value`. A plain EOA uses 21,000 gas. An
-eligible EIP-7702 delegated EOA uses the higher exact estimate returned by both independent RPCs with 125% headroom,
-bounded between 21,000 and 100,000 gas. A broader policy is not activation-ready even though these server checks
-remain in place.
+The policy has three non-overlapping allow rules and defaults to deny everything else. The native rule requires a
+strictly positive Mainnet value no greater than 0.002 ETH, so it cannot authorize zero-value contract calls. The
+permit rule pins the V4 token, sponsor spender, total-supply ceiling and release deadline. The `transferFrom` rule pins
+the V4 token, total-supply ceiling and fixed migration destination. The server independently binds the dynamic holder,
+exact signed amount, empty native calldata or byte-exact token calldata, sender, type-2 gas/fee fields and calculated
+value. Every submitted transaction is independently read back through two RPCs.
+
+## Delegated-wallet gasless path
+
+The gasless route is used only when the connected address has the canonical EIP-7702 delegation indicator. Both RPCs
+must agree on that code, the pinned token runtime, token name `Programmable`, permit domain separator, current nonce,
+current balance and pre-window eligibility. The wallet reviews an EIP-2612 permit binding chain ID 1, the pinned V4
+token, the dedicated sponsor as spender, exact raw amount, current nonce and a deadline of at most 20 minutes. The
+server recovers the exact connected owner before reserving anything.
+
+The private ledger stores one request binding plus separate deterministic provider references for `permit` and
+`transferFrom`. The sponsor first submits the byte-exact permit. Only after two providers confirm its successful
+receipt and the allowance is visible may the sponsor call `transferFrom(owner, fixedMigrationWallet, exactAmount)`.
+Both calls have zero native value, 100,000-gas ceilings and share the existing release budget and root-wallet replay
+guard. The ordinary ETH endpoint rejects delegated wallets, preventing a new wallet from claiming both paths. The UI
+never signs automatically and never treats a provider response as a confirmed token transfer.
 
 ## Fixed fee and budget boundaries
 
@@ -77,7 +98,7 @@ These limits are code-bound and are not operator-tunable:
 | Token-transfer gas ceiling | `100000` gas | A larger estimate fails closed |
 | Quote multiplier | `12500` bps (125%) | Applied to the conservative transfer-gas quote |
 | Maximum fee per gas | `20000000000` wei (20 gwei) | A higher quote returns unavailable; it never increases the cap |
-| Sponsor transaction gas | `21000` to `100000` gas | Plain EOA is fixed at 21,000; delegated EOA is dual-RPC estimated with 125% headroom |
+| Sponsor transaction gas | `21000` gas | Only a plain EOA can receive a native top-up; delegated wallets use the gasless token path |
 | Absolute top-up cap | `2000000000000000` wei (0.002 ETH) | The configured cap may be lower, never higher |
 | Absolute release budget cap | `1000000000000000000` wei (1 ETH) | The configured budget may be lower, never higher |
 | Deadline safety margin | `300` seconds | New sponsorship closes before the migration deadline |
@@ -85,7 +106,8 @@ These limits are code-bound and are not operator-tunable:
 The calculated requirement is `ceil(100000 * maxFeePerGas * 12500 / 10000)`. Existing holder ETH is subtracted, so
 only the deficit is sent. The quote uses the higher max fee and higher priority fee observed across the two
 independent providers, and the priority fee must not exceed the max fee. Each durable budget reservation includes
-both that top-up and the sponsor's exact reserved `sponsorGasLimit * maxFeePerGas` transaction cost. The total budget
+both that top-up and the sponsor's exact reserved `sponsorGasLimit * maxFeePerGas` transaction cost. Native and
+gasless holder rows are summed under the same advisory lock. The total budget
 must cover the configured maximum top-up. It must also be
 chosen below the wallet's funded balance with an operator-owned safety margin; the absolute code cap is not a funding
 recommendation.
@@ -95,7 +117,8 @@ recommendation.
 The endpoint authenticates the Privy access token and requires the requested address to be linked to that Privy
 principal. Both independent Ethereum providers must agree on chain ID, canonical head, the finalized pre-window
 eligibility block and the pinned V4 runtime code. The holder and sponsor must be EOAs or an explicitly supported
-EIP-7702 delegated EOA. The current holder must own at least the requested V4 amount at the canonical read. It is
+EIP-7702 delegated EOA. The native top-up path accepts only a plain EOA; a supported delegated holder is routed
+exclusively to the gasless transfer. The current holder must own at least the requested V4 amount at the canonical read. It is
 eligible either by owning that amount at the pre-window block or through one finalized direct V4 transfer from an
 eligible pre-window root wallet. Both providers must return the exact same transfer log, transaction and pre-window
 root balance. The transaction must originate from that root EOA, call the pinned V4 token directly and encode the

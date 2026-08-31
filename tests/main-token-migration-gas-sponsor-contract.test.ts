@@ -30,6 +30,44 @@ type SponsorContract = Readonly<{
   runtimeDependencies: readonly string[];
 }>;
 
+type GaslessTransferContract = Readonly<{
+  schema: string;
+  releaseId: string;
+  activationManifestPath: string;
+  route: string;
+  serverOnly: boolean;
+  chainId: string;
+  sourceAssetContract: string;
+  tokenName: string;
+  permitVersion: string;
+  permitDomainSeparator: string;
+  migrationWallet: string;
+  walletReview: Readonly<{
+    standard: string;
+    binds: readonly string[];
+  }>;
+  relayer: Readonly<Record<string, string>>;
+  serverEnforces: readonly string[];
+}>;
+
+type PrivyPolicyContract = Readonly<{
+  schema: string;
+  name: string;
+  chainType: string;
+  version: string;
+  rules: readonly Readonly<{
+    name: string;
+    action: string;
+    method: string;
+    conditions: readonly Readonly<{
+      field_source: string;
+      field: string;
+      operator: string;
+      value: string;
+    }>[];
+  }>[];
+}>;
+
 const read = (path: string) =>
   readFileSync(join(process.cwd(), path), "utf8");
 const parse = <T>(path: string) => JSON.parse(read(path)) as T;
@@ -37,6 +75,12 @@ const parse = <T>(path: string) => JSON.parse(read(path)) as T;
 describe("main token migration gas sponsor activation contract", () => {
   const contract = parse<SponsorContract>(
     "config/main-token-migration-gas-sponsor-contract.v1.json",
+  );
+  const gaslessContract = parse<GaslessTransferContract>(
+    "config/main-token-migration-gasless-transfer-contract.v1.json",
+  );
+  const privyPolicy = parse<PrivyPolicyContract>(
+    "config/main-token-migration-gas-sponsor-privy-policy.v2.json",
   );
   const manifest = parse<Record<string, unknown>>(
     "config/main-token-migration-activation.v1.json",
@@ -47,6 +91,9 @@ describe("main token migration gas sponsor activation contract", () => {
   );
   const store = read(
     "lib/server/main-token-migration-gas-sponsor-store-v1.ts",
+  );
+  const gaslessImplementation = read(
+    "lib/server/main-token-migration-gasless-transfer-v1.ts",
   );
   const runbook = read(
     "docs/operations/MAIN-TOKEN-MIGRATION-GAS-SPONSOR-V1.md",
@@ -123,10 +170,17 @@ describe("main token migration gas sponsor activation contract", () => {
       transactionMethod: "eth_sendTransaction",
       transactionType: "2",
       transactionData: "0x",
-      sponsorGasLimitMode: "eoa-fixed-or-delegated-estimated",
+      sponsorGasLimitMode: "plain-eoa-fixed",
       sponsorGasLimitMinimum: "21000",
       sponsorGasLimitMaximum: "100000",
-      providerPolicyEnforces: ["method", "chainId", "maximumValue"],
+      providerPolicyEnforces: [
+        "method",
+        "chainId",
+        "positiveMaximumNativeValue",
+        "pinnedToken",
+        "permitSpenderAmountDeadline",
+        "fixedTransferFromDestinationAndAmount",
+      ],
       serverEnforces: [
         "holderRecipient",
         "emptyCalldata",
@@ -171,6 +225,121 @@ describe("main token migration gas sponsor activation contract", () => {
     );
     expect(store).toContain(
       "MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1 = 21_000n",
+    );
+  });
+
+  it("pins the delegated-wallet permit and fixed transfer destination", () => {
+    expect(gaslessContract).toMatchObject({
+      schema: "programmable-main-token-migration-gasless-transfer-contract/v1",
+      releaseId: contract.releaseId,
+      activationManifestPath: contract.activationManifestPath,
+      route: "/api/main-token-migration/gasless-transfer",
+      serverOnly: true,
+      chainId: "1",
+      sourceAssetContract: manifest.sourceTokenAddress,
+      tokenName: "Programmable",
+      permitVersion: "1",
+      migrationWallet: manifest.migrationWallet,
+      walletReview: {
+        standard: "EIP-2612 Permit",
+        binds: [
+          "owner",
+          "sponsorSpender",
+          "exactAmountRaw",
+          "currentNonce",
+          "shortDeadline",
+          "EthereumChainId",
+          "pinnedToken",
+        ],
+      },
+      relayer: {
+        permitGasLimit: "100000",
+        transferFromGasLimit: "100000",
+        maximumFeePerGasWei: "20000000000",
+        destination: "fixedMigrationWallet",
+        providerTransactions: "separate-idempotent-permit-and-transferFrom",
+      },
+    });
+    expect(gaslessContract.permitDomainSeparator).toMatch(
+      /^0x[0-9a-f]{64}$/u,
+    );
+    for (const boundary of [
+      "authenticatedLinkedOwner",
+      "sameOrigin",
+      "openingAndCurrentBalance",
+      "dualRpcQuorum",
+      "eip7702WalletCode",
+      "exactPermitSigner",
+      "exactPermitTypedData",
+      "fixedToken",
+      "fixedMigrationDestination",
+      "sharedBudget",
+      "rootWalletReplayGuard",
+      "exactTransactionReadback",
+    ]) {
+      expect(gaslessContract.serverEnforces).toContain(boundary);
+    }
+    expect(gaslessImplementation).toContain(
+      "const PERMIT_GAS_LIMIT = 100_000n;",
+    );
+    expect(gaslessImplementation).toContain(
+      "const TRANSFER_GAS_LIMIT = 100_000n;",
+    );
+    expect(gaslessImplementation).toContain(
+      "const MAXIMUM_FEE_PER_GAS_WEI = 20_000_000_000n;",
+    );
+    expect(gaslessImplementation).toContain(
+      "MAIN_TOKEN_MIGRATION_WALLET,",
+    );
+  });
+
+  it("pins a provider policy that cannot turn the permit into a broad allowance", () => {
+    expect(privyPolicy).toMatchObject({
+      schema: "programmable-main-token-migration-gas-sponsor-privy-policy/v2",
+      name: "Main token migration gas sponsor v2",
+      chainType: "ethereum",
+      version: "1.0",
+    });
+    expect(privyPolicy.rules).toHaveLength(3);
+    expect(privyPolicy.rules.every((rule) =>
+      rule.action === "ALLOW" && rule.method === "eth_sendTransaction",
+    )).toBe(true);
+    expect(privyPolicy.rules.some((rule) => rule.method === "*")).toBe(false);
+    const [native, permit, transfer] = privyPolicy.rules;
+    expect(native?.conditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "value", operator: "gt", value: "0x0" }),
+      expect.objectContaining({
+        field: "value",
+        operator: "lte",
+        value: "0x71afd498d0000",
+      }),
+    ]));
+    expect(permit?.conditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        field: "to",
+        value: "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+      }),
+      expect.objectContaining({
+        field: "permit.spender",
+        value: "0x0060f9E57FCcc0611ef44809B257919e78Aa99Ac",
+      }),
+      expect.objectContaining({ field: "permit.deadline", value: "0x6a9919c4" }),
+    ]));
+    expect(transfer?.conditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        field: "transferFrom.to",
+        value: "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
+      }),
+      expect.objectContaining({
+        field: "transferFrom.amount",
+        value: "0x33b2e3c9fd0803ce8000000",
+      }),
+    ]));
+    expect(implementation).toContain(
+      "assertMainTokenMigrationPrivySponsorPolicyV2",
+    );
+    expect(runbook).toContain(
+      "main-token-migration-gas-sponsor-privy-policy.v2.json",
     );
   });
 });

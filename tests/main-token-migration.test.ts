@@ -272,7 +272,7 @@ describe("main token migration page contract", () => {
       "const canRevealDestination = transferWindowOpen || hasTrackedTransfer;",
     );
     expect(page).toContain("const canCopyDestination = transferWindowOpen;");
-    expect(page).toContain("{canRevealDestination ? (");
+    expect(page).toContain(": canRevealDestination ? (");
     expect(page).toContain("Copy address");
     expect(page).toContain("disabled={!canCopyDestination}");
     expect(page).toContain(

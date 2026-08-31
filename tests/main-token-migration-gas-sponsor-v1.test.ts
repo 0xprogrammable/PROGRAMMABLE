@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   MainTokenMigrationGasSponsorErrorV1,
+  assertMainTokenMigrationPrivySponsorPolicyV2,
   assertMainTokenMigrationSponsorEligibilityAnchorV1,
   assertMainTokenMigrationPrivySponsorWalletV1,
   calculateMainTokenMigrationTopUpWeiV1,
@@ -29,6 +30,8 @@ import {
   type MainTokenMigrationGasSponsorRecordV1,
   type MainTokenMigrationGasSponsorStoreV1,
 } from "../lib/server/main-token-migration-gas-sponsor-store-v1";
+import sponsorPolicyContract from
+  "../config/main-token-migration-gas-sponsor-privy-policy.v2.json";
 import {
   MAIN_TOKEN_ADDRESS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
@@ -63,6 +66,12 @@ const CONFIGURATION: MainTokenMigrationGasSponsorConfigurationV1 = {
   sponsorAddress: SPONSOR,
   maximumTopUpWei: 2_000_000_000_000_000n,
   totalBudgetWei: 172_000_000_000_000n,
+};
+
+const PRODUCTION_POLICY_CONFIGURATION: MainTokenMigrationGasSponsorConfigurationV1 = {
+  ...CONFIGURATION,
+  deadlineTimestampExclusive: 1_788_418_500,
+  sponsorAddress: "0x0060f9E57FCcc0611ef44809B257919e78Aa99Ac",
 };
 
 function key(releaseId: string, walletAddress: string) {
@@ -280,6 +289,35 @@ function sponsor(
 }
 
 describe("main token migration gas sponsor", () => {
+  it("requires the exact provider policy and rejects a broader allow rule", () => {
+    const policy = {
+      chain_type: sponsorPolicyContract.chainType,
+      name: sponsorPolicyContract.name,
+      owner_id: null,
+      version: sponsorPolicyContract.version,
+      rules: sponsorPolicyContract.rules.map((rule, index) => ({
+        ...rule,
+        id: `rule-${index}`,
+      })),
+    };
+    expect(() => assertMainTokenMigrationPrivySponsorPolicyV2(
+      policy,
+      PRODUCTION_POLICY_CONFIGURATION,
+    )).not.toThrow();
+    expect(() => assertMainTokenMigrationPrivySponsorPolicyV2({
+      ...policy,
+      rules: [...policy.rules, {
+        id: "broad-rule",
+        name: "Broad allow",
+        action: "ALLOW",
+        method: "eth_sendTransaction",
+        conditions: [],
+      }],
+    }, PRODUCTION_POLICY_CONFIGURATION)).toThrow(
+      MainTokenMigrationGasSponsorErrorV1,
+    );
+  });
+
   it("accepts one confirmed direct transfer from the eligible root wallet", async () => {
     const blockHash = `0x${"45".repeat(32)}` as const;
     const transferHash = `0x${"67".repeat(32)}` as const;
