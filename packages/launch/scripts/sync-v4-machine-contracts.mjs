@@ -56,6 +56,12 @@ const uuid = {
   type: "string",
   pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 };
+const opaqueListCursor = {
+  type: "string",
+  minLength: 16,
+  maxLength: 512,
+  pattern: "^[A-Za-z0-9_-]+$",
+};
 
 const finalityPolicy = closed(
   ["schemaVersion", "policyId", "policyRevision", "policyDigest"],
@@ -1843,7 +1849,7 @@ const listEnvelope = closed(
     caip2: { const: "eip155:4663" },
     generatedAt: dateTime,
     launches: array(resource),
-    nextCursor: nullable({ type: "string", minLength: 1, maxLength: 4096 }),
+    nextCursor: nullable(clone(opaqueListCursor)),
   },
 );
 const finalizedListEnvelope = closed(
@@ -1861,9 +1867,25 @@ const finalizedListEnvelope = closed(
       quarantinedRowCount: { type: "integer", minimum: 0 },
     }),
     launches: array(finalizedMetadata),
-    nextCursor: nullable({ type: "string", minLength: 1, maxLength: 4096 }),
+    nextCursor: nullable(clone(opaqueListCursor)),
   },
 );
+const listPaginationParameters = [
+  {
+    name: "limit",
+    in: "query",
+    required: false,
+    description: "Page size. Defaults to 10 and never exceeds 25.",
+    schema: { type: "integer", minimum: 1, maximum: 25, default: 10 },
+  },
+  {
+    name: "cursor",
+    in: "query",
+    required: false,
+    description: "Opaque continuation cursor returned by nextCursor. Pass it back unchanged.",
+    schema: clone(opaqueListCursor),
+  },
+];
 
 const standalone = new Map([
   ["custom-launch-create-request.json", annotate("Custom Launch V4 create request", "custom-launch-create-request.json", createRequest)],
@@ -1906,6 +1928,19 @@ listResponse.schema = { $ref: "#/components/schemas/CustomLaunchListV4" };
 const finalizedResponse = openapi.paths["/v4/chains/{chainId}/finalized-custom-launches"].get
   .responses["200"].content["application/json"];
 finalizedResponse.schema = { $ref: "#/components/schemas/CustomLaunchFinalizedListV4" };
+for (const pathName of [
+  "/v4/chains/{chainId}/custom-launches",
+  "/v4/chains/{chainId}/finalized-custom-launches",
+]) {
+  const operation = openapi.paths[pathName].get;
+  operation.parameters = [
+    ...(operation.parameters ?? []).filter((parameter) => !(
+      parameter.in === "query"
+      && (parameter.name === "limit" || parameter.name === "cursor")
+    )),
+    ...clone(listPaginationParameters),
+  ];
+}
 
 await writeFile(openApiPath, `${JSON.stringify(openapi, null, 2)}\n`);
 

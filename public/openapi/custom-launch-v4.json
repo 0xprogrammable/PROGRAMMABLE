@@ -374,6 +374,30 @@
               "const": "4663",
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Defaults to 10 and never exceeds 25.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque continuation cursor returned by nextCursor. Pass it back unchanged.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
           }
         ],
         "responses": {
@@ -593,6 +617,30 @@
             "schema": {
               "const": "4663",
               "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Defaults to 10 and never exceeds 25.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque continuation cursor returned by nextCursor. Pass it back unchanged.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_-]+$"
             }
           }
         ],
@@ -57262,8 +57310,9 @@
             "oneOf": [
               {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 4096
+                "minLength": 16,
+                "maxLength": 512,
+                "pattern": "^[A-Za-z0-9_-]+$"
               },
               {
                 "type": "null"
@@ -64554,8 +64603,9 @@
             "oneOf": [
               {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 4096
+                "minLength": 16,
+                "maxLength": 512,
+                "pattern": "^[A-Za-z0-9_-]+$"
               },
               {
                 "type": "null"

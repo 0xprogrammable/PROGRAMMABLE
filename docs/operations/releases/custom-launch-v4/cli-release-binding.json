@@ -65,7 +65,7 @@
       "name": "openapi",
       "path": "public/openapi/custom-launch-v4.json",
       "url": "https://programmable.market/openapi/custom-launch-v4.json",
-      "sha256": "sha256:dd551dbe2d4d60a1b4e7ec20dece7f0ee91e36642ce9f1e4186e341f13b60728"
+      "sha256": "sha256:581eb94ad6b8500646ec8b60aa56023c1badee44daf8814ffcd821a85e1ed1ef"
     },
     {
       "name": "packConfig",

@@ -692,6 +692,57 @@ test("V4 list and finalized routes publish closed launches/nextCursor envelopes"
   assert.equal(finalizedValidator(finalizedGolden), false, "finalized envelope must be closed");
 });
 
+test("V4 collection routes publish the exact runtime pagination contract", () => {
+  const expectedPaginationParameters = [
+    {
+      name: "limit",
+      in: "query",
+      required: false,
+      description: "Page size. Defaults to 10 and never exceeds 25.",
+      schema: { type: "integer", minimum: 1, maximum: 25, default: 10 },
+    },
+    {
+      name: "cursor",
+      in: "query",
+      required: false,
+      description: "Opaque continuation cursor returned by nextCursor. Pass it back unchanged.",
+      schema: {
+        type: "string",
+        minLength: 16,
+        maxLength: 512,
+        pattern: "^[A-Za-z0-9_-]+$",
+      },
+    },
+  ];
+  const expectedNextCursor = {
+    oneOf: [
+      structuredClone(expectedPaginationParameters[1].schema),
+      { type: "null" },
+    ],
+  };
+  for (const [pathName, componentName] of [
+    ["/v4/chains/{chainId}/custom-launches", "CustomLaunchListV4"],
+    ["/v4/chains/{chainId}/finalized-custom-launches", "CustomLaunchFinalizedListV4"],
+  ]) {
+    const parameters = openapi.paths[pathName].get.parameters;
+    assert.deepEqual(
+      parameters.map(({ name, in: location }) => ({ name, in: location })),
+      [
+        { name: "chainId", in: "path" },
+        { name: "limit", in: "query" },
+        { name: "cursor", in: "query" },
+      ],
+      `${pathName} parameter order and uniqueness`,
+    );
+    assert.deepEqual(parameters.slice(1), expectedPaginationParameters, pathName);
+    assert.deepEqual(
+      openapi.components.schemas[componentName].properties.nextCursor,
+      expectedNextCursor,
+      `${componentName} nextCursor must be accepted unchanged by the request cursor`,
+    );
+  }
+});
+
 test("V4 source-verification schemas bind aggregate truth, exact evidence, and finalized readback", () => {
   const standalone = publicSchemas.get("source-verification-status.json");
   const {
