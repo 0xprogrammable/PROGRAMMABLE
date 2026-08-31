@@ -100,7 +100,10 @@ import {
   SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
 } from "../robinhood-backend-promotion-v1.mjs";
 import { runRobinhoodPostdeploymentCli } from "../finalize-robinhood-custom-launch-deployment.mjs";
-import { validateRobinhoodCaptureEndpoint } from
+import {
+  canonicalizeRobinhoodAddressList,
+  validateRobinhoodCaptureEndpoint,
+} from
   "../capture-robinhood-custom-launch-postdeployment.mjs";
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
@@ -520,6 +523,14 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
+});
+
+test("canonicalizes Safe address arrays without treating map indices as chain IDs", () => {
+  const lowercaseOwners = SAFE_OWNERS.map((owner) => owner.toLowerCase());
+  assert.deepEqual(canonicalizeRobinhoodAddressList(lowercaseOwners), SAFE_OWNERS);
+  assert.notDeepEqual(lowercaseOwners.map(getAddress), SAFE_OWNERS);
+  assert.deepEqual(canonicalizeRobinhoodAddressList([]), []);
+  assert.throws(() => canonicalizeRobinhoodAddressList(null), /must be an array/u);
 });
 
 test("accepts alternate self-consistent no-CBOR provider context without granting source authority", async () => {

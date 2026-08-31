@@ -168,6 +168,13 @@ export function validateRobinhoodCaptureEndpoint(endpoint, layer, providerId) {
   return true;
 }
 
+export function canonicalizeRobinhoodAddressList(values) {
+  if (!Array.isArray(values)) {
+    throw new TypeError("address list must be an array");
+  }
+  return values.map((value) => getAddress(value));
+}
+
 async function rpcEntry(endpoint, key, method, params, id, responseBudget) {
   const request = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, method, params }), "utf8");
   const response = await fetch(endpoint, {
@@ -392,8 +399,10 @@ async function collectL2(endpoint, providerPin, transactionHash, observedAt, res
         runtimeCodeHash: codeHash(codes.get("safeSingletonCode")), version: safeVersion },
       fallbackHandler: SAFE_FALLBACK,
       fallbackHandlerRuntimeCodeHash: codeHash(codes.get("safeFallbackHandlerCode")),
-      owners: owners.map(getAddress), threshold: Number(threshold), nonce: nonce.toString(10),
-      modules: modules.map(getAddress), modulesNext: getAddress(modulesNext), guard: null,
+      owners: canonicalizeRobinhoodAddressList(owners),
+      threshold: Number(threshold), nonce: nonce.toString(10),
+      modules: canonicalizeRobinhoodAddressList(modules),
+      modulesNext: getAddress(modulesNext), guard: null,
       singletonSlot, fallbackHandlerSlot, guardSlot,
     },
     permit2Genesis: {
