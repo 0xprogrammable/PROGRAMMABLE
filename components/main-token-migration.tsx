@@ -222,6 +222,7 @@ function persistGaslessTransferProgress(
       "Gasless transfer recovery is unavailable in this browser. No signature was requested.",
     );
   }
+  window.dispatchEvent(new Event(migrationRecoveryEvent));
   return value;
 }
 
@@ -1053,6 +1054,12 @@ function MainTokenMigrationSession() {
   const trustedClockRef = useRef<TrustedClock | null>(null);
   const sponsorshipIdempotencyKeysRef = useRef(new Map<string, string>());
   const gaslessIdempotencyKeysRef = useRef(new Map<string, string>());
+  const sessionActiveRef = useRef(true);
+
+  useEffect(() => {
+    sessionActiveRef.current = true;
+    return () => { sessionActiveRef.current = false; };
+  }, []);
 
   const readTrustedNow = useCallback(() => {
     const clock = trustedClockRef.current;
@@ -1873,6 +1880,7 @@ function MainTokenMigrationSession() {
     if (prepared.status !== "signature_required") {
       throw new Error("The gasless transfer request is not ready for review.");
     }
+    if (!sessionActiveRef.current) return;
     const progress = persistGaslessTransferProgress(account, amountRaw);
     setGaslessProgress(progress);
     setGaslessStage("signing");
@@ -2084,6 +2092,7 @@ function MainTokenMigrationSession() {
         });
         return;
       }
+      if (!sessionActiveRef.current) return;
       setSubmission({ kind: "submitting" });
       const hash = await sendTransaction(checked);
       const submitted: Extract<SubmissionState, { kind: "submitted" }> = {
