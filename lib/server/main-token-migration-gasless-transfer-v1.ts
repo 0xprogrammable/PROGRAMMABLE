@@ -165,14 +165,17 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
           amountRaw: parsed.amountRaw,
           idempotencyKey,
         });
-        await input.admissionStore.admit({
+        const admission = {
           releaseId: input.configuration.releaseId,
           principalBindingHash:
             deriveMainTokenMigrationSponsorPrincipalBindingV1(
               principal.privyUserId,
             ),
           walletAddress: parsed.walletAddress,
-          operation: parsed.action === "prepare" ? "read" : "submit",
+        };
+        await input.admissionStore.admit({
+          ...admission,
+          operation: parsed.action === "prepare" ? "read" : "progress",
         });
         const lookup = {
           releaseId: input.configuration.releaseId,
@@ -252,6 +255,13 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
 
         let record = existing;
         if (!record) {
+          // Only a new durable reservation consumes the new-transfer budget.
+          // Identical signed retries still pass the bounded progress admission,
+          // signature verification and immutable binding checks above/below.
+          await input.admissionStore.admit({
+            ...admission,
+            operation: "submit",
+          });
           const nowSeconds = Math.floor(now().getTime() / 1_000);
           if (parsed.permitDeadline <= BigInt(nowSeconds + 30) ||
             parsed.permitDeadline > BigInt(
@@ -376,11 +386,15 @@ async function progressTransfer(input: Readonly<{
   if (permitStatus === "pending") {
     return transferResponse("permit_pending", record, 10);
   }
-  await input.chain.assertPermitEffect(record);
   if (!record.transferTransactionHash) {
     const reconciled = await input.sender.lookup("transfer", record.intent);
     const recoveredHash = providerHashOrNull(reconciled);
-    if (!recoveredHash) assertProviderRetryWindow(record.intent, input.now);
+    if (!recoveredHash) {
+      assertProviderRetryWindow(record.intent, input.now);
+      // transferFrom consumes the exact allowance. A known transaction must
+      // be reconciled by its receipt, not rejected for already using it.
+      await input.chain.assertPermitEffect(record);
+    }
     const hash = recoveredHash ?? await input.sender.send("transfer", record.intent);
     record = await input.store.complete({
       lookup: {
@@ -831,6 +845,12 @@ function errorResponse(error: unknown) {
       code: failure.code,
       requestId,
     });
+  } else if (failure.status === 429) {
+    console.warn("Main token migration gasless transfer rate limited", {
+      code: failure.code,
+      requestId,
+      retryAfterSeconds: failure.retryAfterSeconds ?? 60,
+    });
   }
   const message = failure.status === 401 || failure.status === 403
     ? "Reconnect this wallet and try again."
@@ -842,7 +862,7 @@ function errorResponse(error: unknown) {
       : failure.status === 422
         ? "This wallet cannot use the gasless transfer path."
         : failure.status === 429
-          ? "Too many migration requests. Wait briefly and try again."
+          ? "Migration checks are briefly paused. Wait before resuming this same request."
           : failure.code === "sponsorship_closed"
             ? "The migration window is closed."
             : "The gasless transfer is temporarily unavailable.";

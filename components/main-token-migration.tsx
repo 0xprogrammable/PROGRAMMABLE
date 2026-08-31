@@ -342,11 +342,94 @@ export function sponsorshipRetryAfterMs(response: Response) {
   if (!value) return 3_000;
   const seconds = Number(value);
   if (Number.isFinite(seconds) && seconds >= 0) {
-    return Math.min(Math.max(Math.ceil(seconds * 1_000), 1_000), 15_000);
+    return Math.max(
+      Math.min(Math.ceil(seconds * 1_000), Number.MAX_SAFE_INTEGER),
+      1_000,
+    );
   }
   const date = Date.parse(value);
   if (!Number.isFinite(date)) return 3_000;
-  return Math.min(Math.max(date - Date.now(), 1_000), 15_000);
+  return Math.max(date - Date.now(), 1_000);
+}
+
+export async function waitForMigrationRetry(
+  delayMs: number,
+  signal?: AbortSignal,
+) {
+  const startedAt = performance.now();
+  let remaining = delayMs;
+  while (remaining > 0) {
+    if (signal?.aborted) throw new DOMException("Request aborted", "AbortError");
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        globalThis.clearTimeout(timer);
+        reject(new DOMException("Request aborted", "AbortError"));
+      };
+      // Larger browser timeouts wrap to a near-immediate retry. Split long waits.
+      const timer = globalThis.setTimeout(() => {
+        signal?.removeEventListener("abort", abort);
+        resolve();
+      }, Math.min(remaining, 2_147_483_647));
+      signal?.addEventListener("abort", abort, { once: true });
+    });
+    remaining = delayMs - (performance.now() - startedAt);
+  }
+  if (signal?.aborted) throw new DOMException("Request aborted", "AbortError");
+}
+
+export function createMigrationRequestGate() {
+  const accounts = new Map<string, {
+    inFlight: Promise<void> | null;
+    nextAllowedAt: number;
+  }>();
+  const entryFor = (account: string) => {
+    const key = account.toLowerCase();
+    let entry = accounts.get(key);
+    if (!entry) {
+      entry = { inFlight: null, nextAllowedAt: 0 };
+      accounts.set(key, entry);
+    }
+    return entry;
+  };
+  return {
+    defer(account: string, delayMs: number) {
+      const entry = entryFor(account);
+      entry.nextAllowedAt = Math.max(
+        entry.nextAllowedAt,
+        performance.now() + delayMs,
+      );
+    },
+    async run<T>(
+      account: string,
+      request: () => Promise<T>,
+      signal?: AbortSignal,
+    ): Promise<T> {
+      const entry = entryFor(account);
+      while (true) {
+        if (signal?.aborted) {
+          throw new DOMException("Request aborted", "AbortError");
+        }
+        if (entry.inFlight) {
+          await entry.inFlight;
+          continue;
+        }
+        const remaining = entry.nextAllowedAt - performance.now();
+        if (remaining > 0) {
+          await waitForMigrationRetry(remaining, signal);
+          continue;
+        }
+        break;
+      }
+      let release!: () => void;
+      entry.inFlight = new Promise<void>((resolve) => { release = resolve; });
+      try {
+        return await request();
+      } finally {
+        entry.inFlight = null;
+        release();
+      }
+    },
+  };
 }
 
 export function parseGasSponsorshipResponse(
@@ -1001,14 +1084,18 @@ function Countdown({
 
 export function MainTokenMigration() {
   const { wallet } = useWallet();
+  const [sponsorshipRequestGate] = useState(createMigrationRequestGate);
   return (
     <MainTokenMigrationSession
       key={wallet?.account.toLowerCase() ?? "disconnected"}
+      sponsorshipRequestGate={sponsorshipRequestGate}
     />
   );
 }
 
-function MainTokenMigrationSession() {
+function MainTokenMigrationSession({ sponsorshipRequestGate }: {
+  sponsorshipRequestGate: ReturnType<typeof createMigrationRequestGate>;
+}) {
   const {
     wallet,
     connecting,
@@ -1055,6 +1142,7 @@ function MainTokenMigrationSession() {
   const sponsorshipIdempotencyKeysRef = useRef(new Map<string, string>());
   const gaslessIdempotencyKeysRef = useRef(new Map<string, string>());
   const sessionActiveRef = useRef(true);
+  const transferInFlightRef = useRef(false);
 
   useEffect(() => {
     sessionActiveRef.current = true;
@@ -1124,6 +1212,12 @@ function MainTokenMigrationSession() {
     connectedAccount !== null &&
     "account" in gasSponsorship &&
     gasSponsorship.account === connectedAccount;
+  const sponsorshipPollingAccount =
+    sponsorshipForConnectedAccount &&
+    (gasSponsorship.kind === "requested" ||
+      gasSponsorship.kind === "funding-confirming")
+      ? connectedAccount
+      : null;
   const sponsorshipInProgressOrReady =
     sponsorshipForConnectedAccount &&
     (gasSponsorship.kind === "requesting" ||
@@ -1384,37 +1478,42 @@ function MainTokenMigrationSession() {
       account: string,
       signal: AbortSignal,
     ): Promise<GasSponsorshipEndpointResult> => {
-      const accessToken = await getAccessToken();
-      if (!accessToken) {
-        throw new GasSponsorshipEndpointError(
-          "Reconnect this wallet before requesting sponsored gas.",
-          true,
-        );
-      }
-      const search = new URLSearchParams({
-        walletAddress: getAddress(account),
-      });
-      const response = await fetch(`${gasSponsorshipEndpoint}?${search}`, {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        signal,
-      });
-      if (!response.ok) {
-        const failure = await gasSponsorshipFailure(response);
-        throw new GasSponsorshipEndpointError(
-          failure.message,
-          failure.retryable,
-        );
-      }
-      return {
-        body: parseGasSponsorshipResponse(await response.json(), account),
-        retryAfterMs: sponsorshipRetryAfterMs(response),
-      };
+      return sponsorshipRequestGate.run(account, async () => {
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+          throw new GasSponsorshipEndpointError(
+            "Reconnect this wallet before requesting sponsored gas.",
+            true,
+          );
+        }
+        const search = new URLSearchParams({
+          walletAddress: getAddress(account),
+        });
+        const response = await fetch(`${gasSponsorshipEndpoint}?${search}`, {
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          signal,
+        });
+        if (response.headers.has("retry-after") || !response.ok) {
+          sponsorshipRequestGate.defer(account, sponsorshipRetryAfterMs(response));
+        }
+        if (!response.ok) {
+          const failure = await gasSponsorshipFailure(response);
+          throw new GasSponsorshipEndpointError(
+            failure.message,
+            failure.retryable,
+          );
+        }
+        return {
+          body: parseGasSponsorshipResponse(await response.json(), account),
+          retryAfterMs: sponsorshipRetryAfterMs(response),
+        };
+      }, signal);
     },
-    [getAccessToken],
+    [getAccessToken, sponsorshipRequestGate],
   );
 
   useEffect(() => {
@@ -1427,6 +1526,7 @@ function MainTokenMigrationSession() {
       gasPrice === null ||
       hasEnoughObservedGas ||
       hasTrackedTransfer ||
+      sponsorshipForConnectedAccount ||
       submission.kind === "submitting"
     ) {
       return;
@@ -1457,80 +1557,74 @@ function MainTokenMigrationSession() {
     transferWindowOpen,
     readGasSponsorship,
     refreshBalance,
+    sponsorshipForConnectedAccount,
     submission.kind,
     wallet,
   ]);
 
   useEffect(() => {
-    if (
-      !sponsorshipForConnectedAccount ||
-      (gasSponsorship.kind !== "requested" &&
-        gasSponsorship.kind !== "funding-confirming")
-    ) {
-      return;
-    }
+    if (!sponsorshipPollingAccount) return;
 
-    const account = gasSponsorship.account;
+    const account = sponsorshipPollingAccount;
     const controller = new AbortController();
-    let retryTimer: number | undefined;
 
     const poll = async () => {
-      try {
-        const result = await readGasSponsorship(account, controller.signal);
-        if (controller.signal.aborted) return;
-        const next = gasSponsorshipState(result.body);
-        setGasSponsorship((previous) => {
+      let retryDelay = 10_000;
+      while (!controller.signal.aborted) {
+        try {
+          await waitForMigrationRetry(retryDelay, controller.signal);
+          const result = await readGasSponsorship(account, controller.signal);
+          if (controller.signal.aborted) return;
+          const next = gasSponsorshipState(result.body);
+          setGasSponsorship((previous) => {
+            if (
+              previous.kind === next.kind &&
+              "account" in previous &&
+              "account" in next &&
+              previous.account === next.account &&
+              (previous.kind !== "requested" &&
+              previous.kind !== "funding-confirming" &&
+              previous.kind !== "ready"
+                ? true
+                : next.kind === "requested" ||
+                    next.kind === "funding-confirming" ||
+                    next.kind === "ready"
+                  ? previous.transactionHash === next.transactionHash
+                  : false)
+            ) {
+              return previous;
+            }
+            return next;
+          });
           if (
-            previous.kind === next.kind &&
-            "account" in previous &&
-            "account" in next &&
-            previous.account === next.account &&
-            (previous.kind !== "requested" &&
-            previous.kind !== "funding-confirming" &&
-            previous.kind !== "ready"
-              ? true
-              : next.kind === "requested" ||
-                  next.kind === "funding-confirming" ||
-                  next.kind === "ready"
-                ? previous.transactionHash === next.transactionHash
-                : false)
+            result.body.status === "confirmed" ||
+            result.body.status === "not_needed"
           ) {
-            return previous;
+            void refreshBalance();
+            return;
           }
-          return next;
-        });
-        if (
-          result.body.status === "confirmed" ||
-          result.body.status === "not_needed"
-        ) {
-          void refreshBalance();
+          if (
+            result.body.status === "submitted" ||
+            result.body.status === "pending"
+          ) {
+            retryDelay = Math.max(10_000, result.retryAfterMs);
+          } else {
+            return;
+          }
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          setGasSponsorship(gasSponsorshipError(error, account));
           return;
         }
-        if (
-          result.body.status === "submitted" ||
-          result.body.status === "pending"
-        ) {
-          retryTimer = window.setTimeout(
-            () => void poll(),
-            result.retryAfterMs,
-          );
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setGasSponsorship(gasSponsorshipError(error, account));
       }
     };
 
-    retryTimer = window.setTimeout(() => void poll(), 2_000);
-    return () => {
-      controller.abort();
-      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
-    };
+    void poll();
+    return () => controller.abort();
   }, [
-    gasSponsorship,
     readGasSponsorship,
     refreshBalance,
-    sponsorshipForConnectedAccount,
+    sponsorshipPollingAccount,
   ]);
 
   useEffect(() => {
@@ -1749,41 +1843,49 @@ function MainTokenMigrationSession() {
     });
     focusSponsorshipActionOrStatus();
     try {
-      const accessToken = await getAccessToken();
-      if (!accessToken) {
-        throw new Error(
-          "Reconnect this wallet before requesting sponsored gas.",
+      const result = await sponsorshipRequestGate.run(account, async () => {
+        const accessToken = await getAccessToken();
+        if (!sessionActiveRef.current) {
+          throw new DOMException("Request aborted", "AbortError");
+        }
+        if (!accessToken) {
+          throw new Error(
+            "Reconnect this wallet before requesting sponsored gas.",
+          );
+        }
+        const body: MainTokenGasSponsorshipRequest = {
+          walletAddress: account,
+          amountRaw: parsedAmount.toString(),
+        };
+        const response = await fetch(gasSponsorshipEndpoint, {
+          method: "POST",
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": gasSponsorshipIdempotencyKey(
+              account,
+              sponsorshipIdempotencyKeysRef.current,
+            ),
+          },
+          body: JSON.stringify(body),
+        });
+        if (response.headers.has("retry-after") || !response.ok) {
+          sponsorshipRequestGate.defer(account, sponsorshipRetryAfterMs(response));
+        }
+        if (!response.ok) {
+          const failure = await gasSponsorshipFailure(response);
+          throw new GasSponsorshipEndpointError(
+            failure.message,
+            failure.retryable,
+          );
+        }
+        return parseGasSponsorshipResponse(
+          await response.json(),
+          account,
         );
-      }
-      const body: MainTokenGasSponsorshipRequest = {
-        walletAddress: account,
-        amountRaw: parsedAmount.toString(),
-      };
-      const response = await fetch(gasSponsorshipEndpoint, {
-        method: "POST",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          "Idempotency-Key": gasSponsorshipIdempotencyKey(
-            account,
-            sponsorshipIdempotencyKeysRef.current,
-          ),
-        },
-        body: JSON.stringify(body),
       });
-      if (!response.ok) {
-        const failure = await gasSponsorshipFailure(response);
-        throw new GasSponsorshipEndpointError(
-          failure.message,
-          failure.retryable,
-        );
-      }
-      const result = parseGasSponsorshipResponse(
-        await response.json(),
-        account,
-      );
       setGasSponsorship(gasSponsorshipState(result));
       if (result.status === "confirmed" || result.status === "not_needed") {
         void refreshBalance();
@@ -1872,9 +1974,7 @@ function MainTokenMigrationSession() {
       if ((response.status !== 429 && response.status !== 503) || attempt === 4) {
         throw new Error(prepareFailure);
       }
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, sponsorshipRetryAfterMs(response));
-      });
+      await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
     }
     if (!prepared) throw new Error(prepareFailure);
     if (prepared.status !== "signature_required") {
@@ -1917,9 +2017,7 @@ function MainTokenMigrationSession() {
       if (!response.ok) {
         const failure = await gaslessTransferFailure(response);
         if ((response.status === 429 || response.status === 503) && attempt < 59) {
-          await new Promise<void>((resolve) => {
-            window.setTimeout(resolve, sponsorshipRetryAfterMs(response));
-          });
+          await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
           continue;
         }
         throw new Error(failure);
@@ -1947,9 +2045,7 @@ function MainTokenMigrationSession() {
         void refreshBalance();
         return;
       }
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, sponsorshipRetryAfterMs(response));
-      });
+      await waitForMigrationRetry(sponsorshipRetryAfterMs(response));
     }
     throw new Error(
       "The gasless transfer is still being reconciled. Resume it here; do not send V4 separately.",
@@ -1957,6 +2053,22 @@ function MainTokenMigrationSession() {
   }
 
   async function reviewTransfer() {
+    if (transferInFlightRef.current || hasTrackedTransfer) return;
+    transferInFlightRef.current = true;
+    setSubmission({ kind: "submitting" });
+    setGaslessStage("preparing");
+    try {
+      await reviewTransferOnce();
+    } finally {
+      transferInFlightRef.current = false;
+      setGaslessStage("idle");
+      setSubmission((current) => current.kind === "submitting"
+        ? { kind: "idle" }
+        : current);
+    }
+  }
+
+  async function reviewTransferOnce() {
     if (!trustedTransferWindowOpen()) {
       setSubmission({
         kind: "error",
@@ -2094,6 +2206,7 @@ function MainTokenMigrationSession() {
       }
       if (!sessionActiveRef.current) return;
       setSubmission({ kind: "submitting" });
+      setGaslessStage("signing");
       const hash = await sendTransaction(checked);
       const submitted: Extract<SubmissionState, { kind: "submitted" }> = {
         kind: "submitted",
@@ -2135,7 +2248,7 @@ function MainTokenMigrationSession() {
                         : "Switch to Ethereum"
                       : visibleSubmission.kind === "submitting"
                         ? gaslessStage === "preparing"
-                          ? "Preparing gasless transfer"
+                          ? "Preparing transfer"
                           : gaslessStage === "relaying"
                             ? "Relaying gasless transfer"
                             : "Confirm exact amount in wallet"

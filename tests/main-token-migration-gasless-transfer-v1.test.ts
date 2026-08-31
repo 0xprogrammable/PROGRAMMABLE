@@ -23,6 +23,9 @@ import {
 import {
   deriveMainTokenMigrationSponsorBindingsV1,
 } from "../lib/server/main-token-migration-gas-sponsor-v1";
+import {
+  createMainTokenMigrationGasSponsorPostgresStoreV1,
+} from "../lib/server/main-token-migration-gas-sponsor-store-v1";
 import type {
   ProjectionTargetPostgresClientV1,
   ProjectionTargetPostgresQueryResultV1,
@@ -65,143 +68,205 @@ function request(body: unknown) {
 }
 
 describe("main token migration gasless permit transfer", () => {
-  it("binds the signature and relays only the exact fixed-destination transfer", async () => {
-    let record: MainTokenMigrationGaslessRecordV1 | null = null;
-    const store = {
-      async get() {
-        return record;
-      },
-      async reserve(input: { intent: MainTokenMigrationGaslessRecordV1["intent"] }) {
-        record = {
-          intent: input.intent,
-          permitTransactionHash: null,
-          transferTransactionHash: null,
-        };
-        return { kind: "created" as const, record };
-      },
-      async complete(input: {
-        kind: "permit" | "transfer";
-        transactionHash: typeof permitHash | typeof transferHash;
-      }) {
-        if (!record) throw new Error("missing intent");
-        record = {
-          ...record,
-          permitTransactionHash: input.kind === "permit"
-            ? input.transactionHash
-            : record.permitTransactionHash,
-          transferTransactionHash: input.kind === "transfer"
-            ? input.transactionHash
-            : record.transferTransactionHash,
-        };
-        return record;
-      },
-    };
-    const sender = {
-      async assertReady() {},
-      async lookup() {
-        return null;
-      },
-      async send(kind: "permit" | "transfer") {
-        return kind === "permit" ? permitHash : transferHash;
-      },
-    };
-    const handler = createMainTokenMigrationGaslessTransferV1({
-      configuration,
-      authenticator: {
-        async authenticate() {
-          return {
-            privyUserId: "did:privy:test",
-            privySessionId: "session-test",
-            wallets: [account.address],
+  it("finishes the exact relay without counting progress as new transfer requests", async () => {
+    const database = new PGlite();
+    try {
+      await database.exec(`
+        CREATE SCHEMA programmable_website_projection_v1;
+        CREATE TABLE programmable_website_projection_v1.credential_uses (
+          credential_id text PRIMARY KEY,
+          request_binding_hash text NOT NULL,
+          canonical_use text NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+      `);
+      const admissionStore = createMainTokenMigrationGasSponsorPostgresStoreV1(
+        new GaslessTestPool(database),
+      );
+      let record: MainTokenMigrationGaslessRecordV1 | null = null;
+      let permitConfirmed = false;
+      let allowanceConsumed = false;
+      let recoverTransferFromProvider = false;
+      const store = {
+        async get() {
+          return record;
+        },
+        async reserve(input: { intent: MainTokenMigrationGaslessRecordV1["intent"] }) {
+          record = {
+            intent: input.intent,
+            permitTransactionHash: null,
+            transferTransactionHash: null,
           };
+          return { kind: "created" as const, record };
         },
-      },
-      admissionStore: { async admit() {} } as never,
-      store: store as never,
-      chain: {
-        async prepare() {
-          return {
-            nonce: 0n,
-            feePerGasWei: 1_000_000_000n,
-            maxPriorityFeePerGasWei: 100_000_000n,
-            sponsorBalanceWei: 1_000_000_000_000_000_000n,
-            rootWalletAddress: account.address,
+        async complete(input: {
+          kind: "permit" | "transfer";
+          transactionHash: typeof permitHash | typeof transferHash;
+        }) {
+          if (!record) throw new Error("missing intent");
+          record = {
+            ...record,
+            permitTransactionHash: input.kind === "permit"
+              ? input.transactionHash
+              : record.permitTransactionHash,
+            transferTransactionHash: input.kind === "transfer"
+              ? input.transactionHash
+              : record.transferTransactionHash,
           };
+          return record;
         },
-        async assertPermitEffect() {},
-        async transactionStatus(kind: "permit" | "transfer") {
-          return kind === "permit"
-            ? ({ status: "confirmed", blockNumber: 25_900_001n } as const)
-            : ({ status: "confirmed", blockNumber: 25_900_002n } as const);
+      };
+      const sender = {
+        async assertReady() {},
+        async lookup(kind: "permit" | "transfer") {
+          if (kind === "transfer" && recoverTransferFromProvider) {
+            return { status: "confirmed", transactionHash: transferHash };
+          }
+          return null;
         },
-      } as never,
-      sender: sender as never,
-      now: () => now,
-    });
+        send: vi.fn(async (kind: "permit" | "transfer") => {
+          if (kind === "transfer") allowanceConsumed = true;
+          return kind === "permit" ? permitHash : transferHash;
+        }),
+      };
+      const handler = createMainTokenMigrationGaslessTransferV1({
+        configuration,
+        authenticator: {
+          async authenticate() {
+            return {
+              privyUserId: "did:privy:test",
+              privySessionId: "session-test",
+              wallets: [account.address],
+            };
+          },
+        },
+        admissionStore,
+        store: store as never,
+        chain: {
+          async prepare() {
+            return {
+              nonce: 0n,
+              feePerGasWei: 1_000_000_000n,
+              maxPriorityFeePerGasWei: 100_000_000n,
+              sponsorBalanceWei: 1_000_000_000_000_000_000n,
+              rootWalletAddress: account.address,
+            };
+          },
+          async assertPermitEffect() {
+            if (allowanceConsumed) {
+              throw new Error("the exact permit allowance was already consumed");
+            }
+          },
+          async transactionStatus(kind: "permit" | "transfer") {
+            if (kind === "permit" && !permitConfirmed) return "pending";
+            return kind === "permit"
+              ? ({ status: "confirmed", blockNumber: 25_900_001n } as const)
+              : ({ status: "confirmed", blockNumber: 25_900_002n } as const);
+          },
+        } as never,
+        sender: sender as never,
+        now: () => now,
+      });
 
-    const preparedResponse = await handler.post(request({
-      action: "prepare",
-      amountRaw: "100",
-      walletAddress: account.address,
-    }));
-    expect(preparedResponse.status).toBe(200);
-    const prepared = await preparedResponse.json() as {
-      nonce: string;
-      permitDeadline: string;
-      requestBindingHash: `sha256:${string}`;
-      sponsorAddress: `0x${string}`;
-      status: string;
-      transferBlockNumber: string | null;
-    };
-    expect(prepared).toMatchObject({
-      status: "signature_required",
-      nonce: "0",
-      sponsorAddress,
-      transferBlockNumber: null,
-    });
-    const signature = await account.signTypedData(
-      buildMainTokenMigrationPermitTypedData({
-        owner: account.address,
-        spender: sponsorAddress,
-        value: 100n,
-        nonce: BigInt(prepared.nonce),
-        deadline: BigInt(prepared.permitDeadline),
-      }),
-    );
-    const submitBody = {
-      action: "submit",
-      amountRaw: "100",
-      nonce: prepared.nonce,
-      permitDeadline: prepared.permitDeadline,
-      permitSignature: signature,
-      requestBindingHash: prepared.requestBindingHash,
-      walletAddress: account.address,
-    };
-    const permitResponse = await handler.post(request(submitBody));
-    expect(await permitResponse.json()).toMatchObject({
-      status: "permit_submitted",
-      permitTransactionHash: permitHash,
-      transferTransactionHash: null,
-    });
-    const transferResponse = await handler.post(request(submitBody));
-    expect(await transferResponse.json()).toMatchObject({
-      status: "transfer_submitted",
-      permitTransactionHash: permitHash,
-      transferTransactionHash: transferHash,
-      transferBlockNumber: null,
-    });
-    const confirmedResponse = await handler.post(request(submitBody));
-    expect(await confirmedResponse.json()).toMatchObject({
-      status: "confirmed",
-      permitTransactionHash: permitHash,
-      transferTransactionHash: transferHash,
-      transferBlockNumber: "25900002",
-    });
-    const finalRecord = record as MainTokenMigrationGaslessRecordV1 | null;
-    expect(finalRecord?.intent.walletAddress).toBe(account.address);
-    expect(finalRecord?.intent.amountRaw).toBe("100");
-    expect(MAIN_TOKEN_MIGRATION_WALLET).not.toBe(account.address);
-  });
+      const preparedResponse = await handler.post(request({
+        action: "prepare",
+        amountRaw: "100",
+        walletAddress: account.address,
+      }));
+      expect(preparedResponse.status).toBe(200);
+      const prepared = await preparedResponse.json() as {
+        nonce: string;
+        permitDeadline: string;
+        requestBindingHash: `sha256:${string}`;
+        sponsorAddress: `0x${string}`;
+        status: string;
+        transferBlockNumber: string | null;
+      };
+      expect(prepared).toMatchObject({
+        status: "signature_required",
+        nonce: "0",
+        sponsorAddress,
+        transferBlockNumber: null,
+      });
+      const signature = await account.signTypedData(
+        buildMainTokenMigrationPermitTypedData({
+          owner: account.address,
+          spender: sponsorAddress,
+          value: 100n,
+          nonce: BigInt(prepared.nonce),
+          deadline: BigInt(prepared.permitDeadline),
+        }),
+      );
+      const submitBody = {
+        action: "submit",
+        amountRaw: "100",
+        nonce: prepared.nonce,
+        permitDeadline: prepared.permitDeadline,
+        permitSignature: signature,
+        requestBindingHash: prepared.requestBindingHash,
+        walletAddress: account.address,
+      };
+      const permitResponse = await handler.post(request(submitBody));
+      expect(await permitResponse.json()).toMatchObject({
+        status: "permit_submitted",
+        permitTransactionHash: permitHash,
+        transferTransactionHash: null,
+      });
+      for (let index = 0; index < 3; index += 1) {
+        const pendingResponse = await handler.post(request(submitBody));
+        expect(pendingResponse.status).toBe(200);
+        expect(await pendingResponse.json()).toMatchObject({
+          status: "permit_pending",
+          permitTransactionHash: permitHash,
+          transferTransactionHash: null,
+        });
+      }
+      permitConfirmed = true;
+      const transferResponse = await handler.post(request(submitBody));
+      expect(await transferResponse.json()).toMatchObject({
+        status: "transfer_submitted",
+        permitTransactionHash: permitHash,
+        transferTransactionHash: transferHash,
+        transferBlockNumber: null,
+      });
+      const confirmedResponse = await handler.post(request(submitBody));
+      expect(await confirmedResponse.json()).toMatchObject({
+        status: "confirmed",
+        permitTransactionHash: permitHash,
+        transferTransactionHash: transferHash,
+        transferBlockNumber: "25900002",
+      });
+      const finalRecord = record as MainTokenMigrationGaslessRecordV1 | null;
+      expect(finalRecord?.intent.walletAddress).toBe(account.address);
+      expect(finalRecord?.intent.amountRaw).toBe("100");
+      expect(MAIN_TOKEN_MIGRATION_WALLET).not.toBe(account.address);
+      expect(sender.send).toHaveBeenCalledTimes(2);
+      // The provider may have sent the transfer before the completion row was
+      // persisted. Its known hash must recover even though allowance is now zero.
+      if (!finalRecord) throw new Error("missing confirmed intent");
+      record = { ...finalRecord, transferTransactionHash: null };
+      recoverTransferFromProvider = true;
+      const recoveredResponse = await handler.post(request(submitBody));
+      expect(recoveredResponse.status).toBe(200);
+      expect(await recoveredResponse.json()).toMatchObject({
+        status: "transfer_submitted",
+        transferTransactionHash: transferHash,
+      });
+      expect(await (await handler.post(request(submitBody))).json()).toMatchObject({
+        status: "confirmed",
+        transferTransactionHash: transferHash,
+      });
+      expect(sender.send).toHaveBeenCalledTimes(2);
+      const admissionRows = await database.query<{ count: string }>(`
+        SELECT count(*)::text AS count
+          FROM programmable_website_projection_v1.credential_uses
+         WHERE credential_id LIKE '%:admission:%:submit:%'
+      `);
+      expect(admissionRows.rows[0]?.count).toBe("2");
+    } finally {
+      await database.close();
+    }
+  }, 10_000);
 
   it("rejects a permit signed by a different wallet", async () => {
     const other = privateKeyToAccount(

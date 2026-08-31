@@ -31,6 +31,9 @@ const ADMISSION_WINDOW_SECONDS = 60;
 const ADMISSION_LIMITS = Object.freeze({
   read: Object.freeze({ holder: 8, principal: 12 }),
   submit: Object.freeze({ holder: 2, principal: 3 }),
+  // A signed relay request is also its progress poll. Keep those bounded
+  // separately from creating a new sponsorship reservation.
+  progress: Object.freeze({ holder: 24, principal: 36 }),
 });
 const ROOT_GUARD_TOP_UP_WEI = 1n;
 const ROOT_GUARD_FEE_PER_GAS_WEI = 1n;
@@ -94,7 +97,7 @@ type EligibilityAliasV1 = Readonly<{
   transferLogIndex: string | null;
 }>;
 
-type AdmissionOperation = "read" | "submit";
+type AdmissionOperation = "read" | "submit" | "progress";
 type AdmissionInput = Readonly<{
   releaseId: string;
   principalBindingHash: `sha256:${string}`;
@@ -845,7 +848,8 @@ function validateAdmission(input: AdmissionInput) {
     walletAddress: input.walletAddress,
   });
   if (!DIGEST.test(input.principalBindingHash)
-    || (input.operation !== "read" && input.operation !== "submit")) {
+    || (input.operation !== "read" && input.operation !== "submit"
+      && input.operation !== "progress")) {
     throw new TypeError("Gas sponsor admission is invalid");
   }
 }
