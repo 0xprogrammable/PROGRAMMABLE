@@ -99,7 +99,10 @@ import {
   validateSigstoreMessageBundleV03,
   SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
 } from "../robinhood-backend-promotion-v1.mjs";
-import { runRobinhoodPostdeploymentCli } from "../finalize-robinhood-custom-launch-deployment.mjs";
+import {
+  canonicalRobinhoodVerifierInstant,
+  runRobinhoodPostdeploymentCli,
+} from "../finalize-robinhood-custom-launch-deployment.mjs";
 import {
   canonicalizeRobinhoodAddressList,
   validateRobinhoodCaptureEndpoint,
@@ -531,6 +534,46 @@ test("canonicalizes Safe address arrays without treating map indices as chain ID
   assert.notDeepEqual(lowercaseOwners.map(getAddress), SAFE_OWNERS);
   assert.deepEqual(canonicalizeRobinhoodAddressList([]), []);
   assert.throws(() => canonicalizeRobinhoodAddressList(null), /must be an array/u);
+});
+
+test("canonical verifier timestamps remain valid through Phase A stage assembly", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const built = await buildInput(fixture);
+    const verifiedAt = canonicalRobinhoodVerifierInstant(
+      () => new Date("2026-08-29T18:00:00.987Z"),
+      "capture verifier clock",
+    );
+    assert.equal(verifiedAt, OBSERVED_AT);
+    const authorization = buildRobinhoodCaptureAuthorization({
+      ...structuredClone(built.authorization),
+      verifiedAt,
+      verificationDigest: null,
+    });
+    const bundle = await materializeRobinhoodStageBundle({
+      repositoryRoot: fixture.root,
+      input: built.input,
+      inputBytes: built.bytes,
+      captureAuthorization: authorization,
+      captureDependencies: testCaptureDependencies,
+    });
+    assert.equal(bundle.captureAuthorization.verifiedAt, OBSERVED_AT);
+
+    const secondsOnly = buildRobinhoodCaptureAuthorization({
+      ...structuredClone(authorization),
+      verifiedAt: "2026-08-29T18:00:00Z",
+      verificationDigest: null,
+    });
+    await assert.rejects(() => materializeRobinhoodStageBundle({
+      repositoryRoot: fixture.root,
+      input: built.input,
+      inputBytes: built.bytes,
+      captureAuthorization: secondsOnly,
+      captureDependencies: testCaptureDependencies,
+    }), /verifiedAt must be a canonical ISO-8601 instant/u);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
 });
 
 test("accepts alternate self-consistent no-CBOR provider context without granting source authority", async () => {
