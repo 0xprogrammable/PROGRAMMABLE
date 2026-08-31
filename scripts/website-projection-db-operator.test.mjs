@@ -23,8 +23,13 @@ import {
   compareWebsiteProjectionEvidence,
   discoverWebsiteProjectionPlan,
   unwrapWebsiteProjectionMigration,
+  validateRetainedWebsiteProjectionPlan,
   validateWebsiteProjectionPlan,
   validateWebsiteProjectionRuntimePassword,
+  WEBSITE_PROJECTION_RETAINED_ORDER_SHA256,
+  WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT,
+  WEBSITE_PROJECTION_RETAINED_PLAN_SHA256,
+  WEBSITE_PROJECTION_RETAINED_PLAN_TREE,
 } from "./website-projection-db-operator-core.mjs";
 import {
   adoptExistingWebsiteProjectionDatabase,
@@ -51,6 +56,7 @@ const MIGRATIONS = [
   "0003_registry_custom_public_read_v1.sql",
   "0004_approval_v3_artifacts_v1.sql",
   "0005_generic_launch_materializations_v2.sql",
+  "0006_gmgn_account_gate_v1.sql",
 ];
 
 function migrationSql(index) {
@@ -77,7 +83,21 @@ async function fixture(overrides = {}) {
   return { workspace, root };
 }
 
-test("plan discovery binds the exact five files, source bytes and execution bodies", async (t) => {
+function retainedPlan(successorPlan) {
+  const plan = Object.freeze({
+    ...successorPlan,
+    repositoryCommit: WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT,
+    repositoryTree: WEBSITE_PROJECTION_RETAINED_PLAN_TREE,
+    migrationCount: 5,
+    orderSha256: WEBSITE_PROJECTION_RETAINED_ORDER_SHA256,
+    migrations: Object.freeze(successorPlan.migrations.slice(0, 5)),
+    planSha256: WEBSITE_PROJECTION_RETAINED_PLAN_SHA256,
+  });
+  validateRetainedWebsiteProjectionPlan(plan);
+  return plan;
+}
+
+test("plan discovery binds the exact six files, source bytes and execution bodies", async (t) => {
   const { workspace } = await fixture();
   t.after(() => rm(workspace, { recursive: true, force: true }));
   const plan = await discoverWebsiteProjectionPlan({
@@ -86,10 +106,10 @@ test("plan discovery binds the exact five files, source bytes and execution bodi
     repositoryTree: TREE,
   });
   assert.equal(plan.migrationRoot, "ops/website-projection-target/migrations");
-  assert.equal(plan.migrationCount, 5);
+  assert.equal(plan.migrationCount, 6);
   assert.deepEqual(plan.migrations.map(({ file }) => path.posix.basename(file)), MIGRATIONS);
   assert.deepEqual(plan.migrations.map(({ version }) => version), [
-    "0001", "0002", "0003", "0004", "0005",
+    "0001", "0002", "0003", "0004", "0005", "0006",
   ]);
   assert.ok(plan.migrations.every(({ fileSha256, executionSha256 }) =>
     /^0x[0-9a-f]{64}$/u.test(fileSha256)
@@ -108,19 +128,19 @@ test("plan discovery rejects missing, extra, linked and unwrapped migration inpu
       repositoryCommit: COMMIT,
       repositoryTree: TREE,
     }),
-    /exactly the five canonical files/u,
+    /exactly the six canonical files/u,
   );
 
   const extra = await fixture();
   t.after(() => rm(extra.workspace, { recursive: true, force: true }));
-  await writeFile(path.join(extra.root, "0006_unreviewed.sql"), migrationSql(6));
+  await writeFile(path.join(extra.root, "0007_unreviewed.sql"), migrationSql(7));
   await assert.rejects(
     discoverWebsiteProjectionPlan({
       workspace: extra.workspace,
       repositoryCommit: COMMIT,
       repositoryTree: TREE,
     }),
-    /exactly the five canonical files/u,
+    /exactly the six canonical files/u,
   );
 
   const linked = await fixture();
@@ -209,7 +229,7 @@ test("evidence comparison permits only an exact prefix on the exact target", asy
   assert.equal(state.status, "pending");
   assert.equal(state.appliedCount, 1);
   assert.deepEqual(state.pending.map(({ version }) => version), [
-    "0002", "0003", "0004", "0005",
+    "0002", "0003", "0004", "0005", "0006",
   ]);
   assert.equal(state.catalogSha256, row.catalog_sha256);
 
@@ -949,7 +969,7 @@ test("database operator bootstraps, applies, resumes and detects catalog drift",
   assert.equal(applied.status, "current");
   assert.equal(applied.roleCreated, true);
   assert.deepEqual(applied.appliedThisRun, [
-    "0001", "0002", "0003", "0004", "0005",
+    "0001", "0002", "0003", "0004", "0005", "0006",
   ]);
   assert.match(applied.catalogSha256, /^0x[0-9a-f]{64}$/u);
 
@@ -1067,7 +1087,123 @@ test("adopt-existing records exact evidence atomically without replaying applica
     sessionIdentity: fixture.sessionIdentity,
   });
   assert.equal(continued.status, "current");
-  assert.deepEqual(continued.appliedThisRun, ["0004", "0005"]);
+  assert.deepEqual(continued.appliedThisRun, ["0004", "0005", "0006"]);
+});
+
+test("exact retained 0001-0005 adoption evidence advances only through 0006", async (t) => {
+  const fixture = await pgliteExistingApplicationFixture(t);
+  const successorPlan = fixture.plan;
+  const predecessorPlan = retainedPlan(successorPlan);
+  await adoptExistingWebsiteProjectionDatabase({
+    ...pgliteAdoptionAuditOptions(),
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: predecessorPlan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+    expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
+  });
+  const predecessorApply = await applyWebsiteProjectionMigrations({
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: predecessorPlan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+  });
+  assert.deepEqual(predecessorApply.appliedThisRun, ["0004", "0005"]);
+  const retainedAdoption = (await fixture.database.query(`
+    SELECT successor_plan_sha256, successor_order_sha256,
+           successor_repository_commit, successor_repository_tree,
+           attestation_sha256
+      FROM programmable_website_projection_migrations.adoption_evidence_v1
+  `)).rows[0];
+
+  const pending = await inspectWebsiteProjectionDatabase({
+    sql: fixture.sql,
+    plan: successorPlan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+  });
+  assert.deepEqual(pending.pending.map(({ version }) => version), ["0006"]);
+  const advanced = await applyWebsiteProjectionMigrations({
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: successorPlan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+  });
+  assert.deepEqual(advanced.appliedThisRun, ["0006"]);
+  assert.equal(advanced.status, "current");
+
+  const evidence = await fixture.database.query(`
+    SELECT ordinal::integer, plan_sha256, repository_commit, repository_tree
+      FROM programmable_website_projection_migrations.migration_evidence_v1
+     ORDER BY ordinal
+  `);
+  assert.deepEqual(evidence.rows.slice(0, 5).map(({ plan_sha256 }) => plan_sha256),
+    Array(5).fill(WEBSITE_PROJECTION_RETAINED_PLAN_SHA256));
+  assert.deepEqual(evidence.rows.slice(0, 5).map(({ repository_commit }) =>
+    repository_commit), Array(5).fill(WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT));
+  assert.deepEqual(evidence.rows[5], {
+    ordinal: 6,
+    plan_sha256: successorPlan.planSha256,
+    repository_commit: successorPlan.repositoryCommit,
+    repository_tree: successorPlan.repositoryTree,
+  });
+  const currentAdoption = (await fixture.database.query(`
+    SELECT successor_plan_sha256, successor_order_sha256,
+           successor_repository_commit, successor_repository_tree,
+           attestation_sha256
+      FROM programmable_website_projection_migrations.adoption_evidence_v1
+  `)).rows[0];
+  assert.deepEqual(currentAdoption, retainedAdoption);
+
+  const privileges = (await fixture.database.query(`
+    SELECT
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_v1',
+        'SELECT') AS gate_select,
+      (
+        has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_v1',
+          'generation', 'UPDATE')
+        AND has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_v1',
+          'next_slot_at', 'UPDATE')
+        AND has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_v1',
+          'blocked_until', 'UPDATE')
+        AND has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_v1',
+          'lease_holder', 'UPDATE')
+        AND has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_v1',
+          'lease_until', 'UPDATE')
+        AND has_column_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_v1',
+          'updated_at', 'UPDATE')
+      ) AS gate_update,
+      has_column_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_v1',
+        'gate_id', 'UPDATE') AS gate_id_update,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_v1',
+        'INSERT,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS gate_forbidden,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+        'INSERT') AS history_insert,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
+        'SELECT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS history_forbidden
+  `)).rows[0];
+  assert.deepEqual(privileges, {
+    gate_select: true,
+    gate_update: true,
+    gate_id_update: false,
+    gate_forbidden: false,
+    history_insert: true,
+    history_forbidden: false,
+  });
 });
 
 test("adopt-existing rejects every nonempty unproven application state", async (t) => {

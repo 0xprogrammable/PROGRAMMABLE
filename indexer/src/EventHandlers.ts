@@ -145,8 +145,13 @@ async function recordOccurrence(
   const configuredSource = SOURCE_REGISTRY.find(
     (source) => source.contractName === event.contractName,
   );
+  const candidateRelease = staticReleaseForContract(event.contractName) ?? {
+    model: "unresolved",
+    releaseVersion: "unresolved",
+  };
   if (
-    CLASSIC_V4_STATIC_CONTRACTS.has(event.contractName) &&
+    (candidateRelease.releaseVersion === "classic-v3" ||
+      CLASSIC_V4_STATIC_CONTRACTS.has(event.contractName)) &&
     (configuredSource === undefined ||
       !sameValue(provenance.sourceAddress, configuredSource.address) ||
       provenance.blockNumber < BigInt(configuredSource.startBlock))
@@ -155,10 +160,6 @@ async function recordOccurrence(
       `Unapproved source for ${event.contractName} at ${provenance.sourceAddress}`,
     );
   }
-  const candidateRelease = staticReleaseForContract(event.contractName) ?? {
-    model: "unresolved",
-    releaseVersion: "unresolved",
-  };
   const existing = await context.ChainEvent.get(provenance.id);
   if (existing !== undefined) {
     const sameTopics =

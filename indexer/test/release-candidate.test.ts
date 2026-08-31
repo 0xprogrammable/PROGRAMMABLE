@@ -281,7 +281,7 @@ describe("Envio release candidate identity", () => {
       schemaSha256:
         "0xdf3d65e033e96d7ebbe62b6f114b6a30f10c8944e5c6fca6b020c3130bb738c0",
       handlerSha256:
-        "0x4b6299cddeffaa900bcd7da8428bb715b65c6289d662e908c20f27ef483329fc",
+        "0x1da18fe73e114b2e208c5818f0b16e550e761acae1de738861a79b1b6b840f35",
       sourceRegistrySha256:
         "0xfcb55c4aab63ae77d483b59f068f4ef152aa479bf5e8a9f1ec630b8392c28bd9",
       eventSetSha256:

@@ -16,6 +16,81 @@ const component = (name: string) => ({
   $ref: `#/components/schemas/${name}`,
 });
 
+const exploreIdentityResponseHeaders = {
+  "X-Programmable-Chain-Id": {
+    description: "Chain namespace used for the verified identity lookup.",
+    schema: { type: "string", enum: ["1", "4663"] },
+  },
+  "X-Programmable-Launch-Source": {
+    description:
+      "Verified launch identity authorities included in the completed lookup.",
+    schema: { type: "string" },
+  },
+  "X-Programmable-Read-Source": {
+    description:
+      "Sources actually read for this response. A verified 404 contains identity sources only because no market lookup occurs.",
+    schema: { type: "string" },
+  },
+  "X-Programmable-Canonical-Read-Status": {
+    description: "Freshness state of the canonical Classic identity catalog.",
+    schema: {
+      type: "string",
+      enum: ["current", "last-known-good", "unavailable"],
+    },
+  },
+  "X-Programmable-Router-Read-Status": {
+    description: "Freshness state of the finalized Router Custom identity read.",
+    schema: {
+      type: "string",
+      enum: ["current", "last-known-good", "unavailable"],
+    },
+  },
+  "X-Programmable-Identity-Last-Indexed-At": {
+    description: "Generation time of the identity boundary used by the response.",
+    schema: { type: "string", format: "date-time" },
+  },
+} as const;
+
+const exploreMarketResponseHeaders = {
+  "X-Programmable-Market-Provider": {
+    description:
+      "Market enrichment provider selected for this Ethereum response. gmgn+dexscreener means GMGN was primary and Dexscreener was used for at least one fallback request.",
+    schema: {
+      type: "string",
+      enum: ["dexscreener", "gmgn", "gmgn+dexscreener"],
+    },
+  },
+  "X-Programmable-Market-Read-Status": {
+    description:
+      "Aggregate completeness of the bounded market read. Identity results remain authoritative independently of this status.",
+    schema: {
+      type: "string",
+      enum: ["complete", "partial", "unavailable"],
+    },
+  },
+  "X-Programmable-Market-Source": {
+    description:
+      "Providers that returned an exact-identity market observation. Omitted when no provider observation was accepted.",
+    schema: {
+      type: "string",
+      enum: ["dexscreener", "gmgn", "gmgn+dexscreener"],
+    },
+  },
+  "X-Programmable-Price-Source": {
+    description:
+      "Providers whose exact-identity observations qualified the displayed valuation. Omitted when no valuation qualified.",
+    schema: {
+      type: "string",
+      enum: ["dexscreener", "gmgn", "gmgn+dexscreener"],
+    },
+  },
+  "X-Programmable-Market-As-Of": {
+    description:
+      "Provider observation time for the response valuation. Omitted when no market valuation is available.",
+    schema: { type: "string", format: "date-time" },
+  },
+} as const;
+
 export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
@@ -134,10 +209,13 @@ export const programmablePublicOpenApi = {
           },
         ],
         responses: {
-          "200": jsonResponse(
-            component("ExploreListResponse"),
-            "Verified launch page or an honest planned-not-deployed chain response.",
-          ),
+          "200": {
+            ...jsonResponse(
+              component("ExploreListResponse"),
+              "Verified launch page or an honest planned-not-deployed chain response.",
+            ),
+            headers: exploreMarketResponseHeaders,
+          },
           "400": jsonResponse(component("ApiError"), "Invalid query shape."),
           "503": jsonResponse(
             component("ApiError"),
@@ -172,15 +250,24 @@ export const programmablePublicOpenApi = {
           },
         ],
         responses: {
-          "200": jsonResponse(
-            component("TokenDetailResponse"),
-            "Verified token, Registry-verified Custom project, or honest planned-not-deployed chain response.",
-          ),
+          "200": {
+            ...jsonResponse(
+              component("TokenDetailResponse"),
+              "Verified token, Registry-verified Custom project, or honest planned-not-deployed chain response.",
+            ),
+            headers: {
+              ...exploreIdentityResponseHeaders,
+              ...exploreMarketResponseHeaders,
+            },
+          },
           "400": jsonResponse(component("ApiError"), "Invalid address or query shape."),
-          "404": jsonResponse(
-            component("TokenDetailReadyResponse"),
-            "Verified lookup completed but no public token identity matched.",
-          ),
+          "404": {
+            ...jsonResponse(
+              component("TokenDetailReadyResponse"),
+              "Verified lookup completed but no public token identity matched. No market provider is read for this response.",
+            ),
+            headers: exploreIdentityResponseHeaders,
+          },
           "503": jsonResponse(
             component("ApiError"),
             "The identity boundary could not be verified at this time.",
@@ -1489,7 +1576,7 @@ export const programmablePublicOpenApi = {
               },
               source: {
                 type: "string",
-                enum: ["bitquery", "dexscreener", "stateview-chainlink"],
+                enum: ["bitquery", "dexscreener", "gmgn", "stateview-chainlink"],
               },
               asOfTime: { type: "string", format: "date-time" },
             },
@@ -1506,6 +1593,154 @@ export const programmablePublicOpenApi = {
           },
         ],
       },
+      DexscreenerExploreMarketRead: {
+        type: "object",
+        description:
+          "Bounded Dexscreener batch result for the exact market identities requested by Explore.",
+        required: [
+          "provider",
+          "status",
+          "currency",
+          "requestedCount",
+          "observedCount",
+          "qualifiedCount",
+          "unavailableCount",
+          "oldestFetchedAt",
+          "newestFetchedAt",
+        ],
+        properties: {
+          provider: { const: "dexscreener" },
+          status: {
+            type: "string",
+            enum: ["complete", "partial", "unavailable"],
+          },
+          currency: { const: "USD" },
+          requestedCount: { type: "integer", minimum: 0 },
+          observedCount: { type: "integer", minimum: 0 },
+          qualifiedCount: { type: "integer", minimum: 0 },
+          unavailableCount: { type: "integer", minimum: 0 },
+          oldestFetchedAt: {
+            oneOf: [
+              { type: "string", format: "date-time" },
+              { type: "null" },
+            ],
+          },
+          newestFetchedAt: {
+            oneOf: [
+              { type: "string", format: "date-time" },
+              { type: "null" },
+            ],
+          },
+        },
+        additionalProperties: false,
+      },
+      GmgnExploreMarketRead: {
+        type: "object",
+        description:
+          "Bounded GMGN primary result with exact-identity Dexscreener fallback accounting for the same Explore response.",
+        required: [
+          "provider",
+          "fallbackProvider",
+          "status",
+          "currency",
+          "requestedCount",
+          "observedCount",
+          "qualifiedCount",
+          "unavailableCount",
+          "gmgnObservedCount",
+          "gmgnQualifiedCount",
+          "fallbackRequestedCount",
+          "fallbackObservedCount",
+          "fallbackQualifiedCount",
+          "oldestFetchedAt",
+          "newestFetchedAt",
+        ],
+        properties: {
+          provider: { const: "gmgn" },
+          fallbackProvider: { const: "dexscreener" },
+          status: {
+            type: "string",
+            enum: ["complete", "partial", "unavailable"],
+          },
+          currency: { const: "USD" },
+          requestedCount: { type: "integer", minimum: 0 },
+          observedCount: { type: "integer", minimum: 0 },
+          qualifiedCount: { type: "integer", minimum: 0 },
+          unavailableCount: { type: "integer", minimum: 0 },
+          gmgnObservedCount: { type: "integer", minimum: 0 },
+          gmgnQualifiedCount: { type: "integer", minimum: 0 },
+          fallbackRequestedCount: { type: "integer", minimum: 0 },
+          fallbackObservedCount: { type: "integer", minimum: 0 },
+          fallbackQualifiedCount: { type: "integer", minimum: 0 },
+          oldestFetchedAt: {
+            oneOf: [
+              { type: "string", format: "date-time" },
+              { type: "null" },
+            ],
+          },
+          newestFetchedAt: {
+            oneOf: [
+              { type: "string", format: "date-time" },
+              { type: "null" },
+            ],
+          },
+        },
+        additionalProperties: false,
+      },
+      ExploreMarketRead: {
+        oneOf: [
+          component("DexscreenerExploreMarketRead"),
+          component("GmgnExploreMarketRead"),
+        ],
+      },
+      GmgnMarketIdentity: {
+        type: "object",
+        required: [
+          "chainId",
+          "protocol",
+          "tokenAddress",
+          "poolId",
+          "quoteAddress",
+        ],
+        properties: {
+          chainId: { const: "1" },
+          protocol: { const: "uniswap_v4" },
+          tokenAddress: component("EthereumAddress"),
+          poolId: component("Hex32"),
+          quoteAddress: component("EthereumAddress"),
+        },
+        additionalProperties: false,
+      },
+      GmgnMarketSnapshot: {
+        type: "object",
+        description:
+          "Short-lived GMGN market observation attached only after exact Programmable token, Uniswap v4 pool, quote asset and canonical supply matching.",
+        required: [
+          "schemaVersion",
+          "source",
+          "currency",
+          "fetchedAt",
+          "identity",
+          "priceUsdWad",
+          "fdvUsdWad",
+          "liquidityUsdWad",
+          "volume24hUsdWad",
+          "swapCount24h",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.gmgn-market-snapshot.v1" },
+          source: { const: "gmgn" },
+          currency: { const: "USD" },
+          fetchedAt: { type: "string", format: "date-time" },
+          identity: component("GmgnMarketIdentity"),
+          priceUsdWad: { type: "string", pattern: "^[1-9][0-9]*$" },
+          fdvUsdWad: { type: "string", pattern: "^[1-9][0-9]*$" },
+          liquidityUsdWad: { type: "string", pattern: "^[1-9][0-9]*$" },
+          volume24hUsdWad: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
+          swapCount24h: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
       ExploreEntry: {
         type: "object",
         required: ["exploreKind", "id", "name", "launchedAt", "valuation"],
@@ -1519,6 +1754,7 @@ export const programmablePublicOpenApi = {
           },
           launchedAt: { type: "string", format: "date-time" },
           valuation: component("ExploreValuation"),
+          gmgnMarketData: component("GmgnMarketSnapshot"),
           links: {
             type: "array",
             items: {
@@ -1568,6 +1804,7 @@ export const programmablePublicOpenApi = {
           "sort",
           "query",
           "catalog",
+          "marketRead",
         ],
         properties: {
           status: { const: "ready" },
@@ -1585,7 +1822,7 @@ export const programmablePublicOpenApi = {
           sortMetric: { const: "fdv" },
           catalog: component("CatalogBoundary"),
           dataQuality: { type: "object", additionalProperties: true },
-          marketRead: { type: "object", additionalProperties: true },
+          marketRead: component("ExploreMarketRead"),
         },
         additionalProperties: true,
       },

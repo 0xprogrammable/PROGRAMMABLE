@@ -521,9 +521,10 @@ function exactJson(left, right) {
 }
 
 function includesEverySourceFragment(source, fragments) {
-  return (
-    typeof source === "string" &&
-    fragments.every((fragment) => source.includes(fragment))
+  if (typeof source !== "string") return false;
+  const compactSource = source.replace(/\s+/gu, "");
+  return fragments.every((fragment) =>
+    compactSource.includes(fragment.replace(/\s+/gu, ""))
   );
 }
 
@@ -1951,6 +1952,13 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/market-data/dexscreener-explore.server.ts") ?? "";
   const dexscreenerShadow =
     source("lib/market-data/dexscreener-shadow.server.ts") ?? "";
+  const exploreMarket =
+    source("lib/market-data/explore-market.server.ts") ?? "";
+  const gmgnMarket = source("lib/market-data/gmgn.server.ts") ?? "";
+  const gmgnAccountGate =
+    source("lib/market-data/gmgn-account-gate.server.ts") ?? "";
+  const gmgnSnapshot =
+    source("lib/market-data/gmgn-market-data-v1.ts") ?? "";
   const stagedPublicSmokeScript =
     source("scripts/smoke-static-dexscreener-public-apis.mjs") ?? "";
   const publicCreatorProfile = source("app/api/explore/profile/route.ts") ?? "";
@@ -2071,6 +2079,21 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedBitquerySmoke = deployWorkflow.indexOf(
     "Smoke staged static identity and Dex public APIs",
   );
+  const stagedGmgnRequirement = deployWorkflow.indexOf(
+    "Resolve staged GMGN market requirement",
+  );
+  const stagedGmgnRequirementEnd = deployWorkflow.indexOf(
+    "Reject mixed legacy and V3 Custom Launch release authority",
+    stagedGmgnRequirement,
+  );
+  const stagedGmgnRequirementBlock =
+    stagedGmgnRequirement >= 0 &&
+      stagedGmgnRequirementEnd > stagedGmgnRequirement
+      ? deployWorkflow.slice(
+          stagedGmgnRequirement,
+          stagedGmgnRequirementEnd,
+        )
+      : "";
   const stagedCatalogProbe = deployWorkflow.indexOf(
     "Probe exact staged Envio Classic V3 catalog",
   );
@@ -2101,11 +2124,16 @@ export function evaluateReadModelOperationsSourceContracts(
       ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
   const stagedProviderHandoff = includesEverySourceFragment(deployWorkflow, [
+    "MARKET_PROVIDER: $\{{ steps.public-provider-smoke.outputs.market_provider }}",
     "MARKET_READ_STATUS: $\{{ steps.public-provider-smoke.outputs.market_read_status }}",
+    "DETAIL_MARKET_PROVIDER: $\{{ steps.public-provider-smoke.outputs.detail_market_provider }}",
     "DETAIL_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.detail_status }}",
     "CHART_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.chart_status }}",
+    'echo "- Visible market provider: \\`${MARKET_PROVIDER:-not-run}\\`"',
     'echo "- Explore market read status: \\`${MARKET_READ_STATUS:-not-run}\\`"',
+    'echo "- Token detail market provider: \\`${DETAIL_MARKET_PROVIDER:-not-run}\\`"',
     'echo "- Token detail smoke: \\`${DETAIL_SMOKE_STATUS:-not-run}\\`"',
+    'echo "- Full-catalog FDV ranking provider: Dexscreener"',
     'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
   ]);
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
@@ -2173,6 +2201,7 @@ export function evaluateReadModelOperationsSourceContracts(
       '{ isComplete: { _eq: true } }',
       '{ provenanceValid: { _eq: true } }',
       "assertLaunchEventBinding(launch, event, release)",
+      "rpcLag < BigInt(release.confirmations)",
       'source: "envio-classic-v3" as const',
       'stock: "excluded" as const',
       'kind: "envio-indexer-state" as const',
@@ -2216,6 +2245,67 @@ export function evaluateReadModelOperationsSourceContracts(
       "const cache = new Map<string, CachedSnapshot>()",
       "const inFlight = new Map<string, Promise<DexscreenerShadowSnapshotV1>>()",
     ]) &&
+    includesEverySourceFragment(exploreMarket, [
+      "if (!gmgnMarketDataConfiguredV1() || entries.length > 9)",
+      "exploreEntryMarketIdentitiesV1(entry).length !== 1",
+      "return readDexscreenerExploreEntriesV1(entries, wait);",
+      "const GMGN_VISIBLE_PHASE_BUDGET_MS = 1_800",
+      "snapshots = await readGmgnExploreSnapshotsV1(entries, {",
+      "phaseStartedAtMs + GMGN_VISIBLE_PHASE_BUDGET_MS",
+      "const fallback = await readDexscreenerExploreEntriesV1(fallbackEntries, wait);",
+      "const valuedEntries = entries.map((entry): ValuedExploreEntry => {",
+      'provider: "gmgn"',
+      'fallbackProvider: "dexscreener"',
+      "if (marketRead.gmgnQualifiedCount > 0) sources.push(\"gmgn\");",
+      "if (marketRead.fallbackQualifiedCount > 0) sources.push(\"dexscreener\");",
+    ]) &&
+    includesEverySourceFragment(gmgnMarket, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 1_500",
+      "const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000",
+      "const GMGN_MAXIMUM_CONCURRENCY = 3",
+      "const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000",
+      'return String(chainId) === "1" ? "eth" : null;',
+      "!productionPoolManagerBoundV1(entry)",
+      '"/v1/token/info"',
+      'candidate.protocol === "uniswap_v4"',
+      "candidate.tokenAddress === tokenAddress",
+      "candidate.poolId === poolId",
+      "candidate.quoteAddress === quoteAddress",
+      'String(data.pool.exchange).toLowerCase() !== "uniswap_v4"',
+      "!poolBaseQuoteMatchesV1(data.pool, identity)",
+      "!providerSupplyMatchesCanonical(",
+      'headers: { Accept: "application/json", "X-APIKEY": apiKey }',
+      "const bytes = await readBoundedResponseBytes(",
+      "const rateLimited = response.status === 429 || isRateLimitedEnvelope(value);",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      "accountGate.reserveSlot({",
+      "await accountGate.blockUntil({",
+      "blockedUntilMs: providerCooldownFromResponse(",
+      "await accountGate.complete(reservation);",
+      "canonicalSafeInteger(envelope.reset_at)",
+      "process.env.GMGN_API_KEY?.trim()",
+      'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1"',
+    ]) &&
+    includesEverySourceFragment(gmgnAccountGate, [
+      'const GATE_ID = "gmgn-openapi-v1" as const',
+      "lease_holder = $3::uuid",
+      "lease_until = authority.decided_at + INTERVAL '5 minutes'",
+      "AND gate.generation = $4::bigint",
+      "AND gate.lease_holder = $5::uuid",
+      "AND gate.generation = $2::bigint",
+      "AND gate.lease_holder = $3::uuid",
+      '"GMGN account gate lease is stale or unavailable"',
+      "assertReady: () => pool.assertGmgnAccountGateReadiness()",
+    ]) &&
+    includesEverySourceFragment(gmgnSnapshot, [
+      '"programmable.gmgn-market-snapshot.v1" as const',
+      'return value.chainId === "1"',
+      'value.protocol === "uniswap_v4"',
+      "positiveInteger(value.priceUsdWad)",
+      "positiveInteger(value.fdvUsdWad)",
+      "positiveInteger(value.liquidityUsdWad)",
+    ]) &&
     includesEverySourceFragment(publicExplore, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
@@ -2227,15 +2317,15 @@ export function evaluateReadModelOperationsSourceContracts(
       'routerCustomStatus === "last-known-good"',
       "envioClassicV3IdentityCommitmentV1(",
       "readDexscreenerExploreEntriesV1(filtered, {",
-      "readDexscreenerExploreEntriesV1(\n        identityPage.tokens,",
+      "readExploreMarketEntriesV1(\n        identityPage.tokens,",
       'registryCustomStatus === "current" && routerCustomStatus === "current"',
       'requested: "fdv" as const',
       'applied: rankingStatus === "complete"',
       '"qualified-fdv-then-launch-order" as const',
       '"launch-order" as const',
       '"X-Programmable-Launch-Source": launchSource',
-      '"X-Programmable-Read-Source": `${launchSource}+dexscreener`',
-      '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Read-Source": `${launchSource}+${marketProvider}`',
+      '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Router-Read-Status": routerCustomStatus',
       '"X-Programmable-Identity-Last-Indexed-At": identityGeneratedAt',
     ]) &&
@@ -2257,10 +2347,10 @@ export function evaluateReadModelOperationsSourceContracts(
       "identityCount: publicIdentityEntries.length",
       "const projectedRouterIdentityCount = publicIdentityEntries.filter(",
       "const entry: ExploreEntry | null = identityEntries.find(",
-      "readDexscreenerExploreEntriesV1([entry], {",
+      "readExploreMarketEntriesV1([entry], {",
       '"X-Programmable-Launch-Source": input.launchSource',
-      '"X-Programmable-Read-Source": `${input.launchSource}+dexscreener`',
-      '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Read-Source": `${input.launchSource}+${marketProvider}`',
+      '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Router-Read-Status": input.routerStatus',
       'valuation: { status: "unavailable", reason: "source-unavailable" }',
     ]) &&
@@ -2306,7 +2396,7 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list, token detail and creator identity combine the validated Envio Classic V3 catalog with the bounded durable Router Custom snapshot; Dexscreener remains bounded exact-identity enrichment, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
+    "Explore list, token detail and creator identity combine the validated Envio Classic V3 catalog with the bounded durable Router Custom snapshot; Ethereum-only GMGN and Dexscreener remain bounded exact-identity enrichment, market-cap ordering stays Dexscreener-bound, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2446,8 +2536,26 @@ export function evaluateReadModelOperationsSourceContracts(
     "ops-protected-public-provider-stage-smoke",
     stagedBitquerySmoke >
       deployWorkflow.indexOf("Resolve exact staged deployment") &&
+      deployWorkflow.indexOf("Pull production configuration") >= 0 &&
+      stagedGmgnRequirement >
+        deployWorkflow.indexOf("Pull production configuration") &&
+      stagedGmgnRequirement < stagedBitquerySmoke &&
+      includesEverySourceFragment(stagedGmgnRequirementBlock, [
+        "env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module",
+        '(process.env.GMGN_API_KEY ?? "").trim() !== ""',
+        "`require_gmgn_market=${requireGmgnMarket}\\n`",
+        'status: "resolved"',
+        "requireGmgnMarket,",
+      ]) &&
+      (stagedGmgnRequirementBlock.match(/GMGN_API_KEY/gu)?.length ?? 0) === 2 &&
+      !/set -x|echo[^\n]*GMGN_API_KEY|console\.log/u.test(
+        stagedGmgnRequirementBlock,
+      ) &&
       stagedBitquerySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+      ) &&
+      stagedBitquerySmokeBlock.includes(
+        "PROGRAMMABLE_REQUIRE_GMGN_MARKET: $\{{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
       ) &&
       stagedBitquerySmokeBlock.includes(
         "node scripts/smoke-static-dexscreener-public-apis.mjs",
@@ -2464,8 +2572,9 @@ export function evaluateReadModelOperationsSourceContracts(
         'typeof response.body.provider.configured === "boolean"',
         "!healthHasSensitiveData(response.body)",
         'healthAuthority: "informational-only"',
-        '"/api/explore?limit=20&page=1&sort=market-cap"',
-        '"/api/explore?limit=20&page=1&sort=newest"',
+        "const VISIBLE_EXPLORE_PAGE_SIZE = 9",
+        "sort=market-cap",
+        "sort=newest",
         '"/api/explore/token?address="',
         '"/api/explore/token/chart?address="',
         '"/api/explore/profile?account="',
@@ -2488,15 +2597,35 @@ export function evaluateReadModelOperationsSourceContracts(
         "catalog.launchSource === launchSource",
         "highestCatalog !== newestCatalog",
         "function exactMarketIdentityCount(tokens)",
-        "function exactMarketRead(response, tokens)",
-        "read.requestedCount !== expectedRequestedCount",
+        "function exactVisibleUnavailableValuation(token)",
+        "const PROVIDER_RECENT_MAXIMUM_AGE_MS = 5 * 60_000",
+        "function currentProviderTimestamp(value, nowMs)",
+        "nowMs - observedAtMs <= PROVIDER_RECENT_MAXIMUM_AGE_MS",
+        "function exactGmgnSnapshot(token, nowMs)",
+        "token.fdvUsdWad === snapshot.fdvUsdWad",
+        "valuation.asOfTime === token.gmgnMarketData.fetchedAt",
+        "token.fdvUsdWad === valuation.valueWad",
+        "function exactMarketReadCounters(read, expectedRequestedCount, nowMs)",
+        "currentProviderTimestamp(read?.oldestFetchedAt, nowMs)",
+        "currentProviderTimestamp(read?.newestFetchedAt, nowMs)",
+        "function exactMarketAsOfBinding(response, tokens, read, nowMs)",
+        'response.headers.get("x-programmable-market-as-of") !== expectedAsOf',
+        "read.requestedCount === expectedRequestedCount",
+        "function exactDexscreenerMarketRead(response, requestedTokens, nowMs, visibleTokens = requestedTokens,)",
+        "function exactVisibleMarketRead(response, tokens, nowMs)",
+        "function exactDetailMarketRead(response, token, launchSource, nowMs)",
+        "function exactGmgnEligibleCanonicalToken(token)",
+        'provenance?.source === "canonical-launch-read-model"',
+        '"&page=1&sort=newest&model=classic"',
+        'token?.exploreKind !== "token" || token.launchModel !== "classic"',
+        'throw new Error("Explore returned no GMGN-qualified canonical token")',
+        "exactGmgnEligibleCanonicalToken(token) &&",
         "const completeCatalogTokens = [...newestTokens]",
         "Explore catalog pagination contract is invalid",
-        "exactMarketRead(highest, completeCatalogTokens)",
         "Initial Newest page is outside the paged catalog",
         "new Set(highestIdentities).size !== highestIdentities.length",
         "Highest FDV page is outside the paged catalog",
-        "exactFdvRanking(highest, highestTokens)",
+        "exactFdvRanking(highest, highestTokens, validationNowMs)",
         "ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount",
         "qualified.length === Math.min(tokens.length, ranking.qualifiedCount)",
         "!exactSamePageOrder(highest, newest)",
@@ -2544,8 +2673,27 @@ export function evaluateReadModelOperationsSourceContracts(
         'chart.headers.get("cache-control") !==\n      "public, max-age=0, s-maxage=2, stale-while-revalidate=2"',
         'chart.headers.get("x-programmable-market-provider") !== "bitquery"',
         'chart.headers.get("x-programmable-valuation-block") !== null',
-        'detail.headers.get("x-programmable-market-provider") !== "dexscreener"',
-        'marketProvider: "dexscreener"',
+        "!exactVisibleMarketRead(newest, newestTokens, validationNowMs)",
+        "!exactDexscreenerMarketRead(",
+        "catalogPage,",
+        "highest, completeCatalogTokens, now().getTime()",
+        "!exactDetailMarketRead(",
+        "const detailMarketProvider = detail.headers.get(",
+        "environment.PROGRAMMABLE_REQUIRE_GMGN_MARKET",
+        '!["true", "false"].includes(gmgnMarketRequirement)',
+        'const requireGmgnMarket = gmgnMarketRequirement === "true"',
+        "requireGmgnMarket &&",
+        'detailMarketProvider !== "gmgn"',
+        'detail.headers.get("x-programmable-market-read-status") !== "complete"',
+        "!qualifiedGmgnFdv(detailToken, now().getTime())",
+        'throw new Error("Token detail GMGN market contract is required")',
+        "const detailStatus = qualifiedGmgnFdv(detailToken, now().getTime())",
+        "marketProvider: newest.headers.get(\"x-programmable-market-provider\")",
+        "marketReadStatus: newest.body.marketRead.status",
+        "`market_provider=${marketProvider}`",
+        "`detail_market_provider=${detailMarketProvider}`",
+        "marketProvider,",
+        "detailMarketProvider,",
         'creatorClaimPrepare: "separate-live-probe-required"',
         'tradePrepare: "separate-live-probe-required"',
         "runProductionStaticDexscreenerSmokeV1",
@@ -2570,7 +2718,7 @@ export function evaluateReadModelOperationsSourceContracts(
       packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
         "scripts/test/smoke-static-dexscreener-public-apis.test.mjs",
       ) === true,
-    "the immutable staged candidate proves validated last-good identities, optional exact-identity Dexscreener enrichment, identity-only outage behavior, and unchanged profile/claim response semantics without exposing an RPC endpoint",
+    "the immutable staged candidate proves validated last-good identities, bounded GMGN-visible and detail enrichment with Dexscreener fallback, mandatory exact-identity GMGN detail when the production key is configured, Dexscreener-only full-catalog FDV ranking, identity-only outage behavior, and unchanged profile/claim response semantics without exposing an RPC endpoint",
   );
   check(
     "ops-obsolete-public-read-gates-absent",
@@ -2720,9 +2868,13 @@ export function evaluateReadModelOperationsSourceContracts(
         'target.toString() !== `${PRODUCTION_ORIGIN}/`',
         'throw new Error("exact production deployment binding is required")',
         "verifyProductionDeploymentBinding({",
-        "runProductionStaticDexscreenerSmokeV1({ fetchImpl })",
+        "const environment = input.environment ?? process.env",
+        '(environment.GMGN_API_KEY ?? "").trim() !== ""',
+        "runProductionStaticDexscreenerSmokeV1({",
+        "PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(requireGmgnMarket)",
         'id: "production-static-identity-dexscreener-public-apis"',
       ]) &&
+      (postPromotionVerifierBlock.match(/GMGN_API_KEY/gu)?.length ?? 0) === 1 &&
       !/runtimeProductionProviderEndpoints|verifyBitquery|stateview|chainlink|\/api\/ops\/health|\/api\/explore\/token\/chart/iu.test(
         postPromotionVerifierBlock,
       ) &&

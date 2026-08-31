@@ -108,7 +108,7 @@ export function shouldFocusDocsSearch({
 
 export function DocsSearch({ id = "docs-search" }: { id?: string }) {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");

@@ -387,6 +387,41 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);
   assert.doesNotMatch(probe, /\n        if:/u);
 
+  const gmgnRequirement = stepBlock(
+    deploy,
+    "Resolve staged GMGN market requirement",
+  );
+  assert.notEqual(deploy.indexOf("Pull production configuration"), -1);
+  assert.ok(
+    deploy.indexOf("Pull production configuration") <
+      deploy.indexOf("Resolve staged GMGN market requirement"),
+  );
+  assert.ok(
+    deploy.indexOf("Resolve staged GMGN market requirement") <
+      deploy.indexOf("Smoke staged static identity and Dex public APIs"),
+  );
+  assert.match(
+    gmgnRequirement,
+    /env -u GMGN_API_KEY node --env-file=\.vercel\/\.env\.production\.local --input-type=module/u,
+  );
+  assert.match(
+    gmgnRequirement,
+    /\(process\.env\.GMGN_API_KEY \?\? ""\)\.trim\(\) !== ""/u,
+  );
+  assert.match(
+    gmgnRequirement,
+    /`require_gmgn_market=\$\{requireGmgnMarket\}\\n`/u,
+  );
+  assert.match(
+    gmgnRequirement,
+    /JSON\.stringify\(\{[\s\S]*requireGmgnMarket/u,
+  );
+  assert.doesNotMatch(
+    gmgnRequirement,
+    /set -x|echo[^\n]*GMGN_API_KEY|console\.log/u,
+  );
+  assert.equal(gmgnRequirement.match(/GMGN_API_KEY/gu)?.length, 2);
+
   const smoke = stepBlock(
     deploy,
     "Smoke staged static identity and Dex public APIs",
@@ -397,6 +432,10 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     /node scripts\/smoke-static-dexscreener-public-apis\.mjs/u,
   );
   assert.match(smoke, /PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"/u);
+  assert.match(
+    smoke,
+    /PROGRAMMABLE_REQUIRE_GMGN_MARKET: \$\{\{ steps\.gmgn-market-requirement\.outputs\.require_gmgn_market \}\}/u,
+  );
   assert.equal(
     smoke.match(/smoke-static-dexscreener-public-apis\.mjs/gu)?.length,
     1,
@@ -417,10 +456,17 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.match(handoff, /Catalog identity count:/u);
   assert.match(
     handoff,
-    /Market data provider: Dexscreener \(optional enrichment\)/u,
+    /MARKET_PROVIDER: \$\{\{ steps\.public-provider-smoke\.outputs\.market_provider \}\}/u,
   );
+  assert.match(handoff, /Visible market provider:/u);
   assert.match(handoff, /Explore market read status:/u);
+  assert.match(
+    handoff,
+    /DETAIL_MARKET_PROVIDER: \$\{\{ steps\.public-provider-smoke\.outputs\.detail_market_provider \}\}/u,
+  );
+  assert.match(handoff, /Token detail market provider:/u);
   assert.match(handoff, /Token detail smoke:/u);
+  assert.match(handoff, /Full-catalog FDV ranking provider: Dexscreener/u);
   assert.match(handoff, /SHARD trade adapter smoke:/u);
   assert.match(handoff, /Market chart smoke:/u);
 
@@ -445,7 +491,35 @@ test("the staged public smoke is a separate bounded script", () => {
   assert.match(source, /readBoundedResponseText/u);
   assert.match(source, /response.status === 503 && attempt === 0/u);
   assert.match(source, /exactSamePageOrder\(highest, newest\)/u);
-  assert.match(source, /marketProvider: "dexscreener"/u);
+  assert.match(
+    source,
+    /exactVisibleMarketRead\(newest, newestTokens, validationNowMs\)/u,
+  );
+  assert.match(
+    source,
+    /exactDexscreenerMarketRead\(\s*highest,\s*completeCatalogTokens,/u,
+  );
+  assert.match(source, /exactDetailMarketRead\(/u);
+  assert.match(source, /environment\.PROGRAMMABLE_REQUIRE_GMGN_MARKET/u);
+  assert.match(source, /requireGmgnMarket &&/u);
+  assert.match(source, /detailMarketProvider !== "gmgn"/u);
+  assert.match(
+    source,
+    /!qualifiedGmgnFdv\(detailToken, now\(\)\.getTime\(\)\)/u,
+  );
+  assert.match(source, /VISIBLE_EXPLORE_PAGE_SIZE = 9/u);
+  assert.match(source, /model=classic/u);
+  assert.match(source, /exactGmgnEligibleCanonicalToken/u);
+  assert.match(
+    source,
+    /marketProvider: newest\.headers\.get\("x-programmable-market-provider"\)/u,
+  );
+  assert.match(source, /marketReadStatus: newest\.body\.marketRead\.status/u);
+  assert.match(source, /`market_provider=\$\{marketProvider\}`/u);
+  assert.match(
+    source,
+    /`detail_market_provider=\$\{detailMarketProvider\}`/u,
+  );
   assert.doesNotMatch(
     source,
     /PROGRAMMABLE_WEBSITE_MAINNET_RPC|BITQUERY_API_KEY|runtimeProductionProviderEndpoints|readPrimaryRpc|readBitquery|fetchBitquery/iu,

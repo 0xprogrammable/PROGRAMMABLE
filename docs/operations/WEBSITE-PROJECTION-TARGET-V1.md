@@ -38,6 +38,7 @@ before starting the runtime, in this exact order:
 3. `ops/website-projection-target/migrations/0003_registry_custom_public_read_v1.sql`
 4. `ops/website-projection-target/migrations/0004_approval_v3_artifacts_v1.sql`
 5. `ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql`
+6. `ops/website-projection-target/migrations/0006_gmgn_account_gate_v1.sql`
 
 `0001` creates the private schema, immutable projection and credential-use
 tables, policies and initial indexes. `0002` then upgrades finalized Custom
@@ -46,7 +47,10 @@ post-launch-authority inventory hash, and replaces the GitHub-derived Custom
 profile index with the wallet-derived profile index. `0003` adds the separate
 Registry-current-state materialization. `0004` adds approval-v3 artifact
 commitments. `0005` adds the Generic V2 launch, reconciliation, and
-reconciliation-attempt materializations. Together they provide:
+reconciliation-attempt materializations. `0006` adds the private singleton and
+append-only decision history used to serialize GMGN account-wide reservations,
+leases, completions, and provider cooldowns across production instances. Together
+they provide:
 
 - a primary key on `(lane, projection_key)`;
 - a global unique index on `idempotency_key`;
@@ -58,10 +62,14 @@ reconciliation-attempt materializations. Together they provide:
   `registry.custom-launched` observations, including exact Registry/event,
   finality, provider/model, GitHub revision, approval/launch-plan, runtime, fee,
   and post-launch-role bindings;
+- a fail-closed distributed GMGN account gate with one exact singleton, bounded
+  leases, and durable reservation, completion, and provider-block decisions;
 - lane-specific constraints requiring complete entitlement metadata and forbidding
   that metadata on custom-launch records;
-- enabled and forced RLS on both tables;
-- no update or delete path in application code.
+- enabled and forced RLS on every application table;
+- no delete path in application code, immutable projection and credential rows,
+  and only the narrow Registry, reconciliation, and GMGN gate updates listed
+  below.
 
 The runtime resolves both the lane/key identity and idempotency identity inside
 one PostgreSQL transaction. A first write returns `201`; an exact retry returns
@@ -100,6 +108,16 @@ GRANT UPDATE (
 GRANT UPDATE (attempted_at)
   ON programmable_website_projection_v1.generic_launch_reconciliation_attempts_v2
   TO programmable_website_projection_runtime;
+GRANT SELECT
+  ON programmable_website_projection_v1.gmgn_account_gate_v1
+  TO programmable_website_projection_runtime;
+GRANT UPDATE (
+  generation, next_slot_at, blocked_until, lease_holder, lease_until, updated_at
+) ON programmable_website_projection_v1.gmgn_account_gate_v1
+  TO programmable_website_projection_runtime;
+GRANT INSERT
+  ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+  TO programmable_website_projection_runtime;
 GRANT EXECUTE ON FUNCTION
   programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
   TO programmable_website_projection_runtime;
@@ -107,9 +125,11 @@ GRANT EXECUTE ON FUNCTION
 
 Do not grant `UPDATE` on the immutable projection or credential tables. Do not
 grant `DELETE`, `TRUNCATE`, schema creation, role management, or access to
-approval-service tables. The narrowly scoped column-level `UPDATE` grant on the Registry
-materialization is required to hide a record immediately after a correction,
-revocation, or reorg. The runtime attests the exact current role,
+approval-service tables. The narrowly scoped column-level `UPDATE` grant on the
+Registry materialization is required to hide a record immediately after a correction,
+revocation, or reorg. The GMGN runtime may read and update only the singleton;
+it may append decisions but cannot read or change decision history. The runtime
+attests the exact current role,
 grants, RLS/force-RLS state, policies, provider-role exclusion, table ownership,
 and live `pg_stat_ssl` connection before serving requests.
 
@@ -343,15 +363,20 @@ and checks Privy session/current-link and principal-scoped entitlement reads.
 
 ## Production activation gates
 
-Do not call this live until all of the following are separately evidenced:
+Do not call the complete projection target with its GMGN account gate active
+until all of the following are separately evidenced. The existing `0001`
+through `0005` projection paths retain their independent readiness contract;
+an absent `0006` must disable GMGN enrichment without disabling those paths.
 
-1. migrations `0001` and `0002` were applied in that order on the intended
-   hosted database, their exact reviewed digests are retained, and live catalog
-   proof confirms the `0002` wallet/profile columns, constraint and index while
-   the superseded GitHub-derived Custom profile index is absent;
-2. the runtime uses the dedicated least-privilege role and its readiness
-   attestation proves the final two-migration schema, grants, forced RLS and
-   provider-role exclusion against that hosted database;
+1. migrations `0001` through `0006` were applied in that exact order on the
+   intended hosted database, their exact reviewed digests are retained, and live
+   catalog proof confirms the complete application schema, including the `0002`
+   wallet/profile changes and the `0006` GMGN gate singleton, policies, grants,
+   decision history, and constraints;
+2. the runtime uses the dedicated least-privilege role, the base production
+   readiness attestation proves the existing `0001` through `0005` contract,
+   and the separate GMGN readiness attestation proves the `0006` schema,
+   grants, forced RLS and provider-role exclusion against that hosted database;
 3. Supabase Postgres SSL enforcement is enabled, the current Server root
    certificate is configured, and the runtime readiness attestation succeeds;
 4. Privy GitHub OAuth and identity tokens are enabled and tested on the intended

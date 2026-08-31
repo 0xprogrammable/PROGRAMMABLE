@@ -786,9 +786,22 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("accepts the exact Envio identity and Dexscreener split", () => {
+  it("accepts the exact Envio identity and bounded Ethereum market-provider split", () => {
     const result = evaluateReadModelOperationsSourceContracts(ROOT);
     expect(result.failures.map(({ id }: { id: string }) => id)).not.toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects an Envio catalog that can publish before its confirmation depth", () => {
+    const path = "lib/market-data/envio-classic-v3-catalog.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const needle = "rpcLag < BigInt(release.confirmations)";
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(needle, "rpcLag < 0n") },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-public-provider-split-source-contract",
     );
   });
@@ -811,7 +824,7 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a different market provider",
-      '"X-Programmable-Market-Provider": "dexscreener"',
+      '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Market-Provider": "unknown"',
     ],
     [
@@ -825,6 +838,78 @@ describe("read-model operations source contract", () => {
     expect(route).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: route.replaceAll(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    [
+      "a Robinhood GMGN slug",
+      "lib/market-data/gmgn.server.ts",
+      'return String(chainId) === "1" ? "eth" : null;',
+      'return String(chainId) === "4663" ? "robinhood" : null;',
+    ],
+    [
+      "an unbounded visible-page fanout",
+      "lib/market-data/explore-market.server.ts",
+      "if (!gmgnMarketDataConfiguredV1() || entries.length > 9)",
+      "if (!gmgnMarketDataConfiguredV1())",
+    ],
+    [
+      "no reserved batch-fallback budget",
+      "lib/market-data/explore-market.server.ts",
+      "phaseStartedAtMs + GMGN_VISIBLE_PHASE_BUDGET_MS",
+      "wait.deadlineMs ?? Number.POSITIVE_INFINITY",
+    ],
+    [
+      "an optimistic undocumented default rate",
+      "lib/market-data/gmgn.server.ts",
+      'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1"',
+      'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "20"',
+    ],
+    [
+      "no response-body ban cooldown",
+      "lib/market-data/gmgn.server.ts",
+      "canonicalSafeInteger(envelope.reset_at)",
+      "null",
+    ],
+    [
+      "a process-local production gate bypass",
+      "lib/market-data/gmgn.server.ts",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      "fetchImpl === fetch",
+    ],
+    [
+      "no account-wide provider reservation",
+      "lib/market-data/gmgn.server.ts",
+      "accountGate.reserveSlot({",
+      "Promise.resolve({",
+    ],
+    [
+      "no conservative failed-outcome lease",
+      "lib/market-data/gmgn-account-gate.server.ts",
+      "lease_until = authority.decided_at + INTERVAL '5 minutes'",
+      "lease_until = authority.decided_at",
+    ],
+    [
+      "no generation-bound stale completion guard",
+      "lib/market-data/gmgn-account-gate.server.ts",
+      "AND gate.generation = $2::bigint",
+      "AND true",
+    ],
+    [
+      "a missing production PoolManager provenance gate",
+      "lib/market-data/gmgn.server.ts",
+      "!productionPoolManagerBoundV1(entry)",
+      "false",
+    ],
+  ])("rejects GMGN enrichment with %s", (_label, path, needle, replacement) => {
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(needle, replacement) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-public-provider-split-source-contract",
@@ -996,6 +1081,31 @@ describe("read-model operations source contract", () => {
       'valuation.freshness === "current"',
     ],
     [
+      "the UI-sized GMGN list path",
+      "const VISIBLE_EXPLORE_PAGE_SIZE = 9",
+      "const VISIBLE_EXPLORE_PAGE_SIZE = 20",
+    ],
+    [
+      "current provider timestamps",
+      "nowMs - observedAtMs <= PROVIDER_RECENT_MAXIMUM_AGE_MS",
+      "nowMs - observedAtMs >= PROVIDER_RECENT_MAXIMUM_AGE_MS",
+    ],
+    [
+      "GMGN valuation-to-snapshot time binding",
+      "valuation.asOfTime === token.gmgnMarketData.fetchedAt",
+      "valuation.asOfTime !== token.gmgnMarketData.fetchedAt",
+    ],
+    [
+      "GMGN public FDV-to-snapshot binding",
+      "token.fdvUsdWad === snapshot.fdvUsdWad",
+      "token.fdvUsdWad !== snapshot.fdvUsdWad",
+    ],
+    [
+      "a GMGN-eligible canonical detail selection",
+      "exactGmgnEligibleCanonicalToken(token) &&",
+      "token?.exploreKind === \"custom-project\" &&",
+    ],
+    [
       "no composite launch-source binding",
       "catalog.launchSource === launchSource",
       "catalog.launchSource === source",
@@ -1006,9 +1116,49 @@ describe("read-model operations source contract", () => {
       'token.exploreKind !== "unsupported" ||\n    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customProjectId ?? ""))',
     ],
     [
-      "a different market provider",
-      'marketProvider: "dexscreener"',
+      "a hard-coded visible market provider",
+      'marketProvider: newest.headers.get("x-programmable-market-provider")',
       'marketProvider: "unknown"',
+    ],
+    [
+      "a hard-coded visible market status",
+      "marketReadStatus: newest.body.marketRead.status",
+      'marketReadStatus: "unknown"',
+    ],
+    [
+      "no strict GMGN requirement flag",
+      '!["true", "false"].includes(gmgnMarketRequirement)',
+      "false",
+    ],
+    [
+      "no configured GMGN detail requirement",
+      "requireGmgnMarket &&",
+      "false &&",
+    ],
+    [
+      "no exact GMGN detail provider requirement",
+      'detailMarketProvider !== "gmgn"',
+      'detailMarketProvider !== "unknown"',
+    ],
+    [
+      "no dynamic visible market contract",
+      "!exactVisibleMarketRead(newest, newestTokens, validationNowMs)",
+      "true",
+    ],
+    [
+      "no Dexscreener-bound full-catalog ranking contract",
+      "highest,\n          completeCatalogTokens,\n          now().getTime(),",
+      "highest,\n          [],\n          now().getTime(),",
+    ],
+    [
+      "no dynamic token detail market contract",
+      "!exactDetailMarketRead(",
+      "!exactDexscreenerMarketRead(",
+    ],
+    [
+      "no complete GMGN detail runtime read",
+      'detail.headers.get("x-programmable-market-read-status") !==\n            "complete"',
+      'detail.headers.get("x-programmable-market-read-status") !==\n            "unavailable"',
     ],
     [
       "no unavailable launch-order proof",
@@ -1058,8 +1208,13 @@ describe("read-model operations source contract", () => {
   it.each([
     [
       "the active public smoke",
-      "runProductionStaticDexscreenerSmokeV1({ fetchImpl })",
+      "runProductionStaticDexscreenerSmokeV1({",
       "Promise.resolve()",
+    ],
+    [
+      "the production GMGN requirement resolution",
+      '(environment.GMGN_API_KEY ?? "").trim() !== ""',
+      "false",
     ],
     [
       "the exact deployment binding",
@@ -1091,6 +1246,22 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("accepts formatting-only whitespace changes in reviewed source fragments", () => {
+    const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const formatted = source.replace(
+      'detail.headers.get("x-programmable-market-read-status") !==\n            "complete"',
+      'detail.headers.get(\n            "x-programmable-market-read-status"\n          ) !== "complete"',
+    );
+    expect(formatted).not.toBe(source);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: formatted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id).includes(
+      "ops-protected-public-provider-stage-smoke",
+    )).toBe(false);
+  });
+
   it("rejects a deployment workflow that does not invoke the exact smoke", () => {
     const path = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
@@ -1106,9 +1277,47 @@ describe("read-model operations source contract", () => {
 
   it.each([
     [
+      "secret-safe GMGN requirement resolution",
+      '(process.env.GMGN_API_KEY ?? "").trim() !== ""',
+      "false",
+    ],
+    [
+      "GMGN requirement smoke handoff",
+      "PROGRAMMABLE_REQUIRE_GMGN_MARKET: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
+      'PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false"',
+    ],
+    [
+      "secret-free GMGN requirement output",
+      'status: "resolved",',
+      'apiKey: process.env.GMGN_API_KEY,\n                status: "resolved",',
+    ],
+  ])("rejects a staged workflow without %s", (_label, needle, replacement) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    expect(workflow).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it.each([
+    [
+      "visible market provider output",
+      "MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.market_provider }}",
+      "MARKET_PROVIDER: unavailable",
+    ],
+    [
       "market-read status output",
       "MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}",
       "MARKET_READ_STATUS: unavailable",
+    ],
+    [
+      "detail market provider output",
+      "DETAIL_MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.detail_market_provider }}",
+      "DETAIL_MARKET_PROVIDER: unavailable",
     ],
     [
       "detail status output",

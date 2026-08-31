@@ -674,6 +674,14 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     expect(response.status).toBe(404);
     expect(await json(response)).toMatchObject({ token: null, customProject: null });
     expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(response.headers.get("x-programmable-read-source")).toBe(
+      "envio-classic-v3+canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-read-status")).toBeNull();
+    expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    expect(response.headers.get("x-programmable-market-as-of")).toBeNull();
   });
 
   it.each([

@@ -58,6 +58,8 @@ import {
   isTokenMarketDataV1,
   marketDataStatusLabel,
 } from "@/lib/market-data/market-data-v1";
+import { isGmgnMarketSnapshotForExploreEntryV1 } from
+  "@/lib/market-data/gmgn-market-data-v1";
 import {
   applyTokenImageFallback,
   canOptimizeTokenImage,
@@ -92,6 +94,7 @@ type TokenCard = {
   links: readonly TokenLink[];
   valuation?: MarketCapMetric;
   valuationMetric?: "Fully diluted valuation";
+  valuationProvider?: "GMGN" | "Dexscreener";
   marketStatus?: ExploreMarketStatus;
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
@@ -151,6 +154,24 @@ type DexscreenerExploreMarketRead = Readonly<{
   newestFetchedAt: string | null;
 }>;
 
+type GmgnExploreMarketRead = Readonly<{
+  provider: "gmgn";
+  fallbackProvider: "dexscreener";
+  status: "complete" | "partial" | "unavailable";
+  currency: "USD";
+  requestedCount: number;
+  observedCount: number;
+  qualifiedCount: number;
+  unavailableCount: number;
+  gmgnObservedCount: number;
+  gmgnQualifiedCount: number;
+  fallbackRequestedCount: number;
+  fallbackObservedCount: number;
+  fallbackQualifiedCount: number;
+  oldestFetchedAt: string | null;
+  newestFetchedAt: string | null;
+}>;
+
 type LegacyBitqueryExploreMarketRead = Readonly<{
   provider: "bitquery";
   status: "unavailable";
@@ -162,6 +183,7 @@ type LegacyBitqueryExploreMarketRead = Readonly<{
 
 type ExploreMarketRead =
   | DexscreenerExploreMarketRead
+  | GmgnExploreMarketRead
   | LegacyBitqueryExploreMarketRead;
 
 type ExploreRanking = Readonly<{
@@ -340,6 +362,7 @@ function preserveKnownMarketObservation(
 
   const {
     marketData: _previousMarketData,
+    gmgnMarketData: _previousGmgnMarketData,
     liquidityEvidence: _previousLiquidityEvidence,
     fdvUsdWad: _previousFdvUsdWad,
     ...identity
@@ -347,6 +370,7 @@ function preserveKnownMarketObservation(
   const incomingCompatibility = incoming as ValuedExploreEntry &
     Readonly<{ fdvUsdWad?: string }>;
   void _previousMarketData;
+  void _previousGmgnMarketData;
   void _previousLiquidityEvidence;
   void _previousFdvUsdWad;
   return {
@@ -355,6 +379,9 @@ function preserveKnownMarketObservation(
     ...(incoming.marketData === undefined
       ? {}
       : { marketData: incoming.marketData }),
+    ...(incoming.gmgnMarketData === undefined
+      ? {}
+      : { gmgnMarketData: incoming.gmgnMarketData }),
     ...(incoming.liquidityEvidence === undefined
       ? {}
       : { liquidityEvidence: incoming.liquidityEvidence }),
@@ -1097,12 +1124,19 @@ function parseExploreEntry(value: unknown): ValuedExploreEntry | null {
           ? value.marketData
           : null
         : undefined;
-    return valuation === null || marketData === null
+    const gmgnMarketData =
+      isRecord(value) && value.gmgnMarketData !== undefined
+        ? isGmgnMarketSnapshotForExploreEntryV1(value.gmgnMarketData, entry)
+          ? value.gmgnMarketData
+          : null
+        : undefined;
+    return valuation === null || marketData === null || gmgnMarketData === null
       ? null
       : {
           ...entry,
           valuation,
           ...(marketData === undefined ? {} : { marketData }),
+          ...(gmgnMarketData === undefined ? {} : { gmgnMarketData }),
         };
   };
   if (isRecord(value) && value.exploreKind === "custom-project") {
@@ -1189,7 +1223,7 @@ function parseExploreMarketRead(value: unknown): ExploreMarketRead | null {
   }
   if (
     !isRecord(value) ||
-    value.provider !== "dexscreener" ||
+    (value.provider !== "dexscreener" && value.provider !== "gmgn") ||
     !["complete", "partial", "unavailable"].includes(String(value.status)) ||
     value.currency !== "USD" ||
     !["requestedCount", "observedCount", "qualifiedCount", "unavailableCount"]
@@ -1205,6 +1239,33 @@ function parseExploreMarketRead(value: unknown): ExploreMarketRead | null {
       (typeof value.newestFetchedAt !== "string" ||
         !Number.isFinite(Date.parse(value.newestFetchedAt))))
   ) return null;
+  if (value.provider === "gmgn") {
+    if (
+      value.fallbackProvider !== "dexscreener" ||
+      ![
+        "gmgnObservedCount",
+        "gmgnQualifiedCount",
+        "fallbackRequestedCount",
+        "fallbackObservedCount",
+        "fallbackQualifiedCount",
+      ].every((field) =>
+        Number.isSafeInteger(value[field]) && Number(value[field]) >= 0
+      ) ||
+      Number(value.gmgnQualifiedCount) > Number(value.gmgnObservedCount) ||
+      Number(value.gmgnObservedCount) > Number(value.requestedCount) ||
+      Number(value.fallbackQualifiedCount) >
+        Number(value.fallbackObservedCount) ||
+      Number(value.fallbackObservedCount) >
+        Number(value.fallbackRequestedCount) ||
+      Number(value.fallbackRequestedCount) > Number(value.requestedCount) ||
+      Number(value.observedCount) < Number(value.gmgnObservedCount) ||
+      Number(value.observedCount) < Number(value.fallbackObservedCount) ||
+      Number(value.observedCount) >
+        Number(value.gmgnObservedCount) + Number(value.fallbackObservedCount) ||
+      Number(value.qualifiedCount) !==
+        Number(value.gmgnQualifiedCount) + Number(value.fallbackQualifiedCount)
+    ) return null;
+  }
   const observed = Number(value.observedCount);
   // Transport completion and pair coverage are independent. A complete
   // Dexscreener read can honestly observe only a small subset of the known
@@ -1904,7 +1965,8 @@ async function fetchExplorePayload(
             : "response-unavailable"
           : null;
       if (
-        payload.marketRead?.provider === "dexscreener" &&
+        (payload.marketRead?.provider === "dexscreener" ||
+          payload.marketRead?.provider === "gmgn") &&
         marketReadStatus !== payload.marketRead.status
       ) {
         throw new Error("The token registry returned inconsistent market read data");
@@ -2077,6 +2139,11 @@ async function loadExploreModelDatasetAttempt(
       (payload.marketRead?.provider !== "dexscreener" ||
         degradedPage.marketRead?.provider !== "dexscreener" ||
         payload.marketRead.currency === degradedPage.marketRead.currency) &&
+      (payload.marketRead?.provider !== "gmgn" ||
+        degradedPage.marketRead?.provider !== "gmgn" ||
+        (payload.marketRead.currency === degradedPage.marketRead.currency &&
+          payload.marketRead.fallbackProvider ===
+            degradedPage.marketRead.fallbackProvider)) &&
       (payload.marketRead?.provider !== "bitquery" ||
         degradedPage.marketRead?.provider !== "bitquery" ||
         (payload.marketRead.category === degradedPage.marketRead.category &&
@@ -2098,11 +2165,13 @@ async function loadExploreModelDatasetAttempt(
       if (entry.exploreKind === "custom-project") {
         const {
           marketData: _marketData,
+          gmgnMarketData: _gmgnMarketData,
           liquidityEvidence: _liquidityEvidence,
           fdvUsdWad: _fdvUsdWad,
           ...identity
         } = entry as typeof entry & Readonly<{ fdvUsdWad?: string }>;
         void _marketData;
+        void _gmgnMarketData;
         void _liquidityEvidence;
         void _fdvUsdWad;
         return {
@@ -2117,11 +2186,13 @@ async function loadExploreModelDatasetAttempt(
       }
       const {
         marketData: _marketData,
+        gmgnMarketData: _gmgnMarketData,
         liquidityEvidence: _liquidityEvidence,
         fdvUsdWad: _fdvUsdWad,
         ...identity
       } = entry;
       void _marketData;
+      void _gmgnMarketData;
       void _liquidityEvidence;
       void _fdvUsdWad;
       return {
@@ -2487,6 +2558,11 @@ export function getTokenCards(
       ...(valuation.status === "available"
         ? {
             valuationMetric: "Fully diluted valuation" as const,
+            ...(valuation.source === "gmgn"
+              ? { valuationProvider: "GMGN" as const }
+              : valuation.source === "dexscreener"
+                ? { valuationProvider: "Dexscreener" as const }
+                : {}),
           }
         : {}),
       marketStatus: exploreMarketStatusLabel(token),
@@ -3309,7 +3385,15 @@ export function ExploreView({
                 </header>
                 <div className={styles.runnerData}>
                   <span>
-                    <small title="Fully diluted valuation">FDV</small>
+                    <small
+                      title={token.valuationProvider
+                        ? `Fully diluted valuation from ${token.valuationProvider}`
+                        : "Fully diluted valuation"}
+                    >
+                      FDV{token.valuationProvider
+                        ? ` · ${token.valuationProvider}`
+                        : ""}
+                    </small>
                     {token.valuation ? (
                       <AnimatedMarketCap
                         metric={token.valuation}

@@ -35,6 +35,12 @@ export type DexscreenerExploreReadV1 = Readonly<{
 export type DexscreenerExploreResultV1 = Readonly<{
   entries: readonly ValuedExploreEntry[];
   marketRead: DexscreenerExploreReadV1;
+  /**
+   * Internal exact-identity coverage used when another provider delegates a
+   * subset to Dexscreener. This is intentionally kept outside marketRead so it
+   * never becomes part of the public response contract.
+   */
+  observedEntryIds: readonly string[];
 }>;
 
 export async function readDexscreenerExploreEntriesV1(
@@ -49,6 +55,7 @@ export async function readDexscreenerExploreEntriesV1(
     return {
       entries: entries.map(unavailableEntry),
       marketRead: unavailableRead(identities.length),
+      observedEntryIds: [],
     };
   }
 
@@ -59,6 +66,15 @@ export async function readDexscreenerExploreEntriesV1(
   const byIdentity = new Map(
     snapshot.results.map((result) => [identityKey(result), result]),
   );
+  const observedIdentityKeys = new Set(snapshot.results.filter((result) =>
+    requestedIdentityKeys.has(identityKey(result)) &&
+    result.status === "available"
+  ).map(identityKey));
+  const observedEntryIds = entries.filter((entry) =>
+    exploreEntryMarketIdentitiesV1(entry).some((identity) =>
+      observedIdentityKeys.has(identityKey({ identity }))
+    )
+  ).map((entry) => entry.id);
   const valuedEntries = entries.map((entry) =>
     valuedEntry(entry, byIdentity, observedAtMs)
   );
@@ -73,6 +89,7 @@ export async function readDexscreenerExploreEntriesV1(
   ).map(identityKey)).size;
   return {
     entries: valuedEntries,
+    observedEntryIds,
     marketRead: {
       provider: "dexscreener",
       status: snapshot.readStatus,

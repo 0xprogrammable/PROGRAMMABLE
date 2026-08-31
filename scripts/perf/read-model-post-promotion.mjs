@@ -102,6 +102,9 @@ export async function verifyPostPromotion(input) {
     throw new Error("exact production deployment binding is required");
   }
   const fetchImpl = input.fetchImpl ?? fetch;
+  const environment = input.environment ?? process.env;
+  const requireGmgnMarket =
+    (environment.GMGN_API_KEY ?? "").trim() !== "";
   const checks = await verifyProductionDeploymentBinding({
     targetUrl: target.toString(),
     expectedDeploymentId: input.expectedDeploymentId,
@@ -113,7 +116,12 @@ export async function verifyPostPromotion(input) {
   });
   let publicSurface = false;
   try {
-    await runProductionStaticDexscreenerSmokeV1({ fetchImpl });
+    await runProductionStaticDexscreenerSmokeV1({
+      fetchImpl,
+      environment: {
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(requireGmgnMarket),
+      },
+    });
     publicSurface = true;
   } catch {
     // Provider responses and deployment credentials never enter release output.
@@ -122,7 +130,7 @@ export async function verifyPostPromotion(input) {
     id: "production-static-identity-dexscreener-public-apis",
     status: publicSurface ? "pass" : "fail",
     detail:
-      "production serves one catalog-bound identity surface with optional exact-pool Dexscreener enrichment, profile reads, and an exact pool-bound Bitquery chart",
+      "production serves one catalog-bound identity surface with the configured GMGN requirement, exact-pool Dexscreener fallback, profile reads, and an exact pool-bound Bitquery chart",
   });
   const failures = checks
     .filter(({ status }) => status !== "pass")

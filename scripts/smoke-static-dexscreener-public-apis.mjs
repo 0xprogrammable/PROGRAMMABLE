@@ -21,6 +21,8 @@ const CLASSIC_V4_POLICY = Object.freeze({
 });
 const PROGRAMMABLE_MAIN_ASSET_ADDRESS =
   "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
+const CANONICAL_POOL_MANAGER_ADDRESS =
+  "0x000000000004444c5dc75cb358380d2e3de08a90";
 const SHARD_TOKEN_ADDRESS = [
   "0xface73b63787960282f2",
   "d4682d3752beb25271ad",
@@ -40,8 +42,15 @@ const MARKET_READ_STATUSES = new Set([
   "partial",
   "unavailable",
 ]);
+const EXPLORE_MARKET_PROVIDERS = new Set([
+  "dexscreener",
+  "gmgn",
+  "gmgn+dexscreener",
+]);
 const EXPLORE_SNAPSHOT_ATTEMPTS = 3;
 const EXPLORE_SNAPSHOT_RETRY_DELAY_MS = 16_000;
+const VISIBLE_EXPLORE_PAGE_SIZE = 9;
+const PROVIDER_RECENT_MAXIMUM_AGE_MS = 5 * 60_000;
 
 class ExploreCatalogBoundaryDriftError extends Error {
   constructor(message) {
@@ -83,6 +92,19 @@ function exactObjectKeys(value, expected) {
   const actual = Object.keys(value).sort();
   return actual.length === expected.length &&
     actual.every((key, index) => key === expected[index]);
+}
+
+function exactIsoTimestamp(value) {
+  if (typeof value !== "string" || !ISO_TIMESTAMP.test(value)) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+function currentProviderTimestamp(value, nowMs) {
+  if (!exactIsoTimestamp(value) || !Number.isFinite(nowMs)) return false;
+  const observedAtMs = Date.parse(value);
+  return observedAtMs <= nowMs &&
+    nowMs - observedAtMs <= PROVIDER_RECENT_MAXIMUM_AGE_MS;
 }
 
 async function requestJson(
@@ -530,6 +552,27 @@ function exactMarketIdentityCount(tokens) {
   return byPool.size;
 }
 
+function exactGmgnEligibleCanonicalToken(token) {
+  if (
+    token?.exploreKind !== "token" ||
+    exactIdentity(token) === null ||
+    entryMarketIdentities(token).length !== 1 ||
+    typeof token.totalSupplyRaw !== "string" ||
+    !/^[1-9][0-9]{0,77}$/u.test(token.totalSupplyRaw) ||
+    !Number.isSafeInteger(token.tokenDecimals) ||
+    token.tokenDecimals < 0 ||
+    token.tokenDecimals > 255
+  ) return false;
+  const provenance = token.launchCategoryProvenance;
+  if (provenance?.source === "canonical-launch-read-model") return true;
+  const stamp = token.launchStampProvenance;
+  return provenance?.source === "canonical-launch-stamp-router" &&
+    canonicalMarketAddress(stamp?.poolManagerAddress) ===
+      CANONICAL_POOL_MANAGER_ADDRESS &&
+    canonicalMarketAddress(stamp?.poolProof?.poolManagerAddress) ===
+      CANONICAL_POOL_MANAGER_ADDRESS;
+}
+
 function healthHasSensitiveData(value, depth = 0) {
   if (depth > 8 || value === null || typeof value !== "object") return false;
   if (Array.isArray(value)) {
@@ -554,7 +597,7 @@ function exactInformationalHealth(response) {
     !healthHasSensitiveData(response.body);
 }
 
-function qualifiedDexscreenerFdv(token) {
+function qualifiedDexscreenerFdv(token, nowMs) {
   const valuation = token?.valuation;
   return valuation?.status === "available" &&
     valuation.metric === "fdv" &&
@@ -562,7 +605,9 @@ function qualifiedDexscreenerFdv(token) {
     valuation.currency === "usd" &&
     valuation.freshness === "provider-recent" &&
     valuation.source === "dexscreener" &&
-    POSITIVE_INTEGER.test(String(valuation.valueWad ?? ""));
+    POSITIVE_INTEGER.test(String(valuation.valueWad ?? "")) &&
+    token.fdvUsdWad === valuation.valueWad &&
+    currentProviderTimestamp(valuation.asOfTime, nowMs);
 }
 
 function exactUnavailableValuation(token) {
@@ -572,6 +617,100 @@ function exactUnavailableValuation(token) {
     token.marketCapUsdWad === undefined &&
     token.priceUsdWad === undefined &&
     token.marketData === undefined;
+}
+
+function exactVisibleUnavailableValuation(token) {
+  return token?.valuation?.status === "unavailable" &&
+    [
+      "no-market",
+      "source-unavailable",
+      "liquidity-unavailable",
+    ].includes(token.valuation.reason) &&
+    token.fdvUsdWad === undefined &&
+    token.marketCapUsdWad === undefined &&
+    token.priceUsdWad === undefined &&
+    token.marketData === undefined;
+}
+
+function exactGmgnSnapshot(token, nowMs) {
+  const snapshot = token?.gmgnMarketData;
+  if (
+    !exactObjectKeys(snapshot, [
+      "currency",
+      "fdvUsdWad",
+      "fetchedAt",
+      "identity",
+      "liquidityUsdWad",
+      "priceUsdWad",
+      "schemaVersion",
+      "source",
+      "swapCount24h",
+      "volume24hUsdWad",
+    ]) ||
+    !exactObjectKeys(snapshot.identity, [
+      "chainId",
+      "poolId",
+      "protocol",
+      "quoteAddress",
+      "tokenAddress",
+    ]) ||
+    snapshot.schemaVersion !== "programmable.gmgn-market-snapshot.v1" ||
+    snapshot.source !== "gmgn" ||
+    snapshot.currency !== "USD" ||
+    !currentProviderTimestamp(snapshot.fetchedAt, nowMs) ||
+    !POSITIVE_INTEGER.test(String(snapshot.priceUsdWad ?? "")) ||
+    !POSITIVE_INTEGER.test(String(snapshot.fdvUsdWad ?? "")) ||
+    !POSITIVE_INTEGER.test(String(snapshot.liquidityUsdWad ?? "")) ||
+    !unsignedInteger(snapshot.volume24hUsdWad) ||
+    !Number.isSafeInteger(snapshot.swapCount24h) ||
+    snapshot.swapCount24h < 0 ||
+    snapshot.identity.chainId !== "1" ||
+    snapshot.identity.protocol !== "uniswap_v4"
+  ) return false;
+  const identity = {
+    tokenAddress: canonicalMarketAddress(snapshot.identity.tokenAddress),
+    poolId: canonicalMarketPool(snapshot.identity.poolId),
+    quoteAddress: canonicalMarketAddress(snapshot.identity.quoteAddress),
+  };
+  if (
+    identity.tokenAddress !== snapshot.identity.tokenAddress ||
+    identity.poolId !== snapshot.identity.poolId ||
+    identity.quoteAddress !== snapshot.identity.quoteAddress ||
+    !entryMarketIdentities(token).some((candidate) =>
+      candidate.tokenAddress === identity.tokenAddress &&
+      candidate.poolId === identity.poolId &&
+      candidate.quoteAddress === identity.quoteAddress
+    ) ||
+    !unsignedInteger(token.totalSupplyRaw) ||
+    BigInt(token.totalSupplyRaw) <= 0n ||
+    !Number.isSafeInteger(token.tokenDecimals) ||
+    token.tokenDecimals < 0 ||
+    token.tokenDecimals > 255
+  ) return false;
+  const expectedFdvUsdWad = (
+    BigInt(snapshot.priceUsdWad) * BigInt(token.totalSupplyRaw)
+  ) / (10n ** BigInt(token.tokenDecimals));
+  return expectedFdvUsdWad > 0n &&
+    BigInt(snapshot.fdvUsdWad) === expectedFdvUsdWad &&
+    token.fdvUsdWad === snapshot.fdvUsdWad;
+}
+
+function qualifiedGmgnFdv(token, nowMs) {
+  const valuation = token?.valuation;
+  return exactGmgnSnapshot(token, nowMs) &&
+    valuation?.status === "available" &&
+    valuation.metric === "fdv" &&
+    valuation.supplyBasis === "total" &&
+    valuation.currency === "usd" &&
+    valuation.freshness === "provider-recent" &&
+    valuation.source === "gmgn" &&
+    valuation.valueWad === token.gmgnMarketData.fdvUsdWad &&
+    valuation.asOfTime === token.gmgnMarketData.fetchedAt;
+}
+
+function exactSourceHeader(response, name, sources) {
+  return response.headers.get(name) ===
+    (sources.length > 0 ? sources.join("+") : null);
 }
 
 function exactCatalogSnapshot(
@@ -590,6 +729,9 @@ function exactCatalogSnapshot(
     routerCustomStatus === "last-known-good";
   const routerOnlyFallback =
     catalog?.launchSource === "canonical-launch-stamp-router";
+  const marketProvider = response.headers.get(
+    "x-programmable-market-provider",
+  );
   if (routerOnlyFallback) {
     const routerStamp = catalog?.routerStamp;
     if (!(
@@ -637,8 +779,9 @@ function exactCatalogSnapshot(
       ) &&
       response.headers.get("x-programmable-launch-source") ===
         "canonical-launch-stamp-router" &&
+      EXPLORE_MARKET_PROVIDERS.has(marketProvider) &&
       response.headers.get("x-programmable-read-source") ===
-        "canonical-launch-stamp-router+dexscreener" &&
+        `canonical-launch-stamp-router+${marketProvider}` &&
       response.headers.get("x-programmable-canonical-read-status") ===
         "unavailable" &&
       response.headers.get("x-programmable-router-read-status") ===
@@ -749,8 +892,9 @@ function exactCatalogSnapshot(
     /^0x[0-9a-f]{64}$/u.test(String(catalog.asOfBlockHash ?? "")) &&
     response.headers.get("x-programmable-launch-source") ===
       launchSource &&
+    EXPLORE_MARKET_PROVIDERS.has(marketProvider) &&
     response.headers.get("x-programmable-read-source") ===
-      `${launchSource}+dexscreener` &&
+      `${launchSource}+${marketProvider}` &&
     response.headers.get("x-programmable-identity-last-indexed-at") ===
       generatedAt &&
     (
@@ -779,36 +923,198 @@ function exactCatalogSnapshot(
   });
 }
 
-function exactMarketRead(response, tokens) {
-  const read = response.body?.marketRead;
-  const expectedRequestedCount = exactMarketIdentityCount(tokens);
-  if (
-    read?.provider !== "dexscreener" ||
-    !MARKET_READ_STATUSES.has(read.status) ||
-    read.currency !== "USD" ||
-    !Number.isSafeInteger(read.requestedCount) ||
-    read.requestedCount !== expectedRequestedCount ||
-    !Number.isSafeInteger(read.observedCount) ||
-    !Number.isSafeInteger(read.qualifiedCount) ||
-    !Number.isSafeInteger(read.unavailableCount) ||
-    read.requestedCount < 0 ||
-    read.observedCount < 0 ||
-    read.observedCount > read.requestedCount ||
-    read.qualifiedCount < 0 ||
-    read.qualifiedCount > read.observedCount ||
-    read.unavailableCount !== read.requestedCount - read.qualifiedCount ||
-    (read.status === "unavailable" && read.observedCount !== 0) ||
-    response.headers.get("x-programmable-market-provider") !== "dexscreener" ||
-    response.headers.get("x-programmable-market-read-status") !== read.status
-  ) return false;
-  const sourceClaimed = response.headers.get("x-programmable-market-source");
-  const priceClaimed = response.headers.get("x-programmable-price-source");
-  return read.observedCount > 0
-    ? sourceClaimed === "dexscreener" && priceClaimed === "dexscreener"
-    : sourceClaimed === null && priceClaimed === null;
+function exactMarketReadCounters(read, expectedRequestedCount, nowMs) {
+  const exactReadWindow = read?.observedCount === 0
+    ? read.oldestFetchedAt === null && read.newestFetchedAt === null
+    : currentProviderTimestamp(read?.oldestFetchedAt, nowMs) &&
+      currentProviderTimestamp(read?.newestFetchedAt, nowMs) &&
+      Date.parse(read.oldestFetchedAt) <= Date.parse(read.newestFetchedAt);
+  return MARKET_READ_STATUSES.has(read?.status) &&
+    read.currency === "USD" &&
+    Number.isSafeInteger(read.requestedCount) &&
+    read.requestedCount === expectedRequestedCount &&
+    Number.isSafeInteger(read.observedCount) &&
+    Number.isSafeInteger(read.qualifiedCount) &&
+    Number.isSafeInteger(read.unavailableCount) &&
+    read.requestedCount >= 0 &&
+    read.observedCount >= 0 &&
+    read.observedCount <= read.requestedCount &&
+    read.qualifiedCount >= 0 &&
+    read.qualifiedCount <= read.observedCount &&
+    read.unavailableCount === read.requestedCount - read.qualifiedCount &&
+    (read.status !== "unavailable" || read.observedCount === 0) &&
+    exactReadWindow;
 }
 
-function exactFdvRanking(response, tokens) {
+function exactMarketAsOfBinding(response, tokens, read, nowMs) {
+  const qualifiedTimes = tokens.flatMap((token) => {
+    const valuation = token?.valuation;
+    return valuation?.status === "available" &&
+        valuation.freshness === "provider-recent" &&
+        (valuation.source === "dexscreener" || valuation.source === "gmgn") &&
+        currentProviderTimestamp(valuation.asOfTime, nowMs)
+      ? [valuation.asOfTime]
+      : [];
+  });
+  const expectedAsOf = qualifiedTimes.length === 0
+    ? null
+    : qualifiedTimes.reduce((latest, value) =>
+        Date.parse(value) > Date.parse(latest) ? value : latest
+      );
+  if (
+    response.body?.dataQuality?.valuation?.asOfTime !== expectedAsOf ||
+    response.headers.get("x-programmable-market-as-of") !== expectedAsOf
+  ) return false;
+  if (qualifiedTimes.length === 0) return true;
+  return read.oldestFetchedAt !== null &&
+    read.newestFetchedAt !== null &&
+    qualifiedTimes.every((value) =>
+      Date.parse(value) >= Date.parse(read.oldestFetchedAt) &&
+      Date.parse(value) <= Date.parse(read.newestFetchedAt)
+    );
+}
+
+function exactDexscreenerMarketRead(
+  response,
+  requestedTokens,
+  nowMs,
+  visibleTokens = requestedTokens,
+) {
+  const read = response.body?.marketRead;
+  const expectedRequestedCount = exactMarketIdentityCount(requestedTokens);
+  if (
+    read?.provider !== "dexscreener" ||
+    !exactMarketReadCounters(read, expectedRequestedCount, nowMs) ||
+    response.headers.get("x-programmable-market-provider") !== "dexscreener" ||
+    response.headers.get("x-programmable-market-read-status") !== read.status ||
+    !exactMarketAsOfBinding(response, visibleTokens, read, nowMs)
+  ) return false;
+  return exactSourceHeader(
+    response,
+    "x-programmable-market-source",
+    read.observedCount > 0 ? ["dexscreener"] : [],
+  ) && exactSourceHeader(
+    response,
+    "x-programmable-price-source",
+    read.qualifiedCount > 0 ? ["dexscreener"] : [],
+  );
+}
+
+function exactVisibleMarketRead(response, tokens, nowMs) {
+  const read = response.body?.marketRead;
+  if (read?.provider === "dexscreener") {
+    return exactDexscreenerMarketRead(response, tokens, nowMs) &&
+      tokens.every((token) => token?.gmgnMarketData === undefined);
+  }
+  const expectedRequestedCount = exactMarketIdentityCount(tokens);
+  if (
+    read?.provider !== "gmgn" ||
+    read.fallbackProvider !== "dexscreener" ||
+    !exactMarketReadCounters(read, expectedRequestedCount, nowMs) ||
+    !Number.isSafeInteger(read.gmgnObservedCount) ||
+    !Number.isSafeInteger(read.gmgnQualifiedCount) ||
+    !Number.isSafeInteger(read.fallbackRequestedCount) ||
+    !Number.isSafeInteger(read.fallbackQualifiedCount) ||
+    read.gmgnObservedCount < 0 ||
+    read.gmgnObservedCount > read.requestedCount ||
+    read.gmgnQualifiedCount < 0 ||
+    read.gmgnQualifiedCount > read.gmgnObservedCount ||
+    read.fallbackRequestedCount !==
+      read.requestedCount - read.gmgnQualifiedCount ||
+    read.fallbackQualifiedCount < 0 ||
+    read.fallbackQualifiedCount > read.fallbackRequestedCount ||
+    read.qualifiedCount !==
+      read.gmgnQualifiedCount + read.fallbackQualifiedCount ||
+    read.observedCount <
+      Math.max(read.gmgnObservedCount, read.fallbackQualifiedCount) ||
+    read.observedCount > Math.min(
+      read.requestedCount,
+      read.gmgnObservedCount + read.fallbackQualifiedCount,
+    ) ||
+    response.headers.get("x-programmable-market-provider") !==
+      (read.fallbackRequestedCount > 0 ? "gmgn+dexscreener" : "gmgn") ||
+    response.headers.get("x-programmable-market-read-status") !== read.status ||
+    !exactMarketAsOfBinding(response, tokens, read, nowMs)
+  ) return false;
+  const gmgnObserved = tokens.filter((token) =>
+    token?.gmgnMarketData !== undefined
+  );
+  const gmgnQualified = tokens.filter((token) => qualifiedGmgnFdv(token, nowMs));
+  const fallbackQualified = tokens.filter((token) =>
+    qualifiedDexscreenerFdv(token, nowMs)
+  );
+  const unavailable = tokens.filter(exactVisibleUnavailableValuation);
+  if (
+    gmgnObserved.length !== read.gmgnObservedCount ||
+    gmgnObserved.some((token) => !exactGmgnSnapshot(token, nowMs)) ||
+    gmgnQualified.length !== read.gmgnQualifiedCount ||
+    fallbackQualified.length !== read.fallbackQualifiedCount ||
+    gmgnQualified.length + fallbackQualified.length + unavailable.length !==
+      tokens.length
+  ) return false;
+  const marketSources = [
+    ...(read.gmgnObservedCount > 0 ? ["gmgn"] : []),
+    ...(read.fallbackQualifiedCount > 0 ? ["dexscreener"] : []),
+  ];
+  const priceSources = [
+    ...(read.gmgnQualifiedCount > 0 ? ["gmgn"] : []),
+    ...(read.fallbackQualifiedCount > 0 ? ["dexscreener"] : []),
+  ];
+  return exactSourceHeader(
+    response,
+    "x-programmable-market-source",
+    marketSources,
+  ) && exactSourceHeader(
+    response,
+    "x-programmable-price-source",
+    priceSources,
+  );
+}
+
+function exactDetailMarketRead(response, token, launchSource, nowMs) {
+  const provider = response.headers.get("x-programmable-market-provider");
+  const hasGmgn = token?.gmgnMarketData !== undefined;
+  const gmgnQualified = qualifiedGmgnFdv(token, nowMs);
+  const dexscreenerQualified = qualifiedDexscreenerFdv(token, nowMs);
+  const unavailable = exactVisibleUnavailableValuation(token);
+  const marketAsOf = gmgnQualified || dexscreenerQualified
+    ? token.valuation.asOfTime
+    : null;
+  if (
+    !EXPLORE_MARKET_PROVIDERS.has(provider) ||
+    response.headers.get("x-programmable-launch-source") !== launchSource ||
+    response.headers.get("x-programmable-read-source") !==
+      `${launchSource}+${provider}` ||
+    !MARKET_READ_STATUSES.has(
+      response.headers.get("x-programmable-market-read-status"),
+    ) ||
+    response.headers.get("x-programmable-market-as-of") !== marketAsOf ||
+    ![gmgnQualified, dexscreenerQualified, unavailable].includes(true) ||
+    (hasGmgn && !exactGmgnSnapshot(token, nowMs)) ||
+    (provider === "dexscreener" && hasGmgn) ||
+    (provider === "gmgn" && (!gmgnQualified || hasGmgn === false)) ||
+    (provider === "gmgn+dexscreener" && gmgnQualified)
+  ) return false;
+  const marketSources = [
+    ...(hasGmgn ? ["gmgn"] : []),
+    ...(dexscreenerQualified ? ["dexscreener"] : []),
+  ];
+  const priceSources = [
+    ...(gmgnQualified ? ["gmgn"] : []),
+    ...(dexscreenerQualified ? ["dexscreener"] : []),
+  ];
+  return exactSourceHeader(
+    response,
+    "x-programmable-market-source",
+    marketSources,
+  ) && exactSourceHeader(
+    response,
+    "x-programmable-price-source",
+    priceSources,
+  );
+}
+
+function exactFdvRanking(response, tokens, nowMs) {
   const ranking = response.body?.ranking;
   if (
     !["complete", "partial", "unavailable"].includes(ranking?.status) ||
@@ -819,12 +1125,14 @@ function exactFdvRanking(response, tokens) {
     ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount ||
     ranking.qualifiedCount > ranking.totalCount
   ) return false;
-  const qualified = tokens.filter(qualifiedDexscreenerFdv);
+  const qualified = tokens.filter((token) =>
+    qualifiedDexscreenerFdv(token, nowMs)
+  );
   const unavailable = tokens.filter(exactUnavailableValuation);
   if (qualified.length + unavailable.length !== tokens.length) return false;
   let encounteredUnavailable = false;
   for (const token of tokens) {
-    if (qualifiedDexscreenerFdv(token)) {
+    if (qualifiedDexscreenerFdv(token, nowMs)) {
       if (encounteredUnavailable) return false;
     } else {
       encounteredUnavailable = true;
@@ -872,8 +1180,12 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const fetchImpl = input.fetchImpl ?? fetch;
   const appendOutput = input.appendOutput ?? appendFileSync;
   const waitForCatalogConvergence = input.waitForCatalogConvergence ?? sleep;
+  const now = input.now ?? (() => new Date());
   if (typeof waitForCatalogConvergence !== "function") {
     throw new Error("Explore catalog convergence wait is invalid");
+  }
+  if (typeof now !== "function" || !Number.isFinite(now().getTime())) {
+    throw new Error("Public API smoke clock is invalid");
   }
   const targetKind = input.targetKind ?? "staged";
   if (targetKind !== "staged" && targetKind !== "production") {
@@ -892,6 +1204,13 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     : {};
   const request = (path, acceptedStatuses) =>
     requestJson(target, headers, path, fetchImpl, acceptedStatuses);
+  const gmgnMarketRequirement =
+    environment.PROGRAMMABLE_REQUIRE_GMGN_MARKET;
+  if (
+    gmgnMarketRequirement !== undefined &&
+    !["true", "false"].includes(gmgnMarketRequirement)
+  ) throw new Error("GMGN market requirement is invalid");
+  const requireGmgnMarket = gmgnMarketRequirement === "true";
   const requireShardRouterTrade =
     environment.PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE === "true";
 
@@ -908,10 +1227,10 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   ) {
     try {
       const highest = await request(
-        "/api/explore?limit=20&page=1&sort=market-cap",
+        `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}&page=1&sort=market-cap`,
       );
       const newest = await request(
-        "/api/explore?limit=20&page=1&sort=newest",
+        `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}&page=1&sort=newest`,
       );
       const highestTokens = Array.isArray(highest.body?.tokens)
         ? highest.body.tokens
@@ -919,15 +1238,19 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       const newestTokens = Array.isArray(newest.body?.tokens)
         ? newest.body.tokens
         : [];
+      const validationNowMs = now().getTime();
       if (
         highest.status !== 200 ||
         highest.body?.status !== "ready" ||
         highest.body?.sort !== "market-cap" ||
         highest.body?.sortMetric !== "fdv" ||
         highestTokens.length < 1 ||
-        !exactExplorePage(highest, highestTokens) ||
+        !exactExplorePage(highest, highestTokens, {
+          page: 1,
+          pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
+        }) ||
         exactCatalogSnapshot(highest) === null ||
-        !exactFdvRanking(highest, highestTokens)
+        !exactFdvRanking(highest, highestTokens, validationNowMs)
       ) throw new Error("Highest FDV response contract is invalid");
       if (
         newest.status !== 200 ||
@@ -935,9 +1258,12 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         newest.body?.sort !== "newest" ||
         newest.body?.ranking !== undefined ||
         newestTokens.length < 1 ||
-        !exactExplorePage(newest, newestTokens) ||
+        !exactExplorePage(newest, newestTokens, {
+          page: 1,
+          pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
+        }) ||
         exactCatalogSnapshot(newest) === null ||
-        !exactMarketRead(newest, newestTokens)
+        !exactVisibleMarketRead(newest, newestTokens, validationNowMs)
       ) throw new Error("Newest launches response contract is invalid");
       const highestCatalog = exactCatalogSnapshot(highest);
       const newestCatalog = exactCatalogSnapshot(newest);
@@ -974,7 +1300,11 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
               pageSize: catalogPageSize,
             }) ||
             pageCatalog === null ||
-            !exactMarketRead(catalogPage, pageTokens)
+            !exactDexscreenerMarketRead(
+              catalogPage,
+              pageTokens,
+              now().getTime(),
+            )
           ) throw new Error("Explore catalog pagination contract is invalid");
           if (pageCatalog !== newestCatalog) {
             throw new ExploreCatalogBoundaryDriftError(
@@ -986,7 +1316,12 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       }
       if (
         completeCatalogTokens.length !== newest.body.total ||
-        !exactMarketRead(highest, completeCatalogTokens)
+        !exactDexscreenerMarketRead(
+          highest,
+          completeCatalogTokens,
+          now().getTime(),
+          highestTokens,
+        )
       ) throw new Error("Highest FDV market request set is invalid");
       const identities = completeCatalogTokens.map(exactIdentity);
       if (
@@ -1032,9 +1367,54 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         !exactSamePageOrder(highest, newest)
       ) throw new Error("Unavailable FDV did not preserve launch order");
 
-      const selectedToken = highestTokens.find((token) =>
-        ADDRESS.test(String(token?.tokenAddress ?? "").toLowerCase())
-      );
+      let qualifiedGmgnCanonicalToken = null;
+      if (requireGmgnMarket) {
+        const gmgnCanonical = await request(
+          `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
+            "&page=1&sort=newest&model=classic",
+        );
+        const gmgnCanonicalTokens = Array.isArray(gmgnCanonical.body?.tokens)
+          ? gmgnCanonical.body.tokens
+          : [];
+        const gmgnCanonicalCatalog = exactCatalogSnapshot(
+          { ...gmgnCanonical, body: {
+            ...gmgnCanonical.body,
+            total: gmgnCanonical.body?.catalog?.identityCount,
+          } },
+        );
+        if (
+          gmgnCanonical.status !== 200 ||
+          gmgnCanonical.body?.status !== "ready" ||
+          gmgnCanonical.body?.sort !== "newest" ||
+          gmgnCanonical.body?.ranking !== undefined ||
+          !exactExplorePage(gmgnCanonical, gmgnCanonicalTokens, {
+            page: 1,
+            pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
+          }) ||
+          gmgnCanonicalCatalog !== highestCatalog ||
+          !exactVisibleMarketRead(
+            gmgnCanonical,
+            gmgnCanonicalTokens,
+            now().getTime(),
+          ) ||
+          gmgnCanonicalTokens.some((token) =>
+            token?.exploreKind !== "token" || token.launchModel !== "classic"
+          )
+        ) throw new Error("Canonical GMGN list response contract is invalid");
+        qualifiedGmgnCanonicalToken = gmgnCanonicalTokens.find((token) =>
+          exactGmgnEligibleCanonicalToken(token) &&
+          qualifiedGmgnFdv(token, now().getTime()) &&
+          completeIdentitySet.has(exactIdentity(token))
+        ) ?? null;
+        if (qualifiedGmgnCanonicalToken === null) {
+          throw new Error("Explore returned no GMGN-qualified canonical token");
+        }
+      }
+
+      const selectedToken = requireGmgnMarket
+        ? qualifiedGmgnCanonicalToken
+        : completeCatalogTokens.find(exactGmgnEligibleCanonicalToken) ??
+          completeCatalogTokens.find((token) => token?.exploreKind === "token");
       const tokenAddress = selectedToken?.tokenAddress;
       if (!tokenAddress || !selectedToken) {
         throw new Error("Explore returned no token identity");
@@ -1062,19 +1442,30 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         detail.status !== 200 ||
         detail.body?.status !== "ready" ||
         exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
-        detail.headers.get("x-programmable-market-provider") !== "dexscreener" ||
-        detail.headers.get("x-programmable-launch-source") !==
-          catalogBoundary.launchSource ||
-        detail.headers.get("x-programmable-read-source") !==
-          `${catalogBoundary.launchSource}+dexscreener` ||
-        ![
-          qualifiedDexscreenerFdv(detailToken),
-          exactUnavailableValuation(detailToken),
-        ].includes(true)
+        !exactDetailMarketRead(
+          detail,
+          detailToken,
+          catalogBoundary.launchSource,
+          now().getTime(),
+        )
       ) throw new Error("Token detail identity or market contract is invalid");
-      const detailStatus = qualifiedDexscreenerFdv(detailToken)
-        ? "verified-dexscreener-market"
-        : "verified-identity-market-unavailable";
+      const detailMarketProvider = detail.headers.get(
+        "x-programmable-market-provider",
+      );
+      if (
+        requireGmgnMarket &&
+        (
+          detailMarketProvider !== "gmgn" ||
+          detail.headers.get("x-programmable-market-read-status") !==
+            "complete" ||
+          !qualifiedGmgnFdv(detailToken, now().getTime())
+        )
+      ) throw new Error("Token detail GMGN market contract is required");
+      const detailStatus = qualifiedGmgnFdv(detailToken, now().getTime())
+        ? "verified-gmgn-market"
+        : qualifiedDexscreenerFdv(detailToken, now().getTime())
+          ? "verified-dexscreener-market"
+          : "verified-identity-market-unavailable";
       let shardTradeStatus = "not-required";
       if (requireShardRouterTrade) {
         const shardDetail = await request(
@@ -1104,8 +1495,11 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
 
       exploreSnapshot = {
         catalogBoundary,
+        detailMarketProvider,
         detailStatus,
         highest,
+        marketProvider: newest.headers.get("x-programmable-market-provider"),
+        marketReadStatus: newest.body.marketRead.status,
         newestTokens,
         shardTradeStatus,
         tokenAddress,
@@ -1127,8 +1521,11 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   }
   const {
     catalogBoundary,
+    detailMarketProvider,
     detailStatus,
     highest,
+    marketProvider,
+    marketReadStatus,
     newestTokens,
     shardTradeStatus,
     tokenAddress,
@@ -1224,7 +1621,6 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   if (targetKind === "staged" && !githubOutput) {
     throw new Error("GitHub output path is unavailable");
   }
-  const marketReadStatus = highest.body.marketRead.status;
   const chart = await request(
     "/api/explore/token/chart?address=" + encodeURIComponent(tokenAddress) +
       "&range=1d",
@@ -1304,7 +1700,9 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     appendOutput(
       githubOutput,
       [
+        `market_provider=${marketProvider}`,
         `market_read_status=${marketReadStatus}`,
+        `detail_market_provider=${detailMarketProvider}`,
         `detail_status=${detailStatus}`,
         `shard_trade_status=${shardTradeStatus}`,
         `chart_status=${chartStatus}`,
@@ -1319,11 +1717,12 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     lastIndexedAt: highest.body.catalog.lastIndexedAt,
     healthStatus: health.body.status,
     healthAuthority: "informational-only",
-    marketProvider: "dexscreener",
+    marketProvider,
     marketReadStatus,
     tokenAddress,
     profileAccount,
     profileStatus,
+    detailMarketProvider,
     detailStatus,
     shardTradeStatus,
     chartStatus,

@@ -3393,11 +3393,12 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   }
 
   const sessionView = getProfileSessionView(connecting, account);
+  const profileAccountQuery = searchParams?.getAll("account") ?? [];
   const requestedProfileAccount = publicProfileAccountFromQuery(
-    searchParams.getAll("account"),
+    profileAccountQuery,
   );
   const publicProfileAccount = publicProfileAccountFromQuery(
-    searchParams.getAll("account"),
+    profileAccountQuery,
     account,
   );
 

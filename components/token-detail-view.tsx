@@ -58,6 +58,11 @@ import {
   type TokenMarketDataV1,
 } from "@/lib/market-data/market-data-v1";
 import {
+  isGmgnMarketSnapshotForExploreEntryV1,
+  isGmgnMarketSnapshotV1,
+  type GmgnMarketSnapshotV1,
+} from "@/lib/market-data/gmgn-market-data-v1";
+import {
   applyTokenImageFallback,
   canOptimizeTokenImage,
   getTokenCardImageSource,
@@ -68,6 +73,7 @@ import { TRADE_QUOTE_VALIDITY_SECONDS } from "@/lib/trade/policy";
 import {
   isLaunchStampProvenanceV1,
   isPlatformFeePolicyReadbackV2,
+  type CanonicalTokenExploreEntry,
   type CustomProjectExploreEntry,
   type LauncherToken,
   type TokenLink,
@@ -92,14 +98,16 @@ import {
 } from "@/lib/platform-fee-certification";
 import styles from "./token-experience.module.css";
 
-type DetailToken = LauncherToken & Readonly<{
+type DetailToken = CanonicalTokenExploreEntry & Readonly<{
   valuation: ExploreValuation;
   marketData?: TokenMarketDataV1;
+  gmgnMarketData?: GmgnMarketSnapshotV1;
 }>;
 
 type DetailCustomProject = CustomProjectExploreEntry & Readonly<{
   valuation?: ExploreValuation;
   marketData?: TokenMarketDataV1;
+  gmgnMarketData?: GmgnMarketSnapshotV1;
 }>;
 
 type RouterTradeProject = Pick<
@@ -529,8 +537,8 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     return null;
   }
 
-  const token: LauncherToken = {
-    ...(value as unknown as LauncherToken),
+  const token: CanonicalTokenExploreEntry = {
+    ...(value as unknown as CanonicalTokenExploreEntry),
     links,
     description:
       typeof value.description === "string" ? value.description : undefined,
@@ -549,12 +557,18 @@ function parseLauncherToken(value: unknown): DetailToken | null {
     : isTokenMarketDataV1(value.marketData)
       ? value.marketData
       : null;
-  return valuation === null || marketData === null
+  const gmgnMarketData = value.gmgnMarketData === undefined
+    ? undefined
+    : isGmgnMarketSnapshotForExploreEntryV1(value.gmgnMarketData, token)
+      ? value.gmgnMarketData
+      : null;
+  return valuation === null || marketData === null || gmgnMarketData === null
     ? null
     : {
         ...token,
         valuation,
         ...(marketData === undefined ? {} : { marketData }),
+        ...(gmgnMarketData === undefined ? {} : { gmgnMarketData }),
       };
 }
 
@@ -720,8 +734,15 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
     : isTokenMarketDataV1(value.marketData)
       ? value.marketData
       : null;
-  if (valuation === null || marketData === null) return null;
-  return {
+  const gmgnMarketData = value.gmgnMarketData === undefined
+    ? undefined
+    : isGmgnMarketSnapshotV1(value.gmgnMarketData)
+      ? value.gmgnMarketData
+      : null;
+  if (valuation === null || marketData === null || gmgnMarketData === null) {
+    return null;
+  }
+  const project: DetailCustomProject = {
     exploreKind: "custom-project",
     id: value.id,
     name: value.name,
@@ -755,6 +776,13 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
     ...(valuation === undefined ? {} : { valuation }),
     ...(marketData === undefined ? {} : { marketData }),
   };
+  if (
+    gmgnMarketData !== undefined &&
+    !isGmgnMarketSnapshotForExploreEntryV1(gmgnMarketData, project)
+  ) return null;
+  return gmgnMarketData === undefined
+    ? project
+    : { ...project, gmgnMarketData };
 }
 
 function parseRouterTradeProject(
@@ -1262,21 +1290,52 @@ export function getValuationMetricLabel(
   return "Market cap";
 }
 
+export function marketDataProviderLabel(input: Readonly<{
+  valuation?: ExploreValuation;
+  gmgnMarketData?: GmgnMarketSnapshotV1;
+  chartVolume?: TokenChartVolume | null;
+}>): string | null {
+  const valuationSource = input.valuation?.status === "available"
+    ? input.valuation.source
+    : undefined;
+  const usesGmgn = input.gmgnMarketData !== undefined ||
+    valuationSource === "gmgn";
+  const usesDexscreener = valuationSource === "dexscreener";
+  const chartVolumeMetric = buildChartVolumeMetric(input.chartVolume ?? null);
+  const usesBitquery = input.chartVolume?.source === "bitquery" &&
+    chartVolumeMetric !== undefined &&
+    chartVolumeMetric.value !== "Loading…" &&
+    chartVolumeMetric.value !== "Not available yet";
+  const providers = [
+    ...(usesGmgn ? ["GMGN"] : []),
+    ...(usesDexscreener ? ["Dexscreener"] : []),
+    ...(usesBitquery ? ["Bitquery"] : []),
+  ];
+  return providers.length > 0 ? providers.join(" + ") : null;
+}
+
 export function buildTokenDetailMetrics(
   token: LauncherToken & Readonly<{
     valuation?: ExploreValuation;
     marketData?: TokenMarketDataV1;
+    gmgnMarketData?: GmgnMarketSnapshotV1;
   }>,
   fdvOverride?: string | null,
   volumeOverride?: TokenMetric,
+  chartVolume?: TokenChartVolume | null,
 ): TokenMetric[] {
   const primaryMarket = token.marketData?.pools.find(
     (pool) => pool.identity.poolId === token.marketData?.primaryPoolId,
   );
-  const marketVolumeUsd = formatUsdWadAmount(primaryMarket?.volume24hUsdWad);
-  const marketLiquidityUsd = primaryMarket?.liquidity?.freshness === "current"
-    ? formatUsdWadAmount(primaryMarket.liquidity.valueUsdWad)
-    : null;
+  const marketVolumeUsd = formatUsdWadAmount(
+    token.gmgnMarketData?.volume24hUsdWad ?? primaryMarket?.volume24hUsdWad,
+  );
+  const marketLiquidityUsd = formatUsdWadAmount(
+    token.gmgnMarketData?.liquidityUsdWad ??
+      (primaryMarket?.liquidity?.freshness === "current"
+        ? primaryMarket.liquidity.valueUsdWad
+        : undefined),
+  );
   const explicitValuation = (token as { valuation?: unknown }).valuation;
   const valuation = isExploreValuation(explicitValuation)
     ? explicitValuation
@@ -1299,6 +1358,13 @@ export function buildTokenDetailMetrics(
               )
       )
     : null;
+  const marketProvider = marketDataProviderLabel({
+    valuation,
+    ...(token.gmgnMarketData === undefined
+      ? {}
+      : { gmgnMarketData: token.gmgnMarketData }),
+    ...(volumeOverride && chartVolume ? { chartVolume } : {}),
+  });
   const values: Array<TokenMetric | null> = [
     {
       label: getValuationMetricLabel(valuation),
@@ -1311,6 +1377,12 @@ export function buildTokenDetailMetrics(
           ? "Custom"
           : "Classic",
     },
+    marketProvider
+      ? {
+          label: "Provider",
+          value: marketProvider,
+        }
+      : null,
     token.launchStampProvenance !== undefined && token.currentTick !== undefined
       ? {
           label: "Market",
@@ -1744,6 +1816,7 @@ function TokenDetailContent({
       token,
       null,
       buildChartVolumeMetric(chartVolume),
+      chartVolume,
     );
   }, [chartVolume, token]);
   const platformFeeDisclosure = platformFeePolicyDisclosure(
@@ -2397,22 +2470,33 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
         : project.marketData?.status === "partial"
           ? "Limited"
           : "";
+  const marketProvider = marketDataProviderLabel(project);
   return [
     {
       label: getValuationMetricLabel(valuation),
       value: valuationValue ?? "",
     },
+    ...(marketProvider
+      ? [{ label: "Provider", value: marketProvider }]
+      : []),
     { label: "Market data", value: marketStatus },
-    ...(primary?.volume24hUsdWad
+    ...((project.gmgnMarketData?.volume24hUsdWad ?? primary?.volume24hUsdWad)
       ? [{
           label: "24h volume",
-          value: formatUsdWadAmount(primary.volume24hUsdWad) ?? "",
+          value: formatUsdWadAmount(
+            project.gmgnMarketData?.volume24hUsdWad ??
+              primary?.volume24hUsdWad,
+          ) ?? "",
         }]
       : []),
-    ...(primary?.liquidity?.freshness === "current"
+    ...((project.gmgnMarketData?.liquidityUsdWad ||
+      primary?.liquidity?.freshness === "current")
       ? [{
           label: "Liquidity",
-          value: formatUsdWadAmount(primary.liquidity.valueUsdWad) ?? "",
+          value: formatUsdWadAmount(
+            project.gmgnMarketData?.liquidityUsdWad ??
+              primary?.liquidity?.valueUsdWad,
+          ) ?? "",
         }]
       : []),
   ];

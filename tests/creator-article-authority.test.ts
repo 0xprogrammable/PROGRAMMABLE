@@ -15,6 +15,7 @@ import type { ExploreEntry } from "../lib/tokens";
 import {
   customGraphExploreEntry,
   launchStampProvenance,
+  STAMP_POOL_ID,
   STAMP_TOKEN,
 } from "./launch-stamp-surface-fixture";
 
@@ -51,7 +52,14 @@ function classic(): ExploreEntry {
   };
 }
 
-function custom(): ExploreEntry {
+function custom(input: Readonly<{
+  tokenAddress?: `0x${string}`;
+  launchingWallet?: `0x${string}`;
+  poolId?: `0x${string}`;
+}> = {}): ExploreEntry {
+  const tokenAddress = input.tokenAddress ?? CUSTOM;
+  const projectId = `sha256:${"66".repeat(32)}` as const;
+  const launchId = `sha256:${"77".repeat(32)}` as const;
   return {
     exploreKind: "custom-project",
     id: "custom:test",
@@ -62,14 +70,46 @@ function custom(): ExploreEntry {
     finalizedAt: "2026-08-21T00:00:00.000Z",
     chainId: "1",
     modelId: "custom",
-    customProjectId: `sha256:${"66".repeat(32)}`,
-    customLaunchId: `sha256:${"77".repeat(32)}`,
-    launchingWallet: { namespace: "eip155:1", value: CREATOR },
+    customProjectId: projectId,
+    customLaunchId: launchId,
+    launchingWallet: {
+      namespace: "eip155:1",
+      value: input.launchingWallet ?? CREATOR,
+    },
     postLaunchAuthorityInventory: {} as never,
     postLaunchAuthorityInventoryHash: `sha256:${"88".repeat(32)}`,
-    markets: [],
-    tokenAddress: CUSTOM,
-    launchCategoryProvenance: {} as never,
+    markets: input.poolId ? [{
+      marketId: `eip155:1/uniswap-v4:${input.poolId}`,
+      kind: "uniswap-v4",
+      status: "active",
+      poolId: input.poolId,
+      baseAsset: {
+        assetId: `eip155:1/erc20:${tokenAddress}`,
+        identity: { namespace: "eip155:1/erc20", value: tokenAddress },
+      },
+      quoteAsset: {
+        assetId: "eip155:1/slip44:60",
+        identity: { namespace: "eip155:1/slip44", value: "60" },
+      },
+    }] : [],
+    tokenAddress,
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "custom",
+      source: "registry.custom-launched",
+      projectId,
+      launchId,
+      sourceRecordBindingHash: `sha256:${"aa".repeat(32)}`,
+      finalizedLaunchBindingHash: `sha256:${"bb".repeat(32)}`,
+      registryAddress: "0x5555555555555555555555555555555555555555",
+      registryStartBlock: "25700000",
+      transactionHash: `0x${"cc".repeat(32)}`,
+      blockHash: `0x${"dd".repeat(32)}`,
+      blockNumber: "25700064",
+      transactionIndex: 1,
+      logIndex: 2,
+      configurationHash: `0x${"ee".repeat(32)}`,
+    },
   };
 }
 
@@ -183,6 +223,22 @@ describe("creator article launch authority", () => {
     })).rejects.toMatchObject({ status: 403 });
   });
 
+  it("does not grant authority to a non-Registry Custom projection", async () => {
+    const reader = createCreatorArticleAuthorityReaderV1({
+      readClassic: vi.fn().mockResolvedValue([]),
+      readCustom: vi.fn().mockResolvedValue([{
+        ...custom(),
+        launchCategoryProvenance: {
+          category: "custom",
+          source: "interface-preview",
+        } as never,
+      }]),
+      readRouter: vi.fn().mockResolvedValue([]),
+    });
+
+    await expect(reader.read(new AbortController().signal)).resolves.toEqual([]);
+  });
+
   it("uses the validated Router stamp wallet instead of the display creator", async () => {
     const routerEntry = {
       ...customGraphExploreEntry,
@@ -235,6 +291,61 @@ describe("creator article launch authority", () => {
       creatorAddress: launchStampProvenance.launchWallet,
       source: "canonical-launch-stamp-router",
     });
+  });
+
+  it("deduplicates an exact Registry and Router launch after matching their launch wallets", async () => {
+    const registryEntry = custom({
+      tokenAddress: STAMP_TOKEN,
+      launchingWallet: launchStampProvenance.launchWallet,
+      poolId: STAMP_POOL_ID,
+    });
+    const reader = createCreatorArticleAuthorityReaderV1({
+      readClassic: vi.fn().mockResolvedValue([]),
+      readCustom: vi.fn().mockResolvedValue([registryEntry]),
+      readRouter: vi.fn().mockResolvedValue([customGraphExploreEntry]),
+    });
+
+    await expect(listCreatorArticleAuthoritiesV1({
+      reader,
+      principal: { ...principal, wallets: [launchStampProvenance.launchWallet] },
+      signal: new AbortController().signal,
+    })).resolves.toEqual([
+      expect.objectContaining({
+        tokenAddress: STAMP_TOKEN,
+        creatorAddress: launchStampProvenance.launchWallet,
+        source: "canonical-launch-stamp-router",
+        name: "Custom Graph",
+      }),
+    ]);
+  });
+
+  it.each([
+    {
+      name: "launching wallet",
+      registry: custom({
+        tokenAddress: STAMP_TOKEN,
+        launchingWallet: OTHER,
+        poolId: STAMP_POOL_ID,
+      }),
+    },
+    {
+      name: "pool binding",
+      registry: custom({
+        tokenAddress: STAMP_TOKEN,
+        launchingWallet: launchStampProvenance.launchWallet,
+        poolId: `0x${"99".repeat(32)}`,
+      }),
+    },
+  ])("fails closed when Registry and Router disagree on $name", async ({ registry }) => {
+    const reader = createCreatorArticleAuthorityReaderV1({
+      readClassic: vi.fn().mockResolvedValue([]),
+      readCustom: vi.fn().mockResolvedValue([registry]),
+      readRouter: vi.fn().mockResolvedValue([customGraphExploreEntry]),
+    });
+
+    await expect(reader.read(new AbortController().signal)).rejects.toThrow(
+      "Creator article token authority is ambiguous",
+    );
   });
 
   it("fails closed when Router authority is duplicated", async () => {

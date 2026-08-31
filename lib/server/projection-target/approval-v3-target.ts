@@ -3,6 +3,7 @@ import "server-only";
 import { canonicalizeJson } from "./canonical-json";
 import {
   PostgresProjectionTargetAtomicStoreV1,
+  type ProjectionTargetPostgresPoolV1,
 } from "./postgres-store";
 import {
   createProjectionTargetReferenceHandlerV1,
@@ -78,7 +79,9 @@ ProjectionTargetReferenceHandlerV1 {
 }
 
 export async function assertApprovalV3ProjectionAdmissionReadyV1(
-  pool: ReturnType<typeof createProductionProjectionTargetPostgresPoolV1>,
+  pool: ProjectionTargetPostgresPoolV1 & Readonly<{
+    assertProductionReadiness(): Promise<void>;
+  }>,
 ): Promise<void> {
   await pool.assertProductionReadiness();
   await assertPostgresGenericLaunchAdmissionReadyV2(pool);

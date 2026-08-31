@@ -9,6 +9,15 @@ import {
 import { readDexscreenerExploreEntriesV1 } from
   "../../../lib/market-data/dexscreener-explore.server";
 import {
+  exploreMarketProviderHeaderV1,
+  exploreMarketPriceSourcesV1,
+  exploreMarketSourcesV1,
+  readExploreMarketEntriesV1,
+  type ExploreMarketReadV1,
+} from "../../../lib/market-data/explore-market.server";
+import { gmgnMarketDataConfiguredV1 } from
+  "../../../lib/market-data/gmgn.server";
+import {
   envioClassicV3IdentityCommitmentV1,
   mergeEnvioClassicV3CatalogEntriesV1,
   readEnvioClassicV3CatalogV1,
@@ -574,9 +583,7 @@ export async function GET(request: NextRequest) {
     }
     if (routerAvailable) includedSources.add(ROUTER_CUSTOM_LAUNCH_SOURCE);
     let paginated: ReturnType<typeof paginateExploreEntriesV1>;
-    let marketRead: Awaited<
-      ReturnType<typeof readDexscreenerExploreEntriesV1>
-    >["marketRead"];
+    let marketRead: ExploreMarketReadV1;
     let marketQualifiedEntryCount = 0;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
       const filtered = filterExploreEntries(
@@ -585,6 +592,9 @@ export async function GET(request: NextRequest) {
         options.socials,
         options.model,
       );
+      // Market-cap ranking and displayed FDV remain one coherent Dexscreener
+      // snapshot. GMGN's one-token endpoint enriches only non-market-cap pages
+      // and single-token detail reads.
       const valued = await readDexscreenerExploreEntriesV1(filtered, {
         signal: readSignal,
         deadlineMs,
@@ -604,7 +614,7 @@ export async function GET(request: NextRequest) {
         presentedPublicEntries,
         options,
       );
-      const valued = await readDexscreenerExploreEntriesV1(
+      const valued = await readExploreMarketEntriesV1(
         identityPage.tokens,
         { signal: readSignal, deadlineMs },
       );
@@ -633,6 +643,9 @@ export async function GET(request: NextRequest) {
       : qualifiedCount === paginated.total
         ? "complete" as const
         : "partial" as const;
+    const marketProvider = exploreMarketProviderHeaderV1(marketRead);
+    const marketSources = exploreMarketSourcesV1(marketRead);
+    const priceSources = exploreMarketPriceSourcesV1(marketRead);
 
     return NextResponse.json(
       {
@@ -716,16 +729,18 @@ export async function GET(request: NextRequest) {
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Chain-Id": String(options.chain),
           "X-Programmable-Launch-Source": launchSource,
-          "X-Programmable-Read-Source": `${launchSource}+dexscreener`,
+          "X-Programmable-Read-Source": `${launchSource}+${marketProvider}`,
           "X-Programmable-Market-Read-Status": marketRead.status,
-          "X-Programmable-Market-Provider": "dexscreener",
+          "X-Programmable-Market-Provider": marketProvider,
           "X-Programmable-Canonical-Read-Status": canonicalStatus,
           "X-Programmable-Router-Read-Status": routerCustomStatus,
-          ...(marketRead.observedCount > 0
+          ...(marketSources.length > 0
             ? {
-                "X-Programmable-Market-Source": "dexscreener",
-                "X-Programmable-Price-Source": "dexscreener",
+                "X-Programmable-Market-Source": marketSources.join("+"),
               }
+            : {}),
+          ...(priceSources.length > 0
+            ? { "X-Programmable-Price-Source": priceSources.join("+") }
             : {}),
           ...(dataQuality.valuation.asOfTime
             ? { "X-Programmable-Market-As-Of": dataQuality.valuation.asOfTime }
@@ -736,6 +751,9 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("Explore read failed", safeOperationalRpcError(error));
+    const configuredProvider = gmgnMarketDataConfiguredV1()
+      ? "gmgn+dexscreener"
+      : "dexscreener";
     return NextResponse.json(
       { error: "Token data is temporarily unavailable" },
       {
@@ -744,8 +762,9 @@ export async function GET(request: NextRequest) {
           "Cache-Control": "no-store",
           "Retry-After": "5",
           "X-Programmable-Launch-Source": "envio-classic-v3",
-          "X-Programmable-Read-Source": "envio-classic-v3+dexscreener",
-          "X-Programmable-Market-Provider": "dexscreener",
+          "X-Programmable-Read-Source":
+            `envio-classic-v3+${configuredProvider}`,
+          "X-Programmable-Market-Provider": configuredProvider,
         },
       },
     );

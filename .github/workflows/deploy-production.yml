@@ -288,6 +288,27 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
+      - name: Resolve staged GMGN market requirement
+        id: gmgn-market-requirement
+        run: |
+          set -euo pipefail
+          env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module -e '
+            import { appendFileSync } from "node:fs";
+            const requireGmgnMarket =
+              (process.env.GMGN_API_KEY ?? "").trim() !== "";
+            appendFileSync(
+              process.env.GITHUB_OUTPUT,
+              `require_gmgn_market=${requireGmgnMarket}\n`,
+              { encoding: "utf8", mode: 0o600 },
+            );
+            process.stdout.write(
+              `${JSON.stringify({
+                status: "resolved",
+                requireGmgnMarket,
+              })}\n`,
+            );
+          '
+
       - name: Reject mixed legacy and V3 Custom Launch release authority
         if: >-
           inputs.custom_launch_v3_release &&
@@ -1446,6 +1467,7 @@ jobs:
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PROGRAMMABLE_REQUIRE_GMGN_MARKET: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}
           PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"
         run: |
           node scripts/smoke-static-dexscreener-public-apis.mjs
@@ -1517,7 +1539,9 @@ jobs:
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
           CUSTOM_LAUNCH_V3_RELEASE: ${{ inputs.custom_launch_v3_release }}
+          MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.market_provider }}
           MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
+          DETAIL_MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.detail_market_provider }}
           DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
           SHARD_TRADE_STATUS: ${{ steps.public-provider-smoke.outputs.shard_trade_status }}
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
@@ -1538,9 +1562,11 @@ jobs:
             echo "- Catalog mode: \`$CATALOG_MODE\`"
             echo "- Catalog progress block: \`$CATALOG_BLOCK_NUMBER\`"
             echo "- Catalog identity count: \`$CATALOG_TOKEN_COUNT\`"
-            echo "- Market data provider: Dexscreener (optional enrichment)"
+            echo "- Visible market provider: \`${MARKET_PROVIDER:-not-run}\`"
             echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
+            echo "- Token detail market provider: \`${DETAIL_MARKET_PROVIDER:-not-run}\`"
             echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"
+            echo "- Full-catalog FDV ranking provider: Dexscreener"
             echo "- SHARD trade adapter smoke: \`${SHARD_TRADE_STATUS:-not-run}\`"
             echo "- Market chart smoke: \`${CHART_SMOKE_STATUS:-not-run}\`"
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"

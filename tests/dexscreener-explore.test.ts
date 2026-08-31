@@ -247,6 +247,11 @@ describe("Dexscreener Explore adapter", () => {
       "unavailable",
       "unavailable",
     ]);
+    expect(result.observedEntryIds).toEqual([tokens[0]?.id, tokens[1]?.id]);
+    expect(result.marketRead).toMatchObject({
+      observedCount: 2,
+      qualifiedCount: 1,
+    });
   });
 
   it("fails soft for an unexpected provider exception", async () => {
