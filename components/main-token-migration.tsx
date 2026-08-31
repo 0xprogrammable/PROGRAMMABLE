@@ -190,13 +190,17 @@ class GasSponsorshipEndpointError extends Error {
   }
 }
 
-const migrationTransferStorageKey = `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_WALLET.toLowerCase()}`;
+const legacyMigrationTransferStorageKey =
+  `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_WALLET.toLowerCase()}`;
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
 const sponsorshipIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
 const digestPattern = /^sha256:[0-9a-f]{64}$/u;
 
 const gaslessTransferProgressStorageKey =
   `programmable:main-token-migration:gasless-progress:${MAIN_TOKEN_MIGRATION_RELEASE_ID}`;
+const migrationRecoveryEvent = "programmable:main-token-migration-recovery";
+const gaslessRecoveryMessage =
+  "This gasless transfer still needs reconciliation. Resume it here and do not send V4 separately.";
 
 function persistGaslessTransferProgress(
   account: string,
@@ -227,6 +231,7 @@ function clearGaslessTransferProgress() {
   } catch {
     // The confirmed transfer remains tracked by the normal transaction state.
   }
+  window.dispatchEvent(new Event(migrationRecoveryEvent));
 }
 
 function storedGaslessTransferProgress(): StoredGaslessTransferProgress | null {
@@ -623,8 +628,13 @@ type StoredMigrationTransfer = Readonly<{
   blockNumber: string | null;
 }>;
 
-function storedMigrationTransfer(
+export function migrationTransferStorageKey(account: string) {
+  return `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${getAddress(account).toLowerCase()}`;
+}
+
+export function storedMigrationTransfer(
   value: string | null,
+  expectedAccount: string,
 ): Extract<SubmissionState, { kind: "submitted" | "confirmed" }> | null {
   if (!value) return null;
   try {
@@ -644,6 +654,9 @@ function storedMigrationTransfer(
       return null;
     }
     const account = getAddress(parsed.account);
+    if (account.toLowerCase() !== getAddress(expectedAccount).toLowerCase()) {
+      return null;
+    }
     parseMainTokenMigrationAmount(parsed.amount);
     if (parsed.status === "confirmed") {
       if (
@@ -660,6 +673,33 @@ function storedMigrationTransfer(
       amount: parsed.amount,
       hash: parsed.hash as Hex,
     };
+  } catch {
+    return null;
+  }
+}
+
+export function restoreMigrationTransfer(
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">,
+  account: string,
+) {
+  try {
+    const storageKey = migrationTransferStorageKey(account);
+    const scoped = storedMigrationTransfer(storage.getItem(storageKey), account);
+    if (scoped) return scoped;
+
+    const source = storage.getItem(legacyMigrationTransferStorageKey);
+    const legacy = storedMigrationTransfer(source, account);
+    if (legacy && source) {
+      try {
+        storage.setItem(storageKey, source);
+        if (storage.getItem(storageKey) === source) {
+          storage.removeItem(legacyMigrationTransferStorageKey);
+        }
+      } catch {
+        // Keep the legacy record recoverable if browser storage is unavailable.
+      }
+    }
+    return legacy;
   } catch {
     return null;
   }
@@ -682,20 +722,36 @@ function persistMigrationTransfer(
         submission.kind === "confirmed" ? submission.blockNumber : null,
     };
     window.localStorage.setItem(
-      migrationTransferStorageKey,
+      migrationTransferStorageKey(submission.account),
       JSON.stringify(value),
     );
+    const legacy = storedMigrationTransfer(
+      window.localStorage.getItem(legacyMigrationTransferStorageKey),
+      submission.account,
+    );
+    if (legacy) {
+      window.localStorage.removeItem(legacyMigrationTransferStorageKey);
+    }
   } catch {
     // Transaction tracking still works for the current page session.
   }
+  window.dispatchEvent(new Event(migrationRecoveryEvent));
 }
 
-function clearPersistedMigrationTransfer() {
+function clearPersistedMigrationTransfer(account: string) {
   try {
-    window.localStorage.removeItem(migrationTransferStorageKey);
+    window.localStorage.removeItem(migrationTransferStorageKey(account));
+    const legacy = storedMigrationTransfer(
+      window.localStorage.getItem(legacyMigrationTransferStorageKey),
+      account,
+    );
+    if (legacy) {
+      window.localStorage.removeItem(legacyMigrationTransferStorageKey);
+    }
   } catch {
     // A reverted transaction remains visible for the current page session.
   }
+  window.dispatchEvent(new Event(migrationRecoveryEvent));
 }
 
 function parseMigrationWindow(): MigrationWindow {
@@ -943,6 +999,15 @@ function Countdown({
 }
 
 export function MainTokenMigration() {
+  const { wallet } = useWallet();
+  return (
+    <MainTokenMigrationSession
+      key={wallet?.account.toLowerCase() ?? "disconnected"}
+    />
+  );
+}
+
+function MainTokenMigrationSession() {
   const {
     wallet,
     connecting,
@@ -1026,15 +1091,24 @@ export function MainTokenMigration() {
       : accountCodeObservation?.account === wallet.account.toLowerCase()
         ? accountCodeObservation.status
         : "checking";
+  const connectedAccount = wallet?.account.toLowerCase() ?? null;
+  const submissionMatchesConnectedAccount =
+    "account" in submission &&
+    connectedAccount !== null &&
+    submission.account.toLowerCase() === connectedAccount;
+  const visibleSubmission: SubmissionState =
+    "account" in submission && !submissionMatchesConnectedAccount
+      ? { kind: "idle" }
+      : submission;
   const hasTrackedTransfer =
-    submission.kind === "submitted" || submission.kind === "confirmed";
+    visibleSubmission.kind === "submitted" ||
+    visibleSubmission.kind === "confirmed";
   const transferWindowOpen =
     now !== null &&
     clockUncertaintyMs !== null &&
     transferWindowOpenAt(now, clockUncertaintyMs);
   const canRevealDestination = transferWindowOpen || hasTrackedTransfer;
   const canCopyDestination = transferWindowOpen;
-  const connectedAccount = wallet?.account.toLowerCase() ?? null;
   const hasEnoughObservedGas =
     nativeBalance !== null &&
     gasPrice !== null &&
@@ -1200,11 +1274,19 @@ export function MainTokenMigration() {
           setAmount(formatUnits(BigInt(restored.amountRaw), MAIN_TOKEN_DECIMALS));
           setAcknowledged(true);
         }
-        setSubmission({
-          kind: "error",
-          message:
-            "This gasless transfer still needs reconciliation. Resume it here and do not send V4 separately.",
-        });
+        setSubmission((current) =>
+          current.kind === "submitting" ||
+          current.kind === "submitted" ||
+          current.kind === "confirmed"
+            ? current
+            : { kind: "error", message: gaslessRecoveryMessage },
+        );
+      } else if (!restored) {
+        setSubmission((current) =>
+          current.kind === "error" && current.message === gaslessRecoveryMessage
+            ? { kind: "idle" }
+            : current,
+        );
       }
     };
     const timeout = window.setTimeout(restore, 0);
@@ -1212,30 +1294,54 @@ export function MainTokenMigration() {
       if (event.key === gaslessTransferProgressStorageKey) restore();
     };
     window.addEventListener("storage", onStorage);
+    window.addEventListener(migrationRecoveryEvent, restore);
     return () => {
       window.clearTimeout(timeout);
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener(migrationRecoveryEvent, restore);
     };
   }, [hasTrackedTransfer, wallet]);
 
   useEffect(() => {
-    const restore = window.setTimeout(() => {
+    if (!connectedAccount) return;
+    const restore = () => {
       let stored: ReturnType<typeof storedMigrationTransfer> = null;
       try {
-        stored = storedMigrationTransfer(
-          window.localStorage.getItem(migrationTransferStorageKey),
+        stored = restoreMigrationTransfer(
+          window.localStorage,
+          connectedAccount,
         );
       } catch {
-        stored = null;
+        // Wallet tracking remains available when local storage is blocked.
       }
       if (stored) {
-        setSubmission(stored);
+        const restored = stored;
+        setSubmission((current) =>
+          (current.kind === "submitted" || current.kind === "confirmed") &&
+          current.account.toLowerCase() === connectedAccount &&
+          current.hash.toLowerCase() === restored.hash.toLowerCase()
+            ? current
+            : restored,
+        );
         setAmount(stored.amount);
         setAcknowledged(true);
       }
-    }, 0);
-    return () => window.clearTimeout(restore);
-  }, []);
+    };
+    const timeout = window.setTimeout(restore, 0);
+    const onStorage = (event: StorageEvent) => {
+      if (
+        event.key === migrationTransferStorageKey(connectedAccount) ||
+        event.key === legacyMigrationTransferStorageKey
+      ) restore();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(migrationRecoveryEvent, restore);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(migrationRecoveryEvent, restore);
+    };
+  }, [connectedAccount]);
 
   const refreshBalance = useCallback(async () => {
     if (!wallet || !onMainnet) {
@@ -1456,7 +1562,13 @@ export function MainTokenMigration() {
   ]);
 
   useEffect(() => {
-    if (submission.kind !== "submitted") return;
+    if (
+      submission.kind !== "submitted" ||
+      connectedAccount === null ||
+      submission.account.toLowerCase() !== connectedAccount
+    ) {
+      return;
+    }
 
     const tracked = submission;
     const controller = new AbortController();
@@ -1486,6 +1598,7 @@ export function MainTokenMigration() {
           status?: "pending" | "not-found" | "confirmed" | "reverted";
           blockNumber?: string | null;
         };
+        if (controller.signal.aborted) return;
         if (
           !response.ok ||
           !body ||
@@ -1517,7 +1630,7 @@ export function MainTokenMigration() {
           return;
         }
         if (body.status === "reverted") {
-          clearPersistedMigrationTransfer();
+          clearPersistedMigrationTransfer(tracked.account);
           setSubmission({
             kind: "reverted",
             account: tracked.account,
@@ -1537,7 +1650,9 @@ export function MainTokenMigration() {
         controller.signal.removeEventListener("abort", abortRequest);
       }
 
-      retryTimer = window.setTimeout(() => void poll(), retryDelay);
+      if (!controller.signal.aborted) {
+        retryTimer = window.setTimeout(() => void poll(), retryDelay);
+      }
     };
 
     void poll();
@@ -1545,7 +1660,7 @@ export function MainTokenMigration() {
       controller.abort();
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [refreshBalance, submission]);
+  }, [connectedAccount, refreshBalance, submission]);
 
   function onAmountChange(event: ChangeEvent<HTMLInputElement>) {
     setAmount(event.target.value);
@@ -1562,7 +1677,7 @@ export function MainTokenMigration() {
 
   function prepareAnotherTransfer() {
     if (submission.kind !== "confirmed" || !trustedTransferWindowOpen()) return;
-    clearPersistedMigrationTransfer();
+    clearPersistedMigrationTransfer(submission.account);
     setAmount("");
     setAcknowledged(false);
     setConfirmationIssue("");
@@ -1997,9 +2112,9 @@ export function MainTokenMigration() {
             ? "Migration closed"
             : !transferWindowOpen
               ? "New transfers closed"
-              : submission.kind === "submitted"
+              : visibleSubmission.kind === "submitted"
                 ? "Waiting for Ethereum confirmation"
-                : submission.kind === "confirmed"
+                : visibleSubmission.kind === "confirmed"
                   ? "Transfer confirmed"
                   : !wallet
                     ? connecting
@@ -2009,7 +2124,7 @@ export function MainTokenMigration() {
                       ? switchingNetwork
                         ? "Switching network"
                         : "Switch to Ethereum"
-                      : submission.kind === "submitting"
+                      : visibleSubmission.kind === "submitting"
                         ? gaslessStage === "preparing"
                           ? "Preparing gasless transfer"
                           : gaslessStage === "relaying"
@@ -2488,10 +2603,10 @@ export function MainTokenMigration() {
               aria-live="polite"
               aria-atomic="true"
             >
-              {submission.kind === "error" ? (
-                <p className={styles.inlineError}>{submission.message}</p>
+              {visibleSubmission.kind === "error" ? (
+                <p className={styles.inlineError}>{visibleSubmission.message}</p>
               ) : null}
-              {submission.kind === "submitted" ? (
+              {visibleSubmission.kind === "submitted" ? (
                 <div
                   className={`${styles.transactionStatus} ${styles.pendingStatus}`}
                 >
@@ -2502,7 +2617,7 @@ export function MainTokenMigration() {
                     Ethereum block timestamp is inside the published window.
                   </p>
                   <a
-                    href={`https://etherscan.io/tx/${submission.hash}`}
+                    href={`https://etherscan.io/tx/${visibleSubmission.hash}`}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -2510,19 +2625,19 @@ export function MainTokenMigration() {
                   </a>
                 </div>
               ) : null}
-              {submission.kind === "confirmed" ? (
+              {visibleSubmission.kind === "confirmed" ? (
                 <div
                   className={`${styles.transactionStatus} ${styles.confirmedStatus}`}
                 >
                   <strong>Wallet transaction confirmed on Ethereum</strong>
                   <p>
                     The transaction was confirmed in block{" "}
-                    {submission.blockNumber}. After the window closes, we will
-                    verify the transfer, amount, sender, recipient and block
-                    timestamp before the Robinhood allocation is sent.
+                    {visibleSubmission.blockNumber}. After the window closes,
+                    we will verify the transfer, amount, sender, recipient and
+                    block timestamp before the Robinhood allocation is sent.
                   </p>
                   <a
-                    href={`https://etherscan.io/tx/${submission.hash}`}
+                    href={`https://etherscan.io/tx/${visibleSubmission.hash}`}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -2539,7 +2654,7 @@ export function MainTokenMigration() {
                   ) : null}
                 </div>
               ) : null}
-              {submission.kind === "reverted" ? (
+              {visibleSubmission.kind === "reverted" ? (
                 <div
                   className={`${styles.transactionStatus} ${styles.revertedStatus}`}
                 >
@@ -2549,7 +2664,7 @@ export function MainTokenMigration() {
                     again while the migration window is active.
                   </p>
                   <a
-                    href={`https://etherscan.io/tx/${submission.hash}`}
+                    href={`https://etherscan.io/tx/${visibleSubmission.hash}`}
                     target="_blank"
                     rel="noreferrer"
                   >

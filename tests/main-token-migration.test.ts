@@ -5,6 +5,11 @@ import { decodeFunctionData, parseAbi } from "viem";
 import { describe, expect, it } from "vitest";
 
 import {
+  migrationTransferStorageKey,
+  restoreMigrationTransfer,
+  storedMigrationTransfer,
+} from "../components/main-token-migration";
+import {
   assertMainTokenMigrationBalance,
   assertMainTokenMigrationTransaction,
   buildMainTokenMigrationTransaction,
@@ -171,6 +176,83 @@ describe("main token migration page contract", () => {
   const read = (path: string) =>
     readFileSync(join(process.cwd(), path), "utf8");
   const page = read("components/main-token-migration.tsx");
+
+  it("scopes persisted transfer receipts to the connected wallet", () => {
+    const hash = `0x${"ab".repeat(32)}`;
+    const receipt = JSON.stringify({
+      schema: "programmable-main-token-migration-ui/v1",
+      status: "confirmed",
+      chainId: MAIN_TOKEN_MIGRATION_CHAIN_ID,
+      tokenAddress: MAIN_TOKEN_ADDRESS,
+      migrationWallet: MAIN_TOKEN_MIGRATION_WALLET,
+      account: sender,
+      amount: "1",
+      hash,
+      blockNumber: "25874337",
+    });
+
+    expect(migrationTransferStorageKey(sender)).not.toBe(
+      migrationTransferStorageKey(other),
+    );
+    expect(storedMigrationTransfer(receipt, sender)).toMatchObject({
+      kind: "submitted",
+      account: sender,
+      amount: "1",
+      hash,
+    });
+    expect(storedMigrationTransfer(receipt, other)).toBeNull();
+    expect(page).toContain("submissionMatchesConnectedAccount");
+    expect(page).toContain('key={wallet?.account.toLowerCase() ?? "disconnected"}');
+    expect(page).toContain("legacyMigrationTransferStorageKey");
+    expect(page).toContain("window.dispatchEvent(new Event(migrationRecoveryEvent))");
+    expect(page).toContain(
+      "window.addEventListener(migrationRecoveryEvent, restore)",
+    );
+    expect(page).toContain(
+      "current.hash.toLowerCase() === restored.hash.toLowerCase()",
+    );
+  });
+
+  it("keeps another wallet's legacy receipt and migrates it only for its owner", () => {
+    const legacyKey =
+      `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_WALLET.toLowerCase()}`;
+    const receipt = JSON.stringify({
+      schema: "programmable-main-token-migration-ui/v1",
+      status: "submitted",
+      chainId: MAIN_TOKEN_MIGRATION_CHAIN_ID,
+      tokenAddress: MAIN_TOKEN_ADDRESS,
+      migrationWallet: MAIN_TOKEN_MIGRATION_WALLET,
+      account: sender,
+      amount: "2",
+      hash: `0x${"cd".repeat(32)}`,
+      blockNumber: null,
+    });
+    const records = new Map([[legacyKey, receipt]]);
+    const storage = {
+      getItem: (key: string) => records.get(key) ?? null,
+      setItem: (key: string, value: string) => { records.set(key, value); },
+      removeItem: (key: string) => { records.delete(key); },
+    };
+
+    expect(restoreMigrationTransfer(storage, other)).toBeNull();
+    expect(records.get(legacyKey)).toBe(receipt);
+    expect(records.has(migrationTransferStorageKey(other))).toBe(false);
+    expect(restoreMigrationTransfer(storage, sender)).toMatchObject({
+      kind: "submitted", account: sender, amount: "2",
+    });
+    expect(records.get(migrationTransferStorageKey(sender))).toBe(receipt);
+    expect(records.has(legacyKey)).toBe(false);
+    expect(restoreMigrationTransfer(storage, other)).toBeNull();
+    expect(restoreMigrationTransfer(storage, sender)?.amount).toBe("2");
+
+    records.clear();
+    records.set(legacyKey, receipt);
+    expect(restoreMigrationTransfer({
+      ...storage,
+      setItem: () => { throw new Error("Storage quota exceeded"); },
+    }, sender)?.amount).toBe("2");
+    expect(records.get(legacyKey)).toBe(receipt);
+  });
 
   it("derives the countdown from one absolute window across reloads", () => {
     const startAt = Date.parse("2026-08-30T12:00:00.000Z");
