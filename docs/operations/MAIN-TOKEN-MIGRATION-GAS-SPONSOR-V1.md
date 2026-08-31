@@ -1,8 +1,7 @@
 # Main Token Migration Gas Sponsor V1
 
-Status: release-dark. The checked-in migration activation manifest remains disabled, no production activation is
-authorized by this document, and no committed file contains the operational Privy wallet ID, policy ID, sponsor
-address or release budget.
+Status: release-live. The checked-in activation manifest binds the exact migration window. No committed file contains
+the operational Privy wallet ID, policy ID, sponsor address or release budget.
 
 ## Purpose
 
@@ -48,8 +47,7 @@ Activation additionally requires the normal runtime dependencies:
 
 The root migration manifest must independently bind the exact release, token, runtime-code hash, migration wallet,
 96-hour timestamps, finalized pre-window eligibility block number and block hash. Sponsor configuration is accepted only while that
-manifest has `enabled: true`, the current time is inside the window, and at least five minutes remain. In this branch
-the manifest deliberately remains `enabled: false` with null timing and block fields.
+manifest has `enabled: true`, the current time is inside the window, and at least five minutes remain.
 
 ## Privy wallet and policy
 
@@ -63,9 +61,11 @@ every eligibility response and transfer, the server re-reads the wallet from Pri
 The attached policy must allow only `eth_sendTransaction` for Ethereum Mainnet (`eip155:1`), native value no greater
 than the configured top-up cap and never greater than 0.002 ETH; its default action must deny unrelated wallet
 methods. Privy's transaction-policy fields do not attest calldata or the dynamic holder recipient. The server
-therefore independently constructs a type-2 transaction with chain ID 1, empty calldata, fixed
-21,000 gas, the sponsor as `from`, the authenticated eligible holder as `to`, and the exact calculated deficit as
-`value`. A broader policy is not activation-ready even though these server checks remain in place.
+therefore independently constructs a type-2 transaction with chain ID 1, empty calldata, the sponsor as `from`, the
+authenticated eligible holder as `to`, and the exact calculated deficit as `value`. A plain EOA uses 21,000 gas. An
+eligible EIP-7702 delegated EOA uses the higher exact estimate returned by both independent RPCs with 125% headroom,
+bounded between 21,000 and 100,000 gas. A broader policy is not activation-ready even though these server checks
+remain in place.
 
 ## Fixed fee and budget boundaries
 
@@ -76,7 +76,7 @@ These limits are code-bound and are not operator-tunable:
 | Token-transfer gas ceiling | `100000` gas | A larger estimate fails closed |
 | Quote multiplier | `12500` bps (125%) | Applied to the conservative transfer-gas quote |
 | Maximum fee per gas | `20000000000` wei (20 gwei) | A higher quote returns unavailable; it never increases the cap |
-| Sponsor transaction gas | `21000` gas | Fixed native transfer with empty calldata |
+| Sponsor transaction gas | `21000` to `100000` gas | Plain EOA is fixed at 21,000; delegated EOA is dual-RPC estimated with 125% headroom |
 | Absolute top-up cap | `2000000000000000` wei (0.002 ETH) | The configured cap may be lower, never higher |
 | Absolute release budget cap | `1000000000000000000` wei (1 ETH) | The configured budget may be lower, never higher |
 | Deadline safety margin | `300` seconds | New sponsorship closes before the migration deadline |
@@ -84,8 +84,8 @@ These limits are code-bound and are not operator-tunable:
 The calculated requirement is `ceil(100000 * maxFeePerGas * 12500 / 10000)`. Existing holder ETH is subtracted, so
 only the deficit is sent. The quote uses the higher max fee and higher priority fee observed across the two
 independent providers, and the priority fee must not exceed the max fee. Each durable budget reservation includes
-both that top-up and the sponsor's own
-`21000 * maxFeePerGas` transaction cost. The total budget must cover the configured maximum top-up. It must also be
+both that top-up and the sponsor's exact reserved `sponsorGasLimit * maxFeePerGas` transaction cost. The total budget
+must cover the configured maximum top-up. It must also be
 chosen below the wallet's funded balance with an operator-owned safety margin; the absolute code cap is not a funding
 recommendation.
 
@@ -93,13 +93,27 @@ recommendation.
 
 The endpoint authenticates the Privy access token and requires the requested address to be linked to that Privy
 principal. Both independent Ethereum providers must agree on chain ID, canonical head, the finalized pre-window
-eligibility block and the pinned V4 runtime code. The holder and sponsor must be EOAs. The holder must own at least
-the requested V4 amount both at the eligibility block and at the current canonical read.
+eligibility block and the pinned V4 runtime code. The holder and sponsor must be EOAs or an explicitly supported
+EIP-7702 delegated EOA. The current holder must own at least the requested V4 amount at the canonical read. It is
+eligible either by owning that amount at the pre-window block or through one finalized direct V4 transfer from an
+eligible pre-window root wallet. Both providers must return the exact same transfer log, transaction and pre-window
+root balance. The transaction must originate from that root EOA, call the pinned V4 token directly and encode the
+exact `transfer(destination, amount)` matching the log. `transferFrom`, multi-hop transfers and contract sources
+remain ineligible. Dust transfers below the requested amount are discarded before the bounded candidate set is
+formed, so unrelated transfer spam cannot displace a valid relocation.
 
 The POST is same-origin, request-size bounded and idempotency-bound. The durable store reserves at most one sponsor
-intent per release and holder under a database advisory lock. An ambiguous provider response is never automatically
-rebroadcast. Confirmation requires both RPCs to read back the exact sender, recipient, value, fee fields, gas limit,
-empty calldata and successful receipt on the same block.
+intent per release and holder under a database advisory lock. A pre-window root wallet is also atomically bound to
+at most one sponsored destination, so moving the same tokens through additional wallets cannot create more sponsor
+claims. A relocated reservation also writes a valid, non-broadcastable root guard into the existing holder namespace.
+That makes an older deployment fail closed on the root holder without relying on the newer eligibility alias. The
+guard reserves 21,001 wei of accounting headroom but never calls the sponsor provider and never represents an ETH
+transfer. Every provider request stores a unique, 64-character reconciliation reference and a separate idempotency
+key before submission. If a provider response is lost, the server first looks up that exact reference. During
+Privy's documented 24-hour idempotency window it may retry only the byte-identical persisted request with the same
+key; it never creates a new key or changes transaction bytes. Outside that window an unresolved reservation stays
+fail-closed for operator reconciliation. Confirmation requires both RPCs to read back the exact sender, recipient,
+value, fee fields, gas limit, empty calldata and successful receipt on the same block.
 
 ## Staging and activation
 
@@ -124,8 +138,9 @@ empty calldata and successful receipt on the same block.
 Set `MAIN_TOKEN_MIGRATION_GAS_SPONSOR_ENABLED=false` to stop new sponsor handling. A manifest with `enabled: false`, a
 closed window, a missing dependency, a wallet/policy mismatch, exhausted budget, RPC disagreement or fee quote above
 the cap also fails closed. After the window, disable the deployment value and revoke or detach the dedicated Privy
-policy through the normal owner-controlled Privy process. Do not repeat a top-up after an ambiguous submission; use
-the stored request ID and onchain transaction readback for review.
+policy through the normal owner-controlled Privy process. The application reconciles an ambiguous submission through
+its stored provider reference and idempotency key. An operator must never issue a fresh top-up or a fresh provider key
+for the same reservation; use the stored request ID and onchain transaction readback for review.
 
 Never include the Privy app secret, database credentials, RPC URLs, holder access tokens or operational wallet IDs in
 public logs, screenshots or release evidence.

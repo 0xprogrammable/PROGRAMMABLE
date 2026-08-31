@@ -120,7 +120,9 @@ describe("main token migration gas sponsor activation contract", () => {
       transactionMethod: "eth_sendTransaction",
       transactionType: "2",
       transactionData: "0x",
-      sponsorGasLimit: "21000",
+      sponsorGasLimitMode: "eoa-fixed-or-delegated-estimated",
+      sponsorGasLimitMinimum: "21000",
+      sponsorGasLimitMaximum: "100000",
       providerPolicyEnforces: ["method", "chainId", "maximumValue"],
       serverEnforces: [
         "holderRecipient",

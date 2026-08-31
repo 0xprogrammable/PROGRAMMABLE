@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { encodeFunctionData, parseAbi } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -11,8 +12,10 @@ import {
   createMainTokenMigrationGasSponsorV1,
   deriveMainTokenMigrationSponsorBindingsV1,
   deriveMainTokenMigrationSponsorPrincipalBindingV1,
+  parsePrivySponsorTransactionLookupV1,
   parseMainTokenMigrationSponsorRequestV1,
   readMainTokenMigrationGasSponsorConfigurationV1,
+  resolveMainTokenMigrationSponsorEligibilityV1,
   type MainTokenMigrationGasSponsorChainV1,
   type MainTokenMigrationGasSponsorConfigurationV1,
   type MainTokenMigrationGasSponsorSenderV1,
@@ -22,6 +25,7 @@ import {
   MainTokenMigrationGasSponsorStoreErrorV1,
   createMainTokenMigrationGasSponsorPostgresStoreV1,
   type MainTokenMigrationGasSponsorIntentV1,
+  type MainTokenMigrationGasSponsorEligibilityV1,
   type MainTokenMigrationGasSponsorRecordV1,
   type MainTokenMigrationGasSponsorStoreV1,
 } from "../lib/server/main-token-migration-gas-sponsor-store-v1";
@@ -44,6 +48,10 @@ const SPONSOR = "0x2222222222222222222222222222222222222222" as const;
 const TX_HASH = `0x${"ab".repeat(32)}` as const;
 const NOW = new Date("2026-08-30T12:00:00.000Z");
 const IDEMPOTENCY_KEY = "migration-request-00000001";
+const TEST_ERC20_ABI = parseAbi([
+  "function transfer(address to,uint256 amount) returns (bool)",
+  "function transferFrom(address from,address to,uint256 amount) returns (bool)",
+]);
 const CONFIGURATION: MainTokenMigrationGasSponsorConfigurationV1 = {
   releaseId: "v4-ethereum-to-robinhood-96h-2026-v1",
   windowStartTimestamp: 1_899_654_400,
@@ -64,6 +72,7 @@ function key(releaseId: string, walletAddress: string) {
 class MemoryStore implements MainTokenMigrationGasSponsorStoreV1 {
   readonly records = new Map<string, MainTokenMigrationGasSponsorRecordV1>();
   readonly aliases = new Map<string, string>();
+  readonly eligibilityAliases = new Map<string, string>();
   readonly admissions:
     Parameters<MainTokenMigrationGasSponsorStoreV1["admit"]>[0][] = [];
   rateLimited = false;
@@ -90,7 +99,15 @@ class MemoryStore implements MainTokenMigrationGasSponsorStoreV1 {
     try {
       const recordKey = key(input.lookup.releaseId, input.lookup.walletAddress);
       const alias = this.aliases.get(input.idempotencyBindingHash);
+      const eligibilityKey = key(
+        input.lookup.releaseId,
+        input.eligibility.rootWalletAddress,
+      );
+      const eligibilityHolder = this.eligibilityAliases.get(eligibilityKey);
       if (alias !== undefined && alias !== input.requestBindingHash) {
+        throw new MainTokenMigrationGasSponsorStoreErrorV1("conflict");
+      }
+      if (eligibilityHolder !== undefined && eligibilityHolder !== recordKey) {
         throw new MainTokenMigrationGasSponsorStoreErrorV1("conflict");
       }
       const existing = this.records.get(recordKey);
@@ -111,6 +128,7 @@ class MemoryStore implements MainTokenMigrationGasSponsorStoreV1 {
         input.idempotencyBindingHash,
         input.requestBindingHash,
       );
+      this.eligibilityAliases.set(eligibilityKey, recordKey);
       const record = Object.freeze({
         intent: input.intent,
         transactionHash: null,
@@ -146,12 +164,25 @@ class IdempotentSender implements MainTokenMigrationGasSponsorSenderV1 {
   readonly hashes = new Map<string, typeof TX_HASH>();
   actualTransfers = 0;
   throwAfterFirstBroadcast = false;
+  throwBeforeFirstBroadcast = false;
   private threwAmbiguous = false;
+  private threwBeforeBroadcast = false;
 
   async assertReady() {}
 
+  async lookup(intent: MainTokenMigrationGasSponsorIntentV1) {
+    const hash = this.hashes.get(intent.providerIdempotencyKey);
+    return hash
+      ? { status: "broadcasted" as const, transactionHash: hash }
+      : null;
+  }
+
   async send(intent: MainTokenMigrationGasSponsorIntentV1) {
     this.calls.push(intent);
+    if (this.throwBeforeFirstBroadcast && !this.threwBeforeBroadcast) {
+      this.threwBeforeBroadcast = true;
+      throw new Error("provider request failed before broadcast");
+    }
     let hash = this.hashes.get(intent.providerIdempotencyKey);
     if (!hash) {
       hash = TX_HASH;
@@ -178,12 +209,28 @@ function chain(): MainTokenMigrationGasSponsorChainV1 {
         maxPriorityFeePerGasWei: 1_000_000_000n,
         nativeBalanceWei: 0n,
         sponsorBalanceWei: 1_000_000_000_000_000_000n,
+        eligibility: directEligibility(request.walletAddress),
       };
     },
     async status() {
       return "confirmed";
     },
+    async sponsorGasLimit() {
+      return MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1;
+    },
   };
+}
+
+function directEligibility(
+  walletAddress: `0x${string}`,
+): MainTokenMigrationGasSponsorEligibilityV1 {
+  return Object.freeze({
+    rootWalletAddress: walletAddress,
+    walletAddress,
+    transferHash: null,
+    transferBlockNumber: null,
+    transferLogIndex: null,
+  });
 }
 
 function request(
@@ -230,6 +277,144 @@ function sponsor(
 }
 
 describe("main token migration gas sponsor", () => {
+  it("accepts one confirmed direct transfer from the eligible root wallet", async () => {
+    const blockHash = `0x${"45".repeat(32)}` as const;
+    const transferHash = `0x${"67".repeat(32)}` as const;
+    const transferData = encodeFunctionData({
+      abi: TEST_ERC20_ABI,
+      functionName: "transfer",
+      args: [SECOND_WALLET, 100n],
+    });
+    const client = () => ({
+      async getLogs() {
+        return [{
+          args: { from: WALLET, to: SECOND_WALLET, value: 100n },
+          blockHash,
+          blockNumber: 103n,
+          logIndex: 0,
+          removed: false,
+          transactionHash: transferHash,
+        }];
+      },
+      async getCode() {
+        return "0x";
+      },
+      async getTransaction() {
+        return {
+          blockHash,
+          blockNumber: 103n,
+          from: WALLET,
+          hash: transferHash,
+          input: transferData,
+          to: MAIN_TOKEN_ADDRESS,
+          value: 0n,
+        };
+      },
+      async readContract() {
+        return 100n;
+      },
+    });
+
+    await expect(resolveMainTokenMigrationSponsorEligibilityV1({
+      clients: [client(), client()] as never,
+      configuration: CONFIGURATION,
+      request: { walletAddress: SECOND_WALLET, amountRaw: 100n },
+      blockNumber: 105n,
+      provenanceBlockNumber: 105n,
+      directOpeningBalances: [0n, 0n],
+    })).resolves.toEqual({
+      rootWalletAddress: WALLET,
+      walletAddress: SECOND_WALLET,
+      transferHash,
+      transferBlockNumber: "103",
+      transferLogIndex: "0",
+    });
+  });
+
+  it("rejects transferFrom provenance even when its Transfer log matches", async () => {
+    const blockHash = `0x${"45".repeat(32)}` as const;
+    const transferHash = `0x${"67".repeat(32)}` as const;
+    const transferData = encodeFunctionData({
+      abi: TEST_ERC20_ABI,
+      functionName: "transferFrom",
+      args: [WALLET, SECOND_WALLET, 100n],
+    });
+    const client = () => ({
+      async getLogs() {
+        return [{
+          args: { from: WALLET, to: SECOND_WALLET, value: 100n },
+          blockHash,
+          blockNumber: 103n,
+          logIndex: 0,
+          removed: false,
+          transactionHash: transferHash,
+        }];
+      },
+      async getCode() {
+        return "0x";
+      },
+      async getTransaction() {
+        return {
+          blockHash,
+          blockNumber: 103n,
+          from: WALLET,
+          hash: transferHash,
+          input: transferData,
+          to: MAIN_TOKEN_ADDRESS,
+          value: 0n,
+        };
+      },
+      async readContract() {
+        return 100n;
+      },
+    });
+
+    await expect(resolveMainTokenMigrationSponsorEligibilityV1({
+      clients: [client(), client()] as never,
+      configuration: CONFIGURATION,
+      request: { walletAddress: SECOND_WALLET, amountRaw: 100n },
+      blockNumber: 105n,
+      provenanceBlockNumber: 105n,
+      directOpeningBalances: [0n, 0n],
+    })).resolves.toBeNull();
+  });
+
+  it("fails closed when independent providers disagree on transfer provenance", async () => {
+    const client = (transactionHash: `0x${string}`) => ({
+      async getLogs() {
+        return [{
+          args: { from: WALLET, to: SECOND_WALLET, value: 100n },
+          blockHash: `0x${"45".repeat(32)}`,
+          blockNumber: 103n,
+          logIndex: 0,
+          removed: false,
+          transactionHash,
+        }];
+      },
+      async getCode() {
+        return "0x";
+      },
+      async readContract() {
+        return 100n;
+      },
+    });
+
+    await expect(resolveMainTokenMigrationSponsorEligibilityV1({
+      clients: [
+        client(`0x${"67".repeat(32)}`),
+        client(`0x${"68".repeat(32)}`),
+      ] as never,
+      configuration: CONFIGURATION,
+      request: { walletAddress: SECOND_WALLET, amountRaw: 100n },
+      blockNumber: 105n,
+      provenanceBlockNumber: 105n,
+      directOpeningBalances: [0n, 0n],
+    })).rejects.toMatchObject({
+      status: 503,
+      code: "rpc_quorum_unavailable",
+    });
+  });
+
   it("accepts only the exact finalized eligibility block before the window", () => {
     const exact = {
       number: CONFIGURATION.startBlockNumber,
@@ -365,6 +550,8 @@ describe("main token migration gas sponsor", () => {
     expect(first.providerReferenceId).toBe(
       replayWithDifferentClientKey.providerReferenceId,
     );
+    expect(first.providerReferenceId).toHaveLength(64);
+    expect(first.providerIdempotencyKey).toHaveLength(70);
     expect(deriveMainTokenMigrationSponsorPrincipalBindingV1(
       "did:privy:test-user",
     )).toMatch(/^sha256:[0-9a-f]{64}$/u);
@@ -404,6 +591,43 @@ describe("main token migration gas sponsor", () => {
     }
   });
 
+  it("accepts only one exact Privy reconciliation record", () => {
+    const referenceId = "mtmgs-test-provider-reference";
+    const record = {
+      caip2: "eip155:1",
+      reference_id: referenceId,
+      status: "broadcasted",
+      transaction_hash: TX_HASH,
+      wallet_id: CONFIGURATION.sponsorWalletId,
+    };
+    expect(parsePrivySponsorTransactionLookupV1({
+      transactions: [record],
+    }, {
+      referenceId,
+      sponsorWalletId: CONFIGURATION.sponsorWalletId,
+    })).toEqual({
+      status: "broadcasted",
+      transactionHash: TX_HASH,
+    });
+    expect(parsePrivySponsorTransactionLookupV1({
+      transactions: [],
+    }, {
+      referenceId,
+      sponsorWalletId: CONFIGURATION.sponsorWalletId,
+    })).toBeNull();
+    for (const transactions of [
+      [record, record],
+      [{ ...record, caip2: "eip155:10" }],
+      [{ ...record, reference_id: "another-reference" }],
+      [{ ...record, wallet_id: "another-wallet" }],
+    ]) {
+      expect(() => parsePrivySponsorTransactionLookupV1({ transactions }, {
+        referenceId,
+        sponsorWalletId: CONFIGURATION.sponsorWalletId,
+      })).toThrowError(MainTokenMigrationGasSponsorErrorV1);
+    }
+  });
+
   it("durably admits the authenticated principal before sender or RPC work", async () => {
     const store = new MemoryStore();
     store.rateLimited = true;
@@ -429,6 +653,9 @@ describe("main token migration gas sponsor", () => {
         },
         async status() {
           return "confirmed";
+        },
+        async sponsorGasLimit() {
+          return MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1;
         },
       },
       sender,
@@ -506,6 +733,7 @@ describe("main token migration gas sponsor", () => {
         },
         idempotencyBindingHash: firstBindings.idempotencyBindingHash,
         requestBindingHash: firstBindings.requestBindingHash,
+        eligibility: directEligibility(WALLET),
         intent: firstIntent,
       })).kind).toBe("created");
 
@@ -522,6 +750,7 @@ describe("main token migration gas sponsor", () => {
         },
         idempotencyBindingHash: replayBindings.idempotencyBindingHash,
         requestBindingHash: replayBindings.requestBindingHash,
+        eligibility: directEligibility(WALLET),
         intent: testIntent(replayBindings.requestBindingHash),
       })).kind).toBe("existing");
       const aliases = await database.query<{ count: string }>(`
@@ -530,6 +759,145 @@ describe("main token migration gas sponsor", () => {
          WHERE credential_id LIKE '%:idempotency:%'
       `);
       expect(aliases.rows[0]?.count).toBe("1");
+
+      const relocatedBindings = deriveMainTokenMigrationSponsorBindingsV1({
+        releaseId: CONFIGURATION.releaseId,
+        walletAddress: SECOND_WALLET,
+        amountRaw: 100n,
+        idempotencyKey: "migration-request-00000013",
+      });
+      await expect(store.reserve({
+        lookup: {
+          releaseId: CONFIGURATION.releaseId,
+          walletAddress: SECOND_WALLET,
+        },
+        idempotencyBindingHash: relocatedBindings.idempotencyBindingHash,
+        requestBindingHash: relocatedBindings.requestBindingHash,
+        eligibility: {
+          rootWalletAddress: WALLET,
+          walletAddress: SECOND_WALLET,
+          transferHash: TX_HASH,
+          transferBlockNumber: "101",
+          transferLogIndex: "0",
+        },
+        intent: testIntent(relocatedBindings.requestBindingHash, SECOND_WALLET),
+      })).rejects.toMatchObject({ code: "conflict" });
+      const eligibilityAliases = await database.query<{ count: string }>(`
+        SELECT count(*)::text AS count
+          FROM programmable_website_projection_v1.credential_uses
+         WHERE credential_id LIKE '%:eligibility:%'
+      `);
+      expect(eligibilityAliases.rows[0]?.count).toBe("1");
+    } finally {
+      await database.close();
+    }
+  }, 10_000);
+
+  it("blocks legacy root-wallet writers with a durable holder guard", async () => {
+    const database = new PGlite();
+    try {
+      await database.exec(`
+        CREATE SCHEMA programmable_website_projection_v1;
+        CREATE TABLE programmable_website_projection_v1.credential_uses (
+          credential_id text PRIMARY KEY,
+          request_binding_hash text NOT NULL,
+          canonical_use text NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+      `);
+      const store = createMainTokenMigrationGasSponsorPostgresStoreV1(
+        new SponsorTestPool(database),
+      );
+      const totalBudgetWei = "1000000000000000";
+      const relocatedBindings = deriveMainTokenMigrationSponsorBindingsV1({
+        releaseId: CONFIGURATION.releaseId,
+        walletAddress: SECOND_WALLET,
+        amountRaw: 100n,
+        idempotencyKey: "migration-request-00000014",
+      });
+      expect((await store.reserve({
+        lookup: {
+          releaseId: CONFIGURATION.releaseId,
+          walletAddress: SECOND_WALLET,
+        },
+        idempotencyBindingHash: relocatedBindings.idempotencyBindingHash,
+        requestBindingHash: relocatedBindings.requestBindingHash,
+        eligibility: {
+          rootWalletAddress: WALLET,
+          walletAddress: SECOND_WALLET,
+          transferHash: TX_HASH,
+          transferBlockNumber: "103",
+          transferLogIndex: "0",
+        },
+        intent: testIntent(
+          relocatedBindings.requestBindingHash,
+          SECOND_WALLET,
+          totalBudgetWei,
+        ),
+      })).kind).toBe("created");
+
+      const rootGuard = await store.get({
+        releaseId: CONFIGURATION.releaseId,
+        walletAddress: WALLET,
+      });
+      expect(rootGuard).toMatchObject({
+        transactionHash: null,
+        intent: {
+          walletAddress: WALLET,
+          topUpWei: "1",
+          reservedTotalWei: "21001",
+        },
+      });
+      const sender = new IdempotentSender();
+      const handler = createMainTokenMigrationGasSponsorV1({
+        configuration: CONFIGURATION,
+        authenticator: {
+          async authenticate() {
+            return {
+              privyUserId: "did:privy:test-user",
+              privySessionId: "session-1",
+              wallets: [WALLET],
+            };
+          },
+        },
+        store,
+        chain: chain(),
+        sender,
+        now: () => NOW,
+      });
+      const blockedGuard = await handler.post(request(
+        WALLET,
+        "migration-request-00000016",
+      ));
+      expect(blockedGuard.status).toBe(409);
+      expect(sender.calls).toHaveLength(0);
+      const rootBindings = deriveMainTokenMigrationSponsorBindingsV1({
+        releaseId: CONFIGURATION.releaseId,
+        walletAddress: WALLET,
+        amountRaw: 100n,
+        idempotencyKey: "migration-request-00000015",
+      });
+      await expect(store.reserve({
+        lookup: {
+          releaseId: CONFIGURATION.releaseId,
+          walletAddress: WALLET,
+        },
+        idempotencyBindingHash: rootBindings.idempotencyBindingHash,
+        requestBindingHash: rootBindings.requestBindingHash,
+        eligibility: directEligibility(WALLET),
+        intent: testIntent(
+          rootBindings.requestBindingHash,
+          WALLET,
+          totalBudgetWei,
+        ),
+      })).rejects.toMatchObject({ code: "conflict" });
+      const holders = await database.query<{ count: string }>(`
+        SELECT count(*)::text AS count
+          FROM programmable_website_projection_v1.credential_uses
+         WHERE credential_id LIKE
+           'main-token-migration-gas-sponsor:v1:holder:%'
+      `);
+      expect(holders.rows[0]?.count).toBe("2");
     } finally {
       await database.close();
     }
@@ -545,16 +913,11 @@ describe("main token migration gas sponsor", () => {
       handler.post(request()),
     ]);
 
-    expect([left.status, right.status].sort()).toEqual([200, 503]);
+    expect([left.status, right.status].sort()).toEqual([200, 200]);
     const bodies = await Promise.all([left.json(), right.json()]);
-    expect(bodies.some((body) => body.transactionHash === TX_HASH)).toBe(true);
-    expect(bodies.some(
-      (body) => body.error?.code === "submission_unknown",
-    )).toBe(true);
-    expect([left, right].find((response) => response.status === 200)
-      ?.headers.get("retry-after")).toBe("10");
+    expect(bodies.every((body) => body.transactionHash === TX_HASH)).toBe(true);
     expect(sender.actualTransfers).toBe(1);
-    expect(sender.calls).toHaveLength(1);
+    expect(sender.calls.length).toBeGreaterThanOrEqual(1);
     expect([...store.records.values()][0]?.transactionHash).toBe(TX_HASH);
   });
 
@@ -572,6 +935,43 @@ describe("main token migration gas sponsor", () => {
     expect(store.aliases.size).toBe(1);
     expect(sender.calls).toHaveLength(1);
     expect(sender.actualTransfers).toBe(1);
+  });
+
+  it("reserves the exact bounded gas estimate for a delegated recipient", async () => {
+    const store = new MemoryStore();
+    const sender = new IdempotentSender();
+    const delegatedSponsorGas = 30_000n;
+    const handler = createMainTokenMigrationGasSponsorV1({
+      configuration: {
+        ...CONFIGURATION,
+        totalBudgetWei: 250_000_000_000_000n,
+      },
+      authenticator: {
+        async authenticate() {
+          return {
+            privyUserId: "did:privy:test-user",
+            privySessionId: "session-1",
+            wallets: [WALLET],
+          };
+        },
+      },
+      store,
+      chain: {
+        ...chain(),
+        async sponsorGasLimit() {
+          return delegatedSponsorGas;
+        },
+      },
+      sender,
+      now: () => NOW,
+    });
+
+    const submitted = await handler.post(request());
+    expect(submitted.status).toBe(200);
+    expect(sender.calls[0]).toMatchObject({
+      sponsorGasLimit: "30000",
+      reservedTotalWei: "190000000000000",
+    });
   });
 
   it("atomically refuses a second holder once the release budget is reserved", async () => {
@@ -605,24 +1005,67 @@ describe("main token migration gas sponsor", () => {
     });
   });
 
-  it("never resends after an ambiguous provider outcome", async () => {
+  it("reconciles an ambiguous provider outcome without a second transfer", async () => {
     const store = new MemoryStore();
     const sender = new IdempotentSender();
     sender.throwAfterFirstBroadcast = true;
     const handler = sponsor(store, sender);
 
-    const unknown = await handler.post(request());
-    expect(unknown.status).toBe(503);
-    expect((await unknown.json()).error.code).toBe("submission_unknown");
+    const recovered = await handler.post(request());
+    expect(recovered.status).toBe(200);
+    expect((await recovered.json()).transactionHash).toBe(TX_HASH);
     expect(sender.actualTransfers).toBe(1);
-    expect([...store.records.values()][0]?.transactionHash).toBeNull();
+    expect([...store.records.values()][0]?.transactionHash).toBe(TX_HASH);
 
     const duplicate = await handler.post(request());
-    expect(duplicate.status).toBe(503);
-    expect((await duplicate.json()).error.code).toBe("submission_unknown");
+    expect(duplicate.status).toBe(200);
+    expect((await duplicate.json()).transactionHash).toBe(TX_HASH);
     expect(sender.actualTransfers).toBe(1);
     expect(sender.calls).toHaveLength(1);
-    expect([...store.records.values()][0]?.transactionHash).toBeNull();
+    expect([...store.records.values()][0]?.transactionHash).toBe(TX_HASH);
+  });
+
+  it("retries the identical provider request after a pre-broadcast failure", async () => {
+    const store = new MemoryStore();
+    const sender = new IdempotentSender();
+    sender.throwBeforeFirstBroadcast = true;
+    const handler = sponsor(store, sender);
+
+    const recovered = await handler.post(request());
+    expect(recovered.status).toBe(200);
+    expect((await recovered.json()).transactionHash).toBe(TX_HASH);
+    expect(sender.calls).toHaveLength(2);
+    expect(sender.calls[0]).toBe(sender.calls[1]);
+    expect(sender.actualTransfers).toBe(1);
+    expect([...store.records.values()][0]?.transactionHash).toBe(TX_HASH);
+  });
+
+  it("never resends an unresolved reservation outside the provider window", async () => {
+    const store = new MemoryStore();
+    const sender = new IdempotentSender();
+    const bindings = deriveMainTokenMigrationSponsorBindingsV1({
+      releaseId: CONFIGURATION.releaseId,
+      walletAddress: WALLET,
+      amountRaw: 100n,
+      idempotencyKey: IDEMPOTENCY_KEY,
+    });
+    const intent = Object.freeze({
+      ...testIntent(bindings.requestBindingHash),
+      providerIdempotencyKey: bindings.providerIdempotencyKey,
+      providerReferenceId: bindings.providerReferenceId,
+      reservedAt: new Date(NOW.getTime() - 24 * 60 * 60 * 1_000).toISOString(),
+    });
+    store.records.set(key(CONFIGURATION.releaseId, WALLET), {
+      intent,
+      transactionHash: null,
+    });
+    const handler = sponsor(store, sender);
+
+    const blocked = await handler.post(request());
+    expect(blocked.status).toBe(503);
+    expect((await blocked.json()).error.code).toBe("submission_unknown");
+    expect(sender.calls).toHaveLength(0);
+    expect(sender.actualTransfers).toBe(0);
   });
 
   it("rechecks the deadline on every request from a cached handler", async () => {
@@ -642,15 +1085,17 @@ describe("main token migration gas sponsor", () => {
 
 function testIntent(
   requestBindingHash: `sha256:${string}`,
+  walletAddress: typeof WALLET | typeof SECOND_WALLET = WALLET,
+  totalBudgetWei = CONFIGURATION.totalBudgetWei.toString(),
 ): MainTokenMigrationGasSponsorIntentV1 {
   return Object.freeze({
     schema: "programmable-main-token-migration-gas-sponsorship-intent/v1",
     releaseId: CONFIGURATION.releaseId,
-    walletAddress: WALLET,
+    walletAddress,
     sponsorAddress: SPONSOR,
     amountRaw: "100",
     topUpWei: "130000000000000",
-    totalBudgetWei: CONFIGURATION.totalBudgetWei.toString(),
+    totalBudgetWei,
     sponsorGasLimit:
       MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1.toString(),
     sponsorMaxFeePerGasWei: "2000000000",

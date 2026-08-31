@@ -159,7 +159,7 @@ describe("main token migration gas sponsorship UI contract", () => {
     for (const [code, expected] of [
       [
         "submission_unknown",
-        "The gas top-up needs a status review. No second top-up was sent.",
+        "The gas top-up status could not be confirmed. Check again shortly. No second top-up will be sent.",
       ],
       [
         "sponsorship_closed",

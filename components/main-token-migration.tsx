@@ -291,7 +291,7 @@ export async function gasSponsorshipFailure(
       : response.status === 429
         ? "Gas sponsorship is temporarily rate limited. Wait a moment and try again."
         : code === "submission_unknown"
-          ? "The gas top-up needs a status review. No second top-up was sent."
+          ? "The gas top-up status could not be confirmed. Check again shortly. No second top-up will be sent."
           : code === "sponsorship_closed"
             ? "Gas sponsorship is closed for this migration window."
             : code === "sponsorship_failed"
@@ -1920,7 +1920,7 @@ export function MainTokenMigration() {
                     className={`${styles.transactionStatus} ${styles.revertedStatus}`}
                     role="alert"
                   >
-                    <strong>Sponsored gas unavailable</strong>
+                    <strong>Unable to check gas sponsorship</strong>
                     <p>
                       {sponsorshipForConnectedAccount &&
                       gasSponsorship.kind === "error"
