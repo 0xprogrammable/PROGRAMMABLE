@@ -1,6 +1,6 @@
 {
   "schema": "programmable-main-token-migration-gas-sponsor-activation-contract/v1",
-  "releaseId": "v4-ethereum-to-robinhood-96h-2026-v1",
+  "releaseId": "v4-ethereum-to-robinhood-72h-2026-v2",
   "activationManifestPath": "config/main-token-migration-activation.v1.json",
   "route": "/api/main-token-migration/gas-sponsorship",
   "serverOnly": true,

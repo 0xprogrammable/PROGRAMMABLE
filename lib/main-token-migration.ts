@@ -14,9 +14,9 @@ import {
 } from "./prepared-transaction";
 
 export const MAIN_TOKEN_MIGRATION_CHAIN_ID = 1 as const;
-export const MAIN_TOKEN_MIGRATION_WINDOW_SECONDS = 96 * 60 * 60;
+export const MAIN_TOKEN_MIGRATION_WINDOW_SECONDS = 72 * 60 * 60;
 export const MAIN_TOKEN_MIGRATION_RELEASE_ID =
-  "v4-ethereum-to-robinhood-96h-2026-v1" as const;
+  "v4-ethereum-to-robinhood-72h-2026-v2" as const;
 export const MAIN_TOKEN_DECIMALS = 18;
 export const MAIN_TOKEN_SYMBOL = "V4";
 export const MAIN_TOKEN_TOTAL_SUPPLY_RAW =
