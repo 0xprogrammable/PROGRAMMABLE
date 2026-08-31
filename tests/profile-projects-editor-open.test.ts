@@ -350,10 +350,10 @@ describe("My projects editor opening", () => {
       /\.list\s*\{[^}]*min-height:\s*var\(--project-list-min-height\);/s,
     );
     expect(styles).toMatch(
-      /@media \(max-width:\s*42rem\)[\s\S]*?\.project\s*\{[^}]*min-height:\s*143px;/s,
+      /\.project\s*\{[^}]*min-height:\s*var\(--project-row-min-height\);/s,
     );
     expect(styles).toMatch(
-      /@media \(max-width:\s*42rem\)[\s\S]*?\.skeletonProject\s*\{[^}]*min-height:\s*143px;/s,
+      /\.skeletonProject\s*\{[^}]*min-height:\s*var\(--project-row-min-height\);/s,
     );
     expect(source).toContain(
       'phase === "loading" && visibleProjects.length === 0',

@@ -511,11 +511,6 @@ export function ProfileProjects({
       ) : (
         <div className={styles.list}>
           {pageData.items.map((project) => {
-            const launchType =
-              project.source === "registry.custom-launched" ||
-              project.source === "canonical-launch-stamp-router"
-                ? "Custom"
-                : "Classic";
             const canEditArticle = editableTokens.has(
               project.tokenAddress.toLowerCase(),
             );
@@ -535,51 +530,13 @@ export function ProfileProjects({
               manageableReward && onChangeRewardReceiver,
             );
             return (
-            <article className={styles.project} key={project.tokenAddress}>
-              <div className={styles.art}>
-                {project.imageUrl ? (
-                  <Image src={project.imageUrl} alt="" fill sizes="64px" unoptimized />
-                ) : <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>}
-              </div>
-              <div className={styles.copy}>
-                <strong>{project.name}</strong>
-                <span>
-                  {project.symbol ? `$${project.symbol}` : "Finalized launch"}
-                  <small className={styles.launchType}>{launchType}</small>
-                </span>
-                {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label ? (
-                  <small>
-                    Market cap {marketCapByToken.get(project.tokenAddress.toLowerCase())?.label}
-                  </small>
-                ) : null}
-                <small
-                  aria-hidden={project.article ? undefined : true}
-                  className={styles.articleSummarySlot}
-                  data-state={
-                    project.article
-                      ? "ready"
-                      : phase === "loading"
-                        ? "loading"
-                        : "empty"
-                  }
-                >
-                  {project.article
-                    ? `Updated ${formatDate(project.article.updatedAt)}`
-                    : "Article details"}
-                </small>
-                {project.partnerAttribution ? (
-                  <PartnerLaunchAttribution
-                    attribution={project.partnerAttribution}
-                    compact
-                  />
-                ) : null}
-              </div>
-              <div
-                className={styles.actions}
-                data-reward-action={
-                  canChangeRewardReceiver ? "available" : "unavailable"
-                }
-              >
+            <ProfileProjectCard
+              key={project.tokenAddress}
+              project={project}
+              phase={phase}
+              marketCapLabel={marketCapByToken.get(project.tokenAddress.toLowerCase())?.label}
+              rewardReceiverAvailable={canChangeRewardReceiver}
+            >
                 {canChangeRewardReceiver && manageableReward ? (
                   <button
                     className={styles.rewardReceiverAction}
@@ -634,8 +591,7 @@ export function ProfileProjects({
                 >
                   View token
                 </Link>
-              </div>
-            </article>
+            </ProfileProjectCard>
             );
           })}
         </div>
@@ -769,6 +725,72 @@ export function ProfileProjectsLoadingState() {
     <ProfileProjectsSection refreshInProgress>
       <ProfileProjectsSkeleton />
     </ProfileProjectsSection>
+  );
+}
+
+export function ProfileProjectCard({
+  project,
+  phase,
+  marketCapLabel,
+  rewardReceiverAvailable,
+  children,
+}: Readonly<{
+  project: CreatorProjectSummaryV1;
+  phase: CreatorProjectOwnerStateV1["phase"];
+  marketCapLabel?: string | null;
+  rewardReceiverAvailable: boolean;
+  children: ReactNode;
+}>) {
+  const launchType =
+    project.source === "registry.custom-launched" ||
+    project.source === "canonical-launch-stamp-router"
+      ? "Custom"
+      : "Classic";
+
+  return (
+    <article className={styles.project}>
+      <div className={styles.art}>
+        {project.imageUrl ? (
+          <Image src={project.imageUrl} alt="" fill sizes="64px" unoptimized />
+        ) : <span aria-hidden="true">{project.symbol?.slice(0, 2) ?? "P"}</span>}
+      </div>
+      <div className={styles.copy}>
+        <strong>{project.name}</strong>
+        <span>
+          {project.symbol ? `$${project.symbol}` : "Finalized launch"}
+          <small className={styles.launchType}>{launchType}</small>
+        </span>
+        <small className={styles.marketCapSlot} aria-hidden={!marketCapLabel || undefined}>
+          {marketCapLabel ? `Market cap ${marketCapLabel}` : null}
+        </small>
+        <small
+          aria-hidden={project.article ? undefined : true}
+          className={styles.articleSummarySlot}
+          data-state={
+            project.article
+              ? "ready"
+              : phase === "loading"
+                ? "loading"
+                : "empty"
+          }
+        >
+          {project.article
+            ? `Updated ${formatDate(project.article.updatedAt)}`
+            : "Article details"}
+        </small>
+        <div className={styles.partnerSlot}>
+          {project.partnerAttribution ? (
+            <PartnerLaunchAttribution attribution={project.partnerAttribution} compact />
+          ) : null}
+        </div>
+      </div>
+      <div
+        className={styles.actions}
+        data-reward-action={rewardReceiverAvailable ? "available" : "unavailable"}
+      >
+        {children}
+      </div>
+    </article>
   );
 }
 

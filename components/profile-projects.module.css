@@ -1,6 +1,7 @@
 .section {
-  /* Five 71px rows with four 3px gaps, shared by every list state. */
-  --project-list-min-height: 367px;
+  /* Reserve the identity, optional metadata and actions in every list state. */
+  --project-row-min-height: 120px;
+  --project-list-min-height: calc(5 * var(--project-row-min-height) + 4 * 3px);
   background: var(--webde-surface, var(--profile-panel, #111));
   border: 1px solid var(--webde-line, var(--profile-line, rgb(255 255 255 / 10%)));
   border-radius: var(--webde-radius-card, 17px);
@@ -243,7 +244,7 @@
   display: grid;
   gap: 9px;
   grid-template-columns: 42px minmax(0, 1fr) auto;
-  min-height: 71px;
+  min-height: var(--project-row-min-height);
   min-width: 0;
   padding: 7px 8px;
   transition: background-color 150ms ease;
@@ -275,8 +276,10 @@
 }
 
 .copy {
+  align-content: start;
   display: grid;
   gap: 2px;
+  min-height: 100px;
   min-width: 0;
 }
 
@@ -329,6 +332,15 @@
   position: relative;
 }
 
+.marketCapSlot {
+  min-height: 1.3em;
+}
+
+.partnerSlot {
+  min-height: 24px;
+  min-width: 0;
+}
+
 .articleSummarySlot[data-state="empty"],
 .articleSummarySlot[data-state="loading"] {
   color: transparent;
@@ -368,7 +380,7 @@
   display: grid;
   gap: 9px;
   grid-template-columns: 42px minmax(0, 1fr) 364px;
-  min-height: 71px;
+  min-height: var(--project-row-min-height);
   padding: 7px 8px;
 }
 
@@ -755,8 +767,8 @@
 
 @media (max-width: 42rem) {
   .section {
-    /* The same five slots at the existing 143px mobile row height. */
-    --project-list-min-height: 727px;
+    /* Include the two action rows used by reward-enabled launches. */
+    --project-row-min-height: 224px;
     padding: 16px;
   }
 
@@ -776,13 +788,11 @@
   .project {
     align-items: center;
     grid-template-columns: 42px minmax(0, 1fr);
-    min-height: 143px;
     padding-block: 9px;
   }
 
   .skeletonProject {
     grid-template-columns: 42px minmax(0, 1fr);
-    min-height: 143px;
   }
 
   .skeletonAction {
@@ -830,6 +840,19 @@
     border-width: 1px 0 0;
     max-height: min(92dvh, 44rem);
     max-width: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .heading {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .headerActions {
+    justify-content: space-between;
+    margin-inline-start: 0;
+    width: 100%;
   }
 }
 
