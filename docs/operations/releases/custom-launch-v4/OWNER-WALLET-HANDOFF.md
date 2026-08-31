@@ -127,6 +127,10 @@ pending observations. The final action-time guard additionally requires a
 provider-agreed owner balance that remains unchanged through its closing read.
 Fee fields use the highest base fee, gas price and priority fee reported by
 either provider and remain bounded by the owner's explicit ceilings.
+The wallet gas limit is the exact provider-agreed estimate plus 5% and a fixed
+25,000 gas reserve. Both providers must return that same estimate in the
+opening and closing snapshots; the helper never shrinks the reserve from a
+balance observation or clamps a result above the reviewed 10,000,000 gas cap.
 The transport paces QuickNode requests at a bounded provider-specific rate so
 the complete opening and closing inventories do not become an unreviewed burst.
 An HTTP throttle response still fails the entire fresh attempt closed; it is
@@ -198,7 +202,10 @@ including exact `accessList: []`. It then uses both frozen credentialed
 providers to re-read chain ID; owner `latest` and `pending` nonce; owner pending
 balance; pending base fee, gas price and maximum priority fee; pending code and
 nonce vacancy for all three targets; and the exact pending simulation and gas
-estimate. It repeats a second closing
+estimate. The action-time `eth_call` carries the exact proposed gas limit, so a
+provider rejection at that boundary fails before the wallet opens; the separate
+uncapped `eth_estimateGas` must still reproduce the envelope estimate. It
+repeats a second closing
 nonce/balance/fee/code/vacancy/simulation/gas snapshot immediately before wallet
 delivery. Both providers must agree on the owner balance, and the opening and
 closing balance must remain identical. The balance must cover the maximum debit

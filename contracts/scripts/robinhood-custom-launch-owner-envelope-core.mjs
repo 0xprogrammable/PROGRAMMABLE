@@ -20,8 +20,8 @@ export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MINIMUM_REMAINING_TTL_SECONDS =
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_REQUEST_TIMEOUT_MS = 15_000;
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_OPERATION_MS = 45_000;
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_HEAD_GAP = 4n;
-export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_GAS_HEADROOM_BPS = 2_000n;
-export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_FIXED_GAS_HEADROOM = 50_000n;
+export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_GAS_HEADROOM_BPS = 500n;
+export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_FIXED_GAS_HEADROOM = 25_000n;
 export const ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_MAX_GAS_LIMIT = 10_000_000n;
 
 const CHAIN_ID = 4_663n;
@@ -1594,6 +1594,10 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
     value: "0x0",
     data: receipt.transaction.input,
   };
+  const gasCappedSimulationRequest = {
+    ...simulationRequest,
+    gas: receipt.transaction.gasQuantity,
+  };
 
   const snapshots = await Promise.all(
     providers.map(async (provider) => {
@@ -1664,7 +1668,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
         rpc(
           provider,
           "eth_call",
-          [simulationRequest, "pending"],
+          [gasCappedSimulationRequest, "pending"],
           rpcClient,
           requestTimeoutMs,
         ),
@@ -1840,7 +1844,7 @@ export async function verifyRobinhoodFoundationOwnerWalletActionTimeState({
           rpc(
             provider,
             "eth_call",
-            [simulationRequest, "pending"],
+            [gasCappedSimulationRequest, "pending"],
             rpcClient,
             requestTimeoutMs,
           ),
