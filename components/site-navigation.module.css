@@ -180,6 +180,10 @@
   width: min(320px, calc(100vw - 32px));
 }
 
+.siteHeader:has(.mobileSheetOpen, .walletMenu) .chainFeedback {
+  display: none;
+}
+
 .headerWalletButton:disabled {
   cursor: wait;
   opacity: 0.62;
