@@ -12,6 +12,7 @@ import {
   keccak256,
   parseAbi,
   recoverTypedDataAddress,
+  TransactionReceiptNotFoundError,
   toHex,
   type Address,
   type Hex,
@@ -104,15 +105,23 @@ type PrepareRequest = Readonly<{
   action: "prepare" | "resume";
   walletAddress: Address;
   amountRaw: bigint;
+  previousRequestBindingHash?: `sha256:${string}`;
+}>;
+type RecoveryPrepareRequest = Readonly<{
+  action: "prepare_recovery";
+  walletAddress: Address;
+  amountRaw: bigint;
+  previousRequestBindingHash: `sha256:${string}`;
 }>;
 type SubmitRequest = Readonly<{
-  action: "submit";
+  action: "submit" | "submit_recovery";
   walletAddress: Address;
   amountRaw: bigint;
   nonce: bigint;
   permitDeadline: bigint;
   permitSignature: Hex;
   requestBindingHash: `sha256:${string}`;
+  previousRequestBindingHash?: `sha256:${string}`;
 }>;
 
 export class MainTokenMigrationGaslessErrorV1 extends Error {
@@ -179,14 +188,79 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
         };
         await input.admissionStore.admit({
           ...admission,
-          operation: parsed.action === "prepare" ? "read" : "progress",
+          operation: parsed.action === "prepare" || parsed.action === "prepare_recovery"
+            ? "read" : "progress",
         });
         const lookup = {
           releaseId: input.configuration.releaseId,
           walletAddress: parsed.walletAddress,
         };
         const existing = await input.store.get(lookup);
-        if (parsed.action !== "submit") {
+        const isRecovery = parsed.action === "prepare_recovery" ||
+          parsed.action === "submit_recovery";
+        let recoveryProof: Awaited<ReturnType<typeof input.chain.assertRecoverable>> | undefined;
+        if (isRecovery) {
+          if (!existing || !parsed.previousRequestBindingHash) {
+            throw new MainTokenMigrationGaslessErrorV1(409, "gasless_request_not_found");
+          }
+          // A response may be lost after the append. The identical new key can
+          // resume that exact successor, never create a second reservation.
+          const currentBinding = deriveMainTokenMigrationGaslessBindingV1({
+            baseRequestBindingHash: baseBindings.requestBindingHash,
+            nonce: BigInt(existing.intent.nonce),
+            permitDeadline: BigInt(existing.intent.permitDeadline),
+          });
+          const alreadyRecovered = currentBinding === existing.intent.requestBindingHash &&
+            existing.previousRequestBindingHash === parsed.previousRequestBindingHash;
+          if (!alreadyRecovered) {
+            if (existing.intent.requestBindingHash !== parsed.previousRequestBindingHash ||
+              existing.intent.amountRaw !== parsed.amountRaw.toString()) {
+              throw new MainTokenMigrationGaslessErrorV1(409, "idempotency_conflict");
+            }
+            const oldKeyBinding = deriveMainTokenMigrationGaslessBindingV1({
+              baseRequestBindingHash: baseBindings.requestBindingHash,
+              nonce: BigInt(existing.intent.nonce),
+              permitDeadline: BigInt(existing.intent.permitDeadline),
+            });
+            if (oldKeyBinding === existing.intent.requestBindingHash) {
+              throw new MainTokenMigrationGaslessErrorV1(409, "recovery_key_required");
+            }
+            recoveryProof = await assertMainTokenMigrationGaslessRecoveryEligibleV1({ ...input, record: existing, now: now() });
+          }
+          if (parsed.action === "prepare_recovery") {
+            if (alreadyRecovered) {
+              return prepareResponse(existing.intent, parsed.previousRequestBindingHash);
+            }
+            const observation = await input.chain.prepare({
+              configuration: input.configuration,
+              walletAddress: parsed.walletAddress,
+              amountRaw: parsed.amountRaw,
+            });
+            if (observation.nonce !== BigInt(existing.intent.nonce)) {
+              throw new MainTokenMigrationGaslessErrorV1(409, "permit_nonce_changed");
+            }
+            const permitDeadline = newPermitDeadline(input.configuration, now());
+            return json({
+              schema: "programmable-main-token-migration-gasless-transfer/v1",
+              status: "signature_required",
+              walletAddress: parsed.walletAddress,
+              amountRaw: parsed.amountRaw.toString(),
+              sponsorAddress: input.configuration.sponsorAddress,
+              nonce: observation.nonce.toString(),
+              permitDeadline: permitDeadline.toString(),
+              requestBindingHash: deriveMainTokenMigrationGaslessBindingV1({
+                baseRequestBindingHash: baseBindings.requestBindingHash,
+                nonce: observation.nonce,
+                permitDeadline,
+              }),
+              previousRequestBindingHash: parsed.previousRequestBindingHash,
+              permitTransactionHash: null,
+              transferTransactionHash: null,
+              transferBlockNumber: null,
+            }, 200);
+          }
+        }
+        if (parsed.action === "prepare" || parsed.action === "resume") {
           if (existing) {
             const binding = deriveMainTokenMigrationGaslessBindingV1({
               baseRequestBindingHash: baseBindings.requestBindingHash,
@@ -195,23 +269,60 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
             });
             if (binding !== existing.intent.requestBindingHash ||
               existing.intent.amountRaw !== parsed.amountRaw.toString()) {
+              if (parsed.action === "resume" &&
+                parsed.previousRequestBindingHash === existing.intent.requestBindingHash &&
+                existing.intent.amountRaw === parsed.amountRaw.toString()) {
+                throw new MainTokenMigrationGaslessErrorV1(409, "gasless_request_not_found");
+              }
               throw new MainTokenMigrationGaslessErrorV1(
                 409,
                 "idempotency_conflict",
               );
             }
+            if (parsed.previousRequestBindingHash &&
+              existing.previousRequestBindingHash !== parsed.previousRequestBindingHash) {
+              throw new MainTokenMigrationGaslessErrorV1(409, "idempotency_conflict");
+            }
             if (parsed.action === "resume") {
               const allowSend = windowOpen(input.configuration, now());
               if (allowSend) await input.sender.assertReady();
-              return await progressTransfer({
-                chain: input.chain,
-                configuration: input.configuration,
-                now: now(),
-                record: existing,
-                sender: input.sender,
-                store: input.store,
-                allowSend,
-              });
+              if (allowSend && !existing.transferTransactionHash &&
+                BigInt(existing.intent.permitDeadline) <
+                  BigInt(Math.floor(now().getTime() / 1_000))) {
+                try {
+                  await assertMainTokenMigrationGaslessRecoveryEligibleV1({
+                    ...input, record: existing, now: now(),
+                  });
+                  return recoveryResponse(existing);
+                } catch (error) {
+                  if (!(error instanceof MainTokenMigrationGaslessErrorV1) ||
+                    !["recovery_not_available", "recovery_wait_finality"]
+                      .includes(error.code)) throw error;
+                }
+              }
+              try {
+                return await progressTransfer({
+                  chain: input.chain,
+                  configuration: input.configuration,
+                  now: now(),
+                  record: existing,
+                  sender: input.sender,
+                  store: input.store,
+                  allowSend,
+                });
+              } catch (error) {
+                if (!allowSend || !(error instanceof MainTokenMigrationGaslessErrorV1) ||
+                  !["relay_needs_attention", "permit_expired", "permit_reverted"]
+                    .includes(error.code)) throw error;
+                try {
+                  await assertMainTokenMigrationGaslessRecoveryEligibleV1({ ...input, record: existing, now: now() });
+                } catch (recoveryError) {
+                  if (recoveryError instanceof MainTokenMigrationGaslessErrorV1 &&
+                    recoveryError.code === "recovery_not_available") throw error;
+                  throw recoveryError;
+                }
+                return recoveryResponse(existing);
+              }
             }
             return prepareResponse(existing.intent);
           }
@@ -225,11 +336,7 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
             walletAddress: parsed.walletAddress,
             amountRaw: parsed.amountRaw,
           });
-          const permitDeadline = BigInt(Math.min(
-            Math.floor(now().getTime() / 1_000) + PERMIT_VALIDITY_SECONDS,
-            input.configuration.deadlineTimestampExclusive -
-              DEADLINE_SAFETY_SECONDS,
-          ));
+          const permitDeadline = newPermitDeadline(input.configuration, now());
           const binding = deriveMainTokenMigrationGaslessBindingV1({
             baseRequestBindingHash: baseBindings.requestBindingHash,
             nonce: observation.nonce,
@@ -250,6 +357,9 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
           }, 200);
         }
 
+        if (parsed.action !== "submit" && parsed.action !== "submit_recovery") {
+          throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
+        }
         const expectedBinding = deriveMainTokenMigrationGaslessBindingV1({
           baseRequestBindingHash: baseBindings.requestBindingHash,
           nonce: parsed.nonce,
@@ -276,7 +386,7 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
         }
 
         let record = existing;
-        if (!record) {
+        if (!record || recoveryProof) {
           // Only a new durable reservation consumes the new-transfer budget.
           // Identical signed retries still pass the bounded progress admission,
           // signature verification and immutable binding checks above/below.
@@ -322,7 +432,8 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
             schema: "programmable-main-token-migration-gasless-intent/v1",
             releaseId: input.configuration.releaseId,
             walletAddress: parsed.walletAddress,
-            rootWalletAddress: observation.rootWalletAddress,
+            rootWalletAddress: recoveryProof && existing
+              ? existing.intent.rootWalletAddress : observation.rootWalletAddress,
             sponsorAddress: input.configuration.sponsorAddress,
             amountRaw: parsed.amountRaw.toString(),
             nonce: parsed.nonce.toString(),
@@ -348,11 +459,19 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
           });
           // An unavailable sponsor must not consume the wallet's durable slot.
           await input.sender.assertReady();
-          record = (await input.store.reserve({
-            lookup,
-            idempotencyBindingHash: baseBindings.idempotencyBindingHash,
-            intent,
-          })).record;
+          record = recoveryProof && parsed.previousRequestBindingHash
+            ? (await input.store.recover({
+                lookup,
+                idempotencyBindingHash: baseBindings.idempotencyBindingHash,
+                previousRequestBindingHash: parsed.previousRequestBindingHash,
+                recoveryProof,
+                intent,
+              })).record
+            : (await input.store.reserve({
+                lookup,
+                idempotencyBindingHash: baseBindings.idempotencyBindingHash,
+                intent,
+              })).record;
         } else if (record.intent.requestBindingHash !== expectedBinding ||
           record.intent.amountRaw !== parsed.amountRaw.toString() ||
           record.intent.nonce !== parsed.nonce.toString() ||
@@ -374,6 +493,51 @@ export function createMainTokenMigrationGaslessTransferV1(input: Readonly<{
       }
     },
   });
+}
+
+/** Read-only eligibility proof. It never reserves, signs or broadcasts. */
+export async function assertMainTokenMigrationGaslessRecoveryEligibleV1(input: Readonly<{
+  configuration: MainTokenMigrationGasSponsorConfigurationV1;
+  record: MainTokenMigrationGaslessRecordV1;
+  chain: ReturnType<typeof createMainTokenMigrationGaslessChainV1>;
+  sender: ReturnType<typeof createMainTokenMigrationGaslessSenderV1>;
+  store: MainTokenMigrationGaslessStoreV1;
+  now: Date;
+}>) {
+  assertWindowOpen(input.configuration, input.now);
+  const { record } = input;
+  if (record.intent.releaseId !== input.configuration.releaseId ||
+    record.intent.sponsorAddress.toLowerCase() !==
+      input.configuration.sponsorAddress.toLowerCase() ||
+    record.transferTransactionHash || (record.recoveryAttempt ?? 0) >= 2) {
+    throw new MainTokenMigrationGaslessErrorV1(409, "recovery_not_available");
+  }
+  await assertCurrentAttempt(input.store, record);
+  const [permit, transfer] = await Promise.all([
+    input.sender.lookup("permit", record.intent),
+    input.sender.lookup("transfer", record.intent),
+  ]);
+  // Even a queued, failed or replaced transferFrom could consume a future
+  // allowance. Only an authoritative empty lookup is eligible for recovery.
+  if (transfer !== null || permit?.status === "confirmed" || permit?.status === "finalized") {
+    throw new MainTokenMigrationGaslessErrorV1(409, "recovery_not_available");
+  }
+  const proof = await input.chain.assertRecoverable(record, permit?.transactionHash);
+  await assertCurrentAttempt(input.store, record);
+  return proof;
+}
+
+async function assertCurrentAttempt(
+  store: MainTokenMigrationGaslessStoreV1,
+  record: MainTokenMigrationGaslessRecordV1,
+) {
+  const current = await store.get({
+    releaseId: record.intent.releaseId,
+    walletAddress: record.intent.walletAddress,
+  });
+  if (!current || current.intent.requestBindingHash !== record.intent.requestBindingHash) {
+    throw new MainTokenMigrationGaslessErrorV1(409, "idempotency_conflict");
+  }
 }
 
 async function progressTransfer(input: Readonly<{
@@ -399,6 +563,7 @@ async function progressTransfer(input: Readonly<{
       }
       assertProviderRetryWindow(record.intent, input.now);
     }
+    await assertCurrentAttempt(input.store, record);
     const hash = recoveredHash ?? await input.sender.send("permit", record.intent);
     record = await input.store.complete({
       lookup: {
@@ -434,6 +599,7 @@ async function progressTransfer(input: Readonly<{
       // be reconciled by its receipt, not rejected for already using it.
       await input.chain.assertPermitEffect(record);
     }
+    await assertCurrentAttempt(input.store, record);
     const hash = recoveredHash ?? await input.sender.send("transfer", record.intent);
     record = await input.store.complete({
       lookup: {
@@ -510,6 +676,101 @@ export function createMainTokenMigrationGaslessChainV1(
     }),
   ];
   return Object.freeze({
+    async assertRecoverable(
+      record: MainTokenMigrationGaslessRecordV1,
+      providerPermitHash?: Hex | null,
+    ) {
+      if (record.transferTransactionHash) {
+        throw new MainTokenMigrationGaslessErrorV1(409, "recovery_not_available");
+      }
+      try {
+        const finalizedHeads = await Promise.all(clients.map((client) =>
+          client.getBlock({ blockTag: "finalized" })));
+        if (finalizedHeads.some((block) => block.number === null || !block.hash)) {
+          throw new MainTokenMigrationGaslessErrorV1(503, "rpc_quorum_unavailable");
+        }
+        const leftFinalized = finalizedHeads[0]!.number!;
+        const rightFinalized = finalizedHeads[1]!.number!;
+        const finalizedBlockNumber = leftFinalized < rightFinalized
+          ? leftFinalized : rightFinalized;
+        const latestHeads = await Promise.all(clients.map((client) =>
+          client.getBlockNumber()));
+        const latestBlockNumber = latestHeads[0] < latestHeads[1]
+          ? latestHeads[0] : latestHeads[1];
+        if (latestBlockNumber < finalizedBlockNumber) {
+          throw new MainTokenMigrationGaslessErrorV1(503, "rpc_quorum_unavailable");
+        }
+        const readState = async (client: PublicClient, blockNumber: bigint) => {
+          const [chainId, block, code, domain, nonce, allowance] = await Promise.all([
+            client.getChainId(),
+            client.getBlock({ blockNumber }),
+            client.getCode({ address: MAIN_TOKEN_ADDRESS, blockNumber }),
+            client.readContract({ address: MAIN_TOKEN_ADDRESS, abi: TOKEN_ABI,
+              functionName: "DOMAIN_SEPARATOR", blockNumber }),
+            client.readContract({ address: MAIN_TOKEN_ADDRESS, abi: TOKEN_ABI,
+              functionName: "nonces", args: [record.intent.walletAddress], blockNumber }),
+            client.readContract({ address: MAIN_TOKEN_ADDRESS, abi: TOKEN_ABI,
+              functionName: "allowance",
+              args: [record.intent.walletAddress, record.intent.sponsorAddress], blockNumber }),
+          ]);
+          return { chainId, block, code, domain, nonce, allowance };
+        };
+        const [finalized, latest] = await Promise.all([
+          Promise.all(clients.map((client) => readState(client, finalizedBlockNumber))),
+          Promise.all(clients.map((client) => readState(client, latestBlockNumber))),
+        ]);
+        for (const [states, number] of [
+          [finalized, finalizedBlockNumber], [latest, latestBlockNumber],
+        ] as const) {
+          const [left, right] = states;
+          if (!left || !right || left.chainId !== MAIN_TOKEN_MIGRATION_CHAIN_ID ||
+            right.chainId !== MAIN_TOKEN_MIGRATION_CHAIN_ID ||
+            left.block.number !== number || right.block.number !== number ||
+            !left.block.hash || left.block.hash !== right.block.hash ||
+            left.block.timestamp !== right.block.timestamp ||
+            !left.code || left.code !== right.code ||
+            keccak256(left.code) !== MAIN_TOKEN_RUNTIME_CODE_KECCAK256 ||
+            left.domain !== right.domain ||
+            left.domain.toLowerCase() !== MAIN_TOKEN_PERMIT_DOMAIN_SEPARATOR.toLowerCase() ||
+            left.nonce !== right.nonce || left.allowance !== right.allowance) {
+            throw new MainTokenMigrationGaslessErrorV1(503, "rpc_quorum_unavailable");
+          }
+          if (left.nonce !== BigInt(record.intent.nonce) || left.allowance !== 0n) {
+            throw new MainTokenMigrationGaslessErrorV1(409, "recovery_not_available");
+          }
+        }
+        const finalizedState = finalized[0]!;
+        if (finalizedState.block.timestamp <= BigInt(record.intent.permitDeadline)) {
+          throw new MainTokenMigrationGaslessErrorV1(409, "recovery_wait_finality");
+        }
+        const hashes = [...new Set([
+          record.permitTransactionHash, providerPermitHash,
+        ].filter((hash): hash is Hex => Boolean(hash)))];
+        await Promise.all(clients.flatMap((client) => hashes.map(async (hash) => {
+          try {
+            const receipt = await client.getTransactionReceipt({ hash });
+            if (receipt.transactionHash !== hash || receipt.status === "success") {
+              throw new MainTokenMigrationGaslessErrorV1(409, "recovery_not_available");
+            }
+          } catch (error) {
+            // An actual eth_getTransactionReceipt null is absence. Transport
+            // timeouts, malformed receipts and all other ambiguity fail closed.
+            if (!(error instanceof TransactionReceiptNotFoundError)) throw error;
+          }
+        })));
+        return Object.freeze({
+          finalizedBlockNumber: finalizedBlockNumber.toString(),
+          finalizedBlockHash: finalizedState.block.hash!,
+          finalizedBlockTimestamp: finalizedState.block.timestamp.toString(),
+          nonce: finalizedState.nonce.toString(),
+          allowanceRaw: "0" as const,
+        });
+      } catch (error) {
+        if (error instanceof MainTokenMigrationGaslessErrorV1) throw error;
+        throw new MainTokenMigrationGaslessErrorV1(503, "rpc_quorum_unavailable");
+      }
+    },
+
     async prepare(input: Readonly<{
       configuration: MainTokenMigrationGasSponsorConfigurationV1;
       walletAddress: Address;
@@ -822,18 +1083,23 @@ function assertSenderIntent(
   }
 }
 
-function parseRequest(input: unknown): PrepareRequest | SubmitRequest {
+function parseRequest(input: unknown): PrepareRequest | RecoveryPrepareRequest | SubmitRequest {
   if (!input || Array.isArray(input) || typeof input !== "object") {
     throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
   }
   const value = input as Record<string, unknown>;
-  const common = value.action === "prepare" || value.action === "resume"
+  const recovery = value.action === "prepare_recovery" || value.action === "submit_recovery";
+  const recoveryResume = value.action === "resume" &&
+    Object.hasOwn(value, "previousRequestBindingHash");
+  const common = value.action === "prepare" || value.action === "resume" ||
+    value.action === "prepare_recovery"
     ? ["action", "amountRaw", "walletAddress"]
     : ["action", "amountRaw", "nonce", "permitDeadline", "permitSignature",
       "requestBindingHash", "walletAddress"];
+  if (recovery || recoveryResume) common.push("previousRequestBindingHash");
   if (Object.keys(value).sort().join("\0") !== common.sort().join("\0") ||
     (value.action !== "prepare" && value.action !== "resume" &&
-      value.action !== "submit") ||
+      value.action !== "submit" && !recovery) ||
     typeof value.walletAddress !== "string" ||
     !isAddress(value.walletAddress, { strict: true }) ||
     typeof value.amountRaw !== "string" || !DECIMAL.test(value.amountRaw)) {
@@ -844,8 +1110,22 @@ function parseRequest(input: unknown): PrepareRequest | SubmitRequest {
     throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
   }
   const walletAddress = getAddress(value.walletAddress);
+  if ((recovery || recoveryResume) && (typeof value.previousRequestBindingHash !== "string" ||
+    !DIGEST.test(value.previousRequestBindingHash))) {
+    throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
+  }
+  if (value.action === "prepare_recovery") {
+    return Object.freeze({
+      action: value.action, walletAddress, amountRaw,
+      previousRequestBindingHash: value.previousRequestBindingHash as `sha256:${string}`,
+    });
+  }
   if (value.action === "prepare" || value.action === "resume") {
-    return Object.freeze({ action: value.action, walletAddress, amountRaw });
+    return Object.freeze({ action: value.action, walletAddress, amountRaw,
+      ...(recoveryResume ? {
+        previousRequestBindingHash: value.previousRequestBindingHash as `sha256:${string}`,
+      } : {}),
+    });
   }
   if (typeof value.nonce !== "string" || !ZERO_DECIMAL.test(value.nonce) ||
     typeof value.permitDeadline !== "string" || !DECIMAL.test(value.permitDeadline) ||
@@ -856,17 +1136,38 @@ function parseRequest(input: unknown): PrepareRequest | SubmitRequest {
     throw new MainTokenMigrationGaslessErrorV1(400, "request_invalid");
   }
   return Object.freeze({
-    action: "submit",
+    action: value.action as "submit" | "submit_recovery",
     walletAddress,
     amountRaw,
     nonce: BigInt(value.nonce),
     permitDeadline: BigInt(value.permitDeadline),
     permitSignature: value.permitSignature.toLowerCase() as Hex,
     requestBindingHash: value.requestBindingHash as `sha256:${string}`,
+    ...(recovery ? {
+      previousRequestBindingHash: value.previousRequestBindingHash as `sha256:${string}`,
+    } : {}),
   });
 }
 
-function prepareResponse(intent: MainTokenMigrationGaslessIntentV1) {
+function newPermitDeadline(
+  configuration: MainTokenMigrationGasSponsorConfigurationV1,
+  now: Date,
+) {
+  const nowSeconds = Math.floor(now.getTime() / 1_000);
+  const deadline = Math.min(
+    nowSeconds + PERMIT_VALIDITY_SECONDS,
+    configuration.deadlineTimestampExclusive - DEADLINE_SAFETY_SECONDS,
+  );
+  if (deadline <= nowSeconds + 30) {
+    throw new MainTokenMigrationGaslessErrorV1(409, "recovery_window_closed");
+  }
+  return BigInt(deadline);
+}
+
+function prepareResponse(
+  intent: MainTokenMigrationGaslessIntentV1,
+  previousRequestBindingHash?: `sha256:${string}`,
+) {
   return json({
     schema: "programmable-main-token-migration-gasless-transfer/v1",
     status: "signature_required",
@@ -877,6 +1178,24 @@ function prepareResponse(intent: MainTokenMigrationGaslessIntentV1) {
     permitDeadline: intent.permitDeadline,
     requestBindingHash: intent.requestBindingHash,
     permitTransactionHash: null,
+    transferTransactionHash: null,
+    transferBlockNumber: null,
+    ...(previousRequestBindingHash ? { previousRequestBindingHash } : {}),
+  }, 200);
+}
+
+function recoveryResponse(record: MainTokenMigrationGaslessRecordV1) {
+  return json({
+    schema: "programmable-main-token-migration-gasless-transfer/v1",
+    status: "recovery_available",
+    walletAddress: record.intent.walletAddress,
+    amountRaw: record.intent.amountRaw,
+    sponsorAddress: record.intent.sponsorAddress,
+    nonce: record.intent.nonce,
+    permitDeadline: record.intent.permitDeadline,
+    requestBindingHash: record.intent.requestBindingHash,
+    previousRequestBindingHash: record.intent.requestBindingHash,
+    permitTransactionHash: record.permitTransactionHash,
     transferTransactionHash: null,
     transferBlockNumber: null,
   }, 200);
@@ -940,6 +1259,14 @@ function errorResponse(error: unknown) {
   }
   const message = failure.status === 401 || failure.status === 403
     ? "Reconnect this wallet and try again."
+    : failure.code === "recovery_wait_finality"
+      ? "The previous approval must expire on finalized Ethereum blocks before a new signature is safe. Check again shortly."
+    : failure.code === "recovery_not_available"
+      ? "This saved transfer cannot safely restart. Contact migration support with this request ID."
+    : failure.code === "recovery_key_required"
+      ? "A new transfer needs its own request key. Refresh the page and review the new transfer again."
+    : failure.code === "recovery_window_closed"
+      ? "There is not enough time left to safely request a new approval."
     : failure.code === "relay_needs_attention" || failure.code === "permit_expired"
       ? "This gasless request needs migration support. Do not send V4 again; contact support with this request ID."
     : failure.code === "gasless_request_not_found"

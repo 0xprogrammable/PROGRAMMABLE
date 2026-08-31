@@ -27,6 +27,7 @@ const DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
 const POSITIVE_DECIMAL = /^[1-9][0-9]*$/u;
 const SAFE_RELEASE_ID = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
 const SAFE_REFERENCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
+export const MAIN_TOKEN_MIGRATION_GASLESS_MAX_RECOVERIES_V1 = 2;
 
 type Row = Readonly<{
   credential_id: string;
@@ -66,6 +67,8 @@ export type MainTokenMigrationGaslessRecordV1 = Readonly<{
   intent: MainTokenMigrationGaslessIntentV1;
   permitTransactionHash: Hex | null;
   transferTransactionHash: Hex | null;
+  recoveryAttempt?: number;
+  previousRequestBindingHash?: `sha256:${string}`;
 }>;
 
 type CompletionKind = "permit" | "transfer";
@@ -90,11 +93,34 @@ type RootGuardV1 = Readonly<{
   requestBindingHash: `sha256:${string}`;
 }>;
 
+type RecoveryEdgeV1 = Readonly<{
+  schema: "programmable-main-token-migration-gasless-recovery/v1";
+  recoveryAttempt: number;
+  previousHolderCredentialId: string;
+  holderCredentialId: string;
+  previousRequestBindingHash: `sha256:${string}`;
+  requestBindingHash: `sha256:${string}`;
+  idempotencyBindingHash: `sha256:${string}`;
+  recoveryProof: MainTokenMigrationGaslessRecoveryProofV1;
+}>;
+
+export type MainTokenMigrationGaslessRecoveryProofV1 = Readonly<{
+  finalizedBlockNumber: string;
+  finalizedBlockHash: Hex;
+  finalizedBlockTimestamp: string;
+  nonce: string;
+  allowanceRaw: "0";
+}>;
+
 type Lookup = Readonly<{ releaseId: string; walletAddress: Address }>;
 type ReserveInput = Readonly<{
   lookup: Lookup;
   idempotencyBindingHash: `sha256:${string}`;
   intent: MainTokenMigrationGaslessIntentV1;
+}>;
+type RecoverInput = ReserveInput & Readonly<{
+  previousRequestBindingHash: `sha256:${string}`;
+  recoveryProof: MainTokenMigrationGaslessRecoveryProofV1;
 }>;
 type CompleteInput = Readonly<{
   lookup: Lookup;
@@ -110,6 +136,10 @@ export interface MainTokenMigrationGaslessStoreV1 {
     idempotencyBindingHash: `sha256:${string}`;
     intent: MainTokenMigrationGaslessIntentV1;
   }>): Promise<Readonly<{
+    kind: "created" | "existing";
+    record: MainTokenMigrationGaslessRecordV1;
+  }>>;
+  recover(input: RecoverInput): Promise<Readonly<{
     kind: "created" | "existing";
     record: MainTokenMigrationGaslessRecordV1;
   }>>;
@@ -166,8 +196,7 @@ export function createMainTokenMigrationGaslessPostgresStoreV1(
           FROM programmable_website_projection_v1.credential_uses
          WHERE credential_id = ANY($1::text[])
          ORDER BY credential_id
-      `, [[holderId(input), completionId(input, "permit"),
-        completionId(input, "transfer")]]);
+      `, [recordIds(input)]);
       return recordFromRows(result.rows, input);
     },
 
@@ -183,22 +212,21 @@ export function createMainTokenMigrationGaslessPostgresStoreV1(
         const alias = aliasId(input.lookup.releaseId, input.idempotencyBindingHash);
         const root = rootId(input.lookup.releaseId, intent.rootWalletAddress);
         const existing = await selectRows(client, [
-          holder,
+          ...recordIds(input.lookup),
           alias,
           root,
-          completionId(input.lookup, "permit"),
-          completionId(input.lookup, "transfer"),
         ]);
         const existingRecord = recordFromRows(existing, input.lookup);
         const aliasRow = existing.find((row) => row.credential_id === alias);
         const rootRow = existing.find((row) => row.credential_id === root);
         if (existingRecord) {
-          if (existingRecord.intent.requestBindingHash !==
+          if (existingRecord.recoveryAttempt || existingRecord.intent.requestBindingHash !==
             intent.requestBindingHash || !aliasRow || !rootRow) throw conflict();
           const parsedAlias = parseAlias(aliasRow);
           const parsedRoot = parseRootGuard(rootRow);
           if (parsedAlias.holderCredentialId !== holder ||
-            parsedRoot.holderCredentialId !== holder) throw conflict();
+            parsedAlias.requestBindingHash !== intent.requestBindingHash ||
+            !rootGuardMatches(parsedRoot, intent, holder)) throw conflict();
           return Object.freeze({
             kind: "existing" as const,
             record: existingRecord,
@@ -232,6 +260,82 @@ export function createMainTokenMigrationGaslessPostgresStoreV1(
       });
     },
 
+    async recover(input: RecoverInput) {
+      validateLookup(input.lookup);
+      if (!DIGEST.test(input.idempotencyBindingHash) ||
+        !DIGEST.test(input.previousRequestBindingHash)) {
+        throw new TypeError("Gasless migration recovery binding is invalid");
+      }
+      const intent = validateIntent(input.intent, input.lookup);
+      await pool.assertProductionReadiness();
+      return transaction(pool, input.lookup.releaseId, async (client) => {
+        const alias = aliasId(input.lookup.releaseId, input.idempotencyBindingHash);
+        const root = rootId(input.lookup.releaseId, intent.rootWalletAddress);
+        const rows = await selectRows(client, [...recordIds(input.lookup), alias, root]);
+        const current = recordFromRows(rows, input.lookup);
+        if (!current) throw conflict();
+        const base = rows.find((row) => row.credential_id === holderId(input.lookup));
+        const rootRow = rows.find((row) => row.credential_id === root);
+        if (!base || !rootRow ||
+          !rootGuardMatches(parseRootGuard(rootRow), parseIntent(base), holderId(input.lookup))) {
+          throw unavailable();
+        }
+        const aliasRow = rows.find((row) => row.credential_id === alias);
+        const attempt = current.recoveryAttempt ?? 0;
+        if (current.intent.requestBindingHash === intent.requestBindingHash) {
+          const edgeRow = rows.find((row) => row.credential_id === recoveryId(input.lookup, attempt));
+          if (!attempt || !edgeRow || !aliasRow ||
+            current.previousRequestBindingHash !== input.previousRequestBindingHash) throw conflict();
+          const edge = parseRecoveryEdge(edgeRow);
+          const parsedAlias = parseAlias(aliasRow);
+          if (edge.idempotencyBindingHash !== input.idempotencyBindingHash ||
+            parsedAlias.holderCredentialId !== holderId(input.lookup, attempt) ||
+            parsedAlias.requestBindingHash !== intent.requestBindingHash ||
+            canonicalizeJson(current.intent) !== canonicalizeJson(intent)) throw conflict();
+          return Object.freeze({ kind: "existing" as const, record: current });
+        }
+        if (aliasRow || current.intent.requestBindingHash !== input.previousRequestBindingHash ||
+          current.transferTransactionHash || attempt >= MAIN_TOKEN_MIGRATION_GASLESS_MAX_RECOVERIES_V1) {
+          throw conflict();
+        }
+        assertRecoveryIntent(current.intent, intent);
+        const recoveryProof = validateRecoveryProof(input.recoveryProof, current.intent, intent);
+        const reserved = await readSharedReservedBudget(client, input.lookup.releaseId);
+        if (reserved + BigInt(intent.reservedTotalWei) > BigInt(intent.totalBudgetWei)) {
+          throw budgetExhausted();
+        }
+        const nextAttempt = attempt + 1;
+        const holder = holderId(input.lookup, nextAttempt);
+        const edge: RecoveryEdgeV1 = {
+          schema: "programmable-main-token-migration-gasless-recovery/v1",
+          recoveryAttempt: nextAttempt,
+          previousHolderCredentialId: holderId(input.lookup, attempt),
+          holderCredentialId: holder,
+          previousRequestBindingHash: current.intent.requestBindingHash,
+          requestBindingHash: intent.requestBindingHash,
+          idempotencyBindingHash: input.idempotencyBindingHash,
+          recoveryProof,
+        };
+        await insertRow(client, holder, intent.requestBindingHash, intent);
+        await insertRow(client, recoveryId(input.lookup, nextAttempt), intent.requestBindingHash, edge);
+        await insertRow(client, alias, intent.requestBindingHash, {
+          schema: "programmable-main-token-migration-gasless-idempotency/v1",
+          holderCredentialId: holder,
+          requestBindingHash: intent.requestBindingHash,
+        } satisfies AliasV1);
+        return Object.freeze({
+          kind: "created" as const,
+          record: Object.freeze({
+            intent,
+            permitTransactionHash: null,
+            transferTransactionHash: null,
+            recoveryAttempt: nextAttempt,
+            previousRequestBindingHash: current.intent.requestBindingHash,
+          }),
+        });
+      });
+    },
+
     async complete(input: CompleteInput) {
       validateLookup(input.lookup);
       if ((input.kind !== "permit" && input.kind !== "transfer") ||
@@ -241,11 +345,7 @@ export function createMainTokenMigrationGaslessPostgresStoreV1(
       }
       await pool.assertProductionReadiness();
       return transaction(pool, input.lookup.releaseId, async (client) => {
-        const rows = await selectRows(client, [
-          holderId(input.lookup),
-          completionId(input.lookup, "permit"),
-          completionId(input.lookup, "transfer"),
-        ]);
+        const rows = await selectRows(client, recordIds(input.lookup));
         const record = recordFromRows(rows, input.lookup);
         if (!record) throw unavailable();
         const expectedReference = input.kind === "permit"
@@ -270,12 +370,12 @@ export function createMainTokenMigrationGaslessPostgresStoreV1(
         };
         await insertRow(
           client,
-          completionId(input.lookup, input.kind),
+          completionId(input.lookup, input.kind, record.recoveryAttempt),
           record.intent.requestBindingHash,
           completion,
         );
         return Object.freeze({
-          intent: record.intent,
+          ...record,
           permitTransactionHash: input.kind === "permit"
             ? input.transactionHash
             : record.permitTransactionHash,
@@ -366,20 +466,49 @@ async function insertRow(
 }
 
 function recordFromRows(rows: readonly Row[], lookup: Lookup) {
-  const holder = rows.find((row) => row.credential_id === holderId(lookup));
-  if (!holder) return null;
-  const intent = parseIntent(holder);
-  if (intent.releaseId !== lookup.releaseId ||
-    intent.walletAddress.toLowerCase() !== lookup.walletAddress.toLowerCase() ||
-    holder.request_binding_hash !== intent.requestBindingHash) throw unavailable();
-  const permit = completionFromRows(rows, lookup, "permit", intent);
-  const transfer = completionFromRows(rows, lookup, "transfer", intent);
-  if (transfer && !permit) throw unavailable();
-  return Object.freeze({
-    intent,
-    permitTransactionHash: permit?.transactionHash ?? null,
-    transferTransactionHash: transfer?.transactionHash ?? null,
-  });
+  let record: MainTokenMigrationGaslessRecordV1 | null = null;
+  let chainEnded = false;
+  for (let attempt = 0; attempt <= MAIN_TOKEN_MIGRATION_GASLESS_MAX_RECOVERIES_V1; attempt++) {
+    const holder = rows.find((row) => row.credential_id === holderId(lookup, attempt));
+    const edgeRow = attempt
+      ? rows.find((row) => row.credential_id === recoveryId(lookup, attempt))
+      : undefined;
+    const hasCompletion = ["permit", "transfer"].some((kind) => rows.some((row) =>
+      row.credential_id === completionId(lookup, kind as CompletionKind, attempt)));
+    if (!holder) {
+      if (edgeRow || hasCompletion) throw unavailable();
+      chainEnded = true;
+      continue;
+    }
+    if (chainEnded) throw unavailable();
+    const intent = parseIntent(holder);
+    if (intent.releaseId !== lookup.releaseId ||
+      intent.walletAddress.toLowerCase() !== lookup.walletAddress.toLowerCase() ||
+      holder.request_binding_hash !== intent.requestBindingHash) throw unavailable();
+    let previousRequestBindingHash: `sha256:${string}` | undefined;
+    if (attempt) {
+      if (!record || !edgeRow || record.transferTransactionHash) throw unavailable();
+      const edge = parseRecoveryEdge(edgeRow);
+      if (edge.recoveryAttempt !== attempt ||
+        edge.holderCredentialId !== holderId(lookup, attempt) ||
+        edge.previousHolderCredentialId !== holderId(lookup, attempt - 1) ||
+        edge.previousRequestBindingHash !== record.intent.requestBindingHash ||
+        edge.requestBindingHash !== intent.requestBindingHash) throw unavailable();
+      assertRecoveryIntent(record.intent, intent);
+      validateRecoveryProof(edge.recoveryProof, record.intent, intent);
+      previousRequestBindingHash = record.intent.requestBindingHash;
+    }
+    const permit = completionFromRows(rows, lookup, "permit", intent, attempt);
+    const transfer = completionFromRows(rows, lookup, "transfer", intent, attempt);
+    if (transfer && !permit) throw unavailable();
+    record = Object.freeze({
+      intent,
+      permitTransactionHash: permit?.transactionHash ?? null,
+      transferTransactionHash: transfer?.transactionHash ?? null,
+      ...(attempt ? { recoveryAttempt: attempt, previousRequestBindingHash } : {}),
+    });
+  }
+  return record;
 }
 
 function completionFromRows(
@@ -387,9 +516,10 @@ function completionFromRows(
   lookup: Lookup,
   kind: CompletionKind,
   intent: MainTokenMigrationGaslessIntentV1,
+  attempt = 0,
 ) {
   const row = rows.find((candidate) =>
-    candidate.credential_id === completionId(lookup, kind));
+    candidate.credential_id === completionId(lookup, kind, attempt));
   if (!row) return null;
   const completion = parseCompletion(row);
   const reference = kind === "permit"
@@ -398,6 +528,63 @@ function completionFromRows(
   if (completion.kind !== kind || completion.providerReferenceId !== reference ||
     row.request_binding_hash !== intent.requestBindingHash) throw unavailable();
   return completion;
+}
+
+function assertRecoveryIntent(
+  previous: MainTokenMigrationGaslessIntentV1,
+  next: MainTokenMigrationGaslessIntentV1,
+) {
+  for (const key of ["releaseId", "walletAddress", "rootWalletAddress", "sponsorAddress",
+    "amountRaw", "nonce", "totalBudgetWei"] as const) {
+    if (previous[key] !== next[key]) throw conflict();
+  }
+  const oldReferences = new Set([
+    previous.providerPermitIdempotencyKey, previous.providerPermitReferenceId,
+    previous.providerTransferIdempotencyKey, previous.providerTransferReferenceId,
+  ]);
+  const newReferences = [next.providerPermitIdempotencyKey, next.providerPermitReferenceId,
+    next.providerTransferIdempotencyKey, next.providerTransferReferenceId];
+  if (BigInt(next.permitDeadline) <= BigInt(previous.permitDeadline) ||
+    next.requestBindingHash === previous.requestBindingHash ||
+    next.permitSignature === previous.permitSignature ||
+    newReferences.some((reference) => oldReferences.has(reference)) ||
+    next.providerPermitIdempotencyKey === next.providerTransferIdempotencyKey ||
+    next.providerPermitReferenceId === next.providerTransferReferenceId ||
+    Date.parse(next.reservedAt) < Date.parse(previous.reservedAt)) throw conflict();
+}
+
+function validateRecoveryProof(
+  input: MainTokenMigrationGaslessRecoveryProofV1,
+  previous: MainTokenMigrationGaslessIntentV1,
+  next: MainTokenMigrationGaslessIntentV1,
+): MainTokenMigrationGaslessRecoveryProofV1 {
+  const value = object(parseCanonical(canonicalizeJson(input)));
+  exactKeys(value, ["finalizedBlockNumber", "finalizedBlockHash", "finalizedBlockTimestamp",
+    "nonce", "allowanceRaw"]);
+  if (!positiveDecimal(value.finalizedBlockNumber) ||
+    typeof value.finalizedBlockHash !== "string" || !HASH.test(value.finalizedBlockHash) ||
+    !positiveDecimal(value.finalizedBlockTimestamp) || !decimal(value.nonce) ||
+    value.allowanceRaw !== "0" || value.nonce !== previous.nonce ||
+    BigInt(value.finalizedBlockTimestamp) <= BigInt(previous.permitDeadline) ||
+    BigInt(value.finalizedBlockTimestamp) >= BigInt(next.permitDeadline)) throw conflict();
+  return Object.freeze({
+    finalizedBlockNumber: value.finalizedBlockNumber,
+    finalizedBlockHash: value.finalizedBlockHash as Hex,
+    finalizedBlockTimestamp: value.finalizedBlockTimestamp,
+    nonce: value.nonce,
+    allowanceRaw: "0",
+  });
+}
+
+function rootGuardMatches(
+  guard: RootGuardV1,
+  intent: MainTokenMigrationGaslessIntentV1,
+  holder: string,
+) {
+  return guard.holderCredentialId === holder &&
+    guard.requestBindingHash === intent.requestBindingHash &&
+    guard.walletAddress === intent.walletAddress &&
+    guard.rootWalletAddress === intent.rootWalletAddress;
 }
 
 function validateIntent(value: MainTokenMigrationGaslessIntentV1, lookup: Lookup) {
@@ -528,6 +715,25 @@ function parseRootGuard(row: Row): RootGuardV1 {
   });
 }
 
+function parseRecoveryEdge(row: Row): RecoveryEdgeV1 {
+  const value = object(parseCanonical(row.canonical_use));
+  exactKeys(value, ["schema", "recoveryAttempt", "previousHolderCredentialId",
+    "holderCredentialId", "previousRequestBindingHash", "requestBindingHash",
+    "idempotencyBindingHash", "recoveryProof"]);
+  if (value.schema !== "programmable-main-token-migration-gasless-recovery/v1" ||
+    typeof value.recoveryAttempt !== "number" || !Number.isInteger(value.recoveryAttempt) ||
+    value.recoveryAttempt < 1 || value.recoveryAttempt > MAIN_TOKEN_MIGRATION_GASLESS_MAX_RECOVERIES_V1 ||
+    typeof value.previousHolderCredentialId !== "string" ||
+    typeof value.holderCredentialId !== "string" ||
+    typeof value.previousRequestBindingHash !== "string" || !DIGEST.test(value.previousRequestBindingHash) ||
+    typeof value.requestBindingHash !== "string" || !DIGEST.test(value.requestBindingHash) ||
+    typeof value.idempotencyBindingHash !== "string" || !DIGEST.test(value.idempotencyBindingHash) ||
+    row.request_binding_hash !== value.requestBindingHash) throw unavailable();
+  // The proof's exact shape and temporal binding are checked against both intents.
+  object(value.recoveryProof);
+  return value as RecoveryEdgeV1;
+}
+
 function parseCanonical(source: string) {
   const value = parseStrictJson(source, { maximumBytes: 24_576, maximumDepth: 8 });
   if (canonicalizeJson(value) !== source) throw unavailable();
@@ -564,12 +770,30 @@ function validateLookup(input: Lookup) {
   }
 }
 
-function holderId(input: Lookup) {
-  return `${PREFIX}:holder:${input.releaseId}:${input.walletAddress.toLowerCase()}`;
+function holderId(input: Lookup, attempt = 0) {
+  return `${PREFIX}:holder:${input.releaseId}:${input.walletAddress.toLowerCase()}${attemptSuffix(attempt)}`;
 }
 
-function completionId(input: Lookup, kind: CompletionKind) {
-  return `${PREFIX}:${kind}:${input.releaseId}:${input.walletAddress.toLowerCase()}`;
+function completionId(input: Lookup, kind: CompletionKind, attempt = 0) {
+  return `${PREFIX}:${kind}:${input.releaseId}:${input.walletAddress.toLowerCase()}${attemptSuffix(attempt)}`;
+}
+
+function recoveryId(input: Lookup, attempt: number) {
+  return `${PREFIX}:recovery:${input.releaseId}:${input.walletAddress.toLowerCase()}:attempt:${attempt}`;
+}
+
+function attemptSuffix(attempt: number) {
+  return attempt ? `:attempt:${attempt}` : "";
+}
+
+function recordIds(input: Lookup) {
+  const ids: string[] = [];
+  for (let attempt = 0; attempt <= MAIN_TOKEN_MIGRATION_GASLESS_MAX_RECOVERIES_V1; attempt++) {
+    ids.push(holderId(input, attempt), completionId(input, "permit", attempt),
+      completionId(input, "transfer", attempt));
+    if (attempt) ids.push(recoveryId(input, attempt));
+  }
+  return ids;
 }
 
 function aliasId(releaseId: string, binding: string) {
