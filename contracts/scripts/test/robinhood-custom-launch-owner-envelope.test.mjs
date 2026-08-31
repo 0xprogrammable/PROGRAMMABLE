@@ -15,10 +15,12 @@ import {
   ROBINHOOD_FOUNDATION_OWNER_ENVELOPE_SCHEMA,
   assertRobinhoodFoundationRpcProviders,
   assertFreshRobinhoodFoundationOwnerEnvelope,
+  conservativeRobinhoodFoundationGasEstimate,
   prepareRobinhoodFoundationOwnerEnvelope,
   reviewedRobinhoodFoundationGasLimit,
   robinhoodFoundationRpcEndpointCommitment,
   robinhoodFoundationRpc,
+  verifyRobinhoodFoundationOwnerWalletActionTimeState,
 } from "../robinhood-custom-launch-owner-envelope-core.mjs";
 import {
   parseRobinhoodFoundationEnvelopeCli,
@@ -402,6 +404,118 @@ test("reviewed gas headroom is exact and fails instead of clamping", () => {
   assert.throws(
     () => reviewedRobinhoodFoundationGasLimit(1n << 64n),
     /exceeds uint64/u,
+  );
+});
+
+test("provider estimator variance records both values and uses the conservative maximum", async () => {
+  const quicknodeEstimate = 7_178_588n;
+  const alchemyEstimate = 7_178_540n;
+  const options = {
+    providers: {
+      quicknode: { estimate: `0x${quicknodeEstimate.toString(16)}` },
+      alchemy: { estimate: `0x${alchemyEstimate.toString(16)}` },
+    },
+  };
+  assert.equal(
+    conservativeRobinhoodFoundationGasEstimate([
+      alchemyEstimate,
+      quicknodeEstimate,
+    ]),
+    quicknodeEstimate,
+  );
+  assert.equal(
+    conservativeRobinhoodFoundationGasEstimate([
+      alchemyEstimate,
+      alchemyEstimate + 717n,
+    ]),
+    alchemyEstimate + 717n,
+  );
+  assert.throws(
+    () =>
+      conservativeRobinhoodFoundationGasEstimate([
+        alchemyEstimate,
+        alchemyEstimate + 718n,
+      ]),
+    /gas estimates exceed the reviewed drift bound/u,
+  );
+  assert.throws(
+    () =>
+      conservativeRobinhoodFoundationGasEstimate([
+        20_000_000n,
+        20_001_001n,
+      ]),
+    /gas estimates exceed the reviewed drift bound/u,
+  );
+  assert.equal(
+    conservativeRobinhoodFoundationGasEstimate([
+      10_000_000n,
+      10_001_000n,
+    ]),
+    10_001_000n,
+  );
+  const { receipt } = await prepareEnvelope({ options });
+  assert.deepEqual(receipt.simulation.gasEstimates, [
+    quicknodeEstimate.toString(),
+    alchemyEstimate.toString(),
+  ]);
+  assert.deepEqual(
+    receipt.simulation.closingGasEstimates,
+    receipt.simulation.gasEstimates,
+  );
+  assert.equal(
+    receipt.simulation.agreedGasEstimate,
+    quicknodeEstimate.toString(),
+  );
+  assert.equal(
+    receipt.transaction.gasLimit,
+    reviewedRobinhoodFoundationGasLimit(quicknodeEstimate).toString(),
+  );
+  assert.equal(receipt.transaction.gasLimit, "7562518");
+
+  const actionTimeMock = mockRpc(options);
+  const actionTime = await verifyRobinhoodFoundationOwnerWalletActionTimeState({
+    receipt,
+    rpcUrls: RPC_URLS,
+    rpcEndpointCommitments: RPC_COMMITMENTS,
+    rpcClient: actionTimeMock.rpcClient,
+    runtimeCodeHash: actionTimeMock.runtimeCodeHash,
+    clock: () => FIXED_TIMESTAMP * 1_000,
+  });
+  assert.equal(actionTime.pendingGasEstimate, quicknodeEstimate.toString());
+  assert.equal(actionTime.closingGasEstimate, quicknodeEstimate.toString());
+
+  const swappedActionTimeMock = mockRpc({
+    providers: {
+      quicknode: { estimate: `0x${alchemyEstimate.toString(16)}` },
+      alchemy: { estimate: `0x${quicknodeEstimate.toString(16)}` },
+    },
+  });
+  await assert.rejects(
+    () =>
+      verifyRobinhoodFoundationOwnerWalletActionTimeState({
+        receipt,
+        rpcUrls: RPC_URLS,
+        rpcEndpointCommitments: RPC_COMMITMENTS,
+        rpcClient: swappedActionTimeMock.rpcClient,
+        runtimeCodeHash: swappedActionTimeMock.runtimeCodeHash,
+        clock: () => FIXED_TIMESTAMP * 1_000,
+      }),
+    /simulation or gas differs from the envelope/u,
+  );
+
+  await assert.rejects(
+    () =>
+      prepareEnvelope({
+        options: {
+          providers: {
+            quicknode: { estimate: "0x6d66aa" },
+            alchemy: {
+              estimate: `0x${(0x6d66aan + 718n).toString(16)}`,
+            },
+          },
+        },
+      }),
+    /gas estimates exceed the reviewed drift bound/u,
   );
 });
 
@@ -826,12 +940,16 @@ test("preflight fails closed on provider, pin, vacancy, nonce, simulation, and g
     [
       "simulation",
       { providers: { alchemy: { callResult: "0x" } } },
-      /pending state, simulation, or gas/u,
+      /pending state or simulation/u,
     ],
     [
-      "estimate",
-      { providers: { alchemy: { estimate: "0x6d66ab" } } },
-      /pending state, simulation, or gas/u,
+      "estimate drift bound",
+      {
+        providers: {
+          alchemy: { estimate: `0x${(0x6d66aan + 718n).toString(16)}` },
+        },
+      },
+      /gas estimates exceed the reviewed drift bound/u,
     ],
     [
       "closing nonce",
@@ -1563,7 +1681,14 @@ test("action-time closing chain, target, simulation, and gas drift fail closed",
 });
 
 test("freshness validation and protected output reject tampering, expiry, and overwrite", async () => {
-  const { receipt } = await prepareEnvelope();
+  const { receipt } = await prepareEnvelope({
+    options: {
+      providers: {
+        quicknode: { estimate: `0x${7_178_588n.toString(16)}` },
+        alchemy: { estimate: `0x${7_178_540n.toString(16)}` },
+      },
+    },
+  });
   assert.equal(
     assertFreshRobinhoodFoundationOwnerEnvelope(
       receipt,
@@ -1611,6 +1736,17 @@ test("freshness validation and protected output reject tampering, expiry, and ov
     ["simulation gas agreement", (candidate) => {
       candidate.simulation.gasEstimates[0] = (
         BigInt(candidate.simulation.agreedGasEstimate) + 1n
+      ).toString();
+    }],
+    ["simulation conservative maximum", (candidate) => {
+      candidate.simulation.agreedGasEstimate =
+        candidate.simulation.gasEstimates[1];
+    }],
+    ["simulation estimate average", (candidate) => {
+      candidate.simulation.agreedGasEstimate = (
+        (BigInt(candidate.simulation.gasEstimates[0]) +
+          BigInt(candidate.simulation.gasEstimates[1])) /
+        2n
       ).toString();
     }],
     ["boolean check", (candidate) => {

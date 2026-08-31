@@ -122,15 +122,17 @@ pending-state, simulation and closing-state inventory. Robinhood produces blocks
 fast enough that authenticated providers can legitimately observe different
 pending parents or fees during one bounded preflight. The preparation guard
 therefore requires two identical state-relevant snapshots (runtime code, target
-vacancy, owner nonce, simulation return and gas estimate) while recording both
-pending observations. The final action-time guard additionally requires a
+vacancy, owner nonce and simulation return) while recording both providers'
+gas estimates. The final action-time guard additionally requires a
 provider-agreed owner balance that remains unchanged through its closing read.
 Fee fields use the highest base fee, gas price and priority fee reported by
 either provider and remain bounded by the owner's explicit ceilings.
-The wallet gas limit is the exact provider-agreed estimate plus 5% and a fixed
-25,000 gas reserve. Both providers must return that same estimate in the
-opening and closing snapshots; the helper never shrinks the reserve from a
-balance observation or clamps a result above the reviewed 10,000,000 gas cap.
+The wallet gas limit uses the higher of the two provider estimates plus 5% and a
+fixed 25,000 gas reserve. Provider estimates may differ by no more than both
+1,000 gas and one basis point of the lower estimate, and each provider must
+reproduce its own exact estimate in the closing snapshot. The helper never
+averages the estimates, shrinks the reserve from a balance observation or
+clamps a result above the reviewed 10,000,000 gas cap.
 The transport paces QuickNode requests at a bounded provider-specific rate so
 the complete opening and closing inventories do not become an unreviewed burst.
 An HTTP throttle response still fails the entire fresh attempt closed; it is
@@ -204,7 +206,9 @@ balance; pending base fee, gas price and maximum priority fee; pending code and
 nonce vacancy for all three targets; and the exact pending simulation and gas
 estimate. The action-time `eth_call` carries the exact proposed gas limit, so a
 provider rejection at that boundary fails before the wallet opens; the separate
-uncapped `eth_estimateGas` must still reproduce the envelope estimate. It
+uncapped `eth_estimateGas` must still reproduce that provider's recorded
+estimate, remain inside the reviewed cross-provider drift bound and preserve the
+same conservative maximum. It
 repeats a second closing
 nonce/balance/fee/code/vacancy/simulation/gas snapshot immediately before wallet
 delivery. Both providers must agree on the owner balance, and the opening and
