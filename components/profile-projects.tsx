@@ -760,9 +760,7 @@ export function ProfileProjectCard({
           {project.symbol ? `$${project.symbol}` : "Finalized launch"}
           <small className={styles.launchType}>{launchType}</small>
         </span>
-        <small className={styles.marketCapSlot} aria-hidden={!marketCapLabel || undefined}>
-          {marketCapLabel ? `Market cap ${marketCapLabel}` : null}
-        </small>
+        {marketCapLabel ? <small>Market cap {marketCapLabel}</small> : null}
         <small
           aria-hidden={project.article ? undefined : true}
           className={styles.articleSummarySlot}
@@ -778,11 +776,9 @@ export function ProfileProjectCard({
             ? `Updated ${formatDate(project.article.updatedAt)}`
             : "Article details"}
         </small>
-        <div className={styles.partnerSlot}>
-          {project.partnerAttribution ? (
-            <PartnerLaunchAttribution attribution={project.partnerAttribution} compact />
-          ) : null}
-        </div>
+        {project.partnerAttribution ? (
+          <PartnerLaunchAttribution attribution={project.partnerAttribution} compact />
+        ) : null}
       </div>
       <div
         className={styles.actions}

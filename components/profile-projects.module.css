@@ -276,10 +276,8 @@
 }
 
 .copy {
-  align-content: start;
   display: grid;
   gap: 2px;
-  min-height: 100px;
   min-width: 0;
 }
 
@@ -330,15 +328,6 @@
 .articleSummarySlot {
   min-height: 1.3em;
   position: relative;
-}
-
-.marketCapSlot {
-  min-height: 1.3em;
-}
-
-.partnerSlot {
-  min-height: 24px;
-  min-width: 0;
 }
 
 .articleSummarySlot[data-state="empty"],
