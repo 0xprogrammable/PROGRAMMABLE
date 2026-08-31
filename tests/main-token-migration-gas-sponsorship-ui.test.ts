@@ -150,24 +150,27 @@ describe("main token migration gas sponsorship UI contract", () => {
       message:
         "The gas top-up needs a status review. No second top-up was sent. " +
         "Request ID: 123e4567-e89b-12d3-a456-426614174000",
-      retryable: false,
+      retryable: true,
     });
   });
 
-  it("keeps terminal failures terminal even without usable server copy", async () => {
+  it("keeps only closed or failed sponsorship terminal", async () => {
     const requestId = "123e4567-e89b-12d3-a456-426614174000";
-    for (const [code, expected] of [
+    for (const [code, expected, retryable] of [
       [
         "submission_unknown",
         "The gas top-up status could not be confirmed. Check again shortly. No second top-up will be sent.",
+        true,
       ],
       [
         "sponsorship_closed",
         "Gas sponsorship is closed for this migration window.",
+        false,
       ],
       [
         "sponsorship_failed",
         "The gas top-up could not be confirmed. Contact migration support before trying again.",
+        false,
       ],
     ] as const) {
       const failure = await gasSponsorshipFailure(new Response(JSON.stringify({
@@ -178,7 +181,7 @@ describe("main token migration gas sponsorship UI contract", () => {
       }));
       expect(failure).toEqual({
         message: `${expected} Request ID: ${requestId}`,
-        retryable: false,
+        retryable,
       });
     }
   });

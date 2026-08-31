@@ -6,6 +6,7 @@ import { PrivyClient } from "@privy-io/node";
 import {
   createPublicClient,
   decodeFunctionData,
+  encodeFunctionData,
   getAddress,
   http,
   isAddress,
@@ -69,7 +70,6 @@ const ABSOLUTE_TOP_UP_CAP_WEI = 2_000_000_000_000_000n;
 const ABSOLUTE_TOTAL_BUDGET_CAP_WEI = 1_000_000_000_000_000_000n;
 const DEADLINE_SAFETY_SECONDS = 5 * 60;
 const MAXIMUM_RELOCATION_LOGS = 64;
-const MAXIMUM_RELOCATION_SOURCES = 8;
 const RELOCATION_LOG_BLOCK_RANGE = 5_000n;
 const PROVIDER_IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1_000;
 const PROVIDER_IDEMPOTENCY_SAFETY_MS = 5 * 60 * 1_000;
@@ -486,6 +486,12 @@ export function createMainTokenMigrationGasSponsorV1(input: Readonly<{
           operation: "submit",
         });
         if (existing) {
+          if (existing.intent.requestBindingHash !== bindings.requestBindingHash) {
+            throw new MainTokenMigrationGasSponsorErrorV1(
+              409,
+              "idempotency_conflict",
+            );
+          }
           if (existing.transactionHash !== null) {
             return await existingResponse(existing, input.chain);
           }
@@ -1194,10 +1200,18 @@ async function isExactDirectRelocationTransferV1(
       return false;
     }
     const [recipient, amount] = decoded.args;
-    return typeof recipient === "string"
-      && getAddress(recipient).toLowerCase() === transfer.to.toLowerCase()
-      && typeof amount === "bigint"
-      && amount === transfer.value;
+    if (typeof recipient !== "string" || typeof amount !== "bigint") {
+      return false;
+    }
+    const normalizedRecipient = getAddress(recipient);
+    const canonicalInput = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: "transfer",
+      args: [normalizedRecipient, amount],
+    });
+    return normalizedRecipient.toLowerCase() === transfer.to.toLowerCase()
+      && amount === transfer.value
+      && canonicalInput.toLowerCase() === left.input.toLowerCase();
   } catch {
     return false;
   }
@@ -1237,8 +1251,6 @@ export async function resolveMainTokenMigrationSponsorEligibilityV1(input: Reado
       "rpc_quorum_unavailable",
     );
   }
-  const candidates: RelocationTransferV1[] = [];
-  const sources = new Set<string>();
   const prioritized = [...logs[0]].sort((left, right) => {
     if (left.value !== right.value) return left.value > right.value ? -1 : 1;
     if (left.blockNumber !== right.blockNumber) {
@@ -1247,13 +1259,6 @@ export async function resolveMainTokenMigrationSponsorEligibilityV1(input: Reado
     return right.logIndex - left.logIndex;
   });
   for (const transfer of prioritized) {
-    const source = transfer.from.toLowerCase();
-    if (sources.has(source)) continue;
-    sources.add(source);
-    candidates.push(transfer);
-    if (candidates.length >= MAXIMUM_RELOCATION_SOURCES) break;
-  }
-  for (const transfer of candidates) {
     if (!await isExactDirectRelocationTransferV1(input.clients, transfer)) {
       continue;
     }

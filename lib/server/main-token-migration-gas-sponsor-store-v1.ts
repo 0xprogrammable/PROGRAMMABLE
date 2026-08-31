@@ -263,7 +263,6 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
         const rootHolderRow = existing.find(
           (row) => row.credential_id === rootHolder,
         );
-        if (rootHolder !== holder && rootHolderRow) throw conflict();
         if (aliasRow) {
           const value = parseAlias(aliasRow);
           if (value.holderCredentialId !== holder
@@ -279,6 +278,7 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
         if (existingRecord) {
           return Object.freeze({ kind: "existing" as const, record: existingRecord });
         }
+        if (rootHolder !== holder && rootHolderRow) throw conflict();
         if (aliasRow || eligibilityRow) throw conflict();
         const releaseIntents = await selectReleaseIntents(
           client,

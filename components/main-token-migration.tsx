@@ -132,6 +132,7 @@ export type GasSponsorshipState =
       account: string;
       message: string;
       retryable: boolean;
+      retryMode: "check" | "submit";
     };
 
 type GasSponsorshipEndpointResult = Readonly<{
@@ -280,11 +281,7 @@ export async function gasSponsorshipFailure(
     // Use a stable status-specific recovery message below.
   }
 
-  const terminal = [
-    "submission_unknown",
-    "sponsorship_closed",
-    "sponsorship_failed",
-  ].includes(code);
+  const terminal = ["sponsorship_closed", "sponsorship_failed"].includes(code);
   const fallback =
     response.status === 401 || response.status === 403
       ? "Reconnect this wallet before requesting sponsored gas."
@@ -313,6 +310,7 @@ export async function gasSponsorshipErrorMessage(response: Response) {
 function gasSponsorshipError(
   error: unknown,
   account: string,
+  retryMode: "check" | "submit" = "check",
 ): GasSponsorshipState {
   return {
     kind: "error",
@@ -320,6 +318,7 @@ function gasSponsorshipError(
     message: migrationErrorMessage(error),
     retryable:
       !(error instanceof GasSponsorshipEndpointError) || error.retryable,
+    retryMode,
   };
 }
 
@@ -1333,6 +1332,7 @@ export function MainTokenMigration() {
         message:
           "Sponsored gas is available only for a directly controlled wallet.",
         retryable: false,
+        retryMode: "check",
       });
       focusSponsorshipActionOrStatus();
       return;
@@ -1383,7 +1383,9 @@ export function MainTokenMigration() {
       }
       focusSponsorshipActionOrStatus();
     } catch (error) {
-      setGasSponsorship(gasSponsorshipError(error, account.toLowerCase()));
+      setGasSponsorship(
+        gasSponsorshipError(error, account.toLowerCase(), "submit"),
+      );
       focusSponsorshipActionOrStatus();
     }
   }
@@ -1934,9 +1936,15 @@ export function MainTokenMigration() {
                         ref={sponsorButtonRef}
                         className={styles.secondaryAction}
                         type="button"
-                        onClick={() => void recheckSponsoredGas()}
+                        onClick={() =>
+                          void (gasSponsorship.retryMode === "submit"
+                            ? requestSponsoredGas()
+                            : recheckSponsoredGas())
+                        }
                       >
-                        Check sponsorship status
+                        {gasSponsorship.retryMode === "submit"
+                          ? "Retry gas sponsorship"
+                          : "Check sponsorship status"}
                       </button>
                     ) : (
                       <a

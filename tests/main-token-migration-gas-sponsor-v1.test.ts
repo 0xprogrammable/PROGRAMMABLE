@@ -379,6 +379,76 @@ describe("main token migration gas sponsor", () => {
     })).resolves.toBeNull();
   });
 
+  it("keeps checking a valid direct transfer after transferFrom noise", async () => {
+    const blockHash = `0x${"46".repeat(32)}` as const;
+    const directHash = `0x${"68".repeat(32)}` as const;
+    const transferFromHash = `0x${"69".repeat(32)}` as const;
+    const directData = encodeFunctionData({
+      abi: TEST_ERC20_ABI,
+      functionName: "transfer",
+      args: [SECOND_WALLET, 100n],
+    });
+    const transferFromData = encodeFunctionData({
+      abi: TEST_ERC20_ABI,
+      functionName: "transferFrom",
+      args: [WALLET, SECOND_WALLET, 101n],
+    });
+    const client = () => ({
+      async getLogs() {
+        return [
+          {
+            args: { from: WALLET, to: SECOND_WALLET, value: 100n },
+            blockHash,
+            blockNumber: 103n,
+            logIndex: 0,
+            removed: false,
+            transactionHash: directHash,
+          },
+          {
+            args: { from: WALLET, to: SECOND_WALLET, value: 101n },
+            blockHash,
+            blockNumber: 104n,
+            logIndex: 0,
+            removed: false,
+            transactionHash: transferFromHash,
+          },
+        ];
+      },
+      async getCode() {
+        return "0x";
+      },
+      async getTransaction({ hash }: { hash: string }) {
+        return {
+          blockHash,
+          blockNumber: hash === directHash ? 103n : 104n,
+          from: WALLET,
+          hash,
+          input: hash === directHash ? directData : transferFromData,
+          to: MAIN_TOKEN_ADDRESS,
+          value: 0n,
+        };
+      },
+      async readContract() {
+        return 101n;
+      },
+    });
+
+    await expect(resolveMainTokenMigrationSponsorEligibilityV1({
+      clients: [client(), client()] as never,
+      configuration: CONFIGURATION,
+      request: { walletAddress: SECOND_WALLET, amountRaw: 100n },
+      blockNumber: 105n,
+      provenanceBlockNumber: 105n,
+      directOpeningBalances: [0n, 0n],
+    })).resolves.toEqual({
+      rootWalletAddress: WALLET,
+      walletAddress: SECOND_WALLET,
+      transferHash: directHash,
+      transferBlockNumber: "103",
+      transferLogIndex: "0",
+    });
+  });
+
   it("fails closed when independent providers disagree on transfer provenance", async () => {
     const client = (transactionHash: `0x${string}`) => ({
       async getLogs() {
@@ -921,16 +991,18 @@ describe("main token migration gas sponsor", () => {
     expect([...store.records.values()][0]?.transactionHash).toBe(TX_HASH);
   });
 
-  it("returns the holder record without growing aliases for fresh client keys", async () => {
+  it("rejects a fresh client key after the holder request is bound", async () => {
     const store = new MemoryStore();
     const sender = new IdempotentSender();
     const handler = sponsor(store, sender);
 
     expect((await handler.post(request())).status).toBe(200);
-    expect((await handler.post(request(
+    const conflict = await handler.post(request(
       WALLET,
       "migration-request-00000002",
-    ))).status).toBe(200);
+    ));
+    expect(conflict.status).toBe(409);
+    expect((await conflict.json()).error.code).toBe("idempotency_conflict");
 
     expect(store.aliases.size).toBe(1);
     expect(sender.calls).toHaveLength(1);
