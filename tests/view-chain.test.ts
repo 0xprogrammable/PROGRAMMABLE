@@ -91,29 +91,30 @@ describe("view chain", () => {
     expect(existsSync("app/token/layout.tsx")).toBe(false);
   });
 
-  it("renders one alternate-chain option before the hamburger as an accessible disclosure", () => {
+  it("switches directly between chains beside the header wallet action", () => {
     const navigation = read("components/site-navigation.tsx");
     const styles = read("components/site-navigation.module.css");
 
-    expect(navigation.indexOf("<HeaderChainSelector")).toBeLessThan(
+    expect(navigation.indexOf("<HeaderChainToggle")).toBeLessThan(
+      navigation.indexOf("<HeaderWalletButton"),
+    );
+    expect(navigation.indexOf("<HeaderWalletButton")).toBeLessThan(
       navigation.indexOf("ref={menuButtonRef}"),
     );
     expect(navigation).toContain("viewChainId === 1 ? 4663 : 1");
-    expect(navigation).toContain("Public index coming soon");
-    expect(navigation).toContain("aria-controls={panelId}");
-    expect(navigation).toContain("aria-expanded={open}");
-    expect(navigation).toContain('role="group"');
+    expect(navigation).toContain("setViewChainId(alternateViewChainId)");
+    expect(navigation).toContain("Switch to ${alternateLabel}");
+    expect(styles).toContain("/brand/networks/robinhood-feather-white.svg");
+    expect(navigation).not.toContain("chainPopover");
+    expect(navigation).not.toContain("Choose network");
     expect(navigation).not.toContain('role="menu"');
-    expect(navigation).toContain("inert={open ? undefined : true}");
+    expect(navigation).toContain("inert={menuOpen ? undefined : true}");
     expect(navigation).toContain('if (event.key !== "Escape") return;');
-    expect(navigation).toContain("chainButtonRef.current?.focus()");
-    expect(navigation).toContain("!chainSelectorRef.current?.contains");
-    expect(navigation).not.toContain("setViewChainId(alternateViewChainId);\n              disconnect");
     expect(styles).toMatch(
       /\.chainTrigger\s*\{[^}]*height:\s*48px;[^}]*width:\s*48px;/s,
     );
     expect(styles).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.chainPopover,/,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.chainTrigger,/,
     );
   });
 });

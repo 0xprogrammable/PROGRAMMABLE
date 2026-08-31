@@ -75,9 +75,9 @@ describe("topbar and Explore hero polish", () => {
     expect(landing).toContain("Read the Programmable overview");
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).not.toContain('if (pathname === "/") return null;');
-    expect(navigation).toContain("<HeaderAccountAction");
+    expect(navigation).toContain("<HeaderWalletButton");
     expect(navigation).toContain("<DesktopNavigation />");
-    expect(navigation).toContain("const mobileNavItems = desktopNavItems;");
+    expect(navigation).toContain("const mobileNavItems = [...desktopNavItems, ...menuNavItems];");
     expect(navigation).not.toContain("liquid-glass-surface");
     expect(navigation).not.toContain("lucide-react");
     expect(navigation).toContain('if (activePath === "/docs")');
@@ -102,10 +102,10 @@ describe("topbar and Explore hero polish", () => {
       /\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*flex;[\s\S]*?\.menuButton\s*\{[^}]*display:\s*inline-flex;/s,
     );
     expect(navigationCss).toMatch(
-      /\.mobileSheet\.mobileSheet :global\(\.mobile-nav\)\s*\{[^}]*display:\s*none;/s,
+      /\.mobileSheet\.mobileSheet :global\(\.mobile-nav\)\s*\{[^}]*display:\s*grid;/s,
     );
     expect(navigationCss).toMatch(
-      /@media \(max-width: 60rem\)[\s\S]*?\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*none;[\s\S]*?\.mobileSheet\.mobileSheet :global\(\.mobile-nav\)\s*\{[^}]*display:\s*grid;/s,
+      /@media \(max-width: 60rem\)[\s\S]*?\.siteHeader\.siteHeader :global\(\.desktop-nav\)\s*\{[^}]*display:\s*none;[\s\S]*?\.mobileSheet\.mobileSheet :global\(\.mobile-nav a\)\.mobilePrimaryLink\s*\{[^}]*display:\s*flex;/s,
     );
     expect(navigation).toContain(
       'aria-label={menuOpen ? "Close menu" : "Open menu"}',

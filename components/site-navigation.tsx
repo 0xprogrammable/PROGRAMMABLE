@@ -30,12 +30,15 @@ const desktopNavItems = [
   { href: "/explore", label: "Explore" },
   { href: "/launch", label: "Create" },
   { href: "/migration", label: "Migrate" },
-  { href: "/docs", label: "Docs" },
-  { href: "/developers/api-keys", label: "API keys" },
-  { href: "/profile", label: "Profile" },
 ];
 
-const mobileNavItems = desktopNavItems;
+const menuNavItems = [
+  { href: "/developers/api-keys", label: "API keys" },
+  { href: "/profile", label: "Profile" },
+  { href: "/docs", label: "Docs" },
+];
+
+const mobileNavItems = [...desktopNavItems, ...menuNavItems];
 const warmedNavigationRoutes = new Set<string>();
 
 function warmNavigationRoute(
@@ -116,122 +119,41 @@ function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function ProgrammableAccountMark() {
-  return (
-    <span className={styles.accountMark} aria-hidden="true">
-      <Image
-        className={styles.accountMarkImage}
-        src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png"
-        alt=""
-        width={1168}
-        height={1536}
-        sizes="18px"
-      />
-    </span>
-  );
-}
-
-function HeaderAccountAction({
-  menuOpen,
-  onConnect,
-}: Readonly<{
-  menuOpen: boolean;
-  onConnect: () => void;
-}>) {
+function HeaderWalletButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
   const {
     wallet,
-    username,
-    avatarDataUrl,
-    authReady,
+    hasSession,
     connecting,
     disconnecting,
-    hasSession,
-    disconnect,
     openWallet,
     preloadWallet,
   } = useWallet();
-  const [disconnectError, setDisconnectError] = useState("");
-  const focusConnectAfterDisconnectRef = useRef(false);
-
-  if (wallet) {
-    return (
-      <div className={styles.accountGroup}>
-        <div className={styles.accountAction}>
-          {avatarDataUrl ? (
-            <Image
-              className={styles.accountAvatar}
-              src={avatarDataUrl}
-              alt=""
-              width={36}
-              height={36}
-              unoptimized
-            />
-          ) : (
-            <ProgrammableAccountMark />
-          )}
-          <span className={styles.accountCopy}>
-            <strong>Connected wallet</strong>
-            <small>{username || shortenAddress(wallet.account)}</small>
-          </span>
-        </div>
-        <button
-          className={styles.disconnectWallet}
-          type="button"
-          disabled={disconnecting}
-          tabIndex={menuOpen ? undefined : -1}
-          onClick={async () => {
-            setDisconnectError("");
-            focusConnectAfterDisconnectRef.current = true;
-            const disconnected = await disconnect({
-              showDialogOnFailure: false,
-            });
-            if (disconnected) {
-              return;
-            }
-            focusConnectAfterDisconnectRef.current = false;
-            setDisconnectError("Wallet could not be disconnected. Try again.");
-          }}
-        >
-          {disconnecting ? "Disconnecting" : "Disconnect"}
-        </button>
-        {disconnectError ? (
-          <p className={styles.accountError} role="alert">
-            {disconnectError}
-          </p>
-        ) : null}
-      </div>
-    );
-  }
-
-  const label = !authReady
-    ? "Loading wallet"
+  const label = disconnecting
+    ? "Disconnecting"
     : connecting
       ? "Opening wallet"
-      : hasSession
-        ? "Reconnect wallet"
-        : "Connect wallet";
+      : wallet
+        ? shortenAddress(wallet.account)
+        : hasSession
+          ? "Reconnect wallet"
+          : "Connect wallet";
 
   return (
     <button
-      ref={(node) => {
-        if (!node || !focusConnectAfterDisconnectRef.current) return;
-        focusConnectAfterDisconnectRef.current = false;
-        if (menuOpen) node.focus({ preventScroll: true });
-      }}
-      className={styles.connectWallet}
+      className={styles.headerWalletButton}
       type="button"
-      disabled={!authReady || connecting}
-      tabIndex={menuOpen ? undefined : -1}
-      aria-busy={connecting || undefined}
+      disabled={connecting || disconnecting}
+      aria-busy={connecting || disconnecting || undefined}
+      aria-haspopup="dialog"
+      aria-label={wallet ? `Manage wallet ${shortenAddress(wallet.account)}` : label}
       onFocus={preloadWallet}
       onPointerEnter={preloadWallet}
       onClick={() => {
-        onConnect();
+        onOpen();
         openWallet();
       }}
     >
-      <ProgrammableAccountMark />
-      <span>{label}</span>
+      {label}
     </button>
   );
 }
@@ -277,9 +199,7 @@ function DesktopNavigation() {
 function ViewChainMark({ viewChainId }: { viewChainId: ViewChainId }) {
   if (viewChainId === 4663) {
     return (
-      <span className={styles.robinhoodChainMark} aria-hidden="true">
-        R
-      </span>
+      <span className={styles.robinhoodChainMark} aria-hidden="true" />
     );
   }
 
@@ -295,12 +215,10 @@ function ViewChainMark({ viewChainId }: { viewChainId: ViewChainId }) {
       <path
         d="m5.5 13.35 6.5 3.7 6.5-3.7L12 22 5.5 13.35Z"
         fill="currentColor"
-        opacity="0.72"
       />
       <path
         d="m12 9.25-6.5 2.95L12 15.9l6.5-3.7L12 9.25Z"
         fill="currentColor"
-        opacity="0.9"
       />
     </svg>
   );
@@ -310,150 +228,59 @@ function viewChainLabel(viewChainId: ViewChainId) {
   return viewChainId === 1 ? "Ethereum" : "Robinhood";
 }
 
-function HeaderChainSelector({
-  open,
-  panelId,
-  rootRef,
+function HeaderChainToggle({
   triggerRef,
-  onDismiss,
-  onToggle,
   onSelect,
 }: Readonly<{
-  open: boolean;
-  panelId: string;
-  rootRef: RefObject<HTMLDivElement | null>;
   triggerRef: RefObject<HTMLButtonElement | null>;
-  onDismiss: () => void;
-  onToggle: () => void;
   onSelect: (viewChainId: ViewChainId) => void;
 }>) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
   const alternateViewChainId: ViewChainId = viewChainId === 1 ? 4663 : 1;
   const currentLabel = viewChainLabel(viewChainId);
   const alternateLabel = viewChainLabel(alternateViewChainId);
-  const alternateStatus =
-    alternateViewChainId === 4663
-      ? "Public index coming soon"
-      : "View Ethereum Chain";
-
-  function closeOnFocusLeave(event: FocusEvent<HTMLDivElement>) {
-    if (!open) return;
-    if (
-      event.relatedTarget instanceof Node &&
-      event.currentTarget.contains(event.relatedTarget)
-    ) {
-      return;
-    }
-
-    const root = event.currentTarget;
-    window.requestAnimationFrame(() => {
-      if (!root.contains(document.activeElement)) onDismiss();
-    });
-  }
 
   return (
-    <div
-      ref={rootRef}
-      className={styles.chainSelector}
-      onBlur={closeOnFocusLeave}
+    <button
+      ref={triggerRef}
+      className={styles.chainTrigger}
+      type="button"
+      aria-busy={!hydrated || undefined}
+      aria-label={`Viewing ${currentLabel}. Switch to ${alternateLabel}`}
+      disabled={!hydrated}
+      title={`Switch to ${alternateLabel}`}
+      onClick={() => {
+        setViewChainId(alternateViewChainId);
+        onSelect(alternateViewChainId);
+      }}
     >
-      <button
-        ref={triggerRef}
-        className={styles.chainTrigger}
-        type="button"
-        aria-controls={panelId}
-        aria-expanded={open}
-        aria-busy={!hydrated || undefined}
-        aria-label={
-          hydrated
-            ? `Viewing ${currentLabel}. Change network`
-            : "Loading network"
-        }
-        disabled={!hydrated}
-        title={hydrated ? currentLabel : undefined}
-        onClick={onToggle}
-      >
-        {hydrated ? (
-          <ViewChainMark viewChainId={viewChainId} />
-        ) : (
-          <span className={styles.chainMarkPlaceholder} aria-hidden="true" />
-        )}
-      </button>
-
-      <div
-        className={`${styles.chainPopover} ${
-          open ? styles.chainPopoverOpen : ""
-        }`}
-        aria-hidden={!open}
-        inert={open ? undefined : true}
-      >
-        <div
-          className={styles.chainPopoverSurface}
-          id={panelId}
-          role="group"
-          aria-label="Choose network"
-        >
-          <button
-            className={styles.chainOption}
-            type="button"
-            tabIndex={open ? undefined : -1}
-            data-view-chain-id={alternateViewChainId}
-            onClick={() => {
-              setViewChainId(alternateViewChainId);
-              onSelect(alternateViewChainId);
-            }}
-          >
-            <span className={styles.chainOptionMark} aria-hidden="true">
-              <ViewChainMark viewChainId={alternateViewChainId} />
-            </span>
-            <span className={styles.chainOptionCopy}>
-              <strong>{alternateLabel}</strong>
-              <small>{alternateStatus}</small>
-            </span>
-          </button>
-        </div>
-      </div>
-    </div>
+      <ViewChainMark viewChainId={viewChainId} />
+    </button>
   );
 }
 
 export function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const { preloadWallet } = useWallet();
   const menuId = useId();
-  const chainPanelId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const chainSelectorRef = useRef<HTMLDivElement>(null);
   const chainButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPath, setMenuPath] = useState<string | null>(null);
-  const [chainSelectorOpen, setChainSelectorOpen] = useState(false);
   const menuOpen = menuPath === pathname;
 
   useEffect(() => {
-    if (!menuOpen && !chainSelectorOpen) return;
+    if (!menuOpen) return;
 
     const closeOnOutsidePress = (event: PointerEvent) => {
       if (!(event.target instanceof Node)) return;
       if (menuOpen && !headerRef.current?.contains(event.target)) {
         setMenuPath(null);
       }
-      if (
-        chainSelectorOpen &&
-        !chainSelectorRef.current?.contains(event.target)
-      ) {
-        setChainSelectorOpen(false);
-      }
     };
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (chainSelectorOpen) {
-        setChainSelectorOpen(false);
-        chainButtonRef.current?.focus();
-        return;
-      }
       if (menuOpen) {
         setMenuPath(null);
         menuButtonRef.current?.focus();
@@ -467,7 +294,7 @@ export function SiteHeader() {
       document.removeEventListener("pointerdown", closeOnOutsidePress);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [chainSelectorOpen, menuOpen]);
+  }, [menuOpen]);
 
   function closeOnFocusLeave(event: FocusEvent<HTMLElement>) {
     if (!menuOpen) return;
@@ -513,18 +340,10 @@ export function SiteHeader() {
         <DesktopNavigation />
 
         <div className={`header-actions ${styles.headerActions}`}>
-          <HeaderChainSelector
-            open={chainSelectorOpen}
-            panelId={chainPanelId}
-            rootRef={chainSelectorRef}
+          <HeaderChainToggle
             triggerRef={chainButtonRef}
-            onDismiss={() => setChainSelectorOpen(false)}
-            onToggle={() => {
-              setMenuPath(null);
-              setChainSelectorOpen((open) => !open);
-            }}
             onSelect={(selectedViewChainId) => {
-              setChainSelectorOpen(false);
+              setMenuPath(null);
               if (pathname.startsWith("/token/")) {
                 const url = new URL(window.location.href);
                 url.searchParams.set("chain", String(selectedViewChainId));
@@ -541,6 +360,7 @@ export function SiteHeader() {
               });
             }}
           />
+          <HeaderWalletButton onOpen={() => setMenuPath(null)} />
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
@@ -548,11 +368,7 @@ export function SiteHeader() {
             aria-controls={menuId}
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
-            onFocus={preloadWallet}
-            onPointerEnter={preloadWallet}
             onClick={() => {
-              preloadWallet();
-              setChainSelectorOpen(false);
               setMenuPath(menuOpen ? null : pathname);
             }}
           >
@@ -576,10 +392,6 @@ export function SiteHeader() {
         inert={menuOpen ? undefined : true}
       >
         <div className={styles.mobileSheetSurface} id={menuId}>
-          <HeaderAccountAction
-            menuOpen={menuOpen}
-            onConnect={() => setMenuPath(null)}
-          />
           <MobileNavigation
             id={menuId}
             open={menuOpen}
@@ -612,13 +424,16 @@ export function MobileNavigation({
   if (!id) return null;
 
   return (
-    <nav className="mobile-nav" aria-label="Primary navigation">
+    <nav className="mobile-nav" aria-label="Menu navigation">
       {mobileNavItems.map((item) => {
         const current = isCurrent(pathname, item);
         return (
           <Link
             key={item.href}
-            className={current ? "active" : undefined}
+            className={[
+              current ? "active" : "",
+              desktopNavItems.includes(item) ? styles.mobilePrimaryLink : "",
+            ].filter(Boolean).join(" ") || undefined}
             href={item.href}
             prefetch={false}
             aria-current={current ? "page" : undefined}

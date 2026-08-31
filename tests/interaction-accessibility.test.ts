@@ -198,9 +198,9 @@ describe("interaction accessibility", () => {
     expect(source).not.toContain(
       '.querySelector<HTMLElement>("a, button:not(:disabled)")',
     );
-    expect(source).toContain("focusConnectAfterDisconnectRef.current = true");
-    expect(source).toContain("node.focus({ preventScroll: true })");
-    expect(source).toContain("onConnect();\n        openWallet();");
+    expect(source).toContain("menuButtonRef.current?.focus()");
+    expect(source).toContain('aria-haspopup="dialog"');
+    expect(source).toContain("onOpen();\n        openWallet();");
   });
 
   it("keeps the sticky header and its wallet disclosure above page content", () => {
@@ -236,7 +236,7 @@ describe("interaction accessibility", () => {
     expect(css).toMatch(/\.scrollCue\s*\{[^}]*min-height:\s*52px;/s);
   });
 
-  it("keeps all four primary routes semantic and reflow-safe in mobile navigation", () => {
+  it("keeps primary and secondary routes semantic in mobile navigation", () => {
     const source = readFileSync(
       join(root, "components/site-navigation.tsx"),
       "utf8",
@@ -258,12 +258,12 @@ describe("interaction accessibility", () => {
       return segments;
     });
 
-    expect(source).toContain("const mobileNavItems = desktopNavItems;");
+    expect(source).toContain("const mobileNavItems = [...desktopNavItems, ...menuNavItems];");
     expect(source).toContain('{ href: "/profile", label: "Profile" },');
     expect(source).toContain('{ href: "/migration", label: "Migrate" },');
     expect(source).not.toContain("/hookathon");
     expect(source).toContain(
-      '<nav className="mobile-nav" aria-label="Primary navigation">',
+      '<nav className="mobile-nav" aria-label="Menu navigation">',
     );
     expect(source).toContain('aria-current={current ? "page" : undefined}');
     expect(source).not.toContain('<Icon aria-hidden="true"');
