@@ -168,6 +168,11 @@ const SAFE_OWNERS = [
   OWNER,
   "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
 ];
+const PHASE_A_TRANSACTION_HASH =
+  "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d";
+const PHASE_A_BLOCK_NUMBER = "50469365";
+const PHASE_A_TRANSACTION_INDEX = "9";
+const PHASE_A_DEPLOYER = "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
 const OWNER_CALLDATA_HASH =
   "0x3ba04469085b17e12843a94c154a335c9c384837f8f6531f179cb4915fd237d9";
 const ROUTER_READ_ABI = [
@@ -517,6 +522,100 @@ test("public v3 RPC evidence drops provider bytes and credential-like endpoint c
   }
 });
 
+test("accepts alternate self-consistent no-CBOR provider context without granting source authority", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const canonicalRaw = await buildWithProductionInputBuilder(fixture);
+    const alternateRaw = await buildWithProductionInputBuilder(fixture, {
+      alternateSourcifyContext: true,
+    });
+    const canonicalProvider = canonicalRaw.capture.sourcifyResponses[0];
+    const alternateProvider = alternateRaw.capture.sourcifyResponses[0];
+    assert.notEqual(
+      alternateProvider.providerCompiler.fullyQualifiedName,
+      canonicalProvider.providerCompiler.fullyQualifiedName,
+    );
+    assert.notEqual(
+      alternateProvider.providerCompiler.compilerSettingsDigest,
+      canonicalProvider.providerCompiler.compilerSettingsDigest,
+    );
+    assert.notEqual(
+      alternateProvider.providerSourceFilesDigest,
+      canonicalProvider.providerSourceFilesDigest,
+    );
+    assert.notEqual(
+      alternateProvider.providerStandardJsonInputDigest,
+      canonicalProvider.providerStandardJsonInputDigest,
+      "alternate provider build context must remain explicitly provider-scoped",
+    );
+
+    const canonicalBuilt = await buildInput(fixture);
+    const alternateBuilt = await buildInput(fixture, { alternateSourcifyContext: true });
+    const canonicalBundle = await materialize(fixture, canonicalBuilt);
+    const alternateBundle = await materialize(fixture, alternateBuilt);
+    assert.deepEqual(
+      alternateBundle.sourceVerification.exactSourceBinding.contracts,
+      canonicalBundle.sourceVerification.exactSourceBinding.contracts,
+      "provider context must not supply any exact-source contract commitment",
+    );
+    const canonicalJobs = canonicalBundle.artifacts.backendRelease
+      .preparedRootSourceManifest.value.jobs;
+    const alternateJobs = alternateBundle.artifacts.backendRelease
+      .preparedRootSourceManifest.value.jobs;
+    const sourceProjection = (jobs) => jobs.map((job) => ({
+      contract: job.contract,
+      compilerVersion: job.compilerVersion,
+      standardJsonInputPath: job.standardJsonInputPath,
+      standardJsonInputSha256: job.standardJsonInputSha256,
+      sourcePath: job.sourcePath,
+      contractName: job.contractName,
+    }));
+    assert.deepEqual(
+      sourceProjection(alternateJobs),
+      sourceProjection(canonicalJobs),
+      "provider context must not change any prepared backend source job",
+    );
+    for (const contract of alternateBundle.sourceVerification.exactSourceBinding.contracts) {
+      assert.equal(
+        contract.compilerSettingsDigest,
+        "sha256:0ae76a7ec92d6bb3c4612261fb06ccffe41fa34dfdd2fb1c3362f7a0b7d7b3ac",
+      );
+    }
+    assert.notEqual(
+      alternateBundle.captureClosure.sourceVerificationClosureDigest,
+      canonicalBundle.captureClosure.sourceVerificationClosureDigest,
+      "distinct provider observations must remain separately committed",
+    );
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("rejects internally inconsistent alternate Sourcify build contexts", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const cases = [
+      [
+        { alternateSourcifyContext: true, sourcifyCompilerSettingsMismatch: true },
+        /provider compiler settings and Standard JSON differ/u,
+      ],
+      [
+        { alternateSourcifyContext: true, sourcifySourceContentMismatch: true },
+        /provider source .* differs from Standard JSON/u,
+      ],
+      [
+        { alternateSourcifyContext: true, wrongSourcifyContractIdentifier: true },
+        /compiler\/contract identity differs/u,
+      ],
+    ];
+    for (const [options, expected] of cases) {
+      await assert.rejects(buildWithProductionInputBuilder(fixture, options), expected);
+    }
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("authenticated raw capture deterministically materializes a closed test-only bundle", async () => {
   const fixture = await fixtureRepository();
   try {
@@ -569,6 +668,29 @@ test("authenticated raw capture deterministically materializes a closed test-onl
       "release/assets/robinhood-v4/ProgrammableLaunchStampRouterV1.standard-input.json",
       "release/assets/robinhood-v4/ProgrammableCreate2GraphDeployerV1.standard-input.json",
     ]);
+    assert.equal(
+      bundle.artifacts.backendRelease.preparedRootSourceManifest.value.providerProfileDigest,
+      "sha256:c03afd37c077e78bea30f69d1ce139d026cb4fad86fa74122257bba8f5e9a910",
+      "prepared-root jobs must bind the backend runtime provider profile",
+    );
+    const standardJsonAssets = new Map(
+      bundle.artifacts.backendRelease.standardJsonInputs.map((asset) => [asset.path, asset]),
+    );
+    for (const job of bundle.artifacts.backendRelease.preparedRootSourceManifest.value.jobs) {
+      const asset = standardJsonAssets.get(`release/${job.standardJsonInputPath}`);
+      assert.ok(asset, `${job.contract} Standard JSON asset is retained`);
+      const standardJson = JSON.parse(Buffer.from(asset.bytesBase64, "base64").toString("utf8"));
+      assert.equal(
+        typeof standardJson.sources[job.sourcePath]?.content,
+        "string",
+        `${job.contract} sourcePath must exist in its copied Standard JSON closure`,
+      );
+      assert.equal(
+        job.contractName,
+        job.sourcePath.endsWith("ProgrammableLaunchStampRouterV1.sol")
+          ? "ProgrammableLaunchStampRouterV1" : "ProgrammableCreate2GraphDeployerV1",
+      );
+    }
     await assert.rejects(
       readFile(path.join(fixture.root, ROBINHOOD_LIVE_DEPLOYMENT_PATH)),
       /ENOENT/u,
@@ -583,27 +705,48 @@ test("rejects a fully redigested substitution of the exact source/build/transact
   try {
     const built = await buildInput(fixture);
     const bundle = await materialize(fixture, built);
-    const tampered = structuredClone(bundle);
-    const binding = tampered.sourceVerification.exactSourceBinding;
-    binding.deploymentTransactionHash = hash32("substituted-source-binding-transaction");
-    binding.bindingDigest = framed(
-      "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1",
-      { ...binding, bindingDigest: null },
-    );
-    const { evidenceDigest: _sourceDigest, ...sourcePreimage } = tampered.sourceVerification;
-    tampered.sourceVerification.evidenceDigest = framed(
-      "programmable.robinhood-custom-launch.source-verification-closure.v5",
-      sourcePreimage,
-    );
-    const { stageBundleDigest: _stageDigest, ...stagePreimage } = tampered;
-    tampered.stageBundleDigest = framed(
-      "programmable.robinhood-custom-launch.stage-bundle.v1",
-      stagePreimage,
-    );
-    await assert.rejects(
-      verify(fixture, built, tampered),
-      /stage bundle and authenticated capture sidecar/u,
-    );
+    const substitutions = [
+      ["deployment transaction", (binding) => {
+        binding.deploymentTransactionHash = hash32("substituted-source-binding-transaction");
+      }],
+      ["fully-qualified name", (binding) => {
+        binding.contracts[0].fullyQualifiedName =
+          "provider/substitution.sol:ProgrammableLaunchStampRouterV1";
+      }],
+      ["Standard JSON path", (binding) => {
+        binding.contracts[0].standardJsonInputPath = sourcePaths[0];
+      }],
+      ["source digest", (binding) => {
+        binding.contracts[0].sourceSha256 = `sha256:${"7".repeat(64)}`;
+      }],
+      ["source closure", (binding) => {
+        binding.sourceClosureDigest = `sha256:${"8".repeat(64)}`;
+      }],
+    ];
+    for (const [label, mutate] of substitutions) {
+      const tampered = structuredClone(bundle);
+      const binding = tampered.sourceVerification.exactSourceBinding;
+      mutate(binding);
+      binding.bindingDigest = framed(
+        "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v2",
+        { ...binding, bindingDigest: null },
+      );
+      const { evidenceDigest: _sourceDigest, ...sourcePreimage } = tampered.sourceVerification;
+      tampered.sourceVerification.evidenceDigest = framed(
+        "programmable.robinhood-custom-launch.source-verification-closure.v6",
+        sourcePreimage,
+      );
+      const { stageBundleDigest: _stageDigest, ...stagePreimage } = tampered;
+      tampered.stageBundleDigest = framed(
+        "programmable.robinhood-custom-launch.stage-bundle.v1",
+        stagePreimage,
+      );
+      await assert.rejects(
+        verify(fixture, built, tampered),
+        /stage bundle and authenticated capture sidecar/u,
+        label,
+      );
+    }
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
@@ -1230,6 +1373,9 @@ test("rejects recomputed adversarial raw capture variants", async () => {
     ["impossible no-CBOR exact Sourcify", { sourcifyMatch: "exact_match" }, /appendCBOR=false/u],
     ["missing Sourcify match", { sourcifyMatch: null }, /appendCBOR=false/u],
     ["wrong Sourcify address", { wrongSourcifyAddress: true }, /appendCBOR=false/u],
+    ["wrong Sourcify deployment transaction", {
+      wrongSourcifyDeploymentTransaction: true,
+    }, /finalized Phase A transaction/u],
     ["reordered inventory", { reorderL2Inventory: true }, /missing or reorders/u],
     ["late external code", { lateExternalCode: true }, /runtime code hash|transition/u],
     ["preexisting external code", { preexistingExternalCode: true }, /runtime code hash|transition/u],
@@ -1793,16 +1939,18 @@ test("fresh Sourcify normalization ignores provider-only canaries and binds its 
   try {
     const built = await buildInput(fixture);
     const bundle = await materialize(fixture, built);
-    const verifyAt = async (observedAt, providerOnlyCanary = false) =>
+    const verifyAt = async (observedAt, options = {}) =>
       freshVerifyRobinhoodSourcify({
         repositoryRoot: fixture.root,
         captureClosure: bundle.captureClosure,
         readFile: (root, relativePath) => readFileSync(path.join(root, relativePath)),
-        fetch: await freshSourcifyFetch(fixture, { providerOnlyCanary }),
+        fetch: await freshSourcifyFetch(fixture, options),
         now: () => new Date(observedAt),
       });
     const baseline = await verifyAt("2026-08-29T18:05:00.000Z");
-    const canary = await verifyAt("2026-08-29T18:05:00.000Z", true);
+    const canary = await verifyAt("2026-08-29T18:05:00.000Z", {
+      providerOnlyCanary: true,
+    });
     assert.equal(baseline.observedAt, "2026-08-29T18:05:00.000Z");
     assert.deepEqual(
       Buffer.from(`${JSON.stringify(canary.responses)}\n`, "utf8"),
@@ -1820,6 +1968,29 @@ test("fresh Sourcify normalization ignores provider-only canaries and binds its 
       baseline.sourceVerificationClosureDigest,
       "an older Sourcify freshness digest must not replay at a later observation instant",
     );
+    const alternate = await verifyAt("2026-08-29T18:07:00.000Z", {
+      alternateSourcifyContext: true,
+    });
+    assert.notEqual(
+      alternate.responses[0].providerCompiler.fullyQualifiedName,
+      baseline.responses[0].providerCompiler.fullyQualifiedName,
+      "a later self-consistent provider build context may differ without gaining authority",
+    );
+    assert.deepEqual(
+      alternate.responses.map(({ providerDeployment }) => providerDeployment),
+      baseline.responses.map(({ providerDeployment }) => providerDeployment),
+      "fresh corroboration remains bound to the same finalized deployment transaction",
+    );
+    for (const [options, expected] of [
+      [{ wrongSourcifyAddress: true }, /appendCBOR=false/u],
+      [{ sourcifyMatch: null }, /appendCBOR=false/u],
+      [{ wrongSourcifyDeploymentTransaction: true }, /finalized Phase A transaction/u],
+    ]) {
+      await assert.rejects(
+        verifyAt("2026-08-29T18:08:00.000Z", options),
+        expected,
+      );
+    }
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
@@ -1992,7 +2163,7 @@ async function buildInput(fixture, options = {}) {
   ]);
   const sourcifyNormalized = sourcifyResponses.map(({ normalized }) => normalized);
   const sourceVerificationClosureDigest = framed(
-    "programmable.robinhood-custom-launch.sourcify-response-closure.v5",
+    "programmable.robinhood-custom-launch.sourcify-response-closure.v6",
     sourcifyNormalized,
   );
   const sourceEntries = await Promise.all([...sourcePaths].sort(bufferCompare).map(async (relativePath) => {
@@ -2437,6 +2608,18 @@ function l1Capture(index, options) {
 async function sourcifyResponse(fixture, target, options, index) {
   const localBytes = await readFile(path.join(fixture.root, target.standardJsonInputPath));
   const stdJsonInput = JSON.parse(localBytes.toString("utf8"));
+  let providerFullyQualifiedName = target.fullyQualifiedName;
+  if (options.alternateSourcifyContext) {
+    const sourcePrefix = index === 0 ? "deployment/router-v4/" : "provider-build/";
+    stdJsonInput.sources = Object.fromEntries(Object.entries(stdJsonInput.sources).map(
+      ([name, value]) => [`${sourcePrefix}${name}`, value],
+    ));
+    stdJsonInput.settings.metadata = {
+      appendCBOR: false,
+      bytecodeHash: "none",
+    };
+    providerFullyQualifiedName = `${sourcePrefix}${target.fullyQualifiedName}`;
+  }
   const sources = Object.fromEntries(Object.entries(stdJsonInput.sources).map(([name, value]) => [
     name, { content: value.content },
   ]));
@@ -2450,18 +2633,40 @@ async function sourcifyResponse(fixture, target, options, index) {
     address,
     verifiedAt: options.sourcifyVerifiedAt ?? "2026-08-29T17:55:00Z",
     matchId: String(index + 100),
+    deployment: {
+      transactionHash: options.wrongSourcifyDeploymentTransaction
+        ? hash32("wrong Sourcify deployment transaction") : PHASE_A_TRANSACTION_HASH,
+      blockNumber: options.wrongSourcifyDeploymentBlock
+        ? "50469366" : PHASE_A_BLOCK_NUMBER,
+      transactionIndex: PHASE_A_TRANSACTION_INDEX,
+      deployer: PHASE_A_DEPLOYER,
+    },
     compilation: {
       language: "Solidity",
       compiler: "solc",
       compilerVersion: "0.8.26+commit.8a97fa7a",
       compilerSettings: stdJsonInput.settings,
       name: target.name,
-      fullyQualifiedName: target.fullyQualifiedName,
+      fullyQualifiedName: options.wrongSourcifyContractIdentifier
+        ? `${providerFullyQualifiedName.split(":")[0]}:WrongContract`
+        : providerFullyQualifiedName,
     },
     sources,
     stdJsonInput,
     metadata: { compiler: { version: "0.8.26+commit.8a97fa7a" }, language: "Solidity" },
   };
+  if (options.sourcifyCompilerSettingsMismatch) {
+    response.compilation.compilerSettings = {
+      ...response.compilation.compilerSettings,
+      optimizer: { enabled: true, runs: 999 },
+    };
+  }
+  if (options.sourcifySourceContentMismatch) {
+    const firstSource = Object.keys(response.sources)[0];
+    response.sources[firstSource] = {
+      content: `${response.sources[firstSource].content}\n// provider mismatch`,
+    };
+  }
   const responseBytes = Buffer.from(JSON.stringify(response), "utf8");
   const responseSha256 = sha256Digest(responseBytes);
   const raw = {
@@ -2483,36 +2688,41 @@ async function sourcifyResponse(fixture, target, options, index) {
     providerClassification: "PARTIAL_NO_CBOR_EXACT_BYTES",
     providerReleaseAuthority: false,
     observedAt: OBSERVED_AT,
-    compiler: {
+    providerMatchId: response.matchId,
+    providerVerifiedAt: response.verifiedAt,
+    providerCompiler: {
       language: "Solidity",
       compiler: "solc",
       compilerVersion: "0.8.26+commit.8a97fa7a",
       name: target.name,
-      fullyQualifiedName: target.fullyQualifiedName,
+      fullyQualifiedName: response.compilation.fullyQualifiedName,
       compilerSettingsDigest: framed(
         "programmable.robinhood-custom-launch.sourcify-compiler-settings.v1",
-        stdJsonInput.settings,
+        response.compilation.compilerSettings,
       ),
     },
-    sourceFilesDigest: framed(
+    providerSourceFilesDigest: framed(
       "programmable.robinhood-custom-launch.sourcify-source-files.v1",
-      sources,
+      response.sources,
     ),
-    standardJsonInputPath: target.standardJsonInputPath,
-    standardJsonInputSha256: sha256Digest(localBytes),
+    providerStandardJsonInputDigest: framed(
+      "programmable.robinhood-custom-launch.sourcify-standard-json-input.v1",
+      response.stdJsonInput,
+    ),
+    providerDeployment: response.deployment,
     urlPath: raw.urlPath,
     httpStatus: 200,
     contentType: "application/json",
     normalizedVerificationDigest: null,
   };
   normalized.normalizedVerificationDigest = framed(
-    "programmable.robinhood-custom-launch.sourcify-normalized-response.v2",
+    "programmable.robinhood-custom-launch.sourcify-normalized-response.v3",
     { ...normalized, normalizedVerificationDigest: null },
   );
   return { raw, normalized };
 }
 
-async function freshSourcifyFetch(fixture, { providerOnlyCanary = false } = {}) {
+async function freshSourcifyFetch(fixture, options = {}) {
   const targets = [
     {
       contract: "graphFactory",
@@ -2533,9 +2743,9 @@ async function freshSourcifyFetch(fixture, { providerOnlyCanary = false } = {}) 
   ];
   const byUrl = new Map();
   for (const [index, target] of targets.entries()) {
-    const { raw } = await sourcifyResponse(fixture, target, {}, index);
+    const { raw } = await sourcifyResponse(fixture, target, options, index);
     const value = JSON.parse(Buffer.from(raw.responseBase64, "base64").toString("utf8"));
-    if (providerOnlyCanary) {
+    if (options.providerOnlyCanary) {
       value.providerOnlyCanary = `must-not-publish-${index}`;
       value.metadata = {
         ...value.metadata,
@@ -2754,20 +2964,41 @@ async function materialize(fixture, built) {
   });
 }
 
-async function rebuildWithProductionInputBuilder(fixture, input) {
+async function buildWithProductionInputBuilder(fixture, options = {}) {
+  const built = await buildInput(fixture);
+  const targets = [
+    {
+      contract: "graphFactory",
+      address: ROOTS.graphFactory.address,
+      name: "ProgrammableCreate2GraphDeployerV1",
+      fullyQualifiedName:
+        "src/ProgrammableCreate2GraphDeployerV1.sol:ProgrammableCreate2GraphDeployerV1",
+      standardJsonInputPath: sourcePaths[0],
+    },
+    {
+      contract: "programmableLaunchStampRouter",
+      address: ROOTS.programmableLaunchStampRouter.address,
+      name: "ProgrammableLaunchStampRouterV1",
+      fullyQualifiedName:
+        "src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol:ProgrammableLaunchStampRouterV1",
+      standardJsonInputPath: sourcePaths[1],
+    },
+  ];
+  const sourcifyResponses = await Promise.all(targets.map(async (target, index) =>
+    (await sourcifyResponse(fixture, target, options, index)).raw));
   return buildRobinhoodPostdeploymentInput({
     repositoryRoot: fixture.root,
     revision: fixture.revision,
     tree: fixture.tree,
     observedAt: OBSERVED_AT,
     expiresAt: EXPIRES_AT,
-    providers: input.providers,
+    providers: built.input.providers,
     l2ProviderEndpointCommitments:
-      input.capture.l2ProviderEndpointCommitments,
-    l2ProviderReadbacks: input.capture.l2ProviderReadbacks,
-    ethereumProviderReadbacks: input.capture.ethereumProviderReadbacks,
-    sourcifyResponses: input.capture.sourcifyResponses,
-    readFile: (root, relativePath) => readFile(path.join(root, relativePath)),
+      built.input.capture.l2ProviderEndpointCommitments,
+    l2ProviderReadbacks: built.input.capture.l2ProviderReadbacks,
+    ethereumProviderReadbacks: built.input.capture.ethereumProviderReadbacks,
+    sourcifyResponses,
+    readFile: (root, relativePath) => readFileSync(path.join(root, relativePath)),
     testOnlyDependencies: testCaptureDependencies,
   });
 }

@@ -109,6 +109,10 @@
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
     },
+    "providerInstant": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    },
     "pathDigestLength": {
       "type": "object",
       "additionalProperties": false,
@@ -451,6 +455,19 @@
         "compilerSettingsDigest": { "$ref": "#/$defs/sha256" }
       }
     },
+    "providerDeployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transactionHash", "blockNumber", "transactionIndex", "deployer"],
+      "properties": {
+        "transactionHash": {
+          "const": "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d"
+        },
+        "blockNumber": { "const": "50469365" },
+        "transactionIndex": { "const": "9" },
+        "deployer": { "const": "0x2Bb333d48DFAF1596D9036671d2E43168994249E" }
+      }
+    },
     "sourcifyClosure": {
       "type": "object",
       "additionalProperties": false,
@@ -465,10 +482,12 @@
         "providerClassification",
         "providerReleaseAuthority",
         "observedAt",
-        "compiler",
-        "sourceFilesDigest",
-        "standardJsonInputPath",
-        "standardJsonInputSha256",
+        "providerMatchId",
+        "providerVerifiedAt",
+        "providerCompiler",
+        "providerSourceFilesDigest",
+        "providerStandardJsonInputDigest",
+        "providerDeployment",
         "urlPath",
         "httpStatus",
         "contentType",
@@ -487,10 +506,12 @@
         "providerClassification": { "const": "PARTIAL_NO_CBOR_EXACT_BYTES" },
         "providerReleaseAuthority": { "const": false },
         "observedAt": { "$ref": "#/$defs/isoInstant" },
-        "compiler": { "$ref": "#/$defs/compilerIdentity" },
-        "sourceFilesDigest": { "$ref": "#/$defs/sha256" },
-        "standardJsonInputPath": { "type": "string", "minLength": 1 },
-        "standardJsonInputSha256": { "$ref": "#/$defs/sha256" },
+        "providerMatchId": { "$ref": "#/$defs/positiveDecimal" },
+        "providerVerifiedAt": { "$ref": "#/$defs/providerInstant" },
+        "providerCompiler": { "$ref": "#/$defs/compilerIdentity" },
+        "providerSourceFilesDigest": { "$ref": "#/$defs/sha256" },
+        "providerStandardJsonInputDigest": { "$ref": "#/$defs/sha256" },
+        "providerDeployment": { "$ref": "#/$defs/providerDeployment" },
         "urlPath": {
           "type": "string",
           "pattern": "^/server/v2/contract/4663/0x[0-9A-Fa-f]{40}\\?fields=all$"
@@ -598,13 +619,15 @@
         "providerClassification",
         "providerReleaseAuthority",
         "observedAt",
-        "compiler",
-        "sourceFilesDigest",
+        "providerMatchId",
+        "providerVerifiedAt",
+        "providerCompiler",
+        "providerSourceFilesDigest",
+        "providerStandardJsonInputDigest",
+        "providerDeployment",
         "urlPath",
         "httpStatus",
         "contentType",
-        "standardJsonInputPath",
-        "standardJsonInputSha256",
         "normalizedVerificationDigest"
       ],
       "properties": {
@@ -616,13 +639,15 @@
         "providerClassification": { "const": "PARTIAL_NO_CBOR_EXACT_BYTES" },
         "providerReleaseAuthority": { "const": false },
         "observedAt": { "$ref": "#/$defs/isoInstant" },
-        "compiler": { "$ref": "#/$defs/compilerIdentity" },
-        "sourceFilesDigest": { "$ref": "#/$defs/sha256" },
+        "providerMatchId": { "$ref": "#/$defs/positiveDecimal" },
+        "providerVerifiedAt": { "$ref": "#/$defs/providerInstant" },
+        "providerCompiler": { "$ref": "#/$defs/compilerIdentity" },
+        "providerSourceFilesDigest": { "$ref": "#/$defs/sha256" },
+        "providerStandardJsonInputDigest": { "$ref": "#/$defs/sha256" },
+        "providerDeployment": { "$ref": "#/$defs/providerDeployment" },
         "urlPath": { "type": "string", "minLength": 1 },
         "httpStatus": { "const": 200 },
         "contentType": { "type": "string", "minLength": 1 },
-        "standardJsonInputPath": { "type": "string", "minLength": 1 },
-        "standardJsonInputSha256": { "$ref": "#/$defs/sha256" },
         "normalizedVerificationDigest": { "$ref": "#/$defs/sha256" }
       }
     },
@@ -631,8 +656,13 @@
       "additionalProperties": false,
       "required": [
         "contract",
+        "name",
+        "fullyQualifiedName",
+        "standardJsonInputPath",
         "address",
         "standardJsonInputSha256",
+        "sourcePath",
+        "sourceSha256",
         "creationCodeHash",
         "runtimeCodeHash",
         "compilerSettingsDigest"
@@ -641,8 +671,13 @@
         "contract": {
           "enum": ["programmableLaunchStampRouter", "graphFactory"]
         },
+        "name": { "type": "string", "minLength": 1 },
+        "fullyQualifiedName": { "type": "string", "minLength": 3 },
+        "standardJsonInputPath": { "type": "string", "minLength": 1 },
         "address": { "$ref": "#/$defs/address" },
         "standardJsonInputSha256": { "$ref": "#/$defs/sha256" },
+        "sourcePath": { "type": "string", "minLength": 1 },
+        "sourceSha256": { "$ref": "#/$defs/sha256" },
         "creationCodeHash": { "$ref": "#/$defs/hex32" },
         "runtimeCodeHash": { "$ref": "#/$defs/hex32" },
         "compilerSettingsDigest": { "$ref": "#/$defs/sha256" }
@@ -657,6 +692,7 @@
         "coveredContracts",
         "sourceRevision",
         "sourceTree",
+        "sourceClosureDigest",
         "captureAuthorizationDigest",
         "productionVerifyProofSha256",
         "productionVerifyArtifactDigest",
@@ -671,7 +707,7 @@
       ],
       "properties": {
         "schemaVersion": {
-          "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+          "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v2"
         },
         "authority": {
           "const": "protected-hosted-build-finalized-transaction-bytecode"
@@ -681,6 +717,7 @@
         },
         "sourceRevision": { "$ref": "#/$defs/gitHash" },
         "sourceTree": { "$ref": "#/$defs/gitHash" },
+        "sourceClosureDigest": { "$ref": "#/$defs/sha256" },
         "captureAuthorizationDigest": { "$ref": "#/$defs/sha256" },
         "productionVerifyProofSha256": { "$ref": "#/$defs/sha256" },
         "productionVerifyArtifactDigest": { "$ref": "#/$defs/sha256" },
@@ -720,7 +757,7 @@
       ],
       "properties": {
         "schemaVersion": {
-          "const": "programmable.robinhood-custom-launch.source-verification-closure.v5"
+          "const": "programmable.robinhood-custom-launch.source-verification-closure.v6"
         },
         "provider": { "const": "sourcify-v2" },
         "providerReleaseAuthority": { "const": false },
