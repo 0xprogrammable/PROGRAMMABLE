@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createMigrationRequestGate,
   gasSponsorshipDisplayKind,
   gasSponsorshipErrorMessage,
   gasSponsorshipFailure,
@@ -8,6 +9,7 @@ import {
   hasEnoughMigrationGas,
   parseGasSponsorshipResponse,
   sponsorshipRetryAfterMs,
+  waitForMigrationRetry,
   type MainTokenGasSponsorshipResponse,
   type MainTokenGasSponsorshipStatus,
 } from "../components/main-token-migration";
@@ -34,7 +36,10 @@ function response(
 }
 
 describe("main token migration gas sponsorship UI contract", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   it("accepts only the exact schema and connected wallet", () => {
     expect(parseGasSponsorshipResponse(response("confirmed"), WALLET)).toEqual({
@@ -107,7 +112,7 @@ describe("main token migration gas sponsorship UI contract", () => {
     expect(hasEnoughMigrationGas(-1n, gasPriceWei)).toBe(false);
   });
 
-  it("bounds Retry-After polling and falls back safely", () => {
+  it("honors the full Retry-After minimum and falls back safely", () => {
     expect(sponsorshipRetryAfterMs(new Response())).toBe(3_000);
     expect(sponsorshipRetryAfterMs(new Response(null, {
       headers: { "retry-after": "0" },
@@ -117,9 +122,15 @@ describe("main token migration gas sponsorship UI contract", () => {
     }))).toBe(2_200);
     expect(sponsorshipRetryAfterMs(new Response(null, {
       headers: { "retry-after": "999" },
-    }))).toBe(15_000);
+    }))).toBe(999_000);
+    expect(sponsorshipRetryAfterMs(new Response(null, {
+      headers: { "retry-after": "60" },
+    }))).toBe(60_000);
     expect(sponsorshipRetryAfterMs(new Response(null, {
       headers: { "retry-after": "not-a-date" },
+    }))).toBe(3_000);
+    expect(sponsorshipRetryAfterMs(new Response(null, {
+      headers: { "retry-after": "Infinity" },
     }))).toBe(3_000);
 
     vi.spyOn(Date, "now").mockReturnValue(
@@ -128,6 +139,65 @@ describe("main token migration gas sponsorship UI contract", () => {
     expect(sponsorshipRetryAfterMs(new Response(null, {
       headers: { "retry-after": "Sun, 30 Aug 2026 12:00:07 GMT" },
     }))).toBe(7_000);
+    expect(sponsorshipRetryAfterMs(new Response(null, {
+      headers: { "retry-after": "Sun, 30 Aug 2026 12:05:00 GMT" },
+    }))).toBe(300_000);
+  });
+
+  it("splits waits beyond the browser timer range without retrying early", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const complete = vi.fn();
+    const waiting = waitForMigrationRetry(2_147_484_647).then(complete);
+    await vi.advanceTimersByTimeAsync(2_147_483_647);
+    expect(complete).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(complete).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await waiting;
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it("serializes one wallet's reads and submits while preserving its cooldown", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const gate = createMigrationRequestGate();
+    let releaseRead!: () => void;
+    const readPending = new Promise<void>((resolve) => { releaseRead = resolve; });
+    const read = gate.run(WALLET, async () => {
+      await readPending;
+      gate.defer(WALLET, 60_000);
+      return "read";
+    });
+    const submit = vi.fn(async () => "submitted");
+    const submitted = gate.run(WALLET.toUpperCase(), submit);
+    await gate.run(OTHER_WALLET, async () => "independent");
+    expect(submit).not.toHaveBeenCalled();
+    releaseRead();
+    await read;
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(submit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(submitted).resolves.toBe("submitted");
+    expect(submit).toHaveBeenCalledOnce();
+  });
+
+  it("does not issue an aborted queued read and releases a failed request", async () => {
+    const gate = createMigrationRequestGate();
+    let releaseFirst!: () => void;
+    const firstPending = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const first = gate.run(WALLET, async () => { await firstPending; });
+    const controller = new AbortController();
+    const queuedRead = vi.fn(async () => "should not run");
+    const queued = gate.run(WALLET, queuedRead, controller.signal);
+    const aborted = expect(queued).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+    releaseFirst();
+    await first;
+    await aborted;
+    expect(queuedRead).not.toHaveBeenCalled();
+    await expect(gate.run(WALLET, async () => {
+      throw new Error("Temporary failure");
+    })).rejects.toThrow("Temporary failure");
+    await expect(gate.run(WALLET, async () => "recovered")).resolves.toBe("recovered");
   });
 
   it("preserves the safe server message and request ID", async () => {

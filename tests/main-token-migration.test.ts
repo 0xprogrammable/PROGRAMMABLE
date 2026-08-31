@@ -177,6 +177,22 @@ describe("main token migration page contract", () => {
     readFileSync(join(process.cwd(), path), "utf8");
   const page = read("components/main-token-migration.tsx");
 
+  it("locks wallet review before the first asynchronous preparation", () => {
+    const review = page.slice(
+      page.indexOf("async function reviewTransfer()"),
+      page.indexOf("async function reviewTransferOnce()"),
+    );
+    expect(review).toContain("if (transferInFlightRef.current || hasTrackedTransfer) return;");
+    expect(review.indexOf("transferInFlightRef.current = true;")).toBeLessThan(
+      review.indexOf("await reviewTransferOnce();"),
+    );
+    expect(review.indexOf('setSubmission({ kind: "submitting" });')).toBeLessThan(
+      review.indexOf("await reviewTransferOnce();"),
+    );
+    expect(review).toContain("finally {");
+    expect(review).toContain("transferInFlightRef.current = false;");
+  });
+
   it("scopes persisted transfer receipts to the connected wallet", () => {
     const hash = `0x${"ab".repeat(32)}`;
     const receipt = JSON.stringify({

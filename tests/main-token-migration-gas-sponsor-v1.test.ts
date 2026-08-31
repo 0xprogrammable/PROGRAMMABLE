@@ -823,12 +823,30 @@ describe("main token migration gas sponsor", () => {
         code: "rate_limited",
       });
 
+      // Polling cannot consume or bypass the stricter new-transfer budget.
+      for (const [operation, limit] of [["submit", 2], ["progress", 24]] as const) {
+        for (let index = 0; index < limit; index += 1) {
+          await store.admit({
+            releaseId: CONFIGURATION.releaseId,
+            principalBindingHash,
+            walletAddress: WALLET,
+            operation,
+          });
+        }
+        await expect(store.admit({
+          releaseId: CONFIGURATION.releaseId,
+          principalBindingHash,
+          walletAddress: WALLET,
+          operation,
+        })).rejects.toMatchObject({ code: "rate_limited" });
+      }
+
       const rows = await database.query<{ count: string }>(`
         SELECT count(*)::text AS count
           FROM programmable_website_projection_v1.credential_uses
          WHERE credential_id LIKE '%:admission:%'
       `);
-      expect(rows.rows[0]?.count).toBe("16");
+      expect(rows.rows[0]?.count).toBe("68");
 
       const firstBindings = deriveMainTokenMigrationSponsorBindingsV1({
         releaseId: CONFIGURATION.releaseId,
