@@ -27,6 +27,7 @@ import {
   MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
   MAIN_TOKEN_SYMBOL,
   MAIN_TOKEN_TOTAL_SUPPLY_RAW,
+  isMainTokenMigrationDelegatedWalletCode,
   isMainTokenMigrationWalletCodeEligible,
   parseMainTokenMigrationAmount,
 } from "@/lib/main-token-migration";
@@ -68,13 +69,17 @@ type SubmissionState =
 
 type AccountCodeObservation = Readonly<{
   account: string;
-  status: "eoa" | "contract" | "unavailable";
+  status: "eoa" | "delegated" | "contract" | "unavailable";
 }>;
 
 const gasSponsorshipEndpoint =
   "/api/main-token-migration/gas-sponsorship" as const;
 const gasSponsorshipSchema =
   "programmable-main-token-migration-gas-sponsorship/v1" as const;
+const gaslessTransferEndpoint =
+  "/api/main-token-migration/gasless-transfer" as const;
+const gaslessTransferSchema =
+  "programmable-main-token-migration-gasless-transfer/v1" as const;
 // A V4 transfer currently uses roughly 52k gas. This conservative client-side
 // reserve only decides whether the UI can skip the sponsor endpoint entirely;
 // the server independently estimates and caps every sponsored top-up.
@@ -135,6 +140,36 @@ export type GasSponsorshipState =
       retryMode: "check" | "submit";
     };
 
+type GaslessTransferStatus =
+  | "signature_required"
+  | "permit_submitted"
+  | "permit_pending"
+  | "transfer_submitted"
+  | "transfer_pending"
+  | "confirmed";
+
+type GaslessTransferResponse = Readonly<{
+  schema: typeof gaslessTransferSchema;
+  status: GaslessTransferStatus;
+  walletAddress: string;
+  amountRaw: string;
+  sponsorAddress: string;
+  nonce: string;
+  permitDeadline: string;
+  requestBindingHash: `sha256:${string}`;
+  permitTransactionHash: Hex | null;
+  transferTransactionHash: Hex | null;
+  transferBlockNumber: string | null;
+}>;
+
+type GaslessStage = "idle" | "preparing" | "signing" | "relaying";
+
+type StoredGaslessTransferProgress = Readonly<{
+  schema: "programmable-main-token-migration-gasless-ui/v1";
+  account: string;
+  amountRaw: string;
+}>;
+
 type GasSponsorshipEndpointResult = Readonly<{
   body: MainTokenGasSponsorshipResponse;
   retryAfterMs: number;
@@ -158,6 +193,143 @@ class GasSponsorshipEndpointError extends Error {
 const migrationTransferStorageKey = `programmable:main-token-migration:${MAIN_TOKEN_MIGRATION_WALLET.toLowerCase()}`;
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/u;
 const sponsorshipIntegerPattern = /^(?:0|[1-9][0-9]*)$/u;
+const digestPattern = /^sha256:[0-9a-f]{64}$/u;
+
+const gaslessTransferProgressStorageKey =
+  `programmable:main-token-migration:gasless-progress:${MAIN_TOKEN_MIGRATION_RELEASE_ID}`;
+
+function persistGaslessTransferProgress(
+  account: string,
+  amountRaw: bigint,
+) {
+  const value: StoredGaslessTransferProgress = {
+    schema: "programmable-main-token-migration-gasless-ui/v1",
+    account: getAddress(account).toLowerCase(),
+    amountRaw: amountRaw.toString(),
+  };
+  const source = JSON.stringify(value);
+  try {
+    window.localStorage.setItem(gaslessTransferProgressStorageKey, source);
+    if (window.localStorage.getItem(gaslessTransferProgressStorageKey) !== source) {
+      throw new Error("Gasless transfer recovery state was not persisted");
+    }
+  } catch {
+    throw new Error(
+      "Gasless transfer recovery is unavailable in this browser. No signature was requested.",
+    );
+  }
+  return value;
+}
+
+function clearGaslessTransferProgress() {
+  try {
+    window.localStorage.removeItem(gaslessTransferProgressStorageKey);
+  } catch {
+    // The confirmed transfer remains tracked by the normal transaction state.
+  }
+}
+
+function storedGaslessTransferProgress(): StoredGaslessTransferProgress | null {
+  try {
+    const source = window.localStorage.getItem(gaslessTransferProgressStorageKey);
+    if (!source) return null;
+    const value = JSON.parse(source) as Record<string, unknown>;
+    if (Object.keys(value).sort().join("\0") !==
+        ["account", "amountRaw", "schema"].sort().join("\0") ||
+      value.schema !== "programmable-main-token-migration-gasless-ui/v1" ||
+      typeof value.account !== "string" ||
+      !isAddress(value.account, { strict: true }) ||
+      value.account !== getAddress(value.account).toLowerCase() ||
+      typeof value.amountRaw !== "string" ||
+      !positiveIntegerPattern.test(value.amountRaw)) return null;
+    return Object.freeze({
+      schema: value.schema,
+      account: value.account,
+      amountRaw: value.amountRaw,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function parseGaslessTransferResponse(
+  input: unknown,
+  expectedAccount: string,
+  expectedAmountRaw: bigint,
+): GaslessTransferResponse {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("The gasless transfer response is invalid.");
+  }
+  const value = input as Record<string, unknown>;
+  const exactKeys = [
+    "amountRaw", "nonce", "permitDeadline", "permitTransactionHash",
+    "requestBindingHash", "schema", "sponsorAddress", "status",
+    "transferBlockNumber", "transferTransactionHash", "walletAddress",
+  ];
+  const statuses: readonly GaslessTransferStatus[] = [
+    "signature_required", "permit_submitted", "permit_pending",
+    "transfer_submitted", "transfer_pending", "confirmed",
+  ];
+  const status = value.status as GaslessTransferStatus;
+  const permitHashValid = value.permitTransactionHash === null ||
+    (typeof value.permitTransactionHash === "string" &&
+      transactionHashPattern.test(value.permitTransactionHash));
+  const transferHashValid = value.transferTransactionHash === null ||
+    (typeof value.transferTransactionHash === "string" &&
+      transactionHashPattern.test(value.transferTransactionHash));
+  const transferBlockValid = value.transferBlockNumber === null ||
+    (typeof value.transferBlockNumber === "string" &&
+      positiveIntegerPattern.test(value.transferBlockNumber));
+  const statusHashesValid = status === "signature_required"
+    ? value.permitTransactionHash === null &&
+      value.transferTransactionHash === null
+    : status === "permit_submitted" || status === "permit_pending"
+      ? typeof value.permitTransactionHash === "string" &&
+        value.transferTransactionHash === null
+      : typeof value.permitTransactionHash === "string" &&
+        typeof value.transferTransactionHash === "string" &&
+        (status !== "confirmed" ||
+          typeof value.transferBlockNumber === "string");
+  if (Object.keys(value).sort().join("\0") !== exactKeys.sort().join("\0") ||
+    value.schema !== gaslessTransferSchema || !statuses.includes(status) ||
+    typeof value.walletAddress !== "string" ||
+    !isAddress(value.walletAddress, { strict: true }) ||
+    getAddress(value.walletAddress).toLowerCase() !==
+      getAddress(expectedAccount).toLowerCase() ||
+    typeof value.sponsorAddress !== "string" ||
+    !isAddress(value.sponsorAddress, { strict: true }) ||
+    typeof value.amountRaw !== "string" ||
+    !positiveIntegerPattern.test(value.amountRaw) ||
+    BigInt(value.amountRaw) !== expectedAmountRaw ||
+    typeof value.nonce !== "string" ||
+    !sponsorshipIntegerPattern.test(value.nonce) ||
+    typeof value.permitDeadline !== "string" ||
+    !positiveIntegerPattern.test(value.permitDeadline) ||
+    typeof value.requestBindingHash !== "string" ||
+    !digestPattern.test(value.requestBindingHash) ||
+    !permitHashValid || !transferHashValid || !transferBlockValid ||
+    (status !== "confirmed" && value.transferBlockNumber !== null) ||
+    !statusHashesValid) {
+    throw new Error("The gasless transfer response is invalid.");
+  }
+  return Object.freeze({
+    schema: gaslessTransferSchema,
+    status,
+    walletAddress: getAddress(value.walletAddress),
+    amountRaw: value.amountRaw,
+    sponsorAddress: getAddress(value.sponsorAddress),
+    nonce: value.nonce,
+    permitDeadline: value.permitDeadline,
+    requestBindingHash: value.requestBindingHash as `sha256:${string}`,
+    permitTransactionHash: value.permitTransactionHash === null
+      ? null
+      : (value.permitTransactionHash as string).toLowerCase() as Hex,
+    transferTransactionHash: value.transferTransactionHash === null
+      ? null
+      : (value.transferTransactionHash as string).toLowerCase() as Hex,
+    transferBlockNumber: value.transferBlockNumber as string | null,
+  });
+}
 
 export function sponsorshipRetryAfterMs(response: Response) {
   const value = response.headers.get("retry-after");
@@ -307,6 +479,25 @@ export async function gasSponsorshipErrorMessage(response: Response) {
   return (await gasSponsorshipFailure(response)).message;
 }
 
+async function gaslessTransferFailure(response: Response) {
+  let message = "The gasless transfer is temporarily unavailable.";
+  let requestId = "";
+  try {
+    const body = await response.json() as {
+      error?: { message?: unknown; requestId?: unknown };
+    };
+    if (typeof body.error?.message === "string" &&
+      body.error.message.length <= 240) message = body.error.message;
+    if (typeof body.error?.requestId === "string" &&
+      /^[0-9a-f-]{36}$/iu.test(body.error.requestId)) {
+      requestId = body.error.requestId;
+    }
+  } catch {
+    // Keep the stable recovery message.
+  }
+  return requestId ? `${message} Request ID: ${requestId}` : message;
+}
+
 function gasSponsorshipError(
   error: unknown,
   account: string,
@@ -388,6 +579,33 @@ function gasSponsorshipIdempotencyKey(
   } catch {
     const created =
       `migration-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
+    fallbackKeys.set(storageKey, created);
+    return created;
+  }
+}
+
+function gaslessTransferIdempotencyKey(
+  account: string,
+  fallbackKeys: Map<string, string>,
+) {
+  const normalizedAccount = getAddress(account).toLowerCase();
+  const storageKey = `programmable:main-token-migration:gasless:${MAIN_TOKEN_MIGRATION_RELEASE_ID}:${normalizedAccount}`;
+  const fallback = fallbackKeys.get(storageKey);
+  if (fallback && /^[a-zA-Z0-9:_-]{16,200}$/u.test(fallback)) return fallback;
+  try {
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored && /^[a-zA-Z0-9:_-]{16,200}$/u.test(stored)) {
+      fallbackKeys.set(storageKey, stored);
+      return stored;
+    }
+    const created =
+      `gasless-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
+    fallbackKeys.set(storageKey, created);
+    window.localStorage.setItem(storageKey, created);
+    return created;
+  } catch {
+    const created =
+      `gasless-${MAIN_TOKEN_MIGRATION_RELEASE_ID}-${window.crypto.randomUUID()}`;
     fallbackKeys.set(storageKey, created);
     return created;
   }
@@ -735,6 +953,7 @@ export function MainTokenMigration() {
     readConnectedAccountCode,
     readTradeBalances,
     sendTransaction,
+    signMainTokenMigrationPermit,
   } = useWallet();
   const [now, setNow] = useState<number | null>(null);
   const [clockUncertaintyMs, setClockUncertaintyMs] = useState<number | null>(
@@ -757,6 +976,9 @@ export function MainTokenMigration() {
   const [gasSponsorship, setGasSponsorship] = useState<GasSponsorshipState>({
     kind: "idle",
   });
+  const [gaslessStage, setGaslessStage] = useState<GaslessStage>("idle");
+  const [gaslessProgress, setGaslessProgress] =
+    useState<StoredGaslessTransferProgress | null>(null);
   const [accountCodeObservation, setAccountCodeObservation] =
     useState<AccountCodeObservation | null>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
@@ -765,6 +987,7 @@ export function MainTokenMigration() {
   const sponsorshipRegionRef = useRef<HTMLDivElement>(null);
   const trustedClockRef = useRef<TrustedClock | null>(null);
   const sponsorshipIdempotencyKeysRef = useRef(new Map<string, string>());
+  const gaslessIdempotencyKeysRef = useRef(new Map<string, string>());
 
   const readTrustedNow = useCallback(() => {
     const clock = trustedClockRef.current;
@@ -851,6 +1074,10 @@ export function MainTokenMigration() {
       ? gasSponsorship.transactionHash
       : null;
   const sponsoredGasReady = hasEnoughObservedGas;
+  const delegatedWallet = accountCodeStatus === "delegated";
+  const unresolvedGaslessTransfer = gaslessProgress !== null;
+  const gaslessProgressForConnectedAccount =
+    connectedAccount !== null && gaslessProgress?.account === connectedAccount;
   const parsedAmount = useMemo(() => {
     if (!amount.trim()) return null;
     try {
@@ -946,9 +1173,11 @@ export function MainTokenMigration() {
         if (!cancelled) {
           setAccountCodeObservation({
             account,
-            status: isMainTokenMigrationWalletCodeEligible(code)
-              ? "eoa"
-              : "contract",
+            status: isMainTokenMigrationDelegatedWalletCode(code)
+              ? "delegated"
+              : isMainTokenMigrationWalletCodeEligible(code)
+                ? "eoa"
+                : "contract",
           });
         }
       })
@@ -961,6 +1190,33 @@ export function MainTokenMigration() {
       cancelled = true;
     };
   }, [onMainnet, readConnectedAccountCode, wallet]);
+
+  useEffect(() => {
+    const restore = () => {
+      const restored = storedGaslessTransferProgress();
+      setGaslessProgress(restored);
+      if (restored && !hasTrackedTransfer) {
+        if (wallet?.account.toLowerCase() === restored.account) {
+          setAmount(formatUnits(BigInt(restored.amountRaw), MAIN_TOKEN_DECIMALS));
+          setAcknowledged(true);
+        }
+        setSubmission({
+          kind: "error",
+          message:
+            "This gasless transfer still needs reconciliation. Resume it here and do not send V4 separately.",
+        });
+      }
+    };
+    const timeout = window.setTimeout(restore, 0);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === gaslessTransferProgressStorageKey) restore();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [hasTrackedTransfer, wallet]);
 
   useEffect(() => {
     const restore = window.setTimeout(() => {
@@ -1451,6 +1707,132 @@ export function MainTokenMigration() {
     }
   }
 
+  async function reviewGaslessTransfer(account: `0x${string}`, amountRaw: bigint) {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      throw new Error("Reconnect this wallet before using the gasless transfer.");
+    }
+    const idempotencyKey = gaslessTransferIdempotencyKey(
+      account,
+      gaslessIdempotencyKeysRef.current,
+    );
+    const headers = {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    };
+    setSubmission({ kind: "submitting" });
+    setGaslessStage("preparing");
+    const prepareBody = JSON.stringify({
+      action: "prepare",
+      walletAddress: account,
+      amountRaw: amountRaw.toString(),
+    });
+    let prepared: GaslessTransferResponse | null = null;
+    let prepareFailure = "The gasless transfer is temporarily unavailable.";
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await fetch(gaslessTransferEndpoint, {
+        method: "POST",
+        cache: "no-store",
+        headers,
+        body: prepareBody,
+      });
+      if (response.ok) {
+        prepared = parseGaslessTransferResponse(
+          await response.json(),
+          account,
+          amountRaw,
+        );
+        break;
+      }
+      prepareFailure = await gaslessTransferFailure(response);
+      if ((response.status !== 429 && response.status !== 503) || attempt === 4) {
+        throw new Error(prepareFailure);
+      }
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, sponsorshipRetryAfterMs(response));
+      });
+    }
+    if (!prepared) throw new Error(prepareFailure);
+    if (prepared.status !== "signature_required") {
+      throw new Error("The gasless transfer request is not ready for review.");
+    }
+    const progress = persistGaslessTransferProgress(account, amountRaw);
+    setGaslessProgress(progress);
+    setGaslessStage("signing");
+    let permit;
+    try {
+      permit = await signMainTokenMigrationPermit({
+        deadline: BigInt(prepared.permitDeadline),
+        nonce: BigInt(prepared.nonce),
+        spender: getAddress(prepared.sponsorAddress),
+        value: amountRaw,
+      });
+    } catch (error) {
+      clearGaslessTransferProgress();
+      setGaslessProgress(null);
+      throw error;
+    }
+    setGaslessStage("relaying");
+    const submitBody = JSON.stringify({
+      action: "submit",
+      walletAddress: account,
+      amountRaw: amountRaw.toString(),
+      nonce: prepared.nonce,
+      permitDeadline: prepared.permitDeadline,
+      permitSignature: permit.signature,
+      requestBindingHash: prepared.requestBindingHash,
+    });
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const response = await fetch(gaslessTransferEndpoint, {
+        method: "POST",
+        cache: "no-store",
+        headers,
+        body: submitBody,
+      });
+      if (!response.ok) {
+        const failure = await gaslessTransferFailure(response);
+        if ((response.status === 429 || response.status === 503) && attempt < 59) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, sponsorshipRetryAfterMs(response));
+          });
+          continue;
+        }
+        throw new Error(failure);
+      }
+      const result = parseGaslessTransferResponse(
+        await response.json(),
+        account,
+        amountRaw,
+      );
+      if (result.status === "confirmed" && result.transferTransactionHash &&
+        result.transferBlockNumber) {
+        const confirmed: Extract<SubmissionState, { kind: "confirmed" }> = {
+          kind: "confirmed",
+          account,
+          hash: result.transferTransactionHash,
+          amount: formatUnits(amountRaw, MAIN_TOKEN_DECIMALS),
+          blockNumber: result.transferBlockNumber,
+        };
+        persistMigrationTransfer(confirmed);
+        clearGaslessTransferProgress();
+        setGaslessProgress(null);
+        setConfirmationIssue("");
+        setSubmission(confirmed);
+        setGaslessStage("idle");
+        void refreshBalance();
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, sponsorshipRetryAfterMs(response));
+      });
+    }
+    throw new Error(
+      "The gasless transfer is still being reconciled. Resume it here; do not send V4 separately.",
+    );
+  }
+
   async function reviewTransfer() {
     if (!trustedTransferWindowOpen()) {
       setSubmission({
@@ -1527,9 +1909,10 @@ export function MainTokenMigration() {
           "Smart-contract wallets are not eligible for the automatic allocation path. Contact support for manual review before sending.",
         );
       }
+      const delegated = isMainTokenMigrationDelegatedWalletCode(code);
       setAccountCodeObservation({
         account: wallet.account.toLowerCase(),
-        status: "eoa",
+        status: delegated ? "delegated" : "eoa",
       });
       const amountRaw = parsedAmount;
       const freshBalances = await readTradeBalances(MAIN_TOKEN_ADDRESS);
@@ -1537,6 +1920,11 @@ export function MainTokenMigration() {
       setNativeBalance(freshBalances.nativeBalanceWei);
       setGasPrice(freshBalances.gasPriceWei);
       assertMainTokenMigrationBalance(amountRaw, freshBalances.tokenBalanceRaw);
+      const account = getAddress(wallet.account);
+      if (delegated) {
+        await reviewGaslessTransfer(account, amountRaw);
+        return;
+      }
       if (
         !hasEnoughMigrationGas(
           freshBalances.nativeBalanceWei,
@@ -1567,7 +1955,6 @@ export function MainTokenMigration() {
         });
         return;
       }
-      const account = getAddress(wallet.account);
       const prepared = buildMainTokenMigrationTransaction({
         from: account,
         amountRaw,
@@ -1594,6 +1981,7 @@ export function MainTokenMigration() {
       setConfirmationIssue("");
       setSubmission(submitted);
     } catch (error) {
+      setGaslessStage("idle");
       setSubmission({ kind: "error", message: migrationErrorMessage(error) });
     }
   }
@@ -1622,7 +2010,11 @@ export function MainTokenMigration() {
                         ? "Switching network"
                         : "Switch to Ethereum"
                       : submission.kind === "submitting"
-                        ? "Confirm in your wallet"
+                        ? gaslessStage === "preparing"
+                          ? "Preparing gasless transfer"
+                          : gaslessStage === "relaying"
+                            ? "Relaying gasless transfer"
+                            : "Confirm exact amount in wallet"
                         : accountCodeStatus === "checking"
                           ? "Checking wallet type"
                           : accountCodeStatus === "contract"
@@ -1635,6 +2027,13 @@ export function MainTokenMigration() {
                                   ? "Balance unavailable"
                                   : !acknowledged
                                     ? "Confirm address control"
+                                    : gaslessProgress &&
+                                        gaslessProgress.account !== connectedAccount
+                                      ? "Reconnect pending wallet"
+                                    : delegatedWallet
+                                      ? gaslessProgressForConnectedAccount
+                                        ? "Resume gasless transfer"
+                                        : "Review gasless transfer"
                                     : !sponsoredGasReady
                                       ? sponsorshipKind === "eligible"
                                         ? "Request sponsored gas first"
@@ -1846,7 +2245,8 @@ export function MainTokenMigration() {
 
             {wallet &&
             onMainnet &&
-            accountCodeStatus === "eoa" &&
+            (accountCodeStatus === "eoa" ||
+              accountCodeStatus === "delegated") &&
             parsedAmount !== null &&
             !amountError &&
             balance !== null ? (
@@ -1855,7 +2255,21 @@ export function MainTokenMigration() {
                 tabIndex={-1}
                 aria-label="Gas sponsorship status"
               >
-                {sponsorshipKind === "not-needed" ? (
+                {delegatedWallet ? (
+                  <div
+                    className={styles.walletTypeStatus}
+                    data-status="eoa"
+                    role="status"
+                  >
+                    <strong>Gasless transfer available</strong>
+                    <span>
+                      Review the exact V4 amount in your wallet. Programmable
+                      pays the Ethereum gas and sends only that amount to the
+                      fixed migration address. Use Max to move your full balance
+                      in one gasless transfer.
+                    </span>
+                  </div>
+                ) : sponsorshipKind === "not-needed" ? (
                   <div
                     className={styles.walletTypeStatus}
                     data-status="eoa"
@@ -2054,7 +2468,9 @@ export function MainTokenMigration() {
                   submission.kind === "submitting" ||
                   hasTrackedTransfer ||
                   accountCodeStatus === "checking" ||
-                  accountCodeStatus === "contract"
+                  accountCodeStatus === "contract" ||
+                  (gaslessProgress !== null &&
+                    gaslessProgress.account !== connectedAccount)
                 }
               >
                 {primaryLabel}
@@ -2062,6 +2478,8 @@ export function MainTokenMigration() {
             ) : null}
             <p className={styles.walletBoundary}>
               Nothing is sent until you approve the V4 transfer in your wallet.
+              For gasless wallets, Programmable then relays that amount to the
+              fixed migration address.
             </p>
 
             <div
@@ -2110,7 +2528,7 @@ export function MainTokenMigration() {
                   >
                     View on Etherscan
                   </a>
-                  {transferWindowOpen ? (
+                  {transferWindowOpen && !delegatedWallet ? (
                     <button
                       className={styles.secondaryAction}
                       type="button"
@@ -2153,8 +2571,17 @@ export function MainTokenMigration() {
               <p>Manual transfer</p>
               <h2 id="migration-wallet-title">Send V4 directly</h2>
             </header>
-            <p>Prefer not to connect? Send V4 directly to this address.</p>
-            {canRevealDestination ? (
+            <p>
+              {unresolvedGaslessTransfer
+                ? "Finish the pending gasless transfer before using the manual path."
+                : "Prefer not to connect? Send V4 directly to this address."}
+            </p>
+            {unresolvedGaslessTransfer ? (
+              <p className={styles.closedAddressNote} role="status">
+                Select Resume gasless transfer. Do not send another transfer while
+                its outcome is being reconciled.
+              </p>
+            ) : canRevealDestination ? (
               <>
                 <div className={styles.addressBlock}>
                   <code>{MAIN_TOKEN_MIGRATION_WALLET}</code>

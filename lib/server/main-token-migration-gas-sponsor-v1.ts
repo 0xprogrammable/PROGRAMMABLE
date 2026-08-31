@@ -21,6 +21,8 @@ import {
 import { mainnet } from "viem/chains";
 
 import activationManifest from "@/config/main-token-migration-activation.v1.json";
+import sponsorPolicyContract from
+  "@/config/main-token-migration-gas-sponsor-privy-policy.v2.json";
 import {
   MAIN_TOKEN_ADDRESS,
   MAIN_TOKEN_MIGRATION_CHAIN_ID,
@@ -29,6 +31,7 @@ import {
   MAIN_TOKEN_MIGRATION_WINDOW_SECONDS,
   MAIN_TOKEN_RUNTIME_CODE_KECCAK256,
   MAIN_TOKEN_TOTAL_SUPPLY_RAW,
+  isMainTokenMigrationDelegatedWalletCode,
   isMainTokenMigrationWalletCodeEligible,
 } from "@/lib/main-token-migration";
 import {
@@ -153,6 +156,14 @@ type PrivySponsorWalletAttestationV1 = Readonly<{
   chain_type?: unknown;
   id?: unknown;
   policy_ids?: unknown;
+}>;
+
+type PrivySponsorPolicyAttestationV2 = Readonly<{
+  chain_type?: unknown;
+  name?: unknown;
+  owner_id?: unknown;
+  rules?: unknown;
+  version?: unknown;
 }>;
 
 export class MainTokenMigrationGasSponsorErrorV1 extends Error {
@@ -294,6 +305,78 @@ export function assertMainTokenMigrationPrivySponsorWalletV1(
     throw new MainTokenMigrationGasSponsorErrorV1(
       503,
       "sponsor_wallet_mismatch",
+    );
+  }
+}
+
+export function assertMainTokenMigrationPrivySponsorPolicyV2(
+  policy: PrivySponsorPolicyAttestationV2,
+  configuration: MainTokenMigrationGasSponsorConfigurationV1,
+) {
+  const contract = sponsorPolicyContract as Readonly<{
+    schema: string;
+    name: string;
+    chainType: string;
+    version: string;
+    rules: unknown;
+  }>;
+  if (contract.schema !==
+      "programmable-main-token-migration-gas-sponsor-privy-policy/v2" ||
+    contract.chainType !== "ethereum" || contract.version !== "1.0" ||
+    configuration.sponsorAddress.toLowerCase() !==
+      "0x0060f9e57fccc0611ef44809b257919e78aa99ac" ||
+    canonicalizeJson(contract.rules as never).includes(
+      "0x0060f9e57fccc0611ef44809b257919e78aa99ac",
+    ) ||
+    !canonicalizeJson(contract.rules as never).includes(
+      configuration.sponsorAddress,
+    ) ||
+    !canonicalizeJson(contract.rules as never).includes(MAIN_TOKEN_ADDRESS) ||
+    !canonicalizeJson(contract.rules as never).includes(
+      MAIN_TOKEN_MIGRATION_WALLET,
+    ) ||
+    !canonicalizeJson(contract.rules as never).includes(
+      toHex(MAIN_TOKEN_TOTAL_SUPPLY_RAW),
+    ) ||
+    !canonicalizeJson(contract.rules as never).includes(
+      toHex(configuration.deadlineTimestampExclusive),
+    ) ||
+    !canonicalizeJson(contract.rules as never).includes(
+      toHex(ABSOLUTE_TOP_UP_CAP_WEI),
+    )) {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "sponsor_policy_contract_invalid",
+    );
+  }
+  if (policy.owner_id !== null || policy.chain_type !== contract.chainType ||
+    policy.name !== contract.name || policy.version !== contract.version ||
+    !Array.isArray(policy.rules)) {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "sponsor_policy_mismatch",
+    );
+  }
+  const rules = policy.rules.map((candidate) => {
+    if (!candidate || Array.isArray(candidate) || typeof candidate !== "object") {
+      throw new MainTokenMigrationGasSponsorErrorV1(
+        503,
+        "sponsor_policy_mismatch",
+      );
+    }
+    const rule = candidate as Record<string, unknown>;
+    return {
+      name: rule.name,
+      action: rule.action,
+      method: rule.method,
+      conditions: rule.conditions,
+    };
+  });
+  if (canonicalizeJson(rules as never) !==
+    canonicalizeJson(contract.rules as never)) {
+    throw new MainTokenMigrationGasSponsorErrorV1(
+      503,
+      "sponsor_policy_mismatch",
     );
   }
 }
@@ -929,6 +1012,8 @@ function createProductionSender(
     async assertReady() {
       const wallet = await privy.wallets().get(configuration.sponsorWalletId);
       assertMainTokenMigrationPrivySponsorWalletV1(wallet, configuration);
+      const policy = await privy.policies().get(configuration.sponsorPolicyId);
+      assertMainTokenMigrationPrivySponsorPolicyV2(policy, configuration);
     },
     async lookup(intent: MainTokenMigrationGasSponsorIntentV1) {
       assertBroadcastableSponsorIntent(intent);
@@ -1493,7 +1578,13 @@ export function createMainTokenMigrationGasSponsorChainV1(
             "rpc_quorum_unavailable",
           );
         }
-        if (left.walletCode === "0x") {
+        if (isMainTokenMigrationDelegatedWalletCode(left.walletCode)) {
+          throw new MainTokenMigrationGasSponsorErrorV1(
+            422,
+            "gasless_transfer_required",
+          );
+        }
+        if (left.walletCode === undefined || left.walletCode === "0x") {
           return MAIN_TOKEN_MIGRATION_GAS_SPONSOR_GAS_LIMIT_V1;
         }
         const estimates = await Promise.all(clients.map((client) =>

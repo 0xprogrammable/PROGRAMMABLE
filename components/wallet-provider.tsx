@@ -56,7 +56,13 @@ import {
 } from "@/lib/custom-launch/wallet-handoff-v4";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
-import { assertMainTokenMigrationTransaction } from "@/lib/main-token-migration";
+import {
+  assertMainTokenMigrationTransaction,
+  buildMainTokenMigrationPermitTypedData,
+  parseMainTokenMigrationPermitSignature,
+  serializeMainTokenMigrationPermitTypedData,
+  type MainTokenMigrationPermitSignature,
+} from "@/lib/main-token-migration";
 import {
   buildPredictionPermitTypedData,
   buildUsdgPermitTypedData,
@@ -179,6 +185,12 @@ type WalletContextValue = {
     tokenName: string;
     value: bigint;
   }>) => Promise<PredictionPermitSignature>;
+  signMainTokenMigrationPermit: (input: Readonly<{
+    deadline: bigint;
+    nonce: bigint;
+    spender: Address;
+    value: bigint;
+  }>) => Promise<MainTokenMigrationPermitSignature>;
   sendBrowserWalletAction: (input: Readonly<{
     chainId: string;
     from: `0x${string}`;
@@ -1025,6 +1037,9 @@ function DeferredWalletProvider({
         throw new Error("Wallet sign-in is still loading");
       },
       signPredictionTokenPermit: async () => {
+        throw new Error("Wallet sign-in is still loading");
+      },
+      signMainTokenMigrationPermit: async () => {
         throw new Error("Wallet sign-in is still loading");
       },
       sendBrowserWalletAction: async () => {
@@ -2085,6 +2100,75 @@ function PrivyWalletBridge({
     }
   }, [connectedWallet, user?.id, wallet]);
 
+  const signMainTokenMigrationPermit = useCallback(async (input: Readonly<{
+    deadline: bigint;
+    nonce: bigint;
+    spender: Address;
+    value: bigint;
+  }>) => {
+    if (!connectedWallet || !wallet) {
+      throw new Error("Connect an Ethereum wallet before continuing");
+    }
+    const sessionSubject = user?.id ?? null;
+    if (sessionSubject === null) {
+      throw new Error("Your wallet session expired. Reconnect and try again");
+    }
+    const expectedAccount = wallet.account.toLowerCase();
+    const assertCurrentSession = () => {
+      const current = walletRequestSessionRef.current;
+      if (!current.authenticated || current.privyUserId !== sessionSubject ||
+        current.account?.toLowerCase() !== expectedAccount) {
+        throw new Error("The wallet session changed. Reconnect and try again");
+      }
+    };
+    const typedData = buildMainTokenMigrationPermitTypedData({
+      ...input,
+      owner: wallet.account,
+    });
+    const mainnetChainHex = `0x${mainnet.id.toString(16)}`;
+
+    try {
+      if (normalizeChainId(wallet.chainId) !== mainnetChainHex) {
+        await connectedWallet.switchChain(mainnet.id);
+        assertCurrentSession();
+      }
+      const provider = await connectedWallet.getEthereumProvider();
+      await assertExternalWalletAuthorityCurrent({
+        expectedAccount: wallet.account,
+        expectedChainId: mainnetChainHex,
+        networkName: mainnet.name,
+        request: (method) => provider.request({ method }),
+      });
+      const signature = await runWithBrowserWalletRequestLock({
+        sessionSubject,
+        account: wallet.account,
+        chainId: String(mainnet.id),
+        requestSubject: JSON.stringify([
+          "main-token-migration-permit-v1",
+          input.spender.toLowerCase(),
+          input.value.toString(),
+          input.nonce.toString(),
+          input.deadline.toString(),
+        ]),
+        assertCurrentSession,
+        execute: () => provider.request({
+          method: "eth_signTypedData_v4",
+          params: [
+            wallet.account,
+            serializeMainTokenMigrationPermitTypedData(typedData),
+          ],
+        }),
+      });
+      assertCurrentSession();
+      if (typeof signature !== "string") {
+        throw new Error("The wallet returned an invalid migration permit signature");
+      }
+      return parseMainTokenMigrationPermitSignature(signature as Hex);
+    } catch (caught) {
+      throw new Error(getWalletTransactionErrorMessage(caught));
+    }
+  }, [connectedWallet, user?.id, wallet]);
+
   const signLaunchMessage = useCallback(async (
     signingMessageBase64Url: string,
   ) => {
@@ -2525,6 +2609,7 @@ function PrivyWalletBridge({
       signLaunchMessage,
       signPredictionPermit,
       signPredictionTokenPermit,
+      signMainTokenMigrationPermit,
       sendBrowserWalletAction,
       sendCustomLaunchWalletAction,
       sendCustomLaunchWalletActionV4,
@@ -2567,6 +2652,7 @@ function PrivyWalletBridge({
       signLaunchMessage,
       signPredictionPermit,
       signPredictionTokenPermit,
+      signMainTokenMigrationPermit,
       switchingNetwork,
       switchWalletNetwork,
       providerSettled,
@@ -2660,6 +2746,9 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
         throw new Error("Wallet sign-in is unavailable");
       },
       signPredictionTokenPermit: async () => {
+        throw new Error("Wallet sign-in is unavailable");
+      },
+      signMainTokenMigrationPermit: async () => {
         throw new Error("Wallet sign-in is unavailable");
       },
       sendBrowserWalletAction: async () => {

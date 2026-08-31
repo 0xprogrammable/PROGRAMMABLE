@@ -1,0 +1,47 @@
+{
+  "schema": "programmable-main-token-migration-gasless-transfer-contract/v1",
+  "releaseId": "v4-ethereum-to-robinhood-72h-2026-v2",
+  "activationManifestPath": "config/main-token-migration-activation.v1.json",
+  "route": "/api/main-token-migration/gasless-transfer",
+  "serverOnly": true,
+  "chainId": "1",
+  "sourceAssetContract": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE",
+  "tokenName": "Programmable",
+  "permitVersion": "1",
+  "permitDomainSeparator": "0xe2ac19a052ba41dccaaa930f489a94353d986c7769e416830273d9362ad26a47",
+  "migrationWallet": "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
+  "eligibleWalletCode": "eip-7702-delegation-indicator",
+  "walletReview": {
+    "standard": "EIP-2612 Permit",
+    "binds": [
+      "owner",
+      "sponsorSpender",
+      "exactAmountRaw",
+      "currentNonce",
+      "shortDeadline",
+      "EthereumChainId",
+      "pinnedToken"
+    ]
+  },
+  "relayer": {
+    "permitGasLimit": "100000",
+    "transferFromGasLimit": "100000",
+    "maximumFeePerGasWei": "20000000000",
+    "destination": "fixedMigrationWallet",
+    "providerTransactions": "separate-idempotent-permit-and-transferFrom"
+  },
+  "serverEnforces": [
+    "authenticatedLinkedOwner",
+    "sameOrigin",
+    "openingAndCurrentBalance",
+    "dualRpcQuorum",
+    "eip7702WalletCode",
+    "exactPermitSigner",
+    "exactPermitTypedData",
+    "fixedToken",
+    "fixedMigrationDestination",
+    "sharedBudget",
+    "rootWalletReplayGuard",
+    "exactTransactionReadback"
+  ]
+}

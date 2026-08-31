@@ -2,8 +2,11 @@ import {
   decodeFunctionData,
   encodeFunctionData,
   getAddress,
+  isHex,
   parseAbi,
+  parseSignature,
   parseUnits,
+  serializeTypedData,
   type Address,
   type Hex,
 } from "viem";
@@ -19,6 +22,10 @@ export const MAIN_TOKEN_MIGRATION_RELEASE_ID =
   "v4-ethereum-to-robinhood-72h-2026-v2" as const;
 export const MAIN_TOKEN_DECIMALS = 18;
 export const MAIN_TOKEN_SYMBOL = "V4";
+export const MAIN_TOKEN_NAME = "Programmable";
+export const MAIN_TOKEN_PERMIT_VERSION = "1";
+export const MAIN_TOKEN_PERMIT_DOMAIN_SEPARATOR =
+  "0xe2ac19a052ba41dccaaa930f489a94353d986c7769e416830273d9362ad26a47" as const;
 export const MAIN_TOKEN_TOTAL_SUPPLY_RAW =
   1_000_000_000_000_000_000_000_000_000n;
 export const MAIN_TOKEN_RUNTIME_CODE_KECCAK256 =
@@ -32,6 +39,23 @@ export const MAIN_TOKEN_MIGRATION_WALLET = getAddress(
 
 const UINT256_MAX = (1n << 256n) - 1n;
 const EIP_7702_DELEGATION_INDICATOR = /^0xef0100[0-9a-f]{40}$/iu;
+const permitTypes = {
+  Permit: [
+    { name: "owner", type: "address" },
+    { name: "spender", type: "address" },
+    { name: "value", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+const permitDomainTypes = {
+  EIP712Domain: [
+    { name: "name", type: "string" },
+    { name: "version", type: "string" },
+    { name: "chainId", type: "uint256" },
+    { name: "verifyingContract", type: "address" },
+  ],
+} as const;
 const erc20TransferAbi = parseAbi([
   "function transfer(address to,uint256 amount) returns (bool)",
 ]);
@@ -48,6 +72,86 @@ export function isMainTokenMigrationWalletCodeEligible(
   // Both representations therefore mean a normal EOA with no runtime code.
   return code === undefined || code === "0x" ||
     EIP_7702_DELEGATION_INDICATOR.test(code);
+}
+
+export function isMainTokenMigrationDelegatedWalletCode(
+  code: Hex | undefined,
+) {
+  return typeof code === "string" &&
+    EIP_7702_DELEGATION_INDICATOR.test(code);
+}
+
+export type MainTokenMigrationPermitSignature = Readonly<{
+  signature: Hex;
+  v: number;
+  r: Hex;
+  s: Hex;
+}>;
+
+export function buildMainTokenMigrationPermitTypedData(input: Readonly<{
+  owner: Address;
+  spender: Address;
+  value: bigint;
+  nonce: bigint;
+  deadline: bigint;
+}>) {
+  if (input.value <= 0n || input.value > UINT256_MAX || input.nonce < 0n ||
+    input.nonce > UINT256_MAX || input.deadline <= 0n ||
+    input.deadline > UINT256_MAX) {
+    throw new Error("The migration permit is outside uint256 bounds");
+  }
+  return {
+    domain: {
+      chainId: MAIN_TOKEN_MIGRATION_CHAIN_ID,
+      name: MAIN_TOKEN_NAME,
+      verifyingContract: MAIN_TOKEN_ADDRESS,
+      version: MAIN_TOKEN_PERMIT_VERSION,
+    },
+    message: {
+      deadline: input.deadline,
+      nonce: input.nonce,
+      owner: getAddress(input.owner),
+      spender: getAddress(input.spender),
+      value: input.value,
+    },
+    primaryType: "Permit" as const,
+    types: permitTypes,
+  };
+}
+
+export function serializeMainTokenMigrationPermitTypedData(
+  typedData: ReturnType<typeof buildMainTokenMigrationPermitTypedData>,
+) {
+  const serialized = serializeTypedData({
+    ...typedData,
+    domain: {
+      ...typedData.domain,
+      chainId: BigInt(typedData.domain.chainId),
+    },
+    types: { ...permitDomainTypes, ...typedData.types },
+  });
+  const payload = JSON.parse(serialized) as {
+    domain: { chainId: number | string };
+  };
+  payload.domain.chainId = MAIN_TOKEN_MIGRATION_CHAIN_ID;
+  return JSON.stringify(payload);
+}
+
+export function parseMainTokenMigrationPermitSignature(
+  signature: Hex,
+): MainTokenMigrationPermitSignature {
+  if (!isHex(signature, { strict: true }) || signature.length !== 132) {
+    throw new Error("The wallet returned an invalid migration permit signature");
+  }
+  const parsed = parseSignature(signature);
+  const v = parsed.v === undefined
+    ? (parsed.yParity ?? -1) + 27
+    : Number(parsed.v);
+  if ((v !== 27 && v !== 28) || parsed.r.length !== 66 ||
+    parsed.s.length !== 66) {
+    throw new Error("The wallet returned an invalid migration permit signature");
+  }
+  return Object.freeze({ signature, v, r: parsed.r, s: parsed.s });
 }
 
 export function parseMainTokenMigrationAmount(value: string): bigint {

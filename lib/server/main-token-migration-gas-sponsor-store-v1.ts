@@ -15,6 +15,11 @@ import {
   createProductionProjectionTargetPostgresPoolV1,
 } from "./projection-target/website-target";
 import { canonicalSha256 } from "./projection-target/hashing";
+import {
+  MAIN_TOKEN_MIGRATION_GASLESS_PREFIX_V1,
+  mainTokenMigrationGaslessRootGuardIdV1,
+  parseMainTokenMigrationGaslessBudgetReservationV1,
+} from "./main-token-migration-gasless-transfer-store-v1";
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const HASH = /^0x[0-9a-f]{64}$/u;
@@ -243,6 +248,10 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
           input.lookup.releaseId,
           eligibility.rootWalletAddress,
         );
+        const gaslessRoot = mainTokenMigrationGaslessRootGuardIdV1(
+          input.lookup.releaseId,
+          eligibility.rootWalletAddress,
+        );
         const rootHolder = holderId({
           releaseId: input.lookup.releaseId,
           walletAddress: eligibility.rootWalletAddress,
@@ -253,6 +262,7 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
           completionId(input.lookup),
           alias,
           eligibilityAlias,
+          gaslessRoot,
         ];
         const existing = await selectRows(client, ids);
         const aliasRow = existing.find((row) => row.credential_id === alias);
@@ -262,6 +272,9 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
         const holderRow = existing.find((row) => row.credential_id === holder);
         const rootHolderRow = existing.find(
           (row) => row.credential_id === rootHolder,
+        );
+        const gaslessRootRow = existing.find(
+          (row) => row.credential_id === gaslessRoot,
         );
         if (aliasRow) {
           const value = parseAlias(aliasRow);
@@ -281,7 +294,7 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
           return Object.freeze({ kind: "existing" as const, record: existingRecord });
         }
         if (rootHolder !== holder && rootHolderRow) throw conflict();
-        if (aliasRow || eligibilityRow) throw conflict();
+        if (aliasRow || eligibilityRow || gaslessRootRow) throw conflict();
         const releaseIntents = await selectReleaseIntents(
           client,
           input.lookup.releaseId,
@@ -290,7 +303,13 @@ export function createMainTokenMigrationGasSponsorPostgresStoreV1(
           ? null
           : createRootGuardIntent(intent, eligibility);
         const reservedWei = releaseIntents.reduce((total, row) => {
-          const existingIntent = parseIntent(row);
+          const existingIntent = row.credential_id.startsWith(
+            `${MAIN_TOKEN_MIGRATION_GASLESS_PREFIX_V1}:holder:`,
+          )
+            ? parseMainTokenMigrationGaslessBudgetReservationV1(
+                row.canonical_use,
+              )
+            : parseIntent(row);
           if (existingIntent.releaseId !== input.lookup.releaseId
             || existingIntent.totalBudgetWei !== intent.totalBudgetWei) {
             throw unavailable();
@@ -505,9 +524,12 @@ async function selectReleaseIntents(
   const result = await client.query<Row>(`
     SELECT credential_id, request_binding_hash, canonical_use
       FROM programmable_website_projection_v1.credential_uses
-     WHERE credential_id LIKE $1
+     WHERE credential_id LIKE $1 OR credential_id LIKE $2
      ORDER BY credential_id
-  `, [`${PREFIX}:holder:${releaseId}:%`]);
+  `, [
+    `${PREFIX}:holder:${releaseId}:%`,
+    `${MAIN_TOKEN_MIGRATION_GASLESS_PREFIX_V1}:holder:${releaseId}:%`,
+  ]);
   return result.rows;
 }
 

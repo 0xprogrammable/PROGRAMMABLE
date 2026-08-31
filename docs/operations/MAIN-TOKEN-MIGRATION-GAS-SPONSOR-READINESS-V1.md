@@ -1,8 +1,7 @@
 # Main Token Migration Gas Sponsor V1 Readiness
 
-This checklist is an activation gate, not an activation record. The committed migration manifest is currently
-disabled. Replace no placeholders in the repository; operational values belong only in the deployment secret manager
-and private release evidence.
+This checklist remains the release and incident-response gate for the active migration window. Operational values
+belong only in the deployment secret manager and private release evidence.
 
 ## Candidate identity
 
@@ -11,6 +10,10 @@ and private release evidence.
       exact finalized pre-window eligibility block number and hash.
 - [ ] The sponsor contract matches
       `config/main-token-migration-gas-sponsor-contract.v1.json` byte-for-byte in the candidate.
+- [ ] The delegated-wallet path matches
+      `config/main-token-migration-gasless-transfer-contract.v1.json` byte-for-byte in the candidate.
+- [ ] The normalized provider readback exactly matches
+      `config/main-token-migration-gas-sponsor-privy-policy.v2.json`.
 
 ## Server configuration
 
@@ -27,10 +30,11 @@ and private release evidence.
 
 - [ ] The wallet readback reports `chain_type=ethereum`, the configured address and exactly one attached policy.
 - [ ] The attached policy ID exactly matches the configured policy ID.
-- [ ] The policy permits only Ethereum Mainnet `eth_sendTransaction` native transfers, caps value at or below the
-      configured maximum top-up, and defaults to deny for unrelated wallet methods.
-- [ ] Server tests and the reviewed candidate independently bind the exact linked holder recipient, empty calldata,
-      sender, type-2 fee/gas limits and exact calculated value; these fields are not attributed to the Privy policy.
+- [ ] The policy allows only strictly positive bounded Mainnet top-ups plus exact V4 `permit` and `transferFrom`
+      calls; the permit spender and fixed migration destination are provider-enforced and unrelated calls default to
+      deny.
+- [ ] Server tests independently bind the exact linked holder, signed amount, token calldata, native recipient,
+      sender, type-2 fee/gas limits and exact calculated value.
 - [ ] The sponsor address differs from both the V4 token and migration recipient addresses and has empty runtime code.
 
 ## Focused behavior
@@ -43,6 +47,12 @@ and private release evidence.
 - [ ] Concurrent duplicate requests reserve and broadcast no more than one transfer.
 - [ ] An ambiguous Privy response is recorded as unknown and is not rebroadcast.
 - [ ] Dual-RPC readback confirms the exact transaction fields and successful receipt before status becomes confirmed.
+- [ ] A delegated EIP-7702 wallet signs the exact EIP-2612 domain/message, receives no ETH top-up, and the sponsor can
+      relay only the signed amount through the pinned token to the fixed migration wallet.
+- [ ] The normal top-up endpoint rejects delegated wallets; both paths share one total budget and a gasless root guard
+      blocks a later native reservation.
+- [ ] Wrong signer, token, spender, amount, nonce, deadline, destination, calldata, root eligibility or provider
+      reference fails closed without a token transfer.
 
 ## Release evidence
 

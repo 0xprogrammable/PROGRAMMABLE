@@ -1,0 +1,232 @@
+{
+  "schema": "programmable-main-token-migration-gas-sponsor-privy-policy/v2",
+  "name": "Main token migration gas sponsor v2",
+  "chainType": "ethereum",
+  "version": "1.0",
+  "rules": [
+    {
+      "name": "Positive bounded Ethereum native top-ups",
+      "action": "ALLOW",
+      "method": "eth_sendTransaction",
+      "conditions": [
+        {
+          "field_source": "ethereum_transaction",
+          "field": "chain_id",
+          "operator": "eq",
+          "value": "1"
+        },
+        {
+          "field_source": "ethereum_transaction",
+          "field": "value",
+          "operator": "gt",
+          "value": "0x0"
+        },
+        {
+          "field_source": "ethereum_transaction",
+          "field": "value",
+          "operator": "lte",
+          "value": "0x71afd498d0000"
+        }
+      ]
+    },
+    {
+      "name": "Exact V4 migration permits",
+      "action": "ALLOW",
+      "method": "eth_sendTransaction",
+      "conditions": [
+        {
+          "field_source": "ethereum_transaction",
+          "field": "chain_id",
+          "operator": "eq",
+          "value": "1"
+        },
+        {
+          "field_source": "ethereum_transaction",
+          "field": "to",
+          "operator": "eq",
+          "value": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE"
+        },
+        {
+          "field_source": "ethereum_transaction",
+          "field": "value",
+          "operator": "eq",
+          "value": "0x0"
+        },
+        {
+          "field_source": "ethereum_calldata",
+          "field": "function_name",
+          "operator": "eq",
+          "value": "permit",
+          "abi": [
+            {
+              "type": "function",
+              "name": "permit",
+              "stateMutability": "nonpayable",
+              "inputs": [
+                { "name": "owner", "type": "address" },
+                { "name": "spender", "type": "address" },
+                { "name": "value", "type": "uint256" },
+                { "name": "deadline", "type": "uint256" },
+                { "name": "v", "type": "uint8" },
+                { "name": "r", "type": "bytes32" },
+                { "name": "s", "type": "bytes32" }
+              ],
+              "outputs": []
+            }
+          ]
+        },
+        {
+          "field_source": "ethereum_calldata",
+          "field": "permit.spender",
+          "operator": "eq",
+          "value": "0x0060f9E57FCcc0611ef44809B257919e78Aa99Ac",
+          "abi": [
+            {
+              "type": "function",
+              "name": "permit",
+              "stateMutability": "nonpayable",
+              "inputs": [
+                { "name": "owner", "type": "address" },
+                { "name": "spender", "type": "address" },
+                { "name": "value", "type": "uint256" },
+                { "name": "deadline", "type": "uint256" },
+                { "name": "v", "type": "uint8" },
+                { "name": "r", "type": "bytes32" },
+                { "name": "s", "type": "bytes32" }
+              ],
+              "outputs": []
+            }
+          ]
+        },
+        {
+          "field_source": "ethereum_calldata",
+          "field": "permit.value",
+          "operator": "lte",
+          "value": "0x33b2e3c9fd0803ce8000000",
+          "abi": [
+            {
+              "type": "function",
+              "name": "permit",
+              "stateMutability": "nonpayable",
+              "inputs": [
+                { "name": "owner", "type": "address" },
+                { "name": "spender", "type": "address" },
+                { "name": "value", "type": "uint256" },
+                { "name": "deadline", "type": "uint256" },
+                { "name": "v", "type": "uint8" },
+                { "name": "r", "type": "bytes32" },
+                { "name": "s", "type": "bytes32" }
+              ],
+              "outputs": []
+            }
+          ]
+        },
+        {
+          "field_source": "ethereum_calldata",
+          "field": "permit.deadline",
+          "operator": "lte",
+          "value": "0x6a9919c4",
+          "abi": [
+            {
+              "type": "function",
+              "name": "permit",
+              "stateMutability": "nonpayable",
+              "inputs": [
+                { "name": "owner", "type": "address" },
+                { "name": "spender", "type": "address" },
+                { "name": "value", "type": "uint256" },
+                { "name": "deadline", "type": "uint256" },
+                { "name": "v", "type": "uint8" },
+                { "name": "r", "type": "bytes32" },
+                { "name": "s", "type": "bytes32" }
+              ],
+              "outputs": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Exact V4 migration transfers",
+      "action": "ALLOW",
+      "method": "eth_sendTransaction",
+      "conditions": [
+        {
+          "field_source": "ethereum_transaction",
+          "field": "chain_id",
+          "operator": "eq",
+          "value": "1"
+        },
+        {
+          "field_source": "ethereum_transaction",
+          "field": "to",
+          "operator": "eq",
+          "value": "0x7987f03462200b3D8A072E02C89A8A41dCB124EE"
+        },
+        {
+          "field_source": "ethereum_transaction",
+          "field": "value",
+          "operator": "eq",
+          "value": "0x0"
+        },
+        {
+          "field_source": "ethereum_calldata",
+          "field": "function_name",
+          "operator": "eq",
+          "value": "transferFrom",
+          "abi": [
+            {
+              "type": "function",
+              "name": "transferFrom",
+              "stateMutability": "nonpayable",
+              "inputs": [
+                { "name": "from", "type": "address" },
+                { "name": "to", "type": "address" },
+                { "name": "amount", "type": "uint256" }
+              ],
+              "outputs": [{ "name": "", "type": "bool" }]
+            }
+          ]
+        },
+        {
+          "field_source": "ethereum_calldata",
+          "field": "transferFrom.to",
+          "operator": "eq",
+          "value": "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D",
+          "abi": [
+            {
+              "type": "function",
+              "name": "transferFrom",
+              "stateMutability": "nonpayable",
+              "inputs": [
+                { "name": "from", "type": "address" },
+                { "name": "to", "type": "address" },
+                { "name": "amount", "type": "uint256" }
+              ],
+              "outputs": [{ "name": "", "type": "bool" }]
+            }
+          ]
+        },
+        {
+          "field_source": "ethereum_calldata",
+          "field": "transferFrom.amount",
+          "operator": "lte",
+          "value": "0x33b2e3c9fd0803ce8000000",
+          "abi": [
+            {
+              "type": "function",
+              "name": "transferFrom",
+              "stateMutability": "nonpayable",
+              "inputs": [
+                { "name": "from", "type": "address" },
+                { "name": "to", "type": "address" },
+                { "name": "amount", "type": "uint256" }
+              ],
+              "outputs": [{ "name": "", "type": "bool" }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
