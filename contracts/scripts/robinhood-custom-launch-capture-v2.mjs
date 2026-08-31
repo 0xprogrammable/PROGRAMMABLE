@@ -14,6 +14,8 @@ import {
 
 import { canonicalizeJson, parseStrictJson } from "../../packages/launch/src/canonical-json.mjs";
 import { assertExactKeys, decodeExactUtf8, sha256Digest } from "../../packages/launch/src/io.mjs";
+import { computeV4SourceClosureDigest } from
+  "../../scripts/programmable-launch-v4-release-binding.mjs";
 import { assertRobinhoodFoundationRpcProviders } from
   "./robinhood-custom-launch-owner-envelope-core.mjs";
 
@@ -2657,10 +2659,7 @@ export async function buildRobinhoodPostdeploymentInput({
     sourceVerificationClosureDigest,
     sourceClosureDigest: null,
   };
-  sourceClosure.sourceClosureDigest = framedSha256(
-    sourceClosure.schemaVersion,
-    { ...sourceClosure, sourceClosureDigest: null },
-  );
+  sourceClosure.sourceClosureDigest = computeV4SourceClosureDigest(sourceClosure);
   const inventories = [
     ...l2ProviderReadbacks.map((provider, index) => {
       const identity = verifyProviderIdentity(
