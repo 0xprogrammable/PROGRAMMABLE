@@ -10,12 +10,16 @@ import {
   hydrateMissingCanonicalTokenSupplyV1,
 } from "./canonical-token-supply.server";
 import {
-  DEXSCREENER_CURRENT_MAXIMUM_AGE_MS,
+  DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS,
+  dexscreenerExploreObservationCurrentV1,
   readDexscreenerExploreEntriesV1,
   type DexscreenerExploreReadV1,
   type DexscreenerExploreResultV1,
 } from "./dexscreener-explore.server";
-import { exploreEntryMarketIdentitiesV1 } from
+import {
+  exploreEntriesMarketIdentitiesV1,
+  exploreEntryMarketIdentitiesV1,
+} from
   "./explore-market-identities";
 import {
   gmgnMarketDataConfiguredV1,
@@ -28,6 +32,10 @@ import { MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD } from
   "./market-data-v1";
 
 const GMGN_VISIBLE_PHASE_BUDGET_MS = 1_800;
+// Dexscreener's fallback reader is bounded to seven seconds. Admit a GMGN
+// observation only when it has enough public-freshness headroom to survive
+// that fallback plus response assembly without changing providers mid-read.
+const GMGN_VISIBLE_FALLBACK_FRESHNESS_RESERVE_MS = 10_000;
 const CANONICAL_SUPPLY_PHASE_BUDGET_MS = 1_800;
 const CANONICAL_SUPPLY_HYDRATION_LIMIT = 20;
 const UINT256_MAX = (1n << 256n) - 1n;
@@ -69,9 +77,18 @@ export async function readExploreMarketEntriesV1(
   if (!gmgnMarketDataConfiguredV1()) {
     return readDexscreenerExploreEntriesV1(hydratedEntries, wait);
   }
-  const gmgnCandidates = hydratedEntries.filter(
-    gmgnVisibleMarketEntryEligibleV1,
+  const requestedIdentities = exploreEntriesMarketIdentitiesV1(
+    hydratedEntries,
   );
+  const requestedIdentityKeys = new Set(
+    requestedIdentities.map(exploreMarketIdentityKeyV1),
+  );
+  const gmgnCandidates = hydratedEntries.filter((entry) => {
+    const identities = exploreEntryMarketIdentitiesV1(entry);
+    return gmgnVisibleMarketEntryEligibleV1(entry) &&
+      identities.length === 1 &&
+      requestedIdentityKeys.has(exploreMarketIdentityKeyV1(identities[0]!));
+  });
   if (gmgnCandidates.length === 0) {
     return readDexscreenerExploreEntriesV1(hydratedEntries, wait);
   }
@@ -92,24 +109,27 @@ export async function readExploreMarketEntriesV1(
   } catch {
     snapshots = new Map();
   }
-  const nowMs = (wait.now ?? (() => new Date()))().getTime();
-  const gmgnEntries = new Map<string, ValuedExploreEntry>();
+  const gmgnAdmissionAtMs = (wait.now ?? (() => new Date()))().getTime();
+  const admittedGmgnEntries = new Map<string, ValuedExploreEntry>();
   const fallbackEntries: ExploreEntry[] = [];
-  let gmgnQualifiedCount = 0;
   const gmgnCandidateIds = new Set(gmgnCandidates.map((entry) => entry.id));
   for (const entry of hydratedEntries) {
     const snapshot = snapshots.get(entry.id);
     if (
       gmgnCandidateIds.has(entry.id) &&
       snapshot &&
-      gmgnSnapshotQualified(snapshot, nowMs)
+      gmgnSnapshotQualified(
+        snapshot,
+        gmgnAdmissionAtMs,
+        DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS -
+          GMGN_VISIBLE_FALLBACK_FRESHNESS_RESERVE_MS,
+      )
     ) {
-      gmgnEntries.set(entry.id, {
+      admittedGmgnEntries.set(entry.id, {
         ...entry,
         valuation: gmgnValuation(snapshot),
         gmgnMarketData: snapshot,
       });
-      gmgnQualifiedCount += 1;
     } else {
       fallbackEntries.push(entry);
     }
@@ -118,15 +138,47 @@ export async function readExploreMarketEntriesV1(
   const fallback = fallbackEntries.length === 0
     ? emptyDexscreenerFallbackV1()
     : await readDexscreenerExploreEntriesV1(fallbackEntries, wait);
-  const fallbackById = new Map(fallback.entries.map((entry) => [entry.id, entry]));
-  const fallbackObservedEntryIds = new Set(
-    fallback.observedEntryIds ?? fallback.entries.filter((entry) =>
-      entry.valuation.status === "available"
-    ).map((entry) => entry.id),
+  const fallbackObservedAtMs = (wait.now ?? (() => new Date()))().getTime();
+  // Recheck after the potentially slow fallback. The admission reserve should
+  // keep ordinary reads inside the public window; this final filter is the
+  // fail-closed boundary if a caller/provider exceeds that budget.
+  const gmgnEntries = new Map(
+    [...admittedGmgnEntries].filter(([, entry]) =>
+      entry.gmgnMarketData !== undefined &&
+      gmgnSnapshotQualified(entry.gmgnMarketData, fallbackObservedAtMs)
+    ),
   );
-  const fallbackObservedCount = fallbackEntries.filter((entry) =>
-    fallbackObservedEntryIds.has(entry.id)
-  ).length;
+  const gmgnQualifiedCount = gmgnEntries.size;
+  const gmgnExpiredAfterFallback =
+    admittedGmgnEntries.size - gmgnEntries.size;
+  const fallbackById = new Map(fallback.entries.map((entry) => [entry.id, entry]));
+  const fallbackWindowCurrent = fallback.marketRead.observedCount === 0
+    ? fallback.marketRead.oldestFetchedAt === null &&
+      fallback.marketRead.newestFetchedAt === null
+    : (
+      fallback.marketRead.oldestFetchedAt !== null &&
+      fallback.marketRead.newestFetchedAt !== null &&
+      dexscreenerExploreObservationCurrentV1(
+        fallback.marketRead.oldestFetchedAt,
+        fallbackObservedAtMs,
+      ) &&
+      dexscreenerExploreObservationCurrentV1(
+        fallback.marketRead.newestFetchedAt,
+        fallbackObservedAtMs,
+      )
+    );
+  const fallbackObservedEntryIds = new Set(
+    fallbackWindowCurrent
+      ? fallback.observedEntryIds ?? fallback.entries.filter((entry) =>
+        entry.valuation.status === "available"
+      ).map((entry) => entry.id)
+      : [],
+  );
+  const requestedCount = requestedIdentities.length;
+  const fallbackRequestedCount = fallback.marketRead.requestedCount;
+  const fallbackObservedCount = fallbackWindowCurrent
+    ? Math.min(fallback.marketRead.observedCount, fallbackRequestedCount)
+    : 0;
   const fallbackQualifiedCount = fallbackEntries.filter((entry) =>
     fallbackObservedEntryIds.has(entry.id) &&
     fallbackById.get(entry.id)?.valuation.status === "available"
@@ -141,28 +193,30 @@ export async function readExploreMarketEntriesV1(
     return gmgn ?? dexscreener ?? unavailableEntry(entry);
   });
   const qualifiedCount = gmgnQualifiedCount + fallbackQualifiedCount;
-  const gmgnObservedCount = gmgnCandidates.filter((entry) =>
-    snapshots.has(entry.id)
-  ).length;
-  const gmgnTimes = gmgnCandidates.flatMap((entry) => {
-    const snapshot = snapshots.get(entry.id);
-    return snapshot ? [snapshot.fetchedAt] : [];
-  });
+  // A GMGN observation is public only when the same qualified snapshot is
+  // attached to the returned entry. Liquidity-unqualified provider payloads
+  // remain internal and therefore do not contribute to public source counts.
+  const gmgnObservedIds = new Set(gmgnEntries.keys());
+  const gmgnObservedCount = gmgnObservedIds.size;
+  const gmgnTimes = [...gmgnEntries.values()].flatMap((entry) =>
+    entry.gmgnMarketData ? [entry.gmgnMarketData.fetchedAt] : []
+  );
   const sourceTimes = [
     ...gmgnTimes,
-    ...(fallback.marketRead.oldestFetchedAt
+    ...(fallbackObservedCount > 0 && fallback.marketRead.oldestFetchedAt
       ? [fallback.marketRead.oldestFetchedAt]
       : []),
-    ...(fallback.marketRead.newestFetchedAt
+    ...(fallbackObservedCount > 0 && fallback.marketRead.newestFetchedAt
       ? [fallback.marketRead.newestFetchedAt]
       : []),
   ].sort();
-  const providerHealthy = fallbackEntries.length === 0 ||
-    fallback.marketRead.status === "complete";
-  const observedCount = hydratedEntries.filter((entry) =>
-    (gmgnCandidateIds.has(entry.id) && snapshots.has(entry.id)) ||
-    fallbackObservedEntryIds.has(entry.id)
-  ).length;
+  const providerHealthy = gmgnExpiredAfterFallback === 0 &&
+    (fallbackRequestedCount === 0 ||
+      fallback.marketRead.status === "complete");
+  const observedCount = Math.min(
+    requestedCount,
+    gmgnObservedCount + fallbackObservedCount,
+  );
   return {
     entries: valuedEntries,
     marketRead: {
@@ -174,13 +228,13 @@ export async function readExploreMarketEntriesV1(
           ? "partial"
           : "unavailable",
       currency: "USD",
-      requestedCount: hydratedEntries.length,
+      requestedCount,
       observedCount,
       qualifiedCount,
-      unavailableCount: hydratedEntries.length - qualifiedCount,
+      unavailableCount: requestedCount - qualifiedCount,
       gmgnObservedCount,
       gmgnQualifiedCount,
-      fallbackRequestedCount: fallbackEntries.length,
+      fallbackRequestedCount,
       fallbackObservedCount,
       fallbackQualifiedCount,
       oldestFetchedAt: observedCount === 0 ? null : sourceTimes[0] ?? null,
@@ -345,13 +399,27 @@ function canonicalHydratedSupplyV1(
 function gmgnSnapshotQualified(
   snapshot: NonNullable<ValuedExploreEntry["gmgnMarketData"]>,
   nowMs: number,
+  maximumAgeMs = DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS,
 ) {
   const fetchedAtMs = Date.parse(snapshot.fetchedAt);
   return BigInt(snapshot.liquidityUsdWad) >=
       BigInt(MARKET_DATA_MINIMUM_FDV_LIQUIDITY_USD_WAD) &&
     Number.isFinite(fetchedAtMs) &&
     nowMs >= fetchedAtMs &&
-    nowMs - fetchedAtMs <= DEXSCREENER_CURRENT_MAXIMUM_AGE_MS;
+    maximumAgeMs >= 0 &&
+    nowMs - fetchedAtMs <= maximumAgeMs;
+}
+
+function exploreMarketIdentityKeyV1(
+  identity: ReturnType<typeof exploreEntryMarketIdentitiesV1>[number],
+): string {
+  return [
+    identity.chainId,
+    identity.protocol,
+    identity.tokenAddress,
+    identity.poolId,
+    identity.quoteAddress,
+  ].join(":");
 }
 
 function gmgnValuation(

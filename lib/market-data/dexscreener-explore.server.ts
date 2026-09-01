@@ -19,6 +19,16 @@ import {
 } from "./explore-market-identities";
 
 export const DEXSCREENER_CURRENT_MAXIMUM_AGE_MS = 5 * 60 * 1_000;
+// Explore responses may remain at the edge for s-maxage=15 plus a 45-second
+// stale-while-revalidate window. Admit only observations that still satisfy
+// the public five-minute freshness contract at the end of that cache window,
+// with a small delivery margin after the edge releases the response.
+const EXPLORE_PUBLIC_EDGE_CACHE_MAXIMUM_AGE_MS = (15 + 45) * 1_000;
+const EXPLORE_PUBLIC_DELIVERY_SAFETY_MARGIN_MS = 5_000;
+export const DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS =
+  DEXSCREENER_CURRENT_MAXIMUM_AGE_MS -
+  EXPLORE_PUBLIC_EDGE_CACHE_MAXIMUM_AGE_MS -
+  EXPLORE_PUBLIC_DELIVERY_SAFETY_MARGIN_MS;
 
 export type DexscreenerExploreReadV1 = Readonly<{
   provider: "dexscreener";
@@ -66,10 +76,21 @@ export async function readDexscreenerExploreEntriesV1(
   const byIdentity = new Map(
     snapshot.results.map((result) => [identityKey(result), result]),
   );
-  const observedIdentityKeys = new Set(snapshot.results.filter((result) =>
-    requestedIdentityKeys.has(identityKey(result)) &&
-    result.status === "available"
-  ).map(identityKey));
+  const currentObservedResults = snapshot.results.filter(
+    (result): result is Extract<
+      DexscreenerShadowResultV1,
+      { status: "available" }
+    > =>
+      requestedIdentityKeys.has(identityKey(result)) &&
+      result.status === "available" &&
+      dexscreenerExploreObservationCurrentV1(
+        result.observation.fetchedAt,
+        observedAtMs,
+      ),
+  );
+  const observedIdentityKeys = new Set(
+    currentObservedResults.map(identityKey),
+  );
   const observedEntryIds = entries.filter((entry) =>
     exploreEntryMarketIdentitiesV1(entry).some((identity) =>
       observedIdentityKeys.has(identityKey({ identity }))
@@ -78,15 +99,12 @@ export async function readDexscreenerExploreEntriesV1(
   const valuedEntries = entries.map((entry) =>
     valuedEntry(entry, byIdentity, observedAtMs)
   );
-  const qualifiedCount = new Set(snapshot.results.filter((result) =>
-    requestedIdentityKeys.has(identityKey(result)) &&
-    result.status === "available" &&
-    result.fdvQualification.status === "qualified" &&
-    dexscreenerObservationFreshnessV1(
-      result.observation.fetchedAt,
-      observedAtMs,
-    ) === "provider-recent"
+  const qualifiedCount = new Set(currentObservedResults.filter((result) =>
+    result.fdvQualification.status === "qualified"
   ).map(identityKey)).size;
+  const sourceTimes = currentObservedResults
+    .map((result) => result.observation.fetchedAt)
+    .sort();
   return {
     entries: valuedEntries,
     observedEntryIds,
@@ -95,15 +113,11 @@ export async function readDexscreenerExploreEntriesV1(
       status: snapshot.readStatus,
       currency: snapshot.currency,
       requestedCount: snapshot.requestedCount,
-      observedCount: snapshot.observedCount,
+      observedCount: observedIdentityKeys.size,
       qualifiedCount,
       unavailableCount: snapshot.requestedCount - qualifiedCount,
-      oldestFetchedAt: snapshot.observedCount === 0
-        ? null
-        : snapshot.sourceReadWindow?.oldestFetchedAt ?? null,
-      newestFetchedAt: snapshot.observedCount === 0
-        ? null
-        : snapshot.sourceReadWindow?.newestFetchedAt ?? null,
+      oldestFetchedAt: sourceTimes[0] ?? null,
+      newestFetchedAt: sourceTimes.at(-1) ?? null,
     },
   };
 }
@@ -132,7 +146,11 @@ function valuedEntry(
     .filter((result): result is DexscreenerShadowResultV1 => result !== undefined);
   const qualified = matches.filter((result) =>
     result.status === "available" &&
-    result.fdvQualification.status === "qualified"
+    result.fdvQualification.status === "qualified" &&
+    dexscreenerExploreObservationCurrentV1(
+      result.observation.fetchedAt,
+      observedAtMs,
+    )
   );
   if (qualified.length !== 1 || qualified[0]?.status !== "available") {
     return unavailableEntry(entry);
@@ -153,6 +171,18 @@ function valuedEntry(
     asOfTime: observation.fetchedAt,
   };
   return { ...entry, valuation };
+}
+
+export function dexscreenerExploreObservationCurrentV1(
+  fetchedAt: string,
+  nowMs = Date.now(),
+): boolean {
+  const fetchedAtMs = Date.parse(fetchedAt);
+  return Number.isFinite(fetchedAtMs) &&
+    Number.isFinite(nowMs) &&
+    nowMs >= fetchedAtMs &&
+    nowMs - fetchedAtMs <=
+      DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS;
 }
 
 export function dexscreenerObservationFreshnessV1(

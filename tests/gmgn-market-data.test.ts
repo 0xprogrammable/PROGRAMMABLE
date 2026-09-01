@@ -243,10 +243,14 @@ describe("GMGN canonical market enrichment", () => {
     expect(gmgnVisibleMarketConcurrencyV1(Number.NaN)).toBe(0);
   });
 
-  it("admits only supply-backed verified Registry Custom market identities", () => {
+  it("admits only one supply-backed verified Registry Custom market identity", () => {
     const custom = registryCustom();
     expect(exploreEntryMarketIdentitiesV1(custom)).toHaveLength(2);
-    expect(gmgnVisibleMarketEntryEligibleV1(custom)).toBe(true);
+    expect(gmgnVisibleMarketEntryEligibleV1(custom)).toBe(false);
+    expect(gmgnVisibleMarketEntryEligibleV1({
+      ...custom,
+      markets: [custom.markets[0]!],
+    })).toBe(true);
     expect(gmgnVisibleMarketEntryEligibleV1({
       ...custom,
       totalSupplyRaw: undefined,

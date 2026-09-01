@@ -13,6 +13,8 @@ import {
   createDexscreenerShadowReaderV1,
   type DexscreenerShadowReaderV1,
 } from "../lib/market-data/dexscreener-shadow.server";
+import { DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS } from
+  "../lib/market-data/dexscreener-explore.server";
 import type { MarketChartIdentityV1 } from
   "../lib/market-data/market-data-v1";
 
@@ -898,6 +900,27 @@ describe("Dexscreener server-only shadow reader", () => {
     nowMs += 300_001;
     await shadowReader.read([identity(1)]);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the default success cache before Explore stops admitting it", async () => {
+    let nowMs = Date.parse(FETCHED_AT);
+    const item = identity(1);
+    const fetchImpl = vi.fn(async () => jsonResponse([pair(item)]));
+    const shadowReader = createDexscreenerShadowReaderV1({
+      fetchImpl,
+      now: () => new Date(nowMs),
+      timeoutMs: 50,
+      minimumRequestIntervalMs: 0,
+    });
+
+    await shadowReader.read([item]);
+    nowMs += 3 * 60_000 + 30_001;
+    await shadowReader.read([item]);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(3 * 60_000 + 30_001).toBeLessThan(
+      DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS,
+    );
   });
 
   it("separates assembly time from mixed token-cache provider times", async () => {

@@ -853,17 +853,18 @@ function exactCatalogSnapshot(
         )
       )
     )) return null;
+    // Delivery freshness is validated above with its matching headers. Bind
+    // pagination to identity fields so current and last-known-good delivery
+    // of the same exact identity set do not create a false catalog drift.
     return JSON.stringify({
       source,
       identityCount: catalog.identityCount,
       identityCommitment: catalog.identityCommitment,
-      completeness: catalog.completeness,
       scope: catalog.scope,
       evidenceDeployment: null,
       evidenceSourceCommit: null,
       classicV4Bound: false,
       routerEvidence: {
-        asOfBlock: routerStamp.asOfBlock,
         identityCommitment: routerStamp.identityCommitment,
       },
       launchSource: catalog.launchSource,
@@ -949,6 +950,10 @@ function exactCatalogSnapshot(
     EXPLORE_MARKET_PROVIDERS.has(marketProvider) &&
     response.headers.get("x-programmable-read-source") ===
       `${launchSource}+${marketProvider}${readSourceSuffix}` &&
+    response.headers.get("x-programmable-canonical-read-status") ===
+      catalog.completeness.classic &&
+    response.headers.get("x-programmable-router-read-status") ===
+      routerCustomStatus &&
     response.headers.get("x-programmable-identity-last-indexed-at") ===
       generatedAt &&
     (
@@ -964,11 +969,12 @@ function exactCatalogSnapshot(
       )
     )
   )) return null;
+  // Completeness is operational metadata and was validated above. It is not
+  // part of the cross-request identity boundary.
   return JSON.stringify({
     source,
     identityCount: catalog.identityCount,
     identityCommitment: catalog.identityCommitment,
-    completeness: catalog.completeness,
     scope: catalog.scope,
     evidenceDeployment: catalog.evidence.deployment,
     evidenceSourceCommit: catalog.evidence.sourceCommit,
@@ -1074,8 +1080,13 @@ function exactVisibleMarketRead(response, tokens, nowMs) {
     read.gmgnObservedCount > read.requestedCount ||
     read.gmgnQualifiedCount < 0 ||
     read.gmgnQualifiedCount > read.gmgnObservedCount ||
-    read.fallbackRequestedCount !==
+    read.fallbackRequestedCount >
       read.requestedCount - read.gmgnQualifiedCount ||
+    (
+      read.fallbackRequestedCount <
+        read.requestedCount - read.gmgnQualifiedCount &&
+      read.status === "complete"
+    ) ||
     read.fallbackObservedCount < 0 ||
     read.fallbackObservedCount > read.fallbackRequestedCount ||
     read.fallbackQualifiedCount < 0 ||
@@ -1776,6 +1787,14 @@ async function readBoundTrendingSnapshot({
           response.body?.sortMetric !== "gmgn-trending" ||
           response.body?.ranking !== undefined ||
           response.body?.total !== canonicalTokens.length ||
+          pageCatalog === null
+        ) throw new Error("Trending discovery response contract is invalid");
+        if (pageCatalog !== catalogSnapshot) {
+          throw new ExploreCatalogBoundaryDriftError(
+            "Explore catalog changed during Trending pagination",
+          );
+        }
+        if (
           !exactExplorePage(response, pageTokens, {
             page,
             pageSize: TRENDING_EXPLORE_PAGE_SIZE,
@@ -1783,11 +1802,6 @@ async function readBoundTrendingSnapshot({
           !exactVisibleMarketRead(response, pageTokens, now().getTime()) ||
           !exactTrendingDiscovery(response, canonicalTokens, now().getTime())
         ) throw new Error("Trending discovery response contract is invalid");
-        if (pageCatalog !== catalogSnapshot) {
-          throw new ExploreCatalogBoundaryDriftError(
-            "Explore catalog changed during Trending pagination",
-          );
-        }
         const serialized = JSON.stringify(discovery);
         const stableSerialized = stableTrendingDiscoveryMetadata(discovery);
         const nextFreshnessMs = discovery.asOfTime === null
@@ -2269,22 +2283,24 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
             catalogPage.body?.status !== "ready" ||
             catalogPage.body?.sort !== "newest" ||
             catalogPage.body?.ranking !== undefined ||
-            !exactExplorePage(catalogPage, pageTokens, {
-              page,
-              pageSize: catalogPageSize,
-            }) ||
-            pageCatalog === null ||
-            !exactVisibleMarketRead(
-              catalogPage,
-              pageTokens,
-              now().getTime(),
-            )
+            pageCatalog === null
           ) throw new Error("Explore catalog pagination contract is invalid");
           if (pageCatalog !== newestCatalog) {
             throw new ExploreCatalogBoundaryDriftError(
               "Explore catalog changed during pagination",
             );
           }
+          if (
+            !exactExplorePage(catalogPage, pageTokens, {
+              page,
+              pageSize: catalogPageSize,
+            }) ||
+            !exactVisibleMarketRead(
+              catalogPage,
+              pageTokens,
+              now().getTime(),
+            )
+          ) throw new Error("Explore catalog pagination contract is invalid");
           completeCatalogTokens.push(...pageTokens);
         }
       }
@@ -2356,7 +2372,14 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
           highestSecondPage.body?.sort !== "market-cap" ||
           highestSecondPage.body?.sortMetric !==
             "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback" ||
-          highestSecondPageCatalog !== highestCatalog ||
+          highestSecondPageCatalog === null
+        ) throw new Error("Market-cap pagination commitment is invalid");
+        if (highestSecondPageCatalog !== highestCatalog) {
+          throw new ExploreCatalogBoundaryDriftError(
+            "Explore catalog changed during market-cap pagination",
+          );
+        }
+        if (
           !exactExplorePage(highestSecondPage, highestSecondPageTokens, {
             page: 2,
             pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
@@ -2400,7 +2423,14 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         lowest.body?.sort !== "market-cap-asc" ||
         lowest.body?.sortMetric !==
           "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback" ||
-        lowestCatalog !== highestCatalog ||
+        lowestCatalog === null
+      ) throw new Error("Lowest market-cap ranking contract is invalid");
+      if (lowestCatalog !== highestCatalog) {
+        throw new ExploreCatalogBoundaryDriftError(
+          "Explore catalog changed before ascending market-cap read",
+        );
+      }
+      if (
         !exactExplorePage(lowest, lowestTokens, {
           page: 1,
           pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
@@ -2571,11 +2601,20 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
               gmgnCanonical.body?.sort !== "newest" ||
               gmgnCanonical.body?.ranking !== undefined ||
               gmgnCanonical.body?.total !== completeClassicTokens.length ||
+              gmgnCanonicalCatalog === null
+            ) {
+              throw new Error("Canonical GMGN list response contract is invalid");
+            }
+            if (gmgnCanonicalCatalog !== highestCatalog) {
+              throw new ExploreCatalogBoundaryDriftError(
+                "Explore catalog changed during canonical GMGN pagination",
+              );
+            }
+            if (
               !exactExplorePage(gmgnCanonical, gmgnCanonicalTokens, {
                 page,
                 pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
               }) ||
-              gmgnCanonicalCatalog !== highestCatalog ||
               !exactVisibleMarketRead(
                 gmgnCanonical,
                 gmgnCanonicalTokens,
