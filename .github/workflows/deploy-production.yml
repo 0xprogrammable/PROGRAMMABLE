@@ -987,7 +987,6 @@ jobs:
           );
           let response;
           let body;
-          let expectedLaunchSource;
           let catalogMode;
           let exactCatalog = false;
           for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -1027,7 +1026,7 @@ jobs:
             const routerCustomAvailable =
               routerCustomStatus === "current" ||
               routerCustomStatus === "last-known-good";
-            expectedLaunchSource = registryCustomCurrent
+            const expectedEnvioLaunchSource = registryCustomCurrent
               ? routerCustomAvailable
                 ? "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router"
                 : "envio-classic-v3+registry.custom-launched"
@@ -1090,6 +1089,9 @@ jobs:
                 "unavailable" &&
               response.headers.get("x-programmable-router-read-status") ===
                 routerCustomStatus;
+            const expectedLaunchSource = routerOnlyFallback
+              ? "canonical-launch-stamp-router"
+              : expectedEnvioLaunchSource;
             exactCatalog =
               body?.status === "ready" &&
               body?.catalog?.source === "envio-classic-v3" &&

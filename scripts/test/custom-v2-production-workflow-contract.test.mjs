@@ -453,6 +453,11 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     probe,
     /routerStamp\.projectedIdentityCount === body\.catalog\.identityCount/u,
   );
+  assert.match(probe, /const expectedEnvioLaunchSource =/u);
+  assert.match(
+    probe,
+    /const expectedLaunchSource = routerOnlyFallback\s+\? "canonical-launch-stamp-router"\s+: expectedEnvioLaunchSource/u,
+  );
   assert.match(probe, /classicCurrent \|\| routerOnlyFallback/u);
   assert.match(probe, /completeness\?\.stock === "excluded"/u);
   assert.match(probe, /completeness\?\.registryCustom === "current"/u);

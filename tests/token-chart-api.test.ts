@@ -83,6 +83,7 @@ const chart = {
 
 function gmgnReadyChart(
   marketIdentity: MarketChartV1["identity"] = chart.identity,
+  range: GmgnMarketChartV1["range"] = "1d",
 ): GmgnMarketChartV1 {
   const generatedAt = new Date();
   const requestedToMs = Math.floor(generatedAt.getTime() / 60_000) * 60_000;
@@ -137,7 +138,7 @@ function gmgnReadyChart(
         tokenDecimals: 18,
       },
     },
-    range: "1d",
+    range,
     resolution: "1m",
     requestedFrom: new Date(requestedFromMs).toISOString(),
     requestedTo: new Date(requestedToMs).toISOString(),
@@ -179,17 +180,19 @@ vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
   readProductionCustomExploreDirectoryV1: mocks.customDirectory,
 }));
 vi.mock("../lib/alchemy/router-custom-public.server", () => ({
-  readFinalizedRouterCustomExploreEntriesV1: mocks.readRouter,
+  readFinalizedRouterCustomIdentitySnapshotV1: mocks.readRouter,
+  ROUTER_CUSTOM_LAUNCH_SOURCE: "canonical-launch-stamp-router",
   routerCustomEntriesAtOrBeforeBlockV1: (entries: readonly unknown[]) => entries,
   mergeRouterCustomExploreEntriesV1: (
     existing: readonly unknown[],
     router: readonly unknown[],
   ) => [...existing, ...router],
   publicLaunchSourceV1: (input: Readonly<{
+    envioAvailable?: boolean;
     registryCustomCurrent: boolean;
     routerCustomCurrent: boolean;
   }>) => [
-    "envio-classic-v3",
+    ...(input.envioAvailable === false ? [] : ["envio-classic-v3"]),
     ...(input.registryCustomCurrent ? ["registry.custom-launched"] : []),
     ...(input.routerCustomCurrent ? ["canonical-launch-stamp-router"] : []),
   ].join("+"),
@@ -197,6 +200,23 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
 
 import { GET } from "../app/api/explore/token/chart/route";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
+
+function routerSnapshot(
+  entries: readonly unknown[],
+  status: "current" | "last-known-good" = "current",
+) {
+  return {
+    schemaVersion: "programmable.router-custom-identity-snapshot.v1",
+    source: "canonical-launch-stamp-router",
+    status,
+    generatedAt: "2026-08-17T12:00:00.000Z",
+    asOfBlock: "25740000",
+    asOfBlockHash: `0x${"44".repeat(32)}`,
+    finalityConfirmations: 64,
+    identityCommitment: `sha256:${"55".repeat(32)}`,
+    entries,
+  };
+}
 
 function request(query = `address=${address}&range=1d`) {
   return new NextRequest(`http://localhost/api/explore/token/chart?${query}`);
@@ -218,7 +238,7 @@ describe("scoped token chart API", () => {
       ...canonical,
       ...custom,
     ]);
-    mocks.readRouter.mockResolvedValue([]);
+    mocks.readRouter.mockResolvedValue(routerSnapshot([]));
     mocks.hydrateSupply.mockImplementation(async (entries) => [...entries]);
     mocks.readGmgnChart.mockResolvedValue(null);
     mocks.readChart.mockResolvedValue(chart);
@@ -629,7 +649,9 @@ describe("scoped token chart API", () => {
       entries: [],
     });
     mocks.customEnabled.mockReturnValue(true);
-    mocks.readRouter.mockResolvedValue([customGraphExploreEntry]);
+    mocks.readRouter.mockResolvedValue(routerSnapshot([
+      customGraphExploreEntry,
+    ]));
     mocks.readChart.mockResolvedValue({
       ...chart,
       identity: {
@@ -662,8 +684,95 @@ describe("scoped token chart API", () => {
     }));
   });
 
+  it.each(["current", "last-known-good"] as const)(
+    "serves an all-range Router chart from the %s durable snapshot when Envio is unavailable",
+    async (routerStatus) => {
+      const routerIdentity = {
+        chainId: "1",
+        protocol: "uniswap_v4",
+        tokenAddress:
+          customGraphExploreEntry.tokenAddress!.toLowerCase() as `0x${string}`,
+        poolId:
+          customGraphExploreEntry.poolId.toLowerCase() as `0x${string}`,
+        quoteAddress: nativeEth,
+      } as const satisfies MarketChartV1["identity"];
+      const gmgn = gmgnReadyChart(routerIdentity, "all");
+      mocks.catalog.mockRejectedValue(new Error("envio unavailable"));
+      mocks.readRouter.mockResolvedValue(routerSnapshot(
+        [customGraphExploreEntry],
+        routerStatus,
+      ));
+      mocks.readGmgnChart.mockResolvedValue(gmgn);
+
+      const response = await GET(request(
+        `address=${customGraphExploreEntry.tokenAddress}&range=all`,
+      ));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-programmable-launch-source")).toBe(
+        "canonical-launch-stamp-router",
+      );
+      expect(response.headers.get("x-programmable-read-source")).toBe(
+        "canonical-launch-stamp-router+gmgn",
+      );
+      expect(response.headers.get("x-programmable-router-read-status")).toBe(
+        routerStatus,
+      );
+      await expect(response.json()).resolves.toEqual(gmgn);
+      expect(mocks.readGmgnChart).toHaveBeenCalledWith({
+        entry: customGraphExploreEntry,
+        identity: routerIdentity,
+        range: "all",
+      }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+      expect(mocks.readChart).not.toHaveBeenCalled();
+    },
+  );
+
+  it("returns 503 when Envio and the Router snapshot are unavailable", async () => {
+    mocks.catalog.mockRejectedValue(new Error("envio unavailable"));
+    mocks.readRouter.mockRejectedValue(new Error("router unavailable"));
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "unavailable",
+    );
+    expect(mocks.readGmgnChart).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 for an unrelated address when only the Router snapshot is available", async () => {
+    const unrelatedAddress =
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
+    mocks.catalog.mockRejectedValue(new Error("envio unavailable"));
+    mocks.readRouter.mockResolvedValue(routerSnapshot([
+      customGraphExploreEntry,
+    ]));
+
+    const response = await GET(request(
+      `address=${unrelatedAddress}&range=1d`,
+    ));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-programmable-launch-source")).toBe(
+      "canonical-launch-stamp-router",
+    );
+    expect(response.headers.get("x-programmable-router-read-status")).toBe(
+      "current",
+    );
+    expect(mocks.readGmgnChart).not.toHaveBeenCalled();
+  });
+
   it("returns 404 for an address outside the committed identity catalog", async () => {
-    mocks.catalog.mockResolvedValue({ source: "envio-classic-v3", entries: [] });
+    mocks.catalog.mockResolvedValue({
+      source: "envio-classic-v3",
+      status: "current",
+      asOfBlock: "25740000",
+      entries: [],
+    });
     expect((await GET(request())).status).toBe(404);
   });
 
