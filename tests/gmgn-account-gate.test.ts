@@ -9,6 +9,9 @@ import {
   PostgresGmgnAccountGateV1,
 } from "../lib/market-data/gmgn-account-gate.server";
 import type {
+  GmgnAccountGateCostV1,
+} from "../lib/market-data/gmgn-account-gate.server";
+import type {
   ProjectionTargetPostgresClientV1,
   ProjectionTargetPostgresPoolV1,
   ProjectionTargetPostgresQueryResultV1,
@@ -62,11 +65,77 @@ describe("GMGN account gate", () => {
       .toHaveLength(2);
   });
 
+  it.each([
+    [1, 1_000],
+    [2, 2_000],
+    [3, 3_000],
+    [5, 5_000],
+  ] as const)(
+    "charges cost %i against the shared leaky schedule",
+    async (cost, expectedScheduleMs) => {
+      const { database, pool } = await migratedGate();
+      const gate = new PostgresGmgnAccountGateV1(pool);
+      const lease = await gate.reserveSlot({
+        requestsPerSecond: 1,
+        cost,
+        deadlineMs: Date.now() + 1_000,
+      });
+      expect(lease?.kind).toBe("reserved");
+      if (lease?.kind !== "reserved") throw new Error("test lease unavailable");
+      await gate.complete(lease);
+
+      await database.exec("RESET ROLE");
+      const evidence = await database.query<{
+        interval_ms: number;
+        schedule_ms: number;
+      }>(`
+        SELECT history.interval_ms,
+               ROUND(EXTRACT(EPOCH FROM
+                 (history.next_slot_at - history.decided_at)) * 1000)::integer
+                 AS schedule_ms
+          FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+            AS history
+         WHERE history.decision_kind = 'reserved'
+      `);
+      expect(evidence.rows).toEqual([{
+        interval_ms: 1_000,
+        schedule_ms: expectedScheduleMs,
+      }]);
+    },
+  );
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    4,
+    6,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    null,
+    "5",
+  ])("fails closed before database access for invalid cost %p", async (cost) => {
+    const query = vi.fn();
+    const pool: ProjectionTargetPostgresPoolV1 = {
+      connect: vi.fn(),
+      query,
+    };
+    const gate = new PostgresGmgnAccountGateV1(pool);
+
+    await expect(gate.reserveSlot({
+      requestsPerSecond: 1,
+      cost: cost as GmgnAccountGateCostV1,
+      deadlineMs: Date.now() + 1_000,
+    })).rejects.toThrow("GMGN account gate reservation is invalid");
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("publishes one central blocked_until and Retry-After decision", async () => {
     const { database, pool } = await migratedGate();
     const gate = new PostgresGmgnAccountGateV1(pool);
     const lease = await gate.reserveSlot({
-      requestsPerSecond: 1,
+      requestsPerSecond: 50,
+      cost: 5,
       deadlineMs: Date.now() + 1_000,
     });
     expect(lease?.kind).toBe("reserved");
@@ -79,7 +148,7 @@ describe("GMGN account gate", () => {
 
     expect(block.retryAfterMs).toBeGreaterThan(1_000);
     const reservation = await gate.reserveSlot({
-      requestsPerSecond: 1,
+      requestsPerSecond: 50,
       deadlineMs: Date.now() + 5_000,
     });
     expect(reservation?.kind).toBe("blocked");
@@ -181,6 +250,7 @@ describe("GMGN account gate", () => {
     const gate = new PostgresGmgnAccountGateV1(pool);
     await expect(gate.reserveSlot({
       requestsPerSecond: 1,
+      cost: 5,
       deadlineMs: Date.now() + 1_000,
     })).rejects.toThrow("projection database unavailable");
   });

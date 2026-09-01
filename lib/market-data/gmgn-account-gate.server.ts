@@ -10,6 +10,10 @@ import {
 const GATE_ID = "gmgn-openapi-v1" as const;
 const MAXIMUM_BLOCK_MS = 5 * 60_000;
 const HISTORY_RETENTION_GENERATIONS = 256;
+const GMGN_ACCOUNT_GATE_COSTS = [1, 2, 3, 5] as const;
+
+export type GmgnAccountGateCostV1 =
+  (typeof GMGN_ACCOUNT_GATE_COSTS)[number];
 
 export type GmgnAccountGateReservationV1 = Readonly<{
   kind: "reserved";
@@ -24,6 +28,7 @@ export type GmgnAccountGateReservationV1 = Readonly<{
 export interface GmgnAccountGateV1 {
   reserveSlot(input: Readonly<{
     requestsPerSecond: number;
+    cost?: GmgnAccountGateCostV1;
     deadlineMs: number;
     signal?: AbortSignal;
   }>): Promise<GmgnAccountGateReservationV1 | null>;
@@ -62,7 +67,7 @@ const RESERVE_SLOT_SQL = `
     UPDATE programmable_website_projection_v1.gmgn_account_gate_v1 AS gate
        SET generation = gate.generation + 1,
            next_slot_at = authority.decided_at
-             + ($1::integer * INTERVAL '1 millisecond'),
+             + ($1::integer * $4::integer * INTERVAL '1 millisecond'),
            lease_holder = $3::uuid,
            lease_until = authority.decided_at + INTERVAL '5 minutes',
            updated_at = authority.decided_at
@@ -211,13 +216,16 @@ export class PostgresGmgnAccountGateV1 implements GmgnAccountGateV1 {
 
   async reserveSlot(input: Readonly<{
     requestsPerSecond: number;
+    cost?: GmgnAccountGateCostV1;
     deadlineMs: number;
     signal?: AbortSignal;
   }>): Promise<GmgnAccountGateReservationV1 | null> {
+    const cost: unknown = input.cost === undefined ? 1 : input.cost;
     if (
       !Number.isSafeInteger(input.requestsPerSecond)
       || input.requestsPerSecond < 1
       || input.requestsPerSecond > 50
+      || !isGmgnAccountGateCostV1(cost)
       || !Number.isFinite(input.deadlineMs)
     ) throw new TypeError("GMGN account gate reservation is invalid");
     const intervalMs = Math.ceil(1_000 / input.requestsPerSecond);
@@ -227,7 +235,7 @@ export class PostgresGmgnAccountGateV1 implements GmgnAccountGateV1 {
       await this.#assertReady();
       const result = await this.#pool.query<GateDecisionRowV1>(
         RESERVE_SLOT_SQL,
-        [intervalMs, GATE_ID, crypto.randomUUID()],
+        [intervalMs, GATE_ID, crypto.randomUUID(), cost],
       );
       const row = exactlyOne(result.rows, "GMGN account gate singleton is unavailable");
       const decidedAtMs = timestampMs(row.decided_at);
@@ -377,6 +385,13 @@ function isUuid(value: unknown): value is string {
   return typeof value === "string"
     && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
       .test(value);
+}
+
+function isGmgnAccountGateCostV1(
+  value: unknown,
+): value is GmgnAccountGateCostV1 {
+  return typeof value === "number"
+    && (GMGN_ACCOUNT_GATE_COSTS as readonly number[]).includes(value);
 }
 
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<boolean> {
