@@ -1073,6 +1073,9 @@ function exactVisibleMarketRead(response, tokens, nowMs) {
 
 function exactDetailMarketRead(response, token, launchSource, nowMs) {
   const provider = response.headers.get("x-programmable-market-provider");
+  const marketStatus = response.headers.get(
+    "x-programmable-market-read-status",
+  );
   const hasGmgn = token?.gmgnMarketData !== undefined;
   const gmgnQualified = qualifiedGmgnFdv(token, nowMs);
   const dexscreenerQualified = qualifiedDexscreenerFdv(token, nowMs);
@@ -1085,9 +1088,7 @@ function exactDetailMarketRead(response, token, launchSource, nowMs) {
     response.headers.get("x-programmable-launch-source") !== launchSource ||
     response.headers.get("x-programmable-read-source") !==
       `${launchSource}+${provider}` ||
-    !MARKET_READ_STATUSES.has(
-      response.headers.get("x-programmable-market-read-status"),
-    ) ||
+    !MARKET_READ_STATUSES.has(marketStatus) ||
     response.headers.get("x-programmable-market-as-of") !== marketAsOf ||
     ![gmgnQualified, dexscreenerQualified, unavailable].includes(true) ||
     (hasGmgn && !exactGmgnSnapshot(token, nowMs)) ||
@@ -1095,19 +1096,23 @@ function exactDetailMarketRead(response, token, launchSource, nowMs) {
     (provider === "gmgn" && (!gmgnQualified || hasGmgn === false)) ||
     (provider === "gmgn+dexscreener" && gmgnQualified)
   ) return false;
-  const marketSources = [
-    ...(hasGmgn ? ["gmgn"] : []),
-    ...(dexscreenerQualified ? ["dexscreener"] : []),
-  ];
-  const priceSources = [
-    ...(gmgnQualified ? ["gmgn"] : []),
-    ...(dexscreenerQualified ? ["dexscreener"] : []),
-  ];
-  return exactSourceHeader(
-    response,
-    "x-programmable-market-source",
-    marketSources,
-  ) && exactSourceHeader(
+  const marketSource = response.headers.get("x-programmable-market-source");
+  const allowedMarketSources = provider === "dexscreener"
+    ? new Set([null, "dexscreener"])
+    : provider === "gmgn"
+    ? new Set(["gmgn"])
+    : new Set([null, "gmgn", "dexscreener", "gmgn+dexscreener"]);
+  const priceSources = gmgnQualified
+    ? ["gmgn"]
+    : dexscreenerQualified
+    ? ["dexscreener"]
+    : [];
+  return (marketStatus !== "unavailable" || marketSource === null) &&
+    allowedMarketSources.has(marketSource) &&
+    (
+      priceSources.length === 0 ||
+      marketSource?.split("+").includes(priceSources[0]) === true
+    ) && exactSourceHeader(
     response,
     "x-programmable-price-source",
     priceSources,
