@@ -28,13 +28,18 @@ import { isTokenChartRange } from "../../../../../lib/onchain/chart";
 import {
   mergeRouterCustomExploreEntriesV1,
   publicLaunchSourceV1,
-  readFinalizedRouterCustomExploreEntriesV1,
+  readFinalizedRouterCustomIdentitySnapshotV1,
+  ROUTER_CUSTOM_LAUNCH_SOURCE,
   routerCustomEntriesAtOrBeforeBlockV1,
 } from "../../../../../lib/alchemy/router-custom-public.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../../../lib/server/custom-launch/explore-directory-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../../../lib/server/custom-launch/public-readiness";
+import type {
+  CanonicalTokenExploreEntry,
+  ExploreEntry,
+} from "../../../../../lib/tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,74 +74,149 @@ export async function GET(request: NextRequest) {
   ]);
 
   try {
-    const catalog = await readEnvioClassicV3CatalogV1({
+    const catalogRead = readEnvioClassicV3CatalogV1({
       signal,
       deadlineMs,
-    });
-    let entries = catalog.entries;
-    let customStatus: "current" | "unavailable" = "unavailable";
-    let customReadFailed = false;
-    if (isCustomLaunchRegistryPublicReadEnabled()) {
-      let customEntries;
-      try {
-        customEntries = await readProductionCustomExploreDirectoryV1(signal);
-      } catch {
-        // A Custom Registry outage cannot invalidate an already committed
-        // canonical identity. Unknown identities remain indeterminate until
-        // both Custom authorities have been read below.
-        customReadFailed = true;
-      }
-      if (customEntries !== undefined) {
-        entries = mergeEnvioClassicV3CatalogEntriesV1(entries, customEntries);
-        customStatus = "current";
-      }
-    }
-    let routerStatus: "current" | "unavailable" = "unavailable";
-    let routerReadFailed = false;
-    try {
-      const verifiedRouterEntries =
-        await readFinalizedRouterCustomExploreEntriesV1({
-          signal,
-          deadlineMs,
+    }).then(
+      (catalog) => catalog,
+      () => {
+        console.error("Token chart Envio identity read unavailable", {
+          name: "EnvioClassicV3ReadError",
         });
-      entries = mergeRouterCustomExploreEntriesV1(
-        entries,
-        routerCustomEntriesAtOrBeforeBlockV1(
-          verifiedRouterEntries,
+        return null;
+      },
+    );
+    const registryEnabled = isCustomLaunchRegistryPublicReadEnabled();
+    const registryRead = registryEnabled
+      ? readProductionCustomExploreDirectoryV1(signal).then(
+          (entries) => ({
+            entries,
+            failed: false,
+            status: "current" as const,
+          }),
+          () => ({
+            entries: [] as readonly ExploreEntry[],
+            failed: true,
+            status: "unavailable" as const,
+          }),
+        )
+      : Promise.resolve({
+          entries: [] as readonly ExploreEntry[],
+          failed: false,
+          status: "unavailable" as const,
+        });
+    const routerRead = readFinalizedRouterCustomIdentitySnapshotV1({
+      signal,
+      deadlineMs,
+    }).then(
+      (snapshot) => ({
+        entries: snapshot.entries,
+        failed: snapshot.status !== "current",
+        status: snapshot.status,
+        snapshot,
+      }),
+      () => {
+        console.error("Token chart Router Custom read unavailable", {
+          name: "RouterCustomReadError",
+        });
+        return {
+          entries: [] as readonly CanonicalTokenExploreEntry[],
+          failed: true,
+          status: "unavailable" as const,
+          snapshot: null,
+        };
+      },
+    );
+    const [catalog, registryResult, routerResult] = await Promise.all([
+      catalogRead,
+      registryRead,
+      routerRead,
+    ]);
+    const canonicalReadFailed = catalog === null || catalog.status !== "current";
+    let customStatus = registryResult.status;
+    const routerStatus = routerResult.status;
+    let customReadFailed = registryResult.failed;
+    const routerReadFailed = routerResult.failed;
+    let customEntries = registryResult.entries;
+    const routerEntries = catalog === null
+      ? routerResult.entries
+      : routerCustomEntriesAtOrBeforeBlockV1(
+          routerResult.entries,
           catalog.asOfBlock,
-        ),
-      );
-      routerStatus = "current";
-    } catch {
-      console.error("Token chart Router Custom read unavailable", {
-        name: "RouterCustomReadError",
-      });
-      routerReadFailed = true;
+        );
+    const requestedRouterIdentityRead = routerEntries.some((candidate) =>
+      candidate.tokenAddress?.toLowerCase() === address.toLowerCase()
+    );
+    const canonicalEntry = catalog?.entries.find((candidate) =>
+      candidate.exploreKind === "token" &&
+      candidate.tokenAddress?.toLowerCase() === address.toLowerCase()
+    ) ?? null;
+
+    if (catalog === null) {
+      // Registry records do not carry an independent onchain snapshot. Only
+      // the Router lane may stand alone on its bound durable cursor.
+      customEntries = [];
+      customStatus = "unavailable";
+      customReadFailed = registryEnabled;
     }
-    const registryBoundLaunchSource = customStatus === "current"
-      ? `${catalog.source}+registry.custom-launched`
-      : catalog.source;
-    const launchSource = publicLaunchSourceV1({
-      registryCustomCurrent: customStatus === "current",
-      routerCustomCurrent: routerStatus === "current",
-    });
+
+    const registryIdentityEntries = mergeEnvioClassicV3CatalogEntriesV1(
+      catalog?.entries ?? [],
+      customEntries,
+    );
+    const entries = mergeRouterCustomExploreEntriesV1(
+      registryIdentityEntries,
+      routerEntries,
+    );
+
     if (
-      launchSource !== registryBoundLaunchSource &&
-      launchSource !==
-        `${registryBoundLaunchSource}+canonical-launch-stamp-router`
+      catalog === null &&
+      (routerResult.snapshot === null || routerStatus === "unavailable")
     ) {
-      throw new Error("Token chart launch source is not catalog-bound");
+      return unavailable({
+        address,
+        range,
+        launchSource: ROUTER_CUSTOM_LAUNCH_SOURCE,
+        reason: "market-data-unavailable",
+        routerStatus,
+        status: 503,
+      });
     }
+    const routerAvailable = routerStatus !== "unavailable";
+    const launchSource = publicLaunchSourceV1({
+      envioAvailable: catalog !== null,
+      registryCustomCurrent: customStatus === "current",
+      routerCustomCurrent: routerAvailable,
+    });
     const resolvedEntry = entries.find((candidate) =>
       candidate.tokenAddress?.toLowerCase() === address.toLowerCase()
     );
+    if (
+      requestedRouterIdentityRead &&
+      resolvedEntry?.launchCategoryProvenance.source !==
+        ROUTER_CUSTOM_LAUNCH_SOURCE &&
+      canonicalEntry === null
+    ) {
+      return unavailable({
+        address,
+        range,
+        launchSource,
+        reason: "identity-unavailable",
+        routerStatus,
+        status: 503,
+      });
+    }
     if (resolvedEntry === undefined) {
-      if (customReadFailed || routerReadFailed) {
+      if (
+        canonicalReadFailed || customReadFailed || routerReadFailed
+      ) {
         return unavailable({
           address,
           range,
           launchSource,
-          reason: "identity-unavailable",
+          reason: canonicalReadFailed
+            ? "market-data-unavailable"
+            : "identity-unavailable",
           routerStatus,
           status: 503,
         });
@@ -288,7 +368,7 @@ function unavailable(input: Readonly<{
   range: "1h" | "1d" | "1w" | "all";
   launchSource: string;
   reason: MarketChartErrorV2["reason"];
-  routerStatus?: "current" | "unavailable";
+  routerStatus?: "current" | "last-known-good" | "unavailable";
   status?: 200 | 503;
 }>) {
   const status = input.status ?? 200;
@@ -323,7 +403,7 @@ function chartResponse(
   chart: MarketChartV1 | GmgnMarketChartV1,
   launchSource: string,
   isCanonicalToken: boolean,
-  routerStatus: "current" | "unavailable",
+  routerStatus: "current" | "last-known-good" | "unavailable",
 ) {
   const chartScope = chart.source === "gmgn" ? chart.seriesScope : "pool";
   const chartPoolAttribution = chart.source === "gmgn"
