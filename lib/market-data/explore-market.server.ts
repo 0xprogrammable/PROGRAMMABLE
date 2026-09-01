@@ -183,8 +183,8 @@ export async function readExploreMarketEntriesV1(
       fallbackRequestedCount: fallbackEntries.length,
       fallbackObservedCount,
       fallbackQualifiedCount,
-      oldestFetchedAt: sourceTimes[0] ?? null,
-      newestFetchedAt: sourceTimes.at(-1) ?? null,
+      oldestFetchedAt: observedCount === 0 ? null : sourceTimes[0] ?? null,
+      newestFetchedAt: observedCount === 0 ? null : sourceTimes.at(-1) ?? null,
     },
   };
 }

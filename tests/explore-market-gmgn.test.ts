@@ -401,6 +401,49 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     expect(exploreMarketPriceSourcesV1(result.marketRead)).toEqual([]);
   });
 
+  it("clears the observation window when no market source observed the page", async () => {
+    const first = entry(6);
+    mocks.readGmgn.mockResolvedValue(new Map());
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...first,
+        valuation: {
+          status: "unavailable" as const,
+          reason: "source-unavailable" as const,
+        },
+      }],
+      observedEntryIds: [],
+      marketRead: {
+        provider: "dexscreener" as const,
+        status: "complete" as const,
+        currency: "USD" as const,
+        requestedCount: 1,
+        observedCount: 0,
+        qualifiedCount: 0,
+        unavailableCount: 1,
+        oldestFetchedAt: NOW,
+        newestFetchedAt: NOW,
+      },
+    });
+
+    const result = await readExploreMarketEntriesV1([first]);
+
+    expect(result.marketRead).toMatchObject({
+      provider: "gmgn",
+      fallbackProvider: "dexscreener",
+      status: "complete",
+      requestedCount: 1,
+      observedCount: 0,
+      qualifiedCount: 0,
+      gmgnObservedCount: 0,
+      fallbackObservedCount: 0,
+      oldestFetchedAt: null,
+      newestFetchedAt: null,
+    });
+    expect(exploreMarketSourcesV1(result.marketRead)).toEqual([]);
+    expect(exploreMarketPriceSourcesV1(result.marketRead)).toEqual([]);
+  });
+
   it("reserves the request budget for the bounded batch fallback", async () => {
     const first = entry(7);
     mocks.readGmgn.mockResolvedValue(new Map());
