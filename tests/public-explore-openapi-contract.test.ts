@@ -190,6 +190,51 @@ describe("public Explore OpenAPI contract", () => {
       type: "string",
       enum: ["classic", "custom"],
     });
+    expect(parameters.get("sort")?.schema).toEqual({
+      type: "string",
+      enum: [
+        "newest",
+        "oldest",
+        "trending",
+        "market-cap",
+        "market-cap-asc",
+        "highest-market-cap",
+        "lowest-market-cap",
+      ],
+      default: "newest",
+    });
+    expect(parameters.get("sort")?.description).toContain("chain=1");
+  });
+
+  it("documents canonical-intersected Trending metadata and headers", () => {
+    const schemas = programmablePublicOpenApi.components.schemas;
+    const response = programmablePublicOpenApi.paths["/api/explore"].get
+      .responses["200"];
+
+    expect(schemas.ExploreReadyListResponse.properties.sort.enum).toContain(
+      "trending",
+    );
+    expect(schemas.ExploreReadyListResponse.properties.discovery).toEqual({
+      $ref: "#/components/schemas/ExploreDiscoveryRanking",
+    });
+    expect(schemas.ExploreDiscoveryRanking).toMatchObject({
+      properties: {
+        provider: { const: "gmgn" },
+        requested: { const: "trending" },
+        snapshotCount: { type: "integer", minimum: 0, maximum: 2 },
+        observedTokenCount: { type: "integer", minimum: 0, maximum: 200 },
+      },
+      additionalProperties: false,
+    });
+    expect(schemas.ExploreDiscoveryRanking.description).toContain(
+      "filtered canonical Programmable catalog",
+    );
+    expect(response.headers["X-Programmable-Discovery-Provider"].schema)
+      .toEqual({ const: "gmgn" });
+    expect(response.headers["X-Programmable-Discovery-Read-Status"].schema.enum)
+      .toEqual(["complete", "partial", "unavailable"]);
+    expect(response.headers["X-Programmable-Discovery-Matched-Count"])
+      .toBeDefined();
   });
 
   it("validates the real catalog-free planned list response", () => {

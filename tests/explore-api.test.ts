@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   routerStatus: vi.fn((): "current" | "last-known-good" => "current"),
   gmgnConfigured: vi.fn(() => false),
   readGmgn: vi.fn(),
+  readTrending: vi.fn(),
+  readHotSearches: vi.fn(),
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -43,6 +45,10 @@ vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
 vi.mock("../lib/market-data/gmgn.server", () => ({
   gmgnMarketDataConfiguredV1: mocks.gmgnConfigured,
   readGmgnExploreSnapshotsV1: mocks.readGmgn,
+}));
+vi.mock("../lib/market-data/gmgn-discovery.server", () => ({
+  readGmgnEthereumTrendingV1: mocks.readTrending,
+  readGmgnEthereumHotSearchesV1: mocks.readHotSearches,
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
@@ -123,6 +129,48 @@ function token(index: number): ExploreEntry {
 }
 
 const entries = Array.from({ length: TOKEN_COUNT }, (_, index) => token(index + 1));
+
+function discoverySnapshot(
+  kind: "trending" | "hot-search",
+  ranked: readonly ExploreEntry[],
+  foreignAddresses: readonly `0x${string}`[] = [],
+) {
+  const addresses = [
+    ...foreignAddresses,
+    ...ranked.flatMap((entry) => entry.tokenAddress ? [entry.tokenAddress] : []),
+  ];
+  return {
+    schemaVersion: "programmable.gmgn-discovery.v1",
+    source: "gmgn",
+    chainId: "1",
+    providerChain: "eth",
+    kind,
+    interval: kind === "trending" ? "1h" : "24h",
+    requestedLimit: 100,
+    fetchedAt: kind === "trending"
+      ? "2026-08-16T08:00:02.000Z"
+      : "2026-08-16T08:00:03.000Z",
+    providerVersion: null,
+    providerItemCount: addresses.length,
+    discardedProviderItemCount: 0,
+    duplicateProviderItemCount: 0,
+    tokens: addresses.map((tokenAddress, index) => ({
+      chain: "eth",
+      tokenAddress: tokenAddress.toLowerCase(),
+      rank: index + 1,
+      visitingCount: null,
+      hotLevel: null,
+      swaps: null,
+      buys: null,
+      sells: null,
+      holderCount: null,
+      priceUsd: null,
+      marketCapUsd: null,
+      liquidityUsd: null,
+      volumeUsd: null,
+    })),
+  };
+}
 
 const multiMarketCustom = {
   exploreKind: "custom-project",
@@ -281,6 +329,8 @@ describe("Explore static identity and Dexscreener market contract", () => {
     mocks.readRouter.mockResolvedValue([]);
     mocks.routerStatus.mockReturnValue("current");
     mocks.gmgnConfigured.mockReturnValue(false);
+    mocks.readTrending.mockResolvedValue(null);
+    mocks.readHotSearches.mockResolvedValue(null);
     mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
       entries: valued(input),
       marketRead: marketRead({ requested: input.length, qualified: input.length }),
@@ -311,6 +361,151 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(mocks.readCustom).not.toHaveBeenCalled();
     expect(mocks.readRouter).not.toHaveBeenCalled();
     expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
+  it("rejects Trending on Robinhood before reading either discovery provider", async () => {
+    const response = await GET(
+      request("chain=4663&sort=trending&page=1&limit=9"),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await json(response)).toEqual({
+      error: "Trending discovery is available on Ethereum only",
+    });
+    expect(mocks.readTrending).not.toHaveBeenCalled();
+    expect(mocks.readHotSearches).not.toHaveBeenCalled();
+    expect(mocks.readCatalog).not.toHaveBeenCalled();
+  });
+
+  it("ranks only filtered canonical Ethereum launches and retains the stable tail", async () => {
+    const foreign = "0xffffffffffffffffffffffffffffffffffffffff" as const;
+    mocks.readTrending.mockResolvedValueOnce(
+      discoverySnapshot("trending", [entries[3]!, entries[19]!], [foreign]),
+    );
+    mocks.readHotSearches.mockResolvedValueOnce(
+      discoverySnapshot("hot-search", [entries[19]!, entries[1]!]),
+    );
+
+    const response = await GET(request(
+      "chain=1&sort=trending&socials=yes&page=1&limit=100",
+    ));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.sort).toBe("trending");
+    expect(body.sortMetric).toBe("gmgn-trending");
+    expect(body.total).toBe(18);
+    expect(body.tokens.map((entry: ExploreEntry) => entry.id)).toEqual([
+      entries[3]!.id,
+      entries[19]!.id,
+      entries[1]!.id,
+      entries[35]!.id,
+      entries[33]!.id,
+      entries[31]!.id,
+      entries[29]!.id,
+      entries[27]!.id,
+      entries[25]!.id,
+      entries[23]!.id,
+      entries[21]!.id,
+      entries[17]!.id,
+      entries[15]!.id,
+      entries[13]!.id,
+      entries[11]!.id,
+      entries[9]!.id,
+      entries[7]!.id,
+      entries[5]!.id,
+    ]);
+    expect(body.tokens).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ tokenAddress: foreign }),
+    ]));
+    expect(body.discovery).toEqual({
+      schemaVersion: "programmable.explore-discovery-ranking.v1",
+      provider: "gmgn",
+      requested: "trending",
+      status: "partial",
+      applied: "gmgn-ranked-with-launch-order-fallback",
+      rankInterval: "1h",
+      hotSearchInterval: "24h",
+      snapshotCount: 2,
+      observedTokenCount: 4,
+      matchedTokenCount: 3,
+      canonicalEntryCount: 18,
+      canonicalTokenCount: 18,
+      unobservedCanonicalEntryCount: 15,
+      canonicalAddressCoverageBps: 1666,
+      foreignTokenCount: 1,
+      discardedProviderItemCount: 0,
+      asOfTime: "2026-08-16T08:00:03.000Z",
+    });
+    expect(mocks.readTrending).toHaveBeenCalledWith(
+      { interval: "1h", limit: 100 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mocks.readHotSearches).toHaveBeenCalledWith(
+      { interval: "24h", limit: 100 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mocks.readTrending.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.readHotSearches.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(18);
+    expect(response.headers.get("x-programmable-discovery-provider")).toBe("gmgn");
+    expect(response.headers.get("x-programmable-discovery-read-status")).toBe("partial");
+    expect(response.headers.get("x-programmable-discovery-matched-count")).toBe("3");
+    expect(response.headers.get("x-programmable-read-source")).toContain(
+      "+gmgn-discovery",
+    );
+  });
+
+  it("falls back to complete canonical Newest order when discovery is unavailable", async () => {
+    mocks.readTrending.mockRejectedValueOnce(new Error("rank unavailable"));
+    mocks.readHotSearches.mockResolvedValueOnce(null);
+
+    const response = await GET(
+      request("chain=1&sort=trending&page=1&limit=9"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(TOKEN_COUNT);
+    expect(body.tokens.map((entry: ExploreEntry) => entry.id)).toEqual(
+      [...entries].reverse().slice(0, 9).map((entry) => entry.id),
+    );
+    expect(body.discovery).toMatchObject({
+      status: "unavailable",
+      applied: "launch-order",
+      snapshotCount: 0,
+      matchedTokenCount: 0,
+      canonicalEntryCount: TOKEN_COUNT,
+      canonicalTokenCount: TOKEN_COUNT,
+      unobservedCanonicalEntryCount: TOKEN_COUNT,
+    });
+    expect(response.headers.get("x-programmable-discovery-provider")).toBe("gmgn");
+    expect(response.headers.get("x-programmable-discovery-read-status"))
+      .toBe("unavailable");
+    expect(response.headers.get("x-programmable-read-source"))
+      .not.toContain("gmgn-discovery");
+  });
+
+  it("skips Hot Search when Rank already covers the filtered canonical set", async () => {
+    mocks.readTrending.mockResolvedValueOnce(
+      discoverySnapshot("trending", [...entries].reverse()),
+    );
+
+    const response = await GET(
+      request("chain=1&sort=trending&page=1&limit=9"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.discovery).toMatchObject({
+      status: "complete",
+      matchedTokenCount: TOKEN_COUNT,
+      canonicalEntryCount: TOKEN_COUNT,
+      unobservedCanonicalEntryCount: 0,
+      canonicalAddressCoverageBps: 10_000,
+    });
+    expect(mocks.readHotSearches).not.toHaveBeenCalled();
   });
 
   it("defaults omitted chain and sort to the visible Ethereum Newest page", async () => {

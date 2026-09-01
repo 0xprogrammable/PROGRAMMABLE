@@ -136,9 +136,15 @@ export function exploreUnavailableFdvLabel(
   return "";
 }
 
-type TokenSort = "newest" | "oldest" | "market-cap" | "market-cap-asc";
+type TokenSort =
+  | "newest"
+  | "oldest"
+  | "trending"
+  | "market-cap"
+  | "market-cap-asc";
 export type ExploreValuationSort = "none" | "highest" | "lowest";
 export type ExploreAgeSort = "none" | "newest" | "oldest";
+export type ExploreDiscoverySort = "none" | "trending";
 export type ExploreSocialFilter = "all" | "yes" | "no";
 export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
@@ -192,6 +198,26 @@ type ExploreRanking = Readonly<{
   applied: "fdv" | "qualified-fdv-then-launch-order" | "launch-order";
   qualifiedCount?: number;
   totalCount?: number;
+}>;
+
+type ExploreDiscoveryRanking = Readonly<{
+  schemaVersion: "programmable.explore-discovery-ranking.v1";
+  provider: "gmgn";
+  requested: "trending";
+  status: "complete" | "partial" | "unavailable";
+  applied: "gmgn-ranked-with-launch-order-fallback" | "launch-order";
+  rankInterval: "1h";
+  hotSearchInterval: "24h";
+  snapshotCount: number;
+  observedTokenCount: number;
+  matchedTokenCount: number;
+  canonicalEntryCount: number;
+  canonicalTokenCount: number;
+  unobservedCanonicalEntryCount: number;
+  canonicalAddressCoverageBps: number;
+  foreignTokenCount: number;
+  discardedProviderItemCount: number;
+  asOfTime: string | null;
 }>;
 
 type ExploreCatalogBoundary = Readonly<{
@@ -272,6 +298,7 @@ type ExplorePayload = {
   dataQuality?: ExploreDataQuality;
   marketRead?: ExploreMarketRead;
   ranking?: ExploreRanking;
+  discovery?: ExploreDiscoveryRanking;
   catalog?: ExploreCatalogBoundary;
 };
 
@@ -289,6 +316,7 @@ export function exploreAppliedSortLabel(
   ) return "Available valuation";
   if (sort === "newest") return "Newest";
   if (sort === "oldest") return "Oldest";
+  if (sort === "trending") return "Trending";
   if (sort === "market-cap") return "Highest valuation";
   return "Lowest valuation";
 }
@@ -296,7 +324,9 @@ export function exploreAppliedSortLabel(
 export function resolveExploreServerSort(
   valuationSort: ExploreValuationSort,
   ageSort: ExploreAgeSort,
+  discoverySort: ExploreDiscoverySort = "none",
 ): TokenSort {
+  if (discoverySort === "trending") return "trending";
   if (valuationSort === "highest") return "market-cap";
   if (valuationSort === "lowest") return "market-cap-asc";
   if (ageSort === "oldest") return "oldest";
@@ -306,8 +336,10 @@ export function resolveExploreServerSort(
 export function requiresCompleteExploreDataset(
   valuationSort: ExploreValuationSort,
   ageSort: ExploreAgeSort,
+  discoverySort: ExploreDiscoverySort = "none",
 ) {
-  return valuationSort !== "none" && ageSort === "oldest";
+  return discoverySort === "none" &&
+    valuationSort !== "none" && ageSort === "oldest";
 }
 
 type ExploreState =
@@ -406,6 +438,19 @@ export function stabilizeExploreRevalidationPayload(
     return incoming;
   }
 
+  if (incoming.discovery !== undefined) {
+    const previousById = new Map(
+      previous.tokens.map((token) => [token.id, token] as const),
+    );
+    return {
+      ...incoming,
+      tokens: incoming.tokens.map((token) => {
+        const known = previousById.get(token.id);
+        return known ? preserveKnownMarketObservation(known, token) : token;
+      }),
+    };
+  }
+
   const incomingById = new Map(
     incoming.tokens.map((token) => [token.id, token] as const),
   );
@@ -420,6 +465,7 @@ export function stabilizeExploreRevalidationPayload(
     dataQuality: incoming.dataQuality ?? previous.dataQuality,
     marketRead: incoming.marketRead ?? previous.marketRead,
     ranking: incoming.ranking ?? previous.ranking,
+    discovery: incoming.discovery ?? previous.discovery,
   };
 }
 
@@ -658,11 +704,13 @@ const modelFilterOptions: {
 export function exploreActiveSelectionState({
   valuationSort,
   ageSort,
+  discoverySort = "none",
   socialFilter,
   modelFilter,
 }: Readonly<{
   valuationSort: ExploreValuationSort;
   ageSort: ExploreAgeSort;
+  discoverySort?: ExploreDiscoverySort;
   socialFilter: ExploreSocialFilter;
   modelFilter: ExploreModelFilter;
 }>) {
@@ -678,6 +726,7 @@ export function exploreActiveSelectionState({
       : modelFilter === "custom-hook"
         ? "Custom"
         : null,
+    discoverySort === "trending" ? "Trending" : null,
     valuationSort !== "none" &&
     valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT
       ? valuationSort === "highest"
@@ -1311,6 +1360,66 @@ function parseExploreRanking(value: unknown, total: unknown): ExploreRanking | n
   return value as ExploreRanking;
 }
 
+function parseExploreDiscoveryRanking(
+  value: unknown,
+  total: unknown,
+): ExploreDiscoveryRanking | null {
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !== "programmable.explore-discovery-ranking.v1" ||
+    value.provider !== "gmgn" ||
+    value.requested !== "trending" ||
+    !["complete", "partial", "unavailable"].includes(String(value.status)) ||
+    ![
+      "gmgn-ranked-with-launch-order-fallback",
+      "launch-order",
+    ].includes(String(value.applied)) ||
+    value.rankInterval !== "1h" ||
+    value.hotSearchInterval !== "24h" ||
+    !Number.isSafeInteger(total) ||
+    ![
+      "snapshotCount",
+      "observedTokenCount",
+      "matchedTokenCount",
+      "canonicalEntryCount",
+      "canonicalTokenCount",
+      "unobservedCanonicalEntryCount",
+      "canonicalAddressCoverageBps",
+      "foreignTokenCount",
+      "discardedProviderItemCount",
+    ].every((field) =>
+      Number.isSafeInteger(value[field]) && Number(value[field]) >= 0
+    ) ||
+    value.canonicalEntryCount !== total ||
+    Number(value.matchedTokenCount) > Number(value.canonicalEntryCount) ||
+    Number(value.matchedTokenCount) > Number(value.canonicalTokenCount) ||
+    Number(value.unobservedCanonicalEntryCount) !==
+      Number(value.canonicalEntryCount) - Number(value.matchedTokenCount) ||
+    Number(value.canonicalAddressCoverageBps) > 10_000 ||
+    Number(value.canonicalAddressCoverageBps) !==
+      (Number(value.canonicalTokenCount) === 0
+        ? 0
+        : Math.floor(
+            Number(value.matchedTokenCount) * 10_000 /
+              Number(value.canonicalTokenCount),
+          )) ||
+    (value.asOfTime !== null && !exactIsoTimestamp(value.asOfTime))
+  ) return null;
+  const matched = Number(value.matchedTokenCount);
+  const count = Number(value.canonicalEntryCount);
+  if (
+    (value.status === "complete" &&
+      (count === 0 || matched !== count ||
+        value.applied !== "gmgn-ranked-with-launch-order-fallback")) ||
+    (value.status === "partial" &&
+      (matched === 0 || matched >= count ||
+        value.applied !== "gmgn-ranked-with-launch-order-fallback")) ||
+    (value.status === "unavailable" &&
+      (matched !== 0 || value.applied !== "launch-order"))
+  ) return null;
+  return value as ExploreDiscoveryRanking;
+}
+
 function exactIsoTimestamp(value: unknown): value is string {
   return typeof value === "string" &&
     Number.isFinite(Date.parse(value)) &&
@@ -1582,6 +1691,13 @@ function parseExplorePayload(value: unknown): ExplorePayload {
   ) {
     throw new Error("The token registry returned invalid ranking data");
   }
+  const discovery = parseExploreDiscoveryRanking(value.discovery, value.total);
+  if (
+    value.discovery !== undefined &&
+    (discovery === null || marketRead === null)
+  ) {
+    throw new Error("The token registry returned invalid discovery data");
+  }
   const catalog = parseExploreCatalog(value.catalog);
   if (catalog === null) {
     throw new Error("The token registry returned invalid catalog data");
@@ -1645,6 +1761,7 @@ function parseExplorePayload(value: unknown): ExplorePayload {
       : { dataQuality: value.dataQuality }),
     ...(marketRead === null ? {} : { marketRead }),
     ...(ranking === null ? {} : { ranking }),
+    ...(discovery === null ? {} : { discovery }),
     catalog,
   };
 }
@@ -2715,6 +2832,9 @@ export function ExploreView({
     DEFAULT_EXPLORE_VALUATION_SORT,
   );
   const [ageSort, setAgeSort] = useState<ExploreAgeSort>("none");
+  const [discoverySort, setDiscoverySort] = useState<ExploreDiscoverySort>(
+    "none",
+  );
   const [socialFilter, setSocialFilter] = useState<ExploreSocialFilter>("all");
   const [modelFilter, setModelFilter] = useState<ExploreModelFilter>(
     initialModelFilter,
@@ -2765,15 +2885,21 @@ export function ExploreView({
     updatedAt: number;
   } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const sort = resolveExploreServerSort(valuationSort, ageSort);
+  const discoverySortForChain = viewChainId === 1 ? discoverySort : "none";
+  const sort = resolveExploreServerSort(
+    valuationSort,
+    ageSort,
+    discoverySortForChain,
+  );
   const requiresCompleteDataset = requiresCompleteExploreDataset(
     valuationSort,
     ageSort,
+    discoverySortForChain,
   );
   const chainContentKey = `${viewChainId}`;
-  const contentKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
+  const contentKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${discoverySortForChain}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
   const requestKey = `${contentKey}\u0000${retryKey}`;
-  const modelDatasetKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
+  const modelDatasetKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${discoverySortForChain}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
   const activeRequestContentKey =
     requiresCompleteDataset ? modelDatasetKey : contentKey;
   const [initialState] = useState(() =>
@@ -2956,6 +3082,7 @@ export function ExploreView({
       debouncedQuery === "" &&
       valuationSort === initialValuationSort &&
       ageSort === "none" &&
+      discoverySortForChain === "none" &&
       socialFilter === "all" &&
       modelFilter === initialModelFilter &&
       currentPage === 1 &&
@@ -3102,6 +3229,7 @@ export function ExploreView({
     valuationSort,
     viewChainId,
     ageSort,
+    discoverySortForChain,
   ]);
 
   const previewPayload = useMemo<ExplorePayload>(() => {
@@ -3190,6 +3318,7 @@ export function ExploreView({
   } = exploreActiveSelectionState({
     valuationSort,
     ageSort,
+    discoverySort: discoverySortForChain,
     socialFilter,
     modelFilter,
   });
@@ -3290,6 +3419,7 @@ export function ExploreView({
                 updateModelFilter("all");
                 setValuationSort(DEFAULT_EXPLORE_VALUATION_SORT);
                 setAgeSort("none");
+                setDiscoverySort("none");
                 searchInputRef.current?.focus();
               }}
             >
@@ -3630,6 +3760,45 @@ export function ExploreView({
                       <div
                         className={styles.filterGroup}
                         role="group"
+                        aria-labelledby="explore-discovery-label"
+                      >
+                        <p
+                          className={styles.filterLabel}
+                          id="explore-discovery-label"
+                        >
+                          Discovery
+                        </p>
+                        <button
+                          className={
+                            discoverySortForChain === "trending"
+                              ? "active"
+                              : undefined
+                          }
+                          type="button"
+                          aria-label={viewChainId === 1
+                            ? "Rank launches by GMGN Trending"
+                            : "Trending is available on Ethereum only"}
+                          aria-pressed={discoverySortForChain === "trending"}
+                          disabled={viewChainId !== 1}
+                          onClick={() => {
+                            setDiscoverySort((current) =>
+                              current === "trending" ? "none" : "trending"
+                            );
+                            setValuationSort(DEFAULT_EXPLORE_VALUATION_SORT);
+                            setAgeSort("none");
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <span>Trending</span>
+                          {discoverySortForChain === "trending" ? (
+                            <Check aria-hidden="true" size={15} />
+                          ) : null}
+                        </button>
+                      </div>
+
+                      <div
+                        className={styles.filterGroup}
+                        role="group"
                         aria-labelledby="explore-valuation-label"
                       >
                         <p
@@ -3651,6 +3820,7 @@ export function ExploreView({
                               setValuationSort((current) =>
                                 current === option.id ? "none" : option.id,
                               );
+                              setDiscoverySort("none");
                               setCurrentPage(1);
                             }}
                           >
@@ -3682,6 +3852,7 @@ export function ExploreView({
                               setAgeSort((current) =>
                                 current === option.id ? "none" : option.id,
                               );
+                              setDiscoverySort("none");
                               setCurrentPage(1);
                             }}
                           >

@@ -91,11 +91,32 @@ const exploreMarketResponseHeaders = {
   },
 } as const;
 
+const exploreDiscoveryResponseHeaders = {
+  "X-Programmable-Discovery-Provider": {
+    description:
+      "Discovery provider consulted for the optional Ethereum Trending order. Emitted only for sort=trending.",
+    schema: { const: "gmgn" },
+  },
+  "X-Programmable-Discovery-Read-Status": {
+    description:
+      "Coverage of the filtered canonical launch set. Unavailable means canonical Newest order was used without hiding any launch.",
+    schema: {
+      type: "string",
+      enum: ["complete", "partial", "unavailable"],
+    },
+  },
+  "X-Programmable-Discovery-Matched-Count": {
+    description:
+      "Number of filtered canonical launches matched by accepted GMGN discovery observations.",
+    schema: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+  },
+} as const;
+
 export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.6.1",
+    version: "1.7.0",
     summary:
       "Verified launch discovery, live Ethereum V3 creation and planned Robinhood V4 integration.",
     description:
@@ -193,12 +214,14 @@ export const programmablePublicOpenApi = {
           {
             name: "sort",
             in: "query",
-            description: "Canonical launch-order or available FDV ordering.",
+            description:
+              "Canonical launch-order, available FDV, or optional GMGN Trending ordering. trending is accepted only with chain=1 and keeps the complete filtered canonical launch tail.",
             schema: {
               type: "string",
               enum: [
                 "newest",
                 "oldest",
+                "trending",
                 "market-cap",
                 "market-cap-asc",
                 "highest-market-cap",
@@ -217,6 +240,7 @@ export const programmablePublicOpenApi = {
             headers: {
               ...exploreIdentityResponseHeaders,
               ...exploreMarketResponseHeaders,
+              ...exploreDiscoveryResponseHeaders,
             },
           },
           "400": jsonResponse(component("ApiError"), "Invalid query shape."),
@@ -274,6 +298,182 @@ export const programmablePublicOpenApi = {
           "503": jsonResponse(
             component("ApiError"),
             "The identity boundary could not be verified at this time.",
+          ),
+        },
+      },
+    },
+    "/api/explore/token/analytics": {
+      get: {
+        operationId: "getVerifiedTokenAnalytics",
+        summary: "Read normalized GMGN analytics for one verified token",
+        description:
+          "Resolves the token through Programmable's canonical Ethereum launch authorities and requires an exact GMGN token_info proof before returning any analytics. summary returns bounded security and exact Uniswap v4 pool observations. holders and traders use a fixed 20-row request and return only seven normalized wallet metrics per row; they are always private and no-store. Provider output remains normalized: raw GMGN envelopes, ranking query metadata, wallet profile metadata, and credentials are never returned.",
+        tags: ["Discovery"],
+        security: [],
+        parameters: [
+          {
+            name: "chain",
+            in: "query",
+            description: "Ethereum only. Omit for chain 1.",
+            schema: { type: "integer", enum: [1], default: 1 },
+          },
+          {
+            name: "address",
+            in: "query",
+            required: true,
+            description: "Canonical Programmable token contract address.",
+            schema: component("EthereumAddress"),
+            example: V4_TOKEN_ADDRESS,
+          },
+          {
+            name: "section",
+            in: "query",
+            description:
+              "summary is edge-cacheable only when data is accepted. holders and traders are private no-store reads.",
+            schema: {
+              type: "string",
+              enum: ["summary", "holders", "traders"],
+              default: "summary",
+            },
+          },
+          {
+            name: "limit",
+            in: "query",
+            description:
+              "Optional fixed ranking limit. When present, the exact decimal value 20 is required for every section; every other value is rejected.",
+            schema: { type: "integer", const: 20, default: 20 },
+          },
+        ],
+        responses: {
+          "200": {
+            ...jsonResponse(
+              component("TokenAnalyticsResponse"),
+              "Canonical-bound, normalized GMGN analytics. An unavailable status remains a successful canonical lookup with null analytics.",
+            ),
+            headers: {
+              ...exploreIdentityResponseHeaders,
+              ...exploreMarketResponseHeaders,
+              "X-Programmable-Analytics-Provider": {
+                description: "Normalized analytics provider.",
+                schema: { const: "gmgn" },
+              },
+              "X-Programmable-Analytics-Read-Status": {
+                description:
+                  "Accepted normalized analytics coverage for the requested section.",
+                schema: {
+                  type: "string",
+                  enum: ["ready", "partial", "unavailable"],
+                },
+              },
+              "X-Programmable-Data-Quality": {
+                description: "Current, partial, or unavailable analytics quality.",
+                schema: {
+                  type: "string",
+                  enum: ["current", "partial", "unavailable"],
+                },
+              },
+              "Cache-Control": {
+                description:
+                  "summary may use a 15-second shared cache only when data is accepted. holders, traders, and unavailable responses are private no-store.",
+                schema: { type: "string" },
+              },
+            },
+          },
+          "400": jsonResponse(component("ApiError"), "Invalid analytics query."),
+          "404": {
+            ...jsonResponse(component("ApiError"), "No canonical token matched."),
+            headers: exploreIdentityResponseHeaders,
+          },
+          "503": {
+            ...jsonResponse(
+              component("ApiError"),
+              "The canonical identity boundary could not be verified.",
+            ),
+            headers: exploreIdentityResponseHeaders,
+          },
+        },
+      },
+    },
+    "/api/explore/token/chart": {
+      get: {
+        operationId: "getVerifiedTokenChart",
+        summary: "Read exact-pool token price history",
+        description:
+          "Resolves one canonical Ethereum launch, then prefers current GMGN period-close OHLCV proven against the exact token, Uniswap v4 pool, quote asset and canonical supply. Bitquery period-median history remains the exact-pool fallback. Provider errors never add or remove canonical launch identity.",
+        tags: ["Discovery"],
+        security: [],
+        parameters: [
+          {
+            name: "address",
+            in: "query",
+            required: true,
+            description: "Canonical Programmable Ethereum token address.",
+            schema: component("EthereumAddress"),
+            example: V4_TOKEN_ADDRESS,
+          },
+          {
+            name: "range",
+            in: "query",
+            description: "Requested bounded chart range.",
+            schema: {
+              type: "string",
+              enum: ["1h", "1d", "1w", "all"],
+              default: "all",
+            },
+          },
+        ],
+        responses: {
+          "200": {
+            ...jsonResponse(
+              component("TokenChartResponse"),
+              "GMGN period-close OHLCV, Bitquery period-median history, or an honest unavailable chart response.",
+            ),
+            headers: {
+              "X-Programmable-Data-Quality": {
+                description: "Current, partial, or unavailable chart quality.",
+                schema: {
+                  type: "string",
+                  enum: ["current", "partial", "unavailable"],
+                },
+              },
+              "X-Programmable-Launch-Source":
+                exploreIdentityResponseHeaders["X-Programmable-Launch-Source"],
+              "X-Programmable-Read-Source":
+                exploreIdentityResponseHeaders["X-Programmable-Read-Source"],
+              "X-Programmable-Router-Read-Status":
+                exploreIdentityResponseHeaders["X-Programmable-Router-Read-Status"],
+              "X-Programmable-Market-Provider": {
+                description: "Chart provider selected for this response.",
+                schema: { type: "string", enum: ["gmgn", "bitquery"] },
+              },
+              "X-Programmable-Market-Read-Status": {
+                description: "Live or bounded cache-fallback chart read.",
+                schema: {
+                  type: "string",
+                  enum: ["live", "cache-fallback"],
+                },
+              },
+              "X-Programmable-Market-Source": {
+                description:
+                  "Accepted exact-identity price-history source. Omitted when no chart point was accepted.",
+                schema: { type: "string", enum: ["gmgn", "bitquery"] },
+              },
+              "X-Programmable-Price-Source": {
+                description:
+                  "Accepted exact-identity chart price source. Omitted when no chart point was accepted.",
+                schema: { type: "string", enum: ["gmgn", "bitquery"] },
+              },
+              "X-Programmable-Market-As-Of": {
+                description: "End time of the latest accepted chart period.",
+                schema: { type: "string", format: "date-time" },
+              },
+            },
+          },
+          "400": jsonResponse(component("ApiError"), "Invalid chart query."),
+          "404": jsonResponse(component("ApiError"), "No canonical token matched."),
+          "503": jsonResponse(
+            component("MarketChartError"),
+            "The identity or exact-pool history boundary is unavailable.",
           ),
         },
       },
@@ -1744,6 +1944,494 @@ export const programmablePublicOpenApi = {
         },
         additionalProperties: false,
       },
+      ExploreDiscoveryRanking: {
+        type: "object",
+        description:
+          "Bounded metadata for an optional GMGN ranking intersected with the already filtered canonical Programmable catalog. No raw GMGN ranking payload is exposed.",
+        required: [
+          "schemaVersion",
+          "provider",
+          "requested",
+          "status",
+          "applied",
+          "rankInterval",
+          "hotSearchInterval",
+          "snapshotCount",
+          "observedTokenCount",
+          "matchedTokenCount",
+          "canonicalEntryCount",
+          "canonicalTokenCount",
+          "unobservedCanonicalEntryCount",
+          "canonicalAddressCoverageBps",
+          "foreignTokenCount",
+          "discardedProviderItemCount",
+          "asOfTime",
+        ],
+        properties: {
+          schemaVersion: {
+            const: "programmable.explore-discovery-ranking.v1",
+          },
+          provider: { const: "gmgn" },
+          requested: { const: "trending" },
+          status: {
+            type: "string",
+            enum: ["complete", "partial", "unavailable"],
+          },
+          applied: {
+            type: "string",
+            enum: [
+              "gmgn-ranked-with-launch-order-fallback",
+              "launch-order",
+            ],
+          },
+          rankInterval: { const: "1h" },
+          hotSearchInterval: { const: "24h" },
+          snapshotCount: { type: "integer", minimum: 0, maximum: 2 },
+          observedTokenCount: { type: "integer", minimum: 0, maximum: 200 },
+          matchedTokenCount: { type: "integer", minimum: 0 },
+          canonicalEntryCount: { type: "integer", minimum: 0 },
+          canonicalTokenCount: { type: "integer", minimum: 0 },
+          unobservedCanonicalEntryCount: { type: "integer", minimum: 0 },
+          canonicalAddressCoverageBps: {
+            type: "integer",
+            minimum: 0,
+            maximum: 10_000,
+          },
+          foreignTokenCount: { type: "integer", minimum: 0, maximum: 200 },
+          discardedProviderItemCount: {
+            type: "integer",
+            minimum: 0,
+            maximum: 2_000,
+          },
+          asOfTime: {
+            oneOf: [
+              { type: "string", format: "date-time" },
+              { type: "null" },
+            ],
+          },
+        },
+        additionalProperties: false,
+      },
+      GmgnTokenSecurity: {
+        type: "object",
+        description:
+          "Normalized GMGN heuristics for the exact canonical token. These fields are observations, not a safety guarantee.",
+        required: [
+          "schemaVersion",
+          "source",
+          "fetchedAt",
+          "identity",
+          "tokenAddress",
+          "flags",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.gmgn-token-security.v1" },
+          source: { const: "gmgn" },
+          fetchedAt: { type: "string", format: "date-time" },
+          identity: component("GmgnMarketIdentity"),
+          tokenAddress: component("EthereumAddress"),
+          flags: {
+            type: "array",
+            items: { type: "string" },
+            maxItems: 128,
+          },
+        },
+        additionalProperties: true,
+      },
+      GmgnTokenPoolInfo: {
+        type: "object",
+        description:
+          "Normalized exact Uniswap v4 pool observation from GMGN.",
+        required: [
+          "schemaVersion",
+          "source",
+          "currency",
+          "fetchedAt",
+          "identity",
+          "tokenAddress",
+          "poolAddress",
+          "baseAddress",
+          "quoteAddress",
+          "token0Address",
+          "token1Address",
+          "exchange",
+          "liquidityUsd",
+          "baseReserve",
+          "quoteReserve",
+          "creationTimestamp",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.gmgn-token-pool-info.v1" },
+          source: { const: "gmgn" },
+          currency: { const: "USD" },
+          fetchedAt: { type: "string", format: "date-time" },
+          identity: component("GmgnMarketIdentity"),
+          tokenAddress: component("EthereumAddress"),
+          poolAddress: component("Hex32"),
+          baseAddress: component("EthereumAddress"),
+          quoteAddress: component("EthereumAddress"),
+          token0Address: component("EthereumAddress"),
+          token1Address: component("EthereumAddress"),
+          exchange: { const: "uniswap_v4" },
+          liquidityUsd: { type: "string" },
+          baseReserve: { type: "string" },
+          quoteReserve: { type: "string" },
+          creationTimestamp: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: true,
+      },
+      GmgnTokenWalletRanking: {
+        type: "object",
+        description:
+          "Privacy-reduced holder or trader ranking with at most 20 rows. The public object excludes provider schema, source, query, token identity, names, avatars, social accounts, tags, transfers and transaction hashes. Wallet analytics are informational and never used for signing or settlement.",
+        required: ["fetchedAt", "wallets"],
+        properties: {
+          fetchedAt: { type: "string", format: "date-time" },
+          wallets: {
+            type: "array",
+            maxItems: 20,
+            items: {
+              type: "object",
+              required: [
+                "address",
+                "usdValue",
+                "amountRatio",
+                "buyVolumeUsd",
+                "sellVolumeUsd",
+                "profitUsd",
+                "profitRatio",
+              ],
+              properties: {
+                address: component("EthereumAddress"),
+                usdValue: { type: ["number", "null"] },
+                amountRatio: { type: ["number", "null"] },
+                buyVolumeUsd: { type: ["number", "null"] },
+                sellVolumeUsd: { type: ["number", "null"] },
+                profitUsd: { type: ["number", "null"] },
+                profitRatio: { type: ["number", "null"] },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+      TokenAnalyticsSummaryResponse: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "status",
+          "provider",
+          "section",
+          "identity",
+          "analytics",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.token-analytics.v1" },
+          status: {
+            type: "string",
+            enum: ["ready", "partial", "unavailable"],
+          },
+          provider: { const: "gmgn" },
+          section: { const: "summary" },
+          identity: {
+            oneOf: [component("GmgnMarketIdentity"), { type: "null" }],
+          },
+          analytics: {
+            type: "object",
+            required: ["security", "pool"],
+            properties: {
+              security: {
+                oneOf: [component("GmgnTokenSecurity"), { type: "null" }],
+              },
+              pool: {
+                oneOf: [component("GmgnTokenPoolInfo"), { type: "null" }],
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        additionalProperties: false,
+      },
+      TokenAnalyticsRankingResponse: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "status",
+          "provider",
+          "section",
+          "identity",
+          "analytics",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.token-analytics.v1" },
+          status: { type: "string", enum: ["ready", "unavailable"] },
+          provider: { const: "gmgn" },
+          section: { type: "string", enum: ["holders", "traders"] },
+          identity: {
+            oneOf: [component("GmgnMarketIdentity"), { type: "null" }],
+          },
+          analytics: {
+            type: "object",
+            required: ["ranking"],
+            properties: {
+              ranking: {
+                oneOf: [
+                  component("GmgnTokenWalletRanking"),
+                  { type: "null" },
+                ],
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        additionalProperties: false,
+      },
+      TokenAnalyticsResponse: {
+        oneOf: [
+          component("TokenAnalyticsSummaryResponse"),
+          component("TokenAnalyticsRankingResponse"),
+        ],
+      },
+      MarketOhlc: {
+        type: "object",
+        required: ["open", "high", "low", "close"],
+        properties: {
+          open: { type: "string" },
+          high: { type: "string" },
+          low: { type: "string" },
+          close: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      BitqueryMarketChartPoint: {
+        type: "object",
+        required: [
+          "blockNumber",
+          "time",
+          "bucketStart",
+          "bucketEnd",
+          "observedAt",
+          "valueSemantics",
+          "tradeCount",
+        ],
+        properties: {
+          blockNumber: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+          time: { type: "string", format: "date-time" },
+          bucketStart: { type: "string", format: "date-time" },
+          bucketEnd: { type: "string", format: "date-time" },
+          observedAt: { type: "string", format: "date-time" },
+          valueSemantics: { const: "period-median" },
+          priceUsd: { type: "string" },
+          priceQuote: { type: "string" },
+          quoteSymbol: { type: "string" },
+          ohlcUsd: component("MarketOhlc"),
+          ohlcQuote: component("MarketOhlc"),
+          volumeUsdWad: {
+            type: "string",
+            pattern: "^(?:0|[1-9][0-9]*)$",
+          },
+          tradeCount: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+      BitqueryMarketChart: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "source",
+          "readStatus",
+          "status",
+          "generatedAt",
+          "identity",
+          "range",
+          "points",
+          "swapCount",
+          "valuation",
+          "truncated",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.market-chart.v1" },
+          source: { const: "bitquery" },
+          readStatus: { type: "string", enum: ["live", "cache-fallback"] },
+          status: {
+            type: "string",
+            enum: [
+              "ready",
+              "insufficient-history",
+              "partial",
+              "waiting-for-first-trade",
+              "unavailable",
+            ],
+          },
+          generatedAt: { type: "string", format: "date-time" },
+          identity: component("GmgnMarketIdentity"),
+          range: { type: "string", enum: ["1h", "1d", "1w", "all"] },
+          points: {
+            type: "array",
+            maxItems: 512,
+            items: component("BitqueryMarketChartPoint"),
+          },
+          swapCount: { type: "integer", minimum: 0 },
+          volumeUsdWad: {
+            type: "string",
+            pattern: "^(?:0|[1-9][0-9]*)$",
+          },
+          valuation: {
+            type: "object",
+            required: ["status", "reason"],
+            properties: {
+              status: { const: "unavailable" },
+              reason: { type: "string" },
+            },
+            additionalProperties: false,
+          },
+          asOfTime: { type: "string", format: "date-time" },
+          truncated: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+      GmgnMarketChartPoint: {
+        type: "object",
+        required: [
+          "time",
+          "bucketStart",
+          "bucketEnd",
+          "valueSemantics",
+          "priceUsd",
+          "ohlcUsd",
+          "volumeUsdWad",
+        ],
+        properties: {
+          time: { type: "string", format: "date-time" },
+          bucketStart: { type: "string", format: "date-time" },
+          bucketEnd: { type: "string", format: "date-time" },
+          valueSemantics: { const: "period-close" },
+          priceUsd: { type: "string" },
+          ohlcUsd: component("MarketOhlc"),
+          volumeUsdWad: {
+            type: "string",
+            pattern: "^(?:0|[1-9][0-9]*)$",
+          },
+        },
+        additionalProperties: false,
+      },
+      GmgnChartIdentityProof: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "source",
+          "verifiedAt",
+          "identity",
+          "canonicalSupply",
+        ],
+        properties: {
+          schemaVersion: {
+            const: "programmable.gmgn-chart-identity-proof.v1",
+          },
+          source: { const: "gmgn-token-info" },
+          verifiedAt: { type: "string", format: "date-time" },
+          identity: component("GmgnMarketIdentity"),
+          canonicalSupply: {
+            type: "object",
+            required: ["totalSupplyRaw", "tokenDecimals"],
+            properties: {
+              totalSupplyRaw: component("CanonicalUint256"),
+              tokenDecimals: { type: "integer", minimum: 0, maximum: 255 },
+            },
+            additionalProperties: false,
+          },
+        },
+        additionalProperties: false,
+      },
+      GmgnMarketChart: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "source",
+          "readStatus",
+          "status",
+          "generatedAt",
+          "identity",
+          "identityProof",
+          "range",
+          "resolution",
+          "requestedFrom",
+          "requestedTo",
+          "points",
+          "candleCount",
+          "volumeUsdWad",
+          "asOfTime",
+          "truncated",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.gmgn-market-chart.v1" },
+          source: { const: "gmgn" },
+          readStatus: { const: "live" },
+          status: {
+            type: "string",
+            enum: ["ready", "insufficient-history", "partial"],
+          },
+          generatedAt: { type: "string", format: "date-time" },
+          identity: component("GmgnMarketIdentity"),
+          identityProof: component("GmgnChartIdentityProof"),
+          range: { type: "string", enum: ["1h", "1d", "1w", "all"] },
+          resolution: {
+            type: "string",
+            enum: ["30s", "1m", "5m", "15m", "1h", "4h", "1d"],
+          },
+          requestedFrom: { type: "string", format: "date-time" },
+          requestedTo: { type: "string", format: "date-time" },
+          points: {
+            type: "array",
+            minItems: 1,
+            maxItems: 512,
+            items: component("GmgnMarketChartPoint"),
+          },
+          candleCount: { type: "integer", minimum: 1, maximum: 512 },
+          volumeUsdWad: {
+            type: "string",
+            pattern: "^(?:0|[1-9][0-9]*)$",
+          },
+          asOfTime: { type: "string", format: "date-time" },
+          truncated: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+      MarketChartError: {
+        type: "object",
+        required: [
+          "schemaVersion",
+          "source",
+          "status",
+          "generatedAt",
+          "address",
+          "range",
+          "reason",
+          "error",
+        ],
+        properties: {
+          schemaVersion: { const: "programmable.market-chart-error.v1" },
+          source: { const: "bitquery" },
+          status: { const: "unavailable" },
+          generatedAt: { type: "string", format: "date-time" },
+          address: component("EthereumAddress"),
+          range: { type: "string", enum: ["1h", "1d", "1w", "all"] },
+          reason: {
+            type: "string",
+            enum: ["identity-unavailable", "market-data-unavailable"],
+          },
+          error: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      TokenChartResponse: {
+        oneOf: [
+          component("GmgnMarketChart"),
+          component("BitqueryMarketChart"),
+          component("MarketChartError"),
+        ],
+      },
       ExploreEntry: {
         type: "object",
         required: ["exploreKind", "id", "name", "launchedAt", "valuation"],
@@ -1819,13 +2507,20 @@ export const programmablePublicOpenApi = {
           totalPages: { type: "integer", minimum: 0 },
           sort: {
             type: "string",
-            enum: ["newest", "oldest", "market-cap", "market-cap-asc"],
+            enum: [
+              "newest",
+              "oldest",
+              "trending",
+              "market-cap",
+              "market-cap-asc",
+            ],
           },
           query: { type: "string" },
-          sortMetric: { const: "fdv" },
+          sortMetric: { type: "string", enum: ["fdv", "gmgn-trending"] },
           catalog: component("CatalogBoundary"),
           dataQuality: { type: "object", additionalProperties: true },
           marketRead: component("ExploreMarketRead"),
+          discovery: component("ExploreDiscoveryRanking"),
         },
         additionalProperties: true,
       },

@@ -908,10 +908,15 @@ describe("Explore refresh state", () => {
 
     expect(resolveExploreServerSort("highest", "newest")).toBe("market-cap");
     expect(resolveExploreServerSort("none", "oldest")).toBe("oldest");
+    expect(resolveExploreServerSort("none", "none", "trending")).toBe(
+      "trending",
+    );
     expect(requiresCompleteExploreDataset("highest", "newest")).toBe(false);
     expect(requiresCompleteExploreDataset("lowest", "newest")).toBe(false);
     expect(requiresCompleteExploreDataset("highest", "oldest")).toBe(true);
     expect(requiresCompleteExploreDataset("none", "oldest")).toBe(false);
+    expect(requiresCompleteExploreDataset("highest", "oldest", "trending"))
+      .toBe(false);
     expect(
       sortExploreEntriesBySelections(
         [lowNewest, highOld, unavailable, highNew],
@@ -960,6 +965,17 @@ describe("Explore refresh state", () => {
       count: 0,
       summary: "Default sorting applied",
     });
+    expect(exploreActiveSelectionState({
+      valuationSort: "none",
+      ageSort: "none",
+      discoverySort: "trending",
+      socialFilter: "all",
+      modelFilter: "all",
+    })).toEqual({
+      count: 1,
+      summary: "Trending selected",
+    });
+    expect(exploreAppliedSortLabel("trending", undefined)).toBe("Trending");
   });
 
   it("loads every server page before model filtering and preserves server order", async () => {

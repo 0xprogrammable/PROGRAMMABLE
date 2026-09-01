@@ -61,6 +61,8 @@ describe("agent-readable public surface", () => {
       "/api/custom-launch/registry/v2/readiness",
       "/api/explore",
       "/api/explore/token",
+      "/api/explore/token/analytics",
+      "/api/explore/token/chart",
       "/openapi.json",
       "/v1/custom-launches",
       "/v1/custom-launches/{launchId}",
@@ -82,6 +84,8 @@ describe("agent-readable public surface", () => {
       "/api/custom-launch/registry/v2/readiness",
       "/api/explore",
       "/api/explore/token",
+      "/api/explore/token/analytics",
+      "/api/explore/token/chart",
       "/openapi.json",
     ] as const;
     for (const path of readOnlyPaths) {

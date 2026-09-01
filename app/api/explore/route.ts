@@ -8,6 +8,14 @@ import {
 } from "../../../lib/explore-financial-data";
 import { readDexscreenerExploreEntriesV1 } from
   "../../../lib/market-data/dexscreener-explore.server";
+import { rankCanonicalExploreEntriesWithGmgnDiscoveryV1 } from
+  "../../../lib/market-data/gmgn-canonical-ranking";
+import {
+  readGmgnEthereumHotSearchesV1,
+  readGmgnEthereumTrendingV1,
+} from "../../../lib/market-data/gmgn-discovery.server";
+import type { GmgnDiscoverySnapshotV1 } from
+  "../../../lib/market-data/gmgn-discovery-v1";
 import {
   exploreMarketProviderHeaderV1,
   exploreMarketPriceSourcesV1,
@@ -213,9 +221,9 @@ function sortExploreEntries(
   sort: ExploreSort,
 ): ExploreEntry[] {
   return [...entries].sort((first, second) => {
-    if (sort === "newest" || sort === "oldest") {
+    if (sort === "newest" || sort === "oldest" || sort === "trending") {
       const comparison = compareNewestEntries(first, second);
-      return sort === "newest" ? comparison : -comparison;
+      return sort === "oldest" ? -comparison : comparison;
     }
     const firstCap = valuationSortValue(first);
     const secondCap = valuationSortValue(second);
@@ -320,6 +328,90 @@ export function paginateExploreEntriesV1(
   return paginateEntries(sortExploreEntries(filtered, input.sort), input);
 }
 
+export type ExploreDiscoveryRankingV1 = Readonly<{
+  schemaVersion: "programmable.explore-discovery-ranking.v1";
+  provider: "gmgn";
+  requested: "trending";
+  status: "complete" | "partial" | "unavailable";
+  applied: "gmgn-ranked-with-launch-order-fallback" | "launch-order";
+  rankInterval: "1h";
+  hotSearchInterval: "24h";
+  snapshotCount: number;
+  observedTokenCount: number;
+  matchedTokenCount: number;
+  canonicalEntryCount: number;
+  canonicalTokenCount: number;
+  unobservedCanonicalEntryCount: number;
+  canonicalAddressCoverageBps: number;
+  foreignTokenCount: number;
+  discardedProviderItemCount: number;
+  asOfTime: string | null;
+}>;
+
+export function paginateTrendingExploreEntriesV1(
+  entries: readonly ExploreEntry[],
+  snapshots: readonly GmgnDiscoverySnapshotV1[],
+  input: Readonly<{
+    page: number;
+    pageSize: number;
+    query: string;
+    socials: "yes" | "no" | null;
+    model: "classic" | "custom" | null;
+  }>,
+): Readonly<{
+  paginated: ReturnType<typeof paginateEntries>;
+  discovery: ExploreDiscoveryRankingV1;
+}> {
+  const filteredNewest = sortExploreEntries(
+    filterExploreEntries(
+      entries,
+      input.query,
+      input.socials,
+      input.model,
+    ),
+    "newest",
+  );
+  const ranked = rankCanonicalExploreEntriesWithGmgnDiscoveryV1(
+    filteredNewest,
+    snapshots,
+  );
+  const coverage = ranked.coverage;
+  const matched = coverage.gmgnMatchedEntryCount;
+  const status = matched === 0
+    ? "unavailable" as const
+    : matched === coverage.canonicalEntryCount
+      ? "complete" as const
+      : "partial" as const;
+  const acceptedTimes = snapshots
+    .map((snapshot) => snapshot.fetchedAt)
+    .filter((value) => Number.isFinite(Date.parse(value)))
+    .sort();
+  return {
+    paginated: paginateEntries(ranked.entries, input),
+    discovery: {
+      schemaVersion: "programmable.explore-discovery-ranking.v1",
+      provider: "gmgn",
+      requested: "trending",
+      status,
+      applied: matched > 0
+        ? "gmgn-ranked-with-launch-order-fallback"
+        : "launch-order",
+      rankInterval: "1h",
+      hotSearchInterval: "24h",
+      snapshotCount: coverage.gmgnSnapshotCount,
+      observedTokenCount: coverage.gmgnObservedUniqueTokenCount,
+      matchedTokenCount: matched,
+      canonicalEntryCount: coverage.canonicalEntryCount,
+      canonicalTokenCount: coverage.canonicalUniqueTokenCount,
+      unobservedCanonicalEntryCount: coverage.unobservedCanonicalEntryCount,
+      canonicalAddressCoverageBps: coverage.canonicalAddressCoverageBps,
+      foreignTokenCount: coverage.foreignGmgnTokenCount,
+      discardedProviderItemCount: coverage.discardedProviderItemCount,
+      asOfTime: acceptedTimes.at(-1) ?? null,
+    },
+  };
+}
+
 function generatedAgeMs(generatedAt: string): number | null {
   const value = Date.parse(generatedAt);
   return Number.isFinite(value) ? Math.max(0, Date.now() - value) : null;
@@ -363,6 +455,13 @@ export async function GET(request: NextRequest) {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
+  const requestedSort = parseExploreSort(search.get("sort"));
+  if (requestedSort === "trending" && chain !== 1) {
+    return NextResponse.json(
+      { error: "Trending discovery is available on Ethereum only" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
 
   if (chain === 4663) {
     const pageSize = positiveInteger(
@@ -380,7 +479,7 @@ export async function GET(request: NextRequest) {
         pageSize,
         total: 0,
         totalPages: 0,
-        sort: parseExploreSort(search.get("sort")),
+        sort: requestedSort,
         query: search.get("q")?.trim() ?? "",
       },
       {
@@ -398,7 +497,7 @@ export async function GET(request: NextRequest) {
     const options = {
       chain,
       query: search.get("q")?.trim() ?? "",
-      sort: parseExploreSort(search.get("sort")),
+      sort: requestedSort,
       page: integerQuery(search.get("page"), 1),
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
@@ -583,6 +682,7 @@ export async function GET(request: NextRequest) {
     let paginated: ReturnType<typeof paginateExploreEntriesV1>;
     let marketRead: ExploreMarketReadV1;
     let marketQualifiedEntryCount = 0;
+    let discovery: ExploreDiscoveryRankingV1 | null = null;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
       const filtered = filterExploreEntries(
         presentedPublicEntries,
@@ -607,6 +707,62 @@ export async function GET(request: NextRequest) {
         socials: null,
         model: null,
       });
+    } else if (options.sort === "trending") {
+      const filteredNewest = sortExploreEntries(
+        filterExploreEntries(
+          presentedPublicEntries,
+          options.query,
+          options.socials,
+          options.model,
+        ),
+        "newest",
+      );
+      const snapshots: GmgnDiscoverySnapshotV1[] = [];
+      if (filteredNewest.length > 0) {
+        const rank = await readGmgnEthereumTrendingV1(
+          { interval: "1h", limit: 100 },
+          { signal: readSignal, deadlineMs },
+        ).catch(() => null);
+        if (rank !== null) snapshots.push(rank);
+        const rankCoverage = rankCanonicalExploreEntriesWithGmgnDiscoveryV1(
+          filteredNewest,
+          snapshots,
+        ).coverage;
+        const hotSearchDeadlineMs = deadlineMs - 2_500;
+        const hotSearchCanAddCoverage =
+          rankCoverage.gmgnMatchedUniqueTokenCount <
+            rankCoverage.canonicalUniqueTokenCount;
+        if (
+          hotSearchCanAddCoverage &&
+          hotSearchDeadlineMs - Date.now() >= 3_000
+        ) {
+          const hotSearch = await readGmgnEthereumHotSearchesV1(
+            { interval: "24h", limit: 100 },
+            { signal: readSignal, deadlineMs: hotSearchDeadlineMs },
+          ).catch(() => null);
+          if (hotSearch !== null) snapshots.push(hotSearch);
+        }
+      }
+      const trendingPage = paginateTrendingExploreEntriesV1(
+        filteredNewest,
+        snapshots,
+        {
+          ...options,
+          query: "",
+          socials: null,
+          model: null,
+        },
+      );
+      discovery = trendingPage.discovery;
+      const valued = await readExploreMarketEntriesV1(
+        trendingPage.paginated.tokens,
+        { signal: readSignal, deadlineMs },
+      );
+      marketRead = valued.marketRead;
+      paginated = {
+        ...trendingPage.paginated,
+        tokens: [...valued.entries],
+      };
     } else {
       const identityPage = paginateExploreEntriesV1(
         presentedPublicEntries,
@@ -653,10 +809,13 @@ export async function GET(request: NextRequest) {
         tokens: pageEntries.map(publicExploreEntryV1),
         sort: options.sort,
         query: options.query,
-        sortMetric: "fdv" as const,
+        sortMetric: options.sort === "trending"
+          ? "gmgn-trending" as const
+          : "fdv" as const,
         dataQuality,
         snapshot: null,
         marketRead,
+        ...(discovery === null ? {} : { discovery }),
         catalog: {
           source: catalog?.source ?? ("envio-classic-v3" as const),
           launchSource,
@@ -727,11 +886,23 @@ export async function GET(request: NextRequest) {
           "X-Programmable-Data-Quality": dataQuality.status,
           "X-Programmable-Chain-Id": String(options.chain),
           "X-Programmable-Launch-Source": launchSource,
-          "X-Programmable-Read-Source": `${launchSource}+${marketProvider}`,
+          "X-Programmable-Read-Source": `${launchSource}+${marketProvider}${
+            discovery !== null && discovery.status !== "unavailable"
+              ? "+gmgn-discovery"
+              : ""
+          }`,
           "X-Programmable-Market-Read-Status": marketRead.status,
           "X-Programmable-Market-Provider": marketProvider,
           "X-Programmable-Canonical-Read-Status": canonicalStatus,
           "X-Programmable-Router-Read-Status": routerCustomStatus,
+          ...(discovery === null
+            ? {}
+            : {
+                "X-Programmable-Discovery-Provider": "gmgn",
+                "X-Programmable-Discovery-Read-Status": discovery.status,
+                "X-Programmable-Discovery-Matched-Count":
+                  String(discovery.matchedTokenCount),
+              }),
           ...(marketSources.length > 0
             ? {
                 "X-Programmable-Market-Source": marketSources.join("+"),
