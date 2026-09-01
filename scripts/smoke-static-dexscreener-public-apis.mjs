@@ -53,6 +53,9 @@ const VISIBLE_EXPLORE_PAGE_SIZE = 9;
 const TRENDING_EXPLORE_PAGE_SIZE = 100;
 const TRENDING_EXPLORE_MAXIMUM_PAGES = 100;
 const TRENDING_SNAPSHOT_ATTEMPTS = 2;
+const TRENDING_DISCOVERY_VOLATILE_KEYS = new Set([
+  "asOfTime",
+]);
 const GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8;
 const PROVIDER_RECENT_MAXIMUM_AGE_MS = 5 * 60_000;
 const MINIMUM_FDV_LIQUIDITY_USD_WAD = 10_000n * 10n ** 18n;
@@ -1727,6 +1730,14 @@ function exactTrendingDiscovery(response, canonicalTokens, nowMs) {
       discovery.rankingCommitment;
 }
 
+function stableTrendingDiscoveryMetadata(discovery) {
+  return JSON.stringify(Object.fromEntries(
+    DISCOVERY_KEYS
+      .filter((key) => !TRENDING_DISCOVERY_VOLATILE_KEYS.has(key))
+      .map((key) => [key, discovery[key]]),
+  ));
+}
+
 async function readBoundTrendingSnapshot({
   request,
   canonicalTokens,
@@ -1743,7 +1754,9 @@ async function readBoundTrendingSnapshot({
     try {
       const tokens = [];
       let metadata = null;
+      let stableMetadata = null;
       let commitment = null;
+      let freshnessMs = null;
       for (let page = 1; page <= totalPages; page += 1) {
         const response = await request(
           `/api/explore?limit=${TRENDING_EXPLORE_PAGE_SIZE}&page=${page}&sort=trending`,
@@ -1776,16 +1789,35 @@ async function readBoundTrendingSnapshot({
           );
         }
         const serialized = JSON.stringify(discovery);
+        const stableSerialized = stableTrendingDiscoveryMetadata(discovery);
+        const nextFreshnessMs = discovery.asOfTime === null
+          ? null
+          : Date.parse(discovery.asOfTime);
         if (metadata === null) {
           metadata = serialized;
+          stableMetadata = stableSerialized;
           commitment = discovery.rankingCommitment;
+          freshnessMs = nextFreshnessMs;
+        } else if (discovery.rankingCommitment !== commitment) {
+          throw new ExploreDiscoverySnapshotDriftError(
+            "Trending discovery ranking identity changed during pagination",
+          );
+        } else if (stableSerialized !== stableMetadata) {
+          throw new ExploreDiscoverySnapshotDriftError(
+            "Trending discovery invariants changed during pagination",
+          );
         } else if (
-          serialized !== metadata ||
-          discovery.rankingCommitment !== commitment
+          (freshnessMs === null && nextFreshnessMs !== null) ||
+          (freshnessMs !== null && (
+            nextFreshnessMs === null || nextFreshnessMs < freshnessMs
+          ))
         ) {
           throw new ExploreDiscoverySnapshotDriftError(
-            "Trending discovery snapshot changed during pagination",
+            "Trending discovery freshness regressed during pagination",
           );
+        } else {
+          metadata = serialized;
+          freshnessMs = nextFreshnessMs;
         }
         tokens.push(...pageTokens);
       }
@@ -1832,7 +1864,11 @@ async function readBoundTrendingSnapshot({
           !currentProviderTimestamp(discovery.asOfTime, now().getTime()) ||
           discovery.applied !== "gmgn-ranked-with-launch-order-fallback")
       ) throw new Error("GMGN Trending discovery is required");
-      return { discovery, tokens };
+      return {
+        consistency: "ranking-identity+monotonic-current-freshness",
+        discovery,
+        tokens,
+      };
     } catch (error) {
       if (!(error instanceof ExploreDiscoverySnapshotDriftError)) throw error;
       lastDrift = error;
@@ -2642,6 +2678,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         searchRanking: searchSnapshot.search,
         shardTradeStatus,
         tokenAddress,
+        trendingDiscoveryConsistency: trendingSnapshot.consistency,
         trendingDiscovery: trendingSnapshot.discovery,
       };
       break;
@@ -2674,6 +2711,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     searchRanking,
     shardTradeStatus,
     tokenAddress,
+    trendingDiscoveryConsistency,
     trendingDiscovery,
   } = exploreSnapshot;
 
@@ -2953,6 +2991,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         `discovery_status=${trendingDiscovery.status}`,
         `discovery_matched_count=${trendingDiscovery.matchedTokenCount}`,
         `discovery_ranking_commitment=${trendingDiscovery.rankingCommitment}`,
+        `discovery_consistency=${trendingDiscoveryConsistency}`,
         `search_status=${searchRanking.status}`,
         `search_matched_count=${searchRanking.matchedTokenCount}`,
         `search_ranking_commitment=${searchRanking.rankingCommitment}`,
@@ -2997,6 +3036,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     discoveryStatus: trendingDiscovery.status,
     discoveryMatchedCount: trendingDiscovery.matchedTokenCount,
     discoveryRankingCommitment: trendingDiscovery.rankingCommitment,
+    discoveryConsistency: trendingDiscoveryConsistency,
     searchStatus: searchRanking.status,
     searchMatchedCount: searchRanking.matchedTokenCount,
     searchRankingCommitment: searchRanking.rankingCommitment,

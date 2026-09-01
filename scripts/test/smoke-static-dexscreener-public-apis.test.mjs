@@ -1962,6 +1962,45 @@ function pagedCatalogTransform(allEntries, options = {}) {
   };
 }
 
+function liveTrendingDiscovery(
+  discovery,
+  totalCount,
+  asOfTime,
+  rankingCommitment = discovery.rankingCommitment,
+) {
+  return {
+    ...discovery,
+    rankingCommitment,
+    status: "partial",
+    applied: "gmgn-ranked-with-launch-order-fallback",
+    snapshotCount: 1,
+    observedTokenCount: 1,
+    matchedTokenCount: 1,
+    matchedUniqueTokenCount: 1,
+    canonicalEntryCount: totalCount,
+    canonicalTokenCount: totalCount,
+    unobservedCanonicalEntryCount: totalCount - 1,
+    canonicalAddressCoverageBps: Math.floor(10_000 / totalCount),
+    foreignTokenCount: 0,
+    discardedProviderItemCount: 0,
+    asOfTime,
+  };
+}
+
+function liveTrendingHeaders({ extraHeaders, omittedHeaders, url }) {
+  return url.pathname === "/api/explore" &&
+      url.searchParams.get("sort") === "trending"
+    ? {
+        extraHeaders: {
+          ...extraHeaders,
+          "x-programmable-read-source":
+            "envio-classic-v3+dexscreener+gmgn-discovery",
+        },
+        omittedHeaders,
+      }
+    : { extraHeaders, omittedHeaders };
+}
+
 test("staged smoke accepts identity-only Explore and token responses", async () => {
   const output = [];
   const result = await runStagedStaticDexscreenerSmokeV1({
@@ -3672,11 +3711,51 @@ test("staged smoke binds market-cap ranking to the complete paged identity set",
   assert.equal(result.discoveryMatchedCount, 0);
 });
 
-test("staged smoke retries the whole bounded Trending pagination once on snapshot drift", async () => {
+test("staged smoke separates one Trending rank identity from monotonic freshness", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  const freshnessBaseMs = Date.parse(NOW) - 1_000;
+  const output = [];
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch((input) => {
+      const body = paged(input);
+      if (
+        input.url.pathname !== "/api/explore" ||
+        input.url.searchParams.get("sort") !== "trending"
+      ) return body;
+      const page = Number(input.url.searchParams.get("page"));
+      return {
+        ...body,
+        discovery: liveTrendingDiscovery(
+          body.discovery,
+          allEntries.length,
+          new Date(freshnessBaseMs + page).toISOString(),
+        ),
+      };
+    }, liveTrendingHeaders),
+    appendOutput: (...args) => output.push(args),
+  });
+  assert.equal(
+    result.discoveryConsistency,
+    "ranking-identity+monotonic-current-freshness",
+  );
+  assert.match(
+    output[0][1],
+    /discovery_consistency=ranking-identity\+monotonic-current-freshness/u,
+  );
+});
+
+test("staged smoke retries the whole bounded Trending pagination once on freshness regression", async () => {
   const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
   const paged = pagedCatalogTransform(allEntries);
   let attempt = 0;
   const pages = new Map();
+  const freshnessBaseMs = Date.parse(NOW) - 1_000;
   const fetchImpl = stagedFetch((input) => {
     const body = paged(input);
     if (
@@ -3686,16 +3765,18 @@ test("staged smoke retries the whole bounded Trending pagination once on snapsho
     const page = Number(input.url.searchParams.get("page"));
     if (page === 1) attempt += 1;
     pages.set(page, (pages.get(page) ?? 0) + 1);
-    return page === 2 && attempt === 1
-      ? {
-          ...body,
-          discovery: {
-            ...body.discovery,
-            rankingCommitment: `sha256:${"ee".repeat(32)}`,
-          },
-        }
-      : body;
-  });
+    const freshnessOffset = attempt === 1 && page === 2
+      ? 1
+      : attempt * 10 + page;
+    return {
+      ...body,
+      discovery: liveTrendingDiscovery(
+        body.discovery,
+        allEntries.length,
+        new Date(freshnessBaseMs + freshnessOffset).toISOString(),
+      ),
+    };
+  }, liveTrendingHeaders);
   await runStagedStaticDexscreenerSmokeV1({
     environment: {
       STAGED_TARGET_URL: "https://candidate.vercel.app/",
@@ -3708,7 +3789,7 @@ test("staged smoke retries the whole bounded Trending pagination once on snapsho
   assert.deepEqual(Object.fromEntries(pages), { 1: 2, 2: 2, 3: 1 });
 });
 
-test("staged smoke fails closed after two drifting Trending paginations", async () => {
+test("staged smoke fails closed after two Trending ranking identity drifts", async () => {
   const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
   const paged = pagedCatalogTransform(allEntries);
   const pages = new Map();
@@ -3726,6 +3807,44 @@ test("staged smoke fails closed after two drifting Trending paginations", async 
           discovery: {
             ...body.discovery,
             rankingCommitment: `sha256:${"ee".repeat(32)}`,
+          },
+        }
+      : body;
+  });
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl,
+      appendOutput: () => {},
+    }),
+    /drifted across both bounded attempts/u,
+  );
+  assert.deepEqual(Object.fromEntries(pages), { 1: 2, 2: 2 });
+});
+
+test("staged smoke fails closed on Trending coverage drift under one commitment", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  const pages = new Map();
+  const fetchImpl = stagedFetch((input) => {
+    const body = paged(input);
+    if (
+      input.url.pathname !== "/api/explore" ||
+      input.url.searchParams.get("sort") !== "trending"
+    ) return body;
+    const page = Number(input.url.searchParams.get("page"));
+    pages.set(page, (pages.get(page) ?? 0) + 1);
+    return page === 2
+      ? {
+          ...body,
+          discovery: {
+            ...body.discovery,
+            canonicalAddressCoverageBps:
+              body.discovery.canonicalAddressCoverageBps + 1,
           },
         }
       : body;

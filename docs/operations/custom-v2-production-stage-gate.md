@@ -107,6 +107,16 @@ and `providers[0].accountGateMode=multiflight-v1`. The
 rolling-availability prefix only; Stage does not apply migration `0007`, and
 that mode cannot authorize promotion at Pro throughput.
 
+Trending pagination records
+`discovery_consistency=ranking-identity+monotonic-current-freshness`. The
+server-side discovery ranking commitment binds the ordered canonical ranking
+identity but deliberately excludes provider observation time. Every page must
+carry that same commitment and the same coverage metadata; each separate
+`asOfTime` must remain current and must not regress across the serial read.
+Freshness-only refreshes can therefore advance without being mislabeled as a
+new ranking, while a changed rank, membership, coverage value, or regressing
+timestamp retries the whole bounded pagination once and then fails closed.
+
 The Custom V2 probe verifies:
 
 - Registry V2 manifest and readiness in the selected prelaunch/live mode

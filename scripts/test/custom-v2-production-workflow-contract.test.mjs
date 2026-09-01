@@ -557,6 +557,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     "discovery_status",
     "discovery_matched_count",
     "discovery_ranking_commitment",
+    "discovery_consistency",
     "analytics_summary_status",
     "analytics_holders_status",
     "analytics_traders_status",
@@ -630,6 +631,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     "discovery_status",
     "discovery_matched_count",
     "discovery_ranking_commitment",
+    "discovery_consistency",
     "analytics_summary_status",
     "analytics_holders_status",
     "analytics_traders_status",
@@ -640,6 +642,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     );
   }
   assert.match(handoff, /GMGN discovery ranking commitment:/u);
+  assert.match(handoff, /GMGN discovery consistency:/u);
   assert.match(handoff, /GMGN analytics summary:/u);
   assert.match(handoff, /Descending market-cap ranking: source/u);
   assert.match(handoff, /Ascending market-cap ranking: source/u);
