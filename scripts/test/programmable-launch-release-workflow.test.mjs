@@ -514,6 +514,9 @@ test("Robinhood Phase A workflow contract mutations fail closed", () => {
 function robinhoodPromotionFailures(value) {
   const required = [
     "github.repository_id == 1314365508",
+    "push:",
+    "(github.event_name == 'workflow_dispatch' || github.event_name == 'push')",
+    "group: robinhood-custom-launch-promotion-${{ github.sha }}",
     "github.ref == 'refs/heads/production'",
     "github.ref_protected == true",
     "environment: production",
@@ -534,6 +537,10 @@ function robinhoodPromotionFailures(value) {
     "test \"$GITHUB_WORKFLOW_REF\" = \"$GITHUB_REPOSITORY/.github/workflows/finalize-robinhood-custom-launch-promotion.yml@$GITHUB_REF\"",
     "test -z \"$(git symbolic-ref -q HEAD || true)\"",
     "test \"$(git remote get-url origin)\" = \"https://github.com/$GITHUB_REPOSITORY\"",
+    "PUSH_BASE_SHA: ${{ github.event.before }}",
+    "git diff --no-renames --name-only \"$PUSH_BASE_SHA\" \"$GITHUB_SHA\"",
+    "test \"${#actual_changes[@]}\" -eq \"${#expected_changes[@]}\"",
+    "test \"${actual_changes[$index]}\" = \"${expected_changes[$index]}\"",
     cleanCheckoutAssertion,
     "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
     "node-version: 24.14.0",
@@ -647,11 +654,20 @@ test("Robinhood Phase B workflow accepts only portable public-safe producer evid
   assert.equal(robinhoodPromotionSource.includes("actions/download-artifact@"), false);
   assert.equal(robinhoodPromotionSource.includes("inputs.phase_a_artifact"), false);
   assert.equal(robinhoodPromotionSource.includes("inputs.backend_artifact"), false);
+  assert.equal(robinhoodPromotionSource.includes("pull_request:"), false);
   assert.equal(robinhoodPromotionSource.includes("create-storage-record: false"), false);
 });
 
 test("Robinhood Phase B workflow contract mutations fail closed", () => {
   const mutations = [
+    robinhoodPromotionSource.replace(
+      "(github.event_name == 'workflow_dispatch' || github.event_name == 'push')",
+      "true",
+    ),
+    robinhoodPromotionSource.replace(
+      "group: robinhood-custom-launch-promotion-${{ github.sha }}",
+      "group: robinhood-custom-launch-promotion",
+    ),
     robinhoodPromotionSource.replace("github.ref == 'refs/heads/production'", "true"),
     robinhoodPromotionSource.replace("github.ref_protected == true", "true"),
     robinhoodPromotionSource.replace("persist-credentials: false", "persist-credentials: true"),
@@ -665,6 +681,14 @@ test("Robinhood Phase B workflow contract mutations fail closed", () => {
     ),
     robinhoodPromotionSource.replace(cleanCheckoutAssertion, "true"),
     replaceLast(robinhoodPromotionSource, cleanCheckoutAssertion, "true"),
+    robinhoodPromotionSource.replace(
+      "git diff --no-renames --name-only \"$PUSH_BASE_SHA\" \"$GITHUB_SHA\"",
+      "printf '%s\\n' \"${expected_changes[@]}\"",
+    ),
+    robinhoodPromotionSource.replace(
+      "test \"${#actual_changes[@]}\" -eq \"${#expected_changes[@]}\"",
+      "true",
+    ),
     robinhoodPromotionSource.replace("test ! -L \"$evidence_path\"", "true"),
     robinhoodPromotionSource.replace(
       "git cat-file -e \"$GITHUB_SHA:release/robinhood-chain-4663/$evidence_file\"",

@@ -7,6 +7,7 @@ import {
   DATABASE_RUNTIME_SOURCE_PATHS,
   DATABASE_RUNTIME_TEST_PATHS,
   READ_MODEL_CONTRACT_DOC_PATHS,
+  ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS,
 } from "./classify-verify-paths.mjs";
 
 const none = {
@@ -17,7 +18,40 @@ const none = {
   indexer: false,
   interface: false,
   read_model: false,
+  robinhood_phase_b_evidence: false,
+  robinhood_phase_b_evidence_exact: false,
 };
+
+test("routes only the exact Robinhood Phase B backend pair through its short-lived evidence gate", () => {
+  assert.deepEqual(classifyVerifyPaths(ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS), {
+    ...none,
+    robinhood_phase_b_evidence: true,
+    robinhood_phase_b_evidence_exact: true,
+  });
+  assert.deepEqual(classifyVerifyPaths([
+    ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS[0],
+  ]), {
+    ...none,
+    robinhood_phase_b_evidence: true,
+  });
+  assert.deepEqual(classifyVerifyPaths([
+    ...ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS,
+    "README.md",
+  ]), {
+    ...none,
+    robinhood_phase_b_evidence: true,
+  });
+  assert.deepEqual(classifyVerifyPaths([], { forceAll: true }), {
+    ...none,
+    contracts: true,
+    custom_v2: true,
+    database: true,
+    dependencies: true,
+    indexer: true,
+    interface: true,
+    read_model: true,
+  });
+});
 
 test("routes the versioned Custom V2 surface without legacy market lanes", () => {
   for (const path of [
@@ -238,6 +272,15 @@ test("keeps protected jobs fail closed and production pushes path scoped", () =>
     /git show "\$BASE_SHA:scripts\/ci\/classify-verify-paths\.mjs"/u,
   );
   assert.doesNotMatch(workflow, /FORCE_ALL:/u);
+  assert.match(workflow, /robinhood_phase_b_evidence: \$\{\{ steps\.scope\.outputs\.robinhood_phase_b_evidence \}\}/u);
+  assert.match(workflow, /robinhood_phase_b_evidence_exact: \$\{\{ steps\.scope\.outputs\.robinhood_phase_b_evidence_exact \}\}/u);
+  assert.match(workflow, /Reject partial or mixed Robinhood Phase B backend evidence imports/u);
+  assert.match(workflow, /Install exact Cosign verifier for Robinhood Phase B backend evidence/u);
+  assert.match(workflow, /verify-backend-import/u);
+  assert.match(workflow, /4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71/u);
+  assert.match(workflow, /git ls-files --stage -- "\$evidence_path"/u);
+  assert.match(workflow, /test "\$\(stat -c '%a' "\$evidence_path"\)" = "644"/u);
+  assert.match(workflow, /needs\.scope\.outputs\.robinhood_phase_b_evidence_exact != 'true'\n        run: exit 1/u);
   assert.match(
     workflow,
     /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/u,
