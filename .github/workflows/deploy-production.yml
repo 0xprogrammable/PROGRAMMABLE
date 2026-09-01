@@ -237,11 +237,13 @@ jobs:
       market_cap_desc_status: ${{ steps.public-provider-smoke.outputs.market_cap_desc_status }}
       market_cap_desc_gmgn_status: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}
       market_cap_desc_matched_count: ${{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}
+      market_cap_desc_gmgn_hydration_qualified_count: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_hydration_qualified_count }}
       market_cap_desc_ranking_commitment: ${{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}
       market_cap_asc_source: ${{ steps.public-provider-smoke.outputs.market_cap_asc_source }}
       market_cap_asc_status: ${{ steps.public-provider-smoke.outputs.market_cap_asc_status }}
       market_cap_asc_gmgn_status: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}
       market_cap_asc_matched_count: ${{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}
+      market_cap_asc_gmgn_hydration_qualified_count: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_hydration_qualified_count }}
       market_cap_asc_ranking_commitment: ${{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -1625,11 +1627,13 @@ jobs:
           MARKET_CAP_DESC_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_desc_status }}
           MARKET_CAP_DESC_GMGN_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}
           MARKET_CAP_DESC_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}
+          MARKET_CAP_DESC_GMGN_HYDRATION_QUALIFIED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_hydration_qualified_count }}
           MARKET_CAP_DESC_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}
           MARKET_CAP_ASC_SOURCE: ${{ steps.public-provider-smoke.outputs.market_cap_asc_source }}
           MARKET_CAP_ASC_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_asc_status }}
           MARKET_CAP_ASC_GMGN_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}
           MARKET_CAP_ASC_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}
+          MARKET_CAP_ASC_GMGN_HYDRATION_QUALIFIED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_hydration_qualified_count }}
           MARKET_CAP_ASC_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}
           SHARD_TRADE_STATUS: ${{ steps.public-provider-smoke.outputs.shard_trade_status }}
           CHART_PROVIDER: ${{ steps.public-provider-smoke.outputs.chart_provider }}
@@ -1676,8 +1680,8 @@ jobs:
             echo "- GMGN analytics summary: \`${ANALYTICS_SUMMARY_STATUS:-not-run}\`"
             echo "- GMGN analytics holders: \`${ANALYTICS_HOLDERS_STATUS:-not-run}\`"
             echo "- GMGN analytics traders: \`${ANALYTICS_TRADERS_STATUS:-not-run}\`"
-            echo "- Descending market-cap ranking: source \`${MARKET_CAP_DESC_SOURCE:-not-run}\`, status \`${MARKET_CAP_DESC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_DESC_GMGN_STATUS:-not-run}\`, canonical matches \`${MARKET_CAP_DESC_MATCHED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_DESC_RANKING_COMMITMENT:-not-run}\`"
-            echo "- Ascending market-cap ranking: source \`${MARKET_CAP_ASC_SOURCE:-not-run}\`, status \`${MARKET_CAP_ASC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_ASC_GMGN_STATUS:-not-run}\`, canonical matches \`${MARKET_CAP_ASC_MATCHED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_ASC_RANKING_COMMITMENT:-not-run}\`"
+            echo "- Descending market-cap ranking: source \`${MARKET_CAP_DESC_SOURCE:-not-run}\`, status \`${MARKET_CAP_DESC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_DESC_GMGN_STATUS:-not-run}\`, canonical rank matches \`${MARKET_CAP_DESC_MATCHED_COUNT:-not-run}\`, token_info qualifications \`${MARKET_CAP_DESC_GMGN_HYDRATION_QUALIFIED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_DESC_RANKING_COMMITMENT:-not-run}\`"
+            echo "- Ascending market-cap ranking: source \`${MARKET_CAP_ASC_SOURCE:-not-run}\`, status \`${MARKET_CAP_ASC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_ASC_GMGN_STATUS:-not-run}\`, canonical rank matches \`${MARKET_CAP_ASC_MATCHED_COUNT:-not-run}\`, token_info qualifications \`${MARKET_CAP_ASC_GMGN_HYDRATION_QUALIFIED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_ASC_RANKING_COMMITMENT:-not-run}\`"
             echo "- SHARD trade adapter smoke: \`${SHARD_TRADE_STATUS:-not-run}\`"
             echo "- Market chart provider: \`${CHART_PROVIDER:-not-run}\`"
             echo "- Market chart series scope: \`${CHART_SCOPE:-not-run}\`"

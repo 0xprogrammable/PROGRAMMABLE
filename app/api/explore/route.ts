@@ -84,6 +84,7 @@ import {
 import {
   EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS,
   EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_BYTES,
+  EXPLORE_MARKET_CAP_AUTHORITY_POSITIVE_REFRESH_MS,
   exploreMarketCapAuthorityStorageCommitmentV1,
   getProductionExploreMarketCapAuthorityStoreV1,
   type ExploreMarketCapAuthorityCandidateV1,
@@ -105,6 +106,8 @@ const GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS =
 const MARKET_CAP_AUTHORITY_BUILD_BUDGET_MS = FAST_LANE_REQUEST_BUDGET_MS;
 const MARKET_CAP_AUTHORITY_PUBLISH_RESERVE_MS = 3_000;
 const MARKET_CAP_REQUEST_BUDGET_MS = 12_000;
+const EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3 =
+  "gmgn-qualified-rank+oldest-first-sentinels+cyclic-supply+same-bucket-supply-priority+cyclic-token-info+dexscreener.v3";
 const SHA256_COMMITMENT = /^sha256:[0-9a-f]{64}$/u;
 const UNSIGNED_INTEGER = /^(?:0|[1-9][0-9]*)$/u;
 const CLASSIC_EXCLUSIONS = Object.freeze([
@@ -966,12 +969,13 @@ function marketCapAuthorityPinCommitmentV1(
   );
 }
 
-function exploreMarketCapAuthorityInputCommitmentV1(
+export function exploreMarketCapAuthorityInputCommitmentV1(
   entries: readonly ExploreEntry[],
 ): `sha256:${string}` {
   return canonicalSha256(
-    "programmable.explore-market-cap-authority-input.v2",
+    "programmable.explore-market-cap-authority-input.v3",
     {
+      compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3,
       orderedCanonicalIdentities: entries.map((entry, index) => ({
         index,
         ...exactOrderedMarketIdentityV1(entry),
@@ -1384,6 +1388,81 @@ function projectExploreMarketCapAuthorityV1(
   });
 }
 
+export function selectMarketCapCyclicHydrationEntriesV1<Entry extends ExploreEntry>(
+  eligibleEntries: readonly Entry[],
+  limit: number,
+  now: Date,
+  priorityEntries: readonly Entry[] = [],
+  priorityReservation = priorityEntries.length,
+): readonly Entry[] {
+  if (!Number.isSafeInteger(limit) || limit <= 0) return Object.freeze([]);
+  const uniqueEligible: Entry[] = [];
+  const seenIds = new Set<string>();
+  for (const entry of eligibleEntries) {
+    if (seenIds.has(entry.id)) continue;
+    seenIds.add(entry.id);
+    uniqueEligible.push(entry);
+  }
+  if (uniqueEligible.length <= 1) return Object.freeze(uniqueEligible);
+
+  const first = uniqueEligible[0]!;
+  const last = uniqueEligible.at(-1)!;
+  if (limit === 1) return Object.freeze([last]);
+  if (
+    !Number.isSafeInteger(priorityReservation) ||
+    priorityReservation < 0 ||
+    priorityReservation > limit - 2
+  ) {
+    throw new TypeError("Market-cap hydration priority reservation is invalid");
+  }
+  const sentinelIds = new Set([first.id, last.id]);
+  const priorityIds = new Set(priorityEntries.map((entry) => entry.id));
+  const priority = uniqueEligible.filter((entry) =>
+    priorityIds.has(entry.id) && !sentinelIds.has(entry.id)
+  );
+  if (priority.length > priorityReservation) {
+    throw new TypeError("Market-cap hydration priority exceeds reservation");
+  }
+  const prefix = [last, first, ...priority];
+  if (prefix.length > limit) {
+    throw new TypeError("Market-cap hydration priority exceeds request bound");
+  }
+  const prefixIds = new Set(prefix.map((entry) => entry.id));
+  const rotating = uniqueEligible.slice(1, -1);
+  if (rotating.every((entry) => prefixIds.has(entry.id)) || prefix.length === limit) {
+    return Object.freeze(prefix);
+  }
+  // Reserve a stable part of every request for same-bucket supply successes.
+  // The rotation remains anchored to the unchanged global interior, so
+  // changing priority identities cannot shift its geometry and starve another
+  // canonical token forever.
+  const windowSize = Math.min(
+    limit - 2 - priorityReservation,
+    rotating.length,
+  );
+  if (windowSize <= 0) return Object.freeze(prefix);
+  const cycleLength = Math.ceil(rotating.length / windowSize);
+  const nowMs = now.getTime();
+  const refreshBucket = Number.isFinite(nowMs)
+    ? Math.floor(nowMs / EXPLORE_MARKET_CAP_AUTHORITY_POSITIVE_REFRESH_MS)
+    : 0;
+  const cycleIndex = ((refreshBucket % cycleLength) + cycleLength) % cycleLength;
+  const windowStart = cycleIndex * windowSize;
+  const window: Entry[] = [];
+  const targetCount = Math.min(limit, uniqueEligible.length);
+  for (
+    let offset = 0;
+    offset < rotating.length && prefix.length + window.length < targetCount;
+    offset += 1
+  ) {
+    const entry = rotating[(windowStart + offset) % rotating.length]!;
+    if (prefixIds.has(entry.id)) continue;
+    prefixIds.add(entry.id);
+    window.push(entry);
+  }
+  return Object.freeze([...prefix, ...window]);
+}
+
 async function buildExploreMarketCapAuthorityV1(
   canonicalEntries: readonly ExploreEntry[],
   inputCommitment: `sha256:${string}`,
@@ -1448,9 +1527,14 @@ async function buildExploreMarketCapAuthorityV1(
   const unobserved = primary.rows.flatMap((row) =>
     row.gmgn === null ? [row.entry] : []
   );
-  const supplyRequested = unobserved.filter(
+  const supplyRequired = unobserved.filter(
     canonicalTokenSupplyHydrationRequiredV1,
-  ).slice(0, MARKET_CAP_SUPPLY_HYDRATION_LIMIT);
+  );
+  const supplyRequested = selectMarketCapCyclicHydrationEntriesV1(
+    supplyRequired,
+    MARKET_CAP_SUPPLY_HYDRATION_LIMIT,
+    authorityNow,
+  );
   const supplyDeadlineMs = authorityDeadlineMs -
     GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
   const hydratedSupply = supplyRequested.length === 0 ||
@@ -1476,12 +1560,21 @@ async function buildExploreMarketCapAuthorityV1(
   const hydrationUniverse = unobserved.map((entry) =>
     hydratedSupplyById.get(entry.id) ?? entry
   );
-  const gmgnHydrationEligible = primary.coverage.gmgnMatchedEntryCount === 0
-    ? []
-    : hydrationUniverse.filter(gmgnVisibleMarketEntryEligibleV1);
-  const gmgnRequested = gmgnHydrationEligible.slice(
-    0,
+  // A qualified global GMGN market-cap observation proves provider liveness
+  // even when every observed token is foreign to Programmable. Direct
+  // token_info then remains the canonical coverage lane. Empty, unavailable,
+  // or fully disqualified rank responses fail closed without provider fanout.
+  const gmgnRankObserved =
+    primary.coverage.gmgnObservedUniqueTokenCount > 0;
+  const gmgnHydrationEligible = gmgnRankObserved
+    ? hydrationUniverse.filter(gmgnVisibleMarketEntryEligibleV1)
+    : [];
+  const gmgnRequested = selectMarketCapCyclicHydrationEntriesV1(
+    gmgnHydrationEligible,
     GMGN_MARKET_CAP_HYDRATION_LIMIT,
+    authorityNow,
+    [...hydratedSupplyById.values()],
+    MARKET_CAP_SUPPLY_HYDRATION_LIMIT,
   );
   const gmgnHydrationDeadlineMs = authorityDeadlineMs -
     GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
@@ -1632,16 +1725,21 @@ async function buildExploreMarketCapAuthorityV1(
   if (!Number.isFinite(validUntilMs) || validUntilMs <= Date.now()) {
     throw new TypeError("Market-cap provider evidence is stale");
   }
+  // This status controls only the durable authority refresh class. Preserve the
+  // public ranking status above as canonical GMGN qualification truth, while a
+  // qualified global rank observation proves enough provider liveness to avoid
+  // repeating the bounded rank plus token_info composition every ten seconds.
+  const authorityRefreshGmgnStatus = ranked.ranking.observedTokenCount === 0
+    ? "unavailable" as const
+    : ranked.ranking.gmgnStatus === "complete"
+      ? "complete" as const
+      : "partial" as const;
   return Object.freeze({
     canonicalAuthority,
     authorityCommitment:
       exploreMarketCapAuthorityStorageCommitmentV1(canonicalAuthority),
     rankingCommitment,
-    gmgnStatus: ranked.ranking.matchedTokenCount === 0
-      ? "unavailable"
-      : ranked.ranking.matchedTokenCount === canonicalEntries.length
-        ? "complete"
-        : "partial",
+    gmgnStatus: authorityRefreshGmgnStatus,
     generatedAt,
     validUntil: new Date(validUntilMs).toISOString(),
   });

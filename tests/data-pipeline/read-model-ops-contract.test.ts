@@ -980,6 +980,87 @@ describe("read-model operations source contract", () => {
       "true ||",
     ],
     [
+      "token_info fanout without a qualified GMGN market-cap observation",
+      "const gmgnRankObserved =\n" +
+        "    primary.coverage.gmgnObservedUniqueTokenCount > 0",
+      "const gmgnRankObserved = true",
+    ],
+    [
+      "a legacy market-cap authority input policy domain",
+      '"programmable.explore-market-cap-authority-input.v3"',
+      '"programmable.explore-market-cap-authority-input.v2"',
+    ],
+    [
+      "an authority input detached from its composition policy",
+      "compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3",
+      'compositionPolicy: "legacy-prefix-token-info"',
+    ],
+    [
+      "a drifted market-cap authority composition policy",
+      '"gmgn-qualified-rank+oldest-first-sentinels+cyclic-supply+' +
+        'same-bucket-supply-priority+cyclic-token-info+dexscreener.v3"',
+      '"gmgn-prefix-token-info+dexscreener.v2"',
+    ],
+    [
+      "a non-rotating canonical supply hydration prefix",
+      "const supplyRequested = selectMarketCapCyclicHydrationEntriesV1(\n" +
+        "    supplyRequired,\n" +
+        "    MARKET_CAP_SUPPLY_HYDRATION_LIMIT,\n" +
+        "    authorityNow,\n" +
+        "  );",
+      "const supplyRequested = supplyRequired.slice(\n" +
+        "    0, MARKET_CAP_SUPPLY_HYDRATION_LIMIT,\n" +
+        "  );",
+    ],
+    [
+      "a non-rotating GMGN hydration prefix",
+      "const gmgnRequested = selectMarketCapCyclicHydrationEntriesV1(\n" +
+        "    gmgnHydrationEligible,\n" +
+        "    GMGN_MARKET_CAP_HYDRATION_LIMIT,\n" +
+        "    authorityNow,\n" +
+        "    [...hydratedSupplyById.values()],\n" +
+        "    MARKET_CAP_SUPPLY_HYDRATION_LIMIT,\n" +
+        "  );",
+      "const gmgnRequested = gmgnHydrationEligible.slice(\n" +
+        "    0, GMGN_MARKET_CAP_HYDRATION_LIMIT,\n" +
+        "  );",
+    ],
+    [
+      "a GMGN hydration rotation detached from the positive refresh bucket",
+      "Math.floor(nowMs / " +
+        "EXPLORE_MARKET_CAP_AUTHORITY_POSITIVE_REFRESH_MS)",
+      "0",
+    ],
+    [
+      "no stable oldest and newest GMGN hydration sentinels",
+      "const prefix = [last, first, ...priority];",
+      "const prefix = [first, ...priority, last];",
+    ],
+    [
+      "a GMGN rotation whose universe changes with the priority charge",
+      "const rotating = uniqueEligible.slice(1, -1);",
+      "const rotating = uniqueEligible.filter((entry) => " +
+        "!prefixIds.has(entry.id));",
+    ],
+    [
+      "GMGN hydration detached from same-bucket supply successes",
+      "    [...hydratedSupplyById.values()],\n" +
+        "    MARKET_CAP_SUPPLY_HYDRATION_LIMIT,",
+      "    [],\n" +
+        "    MARKET_CAP_SUPPLY_HYDRATION_LIMIT,",
+    ],
+    [
+      "GMGN rotation without a fixed supply-priority reservation",
+      "limit - 2 - priorityReservation,",
+      "limit - prefix.length,",
+    ],
+    [
+      "a market-cap authority refresh class detached from qualified rank liveness",
+      "const authorityRefreshGmgnStatus = " +
+        "ranked.ranking.observedTokenCount === 0",
+      "const authorityRefreshGmgnStatus = ranked.ranking.gmgnStatus",
+    ],
+    [
       "no durable market-cap authority store",
       "const authorityStore = getProductionExploreMarketCapAuthorityStoreV1();",
       "const authorityStore = disabledMarketCapAuthorityStore();",
@@ -1380,17 +1461,18 @@ describe("read-model operations source contract", () => {
     );
   });
 
-  it("rejects a staged descending GMGN canonical-match requirement", () => {
+  it("rejects a staged descending GMGN gate detached from token_info", () => {
     const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
     const source = readFileSync(resolve(ROOT, path), "utf8");
     const needle =
-      'return exactRequiredGmgnMarketCapLiveness(response, "desc", nowMs);';
+      "const gmgnQualifiedCount = ranking?.matchedUniqueTokenCount +\n" +
+      "    ranking?.gmgnHydrationQualifiedCount;";
     expect(source).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
         [path]: source.replaceAll(
           needle,
-          "return response.body?.ranking?.matchedUniqueTokenCount > 0;",
+          "const gmgnQualifiedCount = ranking?.matchedUniqueTokenCount;",
         ),
       },
     });
@@ -2104,9 +2186,35 @@ describe("read-model operations source contract", () => {
       'highest,\n          [],\n          "desc",',
     ],
     [
-      "no live GMGN ascending bottom-rank proof",
-      "ranking.observedTokenCount > 0",
-      "ranking.observedTokenCount >= 0",
+      "no canonical GMGN ascending qualification proof",
+      'ranking?.direction === direction &&\n' +
+        '    ranking?.gmgnStatus !== "unavailable" &&\n' +
+        "    Number.isSafeInteger(gmgnQualifiedCount) &&\n" +
+        "    gmgnQualifiedCount > 0",
+      'ranking?.direction === direction &&\n' +
+        '    ranking?.gmgnStatus !== "unavailable" &&\n' +
+        "    Number.isSafeInteger(gmgnQualifiedCount) &&\n" +
+        "    gmgnQualifiedCount >= 0",
+    ],
+    [
+      "no observed GMGN descending rank proof",
+      "gmgnQualifiedCount > 0 &&\n" +
+        "    ranking?.observedTokenCount > 0",
+      "gmgnQualifiedCount > 0 &&\n" +
+        "    ranking?.observedTokenCount >= 0",
+    ],
+    [
+      "no observed GMGN ascending rank proof",
+      "Number.isSafeInteger(ranking?.observedTokenCount) &&\n" +
+        "    ranking.observedTokenCount > 0",
+      "Number.isSafeInteger(ranking?.observedTokenCount) &&\n" +
+        "    ranking.observedTokenCount >= 0",
+    ],
+    [
+      "a detail probe that omits the GMGN token_info ranking prefix",
+      "highest.body.ranking.matchedTokenCount +\n" +
+        "              highest.body.ranking.gmgnHydrationQualifiedCount",
+      "highest.body.ranking.matchedTokenCount",
     ],
     [
       "no dynamic token detail market contract",
