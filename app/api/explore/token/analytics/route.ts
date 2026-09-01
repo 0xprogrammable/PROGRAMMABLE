@@ -57,13 +57,27 @@ const PUBLIC_SUMMARY_CACHE_CONTROL =
   "public, max-age=0, s-maxage=15, stale-while-revalidate=30";
 const PRIVATE_RANKING_CACHE_CONTROL = "private, max-age=0, no-store";
 const NO_STORE = "no-store";
-const DEFAULT_RANKING_LIMIT = 20;
-const MAXIMUM_RANKING_LIMIT = 20;
+const FIXED_RANKING_LIMIT = 20;
 
 type AnalyticsSection = "summary" | "holders" | "traders";
 type AnalyticsStatus = "ready" | "partial" | "unavailable";
 type CanonicalReadStatus = "current" | "last-known-good" | "unavailable";
 type RouterReadStatus = "current" | "last-known-good" | "unavailable";
+
+type PublicRankedWalletV1 = Readonly<{
+  address: `0x${string}`;
+  usdValue: number | null;
+  amountRatio: number | null;
+  buyVolumeUsd: number | null;
+  sellVolumeUsd: number | null;
+  profitUsd: number | null;
+  profitRatio: number | null;
+}>;
+
+type PublicWalletRankingV1 = Readonly<{
+  fetchedAt: string;
+  wallets: readonly PublicRankedWalletV1[];
+}>;
 
 type ReadyCanonicalToken = Readonly<{
   kind: "ready";
@@ -160,6 +174,32 @@ export async function GET(request: NextRequest) {
   const identity = identities[0]!;
   const wait = { signal, deadlineMs } as const;
 
+  // Every analytics response is subordinate to the exact token_info proof.
+  // That adapter binds token, v4 pool, quote and canonical raw supply. It also
+  // prevents address-only security echoes from becoming public analytics.
+  let verification: GmgnMarketSnapshotV1 | null = null;
+  try {
+    const candidate = await readGmgnMarketSnapshotV1(canonical.entry, wait);
+    verification = exactMarketVerification(
+        candidate,
+        canonical.entry,
+        identity,
+      )
+      ? candidate
+      : null;
+  } catch {
+    verification = null;
+  }
+  if (verification === null) {
+    return analyticsResponse({
+      canonical,
+      section: query.section,
+      status: "unavailable",
+      identity,
+      analytics: emptyAnalytics(query.section),
+    });
+  }
+
   if (query.section === "summary") {
     const [securityRead, poolRead] = await Promise.allSettled([
       readGmgnTokenSecurityV1(identity, wait),
@@ -183,33 +223,10 @@ export async function GET(request: NextRequest) {
           ? "partial"
           : "unavailable",
       identity,
-      analytics: { security, pool },
-    });
-  }
-
-  // Ranking responses do not carry a pool or quote identity. Confirm the
-  // provider's exact token, v4 pool, quote and canonical supply through the
-  // existing /v1/token/info adapter before making either weighted read.
-  let verification: GmgnMarketSnapshotV1 | null = null;
-  try {
-    const candidate = await readGmgnMarketSnapshotV1(canonical.entry, wait);
-    verification = exactMarketVerification(
-        candidate,
-        canonical.entry,
-        identity,
-      )
-      ? candidate
-      : null;
-  } catch {
-    verification = null;
-  }
-  if (verification === null) {
-    return analyticsResponse({
-      canonical,
-      section: query.section,
-      status: "unavailable",
-      identity,
-      analytics: { ranking: null },
+      analytics: {
+        security: security === null ? null : publicSecurityV1(security),
+        pool: pool === null ? null : publicPoolV1(pool),
+      },
     });
   }
 
@@ -218,19 +235,19 @@ export async function GET(request: NextRequest) {
     const candidate = query.section === "holders"
       ? await readGmgnTokenTopHoldersV1(
           identity,
-          { limit: query.limit },
+          { limit: FIXED_RANKING_LIMIT },
           wait,
         )
       : await readGmgnTokenTopTradersV1(
           identity,
-          { limit: query.limit },
+          { limit: FIXED_RANKING_LIMIT },
           wait,
         );
     ranking = exactRankingForIdentity(
         candidate,
         identity,
         query.section,
-        query.limit,
+        FIXED_RANKING_LIMIT,
       )
       ? candidate
       : null;
@@ -242,14 +259,15 @@ export async function GET(request: NextRequest) {
     section: query.section,
     status: ranking === null ? "unavailable" : "ready",
     identity,
-    analytics: { ranking },
+    analytics: {
+      ranking: ranking === null ? null : publicWalletRankingV1(ranking),
+    },
   });
 }
 
 function parseQuery(request: NextRequest): Readonly<{
   address: `0x${string}`;
   section: AnalyticsSection;
-  limit: number;
 }> | NextResponse {
   const search = request.nextUrl.searchParams;
   const allowed = new Set(["address", "chain", "section", "limit"]);
@@ -277,22 +295,14 @@ function parseQuery(request: NextRequest): Readonly<{
     rawSection !== "traders"
   ) return inputError("Choose a supported analytics section");
 
-  const rawLimit = search.get("limit")?.trim();
-  const limit = rawLimit === undefined || rawLimit === null || rawLimit === ""
-    ? DEFAULT_RANKING_LIMIT
-    : /^[1-9][0-9]*$/u.test(rawLimit)
-      ? Number(rawLimit)
-      : Number.NaN;
-  if (
-    !Number.isSafeInteger(limit) ||
-    limit < 1 ||
-    limit > MAXIMUM_RANKING_LIMIT
-  ) return inputError("Choose a limit from 1 to 20");
+  const rawLimit = search.get("limit");
+  if (rawLimit !== null && rawLimit !== String(FIXED_RANKING_LIMIT)) {
+    return inputError("Only the fixed ranking limit 20 is supported");
+  }
 
   return {
     address: getAddress(rawAddress),
     section: rawSection,
-    limit,
   };
 }
 
@@ -496,6 +506,7 @@ function exactMarketVerification(
   identity: MarketChartIdentityV1,
 ): value is GmgnMarketSnapshotV1 {
   return isGmgnMarketSnapshotV1(value) &&
+    !hasExplicitForeignProviderChain(value) &&
     isGmgnMarketSnapshotForExploreEntryV1(value, entry) &&
     sameIdentity(value.identity, identity);
 }
@@ -505,6 +516,7 @@ function exactSecurityForIdentity(
   identity: MarketChartIdentityV1,
 ): value is GmgnTokenSecurityV1 {
   return isGmgnTokenSecurityV1(value) &&
+    !hasExplicitForeignProviderChain(value) &&
     value.tokenAddress === identity.tokenAddress &&
     sameIdentity(value.identity, identity);
 }
@@ -514,6 +526,7 @@ function exactPoolForIdentity(
   identity: MarketChartIdentityV1,
 ): value is GmgnTokenPoolInfoV1 {
   return isGmgnTokenPoolInfoV1(value) &&
+    !hasExplicitForeignProviderChain(value) &&
     value.tokenAddress === identity.tokenAddress &&
     value.poolAddress === identity.poolId &&
     value.quoteAddress === identity.quoteAddress &&
@@ -528,6 +541,7 @@ function exactRankingForIdentity(
   limit: number,
 ): value is GmgnTokenWalletRankingV1 {
   return isGmgnTokenWalletRankingV1(value) &&
+    !hasExplicitForeignProviderChain(value) &&
     value.kind === section &&
     value.query.limit === limit &&
     value.wallets.length <= limit &&
@@ -546,6 +560,114 @@ function sameIdentity(
     first.protocol === second.protocol;
 }
 
+function hasExplicitForeignProviderChain(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return Object.prototype.hasOwnProperty.call(record, "chain") &&
+    record.chain !== "eth";
+}
+
+function publicSecurityV1(
+  value: GmgnTokenSecurityV1,
+): GmgnTokenSecurityV1 {
+  return {
+    schemaVersion: value.schemaVersion,
+    source: value.source,
+    fetchedAt: value.fetchedAt,
+    identity: value.identity,
+    tokenAddress: value.tokenAddress,
+    isShowAlert: value.isShowAlert,
+    isOpenSource: value.isOpenSource,
+    isBlacklisted: value.isBlacklisted,
+    isHoneypot: value.isHoneypot,
+    isOwnerRenounced: value.isOwnerRenounced,
+    isMintRenounced: value.isMintRenounced,
+    isFreezeAccountRenounced: value.isFreezeAccountRenounced,
+    isWashTrading: value.isWashTrading,
+    top10HolderRatio: value.top10HolderRatio,
+    developerTeamHoldRatio: value.developerTeamHoldRatio,
+    creatorBalanceRatio: value.creatorBalanceRatio,
+    suspectedInsiderHoldRatio: value.suspectedInsiderHoldRatio,
+    rugRatio: value.rugRatio,
+    ratTraderAmountRatio: value.ratTraderAmountRatio,
+    bundlerTraderAmountRatio: value.bundlerTraderAmountRatio,
+    buyTaxRatio: value.buyTaxRatio,
+    sellTaxRatio: value.sellTaxRatio,
+    averageTaxRatio: value.averageTaxRatio,
+    highTaxRatio: value.highTaxRatio,
+    burnRatio: value.burnRatio,
+    developerTokenBurnAmount: value.developerTokenBurnAmount,
+    developerTokenBurnRatio: value.developerTokenBurnRatio,
+    burnStatus: value.burnStatus,
+    creatorTokenStatus: value.creatorTokenStatus,
+    sniperCount: value.sniperCount,
+    canSellCount: value.canSellCount,
+    cannotSellCount: value.cannotSellCount,
+    hideRisk: value.hideRisk,
+    flags: [...value.flags],
+    lockSummary: value.lockSummary === null
+      ? null
+      : {
+          isLocked: value.lockSummary.isLocked,
+          lockRatio: value.lockSummary.lockRatio,
+          remainingLockRatio: value.lockSummary.remainingLockRatio,
+          details: value.lockSummary.details.map((detail) => ({
+            ratio: detail.ratio,
+            poolAddress: detail.poolAddress,
+            isBlackhole: detail.isBlackhole,
+          })),
+        },
+  };
+}
+
+function publicPoolV1(value: GmgnTokenPoolInfoV1): GmgnTokenPoolInfoV1 {
+  return {
+    schemaVersion: value.schemaVersion,
+    source: value.source,
+    currency: value.currency,
+    fetchedAt: value.fetchedAt,
+    identity: value.identity,
+    tokenAddress: value.tokenAddress,
+    poolAddress: value.poolAddress,
+    baseAddress: value.baseAddress,
+    quoteAddress: value.quoteAddress,
+    token0Address: value.token0Address,
+    token1Address: value.token1Address,
+    quoteSymbol: value.quoteSymbol,
+    exchange: value.exchange,
+    liquidityUsd: value.liquidityUsd,
+    baseReserve: value.baseReserve,
+    quoteReserve: value.quoteReserve,
+    baseReserveValueUsd: value.baseReserveValueUsd,
+    quoteReserveValueUsd: value.quoteReserveValueUsd,
+    initialLiquidityUsd: value.initialLiquidityUsd,
+    initialBaseReserve: value.initialBaseReserve,
+    initialQuoteReserve: value.initialQuoteReserve,
+    priceUsd: value.priceUsd,
+    feeRatio: value.feeRatio,
+    creationTimestamp: value.creationTimestamp,
+  };
+}
+
+function publicWalletRankingV1(
+  value: GmgnTokenWalletRankingV1,
+): PublicWalletRankingV1 {
+  return {
+    fetchedAt: value.fetchedAt,
+    wallets: value.wallets.map((wallet) => ({
+      address: wallet.address,
+      usdValue: wallet.usdValue,
+      amountRatio: wallet.amountRatio,
+      buyVolumeUsd: wallet.buyVolumeUsd,
+      sellVolumeUsd: wallet.sellVolumeUsd,
+      profitUsd: wallet.profitUsd,
+      profitRatio: wallet.profitRatio,
+    })),
+  };
+}
+
 function analyticsResponse(input: Readonly<{
   canonical: ReadyCanonicalToken;
   section: AnalyticsSection;
@@ -556,7 +678,7 @@ function analyticsResponse(input: Readonly<{
         security: GmgnTokenSecurityV1 | null;
         pool: GmgnTokenPoolInfoV1 | null;
       }>
-    | Readonly<{ ranking: GmgnTokenWalletRankingV1 | null }>;
+    | Readonly<{ ranking: PublicWalletRankingV1 | null }>;
 }>) {
   const hasData = input.status !== "unavailable";
   const marketReadStatus = input.status === "ready"

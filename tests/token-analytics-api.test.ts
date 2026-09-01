@@ -5,6 +5,7 @@ import type { GmgnMarketSnapshotV1 } from
   "../lib/market-data/gmgn-market-data-v1";
 import type {
   GmgnTokenPoolInfoV1,
+  GmgnTokenRankedWalletV1,
   GmgnTokenSecurityV1,
   GmgnTokenWalletRankingV1,
 } from "../lib/market-data/gmgn-token-analytics-v1";
@@ -265,6 +266,7 @@ function ranking(
   kind: "holders" | "traders",
   limit = 20,
   marketIdentity = identity(),
+  wallets: readonly GmgnTokenRankedWalletV1[] = [],
 ): GmgnTokenWalletRankingV1 {
   return {
     schemaVersion: "programmable.gmgn-token-wallet-ranking.v1",
@@ -279,7 +281,84 @@ function ranking(
       direction: "desc",
       tag: null,
     },
-    wallets: [],
+    wallets,
+  };
+}
+
+function rankedWallet(): GmgnTokenRankedWalletV1 {
+  return {
+    address: "0x8888888888888888888888888888888888888888",
+    accountAddress: null,
+    addressType: null,
+    exchange: "private-provider-label",
+    walletRank: "sensitive-provider-rank",
+    nativeBalanceRaw: null,
+    balance: null,
+    amount: null,
+    usdValue: 12500,
+    amountRatio: 0.12,
+    accumulatedAmount: null,
+    accumulatedCostUsd: null,
+    costUsd: null,
+    currentCostUsd: null,
+    isOnCurve: null,
+    isNew: null,
+    isSuspicious: null,
+    transferIn: null,
+    buyVolumeUsd: 2000,
+    sellVolumeUsd: 750,
+    buyAmount: null,
+    sellAmount: null,
+    currentBuyAmount: null,
+    currentSellAmount: null,
+    sellAmountRatio: null,
+    buyTransactionCount: null,
+    sellTransactionCount: null,
+    netflowUsd: null,
+    netflowAmount: null,
+    averageCostUsd: null,
+    averageSoldUsd: null,
+    historyBoughtCostUsd: null,
+    historyBoughtFeeUsd: null,
+    historySoldIncomeUsd: null,
+    historySoldFeeUsd: null,
+    totalCostUsd: null,
+    profitUsd: 325,
+    profitRatio: 0.026,
+    realizedProfitUsd: null,
+    realizedPnlRatio: null,
+    unrealizedProfitUsd: null,
+    unrealizedPnlRatio: null,
+    currentTransferInAmount: null,
+    currentTransferOutAmount: null,
+    historyTransferInAmount: null,
+    historyTransferInCostUsd: null,
+    historyTransferOutAmount: null,
+    historyTransferOutIncomeUsd: null,
+    historyTransferOutFeeUsd: null,
+    transferInCount: null,
+    transferOutCount: null,
+    startHoldingAt: null,
+    endHoldingAt: null,
+    lastActiveTimestamp: null,
+    lastBlock: null,
+    name: "Private provider name",
+    twitterUsername: "private_x_handle",
+    twitterName: "Private X name",
+    avatar: "https://provider.invalid/private-avatar.png",
+    tags: ["private-tag"],
+    makerTokenTags: ["private-maker-tag"],
+    createdAt: null,
+    nativeTransfer: {
+      name: "private-transfer",
+      fromAddress: "0x7777777777777777777777777777777777777777",
+      amount: "1",
+      timestamp: 1_788_235_000,
+      transactionHash: `0x${"aa".repeat(32)}`,
+    },
+    tokenTransfer: null,
+    tokenTransferIn: null,
+    tokenTransferOut: null,
   };
 }
 
@@ -360,7 +439,7 @@ describe("Programmable GMGN token analytics API", () => {
     expect(response.headers.get("x-programmable-market-read-status"))
       .toBe("complete");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(mocks.readMarketSnapshot).not.toHaveBeenCalled();
+    expect(mocks.readMarketSnapshot).toHaveBeenCalledTimes(1);
     expect(mocks.readHolders).not.toHaveBeenCalled();
     expect(mocks.readTraders).not.toHaveBeenCalled();
   });
@@ -383,9 +462,12 @@ describe("Programmable GMGN token analytics API", () => {
     mocks.readMarketSnapshot.mockResolvedValue(
       marketSnapshot(identity(other)),
     );
-    mocks.readHolders.mockResolvedValue(ranking("holders", 7));
+    mocks.readHolders.mockResolvedValue(ranking("holders"));
 
-    const response = await GET(request(token().tokenAddress, "&section=holders&limit=7"));
+    const response = await GET(request(
+      token().tokenAddress,
+      "&section=holders&limit=20",
+    ));
     const json = await body(response);
 
     expect(response.status).toBe(200);
@@ -402,11 +484,78 @@ describe("Programmable GMGN token analytics API", () => {
     expect(response.headers.get("x-programmable-market-source")).toBeNull();
   });
 
+  it("does not accept an unknown security address echo when token_info fails", async () => {
+    mocks.readMarketSnapshot.mockResolvedValue(null);
+    mocks.readSecurity.mockResolvedValue(security(identity(token(2))));
+    mocks.readPool.mockResolvedValue(pool());
+
+    const response = await GET(request());
+    const json = await body(response);
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({
+      status: "unavailable",
+      identity: identity(),
+      analytics: { security: null, pool: null },
+    });
+    expect(mocks.readMarketSnapshot).toHaveBeenCalledTimes(1);
+    expect(mocks.readSecurity).not.toHaveBeenCalled();
+    expect(mocks.readPool).not.toHaveBeenCalled();
+  });
+
+  it("publishes no summary analytics when token_info rejects provider supply", async () => {
+    // A null token_info snapshot is the existing adapter's fail-closed result
+    // for a provider supply that does not equal the canonical raw supply.
+    mocks.readMarketSnapshot.mockResolvedValue(null);
+
+    const response = await GET(request());
+    const json = await body(response);
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({
+      status: "unavailable",
+      analytics: { security: null, pool: null },
+    });
+    expect(mocks.readSecurity).not.toHaveBeenCalled();
+    expect(mocks.readPool).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["security", "sol"],
+    ["pool", "base"],
+  ] as const)(
+    "rejects an explicit foreign chain on normalized %s analytics",
+    async (kind, chain) => {
+      if (kind === "security") {
+        mocks.readSecurity.mockResolvedValue({ ...security(), chain });
+        mocks.readPool.mockResolvedValue(null);
+      } else {
+        mocks.readSecurity.mockResolvedValue(null);
+        mocks.readPool.mockResolvedValue({ ...pool(), chain });
+      }
+
+      const response = await GET(request());
+      const json = await body(response);
+
+      expect(response.status).toBe(200);
+      expect(json).toMatchObject({
+        status: "unavailable",
+        analytics: { security: null, pool: null },
+      });
+      expect(JSON.stringify(json)).not.toContain(`"chain":"${chain}"`);
+    },
+  );
+
   it("serves a verified bounded holder ranking with private cache policy", async () => {
-    mocks.readHolders.mockResolvedValue(ranking("holders", 7));
+    mocks.readHolders.mockResolvedValue(ranking(
+      "holders",
+      20,
+      identity(),
+      [rankedWallet()],
+    ));
     const response = await GET(request(
       token().tokenAddress,
-      "&section=holders&limit=7",
+      "&section=holders&limit=20",
     ));
     const json = await body(response);
 
@@ -417,20 +566,41 @@ describe("Programmable GMGN token analytics API", () => {
       identity: identity(),
       analytics: {
         ranking: {
-          kind: "holders",
-          query: { limit: 7 },
+          fetchedAt: NOW,
+          wallets: [{
+            address: "0x8888888888888888888888888888888888888888",
+            usdValue: 12500,
+            amountRatio: 0.12,
+            buyVolumeUsd: 2000,
+            sellVolumeUsd: 750,
+            profitUsd: 325,
+            profitRatio: 0.026,
+          }],
         },
       },
     });
     expect(mocks.readHolders).toHaveBeenCalledWith(
       identity(),
-      { limit: 7 },
+      { limit: 20 },
       expect.objectContaining({ deadlineMs: expect.any(Number) }),
     );
     expect(mocks.readTraders).not.toHaveBeenCalled();
     expect(response.headers.get("cache-control"))
       .toBe("private, max-age=0, no-store");
     expect(response.headers.get("x-programmable-market-source")).toBe("gmgn");
+    expect(Object.keys(json.analytics.ranking.wallets[0]).sort()).toEqual([
+      "address",
+      "amountRatio",
+      "buyVolumeUsd",
+      "profitRatio",
+      "profitUsd",
+      "sellVolumeUsd",
+      "usdValue",
+    ]);
+    expect(JSON.stringify(json)).not.toContain("private-provider-label");
+    expect(JSON.stringify(json)).not.toContain("private_x_handle");
+    expect(JSON.stringify(json)).not.toContain("private-transfer");
+    expect(JSON.stringify(json)).not.toContain("private-tag");
   });
 
   it("fails soft with HTTP 200 when normalized analytics are unavailable", async () => {
@@ -459,6 +629,7 @@ describe("Programmable GMGN token analytics API", () => {
     const secret = "gmgn-live-secret-must-never-leak";
     vi.stubEnv("GMGN_API_KEY", secret);
     mocks.readSecurity.mockResolvedValue({
+      ...security(),
       apiKey: secret,
       authorization: `Bearer ${secret}`,
       raw: { provider: "untrusted" },
@@ -473,26 +644,33 @@ describe("Programmable GMGN token analytics API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(json.analytics).toEqual({ security: null, pool: null });
+    expect(json.status).toBe("partial");
+    expect(json.analytics.security).toMatchObject({
+      tokenAddress: token().tokenAddress,
+    });
+    expect(json.analytics.pool).toBeNull();
     expect(publicEnvelope).not.toContain(secret);
     expect(publicEnvelope).not.toContain("authorization");
     expect(publicEnvelope).not.toContain("untrusted");
   });
 
-  it("bounds ranking limits before canonical or GMGN provider work", async () => {
-    const response = await GET(request(
-      token().tokenAddress,
-      "&section=traders&limit=21",
-    ));
+  it.each(["1", "19", "21", "020", "20%20"]) (
+    "rejects every variable ranking limit before provider work: %s",
+    async (limit) => {
+      const response = await GET(request(
+        token().tokenAddress,
+        `&section=traders&limit=${limit}`,
+      ));
 
-    expect(response.status).toBe(400);
-    expect(await body(response)).toEqual({
-      error: "Choose a limit from 1 to 20",
-    });
-    expect(mocks.readCatalog).not.toHaveBeenCalled();
-    expect(mocks.readMarketSnapshot).not.toHaveBeenCalled();
-    expect(mocks.readTraders).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(400);
+      expect(await body(response)).toEqual({
+        error: "Only the fixed ranking limit 20 is supported",
+      });
+      expect(mocks.readCatalog).not.toHaveBeenCalled();
+      expect(mocks.readMarketSnapshot).not.toHaveBeenCalled();
+      expect(mocks.readTraders).not.toHaveBeenCalled();
+    },
+  );
 
   it("mirrors token detail indeterminate identity semantics with 503", async () => {
     mocks.readCatalog.mockRejectedValue(new Error("envio unavailable"));
