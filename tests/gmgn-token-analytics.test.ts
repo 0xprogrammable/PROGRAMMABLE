@@ -356,6 +356,28 @@ describe("GMGN Ethereum token analytics", () => {
       rankingQuery(),
       NOW,
     )).toBeNull();
+    expect(parseGmgnTokenSecurityV1(
+      { chain: "eth", data: securityData(market) },
+      market,
+      NOW,
+    )).not.toBeNull();
+    expect(parseGmgnTokenSecurityV1(
+      { chain: "sol", data: securityData(market) },
+      market,
+      NOW,
+    )).toBeNull();
+    expect(parseGmgnTokenPoolInfoV1(
+      { chain: "base", data: poolData(market) },
+      market,
+      NOW,
+    )).toBeNull();
+    expect(parseGmgnTokenWalletRankingV1(
+      { chain: "bsc", data: { list: [rankedWallet()] } },
+      "holders",
+      market,
+      rankingQuery(),
+      NOW,
+    )).toBeNull();
   });
 
   it.each(["holders", "traders"] as const)(
@@ -481,6 +503,38 @@ describe("GMGN Ethereum token analytics", () => {
       cost: 1,
     }));
   });
+
+  it.each(["security", "pool", "holders"] as const)(
+    "fails soft when the %s endpoint declares a foreign outer chain",
+    async (kind) => {
+      const market = identity(kind === "security" ? 93 : kind === "pool" ? 94 : 95);
+      const data = kind === "security"
+        ? securityData(market)
+        : kind === "pool"
+          ? poolData(market)
+          : { list: [rankedWallet()] };
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+        code: 0,
+        chain: "sol",
+        data,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+
+      const result = kind === "security"
+        ? await readGmgnTokenSecurityV1(market, { fetchImpl, now: () => NOW })
+        : kind === "pool"
+          ? await readGmgnTokenPoolInfoV1(market, { fetchImpl, now: () => NOW })
+          : await readGmgnTokenTopHoldersV1(
+              market,
+              {},
+              { fetchImpl, now: () => NOW },
+            );
+      expect(result).toBeNull();
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("caches successful security and pool reads independently", async () => {
     const securityMarket = identity(10);

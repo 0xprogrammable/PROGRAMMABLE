@@ -270,6 +270,51 @@ describe("GMGN exact Ethereum kline adapter", () => {
     )).toBeNull();
   });
 
+  it("accepts only an omitted or exact Ethereum chain on outer and inner provider payloads", () => {
+    const entry = token(214);
+    expect(parseGmgnChartIdentityProofV1(
+      { chain: "eth", data: tokenInfo(entry) },
+      identity(entry),
+      canonicalSupply(entry),
+      NOW,
+    )).not.toBeNull();
+    expect(parseGmgnChartIdentityProofV1(
+      { chain: "sol", data: tokenInfo(entry) },
+      identity(entry),
+      canonicalSupply(entry),
+      NOW,
+    )).toBeNull();
+    expect(parseGmgnChartIdentityProofV1(
+      { ...tokenInfo(entry), chain: "base" },
+      identity(entry),
+      canonicalSupply(entry),
+      NOW,
+    )).toBeNull();
+
+    const from = new Date(NOW.getTime() - 120_000);
+    const input = {
+      identityProof: proof(entry),
+      range: "1h" as const,
+      resolution: "1m" as const,
+      requestedFrom: from,
+      requestedTo: NOW,
+      fetchedAt: NOW,
+    };
+    const list = [candle(from.getTime()), candle(from.getTime() + 60_000)];
+    expect(parseGmgnKlineMarketChartV1(
+      { chain: "eth", data: { list } },
+      input,
+    )).not.toBeNull();
+    expect(parseGmgnKlineMarketChartV1(
+      { chain: "bsc", data: { list } },
+      input,
+    )).toBeNull();
+    expect(parseGmgnKlineMarketChartV1(
+      { chain: "robinhood", list },
+      input,
+    )).toBeNull();
+  });
+
   it("parses sorted USD OHLCV candles without trusting provider order or source text", () => {
     const entry = token(202);
     const from = new Date(NOW.getTime() - 120_000);
@@ -436,6 +481,29 @@ describe("GMGN exact Ethereum kline adapter", () => {
       expect(init?.redirect).toBe("error");
       expect(init?.credentials).toBe("omit");
     }
+  });
+
+  it("fails soft before kline when token info declares a foreign outer chain", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(217);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      code: 0,
+      chain: "sol",
+      data: tokenInfo(entry),
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(readGmgnMarketChartV1({
+      entry,
+      identity: identity(entry),
+      range: "1h",
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => NOW,
+    })).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it.each([

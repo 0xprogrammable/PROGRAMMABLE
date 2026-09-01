@@ -256,13 +256,20 @@ function isGmgnDiscoveryTokenV1(value: unknown): value is GmgnDiscoveryTokenV1 {
 function unwrapSuccessfulData(value: unknown): unknown | null {
   let current = value;
   for (let depth = 0; depth < 2; depth += 1) {
+    if (!hasExactOptionalEthereumChain(current)) return null;
     if (!isRecord(current) || current.code === undefined) break;
     if ((current.code !== 0 && current.code !== "0") || current.data === undefined) {
       return null;
     }
     current = current.data;
   }
-  return current;
+  return hasExactOptionalEthereumChain(current) ? current : null;
+}
+
+function hasExactOptionalEthereumChain(value: unknown): boolean {
+  return !isRecord(value) ||
+    !Object.prototype.hasOwnProperty.call(value, "chain") ||
+    value.chain === "eth";
 }
 
 function validParseInput(input: ParseGmgnDiscoverySnapshotInputV1): boolean {

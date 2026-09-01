@@ -770,7 +770,10 @@ async function gmgnJsonRequest(
   }
   if (!response.ok || rateLimited || !isRecord(envelope)) return null;
   if (envelope.code !== 0 && envelope.code !== "0") return null;
-  return isRecord(envelope.data) ? envelope.data : null;
+  if (!isRecord(envelope.data)) return null;
+  // Preserve the raw envelope so each parser can validate an explicit outer
+  // chain together with the normalized inner payload.
+  return envelope;
 }
 
 async function finalizeRejectedResponse(

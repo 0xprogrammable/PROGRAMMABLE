@@ -207,6 +207,8 @@ export function parseGmgnChartIdentityProofV1(
 ): GmgnChartIdentityProofV1 | null {
   const data = unwrapData(response);
   if (
+    !hasExactOptionalEthereumChain(response) ||
+    !hasExactOptionalEthereumChain(data) ||
     !isMarketChartIdentityV1(expectedIdentity) ||
     !isCanonicalSupplyV1(canonicalSupply) ||
     !Number.isFinite(verifiedAt.getTime()) ||
@@ -237,7 +239,6 @@ export function parseGmgnChartIdentityProofV1(
     ![token0Address, token1Address].includes(expectedIdentity.tokenAddress) ||
     ![token0Address, token1Address].includes(expectedIdentity.quoteAddress) ||
     String(pool.exchange).toLowerCase() !== "uniswap_v4" ||
-    (data.chain !== undefined && String(data.chain).toLowerCase() !== "eth") ||
     !providerSupplyMatchesCanonical(
       data.total_supply,
       canonicalSupply.raw,
@@ -271,6 +272,8 @@ export function parseGmgnKlineMarketChartV1(
 ): GmgnMarketChartV1 | null {
   const data = unwrapData(response);
   if (
+    !hasExactOptionalEthereumChain(response) ||
+    !hasExactOptionalEthereumChain(data) ||
     !isRecord(data) ||
     !Array.isArray(data.list) ||
     data.list.length === 0 ||
@@ -642,7 +645,9 @@ async function gmgnJsonRequest(
   if (!isRecord(value) || value.code !== 0 || !isRecord(value.data)) {
     return null;
   }
-  return value.data;
+  // Preserve the raw envelope so the parser can reject an explicit foreign
+  // outer chain instead of losing that provider signal before validation.
+  return value;
 }
 
 async function readBoundedResponseBytes(
@@ -1020,6 +1025,12 @@ function tokenLocatorAddress(value: unknown): `0x${string}` | null {
 
 function unwrapData(value: unknown): unknown {
   return isRecord(value) && value.data !== undefined ? value.data : value;
+}
+
+function hasExactOptionalEthereumChain(value: unknown): boolean {
+  return !isRecord(value) ||
+    !Object.prototype.hasOwnProperty.call(value, "chain") ||
+    value.chain === "eth";
 }
 
 function isRateLimitedEnvelope(value: unknown): boolean {

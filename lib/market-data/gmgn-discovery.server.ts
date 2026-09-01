@@ -477,7 +477,9 @@ async function gmgnJsonRequest(
     (envelope.code !== 0 && envelope.code !== "0") ||
     envelope.data === undefined
   ) return null;
-  return envelope.data;
+  // Preserve the provider envelope so the schema parser can validate every
+  // explicit outer and nested chain declaration before unwrapping its data.
+  return envelope;
 }
 
 function endpointCost(path: GmgnDiscoveryPath): GmgnAccountGateCostV1 {

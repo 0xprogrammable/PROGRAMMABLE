@@ -97,6 +97,45 @@ function accountGate() {
 }
 
 describe("GMGN Ethereum discovery schemas", () => {
+  it("accepts absent or exact Ethereum envelope chains and rejects foreign ones", () => {
+    const input = {
+      kind: "trending" as const,
+      interval: "1h" as const,
+      limit: 10,
+      fetchedAt: NOW,
+    };
+    const exactEthereum = {
+      code: 0,
+      chain: "eth",
+      data: {
+        code: 0,
+        chain: "eth",
+        data: { chain: "eth", rank: [providerToken(1, 1)] },
+      },
+    };
+
+    expect(parseGmgnDiscoverySnapshotV1(exactEthereum, input))
+      .not.toBeNull();
+    expect(parseGmgnDiscoverySnapshotV1(rankResponse([
+      providerToken(2, 1),
+    ]), input)).not.toBeNull();
+    expect(parseGmgnDiscoverySnapshotV1({
+      ...exactEthereum,
+      chain: "sol",
+    }, input)).toBeNull();
+    expect(parseGmgnDiscoverySnapshotV1({
+      ...exactEthereum,
+      data: { ...exactEthereum.data, chain: "base" },
+    }, input)).toBeNull();
+    expect(parseGmgnDiscoverySnapshotV1({
+      ...exactEthereum,
+      data: {
+        ...exactEthereum.data,
+        data: { chain: "bsc", rank: [providerToken(1, 1)] },
+      },
+    }, input)).toBeNull();
+  });
+
   it("handles the live rank double envelope and discards foreign rows", () => {
     const snapshot = parseGmgnDiscoverySnapshotV1(rankResponse([
       providerToken(2, 2),
@@ -331,6 +370,26 @@ describe("GMGN discovery server adapter", () => {
       now: () => NOW,
     })).resolves.toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a foreign chain declared by the raw provider envelope", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    const response = rankResponse([providerToken(10, 1)]);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      ...response,
+      chain: "sol",
+    }), { status: 200 }));
+
+    await expect(readGmgnEthereumTrendingV1({
+      interval: "1h",
+      limit: 10,
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.toBeNull();
   });
 
   it("uses only the official read-only rank request and weight one", async () => {
