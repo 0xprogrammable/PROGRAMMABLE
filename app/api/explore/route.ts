@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unstable_cache } from "next/cache";
 
 import {
   buildExploreDataQuality,
@@ -29,6 +28,7 @@ import {
 } from "../../../lib/market-data/gmgn-discovery.server";
 import {
   GMGN_TRENDING_MAXIMUM_LIMIT,
+  isGmgnDiscoverySnapshotV1,
   normalizeGmgnSearchQueryV1,
   type GmgnDiscoverySnapshotV1,
   type GmgnSearchSnapshotV1,
@@ -77,6 +77,17 @@ import { isCustomLaunchRegistryPublicReadEnabled } from
 import type { ExploreSort } from "../../../lib/onchain/types";
 import { canonicalSha256 } from
   "../../../lib/server/projection-target/hashing";
+import {
+  canonicalizeJson,
+  parseStrictJson,
+} from "../../../lib/server/projection-target/canonical-json";
+import {
+  EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS,
+  EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_BYTES,
+  exploreMarketCapAuthorityStorageCommitmentV1,
+  getProductionExploreMarketCapAuthorityStoreV1,
+  type ExploreMarketCapAuthorityCandidateV1,
+} from "../../../lib/market-data/explore-market-cap-authority.server";
 import type { ExploreEntry } from "../../../lib/tokens";
 import { tryParseViewChainId } from "../../../lib/view-chain";
 
@@ -91,11 +102,11 @@ const GMGN_MARKET_CAP_RANK_REQUEST_BUDGET_MS = 2_500;
 const GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS =
   GMGN_MARKET_CAP_RANK_REQUEST_BUDGET_MS +
   MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS + GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
-const EXPLORE_MARKET_CAP_CACHE_REVALIDATE_SECONDS = 60;
-// Explore responses may spend up to 60 seconds in the public edge cache. Keep
-// both the completed composition and every provider ordering observation
-// inside the remaining 235-second origin budget of the five-minute contract.
-const EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS = 235_000;
+const MARKET_CAP_AUTHORITY_BUILD_BUDGET_MS = FAST_LANE_REQUEST_BUDGET_MS;
+const MARKET_CAP_AUTHORITY_PUBLISH_RESERVE_MS = 3_000;
+const MARKET_CAP_REQUEST_BUDGET_MS = 12_000;
+const SHA256_COMMITMENT = /^sha256:[0-9a-f]{64}$/u;
+const UNSIGNED_INTEGER = /^(?:0|[1-9][0-9]*)$/u;
 const CLASSIC_EXCLUSIONS = Object.freeze([
   "classic-v1",
   "classic-v2",
@@ -141,6 +152,7 @@ const EXPLORE_QUERY_PARAMETERS = new Set([
   "model",
   "page",
   "q",
+  "rankingCommitment",
   "socials",
   "sort",
 ]);
@@ -738,6 +750,22 @@ function marketCapAppliedV1(input: Readonly<{
   return "launch-order";
 }
 
+function marketCapRankingIdentityCommitmentV1(
+  orderedEntries: readonly ExploreEntry[],
+  direction: "asc" | "desc",
+): `sha256:${string}` {
+  return canonicalSha256(
+    "programmable.explore-market-cap-ranking-identity-commitment.v1",
+    {
+      direction,
+      orderedCanonicalEntries: orderedEntries.map((entry, index) => ({
+        index,
+        ...exactOrderedMarketIdentityV1(entry),
+      })),
+    },
+  );
+}
+
 export function exploreMarketCapRankingV1(
   canonicalEntries: readonly ExploreEntry[],
   snapshot: GmgnDiscoverySnapshotV1 | null,
@@ -780,28 +808,9 @@ export function exploreMarketCapRankingV1(
     : hybrid.fallbackQualifiedEntryCount > 0
       ? "dexscreener" as const
       : "canonical-launch-order" as const;
-  const rankingCommitment = canonicalSha256(
-    "programmable.explore-market-cap-ranking-commitment.v1",
-    {
-      direction,
-      gmgnSnapshot: snapshot === null || coverage.gmgnSnapshotCount === 0
-        ? null
-        : {
-            interval: snapshot.interval,
-            orderBy: snapshot.orderBy,
-            direction: snapshot.direction,
-            requestedLimit: snapshot.requestedLimit,
-            fetchedAt: snapshot.fetchedAt,
-          },
-      orderedCanonicalEntries: hybrid.rows.map((row, index) => ({
-        index,
-        id: row.entry.id,
-        tokenAddress: row.tokenAddress,
-        source: row.orderingSource,
-        valueWad: row.orderingValueWad,
-        asOfTime: row.orderingAsOfTime,
-      })),
-    },
+  const rankingCommitment = marketCapRankingIdentityCommitmentV1(
+    hybrid.entries,
+    direction,
   );
   return {
     orderedEntries: hybrid.entries,
@@ -859,44 +868,550 @@ export function exploreMarketCapRankingV1(
   };
 }
 
-type CachedExploreMarketCapCompositionV1 = Readonly<{
-  schemaVersion: "programmable.explore-market-cap-composition.v1";
+type ExactOrderedMarketIdentityV1 = Readonly<{
+  id: string;
+  tokenAddress: string | null;
+  marketIdentities: ReturnType<typeof exploreEntryMarketIdentitiesV1>;
+}>;
+
+type ExploreMarketCapProviderEvidenceV1 = Readonly<{
+  id: string;
+  valueWad: string | null;
+  asOfTime: string | null;
+}>;
+
+type ExploreMarketCapFilterFacetV1 = Readonly<{
+  id: string;
+  name: string;
+  symbol: string | null;
+  modelId: string | null;
+  category: "classic" | "custom";
+  hasSocials: boolean;
+}>;
+
+type ExploreMarketCapAuthorityV1 = Readonly<{
+  schemaVersion: "programmable.explore-market-cap-authority.v2";
   inputCommitment: `sha256:${string}`;
   direction: "asc" | "desc";
-  assembledAt: string;
-  orderedEntryIds: readonly string[];
-  orderingAsOfTimes: readonly (string | null)[];
+  generatedAt: string;
+  rankSnapshot: GmgnDiscoverySnapshotV1 | null;
+  filterFacets: readonly ExploreMarketCapFilterFacetV1[];
+  gmgnHydrationEligibleEntryIds: readonly string[];
+  gmgnRequestedEntryIds: readonly string[];
+  gmgnEvidence: readonly ExploreMarketCapProviderEvidenceV1[];
+  dexscreenerRequestedEntryIds: readonly string[];
+  dexscreenerEvidence: readonly ExploreMarketCapProviderEvidenceV1[];
+  orderedIdentities: readonly ExactOrderedMarketIdentityV1[];
   ranking: ExploreMarketCapRankingV1;
 }>;
 
-function exploreMarketCapCompositionInputCommitmentV1(
-  entries: readonly ExploreEntry[],
+function exactOrderedMarketIdentityV1(
+  entry: ExploreEntry,
+): ExactOrderedMarketIdentityV1 {
+  return Object.freeze({
+    id: entry.id,
+    tokenAddress: entry.tokenAddress?.toLowerCase() ?? null,
+    marketIdentities: Object.freeze(
+      exploreEntryMarketIdentitiesV1(entry).map((identity) =>
+        Object.freeze({ ...identity })
+      ),
+    ),
+  });
+}
+
+function exploreMarketCapFilterFacetV1(
+  entry: ExploreEntry,
+): ExploreMarketCapFilterFacetV1 {
+  const category = entry.launchCategoryProvenance.category;
+  return Object.freeze({
+    id: entry.id,
+    name: entry.name,
+    symbol: entry.symbol ?? null,
+    modelId: entry.exploreKind === "custom-project" ? entry.modelId : null,
+    category: category === "classic" || category === "custom"
+      ? category
+      : entry.exploreKind === "custom-project" ? "custom" : "classic",
+    hasSocials: entry.links?.some(
+      (link) => link.kind === "x" || link.kind === "telegram",
+    ) ?? false,
+  });
+}
+
+function marketCapAuthorityPinCommitmentV1(
+  orderedEntries: readonly ExploreEntry[],
+  filterFacets: readonly ExploreMarketCapFilterFacetV1[],
   direction: "asc" | "desc",
-): `sha256:${string}` {
+): `sha256:${string}` | null {
+  const facetsById = new Map(
+    filterFacets.map((facet) => [facet.id, facet] as const),
+  );
+  if (
+    facetsById.size !== filterFacets.length ||
+    orderedEntries.length !== filterFacets.length
+  ) return null;
+  const orderedCanonicalEntries = orderedEntries.flatMap((entry, index) => {
+    const filterFacet = facetsById.get(entry.id);
+    return filterFacet === undefined
+      ? []
+      : [{
+          index,
+          identity: exactOrderedMarketIdentityV1(entry),
+          filterFacet,
+        }];
+  });
+  if (orderedCanonicalEntries.length !== orderedEntries.length) return null;
   return canonicalSha256(
-    "programmable.explore-market-cap-composition-input.v1",
-    { direction, entries },
+    "programmable.explore-market-cap-authority-pin.v2",
+    { direction, orderedCanonicalEntries },
   );
 }
 
-async function assembleExploreMarketCapCompositionV1(
-  filteredNewest: readonly ExploreEntry[],
-  direction: "asc" | "desc",
-): Promise<Readonly<{
+function exploreMarketCapAuthorityInputCommitmentV1(
+  entries: readonly ExploreEntry[],
+): `sha256:${string}` {
+  return canonicalSha256(
+    "programmable.explore-market-cap-authority-input.v2",
+    {
+      orderedCanonicalIdentities: entries.map((entry, index) => ({
+        index,
+        ...exactOrderedMarketIdentityV1(entry),
+      })),
+    },
+  );
+}
+
+function currentMarketCapAuthorityTimestampV1(
+  value: string,
+  nowMs: number,
+): boolean {
+  const timestampMs = Date.parse(value);
+  return Number.isFinite(timestampMs) &&
+    new Date(timestampMs).toISOString() === value &&
+    Number.isFinite(nowMs) && timestampMs <= nowMs &&
+    nowMs - timestampMs <= EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS;
+}
+
+function valuedEntryProviderTimeV1(
+  entry: ValuedExploreEntry,
+): string | null {
+  if (
+    entry.valuation.status === "available" &&
+      typeof entry.valuation.asOfTime === "string"
+  ) return entry.valuation.asOfTime;
+  return typeof entry.gmgnMarketData?.fetchedAt === "string"
+    ? entry.gmgnMarketData.fetchedAt
+    : null;
+}
+
+function exactEntryMapV1(
+  entries: readonly ExploreEntry[],
+): ReadonlyMap<string, ExploreEntry> | null {
+  const byId = new Map<string, ExploreEntry>();
+  for (const entry of entries) {
+    if (byId.has(entry.id)) return null;
+    byId.set(entry.id, entry);
+  }
+  return byId;
+}
+
+function exactAuthorityOrderedEntriesV1(
+  authority: ExploreMarketCapAuthorityV1,
+  canonicalEntries: readonly ExploreEntry[],
+): readonly ExploreEntry[] | null {
+  const byId = exactEntryMapV1(canonicalEntries);
+  if (byId === null || authority.orderedIdentities.length !== byId.size) {
+    return null;
+  }
+  const seen = new Set<string>();
+  const ordered: ExploreEntry[] = [];
+  for (const identity of authority.orderedIdentities) {
+    const entry = byId.get(identity.id);
+    if (
+      entry === undefined || seen.has(identity.id) ||
+      canonicalizeJson(identity) !==
+        canonicalizeJson(exactOrderedMarketIdentityV1(entry))
+    ) return null;
+    seen.add(identity.id);
+    ordered.push(entry);
+  }
+  return seen.size === byId.size ? Object.freeze(ordered) : null;
+}
+
+function exactStringIdsV1(
+  values: readonly string[],
+  canonicalById: ReadonlyMap<string, ExploreEntry>,
+): boolean {
+  return values.length === new Set(values).size &&
+    values.every((value) => canonicalById.has(value));
+}
+
+function compactProviderEvidenceV1(
+  entries: readonly ValuedExploreEntry[],
+  provider: "gmgn" | "dexscreener",
+  now: Date,
+): readonly ExploreMarketCapProviderEvidenceV1[] {
+  const seen = new Set<string>();
+  const result: ExploreMarketCapProviderEvidenceV1[] = [];
+  for (const entry of entries) {
+    if (seen.has(entry.id)) continue;
+    const asOfTime = valuedEntryProviderTimeV1(entry);
+    const currentAsOfTime = asOfTime !== null &&
+      currentMarketCapAuthorityTimestampV1(asOfTime, now.getTime())
+      ? asOfTime
+      : null;
+    if (entry.valuation.status === "available") {
+      if (
+        entry.valuation.source !== provider ||
+        currentAsOfTime === null ||
+        !UNSIGNED_INTEGER.test(entry.valuation.valueWad) ||
+        BigInt(entry.valuation.valueWad) === 0n
+      ) continue;
+      result.push(Object.freeze({
+        id: entry.id,
+        valueWad: entry.valuation.valueWad,
+        asOfTime: currentAsOfTime,
+      }));
+    } else {
+      result.push(Object.freeze({
+        id: entry.id,
+        valueWad: null,
+        asOfTime: currentAsOfTime,
+      }));
+    }
+    seen.add(entry.id);
+  }
+  return Object.freeze(result);
+}
+
+function providerEvidenceEntriesV1(
+  evidence: readonly ExploreMarketCapProviderEvidenceV1[],
+  canonicalById: ReadonlyMap<string, ExploreEntry>,
+  provider: "gmgn" | "dexscreener",
+): readonly ValuedExploreEntry[] | null {
+  const seen = new Set<string>();
+  const result: ValuedExploreEntry[] = [];
+  for (const item of evidence) {
+    const entry = canonicalById.get(item.id);
+    if (entry === undefined || seen.has(item.id)) return null;
+    seen.add(item.id);
+    result.push(Object.freeze({
+      ...entry,
+      valuation: item.valueWad === null
+        ? Object.freeze({
+            status: "unavailable" as const,
+            reason: "source-unavailable" as const,
+          })
+        : Object.freeze({
+            status: "available" as const,
+            metric: "fdv" as const,
+            supplyBasis: "total" as const,
+            currency: "usd" as const,
+            valueWad: item.valueWad,
+            freshness: "provider-recent" as const,
+            source: provider,
+            asOfTime: item.asOfTime!,
+          }),
+    }));
+  }
+  return Object.freeze(result);
+}
+
+function entriesForExactIdsV1(
+  ids: readonly string[],
+  canonicalById: ReadonlyMap<string, ExploreEntry>,
+): readonly ExploreEntry[] | null {
+  if (!exactStringIdsV1(ids, canonicalById)) return null;
+  return Object.freeze(ids.map((id) => canonicalById.get(id)!));
+}
+
+function authorityFallbackInputV1(
+  authority: ExploreMarketCapAuthorityV1,
+  canonicalEntries: readonly ExploreEntry[],
+): Parameters<typeof rankCanonicalExploreMarketCapEntriesWithGmgnV1>[2] | null {
+  const canonicalById = exactEntryMapV1(canonicalEntries);
+  if (
+    canonicalById === null ||
+    authority.filterFacets.length !== canonicalById.size ||
+    authority.filterFacets.length !==
+      new Set(authority.filterFacets.map((facet) => facet.id)).size ||
+    authority.filterFacets.some((facet) => !canonicalById.has(facet.id)) ||
+    !exactStringIdsV1(
+      authority.gmgnHydrationEligibleEntryIds,
+      canonicalById,
+    )
+  ) return null;
+  const gmgnRequestedEntries = entriesForExactIdsV1(
+    authority.gmgnRequestedEntryIds,
+    canonicalById,
+  );
+  const dexscreenerRequestedEntries = entriesForExactIdsV1(
+    authority.dexscreenerRequestedEntryIds,
+    canonicalById,
+  );
+  const gmgnEntries = providerEvidenceEntriesV1(
+    authority.gmgnEvidence,
+    canonicalById,
+    "gmgn",
+  );
+  const dexscreenerEntries = providerEvidenceEntriesV1(
+    authority.dexscreenerEvidence,
+    canonicalById,
+    "dexscreener",
+  );
+  if (
+    gmgnRequestedEntries === null || dexscreenerRequestedEntries === null ||
+    gmgnEntries === null || dexscreenerEntries === null
+  ) return null;
+  const gmgnRequestedIds = new Set(authority.gmgnRequestedEntryIds);
+  const dexscreenerRequestedIds = new Set(
+    authority.dexscreenerRequestedEntryIds,
+  );
+  if (
+    authority.gmgnEvidence.some((item) => !gmgnRequestedIds.has(item.id)) ||
+    authority.dexscreenerEvidence.some(
+      (item) => !dexscreenerRequestedIds.has(item.id),
+    )
+  ) return null;
+  return Object.freeze({
+    gmgnHydrationLimit: GMGN_MARKET_CAP_HYDRATION_LIMIT,
+    gmgnHydrationEligibleEntryCount:
+      authority.gmgnHydrationEligibleEntryIds.length,
+    gmgnRequestedEntries,
+    gmgnEntries,
+    dexscreenerRequestedEntries,
+    dexscreenerEntries,
+  });
+}
+
+function frozenFilterIdsV1(
+  authority: ExploreMarketCapAuthorityV1,
+  input: Readonly<{
+    query: string;
+    socials: "yes" | "no" | null;
+    model: "classic" | "custom" | null;
+  }>,
+): ReadonlySet<string> {
+  const normalized = input.query.trim().toLowerCase().replace(/^\$/u, "");
+  const tokenAddressById = new Map(
+    authority.orderedIdentities.map((identity) => [
+      identity.id,
+      identity.tokenAddress,
+    ] as const),
+  );
+  return new Set(authority.filterFacets.flatMap((facet) => {
+    if (input.model !== null && facet.category !== input.model) return [];
+    if (
+      input.socials !== null &&
+      facet.hasSocials !== (input.socials === "yes")
+    ) return [];
+    if (
+      normalized !== "" &&
+      !facet.name.toLowerCase().includes(normalized) &&
+      !(facet.symbol?.toLowerCase().includes(normalized) ?? false) &&
+      !(tokenAddressById.get(facet.id)?.includes(normalized) ?? false) &&
+      !(facet.modelId?.toLowerCase().includes(normalized) ?? false)
+    ) return [];
+    return [facet.id];
+  }));
+}
+
+function marketCapAuthorityCurrentV1(
+  authority: ExploreMarketCapAuthorityV1,
+  input: Readonly<{
+    inputCommitment: `sha256:${string}`;
+    direction: "asc" | "desc";
+    canonicalEntries: readonly ExploreEntry[];
+    now?: Date;
+  }>,
+): boolean {
+  const now = input.now ?? new Date();
+  const nowMs = now.getTime();
+  const ordered = exactAuthorityOrderedEntriesV1(
+    authority,
+    input.canonicalEntries,
+  );
+  const fallback = authorityFallbackInputV1(
+    authority,
+    input.canonicalEntries,
+  );
+  const authorityPin = ordered === null
+    ? null
+    : marketCapAuthorityPinCommitmentV1(
+        ordered,
+        authority.filterFacets,
+        input.direction,
+      );
+  if (
+    authority.schemaVersion !==
+      "programmable.explore-market-cap-authority.v2" ||
+    authority.inputCommitment !== input.inputCommitment ||
+    authority.direction !== input.direction || ordered === null ||
+    fallback === null || authorityPin === null ||
+    !currentMarketCapAuthorityTimestampV1(authority.generatedAt, nowMs) ||
+    authority.ranking.direction !== input.direction ||
+    authority.ranking.totalCount !== input.canonicalEntries.length ||
+    authority.ranking.canonicalEntryCount !== input.canonicalEntries.length ||
+    authority.ranking.rankingCommitment !== authorityPin
+  ) return false;
+  const providerTimes = [
+    ...(authority.rankSnapshot === null
+      ? []
+      : [authority.rankSnapshot.fetchedAt]),
+    ...authority.gmgnEvidence.flatMap((item) =>
+      item.asOfTime === null ? [] : [item.asOfTime]
+    ),
+    ...authority.dexscreenerEvidence.flatMap((item) =>
+      item.asOfTime === null ? [] : [item.asOfTime]
+    ),
+  ];
+  if (!providerTimes.every((value) =>
+    currentMarketCapAuthorityTimestampV1(value, nowMs)
+  )) return false;
+  const rebuilt = exploreMarketCapRankingV1(
+    sortExploreEntries(input.canonicalEntries, "newest"),
+    authority.rankSnapshot,
+    fallback,
+    input.direction,
+    now,
+  );
+  return canonicalizeJson({
+    ...rebuilt.ranking,
+    rankingCommitment: authorityPin,
+  }) === canonicalizeJson(authority.ranking) &&
+    rebuilt.ranking.rankingCommitment ===
+      marketCapRankingIdentityCommitmentV1(ordered, input.direction) &&
+    rebuilt.orderedEntries.every((entry, index) => entry.id === ordered[index]?.id);
+}
+
+function filterEntriesByIdsV1<Entry extends ExploreEntry>(
+  entries: readonly Entry[],
+  ids: ReadonlySet<string>,
+): readonly Entry[] {
+  return entries.filter((entry) => ids.has(entry.id));
+}
+
+function projectExploreMarketCapAuthorityV1(
+  authority: ExploreMarketCapAuthorityV1,
+  canonicalEntries: readonly ExploreEntry[],
+  input: Readonly<{
+    inputCommitment: `sha256:${string}`;
+    direction: "asc" | "desc";
+    query: string;
+    socials: "yes" | "no" | null;
+    model: "classic" | "custom" | null;
+    now?: Date;
+  }>,
+): Readonly<{
   orderedEntries: readonly ExploreEntry[];
-  orderingAsOfTimes: readonly (string | null)[];
   ranking: ExploreMarketCapRankingV1;
-}>> {
-  const deadlineMs = Date.now() + FAST_LANE_REQUEST_BUDGET_MS;
-  const readSignal = AbortSignal.timeout(FAST_LANE_REQUEST_BUDGET_MS);
+}> | null {
+  const now = input.now ?? new Date();
+  if (!marketCapAuthorityCurrentV1(authority, {
+    inputCommitment: input.inputCommitment,
+    direction: input.direction,
+    canonicalEntries,
+    now,
+  })) return null;
+  const authorityOrder = exactAuthorityOrderedEntriesV1(
+    authority,
+    canonicalEntries,
+  );
+  const fullFallback = authorityFallbackInputV1(authority, canonicalEntries);
+  if (authorityOrder === null || fullFallback === null) return null;
+  if (input.query === "" && input.socials === null && input.model === null) {
+    return Object.freeze({
+      orderedEntries: authorityOrder,
+      ranking: authority.ranking,
+    });
+  }
+  const filteredIds = frozenFilterIdsV1(authority, input);
+  const filteredNewest = sortExploreEntries(
+    canonicalEntries.filter((entry) => filteredIds.has(entry.id)),
+    "newest",
+  );
+  const frozenFilteredOrder = authorityOrder.filter((entry) =>
+    filteredIds.has(entry.id)
+  );
+  const ranked = exploreMarketCapRankingV1(
+    filteredNewest,
+    authority.rankSnapshot,
+    {
+      gmgnHydrationLimit: GMGN_MARKET_CAP_HYDRATION_LIMIT,
+      gmgnHydrationEligibleEntryCount:
+        authority.gmgnHydrationEligibleEntryIds.filter((id) =>
+          filteredIds.has(id)
+        ).length,
+      gmgnRequestedEntries: filterEntriesByIdsV1(
+        fullFallback.gmgnRequestedEntries,
+        filteredIds,
+      ),
+      gmgnEntries: filterEntriesByIdsV1(
+        fullFallback.gmgnEntries,
+        filteredIds,
+      ),
+      dexscreenerRequestedEntries: filterEntriesByIdsV1(
+        fullFallback.dexscreenerRequestedEntries,
+        filteredIds,
+      ),
+      dexscreenerEntries: filterEntriesByIdsV1(
+        fullFallback.dexscreenerEntries,
+        filteredIds,
+      ),
+    },
+    input.direction,
+    now,
+  );
+  if (
+    ranked.orderedEntries.length !== frozenFilteredOrder.length ||
+    ranked.orderedEntries.some(
+      (entry, index) => entry.id !== frozenFilteredOrder[index]?.id,
+    ) ||
+    ranked.ranking.rankingCommitment !==
+      marketCapRankingIdentityCommitmentV1(
+        frozenFilteredOrder,
+        input.direction,
+      )
+  ) return null;
+  return Object.freeze({
+    orderedEntries: Object.freeze(frozenFilteredOrder),
+    // The public pin names the retained full-universe generation. Query,
+    // model, and social filters are deterministic projections of that one
+    // identity order and therefore share its page/limit-independent pin.
+    ranking: Object.freeze({
+      ...ranked.ranking,
+      rankingCommitment: authority.ranking.rankingCommitment,
+    }),
+  });
+}
+
+async function buildExploreMarketCapAuthorityV1(
+  canonicalEntries: readonly ExploreEntry[],
+  inputCommitment: `sha256:${string}`,
+  direction: "asc" | "desc",
+  input: Readonly<{ deadlineMs: number }>,
+): Promise<ExploreMarketCapAuthorityCandidateV1> {
+  const authorityDeadlineMs = Math.min(
+    input.deadlineMs - MARKET_CAP_AUTHORITY_PUBLISH_RESERVE_MS,
+    Date.now() + MARKET_CAP_AUTHORITY_BUILD_BUDGET_MS,
+  );
+  if (authorityDeadlineMs <= Date.now()) {
+    throw new TypeError("Market-cap authority build deadline elapsed");
+  }
+  const authoritySignal = AbortSignal.timeout(
+    Math.max(1, authorityDeadlineMs - Date.now()),
+  );
+  const newestEntries = sortExploreEntries(canonicalEntries, "newest");
   const rankOptions = {
     interval: "1h" as const,
     limit: 100,
     orderBy: "marketcap" as const,
     direction,
   } as const;
-  const rankWait = { signal: readSignal, deadlineMs };
-  const rankCandidate = filteredNewest.length === 0
+  const rankWait = {
+    signal: authoritySignal,
+    deadlineMs: authorityDeadlineMs,
+  };
+  const rankCandidate = canonicalEntries.length === 0
     ? null
     : await (async () => {
         const first = await readGmgnEthereumTrendingV1(
@@ -906,7 +1421,7 @@ async function assembleExploreMarketCapCompositionV1(
         if (
           first !== null ||
           rankWait.signal.aborted ||
-          deadlineMs - Date.now() <
+          authorityDeadlineMs - Date.now() <
             GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS
         ) return first;
         return readGmgnEthereumTrendingV1(
@@ -916,15 +1431,19 @@ async function assembleExploreMarketCapCompositionV1(
       })();
   const rank = rankCandidate?.kind === "trending" &&
       rankCandidate.orderBy === "marketcap" &&
-      rankCandidate.direction === direction
+      rankCandidate.direction === direction &&
+      currentMarketCapAuthorityTimestampV1(
+        rankCandidate.fetchedAt,
+        Date.now(),
+      )
     ? rankCandidate
     : null;
-  const marketCapNow = new Date();
+  const authorityNow = new Date();
   const primary = rankCanonicalExploreMarketCapPrimaryWithGmgnV1(
-    filteredNewest,
+    newestEntries,
     rank === null ? [] : [rank],
     direction,
-    marketCapNow,
+    authorityNow,
   );
   const unobserved = primary.rows.flatMap((row) =>
     row.gmgn === null ? [row.entry] : []
@@ -932,13 +1451,16 @@ async function assembleExploreMarketCapCompositionV1(
   const supplyRequested = unobserved.filter(
     canonicalTokenSupplyHydrationRequiredV1,
   ).slice(0, MARKET_CAP_SUPPLY_HYDRATION_LIMIT);
-  const hydratedSupply = supplyRequested.length === 0
+  const supplyDeadlineMs = authorityDeadlineMs -
+    GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
+  const hydratedSupply = supplyRequested.length === 0 ||
+      supplyDeadlineMs <= Date.now()
     ? []
     : await hydrateMissingCanonicalTokenSupplyBoundedV1(
         supplyRequested,
         {
-          signal: readSignal,
-          deadlineMs: deadlineMs - GMGN_MARKET_CAP_HYDRATION_RESERVE_MS,
+          signal: authoritySignal,
+          deadlineMs: supplyDeadlineMs,
           maximumDurationMs: MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS,
         },
       ).catch(() => supplyRequested);
@@ -954,19 +1476,19 @@ async function assembleExploreMarketCapCompositionV1(
   const hydrationUniverse = unobserved.map((entry) =>
     hydratedSupplyById.get(entry.id) ?? entry
   );
-  const gmgnHydrationEligible = hydrationUniverse.filter(
-    gmgnVisibleMarketEntryEligibleV1,
-  );
+  const gmgnHydrationEligible = primary.coverage.gmgnMatchedEntryCount === 0
+    ? []
+    : hydrationUniverse.filter(gmgnVisibleMarketEntryEligibleV1);
   const gmgnRequested = gmgnHydrationEligible.slice(
     0,
     GMGN_MARKET_CAP_HYDRATION_LIMIT,
   );
-  const gmgnHydrationDeadlineMs = deadlineMs -
+  const gmgnHydrationDeadlineMs = authorityDeadlineMs -
     GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
   const gmgnSnapshots = gmgnRequested.length > 0 &&
       gmgnHydrationDeadlineMs > Date.now()
     ? await readGmgnExploreSnapshotsV1(gmgnRequested, {
-        signal: readSignal,
+        signal: authoritySignal,
         deadlineMs: gmgnHydrationDeadlineMs,
       }).catch(() => new Map())
     : new Map();
@@ -978,7 +1500,13 @@ async function assembleExploreMarketCapCompositionV1(
       snapshot,
       new Date(),
     );
-    return hydrated === null ? [] : [hydrated];
+    const providerTime = hydrated === null
+      ? null
+      : valuedEntryProviderTimeV1(hydrated);
+    return hydrated === null || providerTime === null ||
+        !currentMarketCapAuthorityTimestampV1(providerTime, Date.now())
+      ? []
+      : [hydrated];
   });
   const gmgnQualifiedIds = new Set(gmgnHydratedEntries.flatMap((entry) =>
     valuationSortValue(entry) === null ? [] : [entry.id]
@@ -988,184 +1516,311 @@ async function assembleExploreMarketCapCompositionV1(
   );
   const fallback = await readDexscreenerExploreEntriesV1(
     dexscreenerRequested,
-    { signal: readSignal, deadlineMs },
+    {
+      signal: authoritySignal,
+      deadlineMs: authorityDeadlineMs,
+    },
+  ).catch(() => ({ entries: [] as readonly ValuedExploreEntry[] }));
+  const dexscreenerEntries = fallback.entries.filter((entry) => {
+    const providerTime = valuedEntryProviderTimeV1(entry);
+    return providerTime === null || currentMarketCapAuthorityTimestampV1(
+      providerTime,
+      Date.now(),
+    );
+  });
+  const generatedAt = new Date().toISOString();
+  const generatedAtDate = new Date(generatedAt);
+  const gmgnEvidence = compactProviderEvidenceV1(
+    gmgnHydratedEntries,
+    "gmgn",
+    generatedAtDate,
   );
-  return exploreMarketCapRankingV1(
-    filteredNewest,
+  const dexscreenerEvidence = compactProviderEvidenceV1(
+    dexscreenerEntries,
+    "dexscreener",
+    generatedAtDate,
+  );
+  const canonicalById = exactEntryMapV1(newestEntries);
+  if (canonicalById === null) {
+    throw new TypeError("Market-cap canonical identities conflict");
+  }
+  const compactGmgnEntries = providerEvidenceEntriesV1(
+    gmgnEvidence,
+    canonicalById,
+    "gmgn",
+  );
+  const compactDexscreenerEntries = providerEvidenceEntriesV1(
+    dexscreenerEvidence,
+    canonicalById,
+    "dexscreener",
+  );
+  if (compactGmgnEntries === null || compactDexscreenerEntries === null) {
+    throw new TypeError("Market-cap provider evidence conflicts");
+  }
+  const ranked = exploreMarketCapRankingV1(
+    newestEntries,
     rank,
     {
       gmgnHydrationLimit: GMGN_MARKET_CAP_HYDRATION_LIMIT,
       gmgnHydrationEligibleEntryCount: gmgnHydrationEligible.length,
-      gmgnRequestedEntries: gmgnRequested,
-      gmgnEntries: gmgnHydratedEntries,
-      dexscreenerRequestedEntries: dexscreenerRequested,
-      dexscreenerEntries: fallback.entries,
+      gmgnRequestedEntries: gmgnRequested.map((entry) =>
+        canonicalById.get(entry.id)!
+      ),
+      gmgnEntries: compactGmgnEntries,
+      dexscreenerRequestedEntries: dexscreenerRequested.map((entry) =>
+        canonicalById.get(entry.id)!
+      ),
+      dexscreenerEntries: compactDexscreenerEntries,
     },
     direction,
-    new Date(),
+    generatedAtDate,
   );
-}
-
-// The Next Data Cache binds the complete provider composition, not just GMGN's
-// rank prefix, across serverless isolates. The callback receives no caller
-// signal: a timed-out request may stop waiting while the bounded fill finishes.
-const readDurablyCachedExploreMarketCapCompositionV1 = unstable_cache(
-  async (
-    inputCommitment: `sha256:${string}`,
-    direction: "asc" | "desc",
-    entries: readonly ExploreEntry[],
-  ): Promise<CachedExploreMarketCapCompositionV1> => {
-    if (
-      exploreMarketCapCompositionInputCommitmentV1(entries, direction) !==
-        inputCommitment
-    ) throw new Error("Explore market-cap cache input is not bound");
-    const composed = await assembleExploreMarketCapCompositionV1(
-      entries,
-      direction,
-    );
-    const assembledAt = new Date().toISOString();
-    if (
-      !currentExploreMarketCapOrderingTimesV1(
-        composed.orderingAsOfTimes,
-        entries.length,
-        composed.ranking.qualifiedCount,
-      ) ||
-      (composed.ranking.asOfTime === null &&
-        (composed.ranking.observedTokenCount > 0 ||
-          composed.ranking.qualifiedCount > 0)) ||
-      (composed.ranking.asOfTime !== null &&
-        !currentExploreMarketCapTimestampV1(composed.ranking.asOfTime))
-    ) throw new Error("Explore market-cap provider snapshot is stale");
-    return Object.freeze({
-      schemaVersion: "programmable.explore-market-cap-composition.v1",
-      inputCommitment,
-      direction,
-      assembledAt,
-      orderedEntryIds: Object.freeze(
-        composed.orderedEntries.map((entry) => entry.id),
-      ),
-      orderingAsOfTimes: Object.freeze([...composed.orderingAsOfTimes]),
-      ranking: composed.ranking,
-    });
-  },
-  ["programmable-explore-market-cap-composition-v1"],
-  { revalidate: EXPLORE_MARKET_CAP_CACHE_REVALIDATE_SECONDS },
-);
-
-function currentExploreMarketCapTimestampV1(value: string): boolean {
-  const observedAtMs = Date.parse(value);
-  const nowMs = Date.now();
-  return Number.isFinite(observedAtMs) &&
-    new Date(observedAtMs).toISOString() === value &&
-    observedAtMs <= nowMs &&
-    nowMs - observedAtMs <= EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS;
-}
-
-function currentExploreMarketCapOrderingTimesV1(
-  value: unknown,
-  expectedLength: number,
-  expectedQualifiedCount: number,
-): value is readonly (string | null)[] {
-  if (!Array.isArray(value) || value.length !== expectedLength) return false;
-  let qualifiedCount = 0;
-  for (const observedAt of value) {
-    if (observedAt === null) continue;
-    if (
-      typeof observedAt !== "string" ||
-      !currentExploreMarketCapTimestampV1(observedAt)
-    ) return false;
-    qualifiedCount += 1;
-  }
-  return qualifiedCount === expectedQualifiedCount;
-}
-
-async function waitForExploreMarketCapCompositionV1(
-  pending: Promise<CachedExploreMarketCapCompositionV1>,
-  signal: AbortSignal,
-  deadlineMs: number,
-): Promise<CachedExploreMarketCapCompositionV1> {
-  if (signal.aborted || deadlineMs <= Date.now()) {
-    throw signal.reason ?? new DOMException("Aborted", "AbortError");
-  }
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal.removeEventListener("abort", abort);
-      callback();
-    };
-    const abort = () => finish(() => reject(
-      signal.reason ?? new DOMException("Aborted", "AbortError"),
-    ));
-    signal.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(abort, Math.max(0, deadlineMs - Date.now()));
-    pending.then(
-      (value) => finish(() => resolve(value)),
-      (error: unknown) => finish(() => reject(error)),
-    );
-  });
-}
-
-async function readBoundExploreMarketCapCompositionV1(
-  entries: readonly ExploreEntry[],
-  direction: "asc" | "desc",
-  wait: Readonly<{ signal: AbortSignal; deadlineMs: number }>,
-): Promise<Readonly<{
-  orderedEntries: readonly ExploreEntry[];
-  ranking: ExploreMarketCapRankingV1;
-}>> {
-  const inputCommitment = exploreMarketCapCompositionInputCommitmentV1(
-    entries,
+  const filterFacets = Object.freeze(
+    canonicalEntries.map(exploreMarketCapFilterFacetV1),
+  );
+  const rankingCommitment = marketCapAuthorityPinCommitmentV1(
+    ranked.orderedEntries,
+    filterFacets,
     direction,
   );
-  const cached = await waitForExploreMarketCapCompositionV1(
-    readDurablyCachedExploreMarketCapCompositionV1(
-      inputCommitment,
-      direction,
-      entries,
-    ),
-    wait.signal,
-    wait.deadlineMs,
-  );
-  if (
-    cached.schemaVersion !==
-      "programmable.explore-market-cap-composition.v1" ||
-    cached.inputCommitment !== inputCommitment ||
-    cached.direction !== direction ||
-    !currentExploreMarketCapTimestampV1(cached.assembledAt) ||
-    cached.ranking.direction !== direction ||
-    cached.ranking.canonicalEntryCount !== entries.length ||
-    cached.ranking.totalCount !== entries.length ||
-    !/^sha256:[0-9a-f]{64}$/u.test(cached.ranking.rankingCommitment) ||
-    (cached.ranking.asOfTime === null &&
-      (cached.ranking.observedTokenCount > 0 ||
-        cached.ranking.qualifiedCount > 0)) ||
-    (cached.ranking.asOfTime !== null &&
-      !currentExploreMarketCapTimestampV1(cached.ranking.asOfTime)) ||
-    cached.orderedEntryIds.length !== entries.length ||
-    !currentExploreMarketCapOrderingTimesV1(
-      cached.orderingAsOfTimes,
-      entries.length,
-      cached.ranking.qualifiedCount,
-    )
-  ) throw new Error("Explore market-cap cache result is invalid or stale");
-  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
-  if (entriesById.size !== entries.length) {
-    throw new Error("Explore market-cap cache input identities are duplicated");
+  if (rankingCommitment === null) {
+    throw new TypeError("Market-cap authority filter facets conflict");
   }
-  const orderedIds = new Set(cached.orderedEntryIds);
-  if (
-    orderedIds.size !== entries.length ||
-    cached.orderedEntryIds.some((id) => !entriesById.has(id))
-  ) throw new Error("Explore market-cap cache order is not a permutation");
-  return Object.freeze({
-    orderedEntries: Object.freeze(
-      cached.orderedEntryIds.map((id) => entriesById.get(id)!),
-    ),
-    ranking: cached.ranking,
+  const authorityRanking = Object.freeze({
+    ...ranked.ranking,
+    rankingCommitment,
   });
+  const authority: ExploreMarketCapAuthorityV1 = Object.freeze({
+    schemaVersion: "programmable.explore-market-cap-authority.v2",
+    inputCommitment,
+    direction,
+    generatedAt,
+    rankSnapshot: rank,
+    filterFacets,
+    gmgnHydrationEligibleEntryIds: Object.freeze(
+      gmgnHydrationEligible.map((entry) => entry.id),
+    ),
+    gmgnRequestedEntryIds: Object.freeze(
+      gmgnRequested.map((entry) => entry.id),
+    ),
+    gmgnEvidence,
+    dexscreenerRequestedEntryIds: Object.freeze(
+      dexscreenerRequested.map((entry) => entry.id),
+    ),
+    dexscreenerEvidence,
+    orderedIdentities: Object.freeze(
+      ranked.orderedEntries.map(exactOrderedMarketIdentityV1),
+    ),
+    ranking: authorityRanking,
+  });
+  const canonicalAuthority = canonicalizeJson(authority);
+  const evidenceTimes = [
+    ...(rank === null ? [] : [rank.fetchedAt]),
+    ...gmgnEvidence.flatMap((item) =>
+      item.asOfTime === null ? [] : [item.asOfTime]
+    ),
+    ...dexscreenerEvidence.flatMap((item) =>
+      item.asOfTime === null ? [] : [item.asOfTime]
+    ),
+  ].map((value) => Date.parse(value));
+  const validUntilMs = Math.min(
+    Date.parse(generatedAt) + EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS,
+    ...evidenceTimes.map((value) =>
+      value + EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS
+    ),
+  );
+  if (!Number.isFinite(validUntilMs) || validUntilMs <= Date.now()) {
+    throw new TypeError("Market-cap provider evidence is stale");
+  }
+  return Object.freeze({
+    canonicalAuthority,
+    authorityCommitment:
+      exploreMarketCapAuthorityStorageCommitmentV1(canonicalAuthority),
+    rankingCommitment,
+    gmgnStatus: ranked.ranking.matchedTokenCount === 0
+      ? "unavailable"
+      : ranked.ranking.matchedTokenCount === canonicalEntries.length
+        ? "complete"
+        : "partial",
+    generatedAt,
+    validUntil: new Date(validUntilMs).toISOString(),
+  });
+}
+
+function parseExploreMarketCapAuthorityV1(
+  canonicalAuthority: string,
+): ExploreMarketCapAuthorityV1 | null {
+  try {
+    const parsed = parseStrictJson(canonicalAuthority, {
+      maximumBytes: EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_BYTES,
+      maximumDepth: 64,
+    });
+    if (
+      canonicalizeJson(parsed) !== canonicalAuthority ||
+      !isRecordV1(parsed) ||
+      !hasExactKeysV1(parsed, [
+        "schemaVersion", "inputCommitment", "direction", "generatedAt",
+        "rankSnapshot", "filterFacets", "gmgnHydrationEligibleEntryIds",
+        "gmgnRequestedEntryIds", "gmgnEvidence",
+        "dexscreenerRequestedEntryIds", "dexscreenerEvidence",
+        "orderedIdentities", "ranking",
+      ]) ||
+      parsed.schemaVersion !==
+        "programmable.explore-market-cap-authority.v2" ||
+      typeof parsed.inputCommitment !== "string" ||
+      !SHA256_COMMITMENT.test(parsed.inputCommitment) ||
+      (parsed.direction !== "asc" && parsed.direction !== "desc") ||
+      typeof parsed.generatedAt !== "string" ||
+      !exactIsoTimestampV1(parsed.generatedAt) ||
+      !exactGmgnDiscoverySnapshotV1(parsed.rankSnapshot) ||
+      !exactFilterFacetArrayV1(parsed.filterFacets) ||
+      !exactStringArrayV1(parsed.gmgnHydrationEligibleEntryIds) ||
+      !exactStringArrayV1(parsed.gmgnRequestedEntryIds) ||
+      !exactProviderEvidenceArrayV1(parsed.gmgnEvidence) ||
+      !exactStringArrayV1(parsed.dexscreenerRequestedEntryIds) ||
+      !exactProviderEvidenceArrayV1(parsed.dexscreenerEvidence) ||
+      !exactOrderedIdentityArrayV1(parsed.orderedIdentities) ||
+      !isRecordV1(parsed.ranking) ||
+      parsed.ranking.schemaVersion !==
+        "programmable.explore-market-cap-ranking.v1" ||
+      parsed.ranking.direction !== parsed.direction ||
+      typeof parsed.ranking.rankingCommitment !== "string" ||
+      !SHA256_COMMITMENT.test(parsed.ranking.rankingCommitment)
+    ) return null;
+    return parsed as unknown as ExploreMarketCapAuthorityV1;
+  } catch {
+    return null;
+  }
+}
+
+function exactFilterFacetArrayV1(
+  value: unknown,
+): value is readonly ExploreMarketCapFilterFacetV1[] {
+  if (!Array.isArray(value) || value.length > 10_000) return false;
+  const ids = new Set<string>();
+  for (const item of value) {
+    if (
+      !isRecordV1(item) || !hasExactKeysV1(item, [
+        "id", "name", "symbol", "modelId", "category", "hasSocials",
+      ]) ||
+      typeof item.id !== "string" || item.id.length > 1_024 ||
+      ids.has(item.id) || typeof item.name !== "string" ||
+      item.name.length > 4_096 ||
+      (item.symbol !== null &&
+        (typeof item.symbol !== "string" || item.symbol.length > 1_024)) ||
+      (item.modelId !== null &&
+        (typeof item.modelId !== "string" || item.modelId.length > 1_024)) ||
+      (item.category !== "classic" && item.category !== "custom") ||
+      typeof item.hasSocials !== "boolean"
+    ) return false;
+    ids.add(item.id);
+  }
+  return true;
+}
+
+function isRecordV1(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeysV1(
+  value: Readonly<Record<string, unknown>>,
+  keys: readonly string[],
+): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index]);
+}
+
+function exactIsoTimestampV1(value: string): boolean {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+function exactStringArrayV1(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.length <= 10_000 &&
+    value.every((item) => typeof item === "string" && item.length <= 1_024) &&
+    value.length === new Set(value).size;
+}
+
+function exactProviderEvidenceArrayV1(
+  value: unknown,
+): value is readonly ExploreMarketCapProviderEvidenceV1[] {
+  if (!Array.isArray(value) || value.length > 10_000) return false;
+  const ids = new Set<string>();
+  for (const item of value) {
+    if (
+      !isRecordV1(item) ||
+      !hasExactKeysV1(item, ["id", "valueWad", "asOfTime"]) ||
+      typeof item.id !== "string" || item.id.length > 1_024 ||
+      ids.has(item.id) ||
+      (item.valueWad !== null &&
+        (typeof item.valueWad !== "string" ||
+          !UNSIGNED_INTEGER.test(item.valueWad) ||
+          BigInt(item.valueWad) === 0n)) ||
+      (item.asOfTime !== null &&
+        (typeof item.asOfTime !== "string" ||
+          !exactIsoTimestampV1(item.asOfTime))) ||
+      (item.valueWad !== null && item.asOfTime === null)
+    ) return false;
+    ids.add(item.id);
+  }
+  return true;
+}
+
+function exactOrderedIdentityArrayV1(
+  value: unknown,
+): value is readonly ExactOrderedMarketIdentityV1[] {
+  if (!Array.isArray(value) || value.length > 10_000) return false;
+  const ids = new Set<string>();
+  for (const item of value) {
+    if (
+      !isRecordV1(item) ||
+      !hasExactKeysV1(item, ["id", "tokenAddress", "marketIdentities"]) ||
+      typeof item.id !== "string" || item.id.length > 1_024 ||
+      ids.has(item.id) ||
+      (item.tokenAddress !== null &&
+        (typeof item.tokenAddress !== "string" ||
+          !/^0x[0-9a-f]{40}$/u.test(item.tokenAddress))) ||
+      !Array.isArray(item.marketIdentities) ||
+      item.marketIdentities.length > 10_000 ||
+      !item.marketIdentities.every((identity) =>
+        isRecordV1(identity) && hasExactKeysV1(identity, [
+          "chainId", "protocol", "tokenAddress", "poolId", "quoteAddress",
+        ]) && identity.chainId === "1" && identity.protocol === "uniswap_v4" &&
+        typeof identity.tokenAddress === "string" &&
+        /^0x[0-9a-f]{40}$/u.test(identity.tokenAddress) &&
+        typeof identity.poolId === "string" &&
+        /^0x[0-9a-f]{64}$/u.test(identity.poolId) &&
+        typeof identity.quoteAddress === "string" &&
+        /^0x[0-9a-f]{40}$/u.test(identity.quoteAddress)
+      )
+    ) return false;
+    ids.add(item.id);
+  }
+  return true;
+}
+
+function exactGmgnDiscoverySnapshotV1(
+  value: unknown,
+): value is GmgnDiscoverySnapshotV1 | null {
+  if (value === null) return true;
+  if (
+    !isRecordV1(value) || !isGmgnDiscoverySnapshotV1(value) ||
+    !hasExactKeysV1(value, [
+      "schemaVersion", "source", "chainId", "providerChain", "kind",
+      "interval", "orderBy", "direction", "requestedLimit", "fetchedAt",
+      "providerVersion", "providerItemCount", "discardedProviderItemCount",
+      "duplicateProviderItemCount", "tokens",
+    ])
+  ) return false;
+  return value.tokens.every((token) =>
+    hasExactKeysV1(token, [
+      "chain", "tokenAddress", "rank", "visitingCount", "hotLevel",
+      "swaps", "buys", "sells", "holderCount", "priceUsd",
+      "marketCapUsd", "liquidityUsd", "volumeUsd",
+    ])
+  );
 }
 
 function generatedAgeMs(generatedAt: string): number | null {
@@ -1174,10 +1829,15 @@ function generatedAgeMs(generatedAt: string): number | null {
 }
 
 export async function GET(request: NextRequest) {
-  const deadlineMs = Date.now() + FAST_LANE_REQUEST_BUDGET_MS;
+  const rawSort = request.nextUrl.searchParams.get("sort");
+  const requestBudgetMs = rawSort === "market-cap" ||
+      rawSort === "market-cap-asc"
+    ? MARKET_CAP_REQUEST_BUDGET_MS
+    : FAST_LANE_REQUEST_BUDGET_MS;
+  const deadlineMs = Date.now() + requestBudgetMs;
   const readSignal = AbortSignal.any([
     request.signal,
-    AbortSignal.timeout(FAST_LANE_REQUEST_BUDGET_MS),
+    AbortSignal.timeout(requestBudgetMs),
   ]);
   const search = request.nextUrl.searchParams;
   if (!hasCanonicalQueryShape(search) || !hasCanonicalPaginationShape(search)) {
@@ -1220,6 +1880,27 @@ export async function GET(request: NextRequest) {
     );
   }
   const requestedSort = parseExploreSort(search.get("sort"));
+  const requestedPage = integerQuery(search.get("page"), 1);
+  const requestedRankingCommitment = search.get("rankingCommitment");
+  const ethereumMarketCapSort = chain === 1 &&
+    (requestedSort === "market-cap" || requestedSort === "market-cap-asc");
+  if (
+    (requestedRankingCommitment !== null &&
+      (!ethereumMarketCapSort ||
+        !SHA256_COMMITMENT.test(requestedRankingCommitment))) ||
+    (ethereumMarketCapSort && requestedPage > 1 &&
+      requestedRankingCommitment === null)
+  ) {
+    return NextResponse.json(
+      {
+        error: requestedRankingCommitment === null
+          ? "Market-cap pages after page 1 require rankingCommitment"
+          : "Unsupported market-cap ranking commitment",
+        code: "MARKET_CAP_RANKING_COMMITMENT_REQUIRED",
+      },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   if (requestedSort === "trending" && chain !== 1) {
     return NextResponse.json(
       { error: "Trending discovery is available on Ethereum only" },
@@ -1262,7 +1943,7 @@ export async function GET(request: NextRequest) {
       chain,
       query,
       sort: requestedSort,
-      page: integerQuery(search.get("page"), 1),
+      page: requestedPage,
       pageSize: integerQuery(search.get("limit"), 9),
       socials,
       model,
@@ -1443,8 +2124,10 @@ export async function GET(request: NextRequest) {
       includedSources.add("registry.custom-launched");
     }
     if (routerAvailable) includedSources.add(ROUTER_CUSTOM_LAUNCH_SOURCE);
+    const marketCapSortRequested = options.sort === "market-cap" ||
+      options.sort === "market-cap-asc";
     const searchRead: Promise<GmgnSearchSnapshotV1 | null> =
-      options.query === ""
+      options.query === "" || marketCapSortRequested
         ? Promise.resolve(null)
         : readGmgnEthereumSearchV1(options.query, {
             signal: readSignal,
@@ -1456,36 +2139,87 @@ export async function GET(request: NextRequest) {
     let discovery: ExploreDiscoveryRankingV1 | null = null;
     let searchRanking: ExploreSearchRankingV1 | null = null;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
-      const localFilteredNewest = sortExploreEntries(
-        filterExploreEntries(
-          presentedPublicEntries,
-          options.query,
-          options.socials,
-          options.model,
-        ),
-        "newest",
-      );
       const direction = options.sort === "market-cap" ? "desc" : "asc";
-      const searchSnapshot = await searchRead;
-      const searchResult = options.query === ""
-        ? null
-        : rankExploreSearchEntriesV1(
-            presentedPublicEntries,
-            searchSnapshot,
-            {
-              query: options.query,
-              socials: options.socials,
-              model: options.model,
-              fallbackSort: "newest",
-            },
-          );
-      if (searchResult !== null) searchRanking = searchResult.search;
-      const filteredNewest = searchResult?.entries ?? localFilteredNewest;
-      const ranked = await readBoundExploreMarketCapCompositionV1(
-        filteredNewest,
+      const authorityInputCommitment =
+        exploreMarketCapAuthorityInputCommitmentV1(
+          presentedPublicEntries,
+        );
+      const projectionInput = {
+        inputCommitment: authorityInputCommitment,
         direction,
-        { signal: readSignal, deadlineMs },
+        query: options.query,
+        socials: options.socials,
+        model: options.model,
+      } as const;
+      const rankingCommitment = requestedRankingCommitment as
+        `sha256:${string}` | null;
+      const authorityStore = getProductionExploreMarketCapAuthorityStoreV1();
+      const resolution = rankingCommitment === null
+        ? await authorityStore.resolve({
+            inputCommitment: authorityInputCommitment,
+            direction,
+            build: () => buildExploreMarketCapAuthorityV1(
+              presentedPublicEntries,
+              authorityInputCommitment,
+              direction,
+              { deadlineMs },
+            ),
+            deadlineMs,
+            signal: readSignal,
+          })
+        : await authorityStore.resolve({
+            inputCommitment: authorityInputCommitment,
+            direction,
+            rankingCommitment,
+            acceptPinnedAuthority: (canonicalAuthority) => {
+              const candidate = parseExploreMarketCapAuthorityV1(
+                canonicalAuthority,
+              );
+              if (candidate === null) return false;
+              const candidateProjection =
+                projectExploreMarketCapAuthorityV1(
+                  candidate,
+                  presentedPublicEntries,
+                  projectionInput,
+                );
+              return candidateProjection?.ranking.rankingCommitment ===
+                rankingCommitment;
+            },
+            deadlineMs,
+            signal: readSignal,
+          });
+      if (resolution.kind === "ranking-conflict") {
+        return NextResponse.json(
+          {
+            error: "Market-cap ranking changed; restart from page 1",
+            code: "MARKET_CAP_RANKING_RESTART_REQUIRED",
+          },
+          {
+            status: 409,
+            headers: {
+              "Cache-Control": "no-store",
+              "X-Programmable-Ranking-Restart": "required",
+            },
+          },
+        );
+      }
+      if (resolution.kind !== "ready") {
+        throw new Error("Market-cap ordering authority is unavailable");
+      }
+      const authority = parseExploreMarketCapAuthorityV1(
+        resolution.canonicalAuthority,
       );
+      if (authority === null) {
+        throw new Error("Market-cap ordering authority is invalid");
+      }
+      const ranked = projectExploreMarketCapAuthorityV1(
+        authority,
+        presentedPublicEntries,
+        projectionInput,
+      );
+      if (ranked === null) {
+        throw new Error("Market-cap ordering authority is unavailable");
+      }
       marketCapRanking = ranked.ranking;
       const identityPage = paginateEntries(ranked.orderedEntries, options);
       const valued = await readExploreMarketEntriesV1(

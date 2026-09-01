@@ -56,6 +56,10 @@ const TRENDING_SNAPSHOT_ATTEMPTS = 2;
 const TRENDING_DISCOVERY_VOLATILE_KEYS = new Set([
   "asOfTime",
 ]);
+const MARKET_CAP_RANKING_SEPARATE_KEYS = new Set([
+  "asOfTime",
+  "rankingCommitment",
+]);
 const GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8;
 const PROVIDER_RECENT_MAXIMUM_AGE_MS = 5 * 60_000;
 const MINIMUM_FDV_LIQUIDITY_USD_WAD = 10_000n * 10n ** 18n;
@@ -1416,6 +1420,14 @@ function exactMarketCapRanking(response, canonicalTokens, direction, nowMs) {
       ranking.rankingCommitment;
 }
 
+function stableMarketCapRankingMetadata(ranking) {
+  return JSON.stringify(Object.fromEntries(
+    MARKET_CAP_RANKING_KEYS
+      .filter((key) => !MARKET_CAP_RANKING_SEPARATE_KEYS.has(key))
+      .map((key) => [key, ranking[key]]),
+  ));
+}
+
 function exactRequiredGmgnMarketCapRanking(response, nowMs) {
   const ranking = response.body?.ranking;
   return ranking?.gmgnStatus !== "unavailable" &&
@@ -2360,7 +2372,10 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       if (highest.body.totalPages > 1) {
         const highestSecondPage = await request(
           `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
-            "&page=2&sort=market-cap",
+            "&page=2&sort=market-cap" +
+            `&rankingCommitment=${encodeURIComponent(
+              highest.body.ranking.rankingCommitment,
+            )}`,
         );
         const highestSecondPageTokens = Array.isArray(
           highestSecondPage.body?.tokens,
@@ -2401,9 +2416,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
             completeCatalogTokens,
             "desc",
             now().getTime(),
-          )
-        ) throw new Error("Market-cap pagination commitment is invalid");
-        if (
+          ) ||
           secondPageIdentities.some((identity) => identity === null) ||
           new Set(secondPageIdentities).size !== secondPageIdentities.length ||
           secondPageIdentities.some((identity) =>
@@ -2411,14 +2424,28 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
           )
         ) throw new Error("Market-cap pagination commitment is invalid");
         if (
-          JSON.stringify(highestSecondPage.body.ranking) !==
-            JSON.stringify(highest.body.ranking) ||
+          highestSecondPage.body.ranking.rankingCommitment !==
+            highest.body.ranking.rankingCommitment
+        ) {
+          throw new ExploreMarketCapSnapshotDriftError(
+            "Market-cap ranking changed during pagination",
+          );
+        }
+        if (
+          stableMarketCapRankingMetadata(highestSecondPage.body.ranking) !==
+            stableMarketCapRankingMetadata(highest.body.ranking)
+        ) {
+          throw new ExploreMarketCapSnapshotDriftError(
+            "Market-cap ranking invariants changed during pagination",
+          );
+        }
+        if (
           secondPageIdentities.some((identity) =>
             highestIdentities.includes(identity)
           )
         ) {
           throw new ExploreMarketCapSnapshotDriftError(
-            "Market-cap ranking changed during pagination",
+            "Market-cap ranking order overlapped during pagination",
           );
         }
       }

@@ -826,7 +826,7 @@ describe("GMGN discovery server adapter", () => {
     expect(reserveSlot).toHaveBeenCalledWith({
       requestsPerSecond: 1,
       cost: 1,
-      deadlineMs: NOW.getTime() + 2_500,
+      deadlineMs: NOW.getTime() + 5_000,
       signal: undefined,
     });
     expect(complete).toHaveBeenCalledWith(RESERVATION);
@@ -876,10 +876,64 @@ describe("GMGN discovery server adapter", () => {
     expect(reserveSlot).toHaveBeenCalledWith({
       requestsPerSecond: 1,
       cost: 1,
-      deadlineMs: NOW.getTime() + 2_500,
+      deadlineMs: NOW.getTime() + 5_000,
       signal: undefined,
     });
     expect(complete).toHaveBeenCalledWith(RESERVATION);
+  });
+
+  it("keeps the GMGN HTTP budget after a cold shared-gate reservation", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const reservation = {
+      ...RESERVATION,
+      reservedAtMs: NOW.getTime() + 3_000,
+    };
+    const reserveSlot = vi.fn(() => new Promise<typeof reservation>((resolve) => {
+      setTimeout(() => resolve(reservation), 3_000);
+    }));
+    const complete = vi.fn(async () => {});
+    const gate = {
+      reserveSlot,
+      blockUntil: vi.fn(),
+      complete,
+    } satisfies GmgnAccountGateV1;
+    let providerSignal: AbortSignal | null | undefined;
+    const fetchImpl = vi.fn((
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      providerSignal = init?.signal;
+      return Promise.resolve(new Response(JSON.stringify(
+        rankResponse([providerToken(16, 1)]),
+      ), { status: 200 }));
+    });
+
+    const read = readGmgnEthereumTrendingV1({
+      interval: "1m",
+      limit: 96,
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => new Date(),
+      deadlineMs: NOW.getTime() + 8_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(read).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(16) }],
+    });
+    expect(reserveSlot).toHaveBeenCalledWith({
+      requestsPerSecond: 1,
+      cost: 1,
+      deadlineMs: NOW.getTime() + 5_000,
+      signal: undefined,
+    });
+    expect(providerSignal?.aborted).toBe(false);
+    expect(complete).toHaveBeenCalledWith(reservation);
   });
 
   it("requests isolated official market-cap rankings in either direction", async () => {
@@ -995,7 +1049,7 @@ describe("GMGN discovery server adapter", () => {
     expect(reserveSlot).toHaveBeenCalledWith({
       requestsPerSecond: 1,
       cost: 3,
-      deadlineMs: NOW.getTime() + 2_500,
+      deadlineMs: NOW.getTime() + 5_000,
       signal: undefined,
     });
   });
@@ -1351,13 +1405,13 @@ describe("GMGN discovery server adapter", () => {
     expect(reserveSlot).toHaveBeenNthCalledWith(1, {
       requestsPerSecond: 20,
       cost: 1,
-      deadlineMs: NOW.getTime() + 2_500,
+      deadlineMs: NOW.getTime() + 5_000,
       signal: undefined,
     });
     expect(reserveSlot).toHaveBeenNthCalledWith(2, {
       requestsPerSecond: 1,
       cost: 1,
-      deadlineMs: NOW.getTime() + 2_500,
+      deadlineMs: NOW.getTime() + 5_000,
       signal: undefined,
     });
   });
@@ -1542,6 +1596,11 @@ describe("GMGN discovery server adapter", () => {
     await expect(stalledRead).resolves.toBeNull();
     expect(reserveSlot).toHaveBeenCalledOnce();
     expect(fetchImpl).not.toHaveBeenCalled();
+
+    // The caller's five-second budget is independent from the detached
+    // provider lifecycle. Let its bounded late-outcome cleanup finish before
+    // proving that the same cache key can start a new request.
+    await vi.advanceTimersByTimeAsync(2_500);
 
     vi.useRealTimers();
     const { gate } = accountGate();

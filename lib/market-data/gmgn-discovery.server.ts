@@ -24,6 +24,11 @@ import {
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
 const GMGN_REQUEST_TIMEOUT_MS = 2_500;
+// Cold database readiness and account-wide scheduling must not consume the
+// provider's response budget after a slot has actually been reserved.
+const GMGN_ACCOUNT_GATE_WAIT_TIMEOUT_MS = 5_000;
+const GMGN_PROVIDER_WORK_TIMEOUT_MS =
+  GMGN_ACCOUNT_GATE_WAIT_TIMEOUT_MS + GMGN_REQUEST_TIMEOUT_MS;
 const GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS = 3_000;
 const GMGN_PROVIDER_LIFECYCLE_GRACE_MS =
   GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS + 500;
@@ -408,15 +413,16 @@ function providerWorkWait(
     accountGate: callerWait.accountGate,
     now,
     deadlineMs: Number.isFinite(startedAtMs)
-      ? startedAtMs + GMGN_REQUEST_TIMEOUT_MS
-      : Date.now() + GMGN_REQUEST_TIMEOUT_MS,
+      ? startedAtMs + GMGN_PROVIDER_WORK_TIMEOUT_MS
+      : Date.now() + GMGN_PROVIDER_WORK_TIMEOUT_MS,
   });
 }
 
 function providerOperation(wait: GmgnDiscoveryReadWaitV1): ProviderOperationV1 {
   const now = wait.now ?? (() => new Date());
   return Object.freeze({
-    deadlineMs: wait.deadlineMs ?? now().getTime() + GMGN_REQUEST_TIMEOUT_MS,
+    deadlineMs: wait.deadlineMs ??
+      now().getTime() + GMGN_PROVIDER_WORK_TIMEOUT_MS,
     now,
   });
 }
@@ -572,7 +578,7 @@ async function gmgnJsonRequest(
   const now = wait.now ?? (() => new Date());
   const queuedAtMs = now().getTime();
   const requestDeadlineMs = wait.deadlineMs ??
-    queuedAtMs + GMGN_REQUEST_TIMEOUT_MS;
+    queuedAtMs + GMGN_PROVIDER_WORK_TIMEOUT_MS;
   if (
     wait.signal?.aborted ||
     !Number.isFinite(queuedAtMs) ||
@@ -586,7 +592,11 @@ async function gmgnJsonRequest(
     Awaited<ReturnType<GmgnAccountGateV1["reserveSlot"]>>,
     { kind: "reserved" }
   > | null = null;
-  const operation = Object.freeze({ deadlineMs: requestDeadlineMs, now });
+  const gateDeadlineMs = Math.min(
+    requestDeadlineMs,
+    queuedAtMs + GMGN_ACCOUNT_GATE_WAIT_TIMEOUT_MS,
+  );
+  const gateOperation = Object.freeze({ deadlineMs: gateDeadlineMs, now });
   try {
     if (
       accountGate === null &&
@@ -596,9 +606,9 @@ async function gmgnJsonRequest(
       const decision = await reserveProviderSlot(accountGate, {
         requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
         cost: endpointCost(path),
-        deadlineMs: requestDeadlineMs,
+        deadlineMs: gateDeadlineMs,
         signal: wait.signal,
-      }, operation);
+      }, gateOperation);
       if (decision?.kind !== "reserved") return null;
       reservation = decision;
     }

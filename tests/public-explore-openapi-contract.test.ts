@@ -284,6 +284,7 @@ describe("public Explore OpenAPI contract", () => {
       "model",
       "socials",
       "sort",
+      "rankingCommitment",
     ]);
     expect(parameters.get("chain")?.schema).toEqual({
       type: "integer",
@@ -308,6 +309,19 @@ describe("public Explore OpenAPI contract", () => {
       default: "newest",
     });
     expect(parameters.get("sort")?.description).toContain("chain=1");
+    expect(parameters.get("rankingCommitment")).toMatchObject({
+      in: "query",
+      schema: {
+        type: "string",
+        pattern: "^sha256:[0-9a-f]{64}$",
+      },
+    });
+    expect(parameters.get("rankingCommitment")?.description).toContain(
+      "Required for page > 1",
+    );
+    expect(operation.responses["409"].description).toContain(
+      "restart pagination from page 1",
+    );
   });
 
   it("documents canonical-intersected Trending metadata and headers", () => {

@@ -24,6 +24,11 @@ import type { MarketChartIdentityV1 } from "./market-data-v1";
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
 const GMGN_REQUEST_TIMEOUT_MS = 2_500;
+// Cold database readiness and account-wide scheduling must not consume the
+// provider's response budget after a slot has actually been reserved.
+const GMGN_ACCOUNT_GATE_WAIT_TIMEOUT_MS = 5_000;
+const GMGN_PROVIDER_WORK_TIMEOUT_MS =
+  GMGN_ACCOUNT_GATE_WAIT_TIMEOUT_MS + GMGN_REQUEST_TIMEOUT_MS;
 const GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS = 3_000;
 const GMGN_PROVIDER_LIFECYCLE_GRACE_MS =
   GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS + 500;
@@ -377,6 +382,20 @@ async function gmgnJsonRequest(
     Awaited<ReturnType<GmgnAccountGateV1["reserveSlot"]>>,
     { kind: "reserved" }
   > | null = null;
+  const gateDeadlineMs = Math.min(
+    requestDeadlineMs,
+    queueTimeMs + GMGN_ACCOUNT_GATE_WAIT_TIMEOUT_MS,
+  );
+  const gateTimeoutMs = Math.max(1, gateDeadlineMs - queueTimeMs);
+  const gateSignal = AbortSignal.any([
+    wait.signal,
+    AbortSignal.timeout(gateTimeoutMs),
+  ]);
+  const gateOperation: ProviderOperationV1 = {
+    deadlineMs: gateDeadlineMs,
+    now,
+    signal: gateSignal,
+  };
   try {
     if (
       accountGate === null
@@ -387,9 +406,9 @@ async function gmgnJsonRequest(
     if (accountGate !== null) {
       const decision = await reserveProviderSlot(accountGate, {
         requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
-        deadlineMs: requestDeadlineMs,
-        signal: wait.signal,
-      }, wait);
+        deadlineMs: gateDeadlineMs,
+        signal: gateSignal,
+      }, gateOperation);
       if (decision?.kind !== "reserved") return null;
       reservation = decision;
     }
@@ -410,6 +429,13 @@ async function gmgnJsonRequest(
   }
   url.searchParams.set("timestamp", String(Math.floor(nowMs / 1_000)));
   url.searchParams.set("client_id", crypto.randomUUID());
+  const providerHttpTimeout = AbortSignal.timeout(
+    Math.max(1, Math.min(GMGN_REQUEST_TIMEOUT_MS, remaining)),
+  );
+  const providerHttpSignal = AbortSignal.any([
+    wait.signal,
+    providerHttpTimeout,
+  ]);
   let response: Response;
   try {
     response = await fetchImpl(url, {
@@ -418,7 +444,7 @@ async function gmgnJsonRequest(
       redirect: "error",
       credentials: "omit",
       cache: "no-store",
-      signal: wait.signal,
+      signal: providerHttpSignal,
     });
   } catch {
     await completeProviderRequest(accountGate, reservation);
@@ -554,9 +580,9 @@ function sharedProviderWait(wait: GmgnReadWaitV1): GmgnProviderReadWaitV1 {
     now,
     accountGate: wait.accountGate,
     deadlineMs: Number.isFinite(startedAtMs)
-      ? startedAtMs + GMGN_REQUEST_TIMEOUT_MS
-      : Date.now() + GMGN_REQUEST_TIMEOUT_MS,
-    signal: AbortSignal.timeout(GMGN_REQUEST_TIMEOUT_MS),
+      ? startedAtMs + GMGN_PROVIDER_WORK_TIMEOUT_MS
+      : Date.now() + GMGN_PROVIDER_WORK_TIMEOUT_MS,
+    signal: AbortSignal.timeout(GMGN_PROVIDER_WORK_TIMEOUT_MS),
   };
 }
 

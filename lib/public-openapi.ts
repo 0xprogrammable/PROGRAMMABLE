@@ -334,6 +334,16 @@ export const programmablePublicOpenApi = {
               default: "newest",
             },
           },
+          {
+            name: "rankingCommitment",
+            in: "query",
+            description:
+              "Required for page > 1 with sort=market-cap or sort=market-cap-asc. Pass the exact ranking.rankingCommitment returned by page 1 to keep every page on the same retained ranking generation. If that generation is no longer retained, restart from page 1.",
+            schema: {
+              type: "string",
+              pattern: "^sha256:[0-9a-f]{64}$",
+            },
+          },
         ],
         responses: {
           "200": {
@@ -350,6 +360,10 @@ export const programmablePublicOpenApi = {
             },
           },
           "400": jsonResponse(component("ApiError"), "Invalid query shape."),
+          "409": jsonResponse(
+            component("ApiError"),
+            "The requested market-cap ranking generation is no longer retained; restart pagination from page 1.",
+          ),
           "503": jsonResponse(
             component("ApiError"),
             "The verified identity source is temporarily unavailable.",
