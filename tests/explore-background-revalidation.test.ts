@@ -187,6 +187,34 @@ describe("Explore background revalidation", () => {
     )).toBe(incoming);
   });
 
+  it("adopts a completely repaginated local selection atomically", () => {
+    const previous = {
+      ...explorePayload("ready"),
+      tokens: [{ id: "1:previous", valuation: { status: "unavailable" } }],
+      total: 1,
+      totalPages: 1,
+      ranking: {
+        requested: "market-cap",
+        rankingCommitment: `sha256:${"10".repeat(32)}`,
+      },
+    };
+    const incoming = {
+      ...explorePayload("ready"),
+      tokens: [
+        { id: "1:older", valuation: { status: "unavailable" } },
+        { id: "1:newer", valuation: { status: "unavailable" } },
+      ],
+      total: 2,
+      totalPages: 1,
+    };
+
+    expect(stabilizeExploreRevalidationPayload(
+      previous as never,
+      incoming as never,
+      { incomingIsCompleteLocalSelection: true },
+    )).toBe(incoming);
+  });
+
   it("runs only when the tab is visible, online and due", () => {
     const due = {
       visibilityState: "visible" as const,
@@ -447,6 +475,13 @@ describe("Explore background revalidation", () => {
     expect(source).toContain('window.addEventListener("online"');
     expect(source).toContain('window.addEventListener("offline"');
     expect(source).toContain("stabilizeExploreRevalidationPayload(");
+    expect(source).toContain("if (!requiresCompleteDataset) {");
+    expect(source).not.toContain(
+      "if (isBackgroundRevalidation || !requiresCompleteDataset) {",
+    );
+    expect(source).toContain(
+      "incomingIsCompleteLocalSelection: requiresCompleteDataset",
+    );
     expect(source).toContain("scheduler.dispose();");
   });
 });

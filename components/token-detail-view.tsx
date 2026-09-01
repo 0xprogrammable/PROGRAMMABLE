@@ -27,6 +27,7 @@ import {
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { TokenDetailShell } from "@/components/token-detail-shell";
+import { TokenGmgnAnalytics } from "@/components/token-gmgn-analytics";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
 import { PartnerLaunchAttribution } from
   "@/components/partner-launch-attribution";
@@ -165,9 +166,21 @@ export const TOKEN_DETAIL_REQUEST_TIMEOUT_MS = 10_000;
 
 function chartTotalSupply(input: {
   totalSupply?: string;
+  totalSupplyRaw?: string;
+  tokenDecimals?: number;
   marketData?: TokenMarketDataV1;
 }) {
   if (input.totalSupply?.trim()) return input.totalSupply;
+  const rawSupply = parseUnsignedDecimal(input.totalSupplyRaw);
+  if (
+    rawSupply !== null &&
+    rawSupply !== "0" &&
+    Number.isSafeInteger(input.tokenDecimals) &&
+    Number(input.tokenDecimals) >= 0 &&
+    Number(input.tokenDecimals) <= 255
+  ) {
+    return formatUnits(BigInt(rawSupply), Number(input.tokenDecimals));
+  }
   const primaryPool = input.marketData?.pools.find(
     (pool) => pool.identity.poolId === input.marketData?.primaryPoolId,
   );
@@ -742,6 +755,10 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
   if (valuation === null || marketData === null || gmgnMarketData === null) {
     return null;
   }
+  const totalSupplyRaw = value.totalSupplyRaw === undefined
+    ? undefined
+    : parseUnsignedDecimal(value.totalSupplyRaw);
+  if (totalSupplyRaw === null || totalSupplyRaw === "0") return null;
   const project: DetailCustomProject = {
     exploreKind: "custom-project",
     id: value.id,
@@ -772,6 +789,7 @@ function parseCustomProject(value: unknown): DetailCustomProject | null {
       && value.tokenDecimals <= 255
       ? { tokenDecimals: value.tokenDecimals }
       : {}),
+    ...(totalSupplyRaw === undefined ? {} : { totalSupplyRaw }),
     launchCategoryProvenance: value.launchCategoryProvenance as CustomProjectExploreEntry["launchCategoryProvenance"],
     ...(valuation === undefined ? {} : { valuation }),
     ...(marketData === undefined ? {} : { marketData }),
@@ -1298,13 +1316,15 @@ export function marketDataProviderLabel(input: Readonly<{
   const valuationSource = input.valuation?.status === "available"
     ? input.valuation.source
     : undefined;
-  const usesGmgn = valuationSource === "gmgn";
-  const usesDexscreener = valuationSource === "dexscreener";
   const chartVolumeMetric = buildChartVolumeMetric(input.chartVolume ?? null);
-  const usesBitquery = input.chartVolume?.source === "bitquery" &&
-    chartVolumeMetric !== undefined &&
+  const usesDisplayedChartVolume = chartVolumeMetric !== undefined &&
     chartVolumeMetric.value !== "Loading…" &&
     chartVolumeMetric.value !== "Not available yet";
+  const usesGmgn = valuationSource === "gmgn" ||
+    (input.chartVolume?.source === "gmgn" && usesDisplayedChartVolume);
+  const usesDexscreener = valuationSource === "dexscreener";
+  const usesBitquery = input.chartVolume?.source === "bitquery" &&
+    usesDisplayedChartVolume;
   const providers = [
     ...(usesGmgn ? ["GMGN"] : []),
     ...(usesDexscreener ? ["Dexscreener"] : []),
@@ -2364,6 +2384,12 @@ function TokenDetailContent({
         ) : null}
 
       </div>
+      {chainId === 1 && !preview ? (
+        <TokenGmgnAnalytics
+          tokenAddress={token.tokenAddress}
+          tokenName={token.name}
+        />
+      ) : null}
       <CreatorArticle
         article={visibleCreatorArticle}
         editAction={creatorProject && creatorAddress ? (
@@ -2527,10 +2553,12 @@ function customMarketMetrics(project: DetailCustomProject): TokenMetric[] {
 function CustomProjectDetailContent({
   project,
   chainId,
+  preview = false,
   creatorArticle = null,
 }: {
   project: DetailCustomProject;
   chainId: number;
+  preview?: boolean;
   creatorArticle?: CreatorArticleV1 | null;
 }) {
   const {
@@ -2799,6 +2827,12 @@ function CustomProjectDetailContent({
           </p>
         </section>
       </div>
+      {chainId === 1 && !preview && project.tokenAddress ? (
+        <TokenGmgnAnalytics
+          tokenAddress={project.tokenAddress}
+          tokenName={project.name}
+        />
+      ) : null}
       <CreatorArticle
         article={visibleCreatorArticle}
         editAction={creatorProject && isAddress(project.launchingWallet.value) ? (
@@ -2945,6 +2979,7 @@ export function TokenDetailView({
       <CustomProjectDetailContent
         project={previewCustomProject}
         chainId={chainId}
+        preview
       />
     );
   }
@@ -2980,6 +3015,7 @@ export function TokenDetailView({
       <CustomProjectDetailContent
         project={activeState.project}
         chainId={activeState.chainId}
+        preview={false}
         creatorArticle={activeState.creatorArticle}
       />
     );

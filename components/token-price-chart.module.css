@@ -50,6 +50,13 @@
   min-height: 14px;
 }
 
+.scope {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+  margin: 3px 0 0;
+}
+
 .ranges {
   align-items: center;
   background: var(--liquid-glass-inner-background);

@@ -8,6 +8,13 @@ export const PROGRAMMABLE_GMGN_MARKET_SNAPSHOT_SCHEMA_VERSION =
 export type GmgnMarketSnapshotV1 = Readonly<{
   schemaVersion: typeof PROGRAMMABLE_GMGN_MARKET_SNAPSHOT_SCHEMA_VERSION;
   source: "gmgn";
+  marketScope: "token";
+  /**
+   * exact means token_info returned the canonical bytes32 v4 PoolId in both
+   * locator fields. unavailable means it returned only a coherent 20-byte
+   * provider pool contract locator.
+   */
+  poolAttribution: "exact" | "unavailable";
   currency: "USD";
   fetchedAt: string;
   identity: MarketChartIdentityV1;
@@ -29,6 +36,9 @@ export function isGmgnMarketSnapshotV1(
   return value.schemaVersion ===
       PROGRAMMABLE_GMGN_MARKET_SNAPSHOT_SCHEMA_VERSION &&
     value.source === "gmgn" &&
+    value.marketScope === "token" &&
+    (value.poolAttribution === "exact" ||
+      value.poolAttribution === "unavailable") &&
     value.currency === "USD" &&
     exactIsoTime(value.fetchedAt) &&
     positiveInteger(value.priceUsdWad) &&

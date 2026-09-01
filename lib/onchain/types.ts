@@ -168,6 +168,7 @@ export type ExploreReadModel =
 export type ExploreSort =
   | "newest"
   | "oldest"
+  | "trending"
   | "market-cap"
   | "market-cap-asc";
 

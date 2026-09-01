@@ -245,6 +245,16 @@ ALTER TABLE programmable_website_projection_migrations.migration_evidence_v1
     CHECK (version ~ '^000[1-6]$');
 `;
 
+const EVIDENCE_0007_DDL = `
+ALTER TABLE programmable_website_projection_migrations.migration_evidence_v1
+  DROP CONSTRAINT migration_evidence_v1_ordinal_check,
+  DROP CONSTRAINT migration_evidence_v1_version_check,
+  ADD CONSTRAINT migration_evidence_v1_ordinal_check
+    CHECK (ordinal BETWEEN 1 AND 7),
+  ADD CONSTRAINT migration_evidence_v1_version_check
+    CHECK (version ~ '^000[1-7]$');
+`;
+
 function evidenceDdl(plan) {
   validateWebsiteProjectionPlan(plan);
   return EVIDENCE_DDL.replace(
@@ -306,6 +316,12 @@ GRANT INSERT, DELETE
   TO programmable_website_projection_runtime;
 GRANT SELECT (gate_id, generation)
   ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+  TO programmable_website_projection_runtime;
+`;
+
+const FINAL_GMGN_MULTIFLIGHT_PRIVILEGES = `
+GRANT SELECT, INSERT, DELETE
+  ON programmable_website_projection_v1.gmgn_account_gate_leases_v1
   TO programmable_website_projection_runtime;
 `;
 
@@ -1692,11 +1708,17 @@ async function applyOneMigration({
     if (migration.ordinal === 6) {
       await executeSimple(transaction, EVIDENCE_0006_DDL);
     }
+    if (migration.ordinal === 7) {
+      await executeSimple(transaction, EVIDENCE_0007_DDL);
+    }
     await executeSimple(transaction, executionSource);
     if (migration.ordinal === plan.migrationCount) {
       await executeSimple(transaction, FINAL_PRIVILEGES);
-      if (plan.migrationCount === 6) {
+      if (plan.migrationCount >= 6) {
         await executeSimple(transaction, FINAL_GMGN_PRIVILEGES);
+      }
+      if (plan.migrationCount >= 7) {
+        await executeSimple(transaction, FINAL_GMGN_MULTIFLIGHT_PRIVILEGES);
       }
     }
     const roleGraph = await readRoleGraph(transaction, migration.ordinal);

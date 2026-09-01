@@ -541,7 +541,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("Token detail market read failed", {
-      name: error instanceof Error ? error.name : "DexscreenerReadError",
+      name: error instanceof Error ? error.name : "ExploreMarketReadError",
     });
     // Unexpected adapter failures remain fail-soft: the already verified
     // identity is returned without valuation rather than hidden behind a 503.

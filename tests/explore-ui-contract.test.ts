@@ -151,11 +151,15 @@ describe("Explore UI contract", () => {
     );
 
     expect(source).toContain('id="explore-model-label"');
+    expect(source).toContain('id="explore-discovery-label"');
     expect(source).toContain('id="explore-valuation-label"');
     expect(source).toContain('id="explore-age-label"');
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
     expect(source).toContain('{ id: "custom-hook", label: "Custom" }');
+    expect(source).toContain('>Trending</span>');
+    expect(source).toContain('sort,\n      page: String(currentPage)');
+    expect(source).toContain('aria-label={viewChainId === 1');
     expect(source).toContain(
       'valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT',
     );

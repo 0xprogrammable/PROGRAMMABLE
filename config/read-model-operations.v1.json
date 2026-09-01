@@ -360,8 +360,14 @@
     "publicRoutes": [
       "/",
       "/api/ops/health",
-      "/api/explore?limit=6&page=1&sort=market-cap",
+      "/api/explore?limit=9&page=1&sort=market-cap",
+      "/api/explore?limit=100&page=1&sort=newest",
+      "/api/explore?limit=100&page=1&sort=newest&q={canonicalTokenAddress}",
+      "/api/explore?limit=100&page=1&sort=trending",
       "/api/explore/token",
+      "/api/explore/token/analytics?chain=1&address={canonicalTokenAddress}&section=summary",
+      "/api/explore/token/analytics?chain=1&address={canonicalTokenAddress}&section=holders&limit=20",
+      "/api/explore/token/analytics?chain=1&address={canonicalTokenAddress}&section=traders&limit=20",
       "/api/explore/token/chart",
       "/api/explore/profile",
       "/api/profile/classic-v3",
@@ -370,20 +376,25 @@
       "/api/trade/prepare"
     ],
     "sources": {
-      "launchIdentity": "commitment-bound-drpc-primary",
-      "creatorIdentity": "commitment-bound-drpc-primary",
-      "actionState": "commitment-bound-drpc-primary",
-      "market": "bitquery",
-      "fdv": "bitquery",
-      "chart": "bitquery"
+      "launchIdentity": "envio-classic-v3-or-bounded-last-good+registry.custom-launched+canonical-launch-stamp-router",
+      "creatorIdentity": "envio-classic-v3+envio-classic-v2-claims+canonical-launch-stamp-router+commitment-bound-rpc-profile-state",
+      "actionState": "canonical-launch-stamp-router+bitquery-stock-identity+commitment-bound-rpc-current-state",
+      "market": "gmgn-visible-and-market-cap-ranking-primary+gmgn-token-info-unobserved-ranking-primary+dexscreener-visible-and-unqualified-ranking-fallback",
+      "fdv": "gmgn-visible-and-unobserved-ranking-primary+dexscreener-visible-and-unqualified-ranking-fallback",
+      "discovery": "gmgn-canonical-intersection-with-launch-order-fallback+gmgn-search-canonical-intersection-with-local-match-fallback",
+      "analytics": "gmgn-token-level+gmgn-token-level-pool-info",
+      "chart": "gmgn-token-level-primary+bitquery-exact-pool-fallback"
     },
     "rpc": {
       "provider": "drpc",
       "role": "primary",
       "endpointCommitmentRequired": true,
-      "secondaryRequired": false
+      "secondaryProvider": "quicknode",
+      "secondaryRole": "eligible-transport-capacity-failover",
+      "secondaryEndpointCommitmentRequired": true,
+      "secondaryRequired": true
     },
-    "fallbacks": false,
+    "fallbacks": true,
     "providerUrlExposure": false
   }
 }

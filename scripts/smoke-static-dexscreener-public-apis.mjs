@@ -50,12 +50,24 @@ const EXPLORE_MARKET_PROVIDERS = new Set([
 const EXPLORE_SNAPSHOT_ATTEMPTS = 3;
 const EXPLORE_SNAPSHOT_RETRY_DELAY_MS = 16_000;
 const VISIBLE_EXPLORE_PAGE_SIZE = 9;
+const TRENDING_EXPLORE_PAGE_SIZE = 100;
+const TRENDING_EXPLORE_MAXIMUM_PAGES = 100;
+const TRENDING_SNAPSHOT_ATTEMPTS = 2;
+const GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8;
 const PROVIDER_RECENT_MAXIMUM_AGE_MS = 5 * 60_000;
+const MINIMUM_FDV_LIQUIDITY_USD_WAD = 10_000n * 10n ** 18n;
 
 class ExploreCatalogBoundaryDriftError extends Error {
   constructor(message) {
     super(message);
     this.name = "ExploreCatalogBoundaryDriftError";
+  }
+}
+
+class ExploreDiscoverySnapshotDriftError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ExploreDiscoverySnapshotDriftError";
   }
 }
 
@@ -587,11 +599,44 @@ function healthHasSensitiveData(value, depth = 0) {
 
 function exactInformationalHealth(response) {
   const checkedAt = response.body?.checkedAt;
+  const primaryProvider = response.body?.provider;
+  const providers = response.body?.providers;
+  const gmgn = providers?.[0];
+  const bitquery = providers?.[1];
+  const dexscreener = providers?.[2];
+  const gmgnRequestsPerSecond = gmgn?.requestsPerSecond;
+  const gmgnAccountGateMode = gmgn?.accountGateMode;
+  const gmgnAccountGateReady = gmgnAccountGateMode === "multiflight-v1" ||
+    (gmgnAccountGateMode === "legacy-singleflight-v1" &&
+      Number.isSafeInteger(gmgnRequestsPerSecond) &&
+      gmgnRequestsPerSecond < 20);
+  const providerStackReady = gmgn?.configured === true &&
+    bitquery?.configured === true && dexscreener?.configured === true &&
+    gmgnAccountGateReady;
   return response.status === 200 &&
-    ["ready", "degraded"].includes(response.body?.status) &&
-    typeof response.body?.provider?.name === "string" &&
-    response.body.provider.name.trim() !== "" &&
-    typeof response.body.provider.configured === "boolean" &&
+    response.body?.status === (providerStackReady ? "ready" : "degraded") &&
+    primaryProvider?.name === "gmgn" &&
+    typeof primaryProvider.configured === "boolean" &&
+    Array.isArray(providers) &&
+    providers.length === 3 &&
+    gmgn?.name === "gmgn" &&
+    gmgn.role === "primary-token-market" &&
+    typeof gmgn.configured === "boolean" &&
+    gmgn.configured === primaryProvider.configured &&
+    Number.isSafeInteger(gmgnRequestsPerSecond) &&
+    gmgnRequestsPerSecond >= 1 &&
+    gmgnRequestsPerSecond <= 20 &&
+    [
+      "multiflight-v1",
+      "legacy-singleflight-v1",
+      "unavailable",
+    ].includes(gmgnAccountGateMode) &&
+    bitquery?.name === "bitquery" &&
+    bitquery.role === "exact-pool-chart-fallback" &&
+    typeof bitquery.configured === "boolean" &&
+    dexscreener?.name === "dexscreener" &&
+    dexscreener.role === "batch-fail-soft-fallback" &&
+    dexscreener.configured === true &&
     ISO_TIMESTAMP.test(String(checkedAt ?? "")) &&
     new Date(Date.parse(checkedAt)).toISOString() === checkedAt &&
     !healthHasSensitiveData(response.body);
@@ -641,6 +686,8 @@ function exactGmgnSnapshot(token, nowMs) {
       "fetchedAt",
       "identity",
       "liquidityUsdWad",
+      "marketScope",
+      "poolAttribution",
       "priceUsdWad",
       "schemaVersion",
       "source",
@@ -656,11 +703,14 @@ function exactGmgnSnapshot(token, nowMs) {
     ]) ||
     snapshot.schemaVersion !== "programmable.gmgn-market-snapshot.v1" ||
     snapshot.source !== "gmgn" ||
+    snapshot.marketScope !== "token" ||
+    !["exact", "unavailable"].includes(snapshot.poolAttribution) ||
     snapshot.currency !== "USD" ||
     !currentProviderTimestamp(snapshot.fetchedAt, nowMs) ||
     !POSITIVE_INTEGER.test(String(snapshot.priceUsdWad ?? "")) ||
     !POSITIVE_INTEGER.test(String(snapshot.fdvUsdWad ?? "")) ||
     !POSITIVE_INTEGER.test(String(snapshot.liquidityUsdWad ?? "")) ||
+    BigInt(snapshot.liquidityUsdWad) < MINIMUM_FDV_LIQUIDITY_USD_WAD ||
     !unsignedInteger(snapshot.volume24hUsdWad) ||
     !Number.isSafeInteger(snapshot.swapCount24h) ||
     snapshot.swapCount24h < 0 ||
@@ -717,6 +767,7 @@ function exactCatalogSnapshot(
   response,
   options = { requireLaunchIdentity: true },
 ) {
+  const readSourceSuffix = options.readSourceSuffix ?? "";
   const catalog = response.body?.catalog;
   const source = catalog?.source;
   const generatedAt = catalog?.lastIndexedAt;
@@ -781,7 +832,7 @@ function exactCatalogSnapshot(
         "canonical-launch-stamp-router" &&
       EXPLORE_MARKET_PROVIDERS.has(marketProvider) &&
       response.headers.get("x-programmable-read-source") ===
-        `canonical-launch-stamp-router+${marketProvider}` &&
+        `canonical-launch-stamp-router+${marketProvider}${readSourceSuffix}` &&
       response.headers.get("x-programmable-canonical-read-status") ===
         "unavailable" &&
       response.headers.get("x-programmable-router-read-status") ===
@@ -894,7 +945,7 @@ function exactCatalogSnapshot(
       launchSource &&
     EXPLORE_MARKET_PROVIDERS.has(marketProvider) &&
     response.headers.get("x-programmable-read-source") ===
-      `${launchSource}+${marketProvider}` &&
+      `${launchSource}+${marketProvider}${readSourceSuffix}` &&
     response.headers.get("x-programmable-identity-last-indexed-at") ===
       generatedAt &&
     (
@@ -1014,6 +1065,7 @@ function exactVisibleMarketRead(response, tokens, nowMs) {
     !Number.isSafeInteger(read.gmgnObservedCount) ||
     !Number.isSafeInteger(read.gmgnQualifiedCount) ||
     !Number.isSafeInteger(read.fallbackRequestedCount) ||
+    !Number.isSafeInteger(read.fallbackObservedCount) ||
     !Number.isSafeInteger(read.fallbackQualifiedCount) ||
     read.gmgnObservedCount < 0 ||
     read.gmgnObservedCount > read.requestedCount ||
@@ -1021,15 +1073,17 @@ function exactVisibleMarketRead(response, tokens, nowMs) {
     read.gmgnQualifiedCount > read.gmgnObservedCount ||
     read.fallbackRequestedCount !==
       read.requestedCount - read.gmgnQualifiedCount ||
+    read.fallbackObservedCount < 0 ||
+    read.fallbackObservedCount > read.fallbackRequestedCount ||
     read.fallbackQualifiedCount < 0 ||
-    read.fallbackQualifiedCount > read.fallbackRequestedCount ||
+    read.fallbackQualifiedCount > read.fallbackObservedCount ||
     read.qualifiedCount !==
       read.gmgnQualifiedCount + read.fallbackQualifiedCount ||
     read.observedCount <
-      Math.max(read.gmgnObservedCount, read.fallbackQualifiedCount) ||
+      Math.max(read.gmgnObservedCount, read.fallbackObservedCount) ||
     read.observedCount > Math.min(
       read.requestedCount,
-      read.gmgnObservedCount + read.fallbackQualifiedCount,
+      read.gmgnObservedCount + read.fallbackObservedCount,
     ) ||
     response.headers.get("x-programmable-market-provider") !==
       (read.fallbackRequestedCount > 0 ? "gmgn+dexscreener" : "gmgn") ||
@@ -1054,7 +1108,7 @@ function exactVisibleMarketRead(response, tokens, nowMs) {
   ) return false;
   const marketSources = [
     ...(read.gmgnObservedCount > 0 ? ["gmgn"] : []),
-    ...(read.fallbackQualifiedCount > 0 ? ["dexscreener"] : []),
+    ...(read.fallbackObservedCount > 0 ? ["dexscreener"] : []),
   ];
   const priceSources = [
     ...(read.gmgnQualifiedCount > 0 ? ["gmgn"] : []),
@@ -1119,50 +1173,451 @@ function exactDetailMarketRead(response, token, launchSource, nowMs) {
   );
 }
 
-function exactFdvRanking(response, tokens, nowMs) {
+const MARKET_CAP_RANKING_KEYS = [
+  "applied",
+  "asOfTime",
+  "canonicalAddressCoverageBps",
+  "canonicalEntryCount",
+  "canonicalTailCount",
+  "canonicalTokenCount",
+  "direction",
+  "discardedProviderItemCount",
+  "fallbackProvider",
+  "fallbackQualifiedCount",
+  "fallbackRequestedCount",
+  "foreignTokenCount",
+  "gmgnHydrationDeferredCount",
+  "gmgnHydrationEligibleCount",
+  "gmgnHydrationLimit",
+  "gmgnHydrationObservedCount",
+  "gmgnHydrationQualifiedCount",
+  "gmgnHydrationRequestedCount",
+  "gmgnStatus",
+  "matchedTokenCount",
+  "matchedUniqueTokenCount",
+  "metricOrder",
+  "observedTokenCount",
+  "primaryProvider",
+  "qualifiedCount",
+  "rankInterval",
+  "rankLimit",
+  "rankingCommitment",
+  "requested",
+  "schemaVersion",
+  "source",
+  "status",
+  "totalCount",
+  "unobservedCanonicalEntryCount",
+].sort();
+
+function expectedMarketCapApplied(ranking) {
+  if (ranking.totalCount === 0) return "launch-order";
+  const hasRank = ranking.matchedTokenCount > 0;
+  const hasHydration = ranking.gmgnHydrationQualifiedCount > 0;
+  const hasFallback = ranking.fallbackQualifiedCount > 0;
+  const hasTail = ranking.canonicalTailCount > 0;
+  if (hasRank && hasHydration && hasFallback) {
+    return hasTail
+      ? "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv";
+  }
+  if (hasRank && hasHydration) {
+    return hasTail
+      ? "gmgn-market-cap-then-gmgn-token-info-fdv-then-launch-order"
+      : "gmgn-market-cap-then-gmgn-token-info-fdv";
+  }
+  if (hasRank && hasFallback) {
+    return hasTail
+      ? "gmgn-market-cap-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-market-cap-then-dexscreener-fdv";
+  }
+  if (hasRank) {
+    return ranking.matchedTokenCount === ranking.totalCount
+      ? "gmgn-market-cap"
+      : "gmgn-market-cap-then-launch-order";
+  }
+  if (hasHydration && hasFallback) {
+    return hasTail
+      ? "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-token-info-fdv-then-dexscreener-fdv";
+  }
+  if (hasHydration) {
+    return hasTail
+      ? "gmgn-token-info-fdv-then-launch-order"
+      : "gmgn-token-info-fdv";
+  }
+  if (hasFallback) {
+    return hasTail ? "qualified-fdv-then-launch-order" : "fdv";
+  }
+  return "launch-order";
+}
+
+function expectedMarketCapSource(ranking) {
+  const gmgnQualifiedCount = ranking.matchedTokenCount +
+    ranking.gmgnHydrationQualifiedCount;
+  if (gmgnQualifiedCount > 0) {
+    return ranking.fallbackQualifiedCount > 0
+      ? "gmgn+dexscreener"
+      : "gmgn";
+  }
+  return ranking.fallbackQualifiedCount > 0
+    ? "dexscreener"
+    : "canonical-launch-order";
+}
+
+function marketCapReadSourceSuffix(response) {
+  return response.body?.ranking?.gmgnStatus === "unavailable"
+    ? ""
+    : "+gmgn-ranking";
+}
+
+function exactMarketCapRanking(response, canonicalTokens, direction, nowMs) {
   const ranking = response.body?.ranking;
+  const canonicalAddresses = new Set(canonicalTokens.flatMap((token) => {
+    const address = canonicalMarketAddress(token?.tokenAddress);
+    return address === null ? [] : [address];
+  }));
+  if (!exactObjectKeys(ranking, MARKET_CAP_RANKING_KEYS)) return false;
+  const integerFields = [
+    "observedTokenCount",
+    "matchedTokenCount",
+    "matchedUniqueTokenCount",
+    "canonicalEntryCount",
+    "canonicalTokenCount",
+    "unobservedCanonicalEntryCount",
+    "canonicalAddressCoverageBps",
+    "foreignTokenCount",
+    "discardedProviderItemCount",
+    "gmgnHydrationLimit",
+    "gmgnHydrationEligibleCount",
+    "gmgnHydrationRequestedCount",
+    "gmgnHydrationObservedCount",
+    "gmgnHydrationQualifiedCount",
+    "gmgnHydrationDeferredCount",
+    "fallbackRequestedCount",
+    "fallbackQualifiedCount",
+    "canonicalTailCount",
+    "qualifiedCount",
+    "totalCount",
+  ];
   if (
-    !["complete", "partial", "unavailable"].includes(ranking?.status) ||
-    ranking.requested !== "fdv" ||
+    integerFields.some((field) =>
+      !Number.isSafeInteger(ranking[field]) || ranking[field] < 0
+    ) ||
+    ranking.schemaVersion !== "programmable.explore-market-cap-ranking.v1" ||
+    ranking.requested !== "market-cap" ||
+    ranking.direction !== direction ||
+    ranking.primaryProvider !== "gmgn" ||
+    ranking.fallbackProvider !== "dexscreener" ||
+    ranking.metricOrder !==
+      "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order" ||
+    ranking.rankInterval !== "1h" ||
+    ranking.rankLimit !== 100 ||
+    ranking.gmgnHydrationLimit !== 100 ||
+    !/^sha256:[0-9a-f]{64}$/u.test(String(ranking.rankingCommitment ?? "")) ||
+    ranking.canonicalEntryCount !== canonicalTokens.length ||
+    ranking.totalCount !== canonicalTokens.length ||
     ranking.totalCount !== response.body?.total ||
-    !Number.isSafeInteger(ranking.qualifiedCount) ||
-    ranking.qualifiedCount < 0 ||
-    ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount ||
-    ranking.qualifiedCount > ranking.totalCount
+    ranking.canonicalTokenCount !== canonicalAddresses.size ||
+    ranking.observedTokenCount > 100 ||
+    ranking.foreignTokenCount > ranking.observedTokenCount ||
+    ranking.matchedTokenCount > ranking.canonicalEntryCount ||
+    ranking.matchedUniqueTokenCount > ranking.matchedTokenCount ||
+    ranking.matchedUniqueTokenCount > ranking.canonicalTokenCount ||
+    ranking.observedTokenCount !==
+      ranking.matchedUniqueTokenCount + ranking.foreignTokenCount ||
+    ranking.unobservedCanonicalEntryCount !==
+      ranking.canonicalEntryCount - ranking.matchedTokenCount ||
+    ranking.gmgnHydrationEligibleCount >
+      ranking.unobservedCanonicalEntryCount ||
+    ranking.gmgnHydrationRequestedCount !==
+      Math.min(
+        ranking.gmgnHydrationEligibleCount,
+        ranking.gmgnHydrationLimit,
+      ) ||
+    ranking.gmgnHydrationObservedCount >
+      ranking.gmgnHydrationRequestedCount ||
+    ranking.gmgnHydrationQualifiedCount >
+      ranking.gmgnHydrationObservedCount ||
+    ranking.gmgnHydrationDeferredCount !==
+      ranking.gmgnHydrationEligibleCount -
+        ranking.gmgnHydrationRequestedCount ||
+    ranking.fallbackRequestedCount !==
+      ranking.unobservedCanonicalEntryCount -
+        ranking.gmgnHydrationQualifiedCount ||
+    ranking.fallbackQualifiedCount > ranking.fallbackRequestedCount ||
+    ranking.qualifiedCount !==
+      ranking.matchedTokenCount + ranking.gmgnHydrationQualifiedCount +
+        ranking.fallbackQualifiedCount ||
+    ranking.canonicalTailCount !==
+      ranking.totalCount - ranking.qualifiedCount ||
+    ranking.qualifiedCount > ranking.totalCount ||
+    ranking.canonicalAddressCoverageBps > 10_000 ||
+    ranking.canonicalAddressCoverageBps !==
+      (ranking.canonicalTokenCount === 0
+        ? 0
+        : Math.floor(
+            ranking.matchedUniqueTokenCount * 10_000 /
+              ranking.canonicalTokenCount,
+          )) ||
+    ranking.source !== expectedMarketCapSource(ranking) ||
+    ranking.applied !== expectedMarketCapApplied(ranking)
   ) return false;
-  const qualified = tokens.filter((token) =>
-    qualifiedDexscreenerFdv(token, nowMs)
-  );
-  const unavailable = tokens.filter(exactUnavailableValuation);
-  if (qualified.length + unavailable.length !== tokens.length) return false;
-  let encounteredUnavailable = false;
-  for (const token of tokens) {
-    if (qualifiedDexscreenerFdv(token, nowMs)) {
-      if (encounteredUnavailable) return false;
-    } else {
-      encounteredUnavailable = true;
-    }
+  const expectedStatus = ranking.qualifiedCount === 0 || ranking.totalCount === 0
+    ? "unavailable"
+    : ranking.qualifiedCount === ranking.totalCount
+      ? "complete"
+      : "partial";
+  const gmgnQualifiedCount = ranking.matchedTokenCount +
+    ranking.gmgnHydrationQualifiedCount;
+  const expectedGmgnStatus = gmgnQualifiedCount === 0 ||
+      ranking.totalCount === 0
+    ? "unavailable"
+    : gmgnQualifiedCount === ranking.totalCount
+      ? "complete"
+      : "partial";
+  const exactAsOfTime = ranking.qualifiedCount === 0
+    ? ranking.asOfTime === null
+    : currentProviderTimestamp(ranking.asOfTime, nowMs);
+  return ranking.status === expectedStatus &&
+    ranking.gmgnStatus === expectedGmgnStatus &&
+    exactAsOfTime &&
+    (ranking.gmgnStatus === "unavailable" || ranking.asOfTime !== null) &&
+    response.headers.get("x-programmable-ranking-primary-provider") ===
+      "gmgn" &&
+    response.headers.get("x-programmable-ranking-source") === ranking.source &&
+    response.headers.get("x-programmable-ranking-read-status") ===
+      ranking.status &&
+    response.headers.get("x-programmable-ranking-gmgn-status") ===
+      ranking.gmgnStatus &&
+    response.headers.get("x-programmable-ranking-commitment") ===
+      ranking.rankingCommitment;
+}
+
+function exactRequiredGmgnMarketCapRanking(response, nowMs) {
+  const ranking = response.body?.ranking;
+  return ranking?.gmgnStatus !== "unavailable" &&
+    ranking?.matchedTokenCount > 0 &&
+    ranking?.matchedUniqueTokenCount > 0 &&
+    currentProviderTimestamp(ranking?.asOfTime, nowMs) &&
+    /^sha256:[0-9a-f]{64}$/u.test(String(ranking?.rankingCommitment ?? ""));
+}
+
+const SEARCH_RANKING_KEYS = [
+  "applied",
+  "asOfTime",
+  "canonicalAddressCoverageBps",
+  "canonicalMatchCount",
+  "canonicalMatchTokenCount",
+  "discardedProviderItemCount",
+  "duplicateProviderItemCount",
+  "foreignTokenCount",
+  "matchedTokenCount",
+  "matchedUniqueTokenCount",
+  "observedTokenCount",
+  "orderBy",
+  "provider",
+  "providerOnlyCanonicalTokenCount",
+  "rankingCommitment",
+  "requested",
+  "schemaVersion",
+  "status",
+  "unobservedCanonicalMatchCount",
+].sort();
+
+function searchReadSourceSuffix(response) {
+  return response.body?.search?.asOfTime === null ? "" : "+gmgn-search";
+}
+
+function exactSearchRanking(response, canonicalMatches, query, nowMs) {
+  const search = response.body?.search;
+  const canonicalAddresses = new Set(canonicalMatches.flatMap((token) => {
+    const address = canonicalMarketAddress(token?.tokenAddress);
+    return address === null ? [] : [address];
+  }));
+  if (!exactObjectKeys(search, SEARCH_RANKING_KEYS)) return false;
+  const integerFields = [
+    "observedTokenCount",
+    "matchedTokenCount",
+    "matchedUniqueTokenCount",
+    "canonicalMatchCount",
+    "canonicalMatchTokenCount",
+    "unobservedCanonicalMatchCount",
+    "providerOnlyCanonicalTokenCount",
+    "foreignTokenCount",
+    "discardedProviderItemCount",
+    "duplicateProviderItemCount",
+    "canonicalAddressCoverageBps",
+  ];
+  if (
+    integerFields.some((field) =>
+      !Number.isSafeInteger(search[field]) || search[field] < 0
+    ) ||
+    search.schemaVersion !== "programmable.explore-search-ranking.v1" ||
+    search.provider !== "gmgn" ||
+    search.requested !== "search" ||
+    search.orderBy !== "weight" ||
+    response.body?.query !== query ||
+    search.canonicalMatchCount !== canonicalMatches.length ||
+    search.canonicalMatchCount !== response.body?.total ||
+    search.canonicalMatchTokenCount !== canonicalAddresses.size ||
+    search.matchedTokenCount > search.canonicalMatchCount ||
+    search.matchedUniqueTokenCount > search.matchedTokenCount ||
+    search.matchedUniqueTokenCount > search.canonicalMatchTokenCount ||
+    search.unobservedCanonicalMatchCount !==
+      search.canonicalMatchCount - search.matchedTokenCount ||
+    search.providerOnlyCanonicalTokenCount > search.matchedUniqueTokenCount ||
+    search.foreignTokenCount > search.observedTokenCount ||
+    search.observedTokenCount !==
+      search.matchedUniqueTokenCount + search.foreignTokenCount ||
+    search.canonicalAddressCoverageBps > 10_000 ||
+    search.canonicalAddressCoverageBps !==
+      (search.canonicalMatchTokenCount === 0
+        ? 0
+        : Math.floor(
+            search.matchedUniqueTokenCount * 10_000 /
+              search.canonicalMatchTokenCount,
+          )) ||
+    search.applied !== (search.matchedTokenCount > 0
+      ? "gmgn-canonical-search-with-local-match-fallback"
+      : "local-match-order") ||
+    !/^sha256:[0-9a-f]{64}$/u.test(String(search.rankingCommitment ?? ""))
+  ) return false;
+  const providerUsable = currentProviderTimestamp(search.asOfTime, nowMs);
+  const expectedStatus = providerUsable
+    ? search.matchedTokenCount === search.canonicalMatchCount
+      ? "complete"
+      : "partial"
+    : "unavailable";
+  return (search.asOfTime === null || providerUsable) &&
+    search.status === expectedStatus &&
+    response.headers.get("x-programmable-search-provider") === "gmgn" &&
+    response.headers.get("x-programmable-search-read-status") ===
+      search.status &&
+    response.headers.get("x-programmable-search-matched-count") ===
+      String(search.matchedTokenCount) &&
+    response.headers.get("x-programmable-search-matched-unique-count") ===
+      String(search.matchedUniqueTokenCount) &&
+    response.headers.get("x-programmable-search-ranking-commitment") ===
+      search.rankingCommitment;
+}
+
+function exactRequiredGmgnSearch(response, nowMs) {
+  const search = response.body?.search;
+  return currentProviderTimestamp(search?.asOfTime, nowMs) &&
+    search?.matchedTokenCount > 0 &&
+    search?.matchedUniqueTokenCount > 0 &&
+    /^sha256:[0-9a-f]{64}$/u.test(String(search?.rankingCommitment ?? ""));
+}
+
+async function readBoundSearchSnapshot({
+  request,
+  canonicalTokens,
+  catalogSnapshot,
+  requireGmgnMarket,
+  now,
+}) {
+  const searchable = (token) =>
+    canonicalMarketAddress(token?.tokenAddress) !== null &&
+    exactIdentity(token) !== null;
+  const searchTarget = canonicalTokens.find((token) =>
+    token?.exploreKind === "token" && searchable(token)
+  ) ?? canonicalTokens.find(searchable);
+  const query = canonicalMarketAddress(searchTarget?.tokenAddress);
+  const targetIdentity = exactIdentity(searchTarget);
+  if (query === null || targetIdentity === null) {
+    throw new Error("Explore returned no canonical search identity");
   }
-  for (let index = 1; index < qualified.length; index += 1) {
+
+  const responses = [];
+  const matchedTokens = [];
+  let totalPages = null;
+  let expectedTotal = null;
+  let expectedSearch = null;
+  for (let page = 1; page <= (totalPages ?? 1); page += 1) {
+    const response = await request(
+      `/api/explore?limit=100&page=${page}&sort=newest&q=${
+        encodeURIComponent(query)
+      }`,
+    );
+    const pageTokens = Array.isArray(response.body?.tokens)
+      ? response.body.tokens
+      : [];
+    const searchCatalog = exactCatalogSnapshot(
+      {
+        ...response,
+        body: {
+          ...response.body,
+          total: response.body?.catalog?.identityCount,
+        },
+      },
+      {
+        requireLaunchIdentity: true,
+        readSourceSuffix: searchReadSourceSuffix(response),
+      },
+    );
     if (
-      BigInt(qualified[index - 1].valuation.valueWad) <
-        BigInt(qualified[index].valuation.valueWad)
-    ) return false;
+      response.status !== 200 ||
+      response.body?.status !== "ready" ||
+      response.body?.sort !== "newest" ||
+      response.body?.sortMetric !== "fdv" ||
+      response.body?.query !== query ||
+      response.body?.ranking !== undefined ||
+      response.body?.discovery !== undefined ||
+      response.body?.search === undefined ||
+      searchCatalog === null ||
+      !exactExplorePage(response, pageTokens, { page, pageSize: 100 }) ||
+      !exactVisibleMarketRead(response, pageTokens, now().getTime())
+    ) throw new Error("Canonical search response contract is invalid");
+    if (searchCatalog !== catalogSnapshot) {
+      throw new ExploreCatalogBoundaryDriftError(
+        "Explore catalog changed during canonical search",
+      );
+    }
+
+    if (page === 1) {
+      totalPages = response.body.totalPages;
+      expectedTotal = response.body.total;
+      expectedSearch = JSON.stringify(response.body.search);
+      if (
+        !Number.isSafeInteger(totalPages) ||
+        totalPages < 1 ||
+        totalPages > 100
+      ) throw new Error("Canonical search exceeds bounded smoke pagination");
+    } else if (
+      response.body.total !== expectedTotal ||
+      response.body.totalPages !== totalPages ||
+      JSON.stringify(response.body.search) !== expectedSearch
+    ) {
+      throw new ExploreCatalogBoundaryDriftError(
+        "Canonical search snapshot changed during pagination",
+      );
+    }
+    responses.push(response);
+    matchedTokens.push(...pageTokens);
   }
-  if (ranking.status === "complete") {
-    return ranking.applied === "fdv" &&
-      ranking.qualifiedCount === ranking.totalCount &&
-      qualified.length === tokens.length;
-  }
-  if (ranking.status === "partial") {
-    return ranking.applied === "qualified-fdv-then-launch-order" &&
-      ranking.qualifiedCount > 0 &&
-      ranking.qualifiedCount < ranking.totalCount &&
-      qualified.length === Math.min(tokens.length, ranking.qualifiedCount);
-  }
-  return ranking.applied === "launch-order" &&
-    ranking.qualifiedCount === 0 &&
-    qualified.length === 0;
+
+  const matchedIdentities = matchedTokens.map(exactIdentity);
+  const canonicalIdentitySet = new Set(canonicalTokens.map(exactIdentity));
+  if (
+    responses.length === 0 ||
+    matchedTokens.length !== expectedTotal ||
+    matchedIdentities.some((identity) => identity === null) ||
+    new Set(matchedIdentities).size !== matchedIdentities.length ||
+    matchedIdentities.some((identity) => !canonicalIdentitySet.has(identity)) ||
+    !matchedIdentities.includes(targetIdentity) ||
+    responses.some((response) =>
+      !exactSearchRanking(response, matchedTokens, query, now().getTime())
+    )
+  ) throw new Error("Canonical search ranking contract is invalid");
+  if (
+    requireGmgnMarket &&
+    !exactRequiredGmgnSearch(responses[0], now().getTime())
+  ) throw new Error("GMGN canonical search match is required");
+  return Object.freeze({
+    query,
+    search: responses[0].body.search,
+  });
 }
 
 function exactSamePageOrder(first, second) {
@@ -1178,6 +1633,453 @@ function exactSamePageOrder(first, second) {
     new Set(secondIds).size === secondIds.length &&
     firstIds.length === secondIds.length &&
     firstIds.every((identity, index) => identity === secondIds[index]);
+}
+
+const DISCOVERY_KEYS = [
+  "applied",
+  "asOfTime",
+  "canonicalAddressCoverageBps",
+  "canonicalEntryCount",
+  "canonicalTokenCount",
+  "discardedProviderItemCount",
+  "foreignTokenCount",
+  "hotSearchInterval",
+  "matchedTokenCount",
+  "matchedUniqueTokenCount",
+  "observedTokenCount",
+  "provider",
+  "rankInterval",
+  "rankingCommitment",
+  "requested",
+  "schemaVersion",
+  "snapshotCount",
+  "status",
+  "unobservedCanonicalEntryCount",
+].sort();
+
+function exactTrendingDiscovery(response, canonicalTokens, nowMs) {
+  const discovery = response.body?.discovery;
+  const canonicalAddresses = new Set(canonicalTokens.flatMap((token) => {
+    const address = canonicalMarketAddress(token?.tokenAddress);
+    return address === null ? [] : [address];
+  }));
+  const live = discovery?.status === "complete" || discovery?.status === "partial";
+  const timestampIsExact = discovery?.snapshotCount === 0
+    ? discovery?.asOfTime === null
+    : currentProviderTimestamp(discovery?.asOfTime, nowMs);
+  return exactObjectKeys(discovery, DISCOVERY_KEYS) &&
+    discovery.schemaVersion === "programmable.explore-discovery-ranking.v1" &&
+    discovery.provider === "gmgn" &&
+    discovery.requested === "trending" &&
+    /^sha256:[0-9a-f]{64}$/u.test(String(discovery.rankingCommitment ?? "")) &&
+    ["complete", "partial", "unavailable"].includes(discovery.status) &&
+    discovery.applied === (live
+      ? "gmgn-ranked-with-launch-order-fallback"
+      : "launch-order") &&
+    discovery.rankInterval === "1h" &&
+    discovery.hotSearchInterval === "24h" &&
+    Number.isSafeInteger(discovery.snapshotCount) &&
+    discovery.snapshotCount >= 0 && discovery.snapshotCount <= 2 &&
+    Number.isSafeInteger(discovery.observedTokenCount) &&
+    Number.isSafeInteger(discovery.matchedTokenCount) &&
+    Number.isSafeInteger(discovery.matchedUniqueTokenCount) &&
+    Number.isSafeInteger(discovery.foreignTokenCount) &&
+    Number.isSafeInteger(discovery.discardedProviderItemCount) &&
+    discovery.observedTokenCount >= 0 &&
+    discovery.matchedTokenCount >= 0 &&
+    discovery.matchedUniqueTokenCount >= 0 &&
+    discovery.matchedUniqueTokenCount <= discovery.matchedTokenCount &&
+    discovery.foreignTokenCount >= 0 &&
+    discovery.discardedProviderItemCount >= 0 &&
+    discovery.canonicalEntryCount === canonicalTokens.length &&
+    discovery.canonicalTokenCount === canonicalAddresses.size &&
+    discovery.matchedTokenCount <= discovery.canonicalEntryCount &&
+    discovery.unobservedCanonicalEntryCount ===
+      discovery.canonicalEntryCount - discovery.matchedTokenCount &&
+    (discovery.status !== "complete" ||
+      discovery.matchedTokenCount === discovery.canonicalEntryCount) &&
+    (discovery.status !== "partial" ||
+      (discovery.matchedTokenCount > 0 &&
+       discovery.matchedTokenCount < discovery.canonicalEntryCount)) &&
+    (discovery.status !== "unavailable" || discovery.matchedTokenCount === 0) &&
+    timestampIsExact &&
+    response.headers.get("x-programmable-discovery-provider") === "gmgn" &&
+    response.headers.get("x-programmable-discovery-read-status") ===
+      discovery.status &&
+    response.headers.get("x-programmable-discovery-matched-count") ===
+      String(discovery.matchedTokenCount) &&
+    response.headers.get("x-programmable-discovery-matched-unique-count") ===
+      String(discovery.matchedUniqueTokenCount) &&
+    response.headers.get("x-programmable-discovery-ranking-commitment") ===
+      discovery.rankingCommitment;
+}
+
+async function readBoundTrendingSnapshot({
+  request,
+  canonicalTokens,
+  catalogSnapshot,
+  requireGmgnMarket,
+  now,
+}) {
+  const totalPages = Math.ceil(canonicalTokens.length / TRENDING_EXPLORE_PAGE_SIZE);
+  if (totalPages > TRENDING_EXPLORE_MAXIMUM_PAGES) {
+    throw new Error("Trending catalog exceeds bounded smoke pagination");
+  }
+  let lastDrift = null;
+  for (let attempt = 0; attempt < TRENDING_SNAPSHOT_ATTEMPTS; attempt += 1) {
+    try {
+      const tokens = [];
+      let metadata = null;
+      let commitment = null;
+      for (let page = 1; page <= totalPages; page += 1) {
+        const response = await request(
+          `/api/explore?limit=${TRENDING_EXPLORE_PAGE_SIZE}&page=${page}&sort=trending`,
+        );
+        const pageTokens = Array.isArray(response.body?.tokens)
+          ? response.body.tokens
+          : [];
+        const discovery = response.body?.discovery;
+        const suffix = discovery?.status === "unavailable" ? "" : "+gmgn-discovery";
+        const pageCatalog = exactCatalogSnapshot(response, {
+          requireLaunchIdentity: true,
+          readSourceSuffix: suffix,
+        });
+        if (
+          response.status !== 200 || response.body?.status !== "ready" ||
+          response.body?.sort !== "trending" ||
+          response.body?.sortMetric !== "gmgn-trending" ||
+          response.body?.ranking !== undefined ||
+          response.body?.total !== canonicalTokens.length ||
+          !exactExplorePage(response, pageTokens, {
+            page,
+            pageSize: TRENDING_EXPLORE_PAGE_SIZE,
+          }) ||
+          !exactVisibleMarketRead(response, pageTokens, now().getTime()) ||
+          !exactTrendingDiscovery(response, canonicalTokens, now().getTime())
+        ) throw new Error("Trending discovery response contract is invalid");
+        if (pageCatalog !== catalogSnapshot) {
+          throw new ExploreCatalogBoundaryDriftError(
+            "Explore catalog changed during Trending pagination",
+          );
+        }
+        const serialized = JSON.stringify(discovery);
+        if (metadata === null) {
+          metadata = serialized;
+          commitment = discovery.rankingCommitment;
+        } else if (
+          serialized !== metadata ||
+          discovery.rankingCommitment !== commitment
+        ) {
+          throw new ExploreDiscoverySnapshotDriftError(
+            "Trending discovery snapshot changed during pagination",
+          );
+        }
+        tokens.push(...pageTokens);
+      }
+      const canonicalIds = canonicalTokens.map(exactIdentity);
+      const trendingIds = tokens.map(exactIdentity);
+      const canonicalIdSet = new Set(canonicalIds);
+      if (
+        tokens.length !== canonicalTokens.length ||
+        trendingIds.some((identity) => identity === null) ||
+        new Set(trendingIds).size !== trendingIds.length ||
+        trendingIds.some((identity) => !canonicalIdSet.has(identity))
+      ) throw new Error("Trending result is not the exact canonical set");
+      const discovery = JSON.parse(metadata);
+      const matchedCount = discovery.matchedTokenCount;
+      const prefix = trendingIds.slice(0, matchedCount);
+      const prefixSet = new Set(prefix);
+      const stableTail = canonicalIds.filter((identity) => !prefixSet.has(identity));
+      const matchedUniqueCanonicalAddresses = new Set(
+        tokens.slice(0, matchedCount).flatMap((token) => {
+          const address = canonicalMarketAddress(token?.tokenAddress);
+          return address === null ? [] : [address];
+        }),
+      );
+      if (
+        prefix.some((identity) => !canonicalIdSet.has(identity)) ||
+        JSON.stringify(trendingIds.slice(matchedCount)) !== JSON.stringify(stableTail) ||
+        discovery.observedTokenCount !==
+          matchedUniqueCanonicalAddresses.size + discovery.foreignTokenCount ||
+        discovery.matchedUniqueTokenCount !==
+          matchedUniqueCanonicalAddresses.size ||
+        discovery.canonicalAddressCoverageBps !==
+          (discovery.canonicalTokenCount === 0
+            ? 0
+            : Math.floor(
+                matchedUniqueCanonicalAddresses.size * 10_000 /
+                  discovery.canonicalTokenCount,
+              ))
+      ) throw new Error("Trending canonical prefix or stable tail is invalid");
+      if (
+        requireGmgnMarket &&
+        (discovery.status === "unavailable" ||
+          discovery.matchedTokenCount <= 0 ||
+          discovery.snapshotCount <= 0 ||
+          !currentProviderTimestamp(discovery.asOfTime, now().getTime()) ||
+          discovery.applied !== "gmgn-ranked-with-launch-order-fallback")
+      ) throw new Error("GMGN Trending discovery is required");
+      return { discovery, tokens };
+    } catch (error) {
+      if (!(error instanceof ExploreDiscoverySnapshotDriftError)) throw error;
+      lastDrift = error;
+    }
+  }
+  throw new Error("Trending discovery snapshot drifted across both bounded attempts", {
+    cause: lastDrift,
+  });
+}
+
+const ANALYTICS_SECURITY_KEYS = [
+  "averageTaxRatio", "bundlerTraderAmountRatio", "burnRatio", "burnStatus",
+  "buyTaxRatio", "canSellCount", "cannotSellCount", "creatorBalanceRatio",
+  "creatorTokenStatus", "developerTeamHoldRatio", "developerTokenBurnAmount",
+  "developerTokenBurnRatio", "fetchedAt", "flags", "hideRisk", "highTaxRatio",
+  "identity", "isBlacklisted", "isFreezeAccountRenounced", "isHoneypot",
+  "isMintRenounced", "isOpenSource", "isOwnerRenounced", "isShowAlert",
+  "isWashTrading", "lockSummary", "ratTraderAmountRatio", "rugRatio",
+  "schemaVersion", "sellTaxRatio", "sniperCount", "source",
+  "suspectedInsiderHoldRatio", "tokenAddress", "top10HolderRatio", // gitleaks:allow -- GMGN response field names, not credentials
+].sort();
+const ANALYTICS_POOL_KEYS = [
+  "baseAddress", "baseReserve", "baseReserveValueUsd", "creationTimestamp",
+  "currency", "exchange", "feeRatio", "fetchedAt", "identity",
+  "initialBaseReserve", "initialLiquidityUsd", "initialQuoteReserve",
+  "liquidityUsd", "marketScope", "poolAttribution", "priceUsd",
+  "providerAddress", "quoteAddress", "quoteReserve", "quoteReserveValueUsd",
+  "quoteSymbol", "schemaVersion", "source",
+  "token0Address", "token1Address", "tokenAddress",
+].sort();
+const ANALYTICS_WALLET_KEYS = [
+  "address", "amountRatio", "buyVolumeUsd", "profitRatio", "profitUsd",
+  "sellVolumeUsd", "usdValue",
+].sort();
+
+function sameAnalyticsIdentity(value, expected) {
+  return exactObjectKeys(value, [
+    "chainId", "poolId", "protocol", "quoteAddress", "tokenAddress",
+  ]) && value.chainId === "1" && value.protocol === "uniswap_v4" &&
+    canonicalMarketAddress(value.tokenAddress) === value.tokenAddress &&
+    value.tokenAddress === expected.tokenAddress &&
+    canonicalMarketPool(value.poolId) === value.poolId &&
+    value.poolId === expected.poolId &&
+    canonicalMarketAddress(value.quoteAddress) === value.quoteAddress &&
+    value.quoteAddress === expected.quoteAddress;
+}
+
+function exactAnalyticsHeaders(
+  response, status, section, launchSource, lastIndexedAt, referenceHeaders,
+) {
+  const cache = response.headers.get("cache-control");
+  const expectedCache = section === "summary"
+    ? new Set([
+        "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+        "public, max-age=0",
+      ])
+    : new Set(["private, max-age=0, no-store"]);
+  return expectedCache.has(cache) &&
+    response.headers.get("x-content-type-options") === "nosniff" &&
+    response.headers.get("referrer-policy") === "no-referrer" &&
+    response.headers.get("x-programmable-chain-id") === "1" &&
+    response.headers.get("x-programmable-launch-source") === launchSource &&
+    response.headers.get("x-programmable-read-source") === `${launchSource}+gmgn` &&
+    response.headers.get("x-programmable-identity-last-indexed-at") === lastIndexedAt &&
+    response.headers.get("x-programmable-canonical-read-status") ===
+      referenceHeaders.get("x-programmable-canonical-read-status") &&
+    response.headers.get("x-programmable-router-read-status") ===
+      referenceHeaders.get("x-programmable-router-read-status") &&
+    response.headers.get("x-programmable-analytics-provider") === "gmgn" &&
+    response.headers.get("x-programmable-analytics-scope") === "token" &&
+    response.headers.get("x-programmable-analytics-pool-attribution") ===
+      "unavailable" &&
+    response.headers.get("x-programmable-analytics-read-status") === status &&
+    response.headers.get("x-programmable-market-provider") === "gmgn" &&
+    response.headers.get("x-programmable-market-read-status") ===
+      (status === "ready" ? "complete" : status) &&
+    response.headers.get("x-programmable-data-quality") ===
+      (status === "ready" ? "current" : status) &&
+    response.headers.get("x-programmable-market-source") === "gmgn" &&
+    response.headers.get("x-programmable-market-as-of") === null &&
+    response.headers.get("x-programmable-price-source") === null &&
+    response.headers.get("x-programmable-valuation-block") === null &&
+    response.headers.get("set-cookie") === null &&
+    response.headers.get("location") === null;
+}
+
+function finiteNullable(value) {
+  return value === null || (typeof value === "number" && Number.isFinite(value));
+}
+
+function publicDecimal(value) {
+  return typeof value === "string" && value.length <= 160 &&
+    /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u.test(value);
+}
+
+function nullablePublicDecimal(value) {
+  return value === null || publicDecimal(value);
+}
+
+function nullablePublicRatio(value) {
+  return value === null ||
+    (publicDecimal(value) && Number(value) >= 0 && Number(value) <= 1);
+}
+
+function publicRatio(value) {
+  return publicDecimal(value) && Number(value) >= 0 && Number(value) <= 1;
+}
+
+function nullableBoolean(value) {
+  return value === null || typeof value === "boolean";
+}
+
+function nullableUnsignedSafeInteger(value) {
+  return value === null ||
+    (Number.isSafeInteger(value) && value >= 0);
+}
+
+function exactPublicSecurityTypes(security) {
+  const booleans = [
+    "isShowAlert", "isOpenSource", "isBlacklisted", "isHoneypot",
+    "isOwnerRenounced", "isMintRenounced", "isFreezeAccountRenounced",
+    "isWashTrading", "hideRisk",
+  ];
+  const ratios = [
+    "top10HolderRatio", "developerTeamHoldRatio", "creatorBalanceRatio",
+    "suspectedInsiderHoldRatio", "rugRatio", "ratTraderAmountRatio",
+    "bundlerTraderAmountRatio", "buyTaxRatio", "sellTaxRatio",
+    "averageTaxRatio", "highTaxRatio", "burnRatio", "developerTokenBurnRatio",
+  ];
+  const counts = ["sniperCount", "canSellCount", "cannotSellCount"];
+  return booleans.every((key) => nullableBoolean(security[key])) &&
+    ratios.every((key) => nullablePublicRatio(security[key])) &&
+    nullablePublicDecimal(security.developerTokenBurnAmount) &&
+    ["burnStatus", "creatorTokenStatus"].every((key) =>
+      security[key] === null ||
+      (typeof security[key] === "string" && security[key].length <= 128)
+    ) &&
+    counts.every((key) => nullableUnsignedSafeInteger(security[key])) &&
+    security.flags.every((flag) =>
+      typeof flag === "string" && flag.length <= 128
+    );
+}
+
+async function readRequiredGmgnAnalytics({
+  request, tokenAddress, identity, catalogBoundary, lastIndexedAt,
+  referenceHeaders, now,
+}) {
+  const reads = {};
+  for (const section of ["summary", "holders", "traders"]) {
+    const suffix = section === "summary" ? "" : "&limit=20";
+    const response = await request(
+      `/api/explore/token/analytics?chain=1&address=${encodeURIComponent(tokenAddress)}` +
+        `&section=${section}${suffix}`,
+    );
+    const body = response.body;
+    if (
+      response.status !== 200 ||
+      !exactObjectKeys(body, [
+        "analytics", "analyticsScope", "identity", "poolAttribution",
+        "provider", "schemaVersion", "section", "status",
+      ]) ||
+      body.schemaVersion !== "programmable.token-analytics.v1" ||
+      body.provider !== "gmgn" || body.analyticsScope !== "token" ||
+      body.poolAttribution !== "unavailable" || body.section !== section ||
+      !sameAnalyticsIdentity(body.identity, identity) ||
+      !exactAnalyticsHeaders(
+        response, body.status, section, catalogBoundary.launchSource,
+        lastIndexedAt, referenceHeaders,
+      )
+    ) throw new Error(`GMGN ${section} analytics envelope is invalid`);
+
+    if (section === "summary") {
+      const security = body.analytics?.security;
+      const pool = body.analytics?.pool;
+      const count = Number(security !== null) + Number(pool !== null);
+      if (
+        !exactObjectKeys(body.analytics, ["pool", "security"]) ||
+        body.status !== "ready" || count !== 2 ||
+        (security !== null && (
+          !exactObjectKeys(security, ANALYTICS_SECURITY_KEYS) ||
+          security.schemaVersion !== "programmable.gmgn-token-security.v1" ||
+          security.source !== "gmgn" ||
+          !currentProviderTimestamp(security.fetchedAt, now().getTime()) ||
+          canonicalMarketAddress(security.tokenAddress) !== security.tokenAddress ||
+          security.tokenAddress !== identity.tokenAddress ||
+          !sameAnalyticsIdentity(security.identity, identity) ||
+          !Array.isArray(security.flags) || security.flags.length > 64 ||
+          !exactPublicSecurityTypes(security) ||
+          (security.lockSummary !== null && (
+            !exactObjectKeys(security.lockSummary, [
+              "details", "isLocked", "lockRatio", "remainingLockRatio",
+            ]) || !Array.isArray(security.lockSummary.details) ||
+            typeof security.lockSummary.isLocked !== "boolean" ||
+            !publicRatio(security.lockSummary.lockRatio) ||
+            !publicRatio(security.lockSummary.remainingLockRatio) ||
+            security.lockSummary.details.length > 256 ||
+            security.lockSummary.details.some((detail) =>
+              !exactObjectKeys(detail, ["isBlackhole", "poolAddress", "ratio"]) ||
+              typeof detail.isBlackhole !== "boolean" ||
+              canonicalMarketAddress(detail.poolAddress) !== detail.poolAddress ||
+              !publicRatio(detail.ratio)
+            )
+          ))
+        )) ||
+        (pool !== null && (
+          !exactObjectKeys(pool, ANALYTICS_POOL_KEYS) ||
+          pool.schemaVersion !== "programmable.gmgn-token-pool-info.v1" ||
+          pool.source !== "gmgn" || pool.currency !== "USD" ||
+          pool.marketScope !== "token" ||
+          pool.poolAttribution !== "unavailable" ||
+          !currentProviderTimestamp(pool.fetchedAt, now().getTime()) ||
+          !sameAnalyticsIdentity(pool.identity, identity) ||
+          canonicalMarketAddress(pool.tokenAddress) !== pool.tokenAddress ||
+          pool.tokenAddress !== identity.tokenAddress ||
+          canonicalMarketAddress(pool.providerAddress) !==
+            pool.providerAddress ||
+          pool.providerAddress !== identity.tokenAddress ||
+          canonicalMarketAddress(pool.baseAddress) !== pool.baseAddress ||
+          pool.baseAddress !== identity.tokenAddress ||
+          canonicalMarketAddress(pool.quoteAddress) !== pool.quoteAddress ||
+          pool.quoteAddress !== identity.quoteAddress ||
+          pool.exchange !== "uniswap_v4" ||
+          ![pool.token0Address, pool.token1Address].every((value) =>
+            canonicalMarketAddress(value) === value
+          ) ||
+          new Set([pool.token0Address, pool.token1Address]).size !== 2 ||
+          ![pool.token0Address, pool.token1Address].includes(identity.tokenAddress) ||
+          ![pool.token0Address, pool.token1Address].includes(identity.quoteAddress) ||
+          ![pool.liquidityUsd, pool.baseReserve, pool.quoteReserve].every(publicDecimal) ||
+          ![
+            pool.baseReserveValueUsd, pool.quoteReserveValueUsd,
+            pool.initialLiquidityUsd, pool.initialBaseReserve,
+            pool.initialQuoteReserve, pool.priceUsd,
+          ].every(nullablePublicDecimal) ||
+          !nullablePublicRatio(pool.feeRatio) ||
+          !Number.isSafeInteger(pool.creationTimestamp) || pool.creationTimestamp < 0 ||
+          !(pool.quoteSymbol === null ||
+            (typeof pool.quoteSymbol === "string" && pool.quoteSymbol.length <= 64))
+        ))
+      ) throw new Error("GMGN summary analytics projection is invalid");
+    } else {
+      const ranking = body.analytics?.ranking;
+      if (
+        body.status !== "ready" ||
+        !exactObjectKeys(body.analytics, ["ranking"]) ||
+        !exactObjectKeys(ranking, ["fetchedAt", "wallets"]) ||
+        !currentProviderTimestamp(ranking.fetchedAt, now().getTime()) ||
+        !Array.isArray(ranking.wallets) || ranking.wallets.length > 20 ||
+        ranking.wallets.some((wallet) =>
+          !exactObjectKeys(wallet, ANALYTICS_WALLET_KEYS) ||
+          canonicalMarketAddress(wallet.address) !== wallet.address ||
+          Object.entries(wallet).some(([key, value]) =>
+            key !== "address" && !finiteNullable(value)
+          )
+        )
+      ) throw new Error(`GMGN ${section} ranking projection is invalid`);
+    }
+    reads[section] = body.status;
+  }
+  return reads;
 }
 
 export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
@@ -1223,6 +2125,16 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   if (!exactInformationalHealth(health)) {
     throw new Error("Informational health response is malformed");
   }
+  const gmgnRequestsPerSecond = health.body.providers[0].requestsPerSecond;
+  const gmgnAccountGateMode = health.body.providers[0].accountGateMode;
+  if (
+    requireGmgnMarket &&
+    (gmgnRequestsPerSecond !== 20 || gmgnAccountGateMode !== "multiflight-v1")
+  ) {
+    throw new Error(
+      "Required GMGN Production throughput lacks exact RPS 20 multiflight-v1 proof",
+    );
+  }
 
   let exploreSnapshot = null;
   for (
@@ -1244,19 +2156,24 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         ? newest.body.tokens
         : [];
       const validationNowMs = now().getTime();
+      const highestReadSourceSuffix = marketCapReadSourceSuffix(highest);
       if (
         highest.status !== 200 ||
         highest.body?.status !== "ready" ||
         highest.body?.sort !== "market-cap" ||
-        highest.body?.sortMetric !== "fdv" ||
+        highest.body?.sortMetric !==
+          "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback" ||
         highestTokens.length < 1 ||
         !exactExplorePage(highest, highestTokens, {
           page: 1,
           pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
         }) ||
-        exactCatalogSnapshot(highest) === null ||
-        !exactFdvRanking(highest, highestTokens, validationNowMs)
-      ) throw new Error("Highest FDV response contract is invalid");
+        exactCatalogSnapshot(highest, {
+          requireLaunchIdentity: true,
+          readSourceSuffix: highestReadSourceSuffix,
+        }) === null ||
+        !exactVisibleMarketRead(highest, highestTokens, validationNowMs)
+      ) throw new Error("Highest market-cap response contract is invalid");
       if (
         newest.status !== 200 ||
         newest.body?.status !== "ready" ||
@@ -1270,7 +2187,10 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         exactCatalogSnapshot(newest) === null ||
         !exactVisibleMarketRead(newest, newestTokens, validationNowMs)
       ) throw new Error("Newest launches response contract is invalid");
-      const highestCatalog = exactCatalogSnapshot(highest);
+      const highestCatalog = exactCatalogSnapshot(highest, {
+        requireLaunchIdentity: true,
+        readSourceSuffix: highestReadSourceSuffix,
+      });
       const newestCatalog = exactCatalogSnapshot(newest);
       if (highestCatalog === null || highestCatalog !== newestCatalog) {
         throw new ExploreCatalogBoundaryDriftError(
@@ -1305,7 +2225,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
               pageSize: catalogPageSize,
             }) ||
             pageCatalog === null ||
-            !exactDexscreenerMarketRead(
+            !exactVisibleMarketRead(
               catalogPage,
               pageTokens,
               now().getTime(),
@@ -1321,13 +2241,17 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       }
       if (
         completeCatalogTokens.length !== newest.body.total ||
-        !exactDexscreenerMarketRead(
+        !exactMarketCapRanking(
           highest,
           completeCatalogTokens,
+          "desc",
           now().getTime(),
-          highestTokens,
         )
-      ) throw new Error("Highest FDV market request set is invalid");
+      ) throw new Error("Highest market-cap ranking contract is invalid");
+      if (
+        requireGmgnMarket &&
+        !exactRequiredGmgnMarketCapRanking(highest, now().getTime())
+      ) throw new Error("GMGN descending market-cap rank match is required");
       const identities = completeCatalogTokens.map(exactIdentity);
       if (
         identities.some((identity) => identity === null) ||
@@ -1360,7 +2284,95 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         highestIdentities.some((identity) => identity === null) ||
         new Set(highestIdentities).size !== highestIdentities.length ||
         highestIdentities.some((identity) => !completeIdentitySet.has(identity))
-      ) throw new Error("Highest FDV page is outside the paged catalog");
+      ) throw new Error("Highest market-cap page is outside the paged catalog");
+      if (highest.body.totalPages > 1) {
+        const highestSecondPage = await request(
+          `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
+            "&page=2&sort=market-cap",
+        );
+        const highestSecondPageTokens = Array.isArray(
+          highestSecondPage.body?.tokens,
+        ) ? highestSecondPage.body.tokens : [];
+        const highestSecondPageCatalog = exactCatalogSnapshot(
+          highestSecondPage,
+          {
+            requireLaunchIdentity: true,
+            readSourceSuffix: marketCapReadSourceSuffix(highestSecondPage),
+          },
+        );
+        const secondPageIdentities = highestSecondPageTokens.map(exactIdentity);
+        if (
+          highestSecondPage.status !== 200 ||
+          highestSecondPage.body?.status !== "ready" ||
+          highestSecondPage.body?.sort !== "market-cap" ||
+          highestSecondPage.body?.sortMetric !==
+            "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback" ||
+          highestSecondPageCatalog !== highestCatalog ||
+          !exactExplorePage(highestSecondPage, highestSecondPageTokens, {
+            page: 2,
+            pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
+          }) ||
+          !exactVisibleMarketRead(
+            highestSecondPage,
+            highestSecondPageTokens,
+            now().getTime(),
+          ) ||
+          !exactMarketCapRanking(
+            highestSecondPage,
+            completeCatalogTokens,
+            "desc",
+            now().getTime(),
+          ) ||
+          JSON.stringify(highestSecondPage.body.ranking) !==
+            JSON.stringify(highest.body.ranking) ||
+          secondPageIdentities.some((identity) => identity === null) ||
+          new Set(secondPageIdentities).size !== secondPageIdentities.length ||
+          secondPageIdentities.some((identity) =>
+            !completeIdentitySet.has(identity) ||
+            highestIdentities.includes(identity)
+          )
+        ) throw new Error("Market-cap pagination commitment is invalid");
+      }
+      const lowest = await request(
+        `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
+          "&page=1&sort=market-cap-asc",
+      );
+      const lowestTokens = Array.isArray(lowest.body?.tokens)
+        ? lowest.body.tokens
+        : [];
+      const lowestCatalog = exactCatalogSnapshot(lowest, {
+        requireLaunchIdentity: true,
+        readSourceSuffix: marketCapReadSourceSuffix(lowest),
+      });
+      const lowestIdentities = lowestTokens.map(exactIdentity);
+      if (
+        lowest.status !== 200 ||
+        lowest.body?.status !== "ready" ||
+        lowest.body?.sort !== "market-cap-asc" ||
+        lowest.body?.sortMetric !==
+          "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback" ||
+        lowestCatalog !== highestCatalog ||
+        !exactExplorePage(lowest, lowestTokens, {
+          page: 1,
+          pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
+        }) ||
+        !exactVisibleMarketRead(lowest, lowestTokens, now().getTime()) ||
+        !exactMarketCapRanking(
+          lowest,
+          completeCatalogTokens,
+          "asc",
+          now().getTime(),
+        ) ||
+        lowestIdentities.some((identity) => identity === null) ||
+        new Set(lowestIdentities).size !== lowestIdentities.length ||
+        lowestIdentities.some((identity) => !completeIdentitySet.has(identity)) ||
+        lowest.body.ranking.rankingCommitment ===
+          highest.body.ranking.rankingCommitment
+      ) throw new Error("Lowest market-cap ranking contract is invalid");
+      if (
+        requireGmgnMarket &&
+        !exactRequiredGmgnMarketCapRanking(lowest, now().getTime())
+      ) throw new Error("GMGN ascending market-cap rank match is required");
       for (let index = 1; index < completeCatalogTokens.length; index += 1) {
         if (
           Date.parse(completeCatalogTokens[index - 1].launchedAt) <
@@ -1370,107 +2382,207 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       if (
         highest.body.ranking.status === "unavailable" &&
         !exactSamePageOrder(highest, newest)
-      ) throw new Error("Unavailable FDV did not preserve launch order");
+      ) throw new Error("Unavailable market-cap ranking did not preserve launch order");
+      if (
+        lowest.body.ranking.status === "unavailable" &&
+        !exactSamePageOrder(lowest, newest)
+      ) throw new Error("Unavailable ascending market-cap ranking did not preserve launch order");
 
-      let qualifiedGmgnCanonicalToken = null;
-      if (requireGmgnMarket) {
-        const gmgnCanonical = await request(
-          `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
-            "&page=1&sort=newest&model=classic",
+      const trendingSnapshot = await readBoundTrendingSnapshot({
+        request,
+        canonicalTokens: completeCatalogTokens,
+        catalogSnapshot: highestCatalog,
+        requireGmgnMarket,
+        now,
+      });
+      const searchSnapshot = await readBoundSearchSnapshot({
+        request,
+        canonicalTokens: completeCatalogTokens,
+        catalogSnapshot: highestCatalog,
+        requireGmgnMarket,
+        now,
+      });
+
+      const readValidatedTokenDetail = async (selectedToken) => {
+        const tokenAddress = selectedToken?.tokenAddress;
+        if (!tokenAddress || !selectedToken) {
+          throw new Error("Explore returned no token identity");
+        }
+        const detail = await request(
+          "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
         );
-        const gmgnCanonicalTokens = Array.isArray(gmgnCanonical.body?.tokens)
-          ? gmgnCanonical.body.tokens
-          : [];
-        const gmgnCanonicalCatalog = exactCatalogSnapshot(
-          { ...gmgnCanonical, body: {
-            ...gmgnCanonical.body,
-            total: gmgnCanonical.body?.catalog?.identityCount,
+        const detailToken = detail.body?.token ?? detail.body?.customProject;
+        const detailCatalog = exactCatalogSnapshot(
+          { ...detail, body: {
+            ...detail.body,
+            total: detail.body?.catalog?.identityCount,
           } },
+          { requireLaunchIdentity: false },
         );
+        if (detailCatalog === null) {
+          throw new Error("Token detail identity or market contract is invalid");
+        }
+        if (detailCatalog !== highestCatalog) {
+          throw new ExploreCatalogBoundaryDriftError(
+            "Explore catalog changed before token detail read",
+          );
+        }
         if (
-          gmgnCanonical.status !== 200 ||
-          gmgnCanonical.body?.status !== "ready" ||
-          gmgnCanonical.body?.sort !== "newest" ||
-          gmgnCanonical.body?.ranking !== undefined ||
-          !exactExplorePage(gmgnCanonical, gmgnCanonicalTokens, {
-            page: 1,
-            pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
-          }) ||
-          gmgnCanonicalCatalog !== highestCatalog ||
-          !exactVisibleMarketRead(
-            gmgnCanonical,
-            gmgnCanonicalTokens,
+          detail.status !== 200 ||
+          detail.body?.status !== "ready" ||
+          exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
+          !exactDetailMarketRead(
+            detail,
+            detailToken,
+            catalogBoundary.launchSource,
             now().getTime(),
-          ) ||
-          gmgnCanonicalTokens.some((token) =>
-            token?.exploreKind !== "token" || token.launchModel !== "classic"
           )
-        ) throw new Error("Canonical GMGN list response contract is invalid");
-        qualifiedGmgnCanonicalToken = gmgnCanonicalTokens.find((token) =>
-          exactGmgnEligibleCanonicalToken(token) &&
-          qualifiedGmgnFdv(token, now().getTime()) &&
-          completeIdentitySet.has(exactIdentity(token))
-        ) ?? null;
-        if (qualifiedGmgnCanonicalToken === null) {
+        ) throw new Error("Token detail identity or market contract is invalid");
+        return { detail, detailToken, selectedToken, tokenAddress };
+      };
+      const exactGmgnDetailProof = (candidate) =>
+        candidate.detail.headers.get("x-programmable-market-provider") ===
+          "gmgn" &&
+        candidate.detail.headers.get("x-programmable-market-read-status") ===
+          "complete" &&
+        qualifiedGmgnFdv(candidate.detailToken, now().getTime());
+
+      let selectedDetail = null;
+      if (requireGmgnMarket) {
+        const attemptedDetailIdentities = new Set();
+        const tryDetailCandidate = async (candidate) => {
+          const identity = exactIdentity(candidate);
+          if (
+            identity === null ||
+            attemptedDetailIdentities.has(identity) ||
+            !completeIdentitySet.has(identity) ||
+            candidate?.exploreKind !== "token" ||
+            candidate.launchModel !== "classic" ||
+            !exactGmgnEligibleCanonicalToken(candidate)
+          ) return null;
+          attemptedDetailIdentities.add(identity);
+          const detailCandidate = await readValidatedTokenDetail(candidate);
+          return exactGmgnDetailProof(detailCandidate) ? detailCandidate : null;
+        };
+
+        // The already-bound GMGN market-cap prefix is the strongest bounded
+        // candidate set. Prefix admission used a fresh positive market-cap
+        // observation and the shared $10k liquidity gate; the following
+        // token_info detail read independently proves visible FDV evidence.
+        const marketCapCandidates = highestTokens.slice(
+          0,
+          Math.min(
+            highest.body.ranking.matchedTokenCount,
+            highestTokens.length,
+          ),
+        ).filter(exactGmgnEligibleCanonicalToken);
+        for (const candidate of marketCapCandidates) {
+          selectedDetail = await tryDetailCandidate(candidate);
+          if (selectedDetail !== null) break;
+        }
+
+        let sawQualifiedGmgnListCandidate = false;
+        if (selectedDetail === null) {
+          const completeClassicTokens = completeCatalogTokens.filter((token) =>
+            token?.exploreKind === "token" && token.launchModel === "classic"
+          );
+          const classicTotalPages = Math.ceil(
+            completeClassicTokens.length / VISIBLE_EXPLORE_PAGE_SIZE,
+          );
+          const scanPages = Math.min(
+            classicTotalPages,
+            GMGN_CANONICAL_SCAN_MAXIMUM_PAGES,
+          );
+          for (let page = 1; page <= scanPages; page += 1) {
+            const gmgnCanonical = await request(
+              `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
+                `&page=${page}&sort=newest&model=classic`,
+            );
+            const gmgnCanonicalTokens = Array.isArray(
+              gmgnCanonical.body?.tokens,
+            ) ? gmgnCanonical.body.tokens : [];
+            const gmgnCanonicalCatalog = exactCatalogSnapshot(
+              { ...gmgnCanonical, body: {
+                ...gmgnCanonical.body,
+                total: gmgnCanonical.body?.catalog?.identityCount,
+              } },
+            );
+            const expectedIdentities = completeClassicTokens.slice(
+              (page - 1) * VISIBLE_EXPLORE_PAGE_SIZE,
+              page * VISIBLE_EXPLORE_PAGE_SIZE,
+            ).map(exactIdentity);
+            const actualIdentities = gmgnCanonicalTokens.map(exactIdentity);
+            if (
+              gmgnCanonical.status !== 200 ||
+              gmgnCanonical.body?.status !== "ready" ||
+              gmgnCanonical.body?.sort !== "newest" ||
+              gmgnCanonical.body?.ranking !== undefined ||
+              gmgnCanonical.body?.total !== completeClassicTokens.length ||
+              !exactExplorePage(gmgnCanonical, gmgnCanonicalTokens, {
+                page,
+                pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
+              }) ||
+              gmgnCanonicalCatalog !== highestCatalog ||
+              !exactVisibleMarketRead(
+                gmgnCanonical,
+                gmgnCanonicalTokens,
+                now().getTime(),
+              ) ||
+              gmgnCanonicalTokens.some((token) =>
+                token?.exploreKind !== "token" || token.launchModel !== "classic"
+              ) ||
+              actualIdentities.some((identity) => identity === null) ||
+              actualIdentities.some((identity, index) =>
+                identity !== expectedIdentities[index]
+              )
+            ) {
+              throw new Error("Canonical GMGN list response contract is invalid");
+            }
+            const qualifiedCandidates = gmgnCanonicalTokens.filter((token) =>
+              exactGmgnEligibleCanonicalToken(token) &&
+              qualifiedGmgnFdv(token, now().getTime())
+            );
+            if (qualifiedCandidates.length > 0) {
+              sawQualifiedGmgnListCandidate = true;
+            }
+            for (const candidate of qualifiedCandidates) {
+              selectedDetail = await tryDetailCandidate(candidate);
+              if (selectedDetail !== null) break;
+            }
+            if (selectedDetail !== null) break;
+          }
+        }
+        if (selectedDetail === null) {
+          if (sawQualifiedGmgnListCandidate) {
+            throw new Error("Token detail GMGN market contract is required");
+          }
           throw new Error("Explore returned no GMGN-qualified canonical token");
         }
+      } else {
+        const selectedToken =
+          completeCatalogTokens.find(exactGmgnEligibleCanonicalToken) ??
+          completeCatalogTokens.find((token) => token?.exploreKind === "token");
+        selectedDetail = await readValidatedTokenDetail(selectedToken);
       }
 
-      const selectedToken = requireGmgnMarket
-        ? qualifiedGmgnCanonicalToken
-        : completeCatalogTokens.find(exactGmgnEligibleCanonicalToken) ??
-          completeCatalogTokens.find((token) => token?.exploreKind === "token");
-      const tokenAddress = selectedToken?.tokenAddress;
-      if (!tokenAddress || !selectedToken) {
-        throw new Error("Explore returned no token identity");
-      }
-      const detail = await request(
-        "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
-      );
-      const detailToken = detail.body?.token ?? detail.body?.customProject;
-      const detailCatalog = exactCatalogSnapshot(
-        { ...detail, body: {
-          ...detail.body,
-          total: detail.body?.catalog?.identityCount,
-        } },
-        { requireLaunchIdentity: false },
-      );
-      if (detailCatalog === null) {
-        throw new Error("Token detail identity or market contract is invalid");
-      }
-      if (detailCatalog !== highestCatalog) {
-        throw new ExploreCatalogBoundaryDriftError(
-          "Explore catalog changed before token detail read",
-        );
-      }
-      if (
-        detail.status !== 200 ||
-        detail.body?.status !== "ready" ||
-        exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
-        !exactDetailMarketRead(
-          detail,
-          detailToken,
-          catalogBoundary.launchSource,
-          now().getTime(),
-        )
-      ) throw new Error("Token detail identity or market contract is invalid");
+      const { detail, detailToken, tokenAddress } = selectedDetail;
       const detailMarketProvider = detail.headers.get(
         "x-programmable-market-provider",
       );
-      if (
-        requireGmgnMarket &&
-        (
-          detailMarketProvider !== "gmgn" ||
-          detail.headers.get("x-programmable-market-read-status") !==
-            "complete" ||
-          !qualifiedGmgnFdv(detailToken, now().getTime())
-        )
-      ) throw new Error("Token detail GMGN market contract is required");
       const detailStatus = qualifiedGmgnFdv(detailToken, now().getTime())
         ? "verified-gmgn-market"
         : qualifiedDexscreenerFdv(detailToken, now().getTime())
           ? "verified-dexscreener-market"
           : "verified-identity-market-unavailable";
+      const chartIdentities = entryMarketIdentities(detailToken);
+      if (chartIdentities.length !== 1) {
+        throw new Error("Token detail has no unique chart market identity");
+      }
+      const chartIdentity = chartIdentities[0];
+      const chartCanonicalSupply = {
+        totalSupplyRaw: detailToken?.totalSupplyRaw,
+        tokenDecimals: detailToken?.tokenDecimals,
+      };
       let shardTradeStatus = "not-required";
       if (requireShardRouterTrade) {
         const shardDetail = await request(
@@ -1500,14 +2612,20 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
 
       exploreSnapshot = {
         catalogBoundary,
+        chartCanonicalSupply,
+        chartIdentity,
         detailMarketProvider,
         detailStatus,
         highest,
+        marketCapAscRanking: lowest.body.ranking,
+        marketCapDescRanking: highest.body.ranking,
         marketProvider: newest.headers.get("x-programmable-market-provider"),
         marketReadStatus: newest.body.marketRead.status,
         newestTokens,
+        searchRanking: searchSnapshot.search,
         shardTradeStatus,
         tokenAddress,
+        trendingDiscovery: trendingSnapshot.discovery,
       };
       break;
     } catch (error) {
@@ -1526,15 +2644,39 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   }
   const {
     catalogBoundary,
+    chartCanonicalSupply,
+    chartIdentity,
     detailMarketProvider,
     detailStatus,
     highest,
+    marketCapAscRanking,
+    marketCapDescRanking,
     marketProvider,
     marketReadStatus,
     newestTokens,
+    searchRanking,
     shardTradeStatus,
     tokenAddress,
+    trendingDiscovery,
   } = exploreSnapshot;
+
+  let analyticsSummaryStatus = "not-required";
+  let analyticsHoldersStatus = "not-required";
+  let analyticsTradersStatus = "not-required";
+  if (requireGmgnMarket) {
+    const analytics = await readRequiredGmgnAnalytics({
+      request,
+      tokenAddress,
+      identity: chartIdentity,
+      catalogBoundary,
+      lastIndexedAt: highest.body.catalog.lastIndexedAt,
+      referenceHeaders: highest.headers,
+      now,
+    });
+    analyticsSummaryStatus = analytics.summary;
+    analyticsHoldersStatus = analytics.holders;
+    analyticsTradersStatus = analytics.traders;
+  }
 
   const profileToken = newestTokens.find((token) =>
     ADDRESS.test(String(token?.creatorAddress ?? "").toLowerCase())
@@ -1632,16 +2774,81 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   );
   const chartHasHistory = Array.isArray(chart.body?.points) &&
     chart.body.points.length > 0;
-  const chartContractValid =
+  const chartProvider = chart.body?.source;
+  const chartScope = chart.headers.get("x-programmable-chart-scope");
+  const chartPoolAttribution = chart.headers.get(
+    "x-programmable-chart-pool-attribution",
+  );
+  const expectedChartScope = chartProvider === "gmgn" ? "token" : "pool";
+  const expectedChartPoolAttribution = chartProvider === "gmgn"
+    ? chart.body?.poolAttribution
+    : "exact";
+  const chartIdentityMatches =
+    chart.body?.identity?.chainId === "1" &&
+    canonicalMarketAddress(chart.body?.identity?.tokenAddress) ===
+      chartIdentity.tokenAddress &&
+    canonicalMarketPool(chart.body?.identity?.poolId) ===
+      chartIdentity.poolId &&
+    canonicalMarketAddress(chart.body?.identity?.quoteAddress) ===
+      chartIdentity.quoteAddress &&
+    chart.body?.identity?.protocol === "uniswap_v4";
+  const gmgnProofIdentityMatches =
+    chart.body?.identityProof?.identity?.chainId === "1" &&
+    canonicalMarketAddress(
+      chart.body?.identityProof?.identity?.tokenAddress,
+    ) === chartIdentity.tokenAddress &&
+    canonicalMarketPool(chart.body?.identityProof?.identity?.poolId) ===
+      chartIdentity.poolId &&
+    canonicalMarketAddress(
+      chart.body?.identityProof?.identity?.quoteAddress,
+    ) === chartIdentity.quoteAddress &&
+    chart.body?.identityProof?.identity?.protocol === "uniswap_v4";
+  const gmgnChartReady =
+    chartProvider === "gmgn" &&
+    chart.body?.schemaVersion === "programmable.gmgn-market-chart.v1" &&
+    chart.body?.seriesScope === "token" &&
+    ["exact", "unavailable"].includes(chart.body?.poolAttribution) &&
+    chart.body?.status === "ready" &&
+    chart.body?.readStatus === "live" &&
+    chartHasHistory &&
+    chart.body?.identityProof?.schemaVersion ===
+      "programmable.gmgn-chart-identity-proof.v1" &&
+    chart.body?.identityProof?.source === "gmgn-token-info" &&
+    chart.body?.identityProof?.poolAttribution ===
+      chart.body?.poolAttribution &&
+    gmgnProofIdentityMatches &&
+    exactObjectKeys(chart.body?.identityProof?.canonicalSupply, [
+      "tokenDecimals",
+      "totalSupplyRaw",
+    ]) &&
+    typeof chartCanonicalSupply.totalSupplyRaw === "string" &&
+    chart.body?.identityProof?.canonicalSupply?.totalSupplyRaw ===
+      chartCanonicalSupply.totalSupplyRaw &&
+    Number.isSafeInteger(chartCanonicalSupply.tokenDecimals) &&
+    chart.body?.identityProof?.canonicalSupply?.tokenDecimals ===
+      chartCanonicalSupply.tokenDecimals &&
+    chart.body?.points.every((point) =>
+      point?.valueSemantics === "period-close"
+    );
+  const bitqueryChartFallback =
+    chartProvider === "bitquery" &&
+    chart.body?.schemaVersion === "programmable.market-chart.v1" &&
+    [
+      "ready",
+      "insufficient-history",
+      "partial",
+      "waiting-for-first-trade",
+      "unavailable",
+    ].includes(chart.body?.status) &&
+    ["live", "cache-fallback"].includes(chart.body?.readStatus) &&
+    chart.body?.valuation?.status === "unavailable" &&
+    chart.body?.valuation?.reason === "source-unavailable";
+  const chartContractInvalid =
     chart.status !== 200 ||
-    chart.body?.schemaVersion !== "programmable.market-chart.v1" ||
-    chart.body?.source !== "bitquery" ||
-    !["ready", "insufficient-history", "partial", "waiting-for-first-trade", "unavailable"].includes(chart.body?.status) ||
-    !["live", "cache-fallback"].includes(chart.body?.readStatus) ||
-    chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase() ||
+    (!gmgnChartReady && !bitqueryChartFallback) ||
+    (requireGmgnMarket && !gmgnChartReady) ||
+    !chartIdentityMatches ||
     chart.body?.range !== "1d" ||
-    chart.body?.valuation?.status !== "unavailable" ||
-    chart.body?.valuation?.reason !== "source-unavailable" ||
     // Vercel normalizes shared-cache directives on dynamic route responses to
     // this publicly observable fresh-response policy. The route-level policy
     // remains accepted for direct runtime tests; the stage probe must accept
@@ -1655,14 +2862,18 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     chart.headers.get("x-programmable-launch-source") !==
       catalogBoundary.launchSource ||
     chart.headers.get("x-programmable-read-source") !==
-      `${catalogBoundary.launchSource}+bitquery` ||
-    chart.headers.get("x-programmable-market-provider") !== "bitquery" ||
+      `${catalogBoundary.launchSource}+${chartProvider}` ||
+    chart.headers.get("x-programmable-market-provider") !== chartProvider ||
+    chartScope !== expectedChartScope ||
+    chartPoolAttribution !== expectedChartPoolAttribution ||
     !["live", "cache-fallback"].includes(
       chart.headers.get("x-programmable-market-read-status"),
     ) ||
+    chart.headers.get("x-programmable-market-read-status") !==
+      chart.body?.readStatus ||
     (chartHasHistory && (
-      chart.headers.get("x-programmable-market-source") !== "bitquery" ||
-      chart.headers.get("x-programmable-price-source") !== "bitquery" ||
+      chart.headers.get("x-programmable-market-source") !== chartProvider ||
+      chart.headers.get("x-programmable-price-source") !== chartProvider ||
       chart.headers.get("x-programmable-market-as-of") !== chart.body?.asOfTime
     )) ||
     (!chartHasHistory && (
@@ -1671,15 +2882,14 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       chart.headers.get("x-programmable-market-as-of") !== null
     )) ||
     chart.headers.get("x-programmable-valuation-block") !== null;
-  if (chartContractValid) {
+  if (chartContractInvalid) {
     throw new Error(
-      "Token chart pool-bound contract is invalid: " + JSON.stringify({
+      "Token chart scope contract is invalid: " + JSON.stringify({
         status: chart.status,
         schemaVersion: chart.body?.schemaVersion ?? null,
         source: chart.body?.source ?? null,
         readStatus: chart.body?.readStatus ?? null,
-        identityMatches: chart.body?.identity?.tokenAddress?.toLowerCase() ===
-          tokenAddress.toLowerCase(),
+        identityMatches: chartIdentityMatches,
         range: chart.body?.range ?? null,
         valuationStatus: chart.body?.valuation?.status ?? null,
         valuationReason: chart.body?.valuation?.reason ?? null,
@@ -1691,6 +2901,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         marketReadStatus: chart.headers.get(
           "x-programmable-market-read-status",
         ),
+        chartScope,
+        chartPoolAttribution,
         hasHistory: chartHasHistory,
         marketSource: chart.headers.get("x-programmable-market-source"),
         priceSource: chart.headers.get("x-programmable-price-source"),
@@ -1705,11 +2917,35 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     appendOutput(
       githubOutput,
       [
+        `gmgn_account_gate_mode=${gmgnAccountGateMode}`,
+        `gmgn_requests_per_second=${gmgnRequestsPerSecond}`,
         `market_provider=${marketProvider}`,
         `market_read_status=${marketReadStatus}`,
         `detail_market_provider=${detailMarketProvider}`,
         `detail_status=${detailStatus}`,
+        `market_cap_desc_source=${marketCapDescRanking.source}`,
+        `market_cap_desc_status=${marketCapDescRanking.status}`,
+        `market_cap_desc_gmgn_status=${marketCapDescRanking.gmgnStatus}`,
+        `market_cap_desc_matched_count=${marketCapDescRanking.matchedTokenCount}`,
+        `market_cap_desc_ranking_commitment=${marketCapDescRanking.rankingCommitment}`,
+        `market_cap_asc_source=${marketCapAscRanking.source}`,
+        `market_cap_asc_status=${marketCapAscRanking.status}`,
+        `market_cap_asc_gmgn_status=${marketCapAscRanking.gmgnStatus}`,
+        `market_cap_asc_matched_count=${marketCapAscRanking.matchedTokenCount}`,
+        `market_cap_asc_ranking_commitment=${marketCapAscRanking.rankingCommitment}`,
+        `discovery_status=${trendingDiscovery.status}`,
+        `discovery_matched_count=${trendingDiscovery.matchedTokenCount}`,
+        `discovery_ranking_commitment=${trendingDiscovery.rankingCommitment}`,
+        `search_status=${searchRanking.status}`,
+        `search_matched_count=${searchRanking.matchedTokenCount}`,
+        `search_ranking_commitment=${searchRanking.rankingCommitment}`,
+        `analytics_summary_status=${analyticsSummaryStatus}`,
+        `analytics_holders_status=${analyticsHoldersStatus}`,
+        `analytics_traders_status=${analyticsTradersStatus}`,
         `shard_trade_status=${shardTradeStatus}`,
+        `chart_provider=${chartProvider}`,
+        `chart_scope=${chartScope}`,
+        `chart_pool_attribution=${chartPoolAttribution}`,
         `chart_status=${chartStatus}`,
       ].join("\n") + "\n",
       "utf8",
@@ -1722,6 +2958,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     lastIndexedAt: highest.body.catalog.lastIndexedAt,
     healthStatus: health.body.status,
     healthAuthority: "informational-only",
+    gmgnAccountGateMode,
+    gmgnRequestsPerSecond,
     marketProvider,
     marketReadStatus,
     tokenAddress,
@@ -1729,7 +2967,29 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     profileStatus,
     detailMarketProvider,
     detailStatus,
+    marketCapDescSource: marketCapDescRanking.source,
+    marketCapDescStatus: marketCapDescRanking.status,
+    marketCapDescGmgnStatus: marketCapDescRanking.gmgnStatus,
+    marketCapDescMatchedCount: marketCapDescRanking.matchedTokenCount,
+    marketCapDescRankingCommitment: marketCapDescRanking.rankingCommitment,
+    marketCapAscSource: marketCapAscRanking.source,
+    marketCapAscStatus: marketCapAscRanking.status,
+    marketCapAscGmgnStatus: marketCapAscRanking.gmgnStatus,
+    marketCapAscMatchedCount: marketCapAscRanking.matchedTokenCount,
+    marketCapAscRankingCommitment: marketCapAscRanking.rankingCommitment,
+    discoveryStatus: trendingDiscovery.status,
+    discoveryMatchedCount: trendingDiscovery.matchedTokenCount,
+    discoveryRankingCommitment: trendingDiscovery.rankingCommitment,
+    searchStatus: searchRanking.status,
+    searchMatchedCount: searchRanking.matchedTokenCount,
+    searchRankingCommitment: searchRanking.rankingCommitment,
+    analyticsSummaryStatus,
+    analyticsHoldersStatus,
+    analyticsTradersStatus,
     shardTradeStatus,
+    chartProvider,
+    chartScope,
+    chartPoolAttribution,
     chartStatus,
     creatorClaimPrepare: "separate-live-probe-required",
     tradePrepare: "separate-live-probe-required",

@@ -16,6 +16,7 @@ export type ExploreSocialFilter = "yes" | "no";
 export function parseExploreSort(value: string | null): ExploreSort {
   if (value === "newest") return "newest";
   if (value === "oldest") return "oldest";
+  if (value === "trending") return "trending";
   if (value === "market-cap" || value === "highest-market-cap") {
     return "market-cap";
   }

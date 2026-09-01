@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import ts from "typescript";
+
 const APPROVED_OPERATIONS = Object.freeze({
   legacyIndexer: Object.freeze({
     path: "/api/ops/index-v2",
@@ -447,8 +449,14 @@ const APPROVED_OPERATIONS = Object.freeze({
     publicRoutes: Object.freeze([
       "/",
       "/api/ops/health",
-      "/api/explore?limit=6&page=1&sort=market-cap",
+      "/api/explore?limit=9&page=1&sort=market-cap",
+      "/api/explore?limit=100&page=1&sort=newest",
+      "/api/explore?limit=100&page=1&sort=newest&q={canonicalTokenAddress}",
+      "/api/explore?limit=100&page=1&sort=trending",
       "/api/explore/token",
+      "/api/explore/token/analytics?chain=1&address={canonicalTokenAddress}&section=summary",
+      "/api/explore/token/analytics?chain=1&address={canonicalTokenAddress}&section=holders&limit=20",
+      "/api/explore/token/analytics?chain=1&address={canonicalTokenAddress}&section=traders&limit=20",
       "/api/explore/token/chart",
       "/api/explore/profile",
       "/api/profile/classic-v3",
@@ -457,20 +465,30 @@ const APPROVED_OPERATIONS = Object.freeze({
       "/api/trade/prepare",
     ]),
     sources: Object.freeze({
-      launchIdentity: "commitment-bound-drpc-primary",
-      creatorIdentity: "commitment-bound-drpc-primary",
-      actionState: "commitment-bound-drpc-primary",
-      market: "bitquery",
-      fdv: "bitquery",
-      chart: "bitquery",
+      launchIdentity:
+        "envio-classic-v3-or-bounded-last-good+registry.custom-launched+canonical-launch-stamp-router",
+      creatorIdentity:
+        "envio-classic-v3+envio-classic-v2-claims+canonical-launch-stamp-router+commitment-bound-rpc-profile-state",
+      actionState:
+        "canonical-launch-stamp-router+bitquery-stock-identity+commitment-bound-rpc-current-state",
+      market:
+        "gmgn-visible-and-market-cap-ranking-primary+gmgn-token-info-unobserved-ranking-primary+dexscreener-visible-and-unqualified-ranking-fallback",
+      fdv: "gmgn-visible-and-unobserved-ranking-primary+dexscreener-visible-and-unqualified-ranking-fallback",
+      discovery:
+        "gmgn-canonical-intersection-with-launch-order-fallback+gmgn-search-canonical-intersection-with-local-match-fallback",
+      analytics: "gmgn-token-level+gmgn-token-level-pool-info",
+      chart: "gmgn-token-level-primary+bitquery-exact-pool-fallback",
     }),
     rpc: Object.freeze({
       provider: "drpc",
       role: "primary",
       endpointCommitmentRequired: true,
-      secondaryRequired: false,
+      secondaryProvider: "quicknode",
+      secondaryRole: "eligible-transport-capacity-failover",
+      secondaryEndpointCommitmentRequired: true,
+      secondaryRequired: true,
     }),
-    fallbacks: false,
+    fallbacks: true,
     providerUrlExposure: false,
   }),
 });
@@ -524,8 +542,529 @@ function includesEverySourceFragment(source, fragments) {
   if (typeof source !== "string") return false;
   const compactSource = source.replace(/\s+/gu, "");
   return fragments.every((fragment) =>
-    compactSource.includes(fragment.replace(/\s+/gu, ""))
+    compactSource.includes(fragment.replace(/\s+/gu, "")),
   );
+}
+
+function includesExactLineSequence(source, lines) {
+  if (typeof source !== "string") return false;
+  const sourceLines = source
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return sourceLines.some((line, start) =>
+    lines.every((expected, offset) => sourceLines[start + offset] === expected),
+  );
+}
+
+const GMGN_READ_ONLY_ENDPOINT_CONTRACT = Object.freeze([
+  Object.freeze({
+    path: "lib/market-data/gmgn.server.ts",
+    fetchImplReferences: 8,
+    pathReferences: 2,
+    allowed: Object.freeze(["/v1/token/info"]),
+    calls: Object.freeze([Object.freeze(["/v1/token/info"])]),
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-chart.server.ts",
+    fetchImplReferences: 8,
+    pathReferences: 3,
+    allowed: Object.freeze(["/v1/market/token_kline", "/v1/token/info"]),
+    calls: Object.freeze([
+      Object.freeze(["/v1/market/token_kline"]),
+      Object.freeze(["/v1/token/info"]),
+    ]),
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-token-analytics.server.ts",
+    fetchImplReferences: 8,
+    pathReferences: 7,
+    allowed: Object.freeze([
+      "/v1/market/token_top_holders",
+      "/v1/market/token_top_traders",
+      "/v1/token/pool_info",
+      "/v1/token/security",
+    ]),
+    calls: Object.freeze([
+      Object.freeze(["/v1/token/security"]),
+      Object.freeze(["/v1/token/pool_info"]),
+      Object.freeze([
+        "/v1/market/token_top_holders",
+        "/v1/market/token_top_traders",
+      ]),
+    ]),
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-discovery.server.ts",
+    fetchImplReferences: 7,
+    pathReferences: 7,
+    allowed: Object.freeze([
+      "/v1/market/hot_searches",
+      "/v1/market/rank",
+      "/v1/market/search",
+    ]),
+    calls: Object.freeze([
+      Object.freeze(["/v1/market/search"]),
+      Object.freeze(["/v1/market/hot_searches", "/v1/market/rank"]),
+    ]),
+  }),
+]);
+
+const PUBLIC_WALLET_FIELDS = Object.freeze([
+  "address",
+  "usdValue",
+  "amountRatio",
+  "buyVolumeUsd",
+  "sellVolumeUsd",
+  "profitUsd",
+  "profitRatio",
+]);
+
+const ANALYTICS_PROVIDER_READS = Object.freeze([
+  "readGmgnTokenSecurityV1",
+  "readGmgnTokenPoolInfoV1",
+  "readGmgnTokenTopHoldersV1",
+  "readGmgnTokenTopTradersV1",
+]);
+
+function reviewedTypeScriptSource(path, source) {
+  if (typeof source !== "string") return null;
+  const parsed = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  return parsed.parseDiagnostics.length === 0 ? parsed : null;
+}
+
+function collectTypeScriptNodes(root, predicate) {
+  const matches = [];
+  const visit = (node) => {
+    if (predicate(node)) matches.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(root);
+  return matches;
+}
+
+function unwrapReviewedExpression(value) {
+  let expression = value;
+  while (
+    ts.isParenthesizedExpression(expression) ||
+    ts.isAsExpression(expression) ||
+    ts.isTypeAssertionExpression(expression) ||
+    ts.isNonNullExpression(expression) ||
+    ts.isSatisfiesExpression(expression)
+  )
+    expression = expression.expression;
+  return expression;
+}
+
+function exactIdentifier(value, expected) {
+  const expression = unwrapReviewedExpression(value);
+  return ts.isIdentifier(expression) && expression.text === expected;
+}
+
+function constVariableDeclarations(sourceFile) {
+  const declarations = new Map();
+  for (const declaration of collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isVariableDeclaration(node),
+  )) {
+    if (
+      !ts.isIdentifier(declaration.name) ||
+      declaration.initializer === undefined ||
+      !ts.isVariableDeclarationList(declaration.parent) ||
+      (declaration.parent.flags & ts.NodeFlags.Const) === 0
+    )
+      continue;
+    const existing = declarations.get(declaration.name.text) ?? [];
+    existing.push(declaration);
+    declarations.set(declaration.name.text, existing);
+  }
+  return declarations;
+}
+
+function staticEndpointValues(expression, declarations, seen = new Set()) {
+  const value = unwrapReviewedExpression(expression);
+  if (ts.isStringLiteral(value)) return [value.text];
+  if (ts.isNoSubstitutionTemplateLiteral(value)) return [value.text];
+  if (ts.isConditionalExpression(value)) {
+    const whenTrue = staticEndpointValues(value.whenTrue, declarations, seen);
+    const whenFalse = staticEndpointValues(value.whenFalse, declarations, seen);
+    return whenTrue === null || whenFalse === null
+      ? null
+      : [...new Set([...whenTrue, ...whenFalse])].sort();
+  }
+  if (!ts.isIdentifier(value) || seen.has(value.text)) return null;
+  const candidates = declarations.get(value.text) ?? [];
+  if (candidates.length !== 1) return null;
+  const nextSeen = new Set(seen);
+  nextSeen.add(value.text);
+  return staticEndpointValues(
+    candidates[0].initializer,
+    declarations,
+    nextSeen,
+  );
+}
+
+function typeAliasDeclarations(sourceFile) {
+  const aliases = new Map();
+  for (const declaration of sourceFile.statements) {
+    if (!ts.isTypeAliasDeclaration(declaration)) continue;
+    const existing = aliases.get(declaration.name.text) ?? [];
+    existing.push(declaration);
+    aliases.set(declaration.name.text, existing);
+  }
+  return aliases;
+}
+
+function staticEndpointTypeValues(typeNode, aliases, seen = new Set()) {
+  if (ts.isLiteralTypeNode(typeNode) && ts.isStringLiteral(typeNode.literal)) {
+    return [typeNode.literal.text];
+  }
+  if (ts.isUnionTypeNode(typeNode)) {
+    const values = typeNode.types.map((member) =>
+      staticEndpointTypeValues(member, aliases, seen),
+    );
+    return values.some((value) => value === null)
+      ? null
+      : [...new Set(values.flat())].sort();
+  }
+  if (
+    !ts.isTypeReferenceNode(typeNode) ||
+    !ts.isIdentifier(typeNode.typeName) ||
+    seen.has(typeNode.typeName.text)
+  )
+    return null;
+  const candidates = aliases.get(typeNode.typeName.text) ?? [];
+  if (candidates.length !== 1) return null;
+  const nextSeen = new Set(seen);
+  nextSeen.add(typeNode.typeName.text);
+  return staticEndpointTypeValues(candidates[0].type, aliases, nextSeen);
+}
+
+function gmgnEndpointFragments(sourceFile) {
+  return collectTypeScriptNodes(
+    sourceFile,
+    (node) =>
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node),
+  )
+    .map((node) => node.text)
+    .filter((value) => value.includes("/v1/"));
+}
+
+function identifierCount(sourceFile, name) {
+  return collectTypeScriptNodes(
+    sourceFile,
+    (node) => ts.isIdentifier(node) && node.text === name,
+  ).length;
+}
+
+function exactReviewedUrlUsage(sourceFile, constructor, fetchCall) {
+  const references = collectTypeScriptNodes(
+    sourceFile,
+    (node) => ts.isIdentifier(node) && node.text === "url",
+  );
+  let declarationCount = 0;
+  let searchParameterCount = 0;
+  let fetchArgumentCount = 0;
+  for (const reference of references) {
+    const parent = reference.parent;
+    if (
+      ts.isVariableDeclaration(parent) &&
+      parent.name === reference &&
+      parent.initializer !== undefined &&
+      unwrapReviewedExpression(parent.initializer) === constructor
+    ) {
+      declarationCount += 1;
+      continue;
+    }
+    if (
+      ts.isPropertyAccessExpression(parent) &&
+      parent.expression === reference &&
+      parent.name.text === "searchParams" &&
+      ts.isPropertyAccessExpression(parent.parent) &&
+      parent.parent.expression === parent &&
+      parent.parent.name.text === "set" &&
+      ts.isCallExpression(parent.parent.parent) &&
+      parent.parent.parent.expression === parent.parent
+    ) {
+      searchParameterCount += 1;
+      continue;
+    }
+    if (
+      ts.isCallExpression(parent) &&
+      parent === fetchCall &&
+      parent.arguments[0] === reference
+    ) {
+      fetchArgumentCount += 1;
+      continue;
+    }
+    return false;
+  }
+  return (
+    references.length === 5 &&
+    declarationCount === 1 &&
+    searchParameterCount === 3 &&
+    fetchArgumentCount === 1
+  );
+}
+
+function exactGmgnEndpointClientContract(sourceFile, contract) {
+  const declarations = constVariableDeclarations(sourceFile);
+  const aliases = typeAliasDeclarations(sourceFile);
+  const requestFunctions = collectTypeScriptNodes(
+    sourceFile,
+    (node) =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "gmgnJsonRequest",
+  );
+  if (requestFunctions.length !== 1) return false;
+  const pathType = requestFunctions[0].parameters[0]?.type;
+  if (pathType === undefined) return false;
+  const allowed = [...contract.allowed].sort();
+  if (!exactJson(staticEndpointTypeValues(pathType, aliases), allowed)) {
+    return false;
+  }
+
+  const requestCalls = collectTypeScriptNodes(
+    sourceFile,
+    (node) =>
+      ts.isCallExpression(node) &&
+      exactIdentifier(node.expression, "gmgnJsonRequest"),
+  ).sort(
+    (left, right) => left.getStart(sourceFile) - right.getStart(sourceFile),
+  );
+  const callEndpoints = requestCalls.map((call) =>
+    call.arguments[0] === undefined
+      ? null
+      : staticEndpointValues(call.arguments[0], declarations),
+  );
+  if (!exactJson(callEndpoints, contract.calls)) return false;
+
+  if (
+    identifierCount(sourceFile, "gmgnJsonRequest") !==
+      contract.calls.length + 1 ||
+    identifierCount(sourceFile, "fetchImpl") !== contract.fetchImplReferences ||
+    identifierCount(sourceFile, "fetch") !== 3 ||
+    identifierCount(sourceFile, "URL") !== 1 ||
+    identifierCount(sourceFile, "GMGN_API_ORIGIN") !== 2 ||
+    identifierCount(sourceFile, "path") !== contract.pathReferences
+  )
+    return false;
+
+  const endpointFragments = gmgnEndpointFragments(sourceFile);
+  if (endpointFragments.some((value) => !allowed.includes(value))) return false;
+
+  const urlConstructors = collectTypeScriptNodes(
+    sourceFile,
+    (node) =>
+      ts.isNewExpression(node) && exactIdentifier(node.expression, "URL"),
+  );
+  if (
+    urlConstructors.length !== 1 ||
+    urlConstructors[0].arguments?.length !== 2 ||
+    !exactIdentifier(urlConstructors[0].arguments[0], "path") ||
+    !exactIdentifier(urlConstructors[0].arguments[1], "GMGN_API_ORIGIN")
+  )
+    return false;
+
+  const networkCalls = collectTypeScriptNodes(sourceFile, (node) => {
+    if (!ts.isCallExpression(node)) return false;
+    const callee = unwrapReviewedExpression(node.expression);
+    return (
+      (ts.isIdentifier(callee) &&
+        ["fetch", "fetchImpl"].includes(callee.text)) ||
+      (ts.isPropertyAccessExpression(callee) && callee.name.text === "fetch")
+    );
+  });
+  return (
+    networkCalls.length === 1 &&
+    exactIdentifier(networkCalls[0].expression, "fetchImpl") &&
+    networkCalls[0].arguments.length >= 1 &&
+    exactIdentifier(networkCalls[0].arguments[0], "url") &&
+    exactReviewedUrlUsage(sourceFile, urlConstructors[0], networkCalls[0])
+  );
+}
+
+function exactGmgnReadOnlyEndpointContract(sourceByPath) {
+  return GMGN_READ_ONLY_ENDPOINT_CONTRACT.every((contract) => {
+    const sourceFile = reviewedTypeScriptSource(
+      contract.path,
+      sourceByPath.get(contract.path),
+    );
+    return (
+      sourceFile !== null &&
+      exactGmgnEndpointClientContract(sourceFile, contract)
+    );
+  });
+}
+
+function directCallName(value) {
+  const expression = unwrapReviewedExpression(value);
+  return ts.isIdentifier(expression) ? expression.text : null;
+}
+
+function nearestFunctionLike(node) {
+  let current = node.parent;
+  while (current !== undefined) {
+    if (ts.isFunctionLike(current)) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
+function exactAnalyticsProofReadBoundary(source) {
+  const sourceFile = reviewedTypeScriptSource(
+    "app/api/explore/token/analytics/route.ts",
+    source,
+  );
+  if (sourceFile === null) return false;
+  const getFunctions = collectTypeScriptNodes(
+    sourceFile,
+    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "GET",
+  );
+  if (getFunctions.length !== 1 || getFunctions[0].body === undefined) {
+    return false;
+  }
+  const getFunction = getFunctions[0];
+  const allCalls = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isCallExpression(node),
+  );
+  const proofCalls = allCalls.filter(
+    (call) => directCallName(call.expression) === "readGmgnMarketSnapshotV1",
+  );
+  const providerCalls = Object.fromEntries(
+    ANALYTICS_PROVIDER_READS.map((name) => [
+      name,
+      allCalls.filter((call) => directCallName(call.expression) === name),
+    ]),
+  );
+  if (
+    proofCalls.length !== 1 ||
+    ANALYTICS_PROVIDER_READS.some((name) => providerCalls[name].length !== 1)
+  )
+    return false;
+  for (const name of [
+    "readGmgnMarketSnapshotV1",
+    ...ANALYTICS_PROVIDER_READS,
+  ]) {
+    const identifiers = collectTypeScriptNodes(
+      sourceFile,
+      (node) => ts.isIdentifier(node) && node.text === name,
+    );
+    if (identifiers.length !== 2) return false;
+  }
+
+  const verificationGuards = collectTypeScriptNodes(
+    getFunction.body,
+    (node) =>
+      ts.isIfStatement(node) &&
+      node.expression.getText(sourceFile).replace(/\s+/gu, "") ===
+        "verification===null",
+  );
+  if (verificationGuards.length !== 1) return false;
+  const guard = verificationGuards[0];
+  if (
+    proofCalls[0].getStart(sourceFile) >= guard.getStart(sourceFile) ||
+    proofCalls[0].getStart(sourceFile) <
+      getFunction.body.getStart(sourceFile) ||
+    nearestFunctionLike(proofCalls[0]) !== getFunction
+  )
+    return false;
+  return ANALYTICS_PROVIDER_READS.every((name) => {
+    const call = providerCalls[name][0];
+    return (
+      call.getStart(sourceFile) > guard.end &&
+      call.end < getFunction.body.end &&
+      nearestFunctionLike(call) === getFunction
+    );
+  });
+}
+
+function directPropertyName(property) {
+  return ts.isIdentifier(property.name) ? property.name.text : null;
+}
+
+function exactPublicWalletProjection(source) {
+  const sourceFile = reviewedTypeScriptSource(
+    "app/api/explore/token/analytics/route.ts",
+    source,
+  );
+  if (sourceFile === null) return false;
+  const functions = collectTypeScriptNodes(
+    sourceFile,
+    (node) =>
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "publicWalletRankingV1",
+  );
+  if (functions.length !== 1 || functions[0].body === undefined) return false;
+  const returns = collectTypeScriptNodes(functions[0].body, (node) =>
+    ts.isReturnStatement(node),
+  );
+  if (returns.length !== 1 || returns[0].expression === undefined) return false;
+  const outer = unwrapReviewedExpression(returns[0].expression);
+  if (!ts.isObjectLiteralExpression(outer) || outer.properties.length !== 2) {
+    return false;
+  }
+  const outerProperties = outer.properties;
+  if (
+    outerProperties.some((property) => !ts.isPropertyAssignment(property)) ||
+    !exactJson(outerProperties.map(directPropertyName), [
+      "fetchedAt",
+      "wallets",
+    ])
+  )
+    return false;
+  const fetchedAt = unwrapReviewedExpression(outerProperties[0].initializer);
+  const wallets = unwrapReviewedExpression(outerProperties[1].initializer);
+  if (
+    !ts.isPropertyAccessExpression(fetchedAt) ||
+    !exactIdentifier(fetchedAt.expression, "value") ||
+    fetchedAt.name.text !== "fetchedAt" ||
+    !ts.isCallExpression(wallets) ||
+    !ts.isPropertyAccessExpression(wallets.expression) ||
+    wallets.expression.name.text !== "map" ||
+    !ts.isPropertyAccessExpression(wallets.expression.expression) ||
+    !exactIdentifier(wallets.expression.expression.expression, "value") ||
+    wallets.expression.expression.name.text !== "wallets" ||
+    wallets.arguments.length !== 1
+  )
+    return false;
+  const mapper = unwrapReviewedExpression(wallets.arguments[0]);
+  if (
+    !ts.isArrowFunction(mapper) ||
+    mapper.parameters.length !== 1 ||
+    !ts.isIdentifier(mapper.parameters[0].name) ||
+    mapper.parameters[0].name.text !== "wallet"
+  )
+    return false;
+  const projection = unwrapReviewedExpression(mapper.body);
+  if (
+    !ts.isObjectLiteralExpression(projection) ||
+    projection.properties.length !== PUBLIC_WALLET_FIELDS.length ||
+    projection.properties.some(
+      (property) => !ts.isPropertyAssignment(property),
+    ) ||
+    !exactJson(
+      projection.properties.map(directPropertyName),
+      PUBLIC_WALLET_FIELDS,
+    )
+  )
+    return false;
+  return projection.properties.every((property, index) => {
+    const value = unwrapReviewedExpression(property.initializer);
+    return (
+      ts.isPropertyAccessExpression(value) &&
+      exactIdentifier(value.expression, "wallet") &&
+      value.name.text === PUBLIC_WALLET_FIELDS[index]
+    );
+  });
 }
 
 export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
@@ -924,16 +1463,19 @@ function exactFalseEnvironmentKey(source, name) {
 
 const EXACT_MANUAL_VERCEL_PROMOTION =
   'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"';
-const EXACT_MANUAL_VERCEL_PRODUCTION_PULL =
-  'vercel pull --yes --environment=production --token="$VERCEL_TOKEN"';
+const EXACT_MANUAL_VERCEL_PRODUCTION_METADATA =
+  'vercel env ls production --format json --token="$VERCEL_TOKEN" |';
+const EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY =
+  'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"';
 const EXACT_REAL_BLOCK_SLA_OUTPUT =
   "/secure/cutover/real-block-sla-db-attestation.json";
 const MANUAL_PROMOTION_SEQUENCE = Object.freeze([
   "npm run perf:read-model:real-block-sla-operator --",
   "npm run perf:read-model:real-block-sla --",
-  EXACT_MANUAL_VERCEL_PRODUCTION_PULL,
-  "env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module",
-  'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"',
+  EXACT_MANUAL_VERCEL_PRODUCTION_METADATA,
+  "node scripts/bind-vercel-sensitive-production-metadata.mjs",
+  "node scripts/resolve-gmgn-production-requirement.mjs",
+  EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY,
   "npm run perf:read-model:staged-deployment --",
   EXACT_MANUAL_VERCEL_PROMOTION,
   "npm run perf:read-model:post-promotion --",
@@ -943,18 +1485,25 @@ const MANUAL_PROMOTION_SEQUENCE = Object.freeze([
 function manualPromotionSequenceIsFailClosed(source) {
   if (typeof source !== "string") return false;
   let inShellFence = false;
+  let currentShellFence = [];
+  const shellFences = [];
   const shellCommands = [];
   for (const sourceLine of source.split(/\r?\n/u)) {
     const line = sourceLine.trim();
     if (line === "```sh" || line === "```bash") {
       inShellFence = true;
+      currentShellFence = [];
       continue;
     }
     if (line.startsWith("```")) {
+      if (inShellFence) shellFences.push(currentShellFence);
       inShellFence = false;
       continue;
     }
-    if (inShellFence && line.length > 0) shellCommands.push(line);
+    if (inShellFence && line.length > 0) {
+      currentShellFence.push(line);
+      shellCommands.push(line);
+    }
   }
   let previousIndex = -1;
   for (const command of MANUAL_PROMOTION_SEQUENCE) {
@@ -967,14 +1516,97 @@ function manualPromotionSequenceIsFailClosed(source) {
   const activePromotionCommands = shellCommands.filter((line) =>
     /\bvercel\s+promote(?:\s|$)/u.test(line),
   );
-  const activeProductionPulls = shellCommands.filter((line) =>
-    /\bvercel\s+pull(?:\s|$)/u.test(line),
+  const activeProductionMetadataListings = shellCommands.filter((line) =>
+    /\bvercel\s+env\s+ls\s+production(?:\s|$)/u.test(line),
   );
+  const activeRequirementEqualities = shellCommands.filter((line) =>
+    line.startsWith(EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY),
+  );
+  const promotionFence = shellFences.find((lines) =>
+    lines.includes(EXACT_MANUAL_VERCEL_PROMOTION),
+  );
+  const strictShellIndex = promotionFence?.indexOf("set -euo pipefail") ?? -1;
+  const metadataIndex =
+    promotionFence?.indexOf(EXACT_MANUAL_VERCEL_PRODUCTION_METADATA) ?? -1;
   return (
     activePromotionCommands.length === 1 &&
     activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION &&
-    activeProductionPulls.length === 1 &&
-    activeProductionPulls[0] === EXACT_MANUAL_VERCEL_PRODUCTION_PULL
+    activeProductionMetadataListings.length === 1 &&
+    activeProductionMetadataListings[0] ===
+      EXACT_MANUAL_VERCEL_PRODUCTION_METADATA &&
+    activeRequirementEqualities.length === 1 &&
+    activeRequirementEqualities[0] === EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY &&
+    strictShellIndex >= 0 &&
+    strictShellIndex < metadataIndex &&
+    includesExactLineSequence(promotionFence?.join("\n") ?? "", [
+      EXACT_MANUAL_VERCEL_PRODUCTION_METADATA,
+      "node scripts/bind-vercel-sensitive-production-metadata.mjs \\",
+      '--metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \\',
+      '--vercel-project-id "$VERCEL_PROJECT_ID"',
+    ]) &&
+    includesExactLineSequence(promotionFence?.join("\n") ?? "", [
+      'case "${STAGED_REQUIRE_GMGN_MARKET:-}" in',
+      "true|false) ;;",
+      '*) echo "The staged GMGN market requirement is missing or invalid" >&2; exit 1 ;;',
+      "esac",
+      "readonly STAGED_REQUIRE_GMGN_MARKET",
+    ]) &&
+    includesExactLineSequence(promotionFence?.join("\n") ?? "", [
+      'REQUIRE_GMGN_MARKET="$(',
+      "node scripts/resolve-gmgn-production-requirement.mjs \\",
+      '--metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \\',
+      '--vercel-project-id "$VERCEL_PROJECT_ID"',
+      ')"',
+      "readonly REQUIRE_GMGN_MARKET",
+    ]) &&
+    !shellCommands.some((line) => /\bvercel\s+pull(?:\s|$)/u.test(line))
+  );
+}
+
+const EXACT_MANUAL_VERCEL_ROLLBACK =
+  'vercel rollback "$PREVIOUS_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"';
+
+function manualRollbackSequenceIsFailClosed(source) {
+  if (typeof source !== "string") return false;
+  const start = source.indexOf("Use fresh owner-only output paths.");
+  const end = source.indexOf("\nThe metadata binder", start);
+  if (start < 0 || end <= start) return false;
+  const block = source.slice(start, end);
+  const bindingCommand = "npm run perf:read-model:production-binding --";
+  const firstBinding = block.indexOf(bindingCommand);
+  const rollback = block.indexOf(EXACT_MANUAL_VERCEL_ROLLBACK);
+  const secondBinding = block.indexOf(bindingCommand, firstBinding + 1);
+  const activeRollbackCommands = block
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => /^vercel rollback(?:\s|$)/u.test(line));
+  return (
+    firstBinding >= 0 &&
+    rollback > firstBinding &&
+    secondBinding > rollback &&
+    (block.match(/npm run perf:read-model:production-binding --/gu)?.length ??
+      0) === 2 &&
+    activeRollbackCommands.length === 1 &&
+    activeRollbackCommands[0] === EXACT_MANUAL_VERCEL_ROLLBACK &&
+    includesEverySourceFragment(block, [
+      "set -euo pipefail",
+      "umask 077",
+      'test ! -e "$UNCERTAIN_PRODUCTION_BINDING_OUTPUT"',
+      '--expected-deployment-id "$STAGED_DEPLOYMENT_ID"',
+      '--expected-git-head "$GITHUB_SHA"',
+      '--github-output "$UNCERTAIN_PRODUCTION_BINDING_OUTPUT"',
+      'grep -Fx "deployment_id=$STAGED_DEPLOYMENT_ID"',
+      'grep -Fx "git_head=$GITHUB_SHA"',
+      EXACT_MANUAL_VERCEL_ROLLBACK,
+      'test ! -e "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"',
+      '--expected-deployment-id "$PREVIOUS_DEPLOYMENT_ID"',
+      '--expected-git-head "$PREVIOUS_GIT_HEAD"',
+      '--github-output "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"',
+      'grep -Fx "deployment_id=$PREVIOUS_DEPLOYMENT_ID"',
+      'grep -Fx "deployment_url=$PREVIOUS_DEPLOYMENT_URL"',
+      'grep -Fx "git_head=$PREVIOUS_GIT_HEAD"',
+      "do not run `vercel rollback`",
+    ])
   );
 }
 
@@ -1909,10 +2541,23 @@ export function evaluateReadModelOperationsSourceContracts(
 
   const deployWorkflow =
     source(".github/workflows/deploy-production.yml") ?? "";
+  const stagedDeployJobStart = deployWorkflow.indexOf("\n  deploy:\n");
+  const stagedDeployJobEnd = deployWorkflow.indexOf(
+    "\n  generic-signer-probe-reconcile:\n",
+    stagedDeployJobStart,
+  );
+  const stagedDeployJobBlock =
+    stagedDeployJobStart >= 0 && stagedDeployJobEnd > stagedDeployJobStart
+      ? deployWorkflow.slice(stagedDeployJobStart, stagedDeployJobEnd)
+      : "";
   const verifyWorkflow = source(".github/workflows/verify.yml") ?? "";
   const packageJson = parseJson(source("package.json"));
   const deployPolicy =
     source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
+  const vercelSensitiveMetadataBinder =
+    source("scripts/bind-vercel-sensitive-production-metadata.mjs") ?? "";
+  const gmgnProductionRequirement =
+    source("scripts/resolve-gmgn-production-requirement.mjs") ?? "";
   const environmentExample = source(".env.example") ?? "";
   const realBlockSlaOperator =
     source("scripts/perf/read-model-real-block-sla-operator.mjs") ?? "";
@@ -1951,14 +2596,18 @@ export function evaluateReadModelOperationsSourceContracts(
   const bootstrapRuntime =
     source("scripts/data-pipeline/hosted-db-bootstrap-runtime.mjs") ?? "";
   const publicExplore = source("app/api/explore/route.ts") ?? "";
+  const publicExploreView = source("components/explore-view.tsx") ?? "";
   const publicToken = source("app/api/explore/token/route.ts") ?? "";
   const publicChart = source("app/api/explore/token/chart/route.ts") ?? "";
+  const publicTokenAnalytics =
+    source("app/api/explore/token/analytics/route.ts") ?? "";
   const routerCustomPublic =
     source("lib/alchemy/router-custom-public.server.ts") ?? "";
   const envioClassicV3Catalog =
     source("lib/market-data/envio-classic-v3-catalog.server.ts") ?? "";
   const envioClassicV4CatalogBinding =
-    source("lib/data-pipeline/envio-classic-v4-catalog-binding.server.ts") ?? "";
+    source("lib/data-pipeline/envio-classic-v4-catalog-binding.server.ts") ??
+    "";
   const dexscreenerExplore =
     source("lib/market-data/dexscreener-explore.server.ts") ?? "";
   const dexscreenerShadow =
@@ -1966,12 +2615,68 @@ export function evaluateReadModelOperationsSourceContracts(
   const exploreMarket =
     source("lib/market-data/explore-market.server.ts") ?? "";
   const gmgnMarket = source("lib/market-data/gmgn.server.ts") ?? "";
+  const canonicalTokenSupply =
+    source("lib/market-data/canonical-token-supply.server.ts") ?? "";
+  const gmgnChart = source("lib/market-data/gmgn-chart.server.ts") ?? "";
+  const gmgnRuntimeConfig =
+    source("lib/market-data/gmgn-runtime-config.server.ts") ?? "";
+  const gmgnChartSnapshot =
+    source("lib/market-data/gmgn-chart-data-v1.ts") ?? "";
+  const marketChartSnapshot = source("lib/market-data/market-data-v1.ts") ?? "";
+  const publicOpenApi = source("lib/public-openapi.ts") ?? "";
+  const marketChartErrorOpenApiStart = publicOpenApi.indexOf(
+    "      MarketChartError: {",
+  );
+  const marketChartErrorOpenApiEnd = publicOpenApi.indexOf(
+    "      TokenChartResponse: {",
+    marketChartErrorOpenApiStart,
+  );
+  const marketChartErrorOpenApi =
+    marketChartErrorOpenApiStart >= 0 &&
+    marketChartErrorOpenApiEnd > marketChartErrorOpenApiStart
+      ? publicOpenApi.slice(
+          marketChartErrorOpenApiStart,
+          marketChartErrorOpenApiEnd,
+        )
+      : "";
+  const gmgnTokenAnalytics =
+    source("lib/market-data/gmgn-token-analytics.server.ts") ?? "";
+  const gmgnTokenAnalyticsSnapshot =
+    source("lib/market-data/gmgn-token-analytics-v1.ts") ?? "";
+  const gmgnDiscovery =
+    source("lib/market-data/gmgn-discovery.server.ts") ?? "";
+  const gmgnDiscoverySnapshot =
+    source("lib/market-data/gmgn-discovery-v1.ts") ?? "";
+  const gmgnCanonicalRanking =
+    source("lib/market-data/gmgn-canonical-ranking.ts") ?? "";
+  const gmgnReadOnlyEndpointBoundary = exactGmgnReadOnlyEndpointContract(
+    new Map([
+      ["lib/market-data/gmgn.server.ts", gmgnMarket],
+      ["lib/market-data/gmgn-chart.server.ts", gmgnChart],
+      ["lib/market-data/gmgn-token-analytics.server.ts", gmgnTokenAnalytics],
+      ["lib/market-data/gmgn-discovery.server.ts", gmgnDiscovery],
+    ]),
+  );
   const gmgnAccountGate =
     source("lib/market-data/gmgn-account-gate.server.ts") ?? "";
-  const gmgnSnapshot =
-    source("lib/market-data/gmgn-market-data-v1.ts") ?? "";
+  const gmgnMultiflightMigration =
+    source(
+      "ops/website-projection-target/migrations/0007_gmgn_account_gate_multiflight_v1.sql",
+    ) ?? "";
+  const websiteProjectionOperatorCore =
+    source("scripts/website-projection-db-operator-core.mjs") ?? "";
+  const websiteProjectionPostgres =
+    source("scripts/website-projection-db-postgres.mjs") ?? "";
+  const websiteProjectionTarget =
+    source("lib/server/projection-target/website-target.ts") ?? "";
+  const websiteProjectionTargetRunbook =
+    source("docs/operations/WEBSITE-PROJECTION-TARGET-V1.md") ?? "";
+  const websiteProjectionOperatorRunbook =
+    source("docs/operations/WEBSITE-PROJECTION-DATABASE-OPERATOR-V1.md") ?? "";
+  const gmgnSnapshot = source("lib/market-data/gmgn-market-data-v1.ts") ?? "";
   const stagedPublicSmokeScript =
     source("scripts/smoke-static-dexscreener-public-apis.mjs") ?? "";
+  const operationsHealth = source("app/api/ops/health/route.ts") ?? "";
   const publicCreatorProfile = source("app/api/explore/profile/route.ts") ?? "";
   const publicClassicProfile =
     source("app/api/profile/classic-v3/route.ts") ?? "";
@@ -1988,6 +2693,40 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/server/action-rpc-identity.server.ts") ?? "";
   const primaryRpcLaunchCatalog =
     source("lib/market-data/primary-rpc-launches.server.ts") ?? "";
+  const publicWalletRankingStart = publicTokenAnalytics.indexOf(
+    "function publicWalletRankingV1(",
+  );
+  const publicWalletRankingEnd = publicTokenAnalytics.indexOf(
+    "\nfunction analyticsResponse(",
+    publicWalletRankingStart,
+  );
+  const publicWalletRankingBlock =
+    publicWalletRankingStart >= 0 &&
+    publicWalletRankingEnd > publicWalletRankingStart
+      ? publicTokenAnalytics.slice(
+          publicWalletRankingStart,
+          publicWalletRankingEnd,
+        )
+      : "";
+  const analyticsProofReadBoundary =
+    exactAnalyticsProofReadBoundary(publicTokenAnalytics);
+  const publicWalletProjectionBoundary =
+    exactPublicWalletProjection(publicTokenAnalytics);
+  const gmgnChartReadStart = publicChart.indexOf(
+    "gmgnChart = await readGmgnMarketChartV1({",
+  );
+  const gmgnChartAcceptanceStart = publicChart.indexOf(
+    "isFreshReadyGmgnTokenSeries(",
+    gmgnChartReadStart,
+  );
+  const bitqueryChartFallbackStart = publicChart.indexOf(
+    "const bitqueryChart = await readBitqueryMarketChartV1({",
+    gmgnChartAcceptanceStart,
+  );
+  const chartPreferenceStart = publicChart.indexOf(
+    "const chart = preferAdmittedGmgnTokenSeriesV1({",
+    bitqueryChartFallbackStart,
+  );
   const primaryResolverStart = websiteRpcProviders.indexOf(
     "export function productionMainnetRpcPrimary(",
   );
@@ -1995,20 +2734,27 @@ export function evaluateReadModelOperationsSourceContracts(
     "\nexport function ",
     primaryResolverStart + 1,
   );
-  const primaryResolver = primaryResolverStart >= 0
-    ? websiteRpcProviders.slice(
-        primaryResolverStart,
-        primaryResolverEnd >= 0 ? primaryResolverEnd : undefined,
-      )
-    : "";
-  const classicProfileGetEnd = publicClassicProfile.indexOf("export async function POST");
-  const publicClassicProfileGet = classicProfileGetEnd >= 0
-    ? publicClassicProfile.slice(0, classicProfileGetEnd)
-    : "";
-  const stockProfileGetEnd = publicStockProfile.indexOf("export async function POST");
-  const publicStockProfileGet = stockProfileGetEnd >= 0
-    ? publicStockProfile.slice(0, stockProfileGetEnd)
-    : "";
+  const primaryResolver =
+    primaryResolverStart >= 0
+      ? websiteRpcProviders.slice(
+          primaryResolverStart,
+          primaryResolverEnd >= 0 ? primaryResolverEnd : undefined,
+        )
+      : "";
+  const classicProfileGetEnd = publicClassicProfile.indexOf(
+    "export async function POST",
+  );
+  const publicClassicProfileGet =
+    classicProfileGetEnd >= 0
+      ? publicClassicProfile.slice(0, classicProfileGetEnd)
+      : "";
+  const stockProfileGetEnd = publicStockProfile.indexOf(
+    "export async function POST",
+  );
+  const publicStockProfileGet =
+    stockProfileGetEnd >= 0
+      ? publicStockProfile.slice(0, stockProfileGetEnd)
+      : "";
   const retiredCandidateCutover = Object.freeze({
     productionRunbook: productionCutoverRunbook,
     envioRunbook: envioCandidateRunbook,
@@ -2094,16 +2840,25 @@ export function evaluateReadModelOperationsSourceContracts(
     "Resolve staged GMGN market requirement",
   );
   const stagedGmgnRequirementEnd = deployWorkflow.indexOf(
-    "Reject mixed legacy and V3 Custom Launch release authority",
+    "Validate staged read-model release policy",
     stagedGmgnRequirement,
   );
   const stagedGmgnRequirementBlock =
     stagedGmgnRequirement >= 0 &&
-      stagedGmgnRequirementEnd > stagedGmgnRequirement
-      ? deployWorkflow.slice(
-          stagedGmgnRequirement,
-          stagedGmgnRequirementEnd,
-        )
+    stagedGmgnRequirementEnd > stagedGmgnRequirement
+      ? deployWorkflow.slice(stagedGmgnRequirement, stagedGmgnRequirementEnd)
+      : "";
+  const stagedReadModelPolicy = deployWorkflow.indexOf(
+    "Validate staged read-model release policy",
+  );
+  const stagedReadModelPolicyEnd = deployWorkflow.indexOf(
+    "Reject mixed legacy and V3 Custom Launch release authority",
+    stagedReadModelPolicy,
+  );
+  const stagedReadModelPolicyBlock =
+    stagedReadModelPolicy >= 0 &&
+    stagedReadModelPolicyEnd > stagedReadModelPolicy
+      ? deployWorkflow.slice(stagedReadModelPolicy, stagedReadModelPolicyEnd)
       : "";
   const stagedCatalogProbe = deployWorkflow.indexOf(
     "Probe exact staged Envio Classic V3 catalog",
@@ -2123,8 +2878,32 @@ export function evaluateReadModelOperationsSourceContracts(
     "      - name: Probe exact staged Custom Launch V3 release",
   );
   const stagedTokenImageProbeBlock =
-    stagedTokenImageProbe >= 0 && stagedTokenImageProbeEnd > stagedTokenImageProbe
+    stagedTokenImageProbe >= 0 &&
+    stagedTokenImageProbeEnd > stagedTokenImageProbe
       ? deployWorkflow.slice(stagedTokenImageProbe, stagedTokenImageProbeEnd)
+      : "";
+  const stagedCandidateDeploy = deployWorkflow.indexOf(
+    "Stage production source build without assigning domains",
+  );
+  const stagedCandidateDeployEnd = deployWorkflow.indexOf(
+    "Resolve exact staged deployment",
+    stagedCandidateDeploy,
+  );
+  const stagedCandidateDeployBlock =
+    stagedCandidateDeploy >= 0 &&
+    stagedCandidateDeployEnd > stagedCandidateDeploy
+      ? deployWorkflow.slice(stagedCandidateDeploy, stagedCandidateDeployEnd)
+      : "";
+  const stagedWakeCanary = deployWorkflow.indexOf(
+    "Verify staged QuickNode wake authentication",
+  );
+  const stagedWakeCanaryEnd = deployWorkflow.indexOf(
+    "Probe staged token image runtime without writes",
+    stagedWakeCanary,
+  );
+  const stagedWakeCanaryBlock =
+    stagedWakeCanary >= 0 && stagedWakeCanaryEnd > stagedWakeCanary
+      ? deployWorkflow.slice(stagedWakeCanary, stagedWakeCanaryEnd)
       : "";
   const stagedBitquerySmokeEnd = deployWorkflow.indexOf(
     "Reverify staged candidate binding",
@@ -2136,24 +2915,87 @@ export function evaluateReadModelOperationsSourceContracts(
       : "";
   const stagedProviderHandoff = includesEverySourceFragment(deployWorkflow, [
     "GMGN_MARKET_REQUIRED: $\{{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
+    "gmgn_account_gate_mode: $\{{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}",
+    "GMGN_ACCOUNT_GATE_MODE: $\{{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}",
+    "gmgn_requests_per_second: $\{{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}",
+    "GMGN_REQUESTS_PER_SECOND: $\{{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}",
+    "market_cap_desc_source: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_source }}",
+    "market_cap_desc_gmgn_status: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}",
+    "market_cap_desc_matched_count: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}",
+    "market_cap_desc_ranking_commitment: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}",
+    "market_cap_asc_source: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_source }}",
+    "market_cap_asc_gmgn_status: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}",
+    "market_cap_asc_matched_count: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}",
+    "market_cap_asc_ranking_commitment: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}",
+    "GMGN account gate mode:",
     "MARKET_PROVIDER: $\{{ steps.public-provider-smoke.outputs.market_provider }}",
+    "discovery_status: $\{{ steps.public-provider-smoke.outputs.discovery_status }}",
+    "discovery_matched_count: $\{{ steps.public-provider-smoke.outputs.discovery_matched_count }}",
+    "discovery_ranking_commitment: $\{{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}",
+    "search_status: $\{{ steps.public-provider-smoke.outputs.search_status }}",
+    "search_matched_count: $\{{ steps.public-provider-smoke.outputs.search_matched_count }}",
+    "search_ranking_commitment: $\{{ steps.public-provider-smoke.outputs.search_ranking_commitment }}",
+    "analytics_summary_status: $\{{ steps.public-provider-smoke.outputs.analytics_summary_status }}",
+    "analytics_holders_status: $\{{ steps.public-provider-smoke.outputs.analytics_holders_status }}",
+    "analytics_traders_status: $\{{ steps.public-provider-smoke.outputs.analytics_traders_status }}",
+    "market_cap_desc_source: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_source }}",
+    "market_cap_desc_status: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_status }}",
+    "market_cap_desc_gmgn_status: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}",
+    "market_cap_desc_matched_count: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}",
+    "market_cap_desc_ranking_commitment: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}",
+    "market_cap_asc_source: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_source }}",
+    "market_cap_asc_status: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_status }}",
+    "market_cap_asc_gmgn_status: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}",
+    "market_cap_asc_matched_count: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}",
+    "market_cap_asc_ranking_commitment: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}",
     "MARKET_READ_STATUS: $\{{ steps.public-provider-smoke.outputs.market_read_status }}",
     "DETAIL_MARKET_PROVIDER: $\{{ steps.public-provider-smoke.outputs.detail_market_provider }}",
     "DETAIL_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.detail_status }}",
+    "DISCOVERY_STATUS: $\{{ steps.public-provider-smoke.outputs.discovery_status }}",
+    "DISCOVERY_MATCHED_COUNT: $\{{ steps.public-provider-smoke.outputs.discovery_matched_count }}",
+    "DISCOVERY_RANKING_COMMITMENT: $\{{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}",
+    "SEARCH_STATUS: $\{{ steps.public-provider-smoke.outputs.search_status }}",
+    "SEARCH_MATCHED_COUNT: $\{{ steps.public-provider-smoke.outputs.search_matched_count }}",
+    "SEARCH_RANKING_COMMITMENT: $\{{ steps.public-provider-smoke.outputs.search_ranking_commitment }}",
+    "ANALYTICS_SUMMARY_STATUS: $\{{ steps.public-provider-smoke.outputs.analytics_summary_status }}",
+    "ANALYTICS_HOLDERS_STATUS: $\{{ steps.public-provider-smoke.outputs.analytics_holders_status }}",
+    "ANALYTICS_TRADERS_STATUS: $\{{ steps.public-provider-smoke.outputs.analytics_traders_status }}",
+    "MARKET_CAP_DESC_SOURCE: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_source }}",
+    "MARKET_CAP_DESC_STATUS: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_status }}",
+    "MARKET_CAP_DESC_GMGN_STATUS: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}",
+    "MARKET_CAP_DESC_MATCHED_COUNT: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}",
+    "MARKET_CAP_DESC_RANKING_COMMITMENT: $\{{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}",
+    "MARKET_CAP_ASC_SOURCE: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_source }}",
+    "MARKET_CAP_ASC_STATUS: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_status }}",
+    "MARKET_CAP_ASC_GMGN_STATUS: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}",
+    "MARKET_CAP_ASC_MATCHED_COUNT: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}",
+    "MARKET_CAP_ASC_RANKING_COMMITMENT: $\{{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}",
+    "CHART_PROVIDER: $\{{ steps.public-provider-smoke.outputs.chart_provider }}",
+    "CHART_SCOPE: $\{{ steps.public-provider-smoke.outputs.chart_scope }}",
+    "CHART_POOL_ATTRIBUTION: $\{{ steps.public-provider-smoke.outputs.chart_pool_attribution }}",
     "CHART_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.chart_status }}",
     'echo "- Visible market provider: \\`${MARKET_PROVIDER:-not-run}\\`"',
     'echo "- Explore market read status: \\`${MARKET_READ_STATUS:-not-run}\\`"',
     'echo "- Token detail market provider: \\`${DETAIL_MARKET_PROVIDER:-not-run}\\`"',
+    'echo "- GMGN discovery ranking commitment: \\`${DISCOVERY_RANKING_COMMITMENT:-not-run}\\`"',
+    'echo "- GMGN search ranking commitment: \\`${SEARCH_RANKING_COMMITMENT:-not-run}\\`"',
+    'echo "- Descending market-cap ranking: source \\`${MARKET_CAP_DESC_SOURCE:-not-run}\\`',
+    'echo "- Ascending market-cap ranking: source \\`${MARKET_CAP_ASC_SOURCE:-not-run}\\`',
+    'echo "- GMGN analytics summary: \\`${ANALYTICS_SUMMARY_STATUS:-not-run}\\`"',
     'echo "- Token detail smoke: \\`${DETAIL_SMOKE_STATUS:-not-run}\\`"',
-    'echo "- Full-catalog FDV ranking provider: Dexscreener"',
+    'echo "- Descending market-cap ranking: source \\`${MARKET_CAP_DESC_SOURCE:-not-run}\\`',
+    'echo "- Ascending market-cap ranking: source \\`${MARKET_CAP_ASC_SOURCE:-not-run}\\`',
     'echo "- GMGN market required by staged public smoke: \\`$GMGN_MARKET_REQUIRED\\`"',
+    'echo "- Effective GMGN requests per second: \\`${GMGN_REQUESTS_PER_SECOND:-not-run}\\`"',
+    'echo "- Market chart provider: \\`${CHART_PROVIDER:-not-run}\\`"',
+    'echo "- Market chart series scope: \\`${CHART_SCOPE:-not-run}\\`"',
+    'echo "- Market chart pool attribution: \\`${CHART_POOL_ATTRIBUTION:-not-run}\\`"',
     'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
   ]);
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
-  const primaryRpcLaunchCatalogCacheStart =
-    primaryRpcLaunchCatalog.indexOf(
-      "export function createPrimaryRpcLaunchCatalogCacheV1",
-    );
+  const primaryRpcLaunchCatalogCacheStart = primaryRpcLaunchCatalog.indexOf(
+    "export function createPrimaryRpcLaunchCatalogCacheV1",
+  );
   const primaryRpcLaunchCatalogCacheEnd = primaryRpcLaunchCatalog.indexOf(
     "function catalogCacheKey(",
     primaryRpcLaunchCatalogCacheStart,
@@ -2211,8 +3053,8 @@ export function evaluateReadModelOperationsSourceContracts(
       "createEnvioClient({",
       '{ model: { _eq: "classic" } }',
       '{ releaseVersion: { _in: ["classic-v3", "classic-v4"] } }',
-      '{ isComplete: { _eq: true } }',
-      '{ provenanceValid: { _eq: true } }',
+      "{ isComplete: { _eq: true } }",
+      "{ provenanceValid: { _eq: true } }",
       "assertLaunchEventBinding(launch, event, release)",
       "rpcLag < BigInt(release.confirmations)",
       'source: "envio-classic-v3" as const',
@@ -2259,32 +3101,75 @@ export function evaluateReadModelOperationsSourceContracts(
       "const inFlight = new Map<string, Promise<DexscreenerShadowSnapshotV1>>()",
     ]) &&
     includesEverySourceFragment(exploreMarket, [
-      "if (!gmgnMarketDataConfiguredV1() || entries.length > 9)",
-      "exploreEntryMarketIdentitiesV1(entry).length !== 1",
-      "return readDexscreenerExploreEntriesV1(entries, wait);",
+      "hydrateVisibleCanonicalSupplyV1(entries, wait)",
+      "const CANONICAL_SUPPLY_PHASE_BUDGET_MS = 1_800",
+      "const CANONICAL_SUPPLY_HYDRATION_LIMIT = 20",
+      "canonicalTokenSupplyHydrationRequiredV1(entry)",
+      "exploreEntryMarketIdentitiesV1(entry).length > 0",
+      ").slice(0, CANONICAL_SUPPLY_HYDRATION_LIMIT)",
+      "hydrateMissingCanonicalTokenSupplyV1(\n    hydrationCandidates,",
+      "{ deadlineMs, now: wait.now }",
+      "hydrationCandidateIndexes.entries()",
+      "const supply = canonicalHydratedSupplyV1(hydrated)",
+      "...original,",
+      "totalSupplyRaw: supply.totalSupplyRaw",
+      "tokenDecimals: supply.tokenDecimals",
+      "entry.totalSupplyRaw.length > 78",
+      "BigInt(entry.totalSupplyRaw) <= UINT256_MAX",
+      "nowMs + CANONICAL_SUPPLY_PHASE_BUDGET_MS",
+      "if (!gmgnMarketDataConfiguredV1())",
+      "const gmgnCandidates = hydratedEntries.filter(",
+      "gmgnVisibleMarketEntryEligibleV1",
+      "if (gmgnCandidates.length === 0)",
+      "return readDexscreenerExploreEntriesV1(hydratedEntries, wait);",
       "const GMGN_VISIBLE_PHASE_BUDGET_MS = 1_800",
-      "snapshots = await readGmgnExploreSnapshotsV1(entries, {",
+      "snapshots = await readGmgnExploreSnapshotsV1(gmgnCandidates, {",
       "phaseStartedAtMs + GMGN_VISIBLE_PHASE_BUDGET_MS",
-      "const fallback = await readDexscreenerExploreEntriesV1(fallbackEntries, wait);",
-      "const valuedEntries = entries.map((entry): ValuedExploreEntry => {",
+      "const fallback = fallbackEntries.length === 0",
+      ": await readDexscreenerExploreEntriesV1(fallbackEntries, wait);",
+      "const fallbackObservedCount = fallbackEntries.filter((entry) =>",
+      "const fallbackQualifiedCount = fallbackEntries.filter((entry) =>",
+      "fallbackObservedEntryIds.has(entry.id) &&",
+      "const valuedEntries = hydratedEntries.map((entry): ValuedExploreEntry => {",
+      "const dexscreener = fallbackObservedEntryIds.has(entry.id)",
       'provider: "gmgn"',
       'fallbackProvider: "dexscreener"',
-      "if (marketRead.gmgnQualifiedCount > 0) sources.push(\"gmgn\");",
-      "if (marketRead.fallbackQualifiedCount > 0) sources.push(\"dexscreener\");",
+      'if (marketRead.gmgnObservedCount > 0) sources.push("gmgn");',
+      'if (marketRead.fallbackObservedCount > 0) sources.push("dexscreener");',
+      'if (marketRead.gmgnQualifiedCount > 0) sources.push("gmgn");',
+      'if (marketRead.fallbackQualifiedCount > 0) sources.push("dexscreener");',
     ]) &&
+    !exploreMarket.includes("entries.length > 9") &&
+    !exploreMarket.includes("exploreEntryMarketIdentitiesV1(entry).length !== 1") &&
     includesEverySourceFragment(gmgnMarket, [
       'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
-      "const GMGN_REQUEST_TIMEOUT_MS = 1_500",
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
       "const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000",
-      "const GMGN_MAXIMUM_CONCURRENCY = 3",
+      "const GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT = 100",
+      "const GMGN_VISIBLE_CHUNK_SIZE = 20",
+      "const GMGN_MAXIMUM_CONCURRENCY = 20",
+      "entries.slice(0, GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT)",
+      "offset += GMGN_VISIBLE_CHUNK_SIZE",
+      "boundedEntries.slice(offset, offset + GMGN_VISIBLE_CHUNK_SIZE)",
+      "gmgnVisibleMarketConcurrencyV1(chunk.length)",
+      "gmgnEffectiveRequestsPerSecondV1()",
+      "gmgnVisibleMarketEntryEligibleV1(",
+      "gmgnCanonicalIdentitySetV1(identities)",
       "const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000",
       'return String(chainId) === "1" ? "eth" : null;',
       "!productionPoolManagerBoundV1(entry)",
       '"/v1/token/info"',
       'candidate.protocol === "uniswap_v4"',
-      "candidate.tokenAddress === tokenAddress",
-      "candidate.poolId === poolId",
-      "candidate.quoteAddress === quoteAddress",
+      'candidate.chainId === "1"',
+      "identity.tokenAddress === tokenAddress",
+      "identity.quoteAddress === quoteAddress",
+      "const selection = tokenInfoPoolSelectionV1(",
+      "const providerPoolAddress = canonicalAddress(poolLocator)",
+      "identities.every((identity) =>",
+      "providerPoolAddress !== identity.quoteAddress",
+      "const providerPoolId = canonicalBytes32(poolLocator)",
+      "candidate.poolId === providerPoolId",
+      'entry.launchCategoryProvenance.source === "registry.custom-launched"',
       'String(data.pool.exchange).toLowerCase() !== "uniswap_v4"',
       "!poolBaseQuoteMatchesV1(data.pool, identity)",
       "!providerSupplyMatchesCanonical(",
@@ -2294,14 +3179,66 @@ export function evaluateReadModelOperationsSourceContracts(
       "const bytes = await readBoundedResponseBytes(",
       "const rateLimited = response.status === 429 || isRateLimitedEnvelope(value);",
       '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
-      "accountGate.reserveSlot({",
-      "await accountGate.blockUntil({",
+      "const pending = accountGate.reserveSlot(input);",
+      "const settled = await settleProviderOperation(pending, operation);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      "const pending = accountGate.blockUntil({",
       "blockedUntilMs: providerCooldownFromResponse(",
-      "await accountGate.complete(reservation);",
+      "accountGate.complete(reservation),",
+      "return settled !== PROVIDER_OPERATION_TIMED_OUT;",
+      "if (!callerCanAwaitSharedRead(wait, nowMs)) return null;",
+      "if (active) return awaitSharedReadForCaller(active, wait);",
+      "if (snapshot !== null) {",
+      "!hasExactOptionalEthereumChain(response)",
+      "!hasExactOptionalEthereumChain(data)",
+      "return value;",
       "canonicalSafeInteger(envelope.reset_at)",
       "process.env.GMGN_API_KEY?.trim()",
-      'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1"',
+      'from "./gmgn-runtime-config.server"',
+      "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
     ]) &&
+    !gmgnMarket.includes("CachedValue<GmgnMarketSnapshotV1 | null>") &&
+    includesEverySourceFragment(gmgnRuntimeConfig, [
+      "export const GMGN_PRO_REQUESTS_PER_SECOND_V1 = 20 as const",
+      "const GMGN_DEFAULT_REQUESTS_PER_SECOND_V1 = 1 as const",
+      "const CANONICAL_GMGN_REQUESTS_PER_SECOND = /^(?:[1-9]|1[0-9]|20)$/u",
+      "export function gmgnEffectiveRequestsPerSecondV1(): number",
+      "process.env.GMGN_MAX_REQUESTS_PER_SECOND ??",
+      "String(GMGN_DEFAULT_REQUESTS_PER_SECOND_V1)",
+      "CANONICAL_GMGN_REQUESTS_PER_SECOND.test(configured)",
+      "? Number(configured)",
+      ": GMGN_DEFAULT_REQUESTS_PER_SECOND_V1",
+    ]) &&
+    includesEverySourceFragment(canonicalTokenSupply, [
+      "const CANONICAL_TOKEN_SUPPLY_PHASE_BUDGET_MS = 1_800",
+      "const CANONICAL_TOKEN_SUPPLY_MAXIMUM_ENTRY_COUNT = 20",
+      "const CANONICAL_TOKEN_SUPPLY_MAXIMUM_PROVIDER_COUNT = 3",
+      "const CANONICAL_TOKEN_SUPPLY_MAXIMUM_CONCURRENCY = 2",
+      "const snapshotInFlight = new Map<",
+      "const supplyInFlight = new Map<string, Promise<SupplyObservation | null>>()",
+      'createHash("sha256").update(JSON.stringify([',
+      "fetchOptions: { signal: context.signal }",
+      "blockHash: snapshot.blockHash",
+      "requireCanonical: true",
+      "const active = snapshotInFlight.get(key)",
+      "const active = supplyInFlight.get(key)",
+      "if (observation !== null) {",
+      "uncached.length < CANONICAL_TOKEN_SUPPLY_MAXIMUM_ENTRY_COUNT",
+      "withSupplyLaneV1(context.signal",
+      "totalSupply > UINT256_MAX",
+      "export async function hydrateMissingCanonicalTokenSupplyBoundedV1<",
+      "const pending = hydrateMissingCanonicalTokenSupplyV1(entries, {",
+      "wait.signal?.addEventListener(\"abort\", onAbort, { once: true })",
+      "void pending.then(finish, () => finish(entries))",
+    ]) &&
+    [gmgnMarket, gmgnChart, gmgnTokenAnalytics, gmgnDiscovery].every(
+      (adapter) =>
+        includesEverySourceFragment(adapter, [
+          'from "./gmgn-runtime-config.server"',
+          "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
+        ]) && !adapter.includes("configuredRequestsPerSecond"),
+    ) &&
     includesEverySourceFragment(gmgnAccountGate, [
       'const GATE_ID = "gmgn-openapi-v1" as const',
       "lease_holder = $3::uuid",
@@ -2312,6 +3249,10 @@ export function evaluateReadModelOperationsSourceContracts(
       "AND gate.lease_holder = $3::uuid",
       '"GMGN account gate lease is stale or unavailable"',
       "assertReady: () => pool.assertGmgnAccountGateReadiness()",
+      "input.requestsPerSecond > 20",
+      "!isGmgnAccountGateCostV1(cost)",
+      "const GMGN_ACCOUNT_GATE_COSTS = [1, 2, 3, 5] as const",
+      "+ ($1::integer * $4::integer * INTERVAL '1 millisecond')",
     ]) &&
     includesEverySourceFragment(gmgnSnapshot, [
       '"programmable.gmgn-market-snapshot.v1" as const',
@@ -2320,7 +3261,221 @@ export function evaluateReadModelOperationsSourceContracts(
       "positiveInteger(value.priceUsdWad)",
       "positiveInteger(value.fdvUsdWad)",
       "positiveInteger(value.liquidityUsdWad)",
+      'value.marketScope === "token"',
+      'value.poolAttribution === "exact" ||',
+      'value.poolAttribution === "unavailable"',
     ]) &&
+    includesEverySourceFragment(gmgnChart, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      '"/v1/token/info"',
+      '"/v1/market/token_kline"',
+      "from: String(window.from.getTime())",
+      "to: String(window.to.getTime())",
+      'cost: path === "/v1/market/token_kline" ? 2 : 1',
+      "const canonicalIdentities = canonicalAdmissionIdentitySetV1(",
+      'identity.chainId === "1"',
+      'identity.protocol === "uniswap_v4"',
+      "identity.tokenAddress === tokenAddress",
+      "identity.quoteAddress === quoteAddress",
+      "const admission = selectTokenInfoAdmissionIdentityV1(",
+      "const providerPoolAddress = canonicalAddress(poolLocator)",
+      "const providerPoolId = canonicalBytes32(poolLocator)",
+      "candidate.poolId === providerPoolId",
+      'String(pool.exchange).toLowerCase() !== "uniswap_v4"',
+      "!poolBaseQuoteMatchesV1(pool, admission.identity)",
+      "identity: admission.identity",
+      "identityKey(first).localeCompare(identityKey(second))",
+      "return identities.some((candidate) => sameIdentity(candidate, identity))",
+      'provenance.source === "registry.custom-launched"',
+      "const declaredBases = [pool.base_address, pool.token_address]",
+      "addresses.includes(identity.tokenAddress)",
+      "addresses.includes(identity.quoteAddress)",
+      "!hasExactOptionalEthereumChain(response)",
+      "!hasExactOptionalEthereumChain(data)",
+      "return value;",
+      "!providerSupplyMatchesCanonical(",
+      'valueSemantics: "period-close" as const',
+      "const proof = await readGmgnChartIdentityProofV1(",
+      "if (proof === null) return null;",
+      "if (proof !== null) {",
+      "if (chart !== null) {",
+      'seriesScope: "token"',
+      "poolAttribution: input.identityProof.poolAttribution",
+      "const pending = accountGate.reserveSlot(input);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      'from "./gmgn-runtime-config.server"',
+      "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
+      'redirect: "error"',
+      'credentials: "omit"',
+    ]) &&
+    (gmgnChart.match(/!hasExactOptionalEthereumChain\(response\)/gu)?.length ??
+      0) === 2 &&
+    (gmgnChart.match(/!hasExactOptionalEthereumChain\(data\)/gu)?.length ??
+      0) === 2 &&
+    !gmgnChart.includes("CachedValue<GmgnMarketChartV1 | null>") &&
+    !gmgnChart.includes("CachedValue<GmgnChartIdentityProofV1 | null>") &&
+    includesEverySourceFragment(marketChartSnapshot, [
+      '"programmable.market-chart-error.v1" as const',
+      '"programmable.market-chart-error.v2" as const',
+      "export type MarketChartErrorV1",
+      "export type MarketChartErrorV2",
+      'source: "programmable"',
+      "export function isMarketChartError(",
+      "value.schemaVersion === PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION",
+      'value.source === "programmable"',
+      "value.schemaVersion === PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION_V1",
+      'value.source === "bitquery"',
+    ]) &&
+    includesEverySourceFragment(marketChartErrorOpenApi, [
+      "Provider-neutral chart error emitted before a chart provider can be selected",
+      'schemaVersion: { const: "programmable.market-chart-error.v2" }',
+      'source: { const: "programmable" }',
+    ]) &&
+    includesEverySourceFragment(gmgnChartSnapshot, [
+      '"programmable.gmgn-market-chart.v1" as const',
+      '"programmable.gmgn-chart-identity-proof.v1" as const',
+      'source: "gmgn-token-info"',
+      'valueSemantics: "period-close"',
+      'value.seriesScope !== "token"',
+      'value.poolAttribution !== "exact" &&',
+      'value.poolAttribution !== "unavailable"',
+      "value.poolAttribution !== value.identityProof.poolAttribution",
+      "!sameIdentity(value.identity, value.identityProof.identity)",
+      "value.time !== value.bucketEnd",
+      "totalVolume.toString() !== value.volumeUsdWad",
+      "isGmgnTokenSeriesForAdmissionIdentityV1(",
+      "return gmgnQuality > fallbackQuality ? input.candidate : input.fallback;",
+    ]) &&
+    includesEverySourceFragment(gmgnTokenAnalytics, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      '"/v1/token/security"',
+      '"/v1/token/pool_info"',
+      '"/v1/market/token_top_holders"',
+      '"/v1/market/token_top_traders"',
+      'return path.includes("token_top_") ? 5 : 1;',
+      "!providerEthereumChainMatchesIfPresent(response, data)",
+      "data.list.some((row) => !providerEthereumChainMatchesIfPresent(row))",
+      "return envelope;",
+      "const providerAddress = canonicalAddress(data.address)",
+      "const baseAddress = canonicalAddress(data.base_address)",
+      "const tokenAddress = baseAddress",
+      "providerAddress !== identity.tokenAddress",
+      "quoteAddress !== identity.quoteAddress",
+      'data.exchange !== "uniswap_v4"',
+      "const token0Address = baseAddress < quoteAddress ? baseAddress : quoteAddress",
+      "const token1Address = baseAddress < quoteAddress ? quoteAddress : baseAddress",
+      "providerPair[0] !== token0Address || providerPair[1] !== token1Address",
+      "token0Address < token1Address",
+      "const providerWait = sharedProviderWait(wait);",
+      "if (value !== null) {",
+      "const pending = accountGate.reserveSlot(input);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      'from "./gmgn-runtime-config.server"',
+      "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
+      'redirect: "error"',
+      'credentials: "omit"',
+    ]) &&
+    !gmgnTokenAnalytics.includes("data.pool_address") &&
+    !gmgnTokenAnalytics.includes("CachedValue<GmgnTokenSecurityV1 | null>") &&
+    !gmgnTokenAnalytics.includes("CachedValue<GmgnTokenPoolInfoV1 | null>") &&
+    !gmgnTokenAnalytics.includes(
+      "CachedValue<GmgnTokenWalletRankingV1 | null>",
+    ) &&
+    includesEverySourceFragment(gmgnTokenAnalyticsSnapshot, [
+      '"programmable.gmgn-token-security.v1" as const',
+      '"programmable.gmgn-token-pool-info.v1" as const',
+      '"programmable.gmgn-token-wallet-ranking.v1" as const',
+      "export const GMGN_TOKEN_RANKING_MAXIMUM_LIMIT = 100 as const",
+      "export const GMGN_TOKEN_RANKING_DEFAULT_LIMIT = 20 as const",
+      'source: "gmgn"',
+      'exchange: "uniswap_v4"',
+      'marketScope: "token"',
+      'poolAttribution: "unavailable"',
+      "token0Address < token1Address",
+      'export type GmgnTokenWalletRankingKindV1 = "holders" | "traders"',
+    ]) &&
+    includesEverySourceFragment(gmgnDiscovery, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      '"/v1/market/rank"',
+      '"/v1/market/hot_searches"',
+      '"/v1/market/search"',
+      'chain: "eth"',
+      'order_by: "weight"',
+      'return path === "/v1/market/hot_searches" ? 3 : 1;',
+      "return envelope;",
+      "if (value !== null) {",
+      "const pending = accountGate.reserveSlot(input);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      'from "./gmgn-runtime-config.server"',
+      "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
+      'redirect: "error"',
+      'credentials: "omit"',
+    ]) &&
+    !gmgnDiscovery.includes("CachedValue<GmgnDiscoverySnapshotV1 | null>") &&
+    includesEverySourceFragment(gmgnDiscoverySnapshot, [
+      '"programmable.gmgn-discovery.v1" as const',
+      '"programmable.gmgn-search.v1" as const',
+      'providerChain: "eth"',
+      "normalizeGmgnSearchQueryV1(value.query) !== value.query",
+      '!Array.isArray(data.wallets)',
+      'if (!isRecord(coin) || coin.chain !== "eth")',
+      "duplicateProviderItemCount",
+      "if (!hasExactOptionalEthereumChain(current)) return null;",
+      "return hasExactOptionalEthereumChain(current) ? current : null;",
+      '!Object.prototype.hasOwnProperty.call(value, "chain")',
+      'value.chain === "eth"',
+      'if (!isRecord(value) || value.chain !== "eth") return null;',
+      'block.chain === "eth" && block.interval === interval',
+      "let discarded = extracted.foreignItemCount;",
+      "if (addresses.has(candidate.token.tokenAddress)) {",
+      "providerItemCount: extracted.providerItemCount",
+      "Number(value.providerItemCount) !== value.tokens.length +",
+    ]) &&
+    includesEverySourceFragment(gmgnCanonicalRanking, [
+      '"programmable.gmgn-canonical-ranking.v1" as const',
+      'source: "canonical-launch-catalog+gmgn"',
+      'applied: "gmgn-ranked-with-launch-order-fallback"',
+      'const tokenAddress = token.chain === "eth"',
+      "for (const [canonicalIndex, entry] of canonicalEntries.entries())",
+      'String(identity.chainId) === "1"',
+      "const unobserved: GmgnCanonicalRankedEntryV1<Entry>[] = [];",
+      "...ranked.map((item) => item.row)",
+      "...unobserved",
+      "entries: Object.freeze(rows.map((row) => row.entry))",
+      "!canonicalEthereumAddresses.has(address)",
+      "unobservedCanonicalEntryCount: canonicalEntries.length -",
+      "gmgnMarketCapDiscoverySnapshotUsableV1(",
+      'snapshot.orderBy === "marketcap"',
+      "token.marketCapUsd > 0",
+      "token.liquidityUsd >= GMGN_MARKET_CAP_MINIMUM_LIQUIDITY_USD",
+      "rankCanonicalExploreMarketCapEntriesWithGmgnV1(",
+      "rankCanonicalExploreEntriesWithGmgnSearchV1(",
+      'source: "canonical-launch-catalog+gmgn-search"',
+      "providerOnlyCanonicalTokenCount",
+      "!universeAddresses.has(address)",
+      "gmgnTokenInfoFallbackEntryV1(",
+      'orderingSource: "gmgn-token-info-fdv" as const',
+      'orderingSource: "dexscreener-fdv" as const',
+      "exactCanonicalMarketIdentityV1(entry, row.entry)",
+      "fallback.gmgnRequestedEntries",
+      "fallback.dexscreenerRequestedEntries.filter(",
+      "fallbackQualifiedEntryCount",
+    ]) &&
+    gmgnReadOnlyEndpointBoundary &&
+    !/GMGN_API_KEY|X-APIKEY|keypair|private_key/iu.test(
+      [publicExplore, publicToken, publicChart, publicTokenAnalytics].join(
+        "\n",
+      ),
+    ) &&
     includesEverySourceFragment(publicExplore, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
@@ -2331,19 +3486,93 @@ export function evaluateReadModelOperationsSourceContracts(
       "const acceptedRouterSnapshot = routerAvailable",
       'routerCustomStatus === "last-known-good"',
       "envioClassicV3IdentityCommitmentV1(",
-      "readDexscreenerExploreEntriesV1(filtered, {",
+      'orderBy: "marketcap"',
+      "direction,",
+      "rankCanonicalExploreMarketCapEntriesWithGmgnV1(",
+      "rankCanonicalExploreMarketCapPrimaryWithGmgnV1(",
+      "const unobserved = primary.rows.flatMap((row) =>",
+      "hydrateMissingCanonicalTokenSupplyBoundedV1(",
+      "MARKET_CAP_SUPPLY_HYDRATION_LIMIT",
+      "MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS",
+      "exactExploreMarketIdentityV1(candidate, original)",
+      "const gmgnHydrationEligible = hydrationUniverse.filter(",
+      "readGmgnExploreSnapshotsV1(gmgnRequested, {",
+      "gmgnTokenInfoFallbackEntryV1(",
+      "const dexscreenerRequested = hydrationUniverse.filter(",
+      "readDexscreenerExploreEntriesV1(\n        dexscreenerRequested,",
+      "exploreMarketCapRankingV1(",
       "readExploreMarketEntriesV1(\n        identityPage.tokens,",
       'registryCustomStatus === "current" && routerCustomStatus === "current"',
-      'requested: "fdv" as const',
-      'applied: rankingStatus === "complete"',
-      '"qualified-fdv-then-launch-order" as const',
-      '"launch-order" as const',
+      'requested: "market-cap"',
+      "input.gmgnHydrationQualifiedCount + input.fallbackQualifiedCount <",
+      "applied: marketCapAppliedV1({",
+      '"gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"',
+      '"gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"',
+      '"qualified-fdv-then-launch-order"',
+      '"launch-order"',
+      '"gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order"',
+      "canonicalTailCount: hybrid.canonicalTailEntryCount",
+      "gmgnHydrationDeferredCount: hybrid.gmgnHydrationDeferredEntryCount",
+      "readGmgnEthereumSearchV1(options.query, {",
+      "rankExploreSearchEntriesV1(",
+      '"programmable.explore-search-ranking-commitment.v1"',
+      '"gmgn-canonical-search-with-local-match-fallback"',
+      '"X-Programmable-Search-Provider": "gmgn"',
+      '"X-Programmable-Search-Ranking-Commitment":',
+      'searchRanking !== null && searchRanking.asOfTime !== null',
+      '? "+gmgn-search"',
+      'options.sort === "trending"',
+      "readGmgnEthereumTrendingV1(",
+      '{ interval: "1h", limit: 100 }',
+      "rankCanonicalExploreEntriesWithGmgnDiscoveryV1(",
+      'canonicalSha256(\n    "programmable.explore-discovery-ranking-commitment.v1",',
+      "canonicalIndex: row.canonicalIndex",
+      "snapshotFetchedAt: row.gmgn.fetchedAt",
+      "matchedUniqueTokenCount: coverage.gmgnMatchedUniqueTokenCount",
+      "rankCoverage.gmgnMatchedUniqueTokenCount <",
+      "rankCoverage.canonicalUniqueTokenCount",
+      "hotSearchDeadlineMs - Date.now() >= 3_000",
+      "readGmgnEthereumHotSearchesV1(",
+      '{ interval: "24h", limit: 100 }',
+      '? "gmgn-trending" as const',
+      '"X-Programmable-Discovery-Provider": "gmgn"',
+      '"X-Programmable-Discovery-Read-Status": discovery.status',
+      '"X-Programmable-Discovery-Ranking-Commitment":',
+      '"X-Programmable-Discovery-Matched-Unique-Count":',
+      '"X-Programmable-Ranking-Primary-Provider": "gmgn"',
+      '"X-Programmable-Ranking-Source": marketCapRanking.source',
+      '"X-Programmable-Ranking-GMGN-Status":',
+      '"X-Programmable-Ranking-Commitment":',
+      "discovery.rankingCommitment",
       '"X-Programmable-Launch-Source": launchSource',
-      '"X-Programmable-Read-Source": `${launchSource}+${marketProvider}`',
+      'discovery !== null && discovery.status !== "unavailable"',
+      '? "+gmgn-discovery"',
       '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Router-Read-Status": routerCustomStatus',
       '"X-Programmable-Identity-Last-Indexed-At": identityGeneratedAt',
     ]) &&
+    includesEverySourceFragment(publicExploreView, [
+      "export function parseExploreSearchRanking(",
+      '"programmable.explore-search-ranking.v1"',
+      "Object.keys(value).length !== EXPLORE_SEARCH_RANKING_FIELDS.length",
+      "export function parseExploreDiscoveryRanking(",
+      '"matchedUniqueTokenCount"',
+      'value.rankingCommitment !== "string"',
+      "Number(value.matchedUniqueTokenCount) + Number(value.foreignTokenCount)",
+      "Number(value.matchedUniqueTokenCount) * 10_000",
+      "const providerOrdered = incoming.discovery !== undefined ||",
+      "incoming.search !== undefined ||",
+      'incoming.ranking?.requested === "market-cap"',
+      "tokens: incoming.tokens.map((token) => {",
+      "exploreProviderOrderCommitmentKey(firstPage)",
+      "tokens.length !== firstPage.total",
+      "providerOrderProofMatchesLocalSelection",
+      "if (!requiresCompleteDataset) {",
+      "incomingIsCompleteLocalSelection: requiresCompleteDataset",
+    ]) &&
+    (publicExploreView.match(
+      /Number\(value\.matchedUniqueTokenCount\) \* 10_000/gu,
+    )?.length ?? 0) === 3 &&
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
       publicExplore,
     ) &&
@@ -2372,21 +3601,97 @@ export function evaluateReadModelOperationsSourceContracts(
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
       publicToken,
     ) &&
+    includesEverySourceFragment(publicTokenAnalytics, [
+      "const FIXED_RANKING_LIMIT = 20",
+      "const signal = AbortSignal.any([",
+      "readEnvioClassicV3CatalogV1({ signal, deadlineMs })",
+      "readProductionCustomExploreDirectoryV1(signal)",
+      "readFinalizedRouterCustomIdentitySnapshotV1({",
+      "mergeEnvioClassicV3CatalogEntriesV1(",
+      "mergeRouterCustomExploreEntriesV1(",
+      "hydrateMissingCanonicalTokenSupplyBoundedV1(",
+      "{ signal, deadlineMs }",
+      'if (canonical.kind === "unavailable")',
+      'if (canonical.kind === "not-found")',
+      "if (identities.length === 0)",
+      "const candidate = await readGmgnMarketSnapshotV1(canonical.entry, wait);",
+      "verification = exactMarketVerification(",
+      "if (verification === null) {",
+      "const identity = verification.identity;",
+      "isGmgnMarketSnapshotForExploreEntryV1(value, entry);",
+      "readGmgnTokenSecurityV1(identity, wait)",
+      "readGmgnTokenPoolInfoV1(identity, wait)",
+      "readGmgnTokenTopHoldersV1(",
+      "readGmgnTokenTopTradersV1(",
+      "{ limit: FIXED_RANKING_LIMIT }",
+      "exactRankingForIdentity(",
+      "value.query.limit === limit",
+      "value.wallets.length <= limit",
+      "if (rawLimit !== null && rawLimit !== String(FIXED_RANKING_LIMIT))",
+      'if (parsedChain !== 1) return inputError("Unsupported chain")',
+      "!hasExplicitForeignProviderChain(value)",
+      "value.providerAddress === identity.tokenAddress",
+      "value.baseAddress === identity.tokenAddress",
+      "value.quoteAddress === identity.quoteAddress",
+      'value.marketScope === "token"',
+      'value.poolAttribution === "unavailable"',
+      'value.exchange === "uniswap_v4"',
+      '"X-Programmable-Analytics-Provider": "gmgn"',
+      '"X-Programmable-Analytics-Scope": "token"',
+      '"X-Programmable-Analytics-Pool-Attribution": "unavailable"',
+      '"X-Programmable-Market-Provider": "gmgn"',
+      'const PRIVATE_RANKING_CACHE_CONTROL = "private, max-age=0, no-store"',
+    ]) &&
+    !publicTokenAnalytics.includes('entry.exploreKind !== "token"') &&
+    analyticsProofReadBoundary &&
+    includesEverySourceFragment(publicWalletRankingBlock, [
+      "address: wallet.address",
+      "usdValue: wallet.usdValue",
+      "amountRatio: wallet.amountRatio",
+      "buyVolumeUsd: wallet.buyVolumeUsd",
+      "sellVolumeUsd: wallet.sellVolumeUsd",
+      "profitUsd: wallet.profitUsd",
+      "profitRatio: wallet.profitRatio",
+    ]) &&
+    publicWalletProjectionBoundary &&
     includesEverySourceFragment(publicChart, [
+      "readGmgnMarketChartV1({",
+      "isFreshReadyGmgnTokenSeries(",
       "readBitqueryMarketChartV1({",
+      "preferAdmittedGmgnTokenSeriesV1({",
       "readEnvioClassicV3CatalogV1({",
       "exploreEntryMarketIdentitiesV1(entry)",
       "mergeEnvioClassicV3CatalogEntriesV1(",
-      "readProductionCustomExploreDirectoryV1(request.signal)",
+      "readProductionCustomExploreDirectoryV1(signal)",
       'let customStatus: "current" | "unavailable" = "unavailable"',
-      '`${catalog.source}+registry.custom-launched`',
-      'schemaVersion: "programmable.market-chart-error.v1"',
+      "`${catalog.source}+registry.custom-launched`",
+      "hydrateMissingCanonicalTokenSupplyBoundedV1(",
+      "if (identities.length === 0)",
+      "gmgnTokenSeriesAdmissionIdentity(",
+      "const fallbackIdentity = gmgnAdmissionIdentity ?? identity;",
+      'schemaVersion: "programmable.market-chart-error.v2"',
+      'source: "programmable"',
       'reason: "identity-unavailable"',
-      '"X-Programmable-Market-Provider": "bitquery"',
+      "const GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS = 60_000",
+      "const GMGN_PRIMARY_CHART_MAXIMUM_CLOCK_SKEW_MS = 5_000",
+      "!isGmgnTokenSeriesForAdmissionIdentityV1(chart, identity, range)",
+      'chart.status !== "ready"',
+      "generatedAtMs - proofAtMs <= GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS",
+      '"X-Programmable-Market-Provider": chart.source',
       '"X-Programmable-Market-Read-Status": chart.readStatus',
-      '"X-Programmable-Read-Source": `${launchSource}+bitquery`',
+      '"X-Programmable-Chart-Scope": chartScope',
+      '"X-Programmable-Chart-Pool-Attribution": chartPoolAttribution',
+      '"X-Programmable-Read-Source": `${launchSource}+${chart.source}`',
       "TOKEN_CHART_CACHE_CONTROL",
     ]) &&
+    !publicChart.includes('"programmable.market-chart-error.v1"') &&
+    gmgnChartReadStart >= 0 &&
+    gmgnChartAcceptanceStart > gmgnChartReadStart &&
+    bitqueryChartFallbackStart > gmgnChartAcceptanceStart &&
+    publicChart.indexOf("readBitqueryMarketChartV1(") ===
+      bitqueryChartFallbackStart + "const bitqueryChart = await ".length &&
+    (publicChart.match(/readBitqueryMarketChartV1\(/gu)?.length ?? 0) === 1 &&
+    chartPreferenceStart > bitqueryChartFallbackStart &&
     !/readPrimaryRpcExploreEntriesV1|productionMainnetRpcPrimary/iu.test(
       publicChart,
     ) &&
@@ -2406,12 +3711,76 @@ export function evaluateReadModelOperationsSourceContracts(
       "routerCustomEntriesAtOrBeforeBlockV1",
       "mergeRouterCustomCreatorProfileV1",
       "BigInt(stamp.blockNumber) > snapshotBlock",
-      'entry.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE',
+      "entry.launchCategoryProvenance.source !== ROUTER_CUSTOM_LAUNCH_SOURCE",
     ]);
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list, token detail and creator identity combine the validated Envio Classic V3 catalog with the bounded durable Router Custom snapshot; Ethereum-only GMGN and Dexscreener remain bounded exact-identity enrichment, market-cap ordering stays Dexscreener-bound, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
+    "Explore list, token detail and analytics keep the validated Envio and bounded Router catalog authoritative; Ethereum-only GMGN is the bounded primary provider for visible token-level market data, canonical-intersection discovery and search, global market-cap ranking, strict token_info FDV ranking for the unobserved canonical remainder, token-level analytics and token-address charts admitted by current token_info context whose coherent bytes32 locators must equal the canonical v4 PoolId while coherent 20-byte locators leave pool attribution unavailable; GMGN pool_info remains strictly token-level with unavailable pool attribution, Dexscreener retains visible fallback and FDV ordering only for the GMGN-unqualified canonical remainder, Bitquery retains exact-pool chart fallback, and action routes keep commitment-bound Website RPC semantics",
+  );
+  check(
+    "ops-gmgn-account-gate-multiflight-migration",
+    includesEverySourceFragment(gmgnMultiflightMigration, [
+      "CREATE TABLE programmable_website_projection_v1.gmgn_account_gate_leases_v1",
+      "PRIMARY KEY (gate_id, generation)",
+      "UNIQUE (gate_id, lease_holder)",
+      "FOREIGN KEY (gate_id)",
+      "REFERENCES programmable_website_projection_v1.gmgn_account_gate_v1 (gate_id)",
+      "ENABLE ROW LEVEL SECURITY",
+      "FORCE ROW LEVEL SECURITY",
+      "gmgn_account_gate_leases_v1_runtime_select",
+      "gmgn_account_gate_leases_v1_runtime_insert",
+      "gmgn_account_gate_leases_v1_runtime_delete",
+      "GRANT SELECT, INSERT, DELETE",
+      "TO programmable_website_projection_runtime",
+      "REVOKE ALL",
+      "FROM PUBLIC",
+      "rolname = 'anon'",
+      "rolname = 'authenticated'",
+      "rolname = 'service_role'",
+    ]) &&
+      includesEverySourceFragment(websiteProjectionOperatorCore, [
+        '"0007_gmgn_account_gate_multiflight_v1.sql"',
+        "MIGRATION_FILE = /^(000[1-7])_([a-z][a-z0-9_]*)\\.sql$/u",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionPostgres, [
+        "const EVIDENCE_0007_DDL",
+        "CHECK (ordinal BETWEEN 1 AND 7)",
+        "CHECK (version ~ '^000[1-7]$')",
+        "if (migration.ordinal === 7)",
+        "await executeSimple(transaction, EVIDENCE_0007_DDL)",
+        "const FINAL_GMGN_MULTIFLIGHT_PRIVILEGES",
+        "GRANT SELECT, INSERT, DELETE",
+        "gmgn_account_gate_leases_v1",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionTarget, [
+        "assertGmgnAccountGateMultiflightReadiness(): Promise<void>",
+        "assertGmgnAccountGateMultiflightSecurityAttestationV1(",
+        "gmgn_leases_select",
+        "gmgn_leases_insert",
+        "gmgn_leases_delete",
+        "gmgn_leases_forbidden_access",
+        "gmgn_leases_rls",
+        "gmgn_leases_force_rls",
+        "expected_policies",
+        "provider_roles_excluded",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionTargetRunbook, [
+        "at most 20",
+        "a 21st reservation waits",
+        "migrations `0001` through `0007`",
+        "safe legacy single-flight prefix",
+        "cannot authorize this release's GMGN Pro throughput claim",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionOperatorRunbook, [
+        "`0001` through `0007`",
+        "at most 20 active holder-bound leases",
+        "a 21st reservation waits",
+        "seven ordered file/execution hashes",
+        "dry-run must report only `0007` pending",
+        "The Stage workflow never applies database migrations",
+      ]),
+    "migration 0007, operator inventory, hosted readiness and runbooks bind the exact 20-flight GMGN account gate while 0006 remains a rolling-only prefix",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2439,7 +3808,7 @@ export function evaluateReadModelOperationsSourceContracts(
       "const launchSource = result === null",
       'routerStatus !== "unavailable"',
       ': "envio-classic-v3"',
-      ': `${launchSource}+rpc`',
+      ": `${launchSource}+rpc`",
       '"X-Programmable-Router-Read-Status": routerStatus',
       '"X-Programmable-Router-Claim-Read-Status": routerClaimStatus',
       '"X-Programmable-Rpc-Provider": rpcProvider',
@@ -2509,7 +3878,9 @@ export function evaluateReadModelOperationsSourceContracts(
       ) &&
       publicProfileAndActionRoutes.every(
         (route) =>
-          !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(route),
+          !/Promise\.allSettled|secondaryProvider|fallbackProvider/u.test(
+            route,
+          ),
       ),
     "Profile identity combines Envio with the bounded durable Router Custom snapshot and remains fail-closed without either identity source, while reviewed reward reads, Classic rewards, Claim, and Trade use the commitment-bound Website pair with at most one complete-operation QuickNode retry after an eligible dRPC transport or capacity failure; Stock retains its singular committed action provider and all action routes retain no write authority or hidden provider rotation",
   );
@@ -2555,17 +3926,123 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedGmgnRequirement >
         deployWorkflow.indexOf("Pull production configuration") &&
       stagedGmgnRequirement < stagedBitquerySmoke &&
+      stagedReadModelPolicy > stagedGmgnRequirement &&
+      stagedReadModelPolicy < stagedCandidateDeploy &&
       includesEverySourceFragment(stagedGmgnRequirementBlock, [
-        "env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module",
-        '(process.env.GMGN_API_KEY ?? "").trim() !== ""',
-        "`require_gmgn_market=${requireGmgnMarket}\\n`",
-        'status: "resolved"',
-        "requireGmgnMarket,",
+        "VERCEL_TOKEN: $\{{ secrets.VERCEL_TOKEN }}",
+        "set -euo pipefail",
+        'metadata_file="$RUNNER_TEMP/vercel-production-env-metadata.json"',
+        'test ! -e "$metadata_file"',
+        'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
+        "node scripts/bind-vercel-sensitive-production-metadata.mjs",
+        '--metadata-file "$metadata_file"',
+        '--vercel-project-id "$VERCEL_PROJECT_ID"',
+        "node scripts/resolve-gmgn-production-requirement.mjs",
+        "readonly require_gmgn_market",
+        'echo "require_gmgn_market=$require_gmgn_market" >> "$GITHUB_OUTPUT"',
+        '"requireGmgnMarket":%s',
       ]) &&
-      (stagedGmgnRequirementBlock.match(/GMGN_API_KEY/gu)?.length ?? 0) === 2 &&
-      !/set -x|echo[^\n]*GMGN_API_KEY|console\.log/u.test(
+      includesExactLineSequence(stagedGmgnRequirementBlock, [
+        'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
+        "node scripts/bind-vercel-sensitive-production-metadata.mjs \\",
+        '--metadata-file "$metadata_file" \\',
+        '--vercel-project-id "$VERCEL_PROJECT_ID"',
+      ]) &&
+      includesExactLineSequence(stagedGmgnRequirementBlock, [
+        'require_gmgn_market="$(',
+        "node scripts/resolve-gmgn-production-requirement.mjs \\",
+        '--metadata-file "$metadata_file" \\',
+        '--vercel-project-id "$VERCEL_PROJECT_ID"',
+        ')"',
+        "readonly require_gmgn_market",
+      ]) &&
+      (stagedGmgnRequirementBlock.match(/require_gmgn_market=/gu)?.length ??
+        0) === 2 &&
+      includesEverySourceFragment(stagedReadModelPolicyBlock, [
+        "id: read-model-policy",
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: $\{{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}",
+        "PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT: $\{{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT }}",
+        "npm run perf:read-model:deploy-policy --",
+        "--env-file .vercel/.env.production.local",
+        '--sensitive-env-metadata "$RUNNER_TEMP/vercel-production-env-metadata.json"',
+        '--github-output "$GITHUB_OUTPUT"',
+      ]) &&
+      !stagedReadModelPolicyBlock.includes("continue-on-error:") &&
+      stagedDeployJobBlock.includes(
+        "VERCEL_ORG_ID: $\{{ secrets.VERCEL_ORG_ID }}",
+      ) &&
+      stagedDeployJobBlock.includes(
+        "VERCEL_PROJECT_ID: $\{{ secrets.VERCEL_PROJECT_ID }}",
+      ) &&
+      !/\bprj_[A-Za-z0-9]{8,128}\b/u.test(deployWorkflow) &&
+      !stagedGmgnRequirementBlock.includes(
+        'vercel env ls production --format json --token="$VERCEL_TOKEN" >',
+      ) &&
+      !/GMGN_API_KEY|\.vercel\/\.env\.production\.local|set -x|console\.log|continue-on-error:/u.test(
         stagedGmgnRequirementBlock,
       ) &&
+      includesEverySourceFragment(vercelSensitiveMetadataBinder, [
+        "MAXIMUM_METADATA_BYTES",
+        "MAXIMUM_ENVIRONMENT_RECORDS",
+        "omitEnvironmentValueFields(entry)",
+        "FORBIDDEN_VALUE_FIELDS.has(key.toLowerCase())",
+        "containsForbiddenValueField(entry)",
+        "Vercel environment metadata must not contain values",
+        'flag: "wx"',
+        "mode: 0o600",
+        'process.stderr.write("Vercel Production metadata binding failed\\n")',
+      ]) &&
+      includesEverySourceFragment(gmgnProductionRequirement, [
+        'GMGN_PRODUCTION_ENVIRONMENT_KEY = "GMGN_API_KEY"',
+        'GMGN_MAX_REQUESTS_PER_SECOND_ENVIRONMENT_KEY =\n    "GMGN_MAX_REQUESTS_PER_SECOND"',
+        "VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA",
+        'metadata.target !== "production"',
+        "metadata.vercelProjectId !== vercelProjectId",
+        "containsForbiddenValueField(entry)",
+        "matches.length === 0 && rateMatches.length === 0",
+        "matches.length === 0 || rateMatches.length === 0",
+        'throw new Error("GMGN Production metadata is incomplete")',
+        "matches.length !== 1",
+        "rateMatches.length !== 1",
+        'entry.type !== "sensitive"',
+        "entry.target.length !== 1",
+        'entry.target[0] !== "production"',
+        "!branchless",
+        "!nonCustom",
+        "!notDecrypted",
+        '!["sensitive", "encrypted"].includes(rateEntry.type)',
+        "rateEntry.target.length !== 1",
+        'rateEntry.target[0] !== "production"',
+        "!rateBranchless",
+        "!rateNonCustom",
+        "!rateNotDecrypted",
+        'process.stdout.write(requireGmgnMarket ? "true\\n" : "false\\n")',
+      ]) &&
+      !gmgnProductionRequirement.includes("process.env.GMGN_API_KEY") &&
+      includesEverySourceFragment(stagedCandidateDeployBlock, [
+        "set -euo pipefail",
+        "vercel deploy --prod --skip-domain --archive=tgz",
+        '--meta githubCommitSha="$GITHUB_SHA"',
+        '--env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"',
+        '--env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA"',
+        "--env PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true",
+        '--token="$VERCEL_TOKEN"',
+      ]) &&
+      !stagedCandidateDeployBlock.includes("--prebuilt") &&
+      stagedWakeCanary >
+        deployWorkflow.indexOf("Resolve exact staged deployment") &&
+      stagedWakeCanary < stagedTokenImageProbe &&
+      includesEverySourceFragment(stagedWakeCanaryBlock, [
+        "id: wake-canary",
+        "if: steps.read-model-policy.outputs.wake_canary_required == 'true'",
+        "PROGRAMMABLE_QUICKNODE_STREAM_SECRET: $\{{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}",
+        "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
+        "STAGED_TARGET_URL: $\{{ steps.staged-deployment.outputs.target_url }}",
+        "npm run perf:read-model:wake-canary --",
+        '--target-url "$STAGED_TARGET_URL"',
+        'echo "status=passed" >> "$GITHUB_OUTPUT"',
+      ]) &&
+      !stagedWakeCanaryBlock.includes("continue-on-error:") &&
       stagedBitquerySmokeBlock.includes(
         "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
@@ -2575,16 +4052,35 @@ export function evaluateReadModelOperationsSourceContracts(
       stagedBitquerySmokeBlock.includes(
         "node scripts/smoke-static-dexscreener-public-apis.mjs",
       ) &&
+      !stagedBitquerySmokeBlock.includes("continue-on-error:") &&
       (stagedBitquerySmokeBlock.match(
         /smoke-static-dexscreener-public-apis\.mjs/gu,
       )?.length ?? 0) === 1 &&
       !stagedBitquerySmokeBlock.includes("        if:") &&
       stagedProviderHandoff &&
+      includesEverySourceFragment(operationsHealth, [
+        "getProductionGmgnAccountGateStatusV1",
+        "const gmgnAccountGate = await getProductionGmgnAccountGateStatusV1()",
+        "accountGateMode: gmgnAccountGate.mode",
+        'gmgnAccountGate.mode === "multiflight-v1"',
+        'gmgnAccountGate.mode === "legacy-singleflight-v1"',
+        "gmgnRequestsPerSecond < 20",
+        "const providerStackReady = gmgnConfigured && bitqueryConfigured &&",
+      ]) &&
       includesEverySourceFragment(stagedPublicSmokeScript, [
         '"/api/ops/health"',
         "function exactInformationalHealth(response)",
-        '["ready", "degraded"].includes(response.body?.status)',
-        'typeof response.body.provider.configured === "boolean"',
+        'response.body?.status === (providerStackReady ? "ready" : "degraded")',
+        'typeof primaryProvider.configured === "boolean"',
+        'gmgn.role === "primary-token-market"',
+        "Number.isSafeInteger(gmgnRequestsPerSecond)",
+        "gmgnRequestsPerSecond >= 1",
+        "gmgnRequestsPerSecond <= 20",
+        'gmgnAccountGateMode === "multiflight-v1"',
+        'gmgnAccountGateMode === "legacy-singleflight-v1"',
+        '"unavailable"',
+        'bitquery.role === "exact-pool-chart-fallback"',
+        'dexscreener.role === "batch-fail-soft-fallback"',
         "!healthHasSensitiveData(response.body)",
         'healthAuthority: "informational-only"',
         "const VISIBLE_EXPLORE_PAGE_SIZE = 9",
@@ -2608,7 +4104,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "qualifiedDexscreenerFdv",
         'valuation.freshness === "provider-recent"',
         "exactUnavailableValuation",
-        "exactCatalogSnapshot(highest)",
+        "exactCatalogSnapshot(highest, {",
         "catalog.launchSource === launchSource",
         "highestCatalog !== newestCatalog",
         "function exactMarketIdentityCount(tokens)",
@@ -2626,35 +4122,85 @@ export function evaluateReadModelOperationsSourceContracts(
         "function exactMarketAsOfBinding(response, tokens, read, nowMs)",
         'response.headers.get("x-programmable-market-as-of") !== expectedAsOf',
         "read.requestedCount === expectedRequestedCount",
-        "function exactDexscreenerMarketRead(response, requestedTokens, nowMs, visibleTokens = requestedTokens,)",
+        "function exactDexscreenerMarketRead(\n  response,\n  requestedTokens,\n  nowMs,\n  visibleTokens = requestedTokens,",
         "function exactVisibleMarketRead(response, tokens, nowMs)",
+        "!Number.isSafeInteger(read.fallbackObservedCount)",
+        "read.fallbackObservedCount > read.fallbackRequestedCount",
+        "read.fallbackQualifiedCount > read.fallbackObservedCount",
+        "read.observedCount <\n      Math.max(read.gmgnObservedCount, read.fallbackObservedCount)",
+        "read.observedCount > Math.min(\n      read.requestedCount,\n      read.gmgnObservedCount + read.fallbackObservedCount",
+        '...(read.fallbackObservedCount > 0 ? ["dexscreener"] : [])',
         "function exactDetailMarketRead(response, token, launchSource, nowMs)",
         "function exactGmgnEligibleCanonicalToken(token)",
         'provenance?.source === "canonical-launch-read-model"',
-        '"&page=1&sort=newest&model=classic"',
+        "const GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8",
+        "`&page=${page}&sort=newest&model=classic`",
         'token?.exploreKind !== "token" || token.launchModel !== "classic"',
         'throw new Error("Explore returned no GMGN-qualified canonical token")',
         "exactGmgnEligibleCanonicalToken(token) &&",
+        "const exactGmgnDetailProof = (candidate) =>",
+        'candidate.detail.headers.get("x-programmable-market-provider") ===\n          "gmgn"',
+        'candidate.detail.headers.get("x-programmable-market-read-status") ===\n          "complete"',
+        "qualifiedGmgnFdv(candidate.detailToken, now().getTime())",
+        "const chartIdentities = entryMarketIdentities(detailToken)",
+        "if (chartIdentities.length !== 1)",
+        "const chartIdentity = chartIdentities[0]",
+        "const chartCanonicalSupply =",
+        "totalSupplyRaw: detailToken?.totalSupplyRaw",
+        "tokenDecimals: detailToken?.tokenDecimals",
         "const completeCatalogTokens = [...newestTokens]",
+        "const TRENDING_EXPLORE_PAGE_SIZE = 100",
+        "const TRENDING_SNAPSHOT_ATTEMPTS = 2",
+        "async function readBoundTrendingSnapshot({",
+        "Trending discovery snapshot changed during pagination",
+        "Trending result is not the exact canonical set",
+        "matchedUniqueCanonicalAddresses.size + discovery.foreignTokenCount",
+        "Trending canonical prefix or stable tail is invalid",
+        'throw new Error("GMGN Trending discovery is required")',
+        'response.headers.get("x-programmable-discovery-ranking-commitment")',
+        "async function readBoundSearchSnapshot({",
+        "sort=newest&q=${",
+        "Canonical search snapshot changed during pagination",
+        "Canonical search ranking contract is invalid",
+        "GMGN canonical search match is required",
+        "function exactSearchRanking(response, canonicalMatches, query, nowMs)",
+        'response.headers.get("x-programmable-search-ranking-commitment")',
+        "matchedIdentities.some((identity) => !canonicalIdentitySet.has(identity))",
+        "!matchedIdentities.includes(targetIdentity)",
+        "async function readRequiredGmgnAnalytics({",
+        'for (const section of ["summary", "holders", "traders"])',
+        '"private, max-age=0, no-store"',
+        "ANALYTICS_WALLET_KEYS",
+        "canonicalMarketAddress(wallet.address) !== wallet.address",
+        'pool.exchange !== "uniswap_v4"',
+        "analyticsSummaryStatus = analytics.summary",
+        "`discovery_ranking_commitment=${trendingDiscovery.rankingCommitment}`",
+        "`search_status=${searchRanking.status}`",
+        "`search_matched_count=${searchRanking.matchedTokenCount}`",
+        "`search_ranking_commitment=${searchRanking.rankingCommitment}`",
         "Explore catalog pagination contract is invalid",
         "Initial Newest page is outside the paged catalog",
         "new Set(highestIdentities).size !== highestIdentities.length",
-        "Highest FDV page is outside the paged catalog",
-        "exactFdvRanking(highest, highestTokens, validationNowMs)",
-        "ranking.qualifiedCount > response.body?.marketRead?.qualifiedCount",
-        "qualified.length === Math.min(tokens.length, ranking.qualifiedCount)",
+        "Highest market-cap page is outside the paged catalog",
+        "function exactMarketCapRanking(response, canonicalTokens, direction, nowMs)",
+        "function exactRequiredGmgnMarketCapRanking(response, nowMs)",
+        "function expectedMarketCapApplied(ranking)",
+        "function expectedMarketCapSource(ranking)",
+        "ranking.qualifiedCount !==\n      ranking.matchedTokenCount + ranking.gmgnHydrationQualifiedCount +\n        ranking.fallbackQualifiedCount",
+        'highest.body?.sortMetric !==\n          "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback"',
+        "Explore catalog changed between ranking reads",
         "!exactSamePageOrder(highest, newest)",
         'token.exploreKind === "token"',
         'token.exploreKind !== "custom-project" ||\n    !/^sha256:[0-9a-f]{64}$/u.test(String(token.customProjectId ?? ""))',
-        'token.customProjectId',
-        'token.customLaunchId',
-        'Array.isArray(token.markets)',
+        "token.customProjectId",
+        "token.customLaunchId",
+        "Array.isArray(token.markets)",
         "const deterministicMarkets = markets",
         "exactIdentity(detailToken) !== exactIdentity(selectedToken)",
         "detail.body?.token ?? detail.body?.customProject",
         "catalogBoundary.launchSource",
         "const profileFailClosed =",
-        'profile.status === 503',
+        "profile.status === 503",
         'exactObjectKeys(profile.body, ["error", "status"])',
         'exactObjectKeys(profile.body?.error, ["code", "kind", "message"])',
         'profile.body?.error?.code === "creator_profile_temporarily_unavailable"',
@@ -2682,33 +4228,76 @@ export function evaluateReadModelOperationsSourceContracts(
         'profileRouterReadStatus === "current"',
         'profileRouterReadStatus === "last-known-good"',
         'profile.headers.get("x-programmable-read-source") ===\n        "envio-classic-v3+rpc"',
-        'schemaVersion !== "programmable.market-chart.v1"',
-        'chart.body?.source !== "bitquery"',
-        'chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase()',
+        "const chartProvider = chart.body?.source",
+        "const chartIdentityMatches =",
+        "canonicalMarketPool(chart.body?.identity?.poolId) ===",
+        "chartIdentity.poolId",
+        "canonicalMarketAddress(chart.body?.identity?.quoteAddress) ===",
+        "chartIdentity.quoteAddress",
+        "const gmgnProofIdentityMatches =",
+        "gmgnProofIdentityMatches &&",
+        "const gmgnChartReady =",
+        'chartProvider === "gmgn"',
+        'chart.body?.schemaVersion === "programmable.gmgn-market-chart.v1"',
+        'chart.body?.seriesScope === "token"',
+        '["exact", "unavailable"].includes(chart.body?.poolAttribution)',
+        "chart.body?.identityProof?.poolAttribution ===",
+        'chart.body?.identityProof?.source === "gmgn-token-info"',
+        "exactObjectKeys(chart.body?.identityProof?.canonicalSupply",
+        "chart.body?.identityProof?.canonicalSupply?.totalSupplyRaw ===",
+        "chartCanonicalSupply.totalSupplyRaw",
+        "chart.body?.identityProof?.canonicalSupply?.tokenDecimals ===",
+        "chartCanonicalSupply.tokenDecimals",
+        'point?.valueSemantics === "period-close"',
+        "const bitqueryChartFallback =",
+        'chartProvider === "bitquery"',
+        'chart.body?.schemaVersion === "programmable.market-chart.v1"',
+        "(!gmgnChartReady && !bitqueryChartFallback)",
+        "(requireGmgnMarket && !gmgnChartReady)",
+        "!chartIdentityMatches",
         'chart.headers.get("cache-control") !==\n      "public, max-age=0, s-maxage=2, stale-while-revalidate=2"',
-        'chart.headers.get("x-programmable-market-provider") !== "bitquery"',
+        'chart.headers.get("x-programmable-read-source") !==\n      `${catalogBoundary.launchSource}+${chartProvider}`',
+        'chart.headers.get("x-programmable-market-provider") !== chartProvider',
+        "chartScope !== expectedChartScope",
+        "chartPoolAttribution !== expectedChartPoolAttribution",
+        'chart.headers.get("x-programmable-market-read-status") !==\n      chart.body?.readStatus',
         'chart.headers.get("x-programmable-valuation-block") !== null',
         "!exactVisibleMarketRead(newest, newestTokens, validationNowMs)",
-        "!exactDexscreenerMarketRead(",
         "catalogPage,",
-        "highest, completeCatalogTokens, now().getTime()",
+        'highest,\n          completeCatalogTokens,\n          "desc"',
+        'lowest,\n          completeCatalogTokens,\n          "asc"',
         "!exactDetailMarketRead(",
         "const detailMarketProvider = detail.headers.get(",
         "environment.PROGRAMMABLE_REQUIRE_GMGN_MARKET",
         '!["true", "false"].includes(gmgnMarketRequirement)',
         'const requireGmgnMarket = gmgnMarketRequirement === "true"',
-        "requireGmgnMarket &&",
-        'detailMarketProvider !== "gmgn"',
-        'detail.headers.get("x-programmable-market-read-status") !== "complete"',
-        "!qualifiedGmgnFdv(detailToken, now().getTime())",
+        'gmgnRequestsPerSecond !== 20 || gmgnAccountGateMode !== "multiflight-v1"',
+        "Required GMGN Production throughput lacks exact RPS 20 multiflight-v1 proof",
+        "GMGN descending market-cap rank match is required",
+        "GMGN ascending market-cap rank match is required",
+        "if (requireGmgnMarket) {",
         'throw new Error("Token detail GMGN market contract is required")',
         "const detailStatus = qualifiedGmgnFdv(detailToken, now().getTime())",
-        "marketProvider: newest.headers.get(\"x-programmable-market-provider\")",
+        'marketProvider: newest.headers.get("x-programmable-market-provider")',
         "marketReadStatus: newest.body.marketRead.status",
         "`market_provider=${marketProvider}`",
+        "`gmgn_account_gate_mode=${gmgnAccountGateMode}`",
+        "`gmgn_requests_per_second=${gmgnRequestsPerSecond}`",
         "`detail_market_provider=${detailMarketProvider}`",
+        "`market_cap_desc_source=${marketCapDescRanking.source}`",
+        "`market_cap_desc_gmgn_status=${marketCapDescRanking.gmgnStatus}`",
+        "`market_cap_desc_ranking_commitment=${marketCapDescRanking.rankingCommitment}`",
+        "`market_cap_asc_source=${marketCapAscRanking.source}`",
+        "`market_cap_asc_gmgn_status=${marketCapAscRanking.gmgnStatus}`",
+        "`market_cap_asc_ranking_commitment=${marketCapAscRanking.rankingCommitment}`",
+        "`chart_provider=${chartProvider}`",
+        "`chart_scope=${chartScope}`",
+        "`chart_pool_attribution=${chartPoolAttribution}`",
         "marketProvider,",
         "detailMarketProvider,",
+        "chartProvider,",
+        "chartScope,",
+        "chartPoolAttribution,",
         'creatorClaimPrepare: "separate-live-probe-required"',
         'tradePrepare: "separate-live-probe-required"',
         "runProductionStaticDexscreenerSmokeV1",
@@ -2732,14 +4321,21 @@ export function evaluateReadModelOperationsSourceContracts(
       ) === true &&
       packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
         "scripts/test/smoke-static-dexscreener-public-apis.test.mjs",
+      ) === true &&
+      packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
+        "tests/bind-vercel-sensitive-production-metadata.test.ts",
+      ) === true &&
+      packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
+        "tests/resolve-gmgn-production-requirement.test.ts",
+      ) === true &&
+      packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
+        "npm run perf:read-model:ops-gate",
       ) === true,
-    "the immutable staged candidate proves validated last-good identities, bounded GMGN-visible and detail enrichment with Dexscreener fallback, mandatory exact-identity GMGN detail when the production key is configured, Dexscreener-only full-catalog FDV ranking, identity-only outage behavior, and unchanged profile/claim response semantics without exposing an RPC endpoint",
+    "the immutable staged candidate proves validated last-good identities, bounded GMGN-visible and detail enrichment with Dexscreener fallback, mandatory exact-identity GMGN detail when configured, GMGN market-cap canonical-prefix ranking with Dexscreener unmatched-remainder FDV fallback and committed coverage, token-address GMGN chart primary with explicit exact-or-unavailable current locator attribution, token-level GMGN pool_info with unavailable attribution, and exact-pool Bitquery fallback with scope and provider handed off explicitly",
   );
   check(
     "ops-obsolete-public-read-gates-absent",
-    !deployWorkflow.includes("perf:read-model:deploy-policy") &&
-      !deployWorkflow.includes("perf:read-model:wake-canary") &&
-      !deployWorkflow.includes("perf:read-model:staged-health") &&
+    !deployWorkflow.includes("perf:read-model:staged-health") &&
       !deployWorkflow.includes("Capture staged read-model evidence") &&
       !deployWorkflow.includes("Gate indexed or shadow read path") &&
       !deployWorkflow.includes("StateView") &&
@@ -2747,7 +4343,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !deployWorkflow.includes(
         "Refresh and prove exact staged durable read model",
       ),
-    "obsolete indexed, Graph, wake and staged-health gates remain absent from Website staging",
+    "obsolete indexed, Graph and staged-health gates remain absent from Website staging",
   );
   const exactVerifyProofGateStart = deployWorkflow.indexOf("  release-gate:");
   const exactVerifyProofGateEnd = deployWorkflow.indexOf("  deploy:");
@@ -2795,16 +4391,19 @@ export function evaluateReadModelOperationsSourceContracts(
       !exactVerifyProofGate.includes("pnpm --dir indexer") &&
       !exactVerifyProofGate.includes("npm run verify") &&
       !exactVerifyProofGate.includes("npm run contracts:verify:ci") &&
-      deployWorkflow.includes(
-        '--meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"',
-      ) &&
+      deployWorkflow.includes('--meta githubCommitSha="$GITHUB_SHA"') &&
+      deployWorkflow.includes('--env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA"') &&
       deployWorkflow.indexOf(
         "Verify Sigstore provenance and exact proof contents",
-      ) < deployWorkflow.indexOf(
-        "Stage production source build without assigning domains",
-      ) &&
+      ) <
+        deployWorkflow.indexOf(
+          "Stage production source build without assigning domains",
+        ) &&
       deployWorkflow.includes(
         "vercel deploy --prod --skip-domain --archive=tgz",
+      ) &&
+      stagedCandidateDeployBlock.includes(
+        "--env PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true",
       ) &&
       !deployWorkflow.includes("vercel build --prod") &&
       !deployWorkflow.includes("--prebuilt") &&
@@ -2876,6 +4475,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "stage-only and must never call `vercel promote`",
       ) &&
       manualPromotionSequenceIsFailClosed(operationsRunbook) &&
+      manualRollbackSequenceIsFailClosed(operationsRunbook) &&
       retiredCandidateCutoverIsFailClosed(retiredCandidateCutover) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
@@ -2888,7 +4488,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "requireGmgnMarket: args.requireGmgnMarket",
       ]) &&
       includesEverySourceFragment(postPromotionVerifierBlock, [
-        'target.toString() !== `${PRODUCTION_ORIGIN}/`',
+        "target.toString() !== `${PRODUCTION_ORIGIN}/`",
         'typeof input.requireGmgnMarket !== "boolean"',
         'throw new Error("an explicit GMGN market requirement boolean is required")',
         'throw new Error("exact production deployment binding is required")',
@@ -2900,14 +4500,27 @@ export function evaluateReadModelOperationsSourceContracts(
       !postPromotion.includes("GMGN_API_KEY") &&
       !postPromotion.includes("input.environment") &&
       includesEverySourceFragment(operationsRunbook, [
-        'vercel pull --yes --environment=production --token="$VERCEL_TOKEN"',
-        "env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module",
-        '(process.env.GMGN_API_KEY ?? "").trim() !== ""',
-        'process.stdout.write(requireGmgnMarket ? "true" : "false")',
+        ': "${VERCEL_ORG_ID:?The Vercel organization ID is required}"',
+        ': "${VERCEL_PROJECT_ID:?The Vercel project ID is required}"',
+        "export VERCEL_ORG_ID VERCEL_PROJECT_ID",
+        'test ! -e "$PRE_PROMOTE_GMGN_METADATA_OUTPUT"',
+        'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
+        "node scripts/bind-vercel-sensitive-production-metadata.mjs",
+        '--metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT"',
+        '--vercel-project-id "$VERCEL_PROJECT_ID"',
+        "node scripts/resolve-gmgn-production-requirement.mjs",
         'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"',
         '--require-gmgn-market "$REQUIRE_GMGN_MARKET"',
+        "Both entries absent resolves to `false`",
+        "either\nentry present alone, duplicates, or malformed metadata fail closed",
       ]) &&
-      !/set -x|echo[^\n]*GMGN_API_KEY|console\.log/u.test(operationsRunbook) &&
+      !operationsRunbook.includes(
+        'vercel env ls production --format json --token="$VERCEL_TOKEN" >',
+      ) &&
+      !/\bprj_[A-Za-z0-9]{8,128}\b/u.test(operationsRunbook) &&
+      !/process\.env\.GMGN_API_KEY|\.vercel\/\.env\.production\.local|set -x|console\.log/u.test(
+        operationsRunbook,
+      ) &&
       !/runtimeProductionProviderEndpoints|verifyBitquery|stateview|chainlink|\/api\/ops\/health|\/api\/explore\/token\/chart/iu.test(
         postPromotionVerifierBlock,
       ) &&

@@ -4,8 +4,11 @@ export const PROGRAMMABLE_MARKET_DATA_SCHEMA_VERSION =
 export const PROGRAMMABLE_MARKET_CHART_SCHEMA_VERSION =
   "programmable.market-chart.v1" as const;
 
-export const PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION =
+export const PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION_V1 =
   "programmable.market-chart-error.v1" as const;
+
+export const PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION =
+  "programmable.market-chart-error.v2" as const;
 
 export const MARKET_DATA_CURRENT_MAX_AGE_MS = 5 * 60 * 1_000;
 
@@ -155,7 +158,7 @@ export type MarketChartV1 = Readonly<{
 }>;
 
 export type MarketChartErrorV1 = Readonly<{
-  schemaVersion: typeof PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION;
+  schemaVersion: typeof PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION_V1;
   source: "bitquery";
   status: "unavailable";
   generatedAt: string;
@@ -164,6 +167,19 @@ export type MarketChartErrorV1 = Readonly<{
   reason: "identity-unavailable" | "market-data-unavailable";
   error: string;
 }>;
+
+export type MarketChartErrorV2 = Readonly<{
+  schemaVersion: typeof PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION;
+  source: "programmable";
+  status: "unavailable";
+  generatedAt: string;
+  address: `0x${string}`;
+  range: MarketChartV1["range"];
+  reason: MarketChartErrorV1["reason"];
+  error: string;
+}>;
+
+export type MarketChartError = MarketChartErrorV1 | MarketChartErrorV2;
 
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
@@ -343,6 +359,34 @@ export function isMarketChartV1(value: unknown): value is MarketChartV1 {
   }
   if (value.status === "partial") return typedPoints.length > 0;
   return typedPoints.length === 0;
+}
+
+/**
+ * Accepts the current provider-neutral error and the legacy Bitquery-attributed
+ * v1 payload so existing clients can parse previously captured responses.
+ */
+export function isMarketChartError(
+  value: unknown,
+): value is MarketChartError {
+  if (!isRecord(value)) return false;
+  const exactVersionSourcePair =
+    (value.schemaVersion === PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION &&
+      value.source === "programmable") ||
+    (value.schemaVersion ===
+        PROGRAMMABLE_MARKET_CHART_ERROR_SCHEMA_VERSION_V1 &&
+      value.source === "bitquery");
+  return exactVersionSourcePair &&
+    value.status === "unavailable" &&
+    validIsoTime(value.generatedAt) &&
+    typeof value.address === "string" &&
+    ADDRESS.test(value.address) &&
+    value.address === value.address.toLowerCase() &&
+    ["1h", "1d", "1w", "all"].includes(String(value.range)) &&
+    ["identity-unavailable", "market-data-unavailable"].includes(
+      String(value.reason),
+    ) &&
+    typeof value.error === "string" &&
+    value.error.trim() !== "";
 }
 
 export function marketDataStatusLabel(

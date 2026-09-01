@@ -1,7 +1,7 @@
 # Website projection database operator v1
 
 This is the repository operator for the Website projection database migrations
-`0001` through `0006`. It does not deploy the Website, change stage
+`0001` through `0007`. It does not deploy the Website, change stage
 workflows, or configure Custom bindings. Run it only from the exact reviewed
 production commit, with a fresh secret-manager session and an independently
 verified production target identity.
@@ -23,11 +23,15 @@ below 15, session change, role/privilege/catalog drift, partial evidence, or any
 migration history other than the exact reviewed prefix.
 
 Migration `0006` installs the GMGN singleton and a forced-RLS decision history.
-The final grant reset permits the runtime to select and update only the singleton,
-insert decisions, and delete only history generations admitted by the bounded
-retention policy. Each gate transition prunes to the latest 256 generations, so
-the gate path contains at most 512 decision rows without an owner cron or broad
-maintenance privilege.
+Migration `0007` adds the private holder-bound multiflight lease table. The final
+grant reset permits the runtime to select and update only the singleton, select,
+insert and delete leases through three exact forced-RLS policies, insert
+decisions, and delete only history generations admitted by the bounded retention
+policy. The runtime admits at most 20 active holder-bound leases; a 21st
+reservation waits for an existing lease to complete or expire. Provider roles
+retain no access. Each gate transition prunes to the
+latest 256 generations, so the gate path contains at most 512 decision rows
+without an owner cron or broad maintenance privilege.
 
 ## One bounded existing-prefix adoption
 
@@ -100,7 +104,7 @@ Any row, extra object, missing object, alternate membership, other role-bit
 drift, partial evidence, lock race, or re-read drift rolls the complete
 transaction back. After a successful adoption, retain its JSON result, run the
 normal `apply` command with the same exact successor plan to apply only `0004`
-through `0006`, then run `verify`. Adoption, apply, and verify remain database
+through `0007`, then run `verify`. Adoption, apply, and verify remain database
 evidence only; they do not enable Custom or authorize a Website deployment.
 
 ## Secret-manager session
@@ -125,10 +129,28 @@ npm run --silent db:website-projection:operator -- dry-run \
   --expected-project-ref '<verified-project-ref>'
 ```
 
-Review the full Git commit/tree, six ordered file/execution hashes, and
+Review the full Git commit/tree, seven ordered file/execution hashes, and
 `planSha256`. Plan generation requires an exact clean, tracked migration
 directory. Dry-run connects without mutations and fails closed on unproven
 objects, non-prefix evidence, target mismatch, role drift, or catalog drift.
+
+The only accepted Production predecessor through `0006` is the exact reviewed
+plan at commit `9a4f5244612d39c387022ce290de40760b112540`, tree
+`6daaa529fac0d95e2c12e05d77fc61ecc4247f3c`, plan commitment
+`0x04f9e0a4c52c4e8b4f22062339a6c30aa0a2fb8d65d38c08ce492438e49f0a4d`,
+and order commitment
+`0x603f0721eadf7e55131c4c2800b46b41dd0fa08ec09613d3f02d019cb65d300c`.
+For an adopted database, rows `0001` through `0005` retain their independently
+frozen predecessor identity and row `0006` retains this exact six-migration
+identity. A database created wholly by the six-migration predecessor may bind
+all six rows to that same exact identity. File and execution hashes, commit,
+tree, plan and order commitments remain exact in both forms; another historical
+branch plan is not a valid substitute.
+
+For this release, dry-run must report only `0007` pending against that exact
+prefix. Retain that output, apply the reviewed plan through the owner-controlled
+command below, and require a current seven-row `verify` result before Website
+promotion. The Stage workflow never applies database migrations.
 
 ## Irreversible apply
 
@@ -159,7 +181,7 @@ npm run --silent db:website-projection:operator -- verify \
   --expected-project-ref '<verified-project-ref>'
 ```
 
-Success requires `current`, six exact evidence rows, the constrained role graph,
+Success requires `current`, seven exact evidence rows, the constrained role graph,
 and application/operator catalog fingerprints matching the last atomic evidence
 row. Pending exits 2; drift is an error. Retain the verify JSON with the plan,
 dry-run result, and apply result.
@@ -197,7 +219,7 @@ current in the database, while its migration order and byte commitments must
 match the current rotation checkout.
 
 The operator reuses the authenticated migration boundary above, requires the
-exact current six-row migration evidence and catalog fingerprints, takes a
+exact current seven-row migration evidence and catalog fingerprints, takes a
 shared migration advisory lock, and changes only the password with `ALTER ROLE`
 inside one database transaction. It then authenticates a fresh connection through the
 exact Frankfurt Supavisor transaction endpoint as

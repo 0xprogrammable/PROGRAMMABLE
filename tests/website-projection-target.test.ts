@@ -45,10 +45,12 @@ import type {
 } from "../lib/server/projection-target/protocol";
 import {
   createWebsiteProjectionTargetV1,
+  assertGmgnAccountGateMultiflightSecurityAttestationV1,
   assertGmgnAccountGateSecurityAttestationV1,
   assertProjectionTargetSecurityAttestationV1,
   assertProductionDatabaseLoginRoleV1,
   verifiedPostgresTlsConfigurationV1,
+  type GmgnAccountGateMultiflightSecurityAttestationRowV1,
   type GmgnAccountGateSecurityAttestationRowV1,
   type ProjectionTargetSecurityAttestationRowV1,
 } from "../lib/server/projection-target/website-target";
@@ -1415,6 +1417,33 @@ describe("Website projection target", () => {
     }
   });
 
+  it("attests the multiflight lease grants, RLS, policies, and role exclusion separately", () => {
+    const secure = gmgnAccountGateMultiflightSecurityAttestationFixture();
+    expect(() => assertGmgnAccountGateMultiflightSecurityAttestationV1(
+      secure,
+      "programmable_website_projection_runtime",
+    )).not.toThrow();
+    for (const mutation of [
+      { gmgn_leases_select: false },
+      { gmgn_leases_insert: false },
+      { gmgn_leases_delete: false },
+      { gmgn_leases_forbidden_access: true },
+      { gmgn_leases_rls: false },
+      { gmgn_leases_force_rls: false },
+      { expected_policies: false },
+      { provider_roles_excluded: false },
+      { rolbypassrls: true },
+      { ssl: false },
+    ] satisfies Array<Partial<
+      GmgnAccountGateMultiflightSecurityAttestationRowV1
+    >>) {
+      expect(() => assertGmgnAccountGateMultiflightSecurityAttestationV1(
+        { ...secure, ...mutation },
+        "programmable_website_projection_runtime",
+      )).toThrow("GMGN account gate multiflight database attestation failed");
+    }
+  });
+
   it("forces RLS, excludes provider roles, and enforces lane-specific metadata", async () => {
     const pool = await pglitePool();
     const state = await pool.query<{
@@ -1902,6 +1931,33 @@ GmgnAccountGateSecurityAttestationRowV1 {
     gmgn_history_rls: true,
     gmgn_history_force_rls: true,
     gmgn_gate_singleton: true,
+    expected_policies: true,
+    provider_roles_excluded: true,
+    ssl: true,
+    ssl_version: "TLSv1.3",
+    ssl_cipher: "TLS_AES_256_GCM_SHA384",
+    ssl_bits: 256,
+  };
+}
+
+function gmgnAccountGateMultiflightSecurityAttestationFixture():
+GmgnAccountGateMultiflightSecurityAttestationRowV1 {
+  return {
+    runtime_role: "programmable_website_projection_runtime",
+    session_role: "programmable_website_projection_runtime",
+    rolsuper: false,
+    rolcreaterole: false,
+    rolcreatedb: false,
+    rolreplication: false,
+    rolbypassrls: false,
+    schema_usage: true,
+    schema_create: false,
+    gmgn_leases_select: true,
+    gmgn_leases_insert: true,
+    gmgn_leases_delete: true,
+    gmgn_leases_forbidden_access: false,
+    gmgn_leases_rls: true,
+    gmgn_leases_force_rls: true,
     expected_policies: true,
     provider_roles_excluded: true,
     ssl: true,

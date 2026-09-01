@@ -4,12 +4,21 @@ vi.mock("server-only", () => ({}));
 
 const mocks = vi.hoisted(() => ({
   configured: vi.fn(),
+  eligible: vi.fn(),
+  hydrate: vi.fn(),
+  hydrationRequired: vi.fn(),
   readGmgn: vi.fn(),
   readDex: vi.fn(),
 }));
 
+vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
+  canonicalTokenSupplyHydrationRequiredV1: mocks.hydrationRequired,
+  hydrateMissingCanonicalTokenSupplyV1: mocks.hydrate,
+}));
+
 vi.mock("../lib/market-data/gmgn.server", () => ({
   gmgnMarketDataConfiguredV1: mocks.configured,
+  gmgnVisibleMarketEntryEligibleV1: mocks.eligible,
   readGmgnExploreSnapshotsV1: mocks.readGmgn,
 }));
 
@@ -157,6 +166,8 @@ function snapshot(
   return {
     schemaVersion: "programmable.gmgn-market-snapshot.v1",
     source: "gmgn",
+    marketScope: "token",
+    poolAttribution: "unavailable",
     currency: "USD",
     fetchedAt: NOW,
     identity: {
@@ -174,7 +185,7 @@ function snapshot(
   };
 }
 
-function dexRead(tokens: readonly ReturnType<typeof entry>[]) {
+function dexRead(tokens: readonly ExploreEntry[]) {
   return {
     entries: tokens.map((token) => ({
       ...token,
@@ -210,6 +221,16 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     mocks.configured.mockReturnValue(true);
+    mocks.hydrate.mockImplementation(async (tokens) => [...tokens]);
+    mocks.hydrationRequired.mockImplementation((token) =>
+      token.totalSupplyRaw === undefined || token.tokenDecimals === undefined
+    );
+    mocks.eligible.mockImplementation((token) =>
+      token.exploreKind === "token" &&
+      typeof token.totalSupplyRaw === "string" &&
+      typeof token.tokenDecimals === "number"
+    );
+    mocks.readGmgn.mockResolvedValue(new Map());
     mocks.readDex.mockImplementation(async (tokens) => dexRead(tokens));
   });
 
@@ -329,6 +350,57 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     expect(exploreMarketPriceSourcesV1(result.marketRead)).toEqual([]);
   });
 
+  it("does not publish or qualify an unobserved fallback valuation", async () => {
+    const first = entry(5);
+    mocks.readGmgn.mockResolvedValue(new Map([
+      [first.id, snapshot(first, "8000000000000000000000")],
+    ]));
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...first,
+        valuation: {
+          status: "available" as const,
+          metric: "fdv" as const,
+          supplyBasis: "total" as const,
+          currency: "usd" as const,
+          valueWad: "1900000000000000000000",
+          freshness: "provider-recent" as const,
+          source: "dexscreener" as const,
+          asOfTime: NOW,
+        },
+      }],
+      observedEntryIds: [],
+      marketRead: {
+        provider: "dexscreener" as const,
+        status: "complete" as const,
+        currency: "USD" as const,
+        requestedCount: 1,
+        observedCount: 0,
+        qualifiedCount: 1,
+        unavailableCount: 0,
+        oldestFetchedAt: NOW,
+        newestFetchedAt: NOW,
+      },
+    });
+
+    const result = await readExploreMarketEntriesV1([first]);
+
+    expect(result.entries[0]?.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
+    });
+    expect(result.marketRead).toMatchObject({
+      observedCount: 1,
+      qualifiedCount: 0,
+      gmgnObservedCount: 1,
+      gmgnQualifiedCount: 0,
+      fallbackObservedCount: 0,
+      fallbackQualifiedCount: 0,
+    });
+    expect(exploreMarketSourcesV1(result.marketRead)).toEqual(["gmgn"]);
+    expect(exploreMarketPriceSourcesV1(result.marketRead)).toEqual([]);
+  });
+
   it("reserves the request budget for the bounded batch fallback", async () => {
     const first = entry(7);
     mocks.readGmgn.mockResolvedValue(new Map());
@@ -347,28 +419,209 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     );
   });
 
-  it("retains the bounded batch provider for catalog-wide reads", async () => {
+  it("keeps GMGN primary when a visible page contains more than nine entries", async () => {
     const entries = Array.from({ length: 10 }, (_, index) => entry(index + 10));
+    mocks.readGmgn.mockResolvedValue(new Map(entries.map((token) => [
+      token.id,
+      snapshot(token, "12000000000000000000000"),
+    ])));
+
+    const result = await readExploreMarketEntriesV1(entries);
+
+    expect(mocks.readGmgn).toHaveBeenCalledWith(entries, expect.any(Object));
+    expect(mocks.readDex).not.toHaveBeenCalled();
+    expect(result.entries.map((token) => token.valuation.status === "available"
+      ? token.valuation.source
+      : null)).toEqual(Array(10).fill("gmgn"));
+    expect(result.marketRead).toMatchObject({
+      provider: "gmgn",
+      status: "complete",
+      requestedCount: 10,
+      observedCount: 10,
+      qualifiedCount: 10,
+      gmgnObservedCount: 10,
+      gmgnQualifiedCount: 10,
+      fallbackRequestedCount: 0,
+      fallbackObservedCount: 0,
+      fallbackQualifiedCount: 0,
+    });
+  });
+
+  it("passes the public API maximum of 100 entries to the bounded GMGN reader", async () => {
+    const entries = Array.from({ length: 100 }, (_, index) => entry(index + 100));
     await readExploreMarketEntriesV1(entries);
-    expect(mocks.readGmgn).not.toHaveBeenCalled();
+    expect(mocks.readGmgn).toHaveBeenCalledWith(
+      entries,
+      expect.objectContaining({ deadlineMs: Date.parse(NOW) + 1_800 }),
+    );
     expect(mocks.readDex).toHaveBeenCalledWith(entries, {});
   });
 
-  it("falls back for the whole page when one entry has two markets", async () => {
+  it("hydrates at most the first 20 required entries on a 100-entry page", async () => {
+    const entries = Array.from({ length: 100 }, (_, index) => ({
+      ...entry(index + 600),
+      totalSupplyRaw: undefined,
+    }));
+    mocks.hydrate.mockImplementationOnce(async (
+      tokens: readonly ExploreEntry[],
+    ) => tokens.map((token) => ({
+      ...token,
+      totalSupplyRaw: "1000000000000000000000",
+    })));
+
+    const result = await readExploreMarketEntriesV1(entries);
+
+    expect(mocks.hydrate).toHaveBeenCalledTimes(1);
+    expect(mocks.hydrate).toHaveBeenCalledWith(
+      entries.slice(0, 20),
+      expect.objectContaining({ deadlineMs: Date.parse(NOW) + 1_800 }),
+    );
+    const gmgnRequested = mocks.readGmgn.mock.calls[0]?.[0] as
+      | readonly ExploreEntry[]
+      | undefined;
+    expect(gmgnRequested).toHaveLength(20);
+    expect(gmgnRequested?.map((token) => token.id)).toEqual(
+      entries.slice(0, 20).map((token) => token.id),
+    );
+    expect(gmgnRequested?.every((token) =>
+      token.totalSupplyRaw === "1000000000000000000000"
+    )).toBe(true);
+    expect(result.entries).toHaveLength(100);
+    expect(result.entries.slice(0, 20).every((token) =>
+      token.totalSupplyRaw === "1000000000000000000000"
+    )).toBe(true);
+    expect(result.entries.slice(20).every((token) =>
+      token.totalSupplyRaw === undefined
+    )).toBe(true);
+    const dexRequested = mocks.readDex.mock.calls[0]?.[0] as
+      | readonly ExploreEntry[]
+      | undefined;
+    expect(dexRequested).toHaveLength(100);
+    expect(dexRequested?.map((token) => token.id)).toEqual(
+      entries.map((token) => token.id),
+    );
+  });
+
+  it("does not spend hydration capacity on a required entry without a market", async () => {
+    const noMarket = {
+      ...customProjectWithTwoMarkets(),
+      markets: [],
+      totalSupplyRaw: undefined,
+    };
+    const eligible = { ...entry(750), totalSupplyRaw: undefined };
+    mocks.hydrate.mockImplementationOnce(async (
+      tokens: readonly ExploreEntry[],
+    ) => tokens.map((token) => ({
+      ...token,
+      totalSupplyRaw: "1000000000000000000000",
+    })));
+
+    await readExploreMarketEntriesV1([noMarket, eligible]);
+
+    expect(mocks.hydrate).toHaveBeenCalledWith(
+      [eligible],
+      expect.objectContaining({ deadlineMs: Date.parse(NOW) + 1_800 }),
+    );
+    expect(mocks.readGmgn).toHaveBeenCalledWith(
+      [expect.objectContaining({
+        id: eligible.id,
+        totalSupplyRaw: "1000000000000000000000",
+      })],
+      expect.any(Object),
+    );
+  });
+
+  it("projects only validated supply fields from the hydrator", async () => {
+    const first = { ...entry(751), totalSupplyRaw: undefined };
+    mocks.hydrate.mockResolvedValueOnce([{
+      ...first,
+      name: "tampered name",
+      symbol: "BAD",
+      links: [{ label: "bad", url: "https://example.invalid" }],
+      poolId: `0x${"ff".repeat(32)}`,
+      launchCategoryProvenance: {
+        ...first.launchCategoryProvenance,
+        source: "interface-preview",
+      } as unknown as typeof first.launchCategoryProvenance,
+      totalSupplyRaw: "5000000000",
+      tokenDecimals: 9,
+    }]);
+
+    const result = await readExploreMarketEntriesV1([first]);
+    const gmgnRequested = mocks.readGmgn.mock.calls[0]?.[0]?.[0] as
+      | ExploreEntry
+      | undefined;
+
+    expect(gmgnRequested).toMatchObject({
+      ...first,
+      totalSupplyRaw: "5000000000",
+      tokenDecimals: 9,
+    });
+    expect(gmgnRequested?.name).toBe(first.name);
+    expect(gmgnRequested?.symbol).toBe(first.symbol);
+    expect(gmgnRequested?.links).toEqual(first.links);
+    expect((gmgnRequested as typeof first | undefined)?.poolId).toBe(
+      first.poolId,
+    );
+    expect(gmgnRequested?.launchCategoryProvenance).toEqual(
+      first.launchCategoryProvenance,
+    );
+    expect(result.entries[0]).toMatchObject({
+      name: first.name,
+      symbol: first.symbol,
+      poolId: first.poolId,
+      totalSupplyRaw: "5000000000",
+      tokenDecimals: 9,
+    });
+  });
+
+  it.each([
+    ["zero supply", "0", 18],
+    ["non-canonical supply", "01", 18],
+    ["uint256 overflow", (1n << 256n).toString(), 18],
+    ["out-of-range decimals", "1", 256],
+  ] as const)(
+    "rejects %s returned by the hydrator",
+    async (_label, totalSupplyRaw, tokenDecimals) => {
+      const first = { ...entry(752), totalSupplyRaw: undefined };
+      mocks.hydrate.mockResolvedValueOnce([{
+        ...first,
+        totalSupplyRaw,
+        tokenDecimals,
+      }]);
+
+      const result = await readExploreMarketEntriesV1([first]);
+
+      expect(mocks.readGmgn).not.toHaveBeenCalled();
+      expect(result.entries[0]?.totalSupplyRaw).toBeUndefined();
+      expect(result.entries[0]?.tokenDecimals).toBe(first.tokenDecimals);
+    },
+  );
+
+  it("partitions one multi-market entry without downgrading an eligible peer", async () => {
     const first = entry(31);
     const custom = customProjectWithTwoMarkets();
     const entries = [first, custom];
+    mocks.readGmgn.mockResolvedValue(new Map([
+      [first.id, snapshot(first, "12000000000000000000000")],
+    ]));
     const fallback = {
-      entries: [],
-      observedEntryIds: [],
+      entries: [{
+        ...custom,
+        valuation: {
+          status: "unavailable" as const,
+          reason: "source-unavailable" as const,
+        },
+      }],
+      observedEntryIds: [custom.id],
       marketRead: {
         provider: "dexscreener" as const,
         status: "complete" as const,
         currency: "USD" as const,
-        requestedCount: 3,
-        observedCount: 3,
+        requestedCount: 2,
+        observedCount: 2,
         qualifiedCount: 2,
-        unavailableCount: 1,
+        unavailableCount: 0,
         oldestFetchedAt: NOW,
         newestFetchedAt: NOW,
       },
@@ -377,12 +630,113 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
 
     const result = await readExploreMarketEntriesV1(entries);
 
+    expect(mocks.readGmgn).toHaveBeenCalledWith([first], expect.any(Object));
+    expect(mocks.readDex).toHaveBeenCalledWith([custom], {});
+    expect(result.entries.map((token) => token.id)).toEqual([
+      first.id,
+      custom.id,
+    ]);
+    expect(result.entries[0]?.valuation).toMatchObject({ source: "gmgn" });
+    expect(result.entries[1]?.valuation).toMatchObject({
+      status: "unavailable",
+    });
+    expect(result.marketRead).toMatchObject({
+      provider: "gmgn",
+      status: "complete",
+      requestedCount: 2,
+      observedCount: 2,
+      qualifiedCount: 1,
+      unavailableCount: 1,
+      gmgnObservedCount: 1,
+      gmgnQualifiedCount: 1,
+      fallbackRequestedCount: 1,
+      fallbackObservedCount: 1,
+      // Dex observed two identities, but its multi-market entry did not yield
+      // one unambiguous displayed valuation.
+      fallbackQualifiedCount: 0,
+    });
+  });
+
+  it("uses hydrated entries for eligibility, GMGN, fallback, and output", async () => {
+    const first = { ...entry(35), totalSupplyRaw: undefined };
+    const hydrated = { ...first, totalSupplyRaw: "1000000000000000000000" };
+    mocks.hydrate.mockResolvedValue([hydrated]);
+    mocks.readGmgn.mockResolvedValue(new Map());
+
+    const result = await readExploreMarketEntriesV1([first]);
+
+    expect(mocks.eligible.mock.calls[0]?.[0]).toEqual(hydrated);
+    expect(mocks.readGmgn).toHaveBeenCalledWith([hydrated], expect.any(Object));
+    expect(mocks.readDex).toHaveBeenCalledWith([hydrated], {});
+    expect(result.entries[0]).toMatchObject({
+      id: hydrated.id,
+      totalSupplyRaw: hydrated.totalSupplyRaw,
+    });
+  });
+
+  it("bounds supply hydration before continuing with the unchanged fallback entry", async () => {
+    const first = { ...entry(36), totalSupplyRaw: undefined };
+    let finishHydration: ((value: ExploreEntry[]) => void) | undefined;
+    mocks.hydrate.mockReturnValue(new Promise((resolve) => {
+      finishHydration = resolve;
+    }));
+
+    const pending = readExploreMarketEntriesV1([first], {
+      deadlineMs: Date.parse(NOW) + 8_000,
+      now: () => new Date(NOW),
+    });
+    await vi.advanceTimersByTimeAsync(1_800);
+    const result = await pending;
+
+    expect(mocks.hydrate).toHaveBeenCalledWith(
+      [first],
+      expect.objectContaining({
+        deadlineMs: Date.parse(NOW) + 1_800,
+        now: expect.any(Function),
+      }),
+    );
     expect(mocks.readGmgn).not.toHaveBeenCalled();
-    expect(mocks.readDex).toHaveBeenCalledWith(entries, {});
+    expect(mocks.readDex).toHaveBeenCalledWith(
+      [first],
+      expect.objectContaining({ deadlineMs: Date.parse(NOW) + 8_000 }),
+    );
+    expect(result.entries[0]?.id).toBe(first.id);
+    finishHydration?.([{ ...first, totalSupplyRaw: "1" }]);
+  });
+
+  it("stops awaiting supply hydration when the caller aborts", async () => {
+    const first = { ...entry(37), totalSupplyRaw: undefined };
+    const controller = new AbortController();
+    mocks.hydrate.mockReturnValue(new Promise(() => undefined));
+
+    const pending = readExploreMarketEntriesV1([first], {
+      signal: controller.signal,
+      now: () => new Date(NOW),
+    });
+    controller.abort();
+    const result = await pending;
+
+    expect(mocks.readGmgn).not.toHaveBeenCalled();
+    expect(mocks.readDex).toHaveBeenCalledWith(
+      [first],
+      expect.objectContaining({ signal: controller.signal }),
+    );
+    expect(result.entries[0]?.id).toBe(first.id);
+  });
+
+  it("uses only Dexscreener when no entry is GMGN eligible", async () => {
+    const custom = customProjectWithTwoMarkets();
+    const fallback = dexRead([custom]);
+    mocks.readDex.mockResolvedValueOnce(fallback);
+
+    const result = await readExploreMarketEntriesV1([custom]);
+
+    expect(mocks.readGmgn).not.toHaveBeenCalled();
+    expect(mocks.readDex).toHaveBeenCalledWith([custom], {});
     expect(result).toBe(fallback);
   });
 
-  it("falls back without changing canonical order when GMGN rejects", async () => {
+  it("falls back per entry without changing canonical order when GMGN rejects", async () => {
     const first = entry(41);
     const second = entry(42);
     mocks.readGmgn.mockRejectedValue(new Error("provider unavailable"));
@@ -391,7 +745,15 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
 
     expect(result.entries.map((item) => item.id)).toEqual([first.id, second.id]);
     expect(result.entries).toHaveLength(2);
-    expect(result.marketRead.provider).toBe("dexscreener");
+    expect(result.marketRead).toMatchObject({
+      provider: "gmgn",
+      status: "complete",
+      gmgnObservedCount: 0,
+      gmgnQualifiedCount: 0,
+      fallbackRequestedCount: 2,
+      fallbackObservedCount: 2,
+      fallbackQualifiedCount: 2,
+    });
     expect(mocks.readDex).toHaveBeenCalledWith([first, second], {});
   });
 });

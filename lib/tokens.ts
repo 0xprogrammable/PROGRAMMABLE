@@ -865,6 +865,7 @@ export type CustomProjectExploreEntry = Readonly<{
   postLaunchAuthorityInventoryHash: `sha256:${string}`;
   tokenAddress?: `0x${string}`;
   tokenDecimals?: number;
+  totalSupplyRaw?: string;
   markets: readonly Readonly<{
     marketId: string;
     kind: string;

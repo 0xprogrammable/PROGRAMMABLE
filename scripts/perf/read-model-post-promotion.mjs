@@ -147,7 +147,7 @@ export async function verifyPostPromotion(input) {
     id: "production-static-identity-dexscreener-public-apis",
     status: publicSurface ? "pass" : "fail",
     detail:
-      "production serves one catalog-bound identity surface with the configured GMGN requirement, exact-pool Dexscreener fallback, profile reads, and an exact pool-bound Bitquery chart",
+      "production serves one catalog-bound identity surface with the configured GMGN requirement, GMGN market-cap ranking over its canonical intersection, Dexscreener visible and unmatched-remainder fallback, profile reads, token-address GMGN chart primary, and exact-pool Bitquery chart fallback",
   });
   const failures = checks
     .filter(({ status }) => status !== "pass")

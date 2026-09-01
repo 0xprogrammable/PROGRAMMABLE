@@ -26,6 +26,11 @@ import {
   validateRetainedWebsiteProjectionPlan,
   validateWebsiteProjectionPlan,
   validateWebsiteProjectionRuntimePassword,
+  websiteProjectionPredecessor0006Plan,
+  WEBSITE_PROJECTION_PREDECESSOR_0006_ORDER_SHA256,
+  WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_COMMIT,
+  WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_SHA256,
+  WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_TREE,
   WEBSITE_PROJECTION_RETAINED_ORDER_SHA256,
   WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT,
   WEBSITE_PROJECTION_RETAINED_PLAN_SHA256,
@@ -57,6 +62,7 @@ const MIGRATIONS = [
   "0004_approval_v3_artifacts_v1.sql",
   "0005_generic_launch_materializations_v2.sql",
   "0006_gmgn_account_gate_v1.sql",
+  "0007_gmgn_account_gate_multiflight_v1.sql",
 ];
 
 function migrationSql(index) {
@@ -97,7 +103,31 @@ function retainedPlan(successorPlan) {
   return plan;
 }
 
-test("plan discovery binds the exact six files, source bytes and execution bodies", async (t) => {
+function appliedEvidenceRow(plan, migration) {
+  return {
+    ordinal: migration.ordinal,
+    version: migration.version,
+    name: migration.name,
+    file_name: path.posix.basename(migration.file),
+    file_sha256: migration.fileSha256,
+    execution_sha256: migration.executionSha256,
+    plan_sha256: plan.planSha256,
+    repository_commit: plan.repositoryCommit,
+    repository_tree: plan.repositoryTree,
+    target_project_ref: PROJECT_REF,
+    catalog_sha256: `0x${"e".repeat(64)}`,
+    operator_catalog_sha256: `0x${"f".repeat(64)}`,
+    evidence_kind: "applied",
+    adoption_source_snapshot_sha256: null,
+    adoption_source_catalog_sha256: null,
+    adoption_source_data_sha256: null,
+    adoption_attestation_sha256: null,
+    adoption_operator_commit: null,
+    adoption_operator_tree: null,
+  };
+}
+
+test("plan discovery binds the exact seven files, source bytes and execution bodies", async (t) => {
   const { workspace } = await fixture();
   t.after(() => rm(workspace, { recursive: true, force: true }));
   const plan = await discoverWebsiteProjectionPlan({
@@ -106,10 +136,10 @@ test("plan discovery binds the exact six files, source bytes and execution bodie
     repositoryTree: TREE,
   });
   assert.equal(plan.migrationRoot, "ops/website-projection-target/migrations");
-  assert.equal(plan.migrationCount, 6);
+  assert.equal(plan.migrationCount, 7);
   assert.deepEqual(plan.migrations.map(({ file }) => path.posix.basename(file)), MIGRATIONS);
   assert.deepEqual(plan.migrations.map(({ version }) => version), [
-    "0001", "0002", "0003", "0004", "0005", "0006",
+    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
   ]);
   assert.ok(plan.migrations.every(({ fileSha256, executionSha256 }) =>
     /^0x[0-9a-f]{64}$/u.test(fileSha256)
@@ -128,7 +158,7 @@ test("plan discovery rejects missing, extra, linked and unwrapped migration inpu
       repositoryCommit: COMMIT,
       repositoryTree: TREE,
     }),
-    /exactly the six canonical files/u,
+    /exactly the seven canonical files/u,
   );
 
   const extra = await fixture();
@@ -140,7 +170,7 @@ test("plan discovery rejects missing, extra, linked and unwrapped migration inpu
       repositoryCommit: COMMIT,
       repositoryTree: TREE,
     }),
-    /exactly the six canonical files/u,
+    /exactly the seven canonical files/u,
   );
 
   const linked = await fixture();
@@ -229,7 +259,7 @@ test("evidence comparison permits only an exact prefix on the exact target", asy
   assert.equal(state.status, "pending");
   assert.equal(state.appliedCount, 1);
   assert.deepEqual(state.pending.map(({ version }) => version), [
-    "0002", "0003", "0004", "0005", "0006",
+    "0002", "0003", "0004", "0005", "0006", "0007",
   ]);
   assert.equal(state.catalogSha256, row.catalog_sha256);
 
@@ -254,6 +284,90 @@ test("evidence comparison permits only an exact prefix on the exact target", asy
     applicationSchemaPresent: true,
     evidenceRows: [{ ...row, version: "0002" }],
   }), /exact plan prefix/u);
+});
+
+test("evidence comparison accepts only the exact frozen 0006 predecessor", async () => {
+  const workspace = path.resolve(new URL("..", import.meta.url).pathname);
+  const successorPlan = await discoverWebsiteProjectionPlan({
+    workspace,
+    repositoryCommit: COMMIT,
+    repositoryTree: TREE,
+  });
+  const predecessorPlan = websiteProjectionPredecessor0006Plan(successorPlan);
+  const retained = retainedPlan(successorPlan);
+  assert.equal(
+    predecessorPlan.planSha256,
+    WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_SHA256,
+  );
+  assert.equal(
+    predecessorPlan.repositoryCommit,
+    WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_COMMIT,
+  );
+  assert.equal(
+    predecessorPlan.repositoryTree,
+    WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_TREE,
+  );
+  assert.equal(
+    predecessorPlan.orderSha256,
+    WEBSITE_PROJECTION_PREDECESSOR_0006_ORDER_SHA256,
+  );
+  assert.equal(
+    predecessorPlan.migrations[5].fileSha256,
+    "0x7427eeaac9d1ffab6753688793225256432534656f3373bc06514622fed2b89b",
+  );
+  assert.equal(
+    predecessorPlan.migrations[5].executionSha256,
+    "0xeed94a58ca5a9b70117a0101c7242f150658289e8abfd35721b01169b66f157a",
+  );
+
+  const retainedThen0006 = [
+    ...retained.migrations.map((migration) =>
+      appliedEvidenceRow(retained, migration)),
+    appliedEvidenceRow(predecessorPlan, predecessorPlan.migrations[5]),
+  ];
+  const retainedState = compareWebsiteProjectionEvidence({
+    plan: successorPlan,
+    expectedProjectRef: PROJECT_REF,
+    evidenceTablePresent: true,
+    applicationSchemaPresent: true,
+    evidenceRows: retainedThen0006,
+  });
+  assert.deepEqual(retainedState.pending.map(({ version }) => version), ["0007"]);
+
+  const predecessorOnly = predecessorPlan.migrations.map((migration) =>
+    appliedEvidenceRow(predecessorPlan, migration));
+  const predecessorState = compareWebsiteProjectionEvidence({
+    plan: successorPlan,
+    expectedProjectRef: PROJECT_REF,
+    evidenceTablePresent: true,
+    applicationSchemaPresent: true,
+    evidenceRows: predecessorOnly,
+  });
+  assert.deepEqual(predecessorState.pending.map(({ version }) => version), ["0007"]);
+
+  for (const [label, mutate] of [
+    ["plan", (row) => {
+      row.plan_sha256 =
+        "0x0f7a32fa3518f84259edbbb78242b0b1e8ee5a21539910b7193c27df61b7b833";
+    }],
+    ["commit", (row) => {
+      row.repository_commit = "755a7ee0cdb7aa9a60ef1721353df03f6c47ec85";
+    }],
+    ["tree", (row) => {
+      row.repository_tree = "e6777d122f1c7c200e37c85549f42e52fa244951";
+    }],
+    ["execution", (row) => { row.execution_sha256 = `0x${"c".repeat(64)}`; }],
+  ]) {
+    const drifted = structuredClone(retainedThen0006);
+    mutate(drifted[5]);
+    assert.throws(() => compareWebsiteProjectionEvidence({
+      plan: successorPlan,
+      expectedProjectRef: PROJECT_REF,
+      evidenceTablePresent: true,
+      applicationSchemaPresent: true,
+      evidenceRows: drifted,
+    }), /exact plan prefix/u, `${label} drift must fail closed`);
+  }
 });
 
 test("fresh state is pending only when no unproven application schema exists", async (t) => {
@@ -969,7 +1083,7 @@ test("database operator bootstraps, applies, resumes and detects catalog drift",
   assert.equal(applied.status, "current");
   assert.equal(applied.roleCreated, true);
   assert.deepEqual(applied.appliedThisRun, [
-    "0001", "0002", "0003", "0004", "0005", "0006",
+    "0001", "0002", "0003", "0004", "0005", "0006", "0007",
   ]);
   assert.match(applied.catalogSha256, /^0x[0-9a-f]{64}$/u);
 
@@ -1087,30 +1201,31 @@ test("adopt-existing records exact evidence atomically without replaying applica
     sessionIdentity: fixture.sessionIdentity,
   });
   assert.equal(continued.status, "current");
-  assert.deepEqual(continued.appliedThisRun, ["0004", "0005", "0006"]);
+  assert.deepEqual(continued.appliedThisRun, ["0004", "0005", "0006", "0007"]);
 });
 
-test("exact retained 0001-0005 adoption evidence advances only through 0006", async (t) => {
+test("exact production 0006 predecessor advances only 0007 and verifies seven rows", async (t) => {
   const fixture = await pgliteExistingApplicationFixture(t);
   const successorPlan = fixture.plan;
-  const predecessorPlan = retainedPlan(successorPlan);
+  const retainedPrefixPlan = retainedPlan(successorPlan);
+  const predecessor0006Plan = websiteProjectionPredecessor0006Plan(successorPlan);
   await adoptExistingWebsiteProjectionDatabase({
     ...pgliteAdoptionAuditOptions(),
     sql: fixture.sql,
     workspace: fixture.workspace,
-    plan: predecessorPlan,
+    plan: retainedPrefixPlan,
     expectedProjectRef: PROJECT_REF,
     sessionIdentity: fixture.sessionIdentity,
     expectedSourceSnapshotSha256: SOURCE_SNAPSHOT,
   });
-  const predecessorApply = await applyWebsiteProjectionMigrations({
+  const retainedApply = await applyWebsiteProjectionMigrations({
     sql: fixture.sql,
     workspace: fixture.workspace,
-    plan: predecessorPlan,
+    plan: retainedPrefixPlan,
     expectedProjectRef: PROJECT_REF,
     sessionIdentity: fixture.sessionIdentity,
   });
-  assert.deepEqual(predecessorApply.appliedThisRun, ["0004", "0005"]);
+  assert.deepEqual(retainedApply.appliedThisRun, ["0004", "0005"]);
   const retainedAdoption = (await fixture.database.query(`
     SELECT successor_plan_sha256, successor_order_sha256,
            successor_repository_commit, successor_repository_tree,
@@ -1118,13 +1233,33 @@ test("exact retained 0001-0005 adoption evidence advances only through 0006", as
       FROM programmable_website_projection_migrations.adoption_evidence_v1
   `)).rows[0];
 
+  const predecessorPending = await inspectWebsiteProjectionDatabase({
+    sql: fixture.sql,
+    plan: predecessor0006Plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+  });
+  assert.deepEqual(
+    predecessorPending.pending.map(({ version }) => version),
+    ["0006"],
+  );
+  const predecessorApply = await applyWebsiteProjectionMigrations({
+    sql: fixture.sql,
+    workspace: fixture.workspace,
+    plan: predecessor0006Plan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+  });
+  assert.deepEqual(predecessorApply.appliedThisRun, ["0006"]);
+  assert.equal(predecessorApply.status, "current");
+
   const pending = await inspectWebsiteProjectionDatabase({
     sql: fixture.sql,
     plan: successorPlan,
     expectedProjectRef: PROJECT_REF,
     sessionIdentity: fixture.sessionIdentity,
   });
-  assert.deepEqual(pending.pending.map(({ version }) => version), ["0006"]);
+  assert.deepEqual(pending.pending.map(({ version }) => version), ["0007"]);
   const advanced = await applyWebsiteProjectionMigrations({
     sql: fixture.sql,
     workspace: fixture.workspace,
@@ -1132,8 +1267,17 @@ test("exact retained 0001-0005 adoption evidence advances only through 0006", as
     expectedProjectRef: PROJECT_REF,
     sessionIdentity: fixture.sessionIdentity,
   });
-  assert.deepEqual(advanced.appliedThisRun, ["0006"]);
+  assert.deepEqual(advanced.appliedThisRun, ["0007"]);
   assert.equal(advanced.status, "current");
+
+  const verified = await inspectWebsiteProjectionDatabase({
+    sql: fixture.sql,
+    plan: successorPlan,
+    expectedProjectRef: PROJECT_REF,
+    sessionIdentity: fixture.sessionIdentity,
+  });
+  assert.equal(verified.status, "current");
+  assert.equal(verified.appliedCount, 7);
 
   const evidence = await fixture.database.query(`
     SELECT ordinal::integer, plan_sha256, repository_commit, repository_tree
@@ -1146,6 +1290,12 @@ test("exact retained 0001-0005 adoption evidence advances only through 0006", as
     repository_commit), Array(5).fill(WEBSITE_PROJECTION_RETAINED_PLAN_COMMIT));
   assert.deepEqual(evidence.rows[5], {
     ordinal: 6,
+    plan_sha256: WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_SHA256,
+    repository_commit: WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_COMMIT,
+    repository_tree: WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_TREE,
+  });
+  assert.deepEqual(evidence.rows[6], {
+    ordinal: 7,
     plan_sha256: successorPlan.planSha256,
     repository_commit: successorPlan.repositoryCommit,
     repository_tree: successorPlan.repositoryTree,
@@ -1203,7 +1353,24 @@ test("exact retained 0001-0005 adoption evidence advances only through 0006", as
         'generation', 'SELECT') AS history_prune_columns,
       has_table_privilege('programmable_website_projection_runtime',
         'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
-        'SELECT,UPDATE,TRUNCATE,REFERENCES,TRIGGER') AS history_forbidden
+        'SELECT,UPDATE,TRUNCATE,REFERENCES,TRIGGER') AS history_forbidden,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+        'SELECT') AS leases_select,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+        'INSERT') AS leases_insert,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+        'DELETE') AS leases_delete,
+      has_table_privilege('programmable_website_projection_runtime',
+        'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+        'UPDATE,TRUNCATE,REFERENCES,TRIGGER') AS leases_forbidden,
+      (SELECT relrowsecurity AND relforcerowsecurity
+         FROM pg_class
+        WHERE oid =
+          'programmable_website_projection_v1.gmgn_account_gate_leases_v1'::regclass)
+        AS leases_rls_forced
   `)).rows[0];
   assert.deepEqual(privileges, {
     gate_select: true,
@@ -1214,6 +1381,11 @@ test("exact retained 0001-0005 adoption evidence advances only through 0006", as
     history_delete: true,
     history_prune_columns: true,
     history_forbidden: false,
+    leases_select: true,
+    leases_insert: true,
+    leases_delete: true,
+    leases_forbidden: false,
+    leases_rls_forced: true,
   });
 });
 

@@ -39,6 +39,7 @@ before starting the runtime, in this exact order:
 4. `ops/website-projection-target/migrations/0004_approval_v3_artifacts_v1.sql`
 5. `ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql`
 6. `ops/website-projection-target/migrations/0006_gmgn_account_gate_v1.sql`
+7. `ops/website-projection-target/migrations/0007_gmgn_account_gate_multiflight_v1.sql`
 
 `0001` creates the private schema, immutable projection and credential-use
 tables, policies and initial indexes. `0002` then upgrades finalized Custom
@@ -49,8 +50,12 @@ Registry-current-state materialization. `0004` adds approval-v3 artifact
 commitments. `0005` adds the Generic V2 launch, reconciliation, and
 reconciliation-attempt materializations. `0006` adds the private singleton and
 bounded decision history used to serialize GMGN account-wide reservations,
-leases, completions, provider failures, and provider cooldowns across production
-instances. Together they provide:
+completions, provider failures, and provider cooldowns across production
+instances. `0007` adds the private forced-RLS lease table used for at most 20
+concurrent account-wide reservations; a 21st reservation waits for a lease to
+complete or expire. Its `(gate_id, generation)` primary key,
+unique `(gate_id, lease_holder)` binding, singleton foreign key and exact lease
+times prevent a holder or generation from being reused. Together they provide:
 
 - a primary key on `(lane, projection_key)`;
 - a global unique index on `idempotency_key`;
@@ -62,10 +67,11 @@ instances. Together they provide:
   `registry.custom-launched` observations, including exact Registry/event,
   finality, provider/model, GitHub revision, approval/launch-plan, runtime, fee,
   and post-launch-role bindings;
-- a fail-closed distributed GMGN account gate with one exact singleton, bounded
-  leases, exact-holder failure release, and the latest 256 generations of
-  reservation, completion, and provider-block decisions (at most 512 gate-path
-  rows);
+- a fail-closed distributed GMGN account gate with one exact singleton, at most
+  20 separately bound live leases, a waiting 21st reservation, exact-holder
+  failure release, and the
+  latest 256 generations of reservation, completion, and provider-block
+  decisions (at most 512 gate-path rows);
 - lane-specific constraints requiring complete entitlement metadata and forbidding
   that metadata on custom-launch records;
 - enabled and forced RLS on every application table;
@@ -119,22 +125,28 @@ GRANT UPDATE (
 GRANT INSERT, DELETE
   ON programmable_website_projection_v1.gmgn_account_gate_decisions_v1
   TO programmable_website_projection_runtime;
+GRANT SELECT, INSERT, DELETE
+  ON programmable_website_projection_v1.gmgn_account_gate_leases_v1
+  TO programmable_website_projection_runtime;
 GRANT EXECUTE ON FUNCTION
   programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
   TO programmable_website_projection_runtime;
 ```
 
 Do not grant `UPDATE` on the immutable projection or credential tables. Do not
-grant `DELETE` except on the GMGN decision history, or grant `TRUNCATE`, schema
+grant `DELETE` except on the GMGN decision history and exact lease table, or
+grant `TRUNCATE`, schema
 creation, role management, or access to approval-service tables. The narrowly
 scoped column-level `UPDATE` grant on the
 Registry materialization is required to hide a record immediately after a correction,
-revocation, or reorg. The GMGN runtime may read and update only the singleton;
-it may append decisions and delete only generations made eligible by the RLS
-retention policy. Its two column-level `SELECT` grants expose only the gate ID
-and generation of those already-prunable rows; it cannot read decision contents,
-update, truncate, or trigger against decision history. Each reserve, complete,
-and provider-block statement prunes generations
+revocation, or reorg. The GMGN runtime may read and update only the singleton,
+and may select, insert and delete only exact holder-bound lease rows through the
+three reviewed forced-RLS policies. It may append decisions and delete only
+generations made eligible by the history RLS retention policy. Its two
+column-level history `SELECT` grants expose only the gate ID and generation of
+already-prunable rows; it cannot read decision contents, update, truncate, or
+trigger against decision history. Provider roles have no lease-table access.
+Each reserve, complete, and provider-block statement prunes generations
 older than the latest 256 in the same serialized gate path. Fetch and timeout
 failures complete only the exact generation-and-holder lease; an observed 429 or
 provider ban instead advances the generation and publishes the bounded shared
@@ -157,7 +169,7 @@ Ed25519 JWT from the reviewed workload token exchange. The JWT is canonical JSON
 uses unpadded canonical base64url segments, and has this exact protected header:
 
 ```json
-{"alg":"EdDSA","kid":"<configured-key-id>","typ":"JWT"}
+{ "alg": "EdDSA", "kid": "<configured-key-id>", "typ": "JWT" }
 ```
 
 Each token authorizes exactly one request. A PUT payload has exactly these fields:
@@ -375,17 +387,24 @@ and checks Privy session/current-link and principal-scoped entitlement reads.
 Do not call the complete projection target with its GMGN account gate active
 until all of the following are separately evidenced. The existing `0001`
 through `0005` projection paths retain their independent readiness contract;
-an absent `0006` must disable GMGN enrichment without disabling those paths.
+an absent `0006` must disable GMGN enrichment without disabling those paths. An
+exact `0001` through `0006` database remains a safe legacy single-flight prefix,
+but it is not multiflight release evidence and cannot authorize this release's
+GMGN Pro throughput claim.
 
-1. migrations `0001` through `0006` were applied in that exact order on the
+1. migrations `0001` through `0007` were applied in that exact order on the
    intended hosted database, their exact reviewed digests are retained, and live
    catalog proof confirms the complete application schema, including the `0002`
    wallet/profile changes and the `0006` GMGN gate singleton, policies, grants,
-   decision history, and constraints;
+   decision history and constraints, plus the `0007` lease table, foreign and
+   unique bindings, three runtime policies and least-privilege grants;
 2. the runtime uses the dedicated least-privilege role, the base production
    readiness attestation proves the existing `0001` through `0005` contract,
-   and the separate GMGN readiness attestation proves the `0006` schema,
-   grants, forced RLS and provider-role exclusion against that hosted database;
+   and the separate GMGN runtime attestation proves the usable `0006`/`0007`
+   relations, ownership, grants, forced RLS, exact policy set and provider-role
+   exclusion against that hosted database. The operator catalog proof in step 1,
+   rather than this runtime probe, binds the full column, constraint and index
+   definitions;
 3. Supabase Postgres SSL enforcement is enabled, the current Server root
    certificate is configured, and the runtime readiness attestation succeeds;
 4. Privy GitHub OAuth and identity tokens are enabled and tested on the intended
@@ -400,14 +419,14 @@ an absent `0006` must disable GMGN enrichment without disabling those paths.
 9. the Website keyring exactly matches the reviewed permit-signing release,
    including signer epoch, component binding, raw public key, and SPKI hash;
 10. the trusted-time route is live, dynamic, same-origin, `no-store`, and passes
-   its malformed-request and disabled-readiness gates;
+    its malformed-request and disabled-readiness gates;
 11. the conformance suite passes against the deployed routes, not only locally;
 12. a real test submission proves approval → entitlement → authenticated user
-   read without granting launch authority early;
+    read without granting launch authority early;
 13. a real wallet-bound rehearsal proves one idempotent preparation → signature
     → authorization → execution → finality → Registry/Website projection path;
 14. alerts cover 401/403/409/503 rates, delivery backlog, database availability,
-   credential expiry, and projection readback mismatch.
+    credential expiry, and projection readback mismatch.
 
 Registry delivery, onchain finality, public terminal feeds, and provider indexing
 remain separate workstreams and are not proven by this Website target.

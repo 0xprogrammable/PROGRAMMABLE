@@ -6,11 +6,11 @@ during backfill and parity checks.
 
 ## Schedule
 
-| Worker | Route | UTC schedule | Activation |
-| --- | --- | --- | --- |
-| Legacy index | `/api/ops/index-v2` | Every five minutes | Retained until indexed reads are promoted |
-| Source projector | `/api/ops/projector` | Every minute | `PROGRAMMABLE_PROJECTOR_ACTIVE=true` |
-| Market projector | `/api/ops/market-projector` | Every minute | `PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE=true` |
+| Worker                | Route                          | UTC schedule          | Activation                                        |
+| --------------------- | ------------------------------ | --------------------- | ------------------------------------------------- |
+| Legacy index          | `/api/ops/index-v2`            | Every five minutes    | Retained until indexed reads are promoted         |
+| Source projector      | `/api/ops/projector`           | Every minute          | `PROGRAMMABLE_PROJECTOR_ACTIVE=true`              |
+| Market projector      | `/api/ops/market-projector`    | Every minute          | `PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE=true`       |
 | QuickNode stream wake | `POST /api/ops/projector-wake` | Every delivered block | `PROGRAMMABLE_QUICKNODE_STREAM_SECRET` configured |
 
 The legacy index also has a GitHub Actions watchdog at minutes `2-57/5` on
@@ -79,10 +79,18 @@ normal release gate:
    `413` or `5xx` responses; the minute crons keep the read model progressing.
 
 Visible Explore and token detail clients continue their bounded refreshes while
-the tab is visible. Historical chart requests use the bounded Bitquery reader
-only after exact token, quote-asset and Uniswap v4 pool binding. A provider
-outage returns an unavailable chart without hiding the verified token identity;
-the route does not fall back to the retired dRPC history scan.
+the tab is visible. Historical chart requests use bounded GMGN `token_kline` as
+the primary series only after current `token_info` admission binds the exact
+token, quote asset, v4 exchange and canonical supply. The adapter accepts two
+strict locator forms: coherent nonzero 20-byte addresses leave pool attribution
+unavailable, while coherent bytes32 locators provide exact current admission
+only when both equal the canonical Uniswap v4 PoolId. The candles remain
+token-address history; even exact current admission is not historical
+per-candle pool provenance. When no fresh valid GMGN series is accepted, the
+route uses the bounded Bitquery exact-pool fallback after exact token,
+quote-asset and pool binding. A provider outage returns an unavailable chart
+without hiding the verified token identity; the route does not fall back to the
+retired dRPC history scan.
 
 `/api/ops/index-v2` is the only legacy writer route. The former
 `/api/ops/index` alias is permanently closed and is not scheduled.
@@ -131,17 +139,21 @@ moved production to the candidate commit.
 9. Reverify and promote the exact staged deployment ID with the reviewed manual
    commands below, never a mutable alias.
 10. Verify that `programmable.market` resolves to that deployment ID and commit,
-   then verify health, populated Explore, the token list, and every indexed
-   route using the same release corpus.
+    then verify health, populated Explore, the token list, and every indexed
+    route using the same release corpus.
 11. Enable indexed read flags only after every check is green, then activate and
-   verify the stream's production destination.
+    verify the stream's production destination.
 12. Remove the legacy cron in a later reviewed cutover commit.
 
-When either projector is active, the deploy policy requires the stream-secret
-key in the pulled Vercel environment. A Vercel Sensitive placeholder is enough
+The Stage workflow always runs `perf:read-model:deploy-policy` against the
+pulled Production configuration and the reviewed, value-free sensitive-variable
+metadata before it builds a candidate. When either projector is active, that
+policy requires the stream-secret key. A Vercel Sensitive placeholder is enough
 for static preflight because its value is intentionally unavailable there. The
 workflow then runs the following canary against the exact unaliased staged
-deployment before release attestation or promotion:
+deployment before release attestation or promotion. When both projectors are
+disabled, the policy records `wake_canary_required=false` and does not request
+the protected GitHub stream secret:
 
 ```sh
 npm run perf:read-model:wake-canary -- \
@@ -188,10 +200,22 @@ secrets and payloads are excluded; only endpoint hostnames and one-way URL
 commitments are allowed.
 
 QuickNode must be configured to retry a non-2xx webhook response after roughly
-one second. On the exact `vercel deploy --prebuilt --prod --skip-domain`
-candidate only, set
-`PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true`. Leave it false in
-normal builds. After the current database release is product-bound to this exact
+one second. The Stage workflow creates one unaliased Production source build
+with the reviewed command shape below. Its `--env` override applies only to that
+immutable candidate and does not mutate the Vercel Production environment:
+
+```sh
+vercel deploy --prod --skip-domain --archive=tgz \
+  --meta githubCommitSha="$GITHUB_SHA" \
+  --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" \
+  --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" \
+  --env PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true \
+  --token="$VERCEL_TOKEN"
+```
+
+Keep `PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=false` in the
+Vercel Production project configuration and in every other build. After the
+current database release is product-bound to this exact
 staged commit and deployment ID, and the staged projectors have published a
 complete Classic launch, arm one five-minute, single-use probe against the
 exact unaliased deployment while the production domain still points to the
@@ -234,32 +258,54 @@ npm run perf:read-model:real-block-sla -- \
   --target-url "$STAGED_TARGET_URL"
 ```
 
-The staging workflow stops here and records the exact deployment ID, URL and
-previous production binding. It also records the exact `true` or `false` GMGN
-market requirement used by the staged public smoke. Set
+The staging workflow stops here and records the exact deployment ID, URL,
+candidate-only retry override, deploy-policy mode, conditional wake-canary
+result and previous production deployment ID, URL and commit. It also records
+the exact `true` or `false` GMGN
+market requirement and the effective GMGN requests-per-second value returned
+by the staged runtime, together with its non-secret GMGN account-gate mode.
+When GMGN is required, the public smoke accepts only the exact Pro value `20`
+and `providers[0].accountGateMode=multiflight-v1`. A database through `0006`
+reports `legacy-singleflight-v1`; it may preserve rolling availability below
+20 requests per second, but it cannot satisfy this release or authorize a Pro
+throughput promotion. `unavailable` also fails the required smoke. The health
+route obtains the rate from the same server-only parser used by the market,
+discovery, analytics and chart adapters and obtains the gate mode from the
+database readiness probe; neither exposes the key or environment metadata. Set
 `STAGED_REQUIRE_GMGN_MARKET` to that Boolean from the exact staged-candidate
 handoff; do not infer it from the operator's existing environment. Only after
-the command above succeeds, pull the current Vercel Production configuration,
-derive only the GMGN requirement Boolean without printing the key, and require
-it to equal the staged value. A mismatch means Production configuration changed
-after staging, so stop and stage a new candidate. Then reverify the same
-immutable deployment immediately before the manual promotion and pass that
-same Boolean explicitly to the post-promotion gate:
+the command above succeeds, capture the current Vercel Production environment
+metadata through the reviewed value-stripping binder, derive only the GMGN
+requirement Boolean from the exact sensitive Production entry, and require it
+to equal the staged value. The raw CLI response is piped directly into the
+binder and is never written to disk; only its value-free, project-bound
+projection is stored with mode `0600`. A mismatch means Production
+configuration changed after staging, so stop and stage a new candidate. Then
+reverify the same immutable deployment immediately before the manual promotion
+and pass that same Boolean explicitly to the post-promotion gate:
 
 ```sh
+set -euo pipefail
 umask 077
+: "${VERCEL_ORG_ID:?The Vercel organization ID is required}"
+: "${VERCEL_PROJECT_ID:?The Vercel project ID is required}"
+export VERCEL_ORG_ID VERCEL_PROJECT_ID
 case "${STAGED_REQUIRE_GMGN_MARKET:-}" in
   true|false) ;;
   *) echo "The staged GMGN market requirement is missing or invalid" >&2; exit 1 ;;
 esac
-vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+readonly STAGED_REQUIRE_GMGN_MARKET
+test ! -e "$PRE_PROMOTE_GMGN_METADATA_OUTPUT"
+vercel env ls production --format json --token="$VERCEL_TOKEN" |
+  node scripts/bind-vercel-sensitive-production-metadata.mjs \
+    --metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \
+    --vercel-project-id "$VERCEL_PROJECT_ID"
 REQUIRE_GMGN_MARKET="$(
-  env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module -e '
-    const requireGmgnMarket =
-      (process.env.GMGN_API_KEY ?? "").trim() !== "";
-    process.stdout.write(requireGmgnMarket ? "true" : "false");
-  '
+  node scripts/resolve-gmgn-production-requirement.mjs \
+    --metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \
+    --vercel-project-id "$VERCEL_PROJECT_ID"
 )"
+readonly REQUIRE_GMGN_MARKET
 case "$REQUIRE_GMGN_MARKET" in
   true|false) ;;
   *) echo "The current GMGN market requirement is invalid" >&2; exit 1 ;;
@@ -288,10 +334,53 @@ staged deployment, using the exact previous deployment recorded by the
 staging workflow, then reverify its deployment ID and Git commit. Keep the
 current database release and public-read flags fenced throughout that recovery.
 
-The Vercel pull writes the current Production environment to the normal local
-`.vercel` file with the restrictive operator umask. The derivation unsets any
-inherited `GMGN_API_KEY`; its captured stdout is exactly `true` or `false`, and
-neither the runbook nor the post-promotion verifier prints or receives the key.
+Use fresh owner-only output paths. This first command must succeed before the
+rollback is allowed; it proves that the canonical domain actually moved to the
+candidate. If it instead proves that the domain still resolves to the previous
+deployment, do not run `vercel rollback`.
+
+```sh
+set -euo pipefail
+umask 077
+test ! -e "$UNCERTAIN_PRODUCTION_BINDING_OUTPUT"
+npm run perf:read-model:production-binding -- \
+  --target-url "https://programmable.market" \
+  --expected-deployment-id "$STAGED_DEPLOYMENT_ID" \
+  --expected-git-head "$GITHUB_SHA" \
+  --github-output "$UNCERTAIN_PRODUCTION_BINDING_OUTPUT"
+grep -Fx "deployment_id=$STAGED_DEPLOYMENT_ID" \
+  "$UNCERTAIN_PRODUCTION_BINDING_OUTPUT"
+grep -Fx "git_head=$GITHUB_SHA" "$UNCERTAIN_PRODUCTION_BINDING_OUTPUT"
+
+vercel rollback "$PREVIOUS_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
+
+test ! -e "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"
+npm run perf:read-model:production-binding -- \
+  --target-url "https://programmable.market" \
+  --expected-deployment-id "$PREVIOUS_DEPLOYMENT_ID" \
+  --expected-git-head "$PREVIOUS_GIT_HEAD" \
+  --github-output "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"
+grep -Fx "deployment_id=$PREVIOUS_DEPLOYMENT_ID" \
+  "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"
+grep -Fx "deployment_url=$PREVIOUS_DEPLOYMENT_URL" \
+  "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"
+grep -Fx "git_head=$PREVIOUS_GIT_HEAD" "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"
+```
+
+The metadata binder removes every known value-bearing field recursively before
+writing its exclusive value-free file and emits only a generic error if the
+provider response is malformed. The fixed-purpose resolver requires exactly one
+case-sensitive `GMGN_API_KEY` entry and exactly one case-sensitive
+`GMGN_MAX_REQUESTS_PER_SECOND` entry. Both must be Production-only, branchless,
+non-custom and not decrypted; the key must be sensitive, and the rate entry
+must be sensitive or encrypted. Both entries absent resolves to `false`; either
+entry present alone, duplicates, or malformed metadata fail closed. The concrete rate value is
+intentionally absent from the metadata projection and is verified only through
+the staged runtime health response. The resolver's captured
+stdout is exactly `true` or `false`, and neither the runbook nor the
+post-promotion verifier reads, prints or receives the key. Keep the Vercel CLI
+version aligned with the reviewed Stage workflow; any output-shape drift is a
+release failure rather than a fallback to the local environment.
 The earlier real-block SLA commands require
 `PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` so the exported HMAC can be verified
 without exposing the secret. The post-promotion command does not reload the

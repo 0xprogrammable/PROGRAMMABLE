@@ -1,5 +1,21 @@
 # Dexscreener market shadow v1
 
+> **Superseded architecture:** This file preserves the historical v1
+> Dexscreener-only shadow contract below; it is not the current production
+> provider priority. The current public read model keeps canonical Envio/Router
+> launch identity, uses GMGN as the bounded primary for visible token market
+> reads, token-level analytics and token-address chart history. GMGN visible
+> market reads remain token-scoped. Coherent 20-byte `token_info` pool locators
+> leave pool attribution unavailable; coherent bytes32 locators provide exact
+> current admission only when both equal the canonical Uniswap v4 PoolId. The
+> locator never turns token-level market figures into historical pool evidence.
+> The current model retains
+> Dexscreener for visible market fallback and FDV ordering of the canonical
+> market-cap remainder that GMGN did not observe, and
+> uses Bitquery for exact-pool chart fallback. See
+> [Custom V2 production stage gate](./custom-v2-production-stage-gate.md) and
+> [Read-model scheduler cutover](./read-model-scheduler-cutover.md).
+
 ## Status and authority
 
 This adapter is server-only market enrichment. It has no authority over launch
