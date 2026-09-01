@@ -2032,6 +2032,89 @@ test("staged smoke accepts identity-only Explore and token responses", async () 
   assert.match(output[0][1], /search_ranking_commitment=sha256:[0-9a-f]{64}/u);
 });
 
+test("staged smoke honors and caps Retry-After before one 503 retry", async () => {
+  for (const [retryAfter, expectedWaitMs] of [
+    ["2", 2_000],
+    ["5", 5_000],
+    ["999", 5_000],
+  ]) {
+    const baseFetch = stagedFetch();
+    const waits = [];
+    let marketCapPageRequests = 0;
+    const result = await runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: async (url) => {
+        if (
+          url.pathname === "/api/explore" &&
+          url.searchParams.get("sort") === "market-cap" &&
+          url.searchParams.get("page") === "1"
+        ) {
+          marketCapPageRequests += 1;
+          if (marketCapPageRequests === 1) {
+            return new Response(JSON.stringify({ error: "warming" }), {
+              status: 503,
+              headers: {
+                "content-type": "application/json",
+                "retry-after": retryAfter,
+              },
+            });
+          }
+        }
+        return baseFetch(url);
+      },
+      appendOutput: () => undefined,
+      waitForStagedRetryAfter: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    });
+    assert.equal(result.marketProvider, "dexscreener");
+    assert.equal(marketCapPageRequests, 2);
+    assert.deepEqual(waits, [expectedWaitMs]);
+  }
+});
+
+test("production smoke keeps the existing immediate single 503 retry", async () => {
+  const baseFetch = stagedFetch();
+  let marketCapPageRequests = 0;
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://programmable.market/",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false",
+    },
+    targetKind: "production",
+    fetchImpl: async (url) => {
+      if (
+        url.pathname === "/api/explore" &&
+        url.searchParams.get("sort") === "market-cap" &&
+        url.searchParams.get("page") === "1"
+      ) {
+        marketCapPageRequests += 1;
+        if (marketCapPageRequests === 1) {
+          return new Response(JSON.stringify({ error: "warming" }), {
+            status: 503,
+            headers: {
+              "content-type": "application/json",
+              "retry-after": "5",
+            },
+          });
+        }
+      }
+      return baseFetch(url);
+    },
+    appendOutput: () => undefined,
+    waitForStagedRetryAfter: async () => {
+      throw new Error("production smoke must not wait for staged Retry-After");
+    },
+  });
+  assert.equal(result.marketProvider, "dexscreener");
+  assert.equal(marketCapPageRequests, 2);
+});
+
 test("staged smoke counts duplicate-address canonical matches once for discovery coverage", async () => {
   const first = entry(0);
   const second = { ...entry(1), tokenAddress: first.tokenAddress };
