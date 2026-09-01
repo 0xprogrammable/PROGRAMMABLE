@@ -2,12 +2,18 @@ name: Finalize Robinhood custom-launch promotion
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - production
+    paths:
+      - release/robinhood-chain-4663/backend-promotion-input.public.json
+      - release/robinhood-chain-4663/backend-promotion-input.attestation.json
 
 permissions:
   contents: read
 
 concurrency:
-  group: robinhood-custom-launch-promotion
+  group: robinhood-custom-launch-promotion-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -15,7 +21,7 @@ jobs:
     name: Authorize and attest Phase B
     if: >-
       github.repository_id == 1314365508 &&
-      github.event_name == 'workflow_dispatch' &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'push') &&
       github.ref == 'refs/heads/production' &&
       github.ref_protected == true
     runs-on: ubuntu-latest
@@ -41,6 +47,7 @@ jobs:
       - name: Bind detached checkout to protected origin production
         env:
           GH_TOKEN: ${{ github.token }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
           askpass="$RUNNER_TEMP/programmable-git-askpass"
@@ -66,6 +73,29 @@ jobs:
           test -z "$(git symbolic-ref -q HEAD || true)"
           test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              ;;
+            push)
+              [[ "$PUSH_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+              test "$PUSH_BASE_SHA" != "0000000000000000000000000000000000000000"
+              git cat-file -e "$PUSH_BASE_SHA^{commit}"
+              expected_changes=(
+                'release/robinhood-chain-4663/backend-promotion-input.attestation.json'
+                'release/robinhood-chain-4663/backend-promotion-input.public.json'
+              )
+              mapfile -t actual_changes < <(
+                git diff --no-renames --name-only "$PUSH_BASE_SHA" "$GITHUB_SHA" | LC_ALL=C sort
+              )
+              test "${#actual_changes[@]}" -eq "${#expected_changes[@]}"
+              for index in "${!expected_changes[@]}"; do
+                test "${actual_changes[$index]}" = "${expected_changes[$index]}"
+              done
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
 
       - name: Set up exact Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -103,9 +133,13 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
 
       # Evidence #1 and the separately attested public-safe backend handoff are
-      # landed by a reviewed evidence PR. The private backend raw capture never
-      # crosses repositories. A default public-repository GITHUB_TOKEN is not
-      # treated as authority to read the private backend repository.
+      # landed by a reviewed evidence PR. Its exact protected-production merge
+      # automatically starts this non-writing producer before the freshness
+      # window can be consumed by a second manual dispatch. Manual dispatch is
+      # retained only as a fail-closed recovery path. The private backend raw
+      # capture never crosses repositories. A default public-repository
+      # GITHUB_TOKEN is not treated as authority to read the private backend
+      # repository.
       - name: Bind exact tracked portable evidence set
         id: imported
         run: |

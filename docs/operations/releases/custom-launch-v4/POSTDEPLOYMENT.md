@@ -49,6 +49,23 @@ outside-repository artifact tree, preserves attestation bytes, and uploads the e
 public-safe handoff files. It accepts no operator-supplied trusted root and serializes no
 credentials.
 
+The backend input retains its fifteen-minute observation age and ten-minute capture-authorization
+delay; repository integration does not extend either limit. A backend evidence-import PR must
+change exactly the public input and its attestation, and nothing else. The trusted-base Verify path
+routes that exact pair through the required `Contracts` status, which installs the pinned verifier
+and freshly checks the public schema, Stage A binding, exact Sigstore subject and protected-backend
+workflow identity. A partial or mixed import fails that required status. All unrelated changes keep
+the normal full verification scope.
+
+Merging that exact two-file PR into protected `production` automatically starts the
+repository-non-writing Phase B finalizer at the merge commit. The push path rechecks that its
+complete `before..HEAD` diff is exactly the same two files before reading evidence; a manual
+dispatch remains available only as a recovery path and does not relax freshness. This removes the
+unbounded operator pause between a protected merge and Phase B without granting a workflow
+permission to commit, push, deploy, sign a wallet transaction, or place the eight output files in
+public production. The workflow still creates the bound GitHub attestations and restricted Actions
+artifact required by the later evidence PR.
+
 An authenticated Phase A bundle is always non-public:
 
 ```text
@@ -287,6 +304,17 @@ does not produce the public-safe artifact and must not be uploaded as public evi
 `authorize-backend` accepts the public-safe backend input and its portable attestation only. The
 private raw input is deliberately not a CLI argument. The production workflow also supplies all
 Phase A portable evidence shown above.
+
+Before importing, prepare the evidence branch and PR metadata against the current protected
+`production` tip. Only after every other prerequisite is ready, capture and authenticate the fresh
+backend artifact, replace the two absent evidence paths with those exact bytes, and push the exact
+two-file commit. Immediately arm the repository's existing squash auto-merge so protected
+`production` merges as soon as its five app-bound required statuses succeed; do not leave a manual
+merge pause inside the freshness window. Do not add documentation, workflow, source, generated
+output, or the private raw capture to that PR. The protected merge is the authorization event for
+the automatic finalizer; if auto-merge cannot be armed, the focused required check fails, or the
+automatic finalizer reports stale evidence, obtain a new backend capture and update the
+still-unmerged evidence PR rather than extending the time window.
 
 ```sh
 npm run contracts:robinhood:postdeploy:authorize-backend -- \
