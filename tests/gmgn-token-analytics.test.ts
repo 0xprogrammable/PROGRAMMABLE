@@ -243,6 +243,7 @@ describe("GMGN Ethereum token analytics", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
@@ -657,6 +658,66 @@ describe("GMGN Ethereum token analytics", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a timed-out provider read pending until its exact lease is released", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const market = identity(96);
+    const reservation = {
+      kind: "reserved" as const,
+      reservedAtMs: NOW.getTime(),
+      generation: 96,
+      holder: "00000000-0000-4000-8000-000000000096",
+    };
+    let releaseExactReservation!: () => void;
+    const exactRelease = new Promise<void>((resolve) => {
+      releaseExactReservation = resolve;
+    });
+    const complete = vi.fn((_reservation: typeof reservation) => {
+      void _reservation;
+      return exactRelease;
+    });
+    const gate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => reservation),
+      blockUntil: vi.fn(async () => ({
+        blockedUntilMs: Date.now(),
+        retryAfterMs: 0,
+      })),
+      complete,
+    };
+    const fetchImpl = vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      setTimeout(
+        () => reject(new DOMException("provider request aborted", "AbortError")),
+        2_501,
+      );
+    }));
+
+    let publicReadSettled = false;
+    const publicRead = readGmgnTokenSecurityV1(market, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => new Date(),
+    }).finally(() => {
+      publicReadSettled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(gate.complete).not.toHaveBeenCalled();
+    expect(publicReadSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(gate.complete).toHaveBeenCalledTimes(1);
+    expect(gate.complete).toHaveBeenCalledWith(reservation);
+    expect(complete.mock.calls[0]?.[0]).toBe(reservation);
+    expect(publicReadSettled).toBe(false);
+
+    releaseExactReservation();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(publicRead).resolves.toBeNull();
+  });
+
   it("rejects unbounded or unknown ranking controls before any request", async () => {
     const fetchImpl = vi.fn();
     const market = identity(12);
@@ -702,5 +763,74 @@ describe("GMGN Ethereum token analytics", () => {
       { fetchImpl: secondFetch, now: () => new Date(NOW.getTime() + 1_000) },
     )).resolves.toBeNull();
     expect(secondFetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a 429 read pending past its request deadline until the exact block is published", async () => {
+    vi.useFakeTimers();
+    const startedAt = new Date(NOW.getTime() + 120_000);
+    vi.setSystemTime(startedAt);
+    const blockedUntilMs = startedAt.getTime() + 2_499 + 1_250;
+    const market = identity(97);
+    const reservation = {
+      kind: "reserved" as const,
+      reservedAtMs: startedAt.getTime(),
+      generation: 97,
+      holder: "00000000-0000-4000-8000-000000000097",
+    };
+    let releaseExactBlock!: () => void;
+    const exactBlock = new Promise<void>((resolve) => {
+      releaseExactBlock = resolve;
+    });
+    const blockUntil = vi.fn(async () => {
+      await exactBlock;
+      return {
+        blockedUntilMs,
+        retryAfterMs: 1_250,
+      };
+    });
+    const gate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => reservation),
+      blockUntil,
+      complete: vi.fn(async () => {}),
+    };
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      setTimeout(() => resolve(jsonResponse({
+        code: 429,
+        error: "RATE_LIMIT_EXCEEDED",
+      }, 429, { "Retry-After": "1" })), 2_499);
+    }));
+
+    let publicReadSettled = false;
+    const publicRead = readGmgnTokenTopTradersV1(
+      market,
+      {},
+      {
+        fetchImpl: fetchImpl as typeof fetch,
+        accountGate: gate,
+        now: () => new Date(),
+      },
+    ).finally(() => {
+      publicReadSettled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(gate.blockUntil).toHaveBeenCalledWith({
+      reservation,
+      blockedUntilMs,
+      providerSignal: "http-429",
+    });
+    expect(gate.complete).not.toHaveBeenCalled();
+    expect(publicReadSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2_900);
+    expect(publicReadSettled).toBe(false);
+
+    releaseExactBlock();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(publicRead).resolves.toBeNull();
+    expect(blockUntil).toHaveBeenCalledTimes(1);
   });
 });

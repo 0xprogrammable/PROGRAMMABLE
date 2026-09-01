@@ -1618,6 +1618,130 @@ describe("Explore static identity and Dexscreener market contract", () => {
     });
   });
 
+  it("retries one fast-null GMGN rank read in the same direction", async () => {
+    const fresh = new Date().toISOString();
+    const ascSnapshot = {
+      ...discoverySnapshot(
+        "trending",
+        [entries[1]!],
+        [],
+        { orderBy: "marketcap", direction: "asc" },
+      ),
+      fetchedAt: fresh,
+    } as const;
+    mocks.readTrending
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(ascSnapshot);
+
+    const response = await GET(
+      request("sort=market-cap-asc&page=1&limit=5"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.ranking).toMatchObject({
+      direction: "asc",
+      gmgnStatus: "partial",
+      matchedTokenCount: 1,
+    });
+    expect(mocks.readTrending).toHaveBeenCalledTimes(2);
+    expect(mocks.readTrending.mock.calls.map(([options]) => options)).toEqual([
+      {
+        interval: "1h",
+        limit: 100,
+        orderBy: "marketcap",
+        direction: "asc",
+      },
+      {
+        interval: "1h",
+        limit: 100,
+        orderBy: "marketcap",
+        direction: "asc",
+      },
+    ]);
+  });
+
+  it("retries a null GMGN rank read at most once", async () => {
+    mocks.readTrending
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+
+    const response = await GET(
+      request("sort=market-cap&page=1&limit=5"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.ranking).toMatchObject({
+      direction: "desc",
+      gmgnStatus: "unavailable",
+    });
+    expect(mocks.readTrending).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry GMGN rank when the remaining request budget is too small", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
+    try {
+      mocks.readTrending
+        .mockImplementationOnce(async () => {
+          vi.setSystemTime(Date.now() + 1_201);
+          return null;
+        });
+
+      const response = await GET(
+        request("sort=market-cap&page=1&limit=5"),
+      );
+      const body = await json(response);
+
+      expect(response.status).toBe(200);
+      expect(body.ranking.gmgnStatus).toBe("unavailable");
+      expect(mocks.readTrending).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry GMGN rank after the request signal aborts", async () => {
+    const controller = new AbortController();
+    mocks.readTrending
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        return null;
+      });
+
+    const response = await GET(new NextRequest(
+      "http://localhost/api/explore?sort=market-cap-asc&page=1&limit=5",
+      { signal: controller.signal },
+    ));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.ranking.gmgnStatus).toBe("unavailable");
+    expect(mocks.readTrending).toHaveBeenCalledOnce();
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it("does not retry a valid GMGN rank snapshot with zero canonical matches", async () => {
+    mocks.readTrending.mockResolvedValueOnce(discoverySnapshot(
+      "trending",
+      [],
+      ["0xffffffffffffffffffffffffffffffffffffffff"],
+      { orderBy: "marketcap", direction: "desc" },
+    ));
+
+    const response = await GET(request("sort=market-cap&page=1&limit=5"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.ranking).toMatchObject({
+      direction: "desc",
+      gmgnStatus: "unavailable",
+      matchedTokenCount: 0,
+    });
+    expect(mocks.readTrending).toHaveBeenCalledOnce();
+  });
+
   it.each(["market-cap", "market-cap-asc"] as const)(
     "retains every identity and applies launch order for zero-qualified %s",
     async (sort) => {

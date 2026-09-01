@@ -911,6 +911,11 @@ describe("read-model operations source contract", () => {
       '"X-Programmable-Search-Ranking-Commitment":',
       '"X-Programmable-Search-Unbound":',
     ],
+    [
+      "no bounded same-direction GMGN market-cap retry",
+      "first !== null ||",
+      "true ||",
+    ],
   ])(
     "rejects the Explore fast-lane contract with %s",
     (_label, needle, replacement) => {
@@ -925,6 +930,31 @@ describe("read-model operations source contract", () => {
       );
     },
   );
+
+  it("rejects an opposite-direction GMGN market-cap retry", () => {
+    const path = "app/api/explore/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    const retry =
+      "return readGmgnEthereumTrendingV1(\n" +
+      "              rankOptions,\n" +
+      "              rankWait,";
+    const oppositeDirectionRetry =
+      "return readGmgnEthereumTrendingV1(\n" +
+      "              {\n" +
+      "                ...rankOptions,\n" +
+      "                direction: direction === \"asc\" ? \"desc\" : \"asc\",\n" +
+      "              },\n" +
+      "              rankWait,";
+    expect(route).toContain(retry);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replace(retry, oppositeDirectionRetry),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
 
   it.each([
     [
@@ -1231,6 +1261,115 @@ describe("read-model operations source contract", () => {
       sourceOverrides: {
         [path]: `${source}\nfunction configuredRequestsPerSecond() { return 20; }\n`,
       },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    "lib/market-data/gmgn.server.ts",
+    "lib/market-data/gmgn-chart.server.ts",
+    "lib/market-data/gmgn-token-analytics.server.ts",
+    "lib/market-data/gmgn-discovery.server.ts",
+  ])("rejects request-budget lease cleanup restored in %s", (path) => {
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const freshOutcome =
+      "outcomeOperation: ProviderOperationV1 = providerOutcomeOperation()";
+    expect(source).toContain(freshOutcome);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: source.replace(
+          freshOutcome,
+          "outcomeOperation: ProviderOperationV1",
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    [
+      "the market snapshot singleflight",
+      "lib/market-data/gmgn.server.ts",
+      "const promise = settleProviderReadLifecycle(providerRead, providerWait).then(",
+      "const promise = settleProviderOperation(providerRead, providerWait).then(",
+    ],
+    [
+      "the outer chart singleflight",
+      "lib/market-data/gmgn-chart.server.ts",
+      "const promise = settleProviderReadLifecycle(providerRead, providerWait).then(",
+      "const promise = settleProviderOperation(providerRead, providerWait).then(",
+    ],
+    [
+      "the chart identity-proof singleflight",
+      "lib/market-data/gmgn-chart.server.ts",
+      "const promise = settleProviderReadLifecycle(providerRead, wait).then(",
+      "const promise = settleProviderOperation(providerRead, wait).then(",
+    ],
+    [
+      "the analytics singleflight",
+      "lib/market-data/gmgn-token-analytics.server.ts",
+      "const promise = settleProviderReadLifecycle(\n" +
+        "    providerRead,\n" +
+        "    providerWait,\n" +
+        "  ).then(",
+      "const promise = settleProviderOperation(\n" +
+        "    providerRead,\n" +
+        "    providerWait,\n" +
+        "  ).then(",
+    ],
+    [
+      "the discovery singleflight",
+      "lib/market-data/gmgn-discovery.server.ts",
+      "const promise = settleProviderReadLifecycle(providerRead, operation).then(",
+      "const promise = settleProviderOperation(providerRead, operation).then(",
+    ],
+  ])("rejects the legacy request-only settle in %s", (
+    _label,
+    path,
+    lifecycle,
+    requestOnly,
+  ) => {
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(lifecycle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: source.replace(lifecycle, requestOnly),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects normal GMGN completion under the consumed request wait", () => {
+    const path = "lib/market-data/gmgn.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const fresh =
+      "await completeProviderRequest(accountGate, reservation);";
+    const consumed =
+      "await completeProviderRequest(accountGate, reservation, wait);";
+    expect(source).toContain(fresh);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(fresh, consumed) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects GMGN provider blocking under the consumed request wait", () => {
+    const path = "lib/market-data/gmgn.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const fresh =
+      "await settleProviderOperation(pending, providerOutcomeOperation());";
+    const consumed = "await settleProviderOperation(pending, operation);";
+    expect(source).toContain(fresh);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(fresh, consumed) },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-public-provider-split-source-contract",

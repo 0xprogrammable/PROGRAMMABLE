@@ -610,6 +610,33 @@ const GMGN_READ_ONLY_ENDPOINT_CONTRACT = Object.freeze([
   }),
 ]);
 
+const GMGN_PROVIDER_LIFECYCLE_CONTRACT = Object.freeze([
+  Object.freeze({
+    path: "lib/market-data/gmgn.server.ts",
+    lifecycleWaits: Object.freeze(["providerWait"]),
+    normalCompletionCount: 6,
+    providerBlockCount: 4,
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-chart.server.ts",
+    lifecycleWaits: Object.freeze(["providerWait", "wait"]),
+    normalCompletionCount: 6,
+    providerBlockCount: 4,
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-token-analytics.server.ts",
+    lifecycleWaits: Object.freeze(["providerWait"]),
+    normalCompletionCount: 4,
+    providerBlockCount: 2,
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-discovery.server.ts",
+    lifecycleWaits: Object.freeze(["operation"]),
+    normalCompletionCount: 4,
+    providerBlockCount: 2,
+  }),
+]);
+
 const PUBLIC_WALLET_FIELDS = Object.freeze([
   "address",
   "usdValue",
@@ -908,6 +935,139 @@ function exactGmgnReadOnlyEndpointContract(sourceByPath) {
 function directCallName(value) {
   const expression = unwrapReviewedExpression(value);
   return ts.isIdentifier(expression) ? expression.text : null;
+}
+
+function compactReviewedNode(node, sourceFile) {
+  return node.getText(sourceFile).replace(/\s+/gu, "");
+}
+
+function directNamedCalls(sourceFile, name) {
+  return collectTypeScriptNodes(
+    sourceFile,
+    (node) =>
+      ts.isCallExpression(node) && directCallName(node.expression) === name,
+  ).sort(
+    (left, right) => left.getStart(sourceFile) - right.getStart(sourceFile),
+  );
+}
+
+function exactGmgnProviderLifecycleAdapterContract(sourceFile, contract) {
+  const lifecycleCalls = directNamedCalls(
+    sourceFile,
+    "settleProviderReadLifecycle",
+  );
+  const lifecycleShapes = lifecycleCalls.map((call) =>
+    call.arguments.map((argument) => compactReviewedNode(argument, sourceFile)),
+  );
+  const expectedLifecycleShapes = contract.lifecycleWaits.map((wait) => [
+    "providerRead",
+    wait,
+  ]);
+  if (!exactJson(lifecycleShapes, expectedLifecycleShapes)) return false;
+
+  const settleCalls = directNamedCalls(sourceFile, "settleProviderOperation");
+  const settleShapes = settleCalls.map((call) =>
+    call.arguments.map((argument) => compactReviewedNode(argument, sourceFile)),
+  );
+  if (
+    !exactJson(settleShapes, [
+      ["pending", "requestOperation"],
+      ["pending", "providerLifecycleOperation()"],
+      ["pending", "operation"],
+      ["pending", "lateOutcome"],
+      ["pending", "providerOutcomeOperation()"],
+      ["accountGate.complete(reservation)", "outcomeOperation"],
+    ]) ||
+    settleShapes.some(([pending]) => pending === "providerRead")
+  ) return false;
+
+  const completionShapes = directNamedCalls(
+    sourceFile,
+    "completeProviderRequest",
+  ).map((call) =>
+    JSON.stringify(
+      call.arguments.map((argument) =>
+        compactReviewedNode(argument, sourceFile)
+      ),
+    )
+  ).sort();
+  const expectedCompletionShapes = [
+    ...Array.from(
+      { length: contract.normalCompletionCount },
+      () => JSON.stringify(["accountGate", "reservation"]),
+    ),
+    JSON.stringify(["accountGate", "lateDecision", "lateOutcome"]),
+    JSON.stringify(["accountGate", "decision"]),
+  ].sort();
+  if (!exactJson(completionShapes, expectedCompletionShapes)) return false;
+
+  const providerBlockCalls = directNamedCalls(
+    sourceFile,
+    "publishProviderBlock",
+  );
+  return providerBlockCalls.length === contract.providerBlockCount &&
+    providerBlockCalls.every((call) =>
+      call.arguments.length === 5 &&
+      exactIdentifier(call.arguments[0], "accountGate") &&
+      exactIdentifier(call.arguments[1], "reservation")
+    );
+}
+
+function exactGmgnProviderLifecycleContract(sourceByPath) {
+  return GMGN_PROVIDER_LIFECYCLE_CONTRACT.every((contract) => {
+    const sourceFile = reviewedTypeScriptSource(
+      contract.path,
+      sourceByPath.get(contract.path),
+    );
+    return sourceFile !== null &&
+      exactGmgnProviderLifecycleAdapterContract(sourceFile, contract);
+  });
+}
+
+function exactExploreGmgnMarketCapRetryContract(source) {
+  const sourceFile = reviewedTypeScriptSource(
+    "app/api/explore/route.ts",
+    source,
+  );
+  if (sourceFile === null) return false;
+  const declarations = constVariableDeclarations(sourceFile);
+  const directionDeclarations = declarations.get("direction") ?? [];
+  const rankOptionsDeclarations = declarations.get("rankOptions") ?? [];
+  if (
+    directionDeclarations.length !== 1 ||
+    rankOptionsDeclarations.length !== 1 ||
+    directionDeclarations[0].initializer === undefined ||
+    compactReviewedNode(directionDeclarations[0].initializer, sourceFile) !==
+      'options.sort==="market-cap"?"desc":"asc"'
+  ) return false;
+
+  const rankOptions = unwrapReviewedExpression(
+    rankOptionsDeclarations[0].initializer,
+  );
+  if (!ts.isObjectLiteralExpression(rankOptions)) return false;
+  const directionProperties = rankOptions.properties.filter((property) =>
+    ts.isShorthandPropertyAssignment(property) &&
+    property.name.text === "direction"
+  );
+  if (directionProperties.length !== 1) return false;
+
+  const trendingCalls = directNamedCalls(
+    sourceFile,
+    "readGmgnEthereumTrendingV1",
+  );
+  const rankCalls = trendingCalls.filter((call) =>
+    call.arguments.length === 2 &&
+    exactIdentifier(call.arguments[0], "rankOptions")
+  );
+  if (
+    rankCalls.length !== 2 ||
+    rankCalls.some((call) => !exactIdentifier(call.arguments[1], "rankWait"))
+  ) return false;
+  const retryFunction = nearestFunctionLike(rankCalls[0]);
+  return retryFunction !== null &&
+    retryFunction === nearestFunctionLike(rankCalls[1]) &&
+    trendingCalls.filter((call) => nearestFunctionLike(call) === retryFunction)
+      .length === 2;
 }
 
 function nearestFunctionLike(node) {
@@ -2649,14 +2809,14 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/market-data/gmgn-discovery-v1.ts") ?? "";
   const gmgnCanonicalRanking =
     source("lib/market-data/gmgn-canonical-ranking.ts") ?? "";
-  const gmgnReadOnlyEndpointBoundary = exactGmgnReadOnlyEndpointContract(
-    new Map([
-      ["lib/market-data/gmgn.server.ts", gmgnMarket],
-      ["lib/market-data/gmgn-chart.server.ts", gmgnChart],
-      ["lib/market-data/gmgn-token-analytics.server.ts", gmgnTokenAnalytics],
-      ["lib/market-data/gmgn-discovery.server.ts", gmgnDiscovery],
-    ]),
-  );
+  const gmgnAdapterSources = new Map([
+    ["lib/market-data/gmgn.server.ts", gmgnMarket],
+    ["lib/market-data/gmgn-chart.server.ts", gmgnChart],
+    ["lib/market-data/gmgn-token-analytics.server.ts", gmgnTokenAnalytics],
+    ["lib/market-data/gmgn-discovery.server.ts", gmgnDiscovery],
+  ]);
+  const gmgnReadOnlyEndpointBoundary =
+    exactGmgnReadOnlyEndpointContract(gmgnAdapterSources);
   const gmgnAccountGate =
     source("lib/market-data/gmgn-account-gate.server.ts") ?? "";
   const gmgnMultiflightMigration =
@@ -3044,7 +3204,31 @@ export function evaluateReadModelOperationsSourceContracts(
     primaryRpcLaunchCatalogCacheContract,
     "the dRPC launch catalog cache is commitment-bound, singleflight, fresh for less than 60 seconds, and never serves stale data",
   );
+  const gmgnProviderLifecycleContract =
+    exactGmgnProviderLifecycleContract(gmgnAdapterSources) && [
+    gmgnMarket,
+    gmgnChart,
+    gmgnTokenAnalytics,
+    gmgnDiscovery,
+  ].every((adapter) =>
+    includesEverySourceFragment(adapter, [
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      "const GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS = 3_000",
+      "const GMGN_PROVIDER_LIFECYCLE_GRACE_MS =",
+      "settleProviderReadLifecycle(",
+      "providerLifecycleOperation()",
+      "providerOutcomeOperation()",
+      "const lateOutcome = providerOutcomeOperation();",
+      "await completeProviderRequest(accountGate, lateDecision, lateOutcome);",
+      "await completeProviderRequest(accountGate, decision);",
+      "await settleProviderOperation(pending, providerOutcomeOperation());",
+      "accountGate.complete(reservation),",
+      "outcomeOperation: ProviderOperationV1 = providerOutcomeOperation()",
+    ]) && !adapter.includes("await accountGate.complete(decision);")
+  );
   const fastLanePublicProviderContract =
+    gmgnProviderLifecycleContract &&
+    exactExploreGmgnMarketCapRetryContract(publicExplore) &&
     includesEverySourceFragment(envioClassicV3Catalog, [
       "getEnvioClassicCatalogBinding()",
       "catalogBinding.releaseBinding",
@@ -3184,7 +3368,6 @@ export function evaluateReadModelOperationsSourceContracts(
       "const pending = accountGate.reserveSlot(input);",
       "const settled = await settleProviderOperation(pending, operation);",
       "void pending.then(async (decision) => {",
-      "await accountGate.complete(decision);",
       "const pending = accountGate.blockUntil({",
       "blockedUntilMs: providerCooldownFromResponse(",
       "accountGate.complete(reservation),",
@@ -3306,7 +3489,6 @@ export function evaluateReadModelOperationsSourceContracts(
       "poolAttribution: input.identityProof.poolAttribution",
       "const pending = accountGate.reserveSlot(input);",
       "void pending.then(async (decision) => {",
-      "await accountGate.complete(decision);",
       '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
       'from "./gmgn-runtime-config.server"',
       "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
@@ -3376,7 +3558,6 @@ export function evaluateReadModelOperationsSourceContracts(
       "if (value !== null) {",
       "const pending = accountGate.reserveSlot(input);",
       "void pending.then(async (decision) => {",
-      "await accountGate.complete(decision);",
       '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
       'from "./gmgn-runtime-config.server"',
       "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
@@ -3415,7 +3596,6 @@ export function evaluateReadModelOperationsSourceContracts(
       "if (value !== null) {",
       "const pending = accountGate.reserveSlot(input);",
       "void pending.then(async (decision) => {",
-      "await accountGate.complete(decision);",
       '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
       'from "./gmgn-runtime-config.server"',
       "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
@@ -3490,6 +3670,11 @@ export function evaluateReadModelOperationsSourceContracts(
       "envioClassicV3IdentityCommitmentV1(",
       'orderBy: "marketcap"',
       "direction,",
+      "GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS",
+      "const first = await readGmgnEthereumTrendingV1(",
+      "first !== null ||",
+      "deadlineMs - Date.now() <",
+      "rankOptions,",
       "rankCanonicalExploreMarketCapEntriesWithGmgnV1(",
       "rankCanonicalExploreMarketCapPrimaryWithGmgnV1(",
       "const unobserved = primary.rows.flatMap((row) =>",

@@ -286,6 +286,7 @@ describe("GMGN admitted Ethereum token-address kline adapter", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
@@ -893,6 +894,153 @@ describe("GMGN admitted Ethereum token-address kline adapter", () => {
       expect(firstSignal).toBe(secondSignal);
     },
   );
+
+  it("awaits exact lease release after the outer provider timer wins", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(221);
+    const reservation = {
+      kind: "reserved" as const,
+      reservedAtMs: NOW.getTime(),
+      generation: 1,
+      holder: "00000000-0000-4000-8000-000000000021",
+    };
+    let resolveComplete!: () => void;
+    const completion = new Promise<void>((resolve) => {
+      resolveComplete = resolve;
+    });
+    const complete = vi.fn((_reservation: typeof reservation) => {
+      void _reservation;
+      return completion;
+    });
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => reservation),
+      blockUntil: vi.fn(),
+      complete,
+    };
+    const fetchImpl = vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      setTimeout(() => {
+        reject(new DOMException("provider timed out", "AbortError"));
+      }, 2_501);
+    }));
+    let readSettled = false;
+
+    const read = readGmgnMarketChartV1({
+      entry,
+      identity: identity(entry),
+      range: "1h",
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => new Date(),
+    }).finally(() => {
+      readSettled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(complete).not.toHaveBeenCalled();
+    expect(readSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledWith(reservation);
+    expect(readSettled).toBe(false);
+
+    resolveComplete();
+    await expect(read).resolves.toBeNull();
+  });
+
+  it("awaits a deferred kline 429 block beyond the request deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(224);
+    const firstReservation = {
+      kind: "reserved" as const,
+      reservedAtMs: NOW.getTime(),
+      generation: 1,
+      holder: "00000000-0000-4000-8000-000000000024",
+    };
+    const secondReservation = {
+      ...firstReservation,
+      generation: 2,
+      holder: "00000000-0000-4000-8000-000000000025",
+    };
+    const blockedUntilMs = NOW.getTime() + 2_499 + 2_000;
+    const blockedResult = {
+      blockedUntilMs,
+      retryAfterMs: 2_000,
+    };
+    let resolveBlockUntil!: (value: typeof blockedResult) => void;
+    const blockOutcome = new Promise<typeof blockedResult>((resolve) => {
+      resolveBlockUntil = resolve;
+    });
+    const blockUntil = vi.fn(() => blockOutcome);
+    const complete = vi.fn(async () => undefined);
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn()
+        .mockResolvedValueOnce(firstReservation)
+        .mockResolvedValueOnce(secondReservation),
+      blockUntil,
+      complete,
+    };
+    const fetchImpl = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v1/token/info") {
+        return Promise.resolve(new Response(JSON.stringify({
+          code: 0,
+          data: tokenInfo(entry),
+        }), { status: 200 }));
+      }
+      return new Promise<Response>((resolve) => {
+        setTimeout(() => {
+          resolve(new Response(JSON.stringify({
+            code: 429,
+            error: "RATE_LIMIT_EXCEEDED",
+            data: {},
+          }), { status: 429 }));
+        }, 2_499);
+      });
+    });
+    let readSettled = false;
+
+    const read = readGmgnMarketChartV1({
+      entry,
+      identity: identity(entry),
+      range: "1h",
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => new Date(),
+    }).finally(() => {
+      readSettled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(blockUntil).toHaveBeenCalledOnce();
+    expect(blockUntil).toHaveBeenCalledWith({
+      reservation: secondReservation,
+      blockedUntilMs,
+      providerSignal: "http-429",
+    });
+    expect(readSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(Date.now()).toBe(NOW.getTime() + 5_498);
+    expect(readSettled).toBe(false);
+
+    resolveBlockUntil(blockedResult);
+    await expect(read).resolves.toBeNull();
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(complete).toHaveBeenCalledWith(firstReservation);
+  });
 
   it("stops before kline when GMGN returns a non-address pool locator", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
