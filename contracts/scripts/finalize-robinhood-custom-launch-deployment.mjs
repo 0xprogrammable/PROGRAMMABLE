@@ -108,6 +108,7 @@ function usage() {
     "  finalize-robinhood-custom-launch-deployment.mjs assemble-stage --input <path> [--output <path>] [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs verify-stage --stage <path> --capture <path> [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs stage-backend-assets --stage <path> --capture <path> --capture-attestation-bundle <path> --stage-attestation-bundle <path> --backend-service-root <path> [--repository-root <path>]",
+    "  finalize-robinhood-custom-launch-deployment.mjs verify-backend-import --stage <path> --backend-input <path> --backend-attestation-bundle <path> [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs authorize-backend --stage <path> --capture <path> --backend-input <path> --backend-attestation-bundle <path> [--output <path>] [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs promote --stage <path> --capture <path> --backend-input <path> --backend-attestation-bundle <path> --backend-authorization <path> --backend-authorization-attestation-bundle <path> [--output <path>] [--repository-root <path>]",
     "  finalize-robinhood-custom-launch-deployment.mjs verify-promotion --bundle <path> --stage <path> --capture <path> --backend-input <path> --backend-attestation-bundle <path> --backend-authorization <path> --backend-authorization-attestation-bundle <path> [--repository-root <path>]",
@@ -115,6 +116,7 @@ function usage() {
     "  finalize-robinhood-custom-launch-deployment.mjs apply --bundle <path> --stage <path> --capture <path> --backend-input <path> --backend-attestation-bundle <path> --backend-authorization <path> --backend-authorization-attestation-bundle <path> [--repository-root <path>]",
     "",
     "assemble-stage exclusively creates the closed phase-A asset handoff.",
+    "verify-backend-import performs a fresh, read-only validation of the exact public input, stage binding and protected-main Sigstore identity.",
     "promote requires the public-safe backend/Fly evidence, its portable attestation and the separately attested backend authorization.",
     "materialize-release-assets exclusively emits exact live/binding bytes to an empty external tree.",
     "apply is read-only: it fresh-rechecks L2/L1, Sourcify and backend state against landed evidence.",
@@ -124,7 +126,8 @@ function usage() {
 function parseCli(argv) {
   const [command, ...rest] = argv;
   if (!new Set([
-    "assemble-stage", "verify-stage", "stage-backend-assets", "authorize-backend", "promote",
+    "assemble-stage", "verify-stage", "stage-backend-assets", "verify-backend-import",
+    "authorize-backend", "promote",
     "verify-promotion", "materialize-release-assets", "apply",
   ]).has(command)
     || rest.length % 2 !== 0) {
@@ -158,6 +161,7 @@ function parseCli(argv) {
       "--stage", "--capture", "--capture-attestation-bundle",
       "--stage-attestation-bundle", "--backend-service-root",
     ],
+    "verify-backend-import": ["--stage", "--backend-input", "--backend-attestation-bundle"],
     "authorize-backend": ["--stage", "--capture", "--backend-input",
       "--backend-attestation-bundle"],
     promote: ["--stage", "--capture", "--backend-input", "--backend-attestation-bundle",
@@ -1306,6 +1310,58 @@ async function authorizeBackend(options, dependencies) {
   };
 }
 
+async function verifyBackendImport(options, dependencies) {
+  const [stageFile, backendInputFile, backendAttestationBundleFile] =
+    await readEvidenceSet([
+      () => readJsonPath(options.stagePath, { label: "stage bundle" }),
+      () => readJsonPath(options.backendInputPath, {
+        label: "backend promotion public input", maximumBytes: 16 * 1024 * 1024,
+      }),
+      () => readOpaquePath(options.backendAttestationBundlePath,
+        "backend portable attestation bundle"),
+    ]);
+  const backend = validateRobinhoodBackendPromotionPublicInput({
+    input: backendInputFile.value,
+    stageBundle: stageFile.value,
+    now: dependencies.backendDependencies?.now,
+  });
+  const authorizeCapture = dependencies.authorizeBackendCapture
+    ?? verifySigstoreBackendCaptureAttestation;
+  const captureResult = await authorizeCapture({
+    inputFile: backendInputFile,
+    attestationBundleFile: backendAttestationBundleFile,
+    stageBundle: stageFile.value,
+    backendReleaseEvidence: backend.backendReleaseEvidence,
+    now: dependencies.backendVerificationNow,
+  });
+  const authorization = captureResult?.authorization ?? captureResult;
+  validateRobinhoodBackendCaptureAuthorization({
+    authorization,
+    inputBytes: backendInputFile.bytes,
+    attestationBundleBytes: backendAttestationBundleFile.bytes,
+    input: backendInputFile.value,
+    allowTestOnly: dependencies.backendDependencies?.allowTestOnly === true,
+  });
+  return {
+    command: "verify-backend-import",
+    stagePath: path.resolve(options.stagePath),
+    backendInputPath: path.resolve(options.backendInputPath),
+    backendAttestationBundlePath: path.resolve(options.backendAttestationBundlePath),
+    backendPromotionPublicInputSha256: sha256Digest(backendInputFile.bytes),
+    backendPromotionPublicInputDigest: backendInputFile.value.publicInputDigest,
+    backendPromotionInputDigest:
+      backend.backendReleaseEvidence.backendPromotionInputDigest,
+    backendReleaseEvidenceDigest:
+      backend.backendReleaseEvidence.backendReleaseEvidenceDigest,
+    backendSource: structuredClone(backendInputFile.value.backendSource),
+    captureVerificationDigest: authorization.verificationDigest,
+    releaseReady: false,
+    publicAuthorization: false,
+    publicWrites: false,
+    wroteLiveArtifacts: false,
+  };
+}
+
 async function promotionSidecars(
   options,
   dependencies,
@@ -1655,6 +1711,9 @@ export async function runRobinhoodPostdeploymentCli(argv, dependencies = {}) {
   if (options.command === "verify-stage") return verifyStage(options, dependencies);
   if (options.command === "stage-backend-assets") {
     return stageBackendAssets(options, dependencies);
+  }
+  if (options.command === "verify-backend-import") {
+    return verifyBackendImport(options, dependencies);
   }
   if (options.command === "authorize-backend") return authorizeBackend(options, dependencies);
   if (options.command === "promote") return promote(options, dependencies);

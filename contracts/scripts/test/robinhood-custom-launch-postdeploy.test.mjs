@@ -927,6 +927,69 @@ test("legacy caller summaries and unsigned production-shaped input never become 
   }
 });
 
+test("focused backend evidence import verifies fresh exact public bytes without writing release state", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const built = await buildInput(fixture);
+    const stageResult = await runRobinhoodPostdeploymentCli([
+      "assemble-stage", "--input", built.path, "--repository-root", fixture.root,
+    ], cliDependencies(built));
+    const stage = JSON.parse(await readFile(stageResult.outputPath, "utf8"));
+    const backend = testBackendEvidence(stage);
+    const backendPath = path.join(fixture.root, ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH);
+    const attestationPath = path.join(fixture.root, ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH);
+    await mkdir(path.dirname(backendPath), { recursive: true });
+    await writeFile(backendPath, backend.inputBytes);
+    await writeFile(attestationPath, backend.attestationBundleBytes);
+    let verificationCalls = 0;
+    const dependencies = {
+      backendDependencies: backend.dependencies,
+      authorizeBackendCapture: async ({ inputFile, attestationBundleFile }) => {
+        verificationCalls += 1;
+        assert.equal(inputFile.bytes.equals(backend.inputBytes), true);
+        assert.equal(attestationBundleFile.bytes.equals(backend.attestationBundleBytes), true);
+        return backend.captureAuthorization;
+      },
+    };
+    const result = await runRobinhoodPostdeploymentCli([
+      "verify-backend-import",
+      "--stage", stageResult.outputPath,
+      "--backend-input", backendPath,
+      "--backend-attestation-bundle", attestationPath,
+      "--repository-root", fixture.root,
+    ], dependencies);
+    assert.equal(result.command, "verify-backend-import");
+    assert.equal(result.backendPromotionPublicInputSha256, sha256Digest(backend.inputBytes));
+    assert.equal(result.backendPromotionPublicInputDigest, backend.input.publicInputDigest);
+    assert.deepEqual(result.backendSource, backend.input.backendSource);
+    assert.equal(result.releaseReady, false);
+    assert.equal(result.publicAuthorization, false);
+    assert.equal(result.publicWrites, false);
+    assert.equal(result.wroteLiveArtifacts, false);
+    assert.equal(verificationCalls, 1);
+    await assert.rejects(
+      readFile(path.join(fixture.root, ROBINHOOD_BACKEND_AUTHORIZATION_PATH)),
+      /ENOENT/u,
+    );
+    await assert.rejects(() => runRobinhoodPostdeploymentCli([
+      "verify-backend-import",
+      "--stage", stageResult.outputPath,
+      "--backend-input", backendPath,
+      "--backend-attestation-bundle", attestationPath,
+      "--repository-root", fixture.root,
+    ], {
+      ...dependencies,
+      backendDependencies: {
+        ...backend.dependencies,
+        now: () => new Date("2026-08-29T12:16:01Z"),
+      },
+    }), /stale or future-dated/u);
+    assert.equal(verificationCalls, 1, "stale evidence must fail before Sigstore verification");
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("test-only Phase B remains closed and canonical apply rejects it", async () => {
   const fixture = await fixtureRepository();
   try {
