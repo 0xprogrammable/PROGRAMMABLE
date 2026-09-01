@@ -1545,6 +1545,7 @@ jobs:
           DETAIL_MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.detail_market_provider }}
           DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
           SHARD_TRADE_STATUS: ${{ steps.public-provider-smoke.outputs.shard_trade_status }}
+          CHART_PROVIDER: ${{ steps.public-provider-smoke.outputs.chart_provider }}
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
           CATALOG_BLOCK_NUMBER: ${{ steps.envio-catalog-probe.outputs.block_number }}
           CATALOG_TOKEN_COUNT: ${{ steps.envio-catalog-probe.outputs.token_count }}
@@ -1570,6 +1571,7 @@ jobs:
             echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"
             echo "- Full-catalog FDV ranking provider: Dexscreener"
             echo "- SHARD trade adapter smoke: \`${SHARD_TRADE_STATUS:-not-run}\`"
+            echo "- Market chart provider: \`${CHART_PROVIDER:-not-run}\`"
             echo "- Market chart smoke: \`${CHART_SMOKE_STATUS:-not-run}\`"
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then

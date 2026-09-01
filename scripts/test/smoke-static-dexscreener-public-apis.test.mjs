@@ -643,12 +643,81 @@ function gmgnStagedFetch(options = {}) {
         if (body.routerTradeProject) return body;
         return { ...body, token: detailToken };
       }
+      if (url.pathname === "/api/explore/token/chart" && options.gmgnChart) {
+        const identity = {
+          chainId: "1",
+          tokenAddress: url.searchParams.get("address"),
+          poolId: POOL,
+          quoteAddress: "0x0000000000000000000000000000000000000000",
+          protocol: "uniswap_v4",
+        };
+        const chart = {
+          schemaVersion: "programmable.gmgn-market-chart.v1",
+          source: "gmgn",
+          readStatus: "live",
+          status: "ready",
+          generatedAt: NOW,
+          identity,
+          identityProof: {
+            schemaVersion: "programmable.gmgn-chart-identity-proof.v1",
+            source: "gmgn-token-info",
+            verifiedAt: NOW,
+            identity,
+            canonicalSupply: {
+              totalSupplyRaw: (1_000_000n * 10n ** 18n).toString(),
+              tokenDecimals: 18,
+            },
+          },
+          range: "1d",
+          resolution: "15m",
+          requestedFrom: "2026-08-31T12:00:00.000Z",
+          requestedTo: NOW,
+          points: [{
+            time: NOW,
+            bucketStart: "2026-09-01T11:45:00.000Z",
+            bucketEnd: NOW,
+            valueSemantics: "period-close",
+            priceUsd: "1",
+            ohlcUsd: { open: "1", high: "1", low: "1", close: "1" },
+            volumeUsdWad: "0",
+          }],
+          candleCount: 1,
+          volumeUsdWad: "0",
+          asOfTime: NOW,
+          truncated: false,
+        };
+        return typeof options.mutateGmgnChart === "function"
+          ? options.mutateGmgnChart(chart)
+          : chart;
+      }
       return body;
     },
     ({ extraHeaders, omittedHeaders, url }) => {
       const newest = url.pathname === "/api/explore" &&
         url.searchParams.get("sort") === "newest";
       const detail = url.pathname === "/api/explore/token";
+      const chart = url.pathname === "/api/explore/token/chart" &&
+        options.gmgnChart;
+      if (chart) {
+        return {
+          extraHeaders: {
+            ...extraHeaders,
+            "cache-control": "public, max-age=0",
+            "x-programmable-data-quality": "current",
+            "x-programmable-read-source": "envio-classic-v3+gmgn",
+            "x-programmable-market-provider": "gmgn",
+            "x-programmable-market-read-status": "live",
+            "x-programmable-market-source": "gmgn",
+            "x-programmable-price-source": "gmgn",
+            "x-programmable-market-as-of": NOW,
+          },
+          omittedHeaders: omittedHeaders.filter((name) => ![
+            "x-programmable-market-source",
+            "x-programmable-price-source",
+            "x-programmable-market-as-of",
+          ].includes(name)),
+        };
+      }
       if (!newest && !detail) return { extraHeaders, omittedHeaders };
       const provider = newest ? "gmgn+dexscreener" : detailProvider;
       const detailUsesGmgn = newest || detailProvider === "gmgn";
@@ -1359,6 +1428,105 @@ test("staged smoke reports GMGN visible and detail providers dynamically", async
     url.searchParams.get("sort") === "newest" &&
     url.searchParams.get("model") === "classic"
   ));
+});
+
+test("staged smoke accepts an exact GMGN-primary chart", async () => {
+  const output = [];
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: gmgnStagedFetch({ gmgnChart: true }),
+    appendOutput: (...args) => output.push(args),
+  });
+
+  assert.equal(result.chartProvider, "gmgn");
+  assert.equal(result.chartStatus, "ready");
+  assert.match(output[0][1], /chart_provider=gmgn/u);
+  assert.match(output[0][1], /chart_status=ready/u);
+});
+
+test("staged smoke rejects a GMGN chart without its exact token-info proof", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        gmgnChart: true,
+        mutateGmgnChart: (chart) => ({ ...chart, identityProof: null }),
+      }),
+      appendOutput: () => undefined,
+    }),
+    /chart pool-bound contract is invalid/u,
+  );
+});
+
+for (const [label, mutateCanonicalSupply] of [
+  ["missing canonical supply", () => undefined],
+  ["wrong raw supply", (supply) => ({
+    ...supply,
+    totalSupplyRaw: (BigInt(supply.totalSupplyRaw) + 1n).toString(),
+  })],
+  ["wrong token decimals", (supply) => ({
+    ...supply,
+    tokenDecimals: supply.tokenDecimals + 1,
+  })],
+]) {
+  test(`staged smoke rejects a GMGN chart with ${label}`, async () => {
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: gmgnStagedFetch({
+          gmgnChart: true,
+          mutateGmgnChart: (chart) => ({
+            ...chart,
+            identityProof: {
+              ...chart.identityProof,
+              canonicalSupply: mutateCanonicalSupply(
+                chart.identityProof.canonicalSupply,
+              ),
+            },
+          }),
+        }),
+        appendOutput: () => undefined,
+      }),
+      /chart pool-bound contract is invalid/u,
+    );
+  });
+}
+
+test("staged smoke rejects a GMGN chart bound to another canonical pool", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        gmgnChart: true,
+        mutateGmgnChart: (chart) => ({
+          ...chart,
+          identity: { ...chart.identity, poolId: `0x${"44".repeat(32)}` },
+        }),
+      }),
+      appendOutput: () => undefined,
+    }),
+    /chart pool-bound contract is invalid/u,
+  );
 });
 
 test("staged smoke proves GMGN from the canonical market-cap candidates first", async () => {
@@ -2561,6 +2729,12 @@ test("staged smoke accepts Registry-current and Router-unavailable catalog", asy
               },
               identityCommitment: `sha256:${"de".repeat(32)}`,
             },
+          };
+        }
+        if (url.pathname === "/api/explore/token/chart") {
+          return {
+            ...body,
+            identity: { ...body.identity, poolId: entry(1).poolId },
           };
         }
         return body;

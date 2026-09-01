@@ -1541,6 +1541,15 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         : qualifiedDexscreenerFdv(detailToken, now().getTime())
           ? "verified-dexscreener-market"
           : "verified-identity-market-unavailable";
+      const chartIdentities = entryMarketIdentities(detailToken);
+      if (chartIdentities.length !== 1) {
+        throw new Error("Token detail has no unique chart market identity");
+      }
+      const chartIdentity = chartIdentities[0];
+      const chartCanonicalSupply = {
+        totalSupplyRaw: detailToken?.totalSupplyRaw,
+        tokenDecimals: detailToken?.tokenDecimals,
+      };
       let shardTradeStatus = "not-required";
       if (requireShardRouterTrade) {
         const shardDetail = await request(
@@ -1570,6 +1579,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
 
       exploreSnapshot = {
         catalogBoundary,
+        chartCanonicalSupply,
+        chartIdentity,
         detailMarketProvider,
         detailStatus,
         highest,
@@ -1596,6 +1607,8 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   }
   const {
     catalogBoundary,
+    chartCanonicalSupply,
+    chartIdentity,
     detailMarketProvider,
     detailStatus,
     highest,
@@ -1702,16 +1715,68 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   );
   const chartHasHistory = Array.isArray(chart.body?.points) &&
     chart.body.points.length > 0;
-  const chartContractValid =
+  const chartProvider = chart.body?.source;
+  const chartIdentityMatches =
+    chart.body?.identity?.chainId === "1" &&
+    canonicalMarketAddress(chart.body?.identity?.tokenAddress) ===
+      chartIdentity.tokenAddress &&
+    canonicalMarketPool(chart.body?.identity?.poolId) ===
+      chartIdentity.poolId &&
+    canonicalMarketAddress(chart.body?.identity?.quoteAddress) ===
+      chartIdentity.quoteAddress &&
+    chart.body?.identity?.protocol === "uniswap_v4";
+  const gmgnProofIdentityMatches =
+    chart.body?.identityProof?.identity?.chainId === "1" &&
+    canonicalMarketAddress(
+      chart.body?.identityProof?.identity?.tokenAddress,
+    ) === chartIdentity.tokenAddress &&
+    canonicalMarketPool(chart.body?.identityProof?.identity?.poolId) ===
+      chartIdentity.poolId &&
+    canonicalMarketAddress(
+      chart.body?.identityProof?.identity?.quoteAddress,
+    ) === chartIdentity.quoteAddress &&
+    chart.body?.identityProof?.identity?.protocol === "uniswap_v4";
+  const gmgnChartReady =
+    chartProvider === "gmgn" &&
+    chart.body?.schemaVersion === "programmable.gmgn-market-chart.v1" &&
+    chart.body?.status === "ready" &&
+    chart.body?.readStatus === "live" &&
+    chartHasHistory &&
+    chart.body?.identityProof?.schemaVersion ===
+      "programmable.gmgn-chart-identity-proof.v1" &&
+    chart.body?.identityProof?.source === "gmgn-token-info" &&
+    gmgnProofIdentityMatches &&
+    exactObjectKeys(chart.body?.identityProof?.canonicalSupply, [
+      "tokenDecimals",
+      "totalSupplyRaw",
+    ]) &&
+    typeof chartCanonicalSupply.totalSupplyRaw === "string" &&
+    chart.body?.identityProof?.canonicalSupply?.totalSupplyRaw ===
+      chartCanonicalSupply.totalSupplyRaw &&
+    Number.isSafeInteger(chartCanonicalSupply.tokenDecimals) &&
+    chart.body?.identityProof?.canonicalSupply?.tokenDecimals ===
+      chartCanonicalSupply.tokenDecimals &&
+    chart.body?.points.every((point) =>
+      point?.valueSemantics === "period-close"
+    );
+  const bitqueryChartFallback =
+    chartProvider === "bitquery" &&
+    chart.body?.schemaVersion === "programmable.market-chart.v1" &&
+    [
+      "ready",
+      "insufficient-history",
+      "partial",
+      "waiting-for-first-trade",
+      "unavailable",
+    ].includes(chart.body?.status) &&
+    ["live", "cache-fallback"].includes(chart.body?.readStatus) &&
+    chart.body?.valuation?.status === "unavailable" &&
+    chart.body?.valuation?.reason === "source-unavailable";
+  const chartContractInvalid =
     chart.status !== 200 ||
-    chart.body?.schemaVersion !== "programmable.market-chart.v1" ||
-    chart.body?.source !== "bitquery" ||
-    !["ready", "insufficient-history", "partial", "waiting-for-first-trade", "unavailable"].includes(chart.body?.status) ||
-    !["live", "cache-fallback"].includes(chart.body?.readStatus) ||
-    chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase() ||
+    (!gmgnChartReady && !bitqueryChartFallback) ||
+    !chartIdentityMatches ||
     chart.body?.range !== "1d" ||
-    chart.body?.valuation?.status !== "unavailable" ||
-    chart.body?.valuation?.reason !== "source-unavailable" ||
     // Vercel normalizes shared-cache directives on dynamic route responses to
     // this publicly observable fresh-response policy. The route-level policy
     // remains accepted for direct runtime tests; the stage probe must accept
@@ -1725,14 +1790,16 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     chart.headers.get("x-programmable-launch-source") !==
       catalogBoundary.launchSource ||
     chart.headers.get("x-programmable-read-source") !==
-      `${catalogBoundary.launchSource}+bitquery` ||
-    chart.headers.get("x-programmable-market-provider") !== "bitquery" ||
+      `${catalogBoundary.launchSource}+${chartProvider}` ||
+    chart.headers.get("x-programmable-market-provider") !== chartProvider ||
     !["live", "cache-fallback"].includes(
       chart.headers.get("x-programmable-market-read-status"),
     ) ||
+    chart.headers.get("x-programmable-market-read-status") !==
+      chart.body?.readStatus ||
     (chartHasHistory && (
-      chart.headers.get("x-programmable-market-source") !== "bitquery" ||
-      chart.headers.get("x-programmable-price-source") !== "bitquery" ||
+      chart.headers.get("x-programmable-market-source") !== chartProvider ||
+      chart.headers.get("x-programmable-price-source") !== chartProvider ||
       chart.headers.get("x-programmable-market-as-of") !== chart.body?.asOfTime
     )) ||
     (!chartHasHistory && (
@@ -1741,15 +1808,14 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       chart.headers.get("x-programmable-market-as-of") !== null
     )) ||
     chart.headers.get("x-programmable-valuation-block") !== null;
-  if (chartContractValid) {
+  if (chartContractInvalid) {
     throw new Error(
       "Token chart pool-bound contract is invalid: " + JSON.stringify({
         status: chart.status,
         schemaVersion: chart.body?.schemaVersion ?? null,
         source: chart.body?.source ?? null,
         readStatus: chart.body?.readStatus ?? null,
-        identityMatches: chart.body?.identity?.tokenAddress?.toLowerCase() ===
-          tokenAddress.toLowerCase(),
+        identityMatches: chartIdentityMatches,
         range: chart.body?.range ?? null,
         valuationStatus: chart.body?.valuation?.status ?? null,
         valuationReason: chart.body?.valuation?.reason ?? null,
@@ -1780,6 +1846,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         `detail_market_provider=${detailMarketProvider}`,
         `detail_status=${detailStatus}`,
         `shard_trade_status=${shardTradeStatus}`,
+        `chart_provider=${chartProvider}`,
         `chart_status=${chartStatus}`,
       ].join("\n") + "\n",
       "utf8",
@@ -1800,6 +1867,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     detailMarketProvider,
     detailStatus,
     shardTradeStatus,
+    chartProvider,
     chartStatus,
     creatorClaimPrepare: "separate-live-probe-required",
     tradePrepare: "separate-live-probe-required",
