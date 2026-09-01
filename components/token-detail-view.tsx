@@ -27,6 +27,7 @@ import {
   type TokenChartVolume,
 } from "@/components/token-price-chart";
 import { TokenDetailShell } from "@/components/token-detail-shell";
+import { TokenGmgnAnalytics } from "@/components/token-gmgn-analytics";
 import { CustomMarketTrade } from "@/components/custom-market-trade";
 import { PartnerLaunchAttribution } from
   "@/components/partner-launch-attribution";
@@ -1298,13 +1299,15 @@ export function marketDataProviderLabel(input: Readonly<{
   const valuationSource = input.valuation?.status === "available"
     ? input.valuation.source
     : undefined;
-  const usesGmgn = valuationSource === "gmgn";
-  const usesDexscreener = valuationSource === "dexscreener";
   const chartVolumeMetric = buildChartVolumeMetric(input.chartVolume ?? null);
-  const usesBitquery = input.chartVolume?.source === "bitquery" &&
-    chartVolumeMetric !== undefined &&
+  const usesDisplayedChartVolume = chartVolumeMetric !== undefined &&
     chartVolumeMetric.value !== "Loading…" &&
     chartVolumeMetric.value !== "Not available yet";
+  const usesGmgn = valuationSource === "gmgn" ||
+    (input.chartVolume?.source === "gmgn" && usesDisplayedChartVolume);
+  const usesDexscreener = valuationSource === "dexscreener";
+  const usesBitquery = input.chartVolume?.source === "bitquery" &&
+    usesDisplayedChartVolume;
   const providers = [
     ...(usesGmgn ? ["GMGN"] : []),
     ...(usesDexscreener ? ["Dexscreener"] : []),
@@ -2364,6 +2367,12 @@ function TokenDetailContent({
         ) : null}
 
       </div>
+      {chainId === 1 && !preview ? (
+        <TokenGmgnAnalytics
+          tokenAddress={token.tokenAddress}
+          tokenName={token.name}
+        />
+      ) : null}
       <CreatorArticle
         article={visibleCreatorArticle}
         editAction={creatorProject && creatorAddress ? (

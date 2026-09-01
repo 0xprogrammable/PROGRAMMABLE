@@ -343,6 +343,38 @@ describe("token detail metrics", () => {
     })).toBe("Dexscreener");
   });
 
+  it("attributes GMGN chart volume once alongside each valuation provider", () => {
+    const gmgnValuation = {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      valueWad: parseEther("168560").toString(),
+      freshness: "provider-recent",
+      source: "gmgn",
+      asOfTime: "2026-09-01T04:00:00.000Z",
+    } as const;
+    const chartVolume = {
+      range: "1d",
+      pending: false,
+      source: "gmgn",
+      volumeUsdWad: parseEther("52000").toString(),
+    } as const;
+
+    expect(marketDataProviderLabel({
+      valuation: gmgnValuation,
+      chartVolume,
+    })).toBe("GMGN");
+    expect(marketDataProviderLabel({
+      valuation: { ...gmgnValuation, source: "dexscreener" },
+      chartVolume,
+    })).toBe("GMGN + Dexscreener");
+    expect(marketDataProviderLabel({
+      valuation: { ...gmgnValuation, source: "dexscreener" },
+      chartVolume: { ...chartVolume, pending: true },
+    })).toBe("Dexscreener");
+  });
+
   it("ignores legacy market volume without Bitquery provenance", () => {
     expect(buildTokenDetailMetrics(token)).toEqual([
       { label: "Market cap", value: "$168.56K" },
