@@ -964,6 +964,89 @@ test("staged smoke accepts identity-only Explore and token responses", async () 
   assert.match(output[0][1], /detail_market_provider=dexscreener/u);
 });
 
+test("staged smoke accepts an exact detail observation without a qualified valuation", async () => {
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(
+      undefined,
+      ({ extraHeaders, omittedHeaders, url }) => ({
+        extraHeaders: url.pathname === "/api/explore/token"
+          ? {
+              ...extraHeaders,
+              "x-programmable-market-read-status": "complete",
+              "x-programmable-market-source": "dexscreener",
+            }
+          : extraHeaders,
+        omittedHeaders,
+      }),
+    ),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.detailMarketProvider, "dexscreener");
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+});
+
+test("staged smoke rejects a detail observation outside the selected provider", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(
+        undefined,
+        ({ extraHeaders, omittedHeaders, url }) => ({
+          extraHeaders: url.pathname === "/api/explore/token"
+            ? {
+                ...extraHeaders,
+                "x-programmable-market-source": "gmgn",
+              }
+            : extraHeaders,
+          omittedHeaders,
+        }),
+      ),
+      appendOutput: () => undefined,
+    }),
+    /Token detail identity or market contract is invalid/u,
+  );
+});
+
+test("staged smoke rejects a detail observation on an unavailable market read", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(
+        undefined,
+        ({ extraHeaders, omittedHeaders, url }) => ({
+          extraHeaders: url.pathname === "/api/explore/token"
+            ? {
+                ...extraHeaders,
+                "x-programmable-market-read-status": "unavailable",
+                "x-programmable-market-source": "dexscreener",
+              }
+            : extraHeaders,
+          omittedHeaders,
+        }),
+      ),
+      appendOutput: () => undefined,
+    }),
+    /Token detail identity or market contract is invalid/u,
+  );
+});
+
 test("staged smoke reports GMGN visible and detail providers dynamically", async () => {
   const output = [];
   const requests = [];
@@ -1013,7 +1096,7 @@ test("staged smoke requires a complete GMGN detail runtime read", async () => {
         PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
         GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
       },
-      fetchImpl: gmgnStagedFetch({ detailReadStatus: "unavailable" }),
+      fetchImpl: gmgnStagedFetch({ detailReadStatus: "partial" }),
       appendOutput: () => undefined,
     }),
     /Token detail GMGN market contract is required/u,
