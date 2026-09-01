@@ -273,6 +273,7 @@ describe("GMGN canonical market enrichment", () => {
     });
     expect(reserveSlot).toHaveBeenCalledWith({
       requestsPerSecond: 1,
+      maximumConcurrentLeases: 12,
       deadlineMs: NOW.getTime() + 5_000,
       signal: expect.any(AbortSignal),
     });
@@ -280,13 +281,13 @@ describe("GMGN canonical market enrichment", () => {
     expect(complete).toHaveBeenCalledWith(reservation);
   });
 
-  it("derives visible token-info concurrency from effective RPS and batch size", () => {
+  it("reserves ranking headroom in visible token-info concurrency", () => {
     vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "20");
     expect(gmgnVisibleMarketConcurrencyV1(0)).toBe(0);
     expect(gmgnVisibleMarketConcurrencyV1(1)).toBe(1);
     expect(gmgnVisibleMarketConcurrencyV1(7)).toBe(7);
-    expect(gmgnVisibleMarketConcurrencyV1(20)).toBe(20);
-    expect(gmgnVisibleMarketConcurrencyV1(100)).toBe(20);
+    expect(gmgnVisibleMarketConcurrencyV1(20)).toBe(12);
+    expect(gmgnVisibleMarketConcurrencyV1(100)).toBe(12);
 
     vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "3");
     expect(gmgnVisibleMarketConcurrencyV1(20)).toBe(3);
@@ -594,12 +595,15 @@ describe("GMGN canonical market enrichment", () => {
     expect(url.searchParams.get("address")).toBe(entry.tokenAddress);
     expect(url.searchParams.get("timestamp")).toBe("1788091200");
     expect(url.searchParams.get("client_id")).toMatch(/^[0-9a-f-]{36}$/u);
-    expect(new Headers(init?.headers).get("X-APIKEY")).toBe("test-server-key");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("X-APIKEY")).toBe("test-server-key");
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("User-Agent")).toBe("programmable-market-indexer/1.0");
     expect(init?.redirect).toBe("error");
     expect(init?.credentials).toBe("omit");
   });
 
-  it("processes the 100-entry API maximum in bounded 20-request chunks", async () => {
+  it("processes the 100-entry API maximum with ranking lease headroom", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "20");
     const entries = Array.from({ length: 100 }, (_, index) => token(index + 300));
@@ -637,7 +641,7 @@ describe("GMGN canonical market enrichment", () => {
 
     expect(snapshots.size).toBe(100);
     expect(fetchImpl).toHaveBeenCalledTimes(100);
-    expect(maximumActive).toBe(20);
+    expect(maximumActive).toBe(12);
     expect(accountGate.reserveSlot).toHaveBeenCalledTimes(100);
     expect(accountGate.complete).toHaveBeenCalledTimes(100);
   });
@@ -656,6 +660,35 @@ describe("GMGN canonical market enrichment", () => {
       now: () => NOW,
     })).resolves.toBeNull();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps provider bodies and credentials out of production diagnostics", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(128);
+    const providerSentinel = "SENTINEL_PROVIDER_ACCOUNT_123456";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => GATE_RESERVATION),
+      blockUntil: vi.fn(),
+      complete: vi.fn(async () => {}),
+    };
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      code: providerSentinel,
+      data: providerData(entry),
+    }), { status: 200 }));
+
+    await expect(readGmgnMarketSnapshotV1(entry, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => NOW,
+    })).resolves.toBeNull();
+
+    const diagnostics = JSON.stringify(warn.mock.calls);
+    expect(diagnostics).toContain("envelope-rejected");
+    expect(diagnostics).not.toContain(providerSentinel);
+    expect(diagnostics).not.toContain("test-server-key");
+    expect(diagnostics).not.toContain(entry.tokenAddress);
   });
 
   it.each([
@@ -685,6 +718,7 @@ describe("GMGN canonical market enrichment", () => {
       })).resolves.not.toBeNull();
       expect(reserveSlot).toHaveBeenCalledWith({
         requestsPerSecond: expected,
+        maximumConcurrentLeases: 12,
         deadlineMs: NOW.getTime() + 5_000,
         signal: expect.any(AbortSignal),
       });

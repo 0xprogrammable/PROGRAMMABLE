@@ -597,7 +597,7 @@ const GMGN_READ_ONLY_ENDPOINT_CONTRACT = Object.freeze([
   Object.freeze({
     path: "lib/market-data/gmgn-discovery.server.ts",
     fetchImplReferences: 8,
-    pathReferences: 7,
+    pathReferences: 18,
     allowed: Object.freeze([
       "/v1/market/hot_searches",
       "/v1/market/rank",
@@ -3365,7 +3365,7 @@ export function evaluateReadModelOperationsSourceContracts(
       "const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000",
       "const GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT = 100",
       "const GMGN_VISIBLE_CHUNK_SIZE = 20",
-      "const GMGN_MAXIMUM_CONCURRENCY = 20",
+      "const GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES = 12",
       "entries.slice(0, GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT)",
       "offset += GMGN_VISIBLE_CHUNK_SIZE",
       "boundedEntries.slice(offset, offset + GMGN_VISIBLE_CHUNK_SIZE)",
@@ -3392,7 +3392,7 @@ export function evaluateReadModelOperationsSourceContracts(
       'String(data.pool.exchange).toLowerCase() !== "uniswap_v4"',
       "!poolBaseQuoteMatchesV1(data.pool, identity)",
       "!providerSupplyMatchesCanonical(",
-      'headers: { Accept: "application/json", "X-APIKEY": apiKey }',
+      '"User-Agent": GMGN_API_USER_AGENT',
       'redirect: "error"',
       'credentials: "omit"',
       "const bytes = await readBoundedResponseBytes(",
@@ -3641,9 +3641,14 @@ export function evaluateReadModelOperationsSourceContracts(
       '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
       'from "./gmgn-runtime-config.server"',
       "requestsPerSecond: gmgnEffectiveRequestsPerSecondV1()",
+      '"User-Agent": GMGN_API_USER_AGENT',
+      "const providerFailureLoggedAt = new Map<string, number>();",
+      "if (nowMs - lastLoggedAt < 10_000) return;",
+      'console.warn("GMGN provider read unavailable", {',
       'redirect: "error"',
       'credentials: "omit"',
     ]) &&
+    !gmgnDiscovery.includes("envelopeCode") &&
     !gmgnDiscovery.includes("CachedValue<GmgnDiscoverySnapshotV1 | null>") &&
     includesEverySourceFragment(gmgnDiscoverySnapshot, [
       '"programmable.gmgn-discovery.v1" as const',

@@ -40,6 +40,7 @@ export interface GmgnAccountGateV1 {
   reserveSlot(input: Readonly<{
     requestsPerSecond: number;
     cost?: GmgnAccountGateCostV1;
+    maximumConcurrentLeases?: number;
     deadlineMs: number;
     signal?: AbortSignal;
   }>): Promise<GmgnAccountGateReservationV1 | null>;
@@ -618,15 +619,21 @@ export class PostgresGmgnAccountGateV1 implements GmgnAccountGateV1 {
   async reserveSlot(input: Readonly<{
     requestsPerSecond: number;
     cost?: GmgnAccountGateCostV1;
+    maximumConcurrentLeases?: number;
     deadlineMs: number;
     signal?: AbortSignal;
   }>): Promise<GmgnAccountGateReservationV1 | null> {
     const cost: unknown = input.cost === undefined ? 1 : input.cost;
+    const maximumConcurrentLeases = input.maximumConcurrentLeases ??
+      MAXIMUM_CONCURRENT_LEASES;
     if (
       !Number.isSafeInteger(input.requestsPerSecond)
       || input.requestsPerSecond < 1
       || input.requestsPerSecond > 20
       || !isGmgnAccountGateCostV1(cost)
+      || !Number.isSafeInteger(maximumConcurrentLeases)
+      || maximumConcurrentLeases < 1
+      || maximumConcurrentLeases > MAXIMUM_CONCURRENT_LEASES
       || !Number.isFinite(input.deadlineMs)
     ) throw new TypeError("GMGN account gate reservation is invalid");
     const intervalMs = Math.ceil(1_000 / input.requestsPerSecond);
@@ -695,7 +702,7 @@ export class PostgresGmgnAccountGateV1 implements GmgnAccountGateV1 {
           Math.ceil(nextSlotAtMs - decidedAtMs),
         );
         const capacityUnavailable = legacyLeaseActive || markerInconsistent ||
-          activeLeases >= MAXIMUM_CONCURRENT_LEASES;
+          activeLeases >= maximumConcurrentLeases;
         if (scheduleRetryMs > 0 || capacityUnavailable) {
           const capacityUntilMs = legacyLeaseActive || markerInconsistent
             ? Math.max(leaseUntilMs, latestLeaseUntilMs ?? decidedAtMs)

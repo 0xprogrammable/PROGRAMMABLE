@@ -514,6 +514,8 @@ describe("GMGN Ethereum token analytics", () => {
       });
       expect(init?.headers).toEqual({
         Accept: "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "programmable-market-indexer/1.0",
         "X-APIKEY": "gmgn-test-server-only",
       });
       return jsonResponse({ list: [rankedWallet()] });

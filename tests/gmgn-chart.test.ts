@@ -813,6 +813,7 @@ describe("GMGN admitted Ethereum token-address kline adapter", () => {
       const headers = new Headers(init?.headers);
       expect(headers.get("X-APIKEY")).toBe("test-server-key");
       expect(headers.get("Content-Type")).toBe("application/json");
+      expect(headers.get("User-Agent")).toBe("programmable-market-indexer/1.0");
       expect(init?.redirect).toBe("error");
       expect(init?.credentials).toBe("omit");
     }

@@ -23,6 +23,7 @@ import { gmgnEffectiveRequestsPerSecondV1 } from
 import type { MarketChartIdentityV1 } from "./market-data-v1";
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
+const GMGN_API_USER_AGENT = "programmable-market-indexer/1.0" as const;
 const GMGN_REQUEST_TIMEOUT_MS = 2_500;
 // Cold database readiness and account-wide scheduling must not consume the
 // provider's response budget after a slot has actually been reserved.
@@ -37,7 +38,10 @@ const GMGN_MARKET_CACHE_TTL_MS = 30_000;
 const GMGN_MAXIMUM_CACHE_ENTRIES = 512;
 const GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT = 100;
 const GMGN_VISIBLE_CHUNK_SIZE = 20;
-const GMGN_MAXIMUM_CONCURRENCY = 20;
+// Reserve eight account-wide leases for ranking, search, chart, and analytics
+// reads. A timed-out visible token-info fanout can otherwise occupy the entire
+// shared provider gate after its Explore response has already returned.
+const GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES = 12;
 const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const UINT256_MAX = (1n << 256n) - 1n;
 const USD_WAD = 10n ** 18n;
@@ -78,6 +82,7 @@ type CachedValue<T> = Readonly<{
 
 const snapshotCache = new Map<string, CachedValue<GmgnMarketSnapshotV1>>();
 const snapshotInFlight = new Map<string, Promise<GmgnMarketSnapshotV1 | null>>();
+const providerFailureLoggedAt = new Map<string, number>();
 
 export function gmgnMarketDataConfiguredV1(): boolean {
   return readApiKey() !== null;
@@ -129,7 +134,7 @@ export function gmgnVisibleMarketConcurrencyV1(batchSize: number): number {
   return Math.min(
     batchSize,
     GMGN_VISIBLE_CHUNK_SIZE,
-    GMGN_MAXIMUM_CONCURRENCY,
+    GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES,
     gmgnEffectiveRequestsPerSecondV1(),
   );
 }
@@ -185,6 +190,9 @@ export async function readGmgnMarketSnapshotV1(
       canonicalSupply,
       providerWait.now(),
     );
+    if (value !== null && snapshot === null) {
+      logGmgnMarketProviderUnavailableV1("schema-rejected", 200);
+    }
     return snapshot;
   })();
   const promise = settleProviderReadLifecycle(providerRead, providerWait).then(
@@ -406,15 +414,24 @@ async function gmgnJsonRequest(
     if (accountGate !== null) {
       const decision = await reserveProviderSlot(accountGate, {
         requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
+        maximumConcurrentLeases: GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES,
         deadlineMs: gateDeadlineMs,
         signal: gateSignal,
       }, gateOperation);
-      if (decision?.kind !== "reserved") return null;
+      if (decision?.kind !== "reserved") {
+        logGmgnMarketProviderUnavailableV1(
+          decision?.kind === "blocked"
+            ? "account-gate-blocked"
+            : "account-gate-unavailable",
+        );
+        return null;
+      }
       reservation = decision;
     }
   } catch {
     // Production must never bypass the shared account gate when its database,
     // migration, role, or TLS authority is unavailable.
+    logGmgnMarketProviderUnavailableV1("account-gate-error");
     return null;
   }
   const nowMs = now().getTime();
@@ -440,7 +457,12 @@ async function gmgnJsonRequest(
   try {
     response = await fetchImpl(url, {
       method: "GET",
-      headers: { Accept: "application/json", "X-APIKEY": apiKey },
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": GMGN_API_USER_AGENT,
+        "X-APIKEY": apiKey,
+      },
       redirect: "error",
       credentials: "omit",
       cache: "no-store",
@@ -448,6 +470,7 @@ async function gmgnJsonRequest(
     });
   } catch {
     await completeProviderRequest(accountGate, reservation);
+    logGmgnMarketProviderUnavailableV1("fetch-error");
     return null;
   }
   const declaredLength = Number(response.headers.get("Content-Length"));
@@ -520,13 +543,51 @@ async function gmgnJsonRequest(
   } else if (!await completeProviderRequest(accountGate, reservation)) {
     return null;
   }
-  if (!response.ok || rateLimited || value === null) return null;
+  if (rateLimited) {
+    logGmgnMarketProviderUnavailableV1(
+      "rate-limited",
+      response.status,
+    );
+    return null;
+  }
+  if (!response.ok) {
+    logGmgnMarketProviderUnavailableV1("http-error", response.status);
+    return null;
+  }
+  if (value === null) {
+    logGmgnMarketProviderUnavailableV1(
+      "invalid-json",
+      response.status,
+    );
+    return null;
+  }
   if (!isRecord(value) || value.code !== 0 || !isRecord(value.data)) {
+    logGmgnMarketProviderUnavailableV1(
+      "envelope-rejected",
+      response.status,
+    );
     return null;
   }
   // Keep the raw envelope for the parser so an explicit outer chain cannot be
   // discarded before the exact-Ethereum boundary check.
   return value;
+}
+
+function logGmgnMarketProviderUnavailableV1(
+  phase: string,
+  httpStatus?: number,
+): void {
+  if (process.env.NODE_ENV !== "production") return;
+  const key = `${phase}:${httpStatus ?? "none"}`;
+  const nowMs = Date.now();
+  const lastLoggedAt = providerFailureLoggedAt.get(key) ?? 0;
+  if (nowMs - lastLoggedAt < 10_000) return;
+  providerFailureLoggedAt.set(key, nowMs);
+  console.warn("GMGN provider read unavailable", {
+    endpoint: "/v1/token/info",
+    phase,
+    httpStatus: Number.isSafeInteger(httpStatus) ? httpStatus : null,
+  });
 }
 
 async function readBoundedResponseBytes(
