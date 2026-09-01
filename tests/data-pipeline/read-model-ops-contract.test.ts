@@ -1234,10 +1234,26 @@ describe("read-model operations source contract", () => {
       'if (marketRead.fallbackQualifiedCount > 0) sources.push("dexscreener");',
     ],
     [
-      "a pure-Dex empty observation with a timestamp window",
+      "multi-market entries admitted to visible GMGN token_info",
+      "lib/market-data/gmgn.server.ts",
+      "canonicalIdentities?.length === 1",
+      "canonicalIdentities !== null",
+    ],
+    [
+      "batch-conflicted pool identities admitted to visible GMGN token_info",
+      "lib/market-data/explore-market.server.ts",
+      "requestedIdentityKeys.has(exploreMarketIdentityKeyV1(identities[0]!))",
+      "true",
+    ],
+    [
+      "a pure-Dex old observation admitted into the timestamp window",
       "lib/market-data/dexscreener-explore.server.ts",
-      "oldestFetchedAt: snapshot.observedCount === 0",
-      "oldestFetchedAt: false",
+      'result.status === "available" &&\n' +
+        "      dexscreenerExploreObservationCurrentV1(\n" +
+        "        result.observation.fetchedAt,\n" +
+        "        observedAtMs,\n" +
+        "      )",
+      'result.status === "available"',
     ],
     [
       "a market-cap client that ignores primary rank observations",

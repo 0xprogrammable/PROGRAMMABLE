@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import {
   getProductionGmgnAccountGateV1,
   type GmgnAccountGateCostV1,
@@ -27,6 +29,11 @@ const GMGN_PROVIDER_LIFECYCLE_GRACE_MS =
   GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS + 500;
 const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000;
 const GMGN_DISCOVERY_CACHE_TTL_MS = 30_000;
+const GMGN_DURABLE_CACHE_REVALIDATE_SECONDS = 60;
+// Explore responses can spend up to 60 seconds in the public edge cache. Keep
+// the shared GMGN authority inside the remaining 235-second origin budget so
+// it cannot outlive the five-minute public freshness contract.
+const GMGN_DURABLE_CACHE_MAXIMUM_AGE_MS = 235_000;
 const GMGN_MAXIMUM_CACHE_ENTRIES = 64;
 const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_OPERATION_TIMED_OUT = Symbol("provider-operation-timed-out");
@@ -38,6 +45,12 @@ type GmgnDiscoveryPath = "/v1/market/rank" |
 type ProviderOperationV1 = Readonly<{
   deadlineMs: number;
   now: () => Date;
+}>;
+type NormalizedDiscoveryOptionsV1 = Readonly<{
+  interval: GmgnDiscoveryIntervalV1;
+  limit: number;
+  orderBy: "marketcap" | null;
+  direction: "asc" | "desc" | null;
 }>;
 
 export type GmgnDiscoveryReadWaitV1 = Readonly<{
@@ -105,32 +118,22 @@ export async function readGmgnEthereumSearchV1(
 ): Promise<GmgnSearchSnapshotV1 | null> {
   const apiKey = readApiKey();
   const normalizedQuery = normalizeGmgnSearchQueryV1(query);
-  if (apiKey === null || normalizedQuery === null) return null;
+  if (
+    apiKey === null ||
+    normalizedQuery === null ||
+    !callerCanWait(wait)
+  ) return null;
   const key = `search:${normalizedQuery}`;
   return readThroughCache(
     searchCache,
     searchInFlight,
     key,
     wait,
-    async (providerWait) => {
-      const data = await gmgnJsonRequest(
-        "/v1/market/search",
-        {
-          query: {
-            query: normalizedQuery,
-            chain: "eth",
-            order_by: "weight",
-          },
-          body: null,
-        },
-        apiKey,
-        providerWait,
-      );
-      return parseGmgnSearchSnapshotV1(data, {
-        query: normalizedQuery,
-        fetchedAt: currentDate(providerWait),
-      });
-    },
+    (providerWait) => readGmgnSearchSnapshotFromProviderV1(
+      normalizedQuery,
+      apiKey,
+      providerWait,
+    ),
   );
 }
 
@@ -141,7 +144,11 @@ async function readGmgnEthereumDiscoveryV1(
 ): Promise<GmgnDiscoverySnapshotV1 | null> {
   const apiKey = readApiKey();
   const normalized = normalizeOptions(kind, options);
-  if (apiKey === null || normalized === null) return null;
+  if (
+    apiKey === null ||
+    normalized === null ||
+    !callerCanWait(wait)
+  ) return null;
   const key = [
     kind,
     normalized.interval,
@@ -149,71 +156,48 @@ async function readGmgnEthereumDiscoveryV1(
     normalized.orderBy ?? "default",
     normalized.direction ?? "default",
   ].join(":");
+  if (durableCacheEligible(wait)) {
+    const durable = await waitForCaller(
+      readDurablyCachedGmgnDiscoverySnapshotV1(
+        kind,
+        normalized.interval,
+        normalized.limit,
+        normalized.orderBy,
+        normalized.direction,
+      ).then(
+        (snapshot) => ({ status: "snapshot" as const, snapshot }),
+        () => ({ status: "unavailable" as const }),
+      ),
+      wait,
+    );
+    if (durable === null || durable.status === "unavailable") return null;
+    if (durableSnapshotCurrent(durable.snapshot.fetchedAt)) {
+      return durable.snapshot;
+    }
+
+    // Next may return a stale entry while it revalidates in the background.
+    // Fail closed here: a module-local provider result could differ between
+    // serverless isolates and therefore cannot be pagination authority.
+    return null;
+  }
   return readThroughCache(
     discoveryCache,
     discoveryInFlight,
     key,
     wait,
-    async (providerWait) => {
-    const path = kind === "trending"
-      ? "/v1/market/rank" as const
-      : "/v1/market/hot_searches" as const;
-    const data = await gmgnJsonRequest(
-      path,
-      kind === "trending"
-        ? {
-            query: {
-              chain: "eth",
-              interval: normalized.interval,
-              limit: String(normalized.limit),
-              ...(normalized.orderBy === null
-                ? {}
-                : {
-                    order_by: normalized.orderBy,
-                    direction: normalized.direction ?? "desc",
-                  }),
-            },
-            body: null,
-          }
-        : {
-            query: {},
-            body: {
-              params: [{
-                label: "hot-search",
-                chain: "eth",
-                interval: normalized.interval,
-                limit: normalized.limit,
-              }],
-            },
-      },
+    (providerWait) => readGmgnDiscoverySnapshotFromProviderV1(
+      kind,
+      normalized,
       apiKey,
       providerWait,
-    );
-    return parseGmgnDiscoverySnapshotV1(data, {
-      kind,
-      interval: normalized.interval,
-      ...(normalized.orderBy === null
-        ? {}
-        : {
-            orderBy: normalized.orderBy,
-            direction: normalized.direction ?? "desc",
-          }),
-      limit: normalized.limit,
-      fetchedAt: currentDate(providerWait),
-    });
-    },
+    ),
   );
 }
 
 function normalizeOptions(
   kind: GmgnDiscoveryKindV1,
   options: GmgnTrendingReadOptionsV1,
-): Readonly<{
-  interval: GmgnDiscoveryIntervalV1;
-  limit: number;
-  orderBy: "marketcap" | null;
-  direction: "asc" | "desc" | null;
-}> | null {
+): NormalizedDiscoveryOptionsV1 | null {
   const interval = options.interval ?? (kind === "trending" ? "1h" : "24h");
   const maximum = kind === "trending"
     ? GMGN_TRENDING_MAXIMUM_LIMIT
@@ -234,6 +218,140 @@ function normalizeOptions(
         (direction !== null && direction !== "asc" && direction !== "desc")))
   ) return null;
   return Object.freeze({ interval, limit, orderBy, direction });
+}
+
+async function readGmgnDiscoverySnapshotFromProviderV1(
+  kind: GmgnDiscoveryKindV1,
+  normalized: NormalizedDiscoveryOptionsV1,
+  apiKey: string,
+  providerWait: GmgnDiscoveryReadWaitV1,
+): Promise<GmgnDiscoverySnapshotV1 | null> {
+  const path = kind === "trending"
+    ? "/v1/market/rank" as const
+    : "/v1/market/hot_searches" as const;
+  const data = await gmgnJsonRequest(
+    path,
+    kind === "trending"
+      ? {
+          query: {
+            chain: "eth",
+            interval: normalized.interval,
+            limit: String(normalized.limit),
+            ...(normalized.orderBy === null
+              ? {}
+              : {
+                  order_by: normalized.orderBy,
+                  direction: normalized.direction ?? "desc",
+                }),
+          },
+          body: null,
+        }
+      : {
+          query: {},
+          body: {
+            params: [{
+              label: "hot-search",
+              chain: "eth",
+              interval: normalized.interval,
+              limit: normalized.limit,
+            }],
+          },
+        },
+    apiKey,
+    providerWait,
+  );
+  return parseGmgnDiscoverySnapshotV1(data, {
+    kind,
+    interval: normalized.interval,
+    ...(normalized.orderBy === null
+      ? {}
+      : {
+          orderBy: normalized.orderBy,
+          direction: normalized.direction ?? "desc",
+        }),
+    limit: normalized.limit,
+    fetchedAt: currentDate(providerWait),
+  });
+}
+
+async function readGmgnSearchSnapshotFromProviderV1(
+  normalizedQuery: string,
+  apiKey: string,
+  providerWait: GmgnDiscoveryReadWaitV1,
+): Promise<GmgnSearchSnapshotV1 | null> {
+  const data = await gmgnJsonRequest(
+    "/v1/market/search",
+    {
+      query: {
+        query: normalizedQuery,
+        chain: "eth",
+        order_by: "weight",
+      },
+      body: null,
+    },
+    apiKey,
+    providerWait,
+  );
+  return parseGmgnSearchSnapshotV1(data, {
+    query: normalizedQuery,
+    fetchedAt: currentDate(providerWait),
+  });
+}
+
+// The Next Data Cache shares completed discovery snapshots across serverless
+// isolates. A failed provider read rejects the fill so `null` and errors are
+// never persisted. The inner read keeps the existing account-gate and
+// singleflight lifecycle, but receives no caller signal or deadline.
+const readDurablyCachedGmgnDiscoverySnapshotV1 = unstable_cache(
+  async (
+    kind: GmgnDiscoveryKindV1,
+    interval: GmgnDiscoveryIntervalV1,
+    limit: number,
+    orderBy: "marketcap" | null,
+    direction: "asc" | "desc" | null,
+  ) => {
+    const apiKey = readApiKey();
+    if (apiKey === null) throw new Error("GMGN discovery is not configured");
+    const key = [
+      kind,
+      interval,
+      limit,
+      orderBy ?? "default",
+      direction ?? "default",
+    ].join(":");
+    const snapshot = await readThroughCache(
+      discoveryCache,
+      discoveryInFlight,
+      key,
+      {},
+      (providerWait) => readGmgnDiscoverySnapshotFromProviderV1(
+        kind,
+        { interval, limit, orderBy, direction },
+        apiKey,
+        providerWait,
+      ),
+    );
+    if (snapshot === null) {
+      throw new Error("GMGN discovery snapshot is unavailable");
+    }
+    return snapshot;
+  },
+  ["programmable-gmgn-ethereum-discovery-v2"],
+  { revalidate: GMGN_DURABLE_CACHE_REVALIDATE_SECONDS },
+);
+
+function durableCacheEligible(wait: GmgnDiscoveryReadWaitV1): boolean {
+  return wait.fetchImpl === undefined &&
+    wait.now === undefined &&
+    wait.accountGate === undefined;
+}
+
+function durableSnapshotCurrent(fetchedAt: string): boolean {
+  const fetchedAtMs = Date.parse(fetchedAt);
+  const nowMs = Date.now();
+  return Number.isFinite(fetchedAtMs) &&
+    fetchedAtMs <= nowMs &&
+    nowMs - fetchedAtMs <= GMGN_DURABLE_CACHE_MAXIMUM_AGE_MS;
 }
 
 async function readThroughCache<Value>(

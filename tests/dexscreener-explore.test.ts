@@ -13,7 +13,12 @@ vi.mock("../lib/market-data/dexscreener-shadow.server", () => ({
   readDexscreenerMarketShadowV1: mocks.readDex,
 }));
 
-import { readDexscreenerExploreEntriesV1 } from
+import {
+  DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS,
+  dexscreenerExploreObservationCurrentV1,
+  dexscreenerObservationFreshnessV1,
+  readDexscreenerExploreEntriesV1,
+} from
   "../lib/market-data/dexscreener-explore.server";
 
 const NOW = "2026-08-16T08:00:00.000Z";
@@ -60,6 +65,7 @@ function identity(token: Extract<ExploreEntry, { exploreKind: "token" }>) {
 function available(
   token: Extract<ExploreEntry, { exploreKind: "token" }>,
   qualified = true,
+  fetchedAt = NOW,
 ) {
   return {
     identity: identity(token),
@@ -68,7 +74,7 @@ function available(
       source: "dexscreener" as const,
       mode: "shadow" as const,
       currency: "USD" as const,
-      fetchedAt: NOW,
+      fetchedAt,
       pairAddress: token.poolId,
       priceUsdWad: "1000000000000000000",
       liquidityUsdWad: "20000000000000000000000",
@@ -175,37 +181,108 @@ describe("Dexscreener Explore adapter", () => {
       });
   });
 
-  it("derives freshness from fetchedAt and removes stale FDV qualification", async () => {
+  it("removes an observation that cannot remain current through the edge cache", async () => {
     vi.setSystemTime(Date.parse(NOW) + 5 * 60 * 1_000 + 1);
     const token = entry(1);
     mocks.readDex.mockResolvedValue(snapshot([available(token)]));
     const result = await readDexscreenerExploreEntriesV1([token]);
-    expect(result.entries[0]?.valuation).toMatchObject({
-      status: "available",
-      freshness: "stale",
-      asOfTime: NOW,
+    expect(result.entries[0]?.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
     });
-    expect(result.marketRead.qualifiedCount).toBe(0);
-    expect(result.marketRead.unavailableCount).toBe(1);
+    expect(result.marketRead).toMatchObject({
+      observedCount: 0,
+      qualifiedCount: 0,
+      unavailableCount: 1,
+      oldestFetchedAt: null,
+      newestFetchedAt: null,
+    });
     expect(valuationSortValue(result.entries[0]!)).toBeNull();
     expect(publicExploreEntryV1(result.entries[0]!)).not.toHaveProperty(
       "fdvUsdWad",
     );
   });
 
-  it("qualifies fetchedAt through exactly five minutes but never future data", async () => {
+  it("admits the exact cache-safe boundary but never future data", async () => {
     const token = entry(1);
     mocks.readDex.mockResolvedValue(snapshot([available(token)]));
-    vi.setSystemTime(Date.parse(NOW) + 5 * 60 * 1_000);
+    vi.setSystemTime(
+      Date.parse(NOW) + DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS,
+    );
     await expect(readDexscreenerExploreEntriesV1([token])).resolves.toMatchObject({
       entries: [{ valuation: { freshness: "provider-recent" } }],
       marketRead: { qualifiedCount: 1 },
     });
+    expect(dexscreenerObservationFreshnessV1(
+      NOW,
+      Date.parse(NOW) +
+        DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS + 60_000,
+    )).toBe("provider-recent");
+    expect(
+      DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS + 60_000,
+    ).toBeLessThan(5 * 60_000);
+
+    vi.setSystemTime(
+      Date.parse(NOW) +
+        DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS + 1,
+    );
+    await expect(readDexscreenerExploreEntriesV1([token])).resolves.toMatchObject({
+      entries: [{ valuation: { status: "unavailable" } }],
+      marketRead: {
+        observedCount: 0,
+        qualifiedCount: 0,
+        oldestFetchedAt: null,
+        newestFetchedAt: null,
+      },
+    });
 
     vi.setSystemTime(Date.parse(NOW) - 1);
     await expect(readDexscreenerExploreEntriesV1([token])).resolves.toMatchObject({
-      entries: [{ valuation: { freshness: "stale" } }],
+      entries: [{ valuation: { status: "unavailable" } }],
       marketRead: { qualifiedCount: 0 },
+    });
+  });
+
+  it("keeps the five-minute provider predicate separate from the cache-safe cutoff", () => {
+    const fetchedAtMs = Date.parse(NOW);
+    expect(dexscreenerObservationFreshnessV1(
+      NOW,
+      fetchedAtMs + 5 * 60 * 1_000,
+    )).toBe("provider-recent");
+    expect(dexscreenerExploreObservationCurrentV1(
+      NOW,
+      fetchedAtMs + DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS + 1,
+    )).toBe(false);
+  });
+
+  it("excludes an old cached token without discarding a current peer", async () => {
+    const oldToken = entry(1);
+    const currentToken = entry(2);
+    const oldFetchedAt = new Date(
+      Date.parse(NOW) -
+        DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS - 1,
+    ).toISOString();
+    mocks.readDex.mockResolvedValue(snapshot([
+      available(oldToken, true, oldFetchedAt),
+      available(currentToken),
+    ]));
+
+    const result = await readDexscreenerExploreEntriesV1([
+      oldToken,
+      currentToken,
+    ]);
+
+    expect(result.entries.map((item) => item.valuation.status)).toEqual([
+      "unavailable",
+      "available",
+    ]);
+    expect(result.observedEntryIds).toEqual([currentToken.id]);
+    expect(result.marketRead).toMatchObject({
+      observedCount: 1,
+      qualifiedCount: 1,
+      unavailableCount: 1,
+      oldestFetchedAt: NOW,
+      newestFetchedAt: NOW,
     });
   });
 

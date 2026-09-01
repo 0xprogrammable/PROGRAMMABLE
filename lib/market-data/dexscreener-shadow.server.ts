@@ -22,7 +22,10 @@ import {
 const DEXSCREENER_TOKENS_ENDPOINT =
   "https://api.dexscreener.com/tokens/v1/ethereum" as const;
 const DEFAULT_TIMEOUT_MS = 3_000;
-const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1_000;
+// Refresh successful provider observations before Explore's 235-second origin
+// admission boundary. This avoids an unavailable tail while preserving the
+// full 60-second public edge-cache freshness reserve.
+const DEFAULT_CACHE_TTL_MS = 3 * 60 * 1_000 + 30_000;
 const DEFAULT_FAILURE_CACHE_TTL_MS = 15_000;
 const DEFAULT_MAXIMUM_RESPONSE_BYTES = 2_000_000;
 const DEFAULT_MAXIMUM_ROWS_PER_BATCH = 1_000;

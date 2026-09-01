@@ -1720,6 +1720,7 @@ function routerCustomStagedFetch(
   {
     registryCustomStatus = "unavailable",
     routerCustomStatus = "current",
+    routerHeaderStatus = routerCustomStatus,
   } = {},
 ) {
   const routerCustomAvailable =
@@ -1813,6 +1814,7 @@ function routerCustomStagedFetch(
             "x-programmable-read-source": url.pathname.endsWith("/chart")
               ? `${launchSource}+bitquery`
               : `${launchSource}+dexscreener`,
+            "x-programmable-router-read-status": routerHeaderStatus,
           }
         : extraHeaders,
       omittedHeaders,
@@ -3709,6 +3711,145 @@ test("staged smoke binds market-cap ranking to the complete paged identity set",
 
   assert.equal(result.marketReadStatus, "unavailable");
   assert.equal(result.discoveryMatchedCount, 0);
+});
+
+test("staged smoke accepts current and last-known-good Router reads for one paged identity snapshot", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  const launchSource =
+    "envio-classic-v3+canonical-launch-stamp-router";
+  let sawLastKnownGoodPage = false;
+  const routerStatusFor = (url) => {
+    const lastKnownGood = url.pathname === "/api/explore" &&
+      url.searchParams.get("sort") === "market-cap" &&
+      url.searchParams.get("page") === "2";
+    if (lastKnownGood) sawLastKnownGoodPage = true;
+    return lastKnownGood ? "last-known-good" : "current";
+  };
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(
+      (input) => {
+        const body = paged(input);
+        if (![
+          "/api/explore",
+          "/api/explore/token",
+        ].includes(input.url.pathname)) return body;
+        return {
+          ...body,
+          catalog: {
+            ...body.catalog,
+            launchSource,
+            completeness: {
+              ...body.catalog.completeness,
+              routerCustom: routerStatusFor(input.url),
+            },
+            scope: {
+              ...body.catalog.scope,
+              included: [
+                ...body.catalog.scope.included,
+                "canonical-launch-stamp-router",
+              ],
+            },
+          },
+        };
+      },
+      ({ extraHeaders, omittedHeaders, url }) => {
+        if (![
+          "/api/explore",
+          "/api/explore/token",
+          "/api/explore/token/chart",
+        ].includes(url.pathname)) return { extraHeaders, omittedHeaders };
+        const provider = url.pathname.endsWith("/chart")
+          ? "bitquery"
+          : "dexscreener";
+        return {
+          extraHeaders: {
+            ...extraHeaders,
+            "x-programmable-launch-source": launchSource,
+            "x-programmable-read-source": `${launchSource}+${provider}`,
+            "x-programmable-router-read-status": routerStatusFor(url),
+          },
+          omittedHeaders,
+        };
+      },
+    ),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(sawLastKnownGoodPage, true);
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+});
+
+test("staged smoke keeps Router body and header status validation strict", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: routerCustomStagedFetch(
+        (value) => value,
+        {
+          routerCustomStatus: "current",
+          routerHeaderStatus: "last-known-good",
+        },
+      ),
+      appendOutput: () => undefined,
+    }),
+    /Highest market-cap response contract is invalid/u,
+  );
+});
+
+test("staged smoke retries identity drift before clamped page validation", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  const waits = [];
+  let snapshotAttempt = 0;
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch((input) => {
+      const body = paged(input);
+      if (
+        input.url.pathname === "/api/explore" &&
+        input.url.searchParams.get("sort") === "market-cap" &&
+        input.url.searchParams.get("page") === "1"
+      ) snapshotAttempt += 1;
+      if (
+        snapshotAttempt === 1 &&
+        input.url.pathname === "/api/explore" &&
+        input.url.searchParams.get("sort") === "market-cap" &&
+        input.url.searchParams.get("page") === "2"
+      ) {
+        return {
+          ...body,
+          page: 1,
+          catalog: {
+            ...body.catalog,
+            identityCommitment: `sha256:${"ef".repeat(32)}`,
+          },
+        };
+      }
+      return body;
+    }),
+    appendOutput: () => undefined,
+    waitForCatalogConvergence: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+  });
+
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+  assert.equal(snapshotAttempt, 2);
+  assert.deepEqual(waits, [16_000]);
 });
 
 test("staged smoke separates one Trending rank identity from monotonic freshness", async () => {

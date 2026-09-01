@@ -4,6 +4,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+const durableCacheHarness = vi.hoisted(() => ({
+  entries: new Map<string, Promise<unknown>>(),
+  productionAccountGate: vi.fn(),
+}));
+
+vi.mock("next/cache", () => ({
+  unstable_cache: <Arguments extends unknown[], Value>(
+    reader: (...args: Arguments) => Promise<Value>,
+    keyParts: string[] = [],
+  ) => (...args: Arguments): Promise<Value> => {
+    const key = JSON.stringify([keyParts, args]);
+    const cached = durableCacheHarness.entries.get(key);
+    if (cached !== undefined) return cached as Promise<Value>;
+    const pending = Promise.resolve().then(() => reader(...args)).catch(
+      (error) => {
+        if (durableCacheHarness.entries.get(key) === pending) {
+          durableCacheHarness.entries.delete(key);
+        }
+        throw error;
+      },
+    );
+    durableCacheHarness.entries.set(key, pending);
+    return pending;
+  },
+}));
+
+vi.mock("../lib/market-data/gmgn-account-gate.server", () => ({
+  getProductionGmgnAccountGateV1:
+    durableCacheHarness.productionAccountGate,
+}));
+
 import {
   normalizeGmgnSearchQueryV1,
   parseGmgnDiscoverySnapshotV1,
@@ -707,12 +738,15 @@ describe("GMGN canonical discovery intersection", () => {
 
 describe("GMGN discovery server adapter", () => {
   beforeEach(() => {
+    durableCacheHarness.entries.clear();
+    durableCacheHarness.productionAccountGate.mockReset();
     vi.stubEnv("GMGN_API_KEY", "");
     vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "");
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -986,6 +1020,303 @@ describe("GMGN discovery server adapter", () => {
     expect(first).toEqual(second);
     expect(second).toEqual(third);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares one successful rank snapshot across fresh server isolates", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate, reserveSlot } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(
+      rankResponse([providerToken(41, 1)]),
+    ), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const input = { interval: "1m" as const, limit: 41 };
+
+    const first = await readGmgnEthereumTrendingV1(input, {
+      deadlineMs: Date.now() + 5_000,
+    });
+    expect(first).toMatchObject({
+      tokens: [{ tokenAddress: address(41) }],
+    });
+
+    vi.resetModules();
+    const freshAdapter = await import(
+      "../lib/market-data/gmgn-discovery.server"
+    );
+    const second = await freshAdapter.readGmgnEthereumTrendingV1(input, {
+      deadlineMs: Date.now() + 5_000,
+    });
+
+    expect(second).toEqual(first);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(reserveSlot).toHaveBeenCalledOnce();
+    expect(reserveSlot).toHaveBeenCalledWith(expect.objectContaining({
+      cost: 1,
+      signal: undefined,
+    }));
+  });
+
+  it("keeps every finite durable discovery query key isolated", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const fetchImpl = vi.fn(async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v1/market/hot_searches") {
+        const body = JSON.parse(String(init?.body)) as {
+          params: Array<{ interval: string }>;
+        };
+        return new Response(JSON.stringify(hotResponse(
+          [providerToken(53, 1)],
+          body.params[0]?.interval,
+        )), { status: 200 });
+      }
+      return new Response(JSON.stringify(
+        rankResponse([providerToken(54 + fetchImpl.mock.calls.length, 1)]),
+      ), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    const wait = () => ({ deadlineMs: Date.now() + 5_000 });
+
+    const reads = [
+      readGmgnEthereumTrendingV1(
+        { interval: "1h", limit: 20 },
+        wait(),
+      ),
+      readGmgnEthereumTrendingV1(
+        { interval: "5m", limit: 20 },
+        wait(),
+      ),
+      readGmgnEthereumTrendingV1(
+        { interval: "1h", limit: 21 },
+        wait(),
+      ),
+      readGmgnEthereumTrendingV1(
+        {
+          interval: "1h",
+          limit: 20,
+          orderBy: "marketcap",
+          direction: "desc",
+        },
+        wait(),
+      ),
+      readGmgnEthereumTrendingV1(
+        {
+          interval: "1h",
+          limit: 20,
+          orderBy: "marketcap",
+          direction: "asc",
+        },
+        wait(),
+      ),
+      readGmgnEthereumHotSearchesV1(
+        { interval: "1h", limit: 20 },
+        wait(),
+      ),
+    ];
+
+    await expect(Promise.all(reads)).resolves.not.toContain(null);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    await expect(readGmgnEthereumTrendingV1(
+      { interval: "1h", limit: 20 },
+      wait(),
+    )).resolves.not.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps arbitrary search terms out of the durable cache", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(
+      searchResponse([{ chain: "eth", address: address(61) }]),
+    ), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+
+    await expect(readGmgnEthereumSearchV1("arbitrary-61", {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.not.toBeNull();
+    expect(durableCacheHarness.entries.size).toBe(0);
+
+    vi.resetModules();
+    const freshAdapter = await import(
+      "../lib/market-data/gmgn-discovery.server"
+    );
+    await expect(freshAdapter.readGmgnEthereumSearchV1("arbitrary-61", {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.not.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(durableCacheHarness.entries.size).toBe(0);
+  });
+
+  it("does not persist a null provider result in the durable cache", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 0,
+        chain: "sol",
+        data: { rank: [providerToken(72, 1)] },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(
+        rankResponse([providerToken(72, 1)]),
+      ), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const input = { interval: "6h" as const, limit: 72 };
+
+    await expect(readGmgnEthereumTrendingV1(input, {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toBeNull();
+    await expect(readGmgnEthereumTrendingV1(input, {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(72) }],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps shared authority within its public-safe age then fails closed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(
+      rankResponse([providerToken(75, 1)]),
+    ), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const input = { interval: "5m" as const, limit: 75 };
+
+    await expect(readGmgnEthereumTrendingV1(input, {
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(75) }],
+    });
+
+    await vi.advanceTimersByTimeAsync(235_000);
+    await expect(readGmgnEthereumTrendingV1(input, {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(75) }],
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(readGmgnEthereumTrendingV1(input, {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("does not start a durable fill for a caller that cannot wait", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate, reserveSlot } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const fetchImpl = vi.fn();
+    vi.stubGlobal("fetch", fetchImpl);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(readGmgnEthereumTrendingV1({
+      interval: "1m",
+      limit: 76,
+    }, {
+      signal: controller.signal,
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toBeNull();
+    await expect(readGmgnEthereumTrendingV1({
+      interval: "1m",
+      limit: 77,
+    }, {
+      deadlineMs: Date.now(),
+    })).resolves.toBeNull();
+
+    expect(durableCacheHarness.entries.size).toBe(0);
+    expect(reserveSlot).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("bounds a durable wait by the caller abort without cancelling its fill", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate, reserveSlot, complete } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const controller = new AbortController();
+    let releaseResponse!: () => void;
+    const responseReady = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const fetchImpl = vi.fn(async () => {
+      await responseReady;
+      return new Response(JSON.stringify(
+        rankResponse([providerToken(73, 1)]),
+      ), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    const input = { interval: "24h" as const, limit: 73 };
+    const aborted = readGmgnEthereumTrendingV1(input, {
+      signal: controller.signal,
+      deadlineMs: Date.now() + 5_000,
+    });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+
+    controller.abort();
+    await expect(aborted).resolves.toBeNull();
+    expect(reserveSlot).toHaveBeenCalledWith(expect.objectContaining({
+      signal: undefined,
+    }));
+
+    releaseResponse();
+    await expect(readGmgnEthereumTrendingV1(input, {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(73) }],
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledWith(RESERVATION);
+  });
+
+  it("bounds a durable wait by the caller deadline without cancelling its fill", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    let releaseResponse!: () => void;
+    const responseReady = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const fetchImpl = vi.fn(async () => {
+      await responseReady;
+      return new Response(JSON.stringify(
+        rankResponse([providerToken(74, 1)]),
+      ), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    const input = { interval: "1m" as const, limit: 74 };
+    const bounded = readGmgnEthereumTrendingV1(input, {
+      deadlineMs: NOW.getTime() + 1_000,
+    });
+    await vi.advanceTimersByTimeAsync(999);
+    let settled = false;
+    void bounded.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(bounded).resolves.toBeNull();
+    releaseResponse();
+    await expect(readGmgnEthereumTrendingV1(input, {
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(74) }],
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it("accepts the official 20 RPS ceiling and rejects 21 conservatively", async () => {

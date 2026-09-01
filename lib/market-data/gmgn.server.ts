@@ -133,9 +133,10 @@ export function gmgnVisibleMarketEntryEligibleV1(
   entry: ExploreEntry,
 ): boolean {
   const identities = exploreEntryMarketIdentitiesV1(entry);
+  const canonicalIdentities = gmgnCanonicalIdentitySetV1(identities);
   return canonicalSupplyV1(entry) !== null &&
     productionPoolManagerBoundV1(entry) &&
-    gmgnCanonicalIdentitySetV1(identities) !== null;
+    canonicalIdentities?.length === 1;
 }
 
 export async function readGmgnMarketSnapshotV1(

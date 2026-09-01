@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   eligible: vi.fn(),
   hydrate: vi.fn(),
   hydrationRequired: vi.fn(),
+  observationMaximumAgeMs: 235_000,
   readGmgn: vi.fn(),
   readDex: vi.fn(),
 }));
@@ -24,6 +25,18 @@ vi.mock("../lib/market-data/gmgn.server", () => ({
 
 vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
   DEXSCREENER_CURRENT_MAXIMUM_AGE_MS: 300_000,
+  DEXSCREENER_EXPLORE_OBSERVATION_MAXIMUM_AGE_MS:
+    mocks.observationMaximumAgeMs,
+  dexscreenerExploreObservationCurrentV1: (
+    fetchedAt: string,
+    nowMs = Date.now(),
+  ) => {
+    const fetchedAtMs = Date.parse(fetchedAt);
+    return Number.isFinite(fetchedAtMs) &&
+      Number.isFinite(nowMs) &&
+      nowMs >= fetchedAtMs &&
+      nowMs - fetchedAtMs <= mocks.observationMaximumAgeMs;
+  },
   readDexscreenerExploreEntriesV1: mocks.readDex,
 }));
 
@@ -266,7 +279,7 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
       requestedCount: 2,
       observedCount: 2,
       qualifiedCount: 2,
-      gmgnObservedCount: 2,
+      gmgnObservedCount: 1,
       gmgnQualifiedCount: 1,
       fallbackRequestedCount: 1,
       fallbackObservedCount: 1,
@@ -297,10 +310,202 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     expect(result.marketRead).toMatchObject({
       observedCount: 1,
       qualifiedCount: 1,
-      gmgnObservedCount: 1,
+      gmgnObservedCount: 0,
       gmgnQualifiedCount: 0,
       fallbackObservedCount: 1,
       fallbackQualifiedCount: 1,
+      oldestFetchedAt: NOW,
+      newestFetchedAt: NOW,
+    });
+  });
+
+  it("reserves enough freshness for the bounded Dexscreener fallback", async () => {
+    const first = entry(46);
+    const nearExpiryFetchedAt = new Date(
+      Date.parse(NOW) - mocks.observationMaximumAgeMs + 10_000 - 1,
+    ).toISOString();
+    mocks.readGmgn.mockResolvedValue(new Map([
+      [first.id, {
+        ...snapshot(first, "12000000000000000000000"),
+        fetchedAt: nearExpiryFetchedAt,
+      }],
+    ]));
+
+    const result = await readExploreMarketEntriesV1([first]);
+
+    expect(mocks.readDex).toHaveBeenCalledWith([first], {});
+    expect(result.entries[0]?.valuation).toMatchObject({
+      status: "available",
+      source: "dexscreener",
+    });
+    expect(result.entries[0]?.gmgnMarketData).toBeUndefined();
+    expect(result.marketRead).toMatchObject({
+      gmgnObservedCount: 0,
+      gmgnQualifiedCount: 0,
+      fallbackRequestedCount: 1,
+      fallbackObservedCount: 1,
+    });
+  });
+
+  it("rechecks an admitted GMGN snapshot after the fallback completes", async () => {
+    const first = entry(47);
+    const second = entry(48);
+    let clockMs = Date.parse(NOW);
+    const admittedFetchedAt = new Date(
+      clockMs - mocks.observationMaximumAgeMs + 15_000,
+    ).toISOString();
+    mocks.readGmgn.mockResolvedValue(new Map([
+      [first.id, {
+        ...snapshot(first, "12000000000000000000000"),
+        fetchedAt: admittedFetchedAt,
+      }],
+    ]));
+    mocks.readDex.mockImplementationOnce(async (
+      tokens: readonly ExploreEntry[],
+    ) => {
+      clockMs += 16_000;
+      const completedAt = new Date(clockMs).toISOString();
+      const value = dexRead(tokens);
+      return {
+        ...value,
+        entries: value.entries.map((token) => ({
+          ...token,
+          valuation: token.valuation.status === "available"
+            ? { ...token.valuation, asOfTime: completedAt }
+            : token.valuation,
+        })),
+        marketRead: {
+          ...value.marketRead,
+          oldestFetchedAt: completedAt,
+          newestFetchedAt: completedAt,
+        },
+      };
+    });
+
+    const result = await readExploreMarketEntriesV1([first, second], {
+      now: () => new Date(clockMs),
+    });
+
+    expect(mocks.readDex).toHaveBeenCalledWith(
+      [second],
+      expect.objectContaining({ now: expect.any(Function) }),
+    );
+    expect(result.entries[0]?.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
+    });
+    expect(result.entries[0]?.gmgnMarketData).toBeUndefined();
+    expect(result.entries[1]?.valuation).toMatchObject({
+      status: "available",
+      source: "dexscreener",
+    });
+    expect(result.marketRead).toMatchObject({
+      status: "partial",
+      requestedCount: 2,
+      observedCount: 1,
+      qualifiedCount: 1,
+      unavailableCount: 1,
+      gmgnObservedCount: 0,
+      gmgnQualifiedCount: 0,
+      fallbackRequestedCount: 1,
+      fallbackObservedCount: 1,
+      fallbackQualifiedCount: 1,
+    });
+  });
+
+  it("rejects a stale fallback window from the combined public read", async () => {
+    const first = entry(44);
+    const staleFetchedAt = new Date(
+      Date.parse(NOW) - mocks.observationMaximumAgeMs - 1,
+    ).toISOString();
+    mocks.readGmgn.mockResolvedValue(new Map());
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...first,
+        valuation: {
+          status: "available" as const,
+          metric: "fdv" as const,
+          supplyBasis: "total" as const,
+          currency: "usd" as const,
+          valueWad: "1900000000000000000000",
+          freshness: "provider-recent" as const,
+          source: "dexscreener" as const,
+          asOfTime: staleFetchedAt,
+        },
+      }],
+      observedEntryIds: [first.id],
+      marketRead: {
+        provider: "dexscreener" as const,
+        status: "complete" as const,
+        currency: "USD" as const,
+        requestedCount: 1,
+        observedCount: 1,
+        qualifiedCount: 1,
+        unavailableCount: 0,
+        oldestFetchedAt: staleFetchedAt,
+        newestFetchedAt: staleFetchedAt,
+      },
+    });
+
+    const result = await readExploreMarketEntriesV1([first]);
+
+    expect(result.entries[0]?.valuation).toEqual({
+      status: "unavailable",
+      reason: "source-unavailable",
+    });
+    expect(result.marketRead).toMatchObject({
+      status: "complete",
+      observedCount: 0,
+      qualifiedCount: 0,
+      fallbackObservedCount: 0,
+      fallbackQualifiedCount: 0,
+      oldestFetchedAt: null,
+      newestFetchedAt: null,
+    });
+    expect(exploreMarketSourcesV1(result.marketRead)).toEqual([]);
+    expect(exploreMarketPriceSourcesV1(result.marketRead)).toEqual([]);
+  });
+
+  it("evaluates the fallback window after the provider read completes", async () => {
+    const first = entry(45);
+    let clockMs = Date.parse(NOW);
+    const completedAt = new Date(clockMs + 1_000).toISOString();
+    mocks.readGmgn.mockResolvedValue(new Map());
+    mocks.readDex.mockImplementationOnce(async (
+      tokens: readonly ExploreEntry[],
+    ) => {
+      clockMs += 1_000;
+      const value = dexRead(tokens);
+      return {
+        ...value,
+        entries: value.entries.map((token) => ({
+          ...token,
+          valuation: token.valuation.status === "available"
+            ? { ...token.valuation, asOfTime: completedAt }
+            : token.valuation,
+        })),
+        marketRead: {
+          ...value.marketRead,
+          oldestFetchedAt: completedAt,
+          newestFetchedAt: completedAt,
+        },
+      };
+    });
+
+    const result = await readExploreMarketEntriesV1([first], {
+      now: () => new Date(clockMs),
+    });
+
+    expect(result.entries[0]?.valuation).toMatchObject({
+      status: "available",
+      source: "dexscreener",
+      asOfTime: completedAt,
+    });
+    expect(result.marketRead).toMatchObject({
+      observedCount: 1,
+      fallbackObservedCount: 1,
+      oldestFetchedAt: completedAt,
+      newestFetchedAt: completedAt,
     });
   });
 
@@ -338,13 +543,12 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     expect(result.marketRead).toMatchObject({
       observedCount: 1,
       qualifiedCount: 0,
-      gmgnObservedCount: 1,
+      gmgnObservedCount: 0,
       gmgnQualifiedCount: 0,
       fallbackObservedCount: 1,
       fallbackQualifiedCount: 0,
     });
     expect(exploreMarketSourcesV1(result.marketRead)).toEqual([
-      "gmgn",
       "dexscreener",
     ]);
     expect(exploreMarketPriceSourcesV1(result.marketRead)).toEqual([]);
@@ -390,14 +594,14 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
       reason: "source-unavailable",
     });
     expect(result.marketRead).toMatchObject({
-      observedCount: 1,
+      observedCount: 0,
       qualifiedCount: 0,
-      gmgnObservedCount: 1,
+      gmgnObservedCount: 0,
       gmgnQualifiedCount: 0,
       fallbackObservedCount: 0,
       fallbackQualifiedCount: 0,
     });
-    expect(exploreMarketSourcesV1(result.marketRead)).toEqual(["gmgn"]);
+    expect(exploreMarketSourcesV1(result.marketRead)).toEqual([]);
     expect(exploreMarketPriceSourcesV1(result.marketRead)).toEqual([]);
   });
 
@@ -686,16 +890,78 @@ describe("Explore GMGN primary with Dexscreener fallback", () => {
     expect(result.marketRead).toMatchObject({
       provider: "gmgn",
       status: "complete",
-      requestedCount: 2,
-      observedCount: 2,
+      requestedCount: 3,
+      observedCount: 3,
       qualifiedCount: 1,
-      unavailableCount: 1,
+      unavailableCount: 2,
       gmgnObservedCount: 1,
       gmgnQualifiedCount: 1,
-      fallbackRequestedCount: 1,
-      fallbackObservedCount: 1,
+      fallbackRequestedCount: 2,
+      fallbackObservedCount: 2,
       // Dex observed two identities, but its multi-market entry did not yield
       // one unambiguous displayed valuation.
+      fallbackQualifiedCount: 0,
+    });
+  });
+
+  it("keeps conflicted pool bindings out of GMGN and aggregate counters", async () => {
+    const peer = entry(32);
+    const conflictedFirst = entry(33);
+    const conflictedSecond = {
+      ...entry(34),
+      poolId: conflictedFirst.poolId,
+    };
+    mocks.readGmgn.mockResolvedValue(new Map([
+      [peer.id, snapshot(peer, "12000000000000000000000")],
+    ]));
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [conflictedFirst, conflictedSecond].map((token) => ({
+        ...token,
+        valuation: {
+          status: "unavailable" as const,
+          reason: "source-unavailable" as const,
+        },
+      })),
+      observedEntryIds: [],
+      marketRead: {
+        provider: "dexscreener" as const,
+        status: "complete" as const,
+        currency: "USD" as const,
+        requestedCount: 0,
+        observedCount: 0,
+        qualifiedCount: 0,
+        unavailableCount: 0,
+        oldestFetchedAt: null,
+        newestFetchedAt: null,
+      },
+    });
+
+    const result = await readExploreMarketEntriesV1([
+      peer,
+      conflictedFirst,
+      conflictedSecond,
+    ]);
+
+    expect(mocks.readGmgn).toHaveBeenCalledWith([peer], expect.any(Object));
+    expect(mocks.readDex).toHaveBeenCalledWith(
+      [conflictedFirst, conflictedSecond],
+      {},
+    );
+    expect(result.entries[0]?.valuation).toMatchObject({ source: "gmgn" });
+    expect(result.entries.slice(1).every((token) =>
+      token.valuation.status === "unavailable"
+    )).toBe(true);
+    expect(result.marketRead).toMatchObject({
+      provider: "gmgn",
+      status: "complete",
+      requestedCount: 1,
+      observedCount: 1,
+      qualifiedCount: 1,
+      unavailableCount: 0,
+      gmgnObservedCount: 1,
+      gmgnQualifiedCount: 1,
+      fallbackRequestedCount: 0,
+      fallbackObservedCount: 0,
       fallbackQualifiedCount: 0,
     });
   });
