@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import ts from "typescript";
+
 const APPROVED_OPERATIONS = Object.freeze({
   legacyIndexer: Object.freeze({
     path: "/api/ops/index-v2",
@@ -526,6 +528,469 @@ function includesEverySourceFragment(source, fragments) {
   return fragments.every((fragment) =>
     compactSource.includes(fragment.replace(/\s+/gu, ""))
   );
+}
+
+const GMGN_READ_ONLY_ENDPOINT_CONTRACT = Object.freeze([
+  Object.freeze({
+    path: "lib/market-data/gmgn.server.ts",
+    fetchImplReferences: 8,
+    pathReferences: 2,
+    allowed: Object.freeze(["/v1/token/info"]),
+    calls: Object.freeze([
+      Object.freeze(["/v1/token/info"]),
+    ]),
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-chart.server.ts",
+    fetchImplReferences: 8,
+    pathReferences: 3,
+    allowed: Object.freeze([
+      "/v1/market/token_kline",
+      "/v1/token/info",
+    ]),
+    calls: Object.freeze([
+      Object.freeze(["/v1/market/token_kline"]),
+      Object.freeze(["/v1/token/info"]),
+    ]),
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-token-analytics.server.ts",
+    fetchImplReferences: 8,
+    pathReferences: 7,
+    allowed: Object.freeze([
+      "/v1/market/token_top_holders",
+      "/v1/market/token_top_traders",
+      "/v1/token/pool_info",
+      "/v1/token/security",
+    ]),
+    calls: Object.freeze([
+      Object.freeze(["/v1/token/security"]),
+      Object.freeze(["/v1/token/pool_info"]),
+      Object.freeze([
+        "/v1/market/token_top_holders",
+        "/v1/market/token_top_traders",
+      ]),
+    ]),
+  }),
+  Object.freeze({
+    path: "lib/market-data/gmgn-discovery.server.ts",
+    fetchImplReferences: 7,
+    pathReferences: 7,
+    allowed: Object.freeze([
+      "/v1/market/hot_searches",
+      "/v1/market/rank",
+    ]),
+    calls: Object.freeze([
+      Object.freeze([
+        "/v1/market/hot_searches",
+        "/v1/market/rank",
+      ]),
+    ]),
+  }),
+]);
+
+const PUBLIC_WALLET_FIELDS = Object.freeze([
+  "address",
+  "usdValue",
+  "amountRatio",
+  "buyVolumeUsd",
+  "sellVolumeUsd",
+  "profitUsd",
+  "profitRatio",
+]);
+
+const ANALYTICS_PROVIDER_READS = Object.freeze([
+  "readGmgnTokenSecurityV1",
+  "readGmgnTokenPoolInfoV1",
+  "readGmgnTokenTopHoldersV1",
+  "readGmgnTokenTopTradersV1",
+]);
+
+function reviewedTypeScriptSource(path, source) {
+  if (typeof source !== "string") return null;
+  const parsed = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  return parsed.parseDiagnostics.length === 0 ? parsed : null;
+}
+
+function collectTypeScriptNodes(root, predicate) {
+  const matches = [];
+  const visit = (node) => {
+    if (predicate(node)) matches.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(root);
+  return matches;
+}
+
+function unwrapReviewedExpression(value) {
+  let expression = value;
+  while (
+    ts.isParenthesizedExpression(expression) ||
+    ts.isAsExpression(expression) ||
+    ts.isTypeAssertionExpression(expression) ||
+    ts.isNonNullExpression(expression) ||
+    ts.isSatisfiesExpression(expression)
+  ) expression = expression.expression;
+  return expression;
+}
+
+function exactIdentifier(value, expected) {
+  const expression = unwrapReviewedExpression(value);
+  return ts.isIdentifier(expression) && expression.text === expected;
+}
+
+function constVariableDeclarations(sourceFile) {
+  const declarations = new Map();
+  for (const declaration of collectTypeScriptNodes(
+    sourceFile,
+    (node) => ts.isVariableDeclaration(node),
+  )) {
+    if (
+      !ts.isIdentifier(declaration.name) ||
+      declaration.initializer === undefined ||
+      !ts.isVariableDeclarationList(declaration.parent) ||
+      (declaration.parent.flags & ts.NodeFlags.Const) === 0
+    ) continue;
+    const existing = declarations.get(declaration.name.text) ?? [];
+    existing.push(declaration);
+    declarations.set(declaration.name.text, existing);
+  }
+  return declarations;
+}
+
+function staticEndpointValues(expression, declarations, seen = new Set()) {
+  const value = unwrapReviewedExpression(expression);
+  if (ts.isStringLiteral(value)) return [value.text];
+  if (ts.isNoSubstitutionTemplateLiteral(value)) return [value.text];
+  if (ts.isConditionalExpression(value)) {
+    const whenTrue = staticEndpointValues(value.whenTrue, declarations, seen);
+    const whenFalse = staticEndpointValues(value.whenFalse, declarations, seen);
+    return whenTrue === null || whenFalse === null
+      ? null
+      : [...new Set([...whenTrue, ...whenFalse])].sort();
+  }
+  if (!ts.isIdentifier(value) || seen.has(value.text)) return null;
+  const candidates = declarations.get(value.text) ?? [];
+  if (candidates.length !== 1) return null;
+  const nextSeen = new Set(seen);
+  nextSeen.add(value.text);
+  return staticEndpointValues(
+    candidates[0].initializer,
+    declarations,
+    nextSeen,
+  );
+}
+
+function typeAliasDeclarations(sourceFile) {
+  const aliases = new Map();
+  for (const declaration of sourceFile.statements) {
+    if (!ts.isTypeAliasDeclaration(declaration)) continue;
+    const existing = aliases.get(declaration.name.text) ?? [];
+    existing.push(declaration);
+    aliases.set(declaration.name.text, existing);
+  }
+  return aliases;
+}
+
+function staticEndpointTypeValues(typeNode, aliases, seen = new Set()) {
+  if (ts.isLiteralTypeNode(typeNode) && ts.isStringLiteral(typeNode.literal)) {
+    return [typeNode.literal.text];
+  }
+  if (ts.isUnionTypeNode(typeNode)) {
+    const values = typeNode.types.map((member) =>
+      staticEndpointTypeValues(member, aliases, seen)
+    );
+    return values.some((value) => value === null)
+      ? null
+      : [...new Set(values.flat())].sort();
+  }
+  if (
+    !ts.isTypeReferenceNode(typeNode) ||
+    !ts.isIdentifier(typeNode.typeName) ||
+    seen.has(typeNode.typeName.text)
+  ) return null;
+  const candidates = aliases.get(typeNode.typeName.text) ?? [];
+  if (candidates.length !== 1) return null;
+  const nextSeen = new Set(seen);
+  nextSeen.add(typeNode.typeName.text);
+  return staticEndpointTypeValues(candidates[0].type, aliases, nextSeen);
+}
+
+function gmgnEndpointFragments(sourceFile) {
+  return collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isStringLiteral(node) ||
+    ts.isNoSubstitutionTemplateLiteral(node) ||
+    ts.isTemplateHead(node) ||
+    ts.isTemplateMiddle(node) ||
+    ts.isTemplateTail(node)
+  ).map((node) => node.text).filter((value) => value.includes("/v1/"));
+}
+
+function identifierCount(sourceFile, name) {
+  return collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isIdentifier(node) && node.text === name
+  ).length;
+}
+
+function exactReviewedUrlUsage(sourceFile, constructor, fetchCall) {
+  const references = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isIdentifier(node) && node.text === "url"
+  );
+  let declarationCount = 0;
+  let searchParameterCount = 0;
+  let fetchArgumentCount = 0;
+  for (const reference of references) {
+    const parent = reference.parent;
+    if (
+      ts.isVariableDeclaration(parent) &&
+      parent.name === reference &&
+      parent.initializer !== undefined &&
+      unwrapReviewedExpression(parent.initializer) === constructor
+    ) {
+      declarationCount += 1;
+      continue;
+    }
+    if (
+      ts.isPropertyAccessExpression(parent) &&
+      parent.expression === reference &&
+      parent.name.text === "searchParams" &&
+      ts.isPropertyAccessExpression(parent.parent) &&
+      parent.parent.expression === parent &&
+      parent.parent.name.text === "set" &&
+      ts.isCallExpression(parent.parent.parent) &&
+      parent.parent.parent.expression === parent.parent
+    ) {
+      searchParameterCount += 1;
+      continue;
+    }
+    if (
+      ts.isCallExpression(parent) &&
+      parent === fetchCall &&
+      parent.arguments[0] === reference
+    ) {
+      fetchArgumentCount += 1;
+      continue;
+    }
+    return false;
+  }
+  return references.length === 5 &&
+    declarationCount === 1 &&
+    searchParameterCount === 3 &&
+    fetchArgumentCount === 1;
+}
+
+function exactGmgnEndpointClientContract(sourceFile, contract) {
+  const declarations = constVariableDeclarations(sourceFile);
+  const aliases = typeAliasDeclarations(sourceFile);
+  const requestFunctions = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "gmgnJsonRequest"
+  );
+  if (requestFunctions.length !== 1) return false;
+  const pathType = requestFunctions[0].parameters[0]?.type;
+  if (pathType === undefined) return false;
+  const allowed = [...contract.allowed].sort();
+  if (!exactJson(staticEndpointTypeValues(pathType, aliases), allowed)) {
+    return false;
+  }
+
+  const requestCalls = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isCallExpression(node) && exactIdentifier(node.expression, "gmgnJsonRequest")
+  ).sort((left, right) => left.getStart(sourceFile) - right.getStart(sourceFile));
+  const callEndpoints = requestCalls.map((call) =>
+    call.arguments[0] === undefined
+      ? null
+      : staticEndpointValues(call.arguments[0], declarations)
+  );
+  if (!exactJson(callEndpoints, contract.calls)) return false;
+
+  if (
+    identifierCount(sourceFile, "gmgnJsonRequest") !==
+      contract.calls.length + 1 ||
+    identifierCount(sourceFile, "fetchImpl") !== contract.fetchImplReferences ||
+    identifierCount(sourceFile, "fetch") !== 3 ||
+    identifierCount(sourceFile, "URL") !== 1 ||
+    identifierCount(sourceFile, "GMGN_API_ORIGIN") !== 2 ||
+    identifierCount(sourceFile, "path") !== contract.pathReferences
+  ) return false;
+
+  const endpointFragments = gmgnEndpointFragments(sourceFile);
+  if (endpointFragments.some((value) => !allowed.includes(value))) return false;
+
+  const urlConstructors = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isNewExpression(node) && exactIdentifier(node.expression, "URL")
+  );
+  if (
+    urlConstructors.length !== 1 ||
+    urlConstructors[0].arguments?.length !== 2 ||
+    !exactIdentifier(urlConstructors[0].arguments[0], "path") ||
+    !exactIdentifier(urlConstructors[0].arguments[1], "GMGN_API_ORIGIN")
+  ) return false;
+
+  const networkCalls = collectTypeScriptNodes(sourceFile, (node) => {
+    if (!ts.isCallExpression(node)) return false;
+    const callee = unwrapReviewedExpression(node.expression);
+    return (
+      ts.isIdentifier(callee) && ["fetch", "fetchImpl"].includes(callee.text)
+    ) || (
+      ts.isPropertyAccessExpression(callee) && callee.name.text === "fetch"
+    );
+  });
+  return networkCalls.length === 1 &&
+    exactIdentifier(networkCalls[0].expression, "fetchImpl") &&
+    networkCalls[0].arguments.length >= 1 &&
+    exactIdentifier(networkCalls[0].arguments[0], "url") &&
+    exactReviewedUrlUsage(sourceFile, urlConstructors[0], networkCalls[0]);
+}
+
+function exactGmgnReadOnlyEndpointContract(sourceByPath) {
+  return GMGN_READ_ONLY_ENDPOINT_CONTRACT.every((contract) => {
+    const sourceFile = reviewedTypeScriptSource(
+      contract.path,
+      sourceByPath.get(contract.path),
+    );
+    return sourceFile !== null &&
+      exactGmgnEndpointClientContract(sourceFile, contract);
+  });
+}
+
+function directCallName(value) {
+  const expression = unwrapReviewedExpression(value);
+  return ts.isIdentifier(expression) ? expression.text : null;
+}
+
+function nearestFunctionLike(node) {
+  let current = node.parent;
+  while (current !== undefined) {
+    if (ts.isFunctionLike(current)) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
+function exactAnalyticsProofReadBoundary(source) {
+  const sourceFile = reviewedTypeScriptSource(
+    "app/api/explore/token/analytics/route.ts",
+    source,
+  );
+  if (sourceFile === null) return false;
+  const getFunctions = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "GET"
+  );
+  if (getFunctions.length !== 1 || getFunctions[0].body === undefined) {
+    return false;
+  }
+  const getFunction = getFunctions[0];
+  const allCalls = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isCallExpression(node)
+  );
+  const proofCalls = allCalls.filter((call) =>
+    directCallName(call.expression) === "readGmgnMarketSnapshotV1"
+  );
+  const providerCalls = Object.fromEntries(
+    ANALYTICS_PROVIDER_READS.map((name) => [
+      name,
+      allCalls.filter((call) => directCallName(call.expression) === name),
+    ]),
+  );
+  if (
+    proofCalls.length !== 1 ||
+    ANALYTICS_PROVIDER_READS.some((name) => providerCalls[name].length !== 1)
+  ) return false;
+  for (const name of ["readGmgnMarketSnapshotV1", ...ANALYTICS_PROVIDER_READS]) {
+    const identifiers = collectTypeScriptNodes(sourceFile, (node) =>
+      ts.isIdentifier(node) && node.text === name
+    );
+    if (identifiers.length !== 2) return false;
+  }
+
+  const verificationGuards = collectTypeScriptNodes(getFunction.body, (node) =>
+    ts.isIfStatement(node) &&
+    node.expression.getText(sourceFile).replace(/\s+/gu, "") ===
+      "verification===null"
+  );
+  if (verificationGuards.length !== 1) return false;
+  const guard = verificationGuards[0];
+  if (
+    proofCalls[0].getStart(sourceFile) >= guard.getStart(sourceFile) ||
+    proofCalls[0].getStart(sourceFile) < getFunction.body.getStart(sourceFile) ||
+    nearestFunctionLike(proofCalls[0]) !== getFunction
+  ) return false;
+  return ANALYTICS_PROVIDER_READS.every((name) => {
+    const call = providerCalls[name][0];
+    return call.getStart(sourceFile) > guard.end &&
+      call.end < getFunction.body.end &&
+      nearestFunctionLike(call) === getFunction;
+  });
+}
+
+function directPropertyName(property) {
+  return ts.isIdentifier(property.name) ? property.name.text : null;
+}
+
+function exactPublicWalletProjection(source) {
+  const sourceFile = reviewedTypeScriptSource(
+    "app/api/explore/token/analytics/route.ts",
+    source,
+  );
+  if (sourceFile === null) return false;
+  const functions = collectTypeScriptNodes(sourceFile, (node) =>
+    ts.isFunctionDeclaration(node) &&
+    node.name?.text === "publicWalletRankingV1"
+  );
+  if (functions.length !== 1 || functions[0].body === undefined) return false;
+  const returns = collectTypeScriptNodes(functions[0].body, (node) =>
+    ts.isReturnStatement(node)
+  );
+  if (returns.length !== 1 || returns[0].expression === undefined) return false;
+  const outer = unwrapReviewedExpression(returns[0].expression);
+  if (!ts.isObjectLiteralExpression(outer) || outer.properties.length !== 2) {
+    return false;
+  }
+  const outerProperties = outer.properties;
+  if (
+    outerProperties.some((property) => !ts.isPropertyAssignment(property)) ||
+    !exactJson(outerProperties.map(directPropertyName), ["fetchedAt", "wallets"])
+  ) return false;
+  const fetchedAt = unwrapReviewedExpression(outerProperties[0].initializer);
+  const wallets = unwrapReviewedExpression(outerProperties[1].initializer);
+  if (
+    !ts.isPropertyAccessExpression(fetchedAt) ||
+    !exactIdentifier(fetchedAt.expression, "value") ||
+    fetchedAt.name.text !== "fetchedAt" ||
+    !ts.isCallExpression(wallets) ||
+    !ts.isPropertyAccessExpression(wallets.expression) ||
+    wallets.expression.name.text !== "map" ||
+    !ts.isPropertyAccessExpression(wallets.expression.expression) ||
+    !exactIdentifier(wallets.expression.expression.expression, "value") ||
+    wallets.expression.expression.name.text !== "wallets" ||
+    wallets.arguments.length !== 1
+  ) return false;
+  const mapper = unwrapReviewedExpression(wallets.arguments[0]);
+  if (
+    !ts.isArrowFunction(mapper) ||
+    mapper.parameters.length !== 1 ||
+    !ts.isIdentifier(mapper.parameters[0].name) ||
+    mapper.parameters[0].name.text !== "wallet"
+  ) return false;
+  const projection = unwrapReviewedExpression(mapper.body);
+  if (
+    !ts.isObjectLiteralExpression(projection) ||
+    projection.properties.length !== PUBLIC_WALLET_FIELDS.length ||
+    projection.properties.some((property) => !ts.isPropertyAssignment(property)) ||
+    !exactJson(projection.properties.map(directPropertyName), PUBLIC_WALLET_FIELDS)
+  ) return false;
+  return projection.properties.every((property, index) => {
+    const value = unwrapReviewedExpression(property.initializer);
+    return ts.isPropertyAccessExpression(value) &&
+      exactIdentifier(value.expression, "wallet") &&
+      value.name.text === PUBLIC_WALLET_FIELDS[index];
+  });
 }
 
 export const STAGED_MARKET_EVIDENCE_SOURCE_GUARDS = Object.freeze([
@@ -1953,6 +2418,8 @@ export function evaluateReadModelOperationsSourceContracts(
   const publicExplore = source("app/api/explore/route.ts") ?? "";
   const publicToken = source("app/api/explore/token/route.ts") ?? "";
   const publicChart = source("app/api/explore/token/chart/route.ts") ?? "";
+  const publicTokenAnalytics =
+    source("app/api/explore/token/analytics/route.ts") ?? "";
   const routerCustomPublic =
     source("lib/alchemy/router-custom-public.server.ts") ?? "";
   const envioClassicV3Catalog =
@@ -1966,6 +2433,27 @@ export function evaluateReadModelOperationsSourceContracts(
   const exploreMarket =
     source("lib/market-data/explore-market.server.ts") ?? "";
   const gmgnMarket = source("lib/market-data/gmgn.server.ts") ?? "";
+  const gmgnChart = source("lib/market-data/gmgn-chart.server.ts") ?? "";
+  const gmgnChartSnapshot =
+    source("lib/market-data/gmgn-chart-data-v1.ts") ?? "";
+  const gmgnTokenAnalytics =
+    source("lib/market-data/gmgn-token-analytics.server.ts") ?? "";
+  const gmgnTokenAnalyticsSnapshot =
+    source("lib/market-data/gmgn-token-analytics-v1.ts") ?? "";
+  const gmgnDiscovery =
+    source("lib/market-data/gmgn-discovery.server.ts") ?? "";
+  const gmgnDiscoverySnapshot =
+    source("lib/market-data/gmgn-discovery-v1.ts") ?? "";
+  const gmgnCanonicalRanking =
+    source("lib/market-data/gmgn-canonical-ranking.ts") ?? "";
+  const gmgnReadOnlyEndpointBoundary = exactGmgnReadOnlyEndpointContract(
+    new Map([
+      ["lib/market-data/gmgn.server.ts", gmgnMarket],
+      ["lib/market-data/gmgn-chart.server.ts", gmgnChart],
+      ["lib/market-data/gmgn-token-analytics.server.ts", gmgnTokenAnalytics],
+      ["lib/market-data/gmgn-discovery.server.ts", gmgnDiscovery],
+    ]),
+  );
   const gmgnAccountGate =
     source("lib/market-data/gmgn-account-gate.server.ts") ?? "";
   const gmgnSnapshot =
@@ -1988,6 +2476,40 @@ export function evaluateReadModelOperationsSourceContracts(
     source("lib/server/action-rpc-identity.server.ts") ?? "";
   const primaryRpcLaunchCatalog =
     source("lib/market-data/primary-rpc-launches.server.ts") ?? "";
+  const publicWalletRankingStart = publicTokenAnalytics.indexOf(
+    "function publicWalletRankingV1(",
+  );
+  const publicWalletRankingEnd = publicTokenAnalytics.indexOf(
+    "\nfunction analyticsResponse(",
+    publicWalletRankingStart,
+  );
+  const publicWalletRankingBlock =
+    publicWalletRankingStart >= 0 &&
+      publicWalletRankingEnd > publicWalletRankingStart
+      ? publicTokenAnalytics.slice(
+          publicWalletRankingStart,
+          publicWalletRankingEnd,
+        )
+      : "";
+  const analyticsProofReadBoundary = exactAnalyticsProofReadBoundary(
+    publicTokenAnalytics,
+  );
+  const publicWalletProjectionBoundary = exactPublicWalletProjection(
+    publicTokenAnalytics,
+  );
+  const gmgnChartReadStart = publicChart.indexOf("gmgnChart = await readGmgnMarketChartV1({");
+  const gmgnChartAcceptanceStart = publicChart.indexOf(
+    "if (isFreshExactReadyGmgnChart(",
+    gmgnChartReadStart,
+  );
+  const bitqueryChartFallbackStart = publicChart.indexOf(
+    "const bitqueryChart = await readBitqueryMarketChartV1({",
+    gmgnChartAcceptanceStart,
+  );
+  const chartPreferenceStart = publicChart.indexOf(
+    "const chart = preferExactGmgnMarketChartV1({",
+    bitqueryChartFallbackStart,
+  );
   const primaryResolverStart = websiteRpcProviders.indexOf(
     "export function productionMainnetRpcPrimary(",
   );
@@ -2140,6 +2662,7 @@ export function evaluateReadModelOperationsSourceContracts(
     "MARKET_READ_STATUS: $\{{ steps.public-provider-smoke.outputs.market_read_status }}",
     "DETAIL_MARKET_PROVIDER: $\{{ steps.public-provider-smoke.outputs.detail_market_provider }}",
     "DETAIL_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.detail_status }}",
+    "CHART_PROVIDER: $\{{ steps.public-provider-smoke.outputs.chart_provider }}",
     "CHART_SMOKE_STATUS: $\{{ steps.public-provider-smoke.outputs.chart_status }}",
     'echo "- Visible market provider: \\`${MARKET_PROVIDER:-not-run}\\`"',
     'echo "- Explore market read status: \\`${MARKET_READ_STATUS:-not-run}\\`"',
@@ -2147,6 +2670,7 @@ export function evaluateReadModelOperationsSourceContracts(
     'echo "- Token detail smoke: \\`${DETAIL_SMOKE_STATUS:-not-run}\\`"',
     'echo "- Full-catalog FDV ranking provider: Dexscreener"',
     'echo "- GMGN market required by staged public smoke: \\`$GMGN_MARKET_REQUIRED\\`"',
+    'echo "- Market chart provider: \\`${CHART_PROVIDER:-not-run}\\`"',
     'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
   ]);
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
@@ -2274,7 +2798,7 @@ export function evaluateReadModelOperationsSourceContracts(
     ]) &&
     includesEverySourceFragment(gmgnMarket, [
       'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
-      "const GMGN_REQUEST_TIMEOUT_MS = 1_500",
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
       "const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000",
       "const GMGN_MAXIMUM_CONCURRENCY = 3",
       "const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000",
@@ -2294,14 +2818,26 @@ export function evaluateReadModelOperationsSourceContracts(
       "const bytes = await readBoundedResponseBytes(",
       "const rateLimited = response.status === 429 || isRateLimitedEnvelope(value);",
       '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
-      "accountGate.reserveSlot({",
-      "await accountGate.blockUntil({",
+      "const pending = accountGate.reserveSlot(input);",
+      "const settled = await settleProviderOperation(pending, operation);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      "const pending = accountGate.blockUntil({",
       "blockedUntilMs: providerCooldownFromResponse(",
-      "await accountGate.complete(reservation);",
+      "accountGate.complete(reservation),",
+      "return settled !== PROVIDER_OPERATION_TIMED_OUT;",
+      "if (!callerCanAwaitSharedRead(wait, nowMs)) return null;",
+      "if (active) return awaitSharedReadForCaller(active, wait);",
+      "if (snapshot !== null) {",
+      "!hasExactOptionalEthereumChain(response)",
+      "!hasExactOptionalEthereumChain(data)",
+      "return value;",
       "canonicalSafeInteger(envelope.reset_at)",
       "process.env.GMGN_API_KEY?.trim()",
       'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1"',
+      "value >= 1 && value <= 20 ? value : 1",
     ]) &&
+    !gmgnMarket.includes("CachedValue<GmgnMarketSnapshotV1 | null>") &&
     includesEverySourceFragment(gmgnAccountGate, [
       'const GATE_ID = "gmgn-openapi-v1" as const',
       "lease_holder = $3::uuid",
@@ -2312,6 +2848,10 @@ export function evaluateReadModelOperationsSourceContracts(
       "AND gate.lease_holder = $3::uuid",
       '"GMGN account gate lease is stale or unavailable"',
       "assertReady: () => pool.assertGmgnAccountGateReadiness()",
+      "input.requestsPerSecond > 20",
+      "!isGmgnAccountGateCostV1(cost)",
+      "const GMGN_ACCOUNT_GATE_COSTS = [1, 2, 3, 5] as const",
+      "+ ($1::integer * $4::integer * INTERVAL '1 millisecond')",
     ]) &&
     includesEverySourceFragment(gmgnSnapshot, [
       '"programmable.gmgn-market-snapshot.v1" as const',
@@ -2321,6 +2861,147 @@ export function evaluateReadModelOperationsSourceContracts(
       "positiveInteger(value.fdvUsdWad)",
       "positiveInteger(value.liquidityUsdWad)",
     ]) &&
+    includesEverySourceFragment(gmgnChart, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      '"/v1/token/info"',
+      '"/v1/market/token_kline"',
+      'cost: path === "/v1/market/token_kline" ? 2 : 1',
+      "expectedIdentity.chainId !== \"1\"",
+      'expectedIdentity.protocol !== "uniswap_v4"',
+      "tokenAddress !== expectedIdentity.tokenAddress",
+      "poolId !== expectedIdentity.poolId",
+      "biggestPoolId !== expectedIdentity.poolId",
+      "quoteAddress !== expectedIdentity.quoteAddress",
+      "declaredBaseAddress !== expectedIdentity.tokenAddress",
+      "![token0Address, token1Address].includes(expectedIdentity.tokenAddress)",
+      "![token0Address, token1Address].includes(expectedIdentity.quoteAddress)",
+      'String(pool.exchange).toLowerCase() !== "uniswap_v4"',
+      "!hasExactOptionalEthereumChain(response)",
+      "!hasExactOptionalEthereumChain(data)",
+      "return value;",
+      "!providerSupplyMatchesCanonical(",
+      'valueSemantics: "period-close" as const',
+      "const proof = await readGmgnChartIdentityProofV1(",
+      "if (proof === null) return null;",
+      "if (proof !== null) {",
+      "if (chart !== null) {",
+      "const pending = accountGate.reserveSlot(input);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1"',
+      "value >= 1 && value <= 20 ? value : 1",
+      'redirect: "error"',
+      'credentials: "omit"',
+    ]) &&
+    (gmgnChart.match(/!hasExactOptionalEthereumChain\(response\)/gu)?.length ?? 0) === 2 &&
+    (gmgnChart.match(/!hasExactOptionalEthereumChain\(data\)/gu)?.length ?? 0) === 2 &&
+    !gmgnChart.includes("CachedValue<GmgnMarketChartV1 | null>") &&
+    !gmgnChart.includes("CachedValue<GmgnChartIdentityProofV1 | null>") &&
+    includesEverySourceFragment(gmgnChartSnapshot, [
+      '"programmable.gmgn-market-chart.v1" as const',
+      '"programmable.gmgn-chart-identity-proof.v1" as const',
+      'source: "gmgn-token-info"',
+      'valueSemantics: "period-close"',
+      "!sameIdentity(value.identity, value.identityProof.identity)",
+      "value.time !== value.bucketEnd",
+      "totalVolume.toString() !== value.volumeUsdWad",
+      "isGmgnMarketChartForIdentityV1(",
+      "return gmgnQuality > fallbackQuality ? input.candidate : input.fallback;",
+    ]) &&
+    includesEverySourceFragment(gmgnTokenAnalytics, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      '"/v1/token/security"',
+      '"/v1/token/pool_info"',
+      '"/v1/market/token_top_holders"',
+      '"/v1/market/token_top_traders"',
+      'return path.includes("token_top_") ? 5 : 1;',
+      "!providerEthereumChainMatchesIfPresent(response, data)",
+      "data.list.some((row) => !providerEthereumChainMatchesIfPresent(row))",
+      "return envelope;",
+      "poolAddress !== identity.poolId",
+      "quoteAddress !== identity.quoteAddress",
+      'String(data.exchange).toLowerCase() !== "uniswap_v4"',
+      "const providerWait = sharedProviderWait(wait);",
+      "if (value !== null) {",
+      "const pending = accountGate.reserveSlot(input);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1"',
+      "value >= 1 && value <= 20 ? value : 1",
+      'redirect: "error"',
+      'credentials: "omit"',
+    ]) &&
+    !gmgnTokenAnalytics.includes("CachedValue<GmgnTokenSecurityV1 | null>") &&
+    !gmgnTokenAnalytics.includes("CachedValue<GmgnTokenPoolInfoV1 | null>") &&
+    !gmgnTokenAnalytics.includes("CachedValue<GmgnTokenWalletRankingV1 | null>") &&
+    includesEverySourceFragment(gmgnTokenAnalyticsSnapshot, [
+      '"programmable.gmgn-token-security.v1" as const',
+      '"programmable.gmgn-token-pool-info.v1" as const',
+      '"programmable.gmgn-token-wallet-ranking.v1" as const',
+      "export const GMGN_TOKEN_RANKING_MAXIMUM_LIMIT = 100 as const",
+      "export const GMGN_TOKEN_RANKING_DEFAULT_LIMIT = 20 as const",
+      'source: "gmgn"',
+      'exchange: "uniswap_v4"',
+      'export type GmgnTokenWalletRankingKindV1 = "holders" | "traders"',
+    ]) &&
+    includesEverySourceFragment(gmgnDiscovery, [
+      'const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const',
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      '"/v1/market/rank"',
+      '"/v1/market/hot_searches"',
+      'chain: "eth"',
+      'return path === "/v1/market/hot_searches" ? 3 : 1;',
+      "return envelope;",
+      "if (value !== null) {",
+      "const pending = accountGate.reserveSlot(input);",
+      "void pending.then(async (decision) => {",
+      "await accountGate.complete(decision);",
+      '(process.env.NODE_ENV === "production" || fetchImpl === fetch)',
+      'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1"',
+      "value >= 1 && value <= 20 ? value : 1",
+      'redirect: "error"',
+      'credentials: "omit"',
+    ]) &&
+    !gmgnDiscovery.includes("CachedValue<GmgnDiscoverySnapshotV1 | null>") &&
+    includesEverySourceFragment(gmgnDiscoverySnapshot, [
+      '"programmable.gmgn-discovery.v1" as const',
+      'providerChain: "eth"',
+      "if (!hasExactOptionalEthereumChain(current)) return null;",
+      "return hasExactOptionalEthereumChain(current) ? current : null;",
+      '!Object.prototype.hasOwnProperty.call(value, "chain")',
+      'value.chain === "eth"',
+      'if (!isRecord(value) || value.chain !== "eth") return null;',
+      'block.chain === "eth" && block.interval === interval',
+      "let discarded = extracted.foreignItemCount;",
+      "if (addresses.has(candidate.token.tokenAddress)) {",
+      "providerItemCount: extracted.providerItemCount",
+      "Number(value.providerItemCount) !== value.tokens.length +",
+    ]) &&
+    includesEverySourceFragment(gmgnCanonicalRanking, [
+      '"programmable.gmgn-canonical-ranking.v1" as const',
+      'source: "canonical-launch-catalog+gmgn"',
+      'applied: "gmgn-ranked-with-launch-order-fallback"',
+      "const tokenAddress = token.chain === \"eth\"",
+      "for (const [canonicalIndex, entry] of canonicalEntries.entries())",
+      'String(identity.chainId) === "1"',
+      "const unobserved: GmgnCanonicalRankedEntryV1<Entry>[] = [];",
+      "...ranked.map((item) => item.row)",
+      "...unobserved",
+      "entries: Object.freeze(rows.map((row) => row.entry))",
+      "!canonicalEthereumAddresses.has(address)",
+      "unobservedCanonicalEntryCount: canonicalEntries.length -",
+    ]) &&
+    gmgnReadOnlyEndpointBoundary &&
+    !/GMGN_API_KEY|X-APIKEY|keypair|private_key/iu.test([
+      publicExplore,
+      publicToken,
+      publicChart,
+      publicTokenAnalytics,
+    ].join("\n")) &&
     includesEverySourceFragment(publicExplore, [
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
@@ -2338,8 +3019,21 @@ export function evaluateReadModelOperationsSourceContracts(
       'applied: rankingStatus === "complete"',
       '"qualified-fdv-then-launch-order" as const',
       '"launch-order" as const',
+      'options.sort === "trending"',
+      "readGmgnEthereumTrendingV1(",
+      '{ interval: "1h", limit: 100 }',
+      "rankCanonicalExploreEntriesWithGmgnDiscoveryV1(",
+      "rankCoverage.gmgnMatchedUniqueTokenCount <",
+      "rankCoverage.canonicalUniqueTokenCount",
+      "hotSearchDeadlineMs - Date.now() >= 3_000",
+      "readGmgnEthereumHotSearchesV1(",
+      '{ interval: "24h", limit: 100 }',
+      '? "gmgn-trending" as const',
+      '"X-Programmable-Discovery-Provider": "gmgn"',
+      '"X-Programmable-Discovery-Read-Status": discovery.status',
       '"X-Programmable-Launch-Source": launchSource',
-      '"X-Programmable-Read-Source": `${launchSource}+${marketProvider}`',
+      'discovery !== null && discovery.status !== "unavailable"',
+      '? "+gmgn-discovery"',
       '"X-Programmable-Market-Provider": marketProvider',
       '"X-Programmable-Router-Read-Status": routerCustomStatus',
       '"X-Programmable-Identity-Last-Indexed-At": identityGeneratedAt',
@@ -2372,8 +3066,53 @@ export function evaluateReadModelOperationsSourceContracts(
     !/readDurableExploreModel|readPrimaryRpcExploreEntriesV1|readBitqueryTokenMarketDataStrictV1/u.test(
       publicToken,
     ) &&
+    includesEverySourceFragment(publicTokenAnalytics, [
+      "const FIXED_RANKING_LIMIT = 20",
+      "const signal = AbortSignal.any([",
+      "readEnvioClassicV3CatalogV1({ signal, deadlineMs })",
+      "readProductionCustomExploreDirectoryV1(signal)",
+      "readFinalizedRouterCustomIdentitySnapshotV1({",
+      "mergeEnvioClassicV3CatalogEntriesV1(",
+      "mergeRouterCustomExploreEntriesV1(",
+      "if (canonical.kind === \"unavailable\")",
+      "if (canonical.kind === \"not-found\")",
+      "const candidate = await readGmgnMarketSnapshotV1(canonical.entry, wait);",
+      "verification = exactMarketVerification(",
+      "if (verification === null) {",
+      "readGmgnTokenSecurityV1(identity, wait)",
+      "readGmgnTokenPoolInfoV1(identity, wait)",
+      "readGmgnTokenTopHoldersV1(",
+      "readGmgnTokenTopTradersV1(",
+      "{ limit: FIXED_RANKING_LIMIT }",
+      "exactRankingForIdentity(",
+      "value.query.limit === limit",
+      "value.wallets.length <= limit",
+      "if (rawLimit !== null && rawLimit !== String(FIXED_RANKING_LIMIT))",
+      'if (parsedChain !== 1) return inputError("Unsupported chain")',
+      "!hasExplicitForeignProviderChain(value)",
+      "value.poolAddress === identity.poolId",
+      "value.quoteAddress === identity.quoteAddress",
+      'value.exchange === "uniswap_v4"',
+      '"X-Programmable-Analytics-Provider": "gmgn"',
+      '"X-Programmable-Market-Provider": "gmgn"',
+      'const PRIVATE_RANKING_CACHE_CONTROL = "private, max-age=0, no-store"',
+    ]) &&
+    analyticsProofReadBoundary &&
+    includesEverySourceFragment(publicWalletRankingBlock, [
+      "address: wallet.address",
+      "usdValue: wallet.usdValue",
+      "amountRatio: wallet.amountRatio",
+      "buyVolumeUsd: wallet.buyVolumeUsd",
+      "sellVolumeUsd: wallet.sellVolumeUsd",
+      "profitUsd: wallet.profitUsd",
+      "profitRatio: wallet.profitRatio",
+    ]) &&
+    publicWalletProjectionBoundary &&
     includesEverySourceFragment(publicChart, [
+      "readGmgnMarketChartV1({",
+      "isFreshExactReadyGmgnChart(",
       "readBitqueryMarketChartV1({",
+      "preferExactGmgnMarketChartV1({",
       "readEnvioClassicV3CatalogV1({",
       "exploreEntryMarketIdentitiesV1(entry)",
       "mergeEnvioClassicV3CatalogEntriesV1(",
@@ -2382,11 +3121,23 @@ export function evaluateReadModelOperationsSourceContracts(
       '`${catalog.source}+registry.custom-launched`',
       'schemaVersion: "programmable.market-chart-error.v1"',
       'reason: "identity-unavailable"',
-      '"X-Programmable-Market-Provider": "bitquery"',
+      "const GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS = 60_000",
+      "const GMGN_PRIMARY_CHART_MAXIMUM_CLOCK_SKEW_MS = 5_000",
+      "!isGmgnMarketChartForIdentityV1(chart, identity, range)",
+      'chart.status !== "ready"',
+      "generatedAtMs - proofAtMs <= GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS",
+      '"X-Programmable-Market-Provider": chart.source',
       '"X-Programmable-Market-Read-Status": chart.readStatus',
-      '"X-Programmable-Read-Source": `${launchSource}+bitquery`',
+      '"X-Programmable-Read-Source": `${launchSource}+${chart.source}`',
       "TOKEN_CHART_CACHE_CONTROL",
     ]) &&
+    gmgnChartReadStart >= 0 &&
+    gmgnChartAcceptanceStart > gmgnChartReadStart &&
+    bitqueryChartFallbackStart > gmgnChartAcceptanceStart &&
+    publicChart.indexOf("readBitqueryMarketChartV1(") ===
+      bitqueryChartFallbackStart + "const bitqueryChart = await ".length &&
+    (publicChart.match(/readBitqueryMarketChartV1\(/gu)?.length ?? 0) === 1 &&
+    chartPreferenceStart > bitqueryChartFallbackStart &&
     !/readPrimaryRpcExploreEntriesV1|productionMainnetRpcPrimary/iu.test(
       publicChart,
     ) &&
@@ -2411,7 +3162,7 @@ export function evaluateReadModelOperationsSourceContracts(
   check(
     "ops-public-provider-split-source-contract",
     fastLanePublicProviderContract,
-    "Explore list, token detail and creator identity combine the validated Envio Classic V3 catalog with the bounded durable Router Custom snapshot; Ethereum-only GMGN and Dexscreener remain bounded exact-identity enrichment, market-cap ordering stays Dexscreener-bound, charts bind one exact pool through Bitquery and action routes retain their commitment-bound Website RPC semantics",
+    "Explore list, token detail and analytics keep the validated Envio and bounded Router catalog authoritative; Ethereum-only GMGN is the bounded primary provider for visible market data, canonical-intersection discovery, exact token analytics and exact-pool charts, while Dexscreener retains full-catalog FDV and visible fallback, Bitquery retains exact-pool chart fallback, and action routes keep commitment-bound Website RPC semantics",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -2631,10 +3382,21 @@ export function evaluateReadModelOperationsSourceContracts(
         "function exactDetailMarketRead(response, token, launchSource, nowMs)",
         "function exactGmgnEligibleCanonicalToken(token)",
         'provenance?.source === "canonical-launch-read-model"',
-        '"&page=1&sort=newest&model=classic"',
+        "const GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8",
+        '`&page=${page}&sort=newest&model=classic`',
         'token?.exploreKind !== "token" || token.launchModel !== "classic"',
         'throw new Error("Explore returned no GMGN-qualified canonical token")',
         "exactGmgnEligibleCanonicalToken(token) &&",
+        "const exactGmgnDetailProof = (candidate) =>",
+        'candidate.detail.headers.get("x-programmable-market-provider") ===\n          "gmgn"',
+        'candidate.detail.headers.get("x-programmable-market-read-status") ===\n          "complete"',
+        "qualifiedGmgnFdv(candidate.detailToken, now().getTime())",
+        "const chartIdentities = entryMarketIdentities(detailToken)",
+        "if (chartIdentities.length !== 1)",
+        "const chartIdentity = chartIdentities[0]",
+        "const chartCanonicalSupply =",
+        "totalSupplyRaw: detailToken?.totalSupplyRaw",
+        "tokenDecimals: detailToken?.tokenDecimals",
         "const completeCatalogTokens = [...newestTokens]",
         "Explore catalog pagination contract is invalid",
         "Initial Newest page is outside the paged catalog",
@@ -2682,11 +3444,33 @@ export function evaluateReadModelOperationsSourceContracts(
         'profileRouterReadStatus === "current"',
         'profileRouterReadStatus === "last-known-good"',
         'profile.headers.get("x-programmable-read-source") ===\n        "envio-classic-v3+rpc"',
-        'schemaVersion !== "programmable.market-chart.v1"',
-        'chart.body?.source !== "bitquery"',
-        'chart.body?.identity?.tokenAddress?.toLowerCase() !== tokenAddress.toLowerCase()',
+        "const chartProvider = chart.body?.source",
+        "const chartIdentityMatches =",
+        'canonicalMarketPool(chart.body?.identity?.poolId) ===',
+        "chartIdentity.poolId",
+        'canonicalMarketAddress(chart.body?.identity?.quoteAddress) ===',
+        "chartIdentity.quoteAddress",
+        "const gmgnProofIdentityMatches =",
+        "gmgnProofIdentityMatches &&",
+        "const gmgnChartReady =",
+        'chartProvider === "gmgn"',
+        'chart.body?.schemaVersion === "programmable.gmgn-market-chart.v1"',
+        'chart.body?.identityProof?.source === "gmgn-token-info"',
+        "exactObjectKeys(chart.body?.identityProof?.canonicalSupply",
+        "chart.body?.identityProof?.canonicalSupply?.totalSupplyRaw ===",
+        "chartCanonicalSupply.totalSupplyRaw",
+        "chart.body?.identityProof?.canonicalSupply?.tokenDecimals ===",
+        "chartCanonicalSupply.tokenDecimals",
+        'point?.valueSemantics === "period-close"',
+        "const bitqueryChartFallback =",
+        'chartProvider === "bitquery"',
+        'chart.body?.schemaVersion === "programmable.market-chart.v1"',
+        "(!gmgnChartReady && !bitqueryChartFallback)",
+        "!chartIdentityMatches",
         'chart.headers.get("cache-control") !==\n      "public, max-age=0, s-maxage=2, stale-while-revalidate=2"',
-        'chart.headers.get("x-programmable-market-provider") !== "bitquery"',
+        'chart.headers.get("x-programmable-read-source") !==\n      `${catalogBoundary.launchSource}+${chartProvider}`',
+        'chart.headers.get("x-programmable-market-provider") !== chartProvider',
+        'chart.headers.get("x-programmable-market-read-status") !==\n      chart.body?.readStatus',
         'chart.headers.get("x-programmable-valuation-block") !== null',
         "!exactVisibleMarketRead(newest, newestTokens, validationNowMs)",
         "!exactDexscreenerMarketRead(",
@@ -2697,18 +3481,17 @@ export function evaluateReadModelOperationsSourceContracts(
         "environment.PROGRAMMABLE_REQUIRE_GMGN_MARKET",
         '!["true", "false"].includes(gmgnMarketRequirement)',
         'const requireGmgnMarket = gmgnMarketRequirement === "true"',
-        "requireGmgnMarket &&",
-        'detailMarketProvider !== "gmgn"',
-        'detail.headers.get("x-programmable-market-read-status") !== "complete"',
-        "!qualifiedGmgnFdv(detailToken, now().getTime())",
+        "if (requireGmgnMarket) {",
         'throw new Error("Token detail GMGN market contract is required")',
         "const detailStatus = qualifiedGmgnFdv(detailToken, now().getTime())",
         "marketProvider: newest.headers.get(\"x-programmable-market-provider\")",
         "marketReadStatus: newest.body.marketRead.status",
         "`market_provider=${marketProvider}`",
         "`detail_market_provider=${detailMarketProvider}`",
+        "`chart_provider=${chartProvider}`",
         "marketProvider,",
         "detailMarketProvider,",
+        "chartProvider,",
         'creatorClaimPrepare: "separate-live-probe-required"',
         'tradePrepare: "separate-live-probe-required"',
         "runProductionStaticDexscreenerSmokeV1",
@@ -2733,7 +3516,7 @@ export function evaluateReadModelOperationsSourceContracts(
       packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
         "scripts/test/smoke-static-dexscreener-public-apis.test.mjs",
       ) === true,
-    "the immutable staged candidate proves validated last-good identities, bounded GMGN-visible and detail enrichment with Dexscreener fallback, mandatory exact-identity GMGN detail when the production key is configured, Dexscreener-only full-catalog FDV ranking, identity-only outage behavior, and unchanged profile/claim response semantics without exposing an RPC endpoint",
+    "the immutable staged candidate proves validated last-good identities, bounded GMGN-visible and detail enrichment with Dexscreener fallback, mandatory exact-identity GMGN detail when configured, Dexscreener-only full-catalog FDV ranking, and an exact GMGN-primary or Bitquery-fallback pool-bound chart with its provider handed off explicitly",
   );
   check(
     "ops-obsolete-public-read-gates-absent",

@@ -870,6 +870,12 @@ describe("read-model operations source contract", () => {
       'process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "20"',
     ],
     [
+      "an unbounded provider operation timeout",
+      "lib/market-data/gmgn.server.ts",
+      "const GMGN_REQUEST_TIMEOUT_MS = 2_500",
+      "const GMGN_REQUEST_TIMEOUT_MS = 25_000",
+    ],
+    [
       "no response-body ban cooldown",
       "lib/market-data/gmgn.server.ts",
       "canonicalSafeInteger(envelope.reset_at)",
@@ -896,8 +902,8 @@ describe("read-model operations source contract", () => {
     [
       "no account-wide provider reservation",
       "lib/market-data/gmgn.server.ts",
-      "accountGate.reserveSlot({",
-      "Promise.resolve({",
+      "const pending = accountGate.reserveSlot(input);",
+      "const pending = Promise.resolve(null);",
     ],
     [
       "no conservative failed-outcome lease",
@@ -917,11 +923,299 @@ describe("read-model operations source contract", () => {
       "!productionPoolManagerBoundV1(entry)",
       "false",
     ],
+    [
+      "a discarded outer market chain",
+      "lib/market-data/gmgn.server.ts",
+      "!hasExactOptionalEthereumChain(response)",
+      "true",
+    ],
+    [
+      "a discarded outer chart chain",
+      "lib/market-data/gmgn-chart.server.ts",
+      "!hasExactOptionalEthereumChain(response)",
+      "true",
+    ],
+    [
+      "a discarded outer analytics chain",
+      "lib/market-data/gmgn-token-analytics.server.ts",
+      "return envelope;",
+      "return envelope.data;",
+    ],
+    [
+      "a discarded outer discovery chain",
+      "lib/market-data/gmgn-discovery.server.ts",
+      "return envelope;",
+      "return envelope.data;",
+    ],
+    [
+      "an ignored nested discovery chain",
+      "lib/market-data/gmgn-discovery-v1.ts",
+      "if (!hasExactOptionalEthereumChain(current)) return null;",
+      "if (false) return null;",
+    ],
+    [
+      "a missing exact-pool chart token binding",
+      "lib/market-data/gmgn-chart.server.ts",
+      "tokenAddress !== expectedIdentity.tokenAddress",
+      "false",
+    ],
+    [
+      "a lower-quality GMGN chart preference",
+      "lib/market-data/gmgn-chart-data-v1.ts",
+      "return gmgnQuality > fallbackQuality ? input.candidate : input.fallback;",
+      "return input.candidate;",
+    ],
+    [
+      "a discovery ranking that drops the canonical tail",
+      "lib/market-data/gmgn-canonical-ranking.ts",
+      "...unobserved,",
+      "",
+    ],
   ])("rejects GMGN enrichment with %s", (_label, path, needle, replacement) => {
     const source = readFileSync(resolve(ROOT, path), "utf8");
     expect(source).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: source.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects analytics provider reads before the exact GMGN token proof", () => {
+    const path = "app/api/explore/token/analytics/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    const tokenProof =
+      "const candidate = await readGmgnMarketSnapshotV1(canonical.entry, wait);";
+    expect(route).toContain(tokenProof);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replace(
+          tokenProof,
+          `void readGmgnTokenSecurityV1(identity, wait);\n    ${tokenProof}`,
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects the sole analytics provider read inside the verification-null branch", () => {
+    const path = "app/api/explore/token/analytics/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    const securityRead = "readGmgnTokenSecurityV1(identity, wait),";
+    const guard =
+      "if (verification === null) {\n    return analyticsResponse({";
+    expect(route).toContain(securityRead);
+    expect(route).toContain(guard);
+    const drifted = route
+      .replace(securityRead, "Promise.resolve(null),")
+      .replace(
+        guard,
+        "if (verification === null) {\n" +
+          "    void readGmgnTokenSecurityV1(identity, wait);\n" +
+          "    return analyticsResponse({",
+      );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a duplicate analytics provider read after verification", () => {
+    const path = "app/api/explore/token/analytics/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    const summary = 'if (query.section === "summary") {';
+    expect(route).toContain(summary);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replace(
+          summary,
+          "void readGmgnTokenSecurityV1(identity, wait);\n\n  " + summary,
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects an extra provider wallet field in the public analytics DTO", () => {
+    const path = "app/api/explore/token/analytics/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    const field = "profitRatio: wallet.profitRatio,";
+    expect(route).toContain(field);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replace(
+          field,
+          `${field}\n      privateNote: wallet.privateNote,`,
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    ["a direct wallet spread", "...wallet,"],
+    ["a helper wallet spread", "...publicWalletExtras(wallet),"],
+    ["a computed wallet property", "[privateWalletField]: wallet.address,"],
+    ["a helper-derived wallet property", "privateNote: publicWalletNote(wallet),"],
+    ["an extra key backed by an allowed value", "privateNote: wallet.address,"],
+  ])("rejects the public wallet projection with %s", (_label, injection) => {
+    const path = "app/api/explore/token/analytics/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    const firstField = "address: wallet.address,";
+    expect(route).toContain(firstField);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replace(
+          firstField,
+          `${injection}\n      ${firstField}`,
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a Bitquery chart read scheduled before GMGN acceptance", () => {
+    const path = "app/api/explore/token/chart/route.ts";
+    const route = readFileSync(resolve(ROOT, path), "utf8");
+    const gmgnRead = "gmgnChart = await readGmgnMarketChartV1({";
+    expect(route).toContain(gmgnRead);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: route.replace(
+          gmgnRead,
+          "const bitqueryChart = await readBitqueryMarketChartV1({});\n" +
+            gmgnRead,
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects a trading endpoint in the GMGN read-only client set", () => {
+    const path = "lib/market-data/gmgn-discovery.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: `${source}\nconst forbiddenEndpoint = \"/v1/trade/swap\";\n`,
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    ["a template endpoint", "`/v1/trade/swap`", ""],
+    ["a concatenated endpoint", '"/v1/" + "trade/swap"', ""],
+    [
+      "an aliased endpoint",
+      "forbiddenEndpoint",
+      'const forbiddenEndpoint = "/v1/trade/swap" as const;\n    ',
+    ],
+  ])("rejects %s in a GMGN provider call", (_label, argument, prefix) => {
+    const path = "lib/market-data/gmgn.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const call =
+      'const value = await gmgnJsonRequest(\n      "/v1/token/info",';
+    expect(source).toContain(call);
+    const drifted = source.replace(
+      call,
+      `${prefix}const value = await gmgnJsonRequest(\n      ${argument},`,
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it("rejects an aliased gmgnJsonRequest network sink", () => {
+    const path = "lib/market-data/gmgn-discovery.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const request = "const data = await gmgnJsonRequest(";
+    expect(source).toContain(request);
+    const drifted = source.replace(
+      request,
+      'const endpointRoot = "/v1";\n' +
+        '    const endpointOperation = "/trade/swap";\n' +
+        "    const hiddenRequest = gmgnJsonRequest;\n" +
+        "    void hiddenRequest(\n" +
+        "      (endpointRoot + endpointOperation) as GmgnDiscoveryPath,\n" +
+        "      { query: {}, body: null },\n" +
+        "      apiKey,\n" +
+        "      providerWait,\n" +
+        "    );\n" +
+        `    ${request}`,
+    );
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: drifted },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
+  it.each([
+    [
+      "an aliased fetchImpl sink",
+      'const endpointRoot = "/v1";\n' +
+        '  const endpointOperation = "/trade/swap";\n' +
+        "  const hiddenFetch = fetchImpl;\n" +
+        "  void hiddenFetch(GMGN_API_ORIGIN + endpointRoot + endpointOperation);",
+    ],
+    [
+      "fetchImpl.call",
+      'const endpointRoot = "/v1";\n' +
+        '  const endpointOperation = "/trade/swap";\n' +
+        "  void fetchImpl.call(\n" +
+        "    undefined,\n" +
+        "    GMGN_API_ORIGIN + endpointRoot + endpointOperation,\n" +
+        "  );",
+    ],
+    [
+      "aliased URL and fetch constructors",
+      'const endpointRoot = "/v1";\n' +
+        '  const endpointOperation = "/trade/swap";\n' +
+        "  const HiddenUrl = URL;\n" +
+        "  const hiddenUrl = new HiddenUrl(\n" +
+        "    endpointRoot + endpointOperation,\n" +
+        "    GMGN_API_ORIGIN,\n" +
+        "  );\n" +
+        "  const hiddenFetch = fetchImpl;\n" +
+        "  void hiddenFetch(hiddenUrl);",
+    ],
+    [
+      "a rewritten reviewed URL path",
+      'const endpointRoot = "/v1";\n' +
+        '  const endpointOperation = "/trade/swap";\n' +
+        "  url.pathname = endpointRoot + endpointOperation;",
+    ],
+  ])("rejects %s in a GMGN request function", (_label, injection) => {
+    const path = "lib/market-data/gmgn-discovery.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const responseBoundary = "let response: Response;";
+    expect(source).toContain(responseBoundary);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: source.replace(
+          responseBoundary,
+          `${injection}\n  ${responseBoundary}`,
+        ),
+      },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-public-provider-split-source-contract",
@@ -1144,13 +1438,13 @@ describe("read-model operations source contract", () => {
     ],
     [
       "no configured GMGN detail requirement",
-      "requireGmgnMarket &&",
-      "false &&",
+      "if (requireGmgnMarket) {",
+      "if (false) {",
     ],
     [
       "no exact GMGN detail provider requirement",
-      'detailMarketProvider !== "gmgn"',
-      'detailMarketProvider !== "unknown"',
+      'candidate.detail.headers.get("x-programmable-market-provider") ===\n          "gmgn"',
+      'candidate.detail.headers.get("x-programmable-market-provider") ===\n          "dexscreener"',
     ],
     [
       "no dynamic visible market contract",
@@ -1169,8 +1463,13 @@ describe("read-model operations source contract", () => {
     ],
     [
       "no complete GMGN detail runtime read",
-      'detail.headers.get("x-programmable-market-read-status") !==\n            "complete"',
-      'detail.headers.get("x-programmable-market-read-status") !==\n            "unavailable"',
+      'candidate.detail.headers.get("x-programmable-market-read-status") ===\n          "complete"',
+      'candidate.detail.headers.get("x-programmable-market-read-status") ===\n          "unavailable"',
+    ],
+    [
+      "no qualified GMGN detail snapshot",
+      "qualifiedGmgnFdv(candidate.detailToken, now().getTime())",
+      "true",
     ],
     [
       "no unavailable launch-order proof",
@@ -1187,12 +1486,63 @@ describe("read-model operations source contract", () => {
       '"/api/explore/profile?account="',
       '"/api/explore/other?account="',
     ],
+    [
+      "no GMGN-primary chart branch",
+      'chartProvider === "gmgn"',
+      'chartProvider === "bitquery"',
+    ],
+    [
+      "no exact GMGN token-info chart proof",
+      'chart.body?.identityProof?.source === "gmgn-token-info"',
+      "true",
+    ],
+    [
+      "no GMGN chart canonical-supply shape",
+      "exactObjectKeys(chart.body?.identityProof?.canonicalSupply, [",
+      "Object.keys(chart.body?.identityProof?.canonicalSupply, [",
+    ],
+    [
+      "no GMGN chart raw-supply binding",
+      "chart.body?.identityProof?.canonicalSupply?.totalSupplyRaw ===",
+      "true ||",
+    ],
+    [
+      "no GMGN chart decimals binding",
+      "chart.body?.identityProof?.canonicalSupply?.tokenDecimals ===",
+      "true ||",
+    ],
+    [
+      "no canonical chart pool binding",
+      "canonicalMarketPool(chart.body?.identity?.poolId) ===",
+      "true ||",
+    ],
+    [
+      "no Bitquery chart fallback branch",
+      'chartProvider === "bitquery"',
+      'chartProvider === "gmgn"',
+    ],
   ])("rejects a staged static/Dex smoke with %s", (_label, needle, replacement) => {
     const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
     const smoke = readFileSync(resolve(ROOT, path), "utf8");
     expect(smoke).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: smoke.replaceAll(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it("rejects a deployment handoff without the selected chart provider", () => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const providerHandoff =
+      "CHART_PROVIDER: ${{ steps.public-provider-smoke.outputs.chart_provider }}";
+    expect(workflow).toContain(providerHandoff);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: workflow.replace(providerHandoff, "CHART_PROVIDER: not-bound"),
+      },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-protected-public-provider-stage-smoke",
@@ -1313,8 +1663,8 @@ describe("read-model operations source contract", () => {
     const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
     const source = readFileSync(resolve(ROOT, path), "utf8");
     const formatted = source.replace(
-      'detail.headers.get("x-programmable-market-read-status") !==\n            "complete"',
-      'detail.headers.get(\n            "x-programmable-market-read-status"\n          ) !== "complete"',
+      'candidate.detail.headers.get("x-programmable-market-read-status") ===\n          "complete"',
+      'candidate.detail.headers.get(\n          "x-programmable-market-read-status"\n        ) === "complete"',
     );
     expect(formatted).not.toBe(source);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
