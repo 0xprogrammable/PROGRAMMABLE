@@ -77,6 +77,15 @@ export type GmgnTrendingReadOptionsV1 = GmgnDiscoveryReadOptionsV1 & Readonly<{
   direction?: "asc" | "desc";
 }>;
 
+export type GmgnMarketCapAuthorityRankReadOptionsV1 = Readonly<{
+  interval: "1h";
+  limit: typeof GMGN_TRENDING_MAXIMUM_LIMIT;
+  orderBy: "marketcap";
+  direction: "asc" | "desc";
+}>;
+
+type GmgnDiscoveryCacheModeV1 = "durable" | "shared-authority";
+
 type CachedValue<T> = Readonly<{
   expiresAtMs: number;
   value: T;
@@ -110,6 +119,18 @@ export async function readGmgnEthereumTrendingV1(
   wait: GmgnDiscoveryReadWaitV1 = {},
 ): Promise<GmgnDiscoverySnapshotV1 | null> {
   return readGmgnEthereumDiscoveryV1("trending", options, wait);
+}
+
+export async function readGmgnEthereumMarketCapAuthorityRankV1(
+  options: GmgnMarketCapAuthorityRankReadOptionsV1,
+  wait: GmgnDiscoveryReadWaitV1 = {},
+): Promise<GmgnDiscoverySnapshotV1 | null> {
+  return readGmgnEthereumDiscoveryV1(
+    "trending",
+    options,
+    wait,
+    "shared-authority",
+  );
 }
 
 export async function readGmgnEthereumHotSearchesV1(
@@ -148,6 +169,7 @@ async function readGmgnEthereumDiscoveryV1(
   kind: GmgnDiscoveryKindV1,
   options: GmgnTrendingReadOptionsV1,
   wait: GmgnDiscoveryReadWaitV1,
+  cacheMode: GmgnDiscoveryCacheModeV1 = "durable",
 ): Promise<GmgnDiscoverySnapshotV1 | null> {
   const apiKey = readApiKey();
   const normalized = normalizeOptions(kind, options);
@@ -163,6 +185,30 @@ async function readGmgnEthereumDiscoveryV1(
     normalized.orderBy ?? "default",
     normalized.direction ?? "default",
   ].join(":");
+  if (cacheMode === "shared-authority") {
+    if (
+      kind !== "trending" ||
+      normalized.interval !== "1h" ||
+      normalized.limit !== GMGN_TRENDING_MAXIMUM_LIMIT ||
+      normalized.orderBy !== "marketcap" ||
+      normalized.direction === null
+    ) return null;
+    // The caller holds the shared Postgres authority lease. Await a fresh
+    // module-local singleflight before those exact bytes can be published as
+    // cross-isolate pagination authority; do not admit Next's stale SWR value.
+    return readThroughCache(
+      discoveryCache,
+      discoveryInFlight,
+      key,
+      wait,
+      (providerWait) => readGmgnDiscoverySnapshotFromProviderV1(
+        kind,
+        normalized,
+        apiKey,
+        providerWait,
+      ),
+    );
+  }
   if (durableCacheEligible(wait)) {
     const durable = await waitForCaller(
       readDurablyCachedGmgnDiscoverySnapshotV1(
@@ -359,7 +405,7 @@ const readDurablyCachedGmgnDiscoverySnapshotV1 = unstable_cache(
     }
     return snapshot;
   },
-  ["programmable-gmgn-ethereum-discovery-v2"],
+  ["programmable-gmgn-ethereum-discovery-v3"],
   { revalidate: GMGN_DURABLE_CACHE_REVALIDATE_SECONDS },
 );
 

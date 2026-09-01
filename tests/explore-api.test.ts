@@ -166,6 +166,7 @@ vi.mock("../lib/market-data/gmgn.server", () => ({
 }));
 vi.mock("../lib/market-data/gmgn-discovery.server", () => ({
   readGmgnEthereumTrendingV1: mocks.readTrending,
+  readGmgnEthereumMarketCapAuthorityRankV1: mocks.readTrending,
   readGmgnEthereumHotSearchesV1: mocks.readHotSearches,
   readGmgnEthereumSearchV1: mocks.readSearch,
 }));
@@ -669,10 +670,12 @@ describe("Explore static identity and Dexscreener market contract", () => {
     )).toHaveLength(100);
   });
 
-  it("does not reuse a legacy v2 authority under the v3 composition policy", async () => {
+  it("does not reuse a pre-fix v3 authority under the v4 composition policy", async () => {
     const legacyInputCommitment = canonicalSha256(
-      "programmable.explore-market-cap-authority-input.v2",
+      "programmable.explore-market-cap-authority-input.v3",
       {
+        compositionPolicy:
+          "gmgn-qualified-rank+oldest-first-sentinels+cyclic-supply+same-bucket-supply-priority+cyclic-token-info+dexscreener.v3",
         orderedCanonicalIdentities: entries.map((entry, index) => ({
           index,
           id: entry.id,
@@ -691,7 +694,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     const nowMs = Date.now();
     const legacyKey = `${legacyInputCommitment}:desc`;
     durableMarketCapCacheHarness.entries.set(legacyKey, [{
-      canonicalAuthority: "legacy-v2-authority",
+      canonicalAuthority: "pre-fix-v3-authority",
       rankingCommitment: `sha256:${"11".repeat(32)}`,
       gmgnStatus: "partial",
       generatedAt: new Date(nowMs - 1_000).toISOString(),
@@ -718,7 +721,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       `${currentInputCommitment}:desc`,
     )).toBe(true);
     expect(durableMarketCapCacheHarness.entries.get(legacyKey)?.[0]
-      ?.canonicalAuthority).toBe("legacy-v2-authority");
+      ?.canonicalAuthority).toBe("pre-fix-v3-authority");
   });
 
   it("separates discovery ranking identity from observed freshness", () => {
