@@ -2437,7 +2437,7 @@ export const programmablePublicOpenApi = {
             type: "string",
             pattern: "^sha256:[0-9a-f]{64}$",
             description:
-              "Commits to ordered matched canonical identities and accepted snapshot metadata without exposing raw provider ranks.",
+              "Commits to the ordered matched canonical ranking identity without exposing raw provider ranks. Observed freshness is reported separately by asOfTime and is not part of this commitment.",
           },
           status: {
             type: "string",

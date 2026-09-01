@@ -636,7 +636,7 @@ export function paginateTrendingExploreEntriesV1(
     .filter((value) => Number.isFinite(Date.parse(value)))
     .sort();
   const rankingCommitment = canonicalSha256(
-    "programmable.explore-discovery-ranking-commitment.v1",
+    "programmable.explore-discovery-ranking-identity-commitment.v1",
     {
       canonicalEntryCount: coverage.canonicalEntryCount,
       matches: ranked.rows.flatMap((row) =>
@@ -649,7 +649,6 @@ export function paginateTrendingExploreEntriesV1(
               snapshotInterval: row.gmgn.interval,
               snapshotOrderBy: row.gmgn.orderBy,
               snapshotDirection: row.gmgn.direction,
-              snapshotFetchedAt: row.gmgn.fetchedAt,
             }]
       ),
     },

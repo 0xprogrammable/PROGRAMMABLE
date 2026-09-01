@@ -226,6 +226,7 @@ jobs:
       discovery_status: ${{ steps.public-provider-smoke.outputs.discovery_status }}
       discovery_matched_count: ${{ steps.public-provider-smoke.outputs.discovery_matched_count }}
       discovery_ranking_commitment: ${{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}
+      discovery_consistency: ${{ steps.public-provider-smoke.outputs.discovery_consistency }}
       search_status: ${{ steps.public-provider-smoke.outputs.search_status }}
       search_matched_count: ${{ steps.public-provider-smoke.outputs.search_matched_count }}
       search_ranking_commitment: ${{ steps.public-provider-smoke.outputs.search_ranking_commitment }}
@@ -1613,6 +1614,7 @@ jobs:
           DISCOVERY_STATUS: ${{ steps.public-provider-smoke.outputs.discovery_status }}
           DISCOVERY_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.discovery_matched_count }}
           DISCOVERY_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}
+          DISCOVERY_CONSISTENCY: ${{ steps.public-provider-smoke.outputs.discovery_consistency }}
           SEARCH_STATUS: ${{ steps.public-provider-smoke.outputs.search_status }}
           SEARCH_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.search_matched_count }}
           SEARCH_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.search_ranking_commitment }}
@@ -1667,6 +1669,7 @@ jobs:
             echo "- GMGN discovery status: \`${DISCOVERY_STATUS:-not-run}\`"
             echo "- GMGN discovery matched canonical entries: \`${DISCOVERY_MATCHED_COUNT:-not-run}\`"
             echo "- GMGN discovery ranking commitment: \`${DISCOVERY_RANKING_COMMITMENT:-not-run}\`"
+            echo "- GMGN discovery consistency: \`${DISCOVERY_CONSISTENCY:-not-run}\`"
             echo "- GMGN search status: \`${SEARCH_STATUS:-not-run}\`"
             echo "- GMGN search matched canonical entries: \`${SEARCH_MATCHED_COUNT:-not-run}\`"
             echo "- GMGN search ranking commitment: \`${SEARCH_RANKING_COMMITMENT:-not-run}\`"

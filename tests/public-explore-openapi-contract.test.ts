@@ -325,6 +325,11 @@ describe("public Explore OpenAPI contract", () => {
       properties: {
         provider: { const: "gmgn" },
         requested: { const: "trending" },
+        rankingCommitment: {
+          description: expect.stringContaining(
+            "Observed freshness is reported separately by asOfTime",
+          ),
+        },
         snapshotCount: { type: "integer", minimum: 0, maximum: 2 },
         observedTokenCount: { type: "integer", minimum: 0, maximum: 200 },
       },

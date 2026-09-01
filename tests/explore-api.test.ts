@@ -456,7 +456,7 @@ async function json(response: Response) {
 }
 
 describe("Explore static identity and Dexscreener market contract", () => {
-  it("binds every page of one discovery snapshot to one deterministic commitment", () => {
+  it("separates discovery ranking identity from observed freshness", () => {
     const snapshots = [
       discoverySnapshot("trending", [entries[3]!, entries[19]!]),
       discoverySnapshot("hot-search", [entries[1]!]),
@@ -475,11 +475,26 @@ describe("Explore static identity and Dexscreener market contract", () => {
       /^sha256:[0-9a-f]{64}$/u,
     );
     expect(second.discovery).not.toHaveProperty("providerRank");
-    const drifted = paginateTrendingExploreEntriesV1(entries, [{
+    const refreshed = paginateTrendingExploreEntriesV1(entries, [{
       ...snapshots[0]!,
       fetchedAt: "2026-08-16T08:00:04.000Z",
     }, snapshots[1]!], { ...input, page: 1 });
-    expect(drifted.discovery.rankingCommitment).not.toBe(
+    expect(refreshed.discovery.rankingCommitment).toBe(
+      first.discovery.rankingCommitment,
+    );
+    expect(refreshed.discovery.asOfTime).not.toBe(first.discovery.asOfTime);
+    const reranked = paginateTrendingExploreEntriesV1(entries, [
+      discoverySnapshot("trending", [entries[19]!, entries[3]!]),
+      snapshots[1]!,
+    ], { ...input, page: 1 });
+    expect(reranked.discovery.rankingCommitment).not.toBe(
+      first.discovery.rankingCommitment,
+    );
+    const changedMembership = paginateTrendingExploreEntriesV1(entries, [
+      discoverySnapshot("trending", [entries[3]!, entries[18]!]),
+      snapshots[1]!,
+    ], { ...input, page: 1 });
+    expect(changedMembership.discovery.rankingCommitment).not.toBe(
       first.discovery.rankingCommitment,
     );
   });

@@ -916,6 +916,12 @@ describe("read-model operations source contract", () => {
       "first !== null ||",
       "true ||",
     ],
+    [
+      "a discovery ranking identity coupled to observed freshness",
+      "snapshotDirection: row.gmgn.direction,",
+      "snapshotDirection: row.gmgn.direction,\n" +
+        "              snapshotFetchedAt: row.gmgn.fetchedAt,",
+    ],
   ])(
     "rejects the Explore fast-lane contract with %s",
     (_label, needle, replacement) => {
@@ -2053,6 +2059,16 @@ describe("read-model operations source contract", () => {
       "no account-gate-mode release output",
       "`gmgn_account_gate_mode=${gmgnAccountGateMode}`",
       "`gmgn_account_gate_mode=unavailable`",
+    ],
+    [
+      "no monotonic discovery freshness proof",
+      "nextFreshnessMs < freshnessMs",
+      "nextFreshnessMs >= freshnessMs",
+    ],
+    [
+      "no discovery consistency release output",
+      "`discovery_consistency=${trendingDiscoveryConsistency}`",
+      "`discovery_consistency=unbound`",
     ],
   ])(
     "rejects a staged static/Dex smoke with %s",
