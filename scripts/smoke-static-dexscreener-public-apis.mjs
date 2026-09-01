@@ -50,7 +50,9 @@ const EXPLORE_MARKET_PROVIDERS = new Set([
 const EXPLORE_SNAPSHOT_ATTEMPTS = 3;
 const EXPLORE_SNAPSHOT_RETRY_DELAY_MS = 16_000;
 const VISIBLE_EXPLORE_PAGE_SIZE = 9;
+const GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8;
 const PROVIDER_RECENT_MAXIMUM_AGE_MS = 5 * 60_000;
+const MINIMUM_FDV_LIQUIDITY_USD_WAD = 10_000n * 10n ** 18n;
 
 class ExploreCatalogBoundaryDriftError extends Error {
   constructor(message) {
@@ -661,6 +663,7 @@ function exactGmgnSnapshot(token, nowMs) {
     !POSITIVE_INTEGER.test(String(snapshot.priceUsdWad ?? "")) ||
     !POSITIVE_INTEGER.test(String(snapshot.fdvUsdWad ?? "")) ||
     !POSITIVE_INTEGER.test(String(snapshot.liquidityUsdWad ?? "")) ||
+    BigInt(snapshot.liquidityUsdWad) < MINIMUM_FDV_LIQUIDITY_USD_WAD ||
     !unsignedInteger(snapshot.volume24hUsdWad) ||
     !Number.isSafeInteger(snapshot.swapCount24h) ||
     snapshot.swapCount24h < 0 ||
@@ -1372,100 +1375,167 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         !exactSamePageOrder(highest, newest)
       ) throw new Error("Unavailable FDV did not preserve launch order");
 
-      let qualifiedGmgnCanonicalToken = null;
-      if (requireGmgnMarket) {
-        const gmgnCanonical = await request(
-          `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
-            "&page=1&sort=newest&model=classic",
+      const readValidatedTokenDetail = async (selectedToken) => {
+        const tokenAddress = selectedToken?.tokenAddress;
+        if (!tokenAddress || !selectedToken) {
+          throw new Error("Explore returned no token identity");
+        }
+        const detail = await request(
+          "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
         );
-        const gmgnCanonicalTokens = Array.isArray(gmgnCanonical.body?.tokens)
-          ? gmgnCanonical.body.tokens
-          : [];
-        const gmgnCanonicalCatalog = exactCatalogSnapshot(
-          { ...gmgnCanonical, body: {
-            ...gmgnCanonical.body,
-            total: gmgnCanonical.body?.catalog?.identityCount,
+        const detailToken = detail.body?.token ?? detail.body?.customProject;
+        const detailCatalog = exactCatalogSnapshot(
+          { ...detail, body: {
+            ...detail.body,
+            total: detail.body?.catalog?.identityCount,
           } },
+          { requireLaunchIdentity: false },
         );
+        if (detailCatalog === null) {
+          throw new Error("Token detail identity or market contract is invalid");
+        }
+        if (detailCatalog !== highestCatalog) {
+          throw new ExploreCatalogBoundaryDriftError(
+            "Explore catalog changed before token detail read",
+          );
+        }
         if (
-          gmgnCanonical.status !== 200 ||
-          gmgnCanonical.body?.status !== "ready" ||
-          gmgnCanonical.body?.sort !== "newest" ||
-          gmgnCanonical.body?.ranking !== undefined ||
-          !exactExplorePage(gmgnCanonical, gmgnCanonicalTokens, {
-            page: 1,
-            pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
-          }) ||
-          gmgnCanonicalCatalog !== highestCatalog ||
-          !exactVisibleMarketRead(
-            gmgnCanonical,
-            gmgnCanonicalTokens,
+          detail.status !== 200 ||
+          detail.body?.status !== "ready" ||
+          exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
+          !exactDetailMarketRead(
+            detail,
+            detailToken,
+            catalogBoundary.launchSource,
             now().getTime(),
-          ) ||
-          gmgnCanonicalTokens.some((token) =>
-            token?.exploreKind !== "token" || token.launchModel !== "classic"
           )
-        ) throw new Error("Canonical GMGN list response contract is invalid");
-        qualifiedGmgnCanonicalToken = gmgnCanonicalTokens.find((token) =>
-          exactGmgnEligibleCanonicalToken(token) &&
-          qualifiedGmgnFdv(token, now().getTime()) &&
-          completeIdentitySet.has(exactIdentity(token))
-        ) ?? null;
-        if (qualifiedGmgnCanonicalToken === null) {
+        ) throw new Error("Token detail identity or market contract is invalid");
+        return { detail, detailToken, selectedToken, tokenAddress };
+      };
+      const exactGmgnDetailProof = (candidate) =>
+        candidate.detail.headers.get("x-programmable-market-provider") ===
+          "gmgn" &&
+        candidate.detail.headers.get("x-programmable-market-read-status") ===
+          "complete" &&
+        qualifiedGmgnFdv(candidate.detailToken, now().getTime());
+
+      let selectedDetail = null;
+      if (requireGmgnMarket) {
+        const attemptedDetailIdentities = new Set();
+        const tryDetailCandidate = async (candidate) => {
+          const identity = exactIdentity(candidate);
+          if (
+            identity === null ||
+            attemptedDetailIdentities.has(identity) ||
+            !completeIdentitySet.has(identity) ||
+            candidate?.exploreKind !== "token" ||
+            candidate.launchModel !== "classic" ||
+            !exactGmgnEligibleCanonicalToken(candidate)
+          ) return null;
+          attemptedDetailIdentities.add(identity);
+          const detailCandidate = await readValidatedTokenDetail(candidate);
+          return exactGmgnDetailProof(detailCandidate) ? detailCandidate : null;
+        };
+
+        // The already-bound market-cap page is the strongest deterministic
+        // candidate set: every candidate passed the same $10k Dexscreener
+        // liquidity gate before an independent GMGN detail proof is accepted.
+        const marketCapCandidates = highestTokens.filter((token) =>
+          qualifiedDexscreenerFdv(token, now().getTime())
+        );
+        for (const candidate of marketCapCandidates) {
+          selectedDetail = await tryDetailCandidate(candidate);
+          if (selectedDetail !== null) break;
+        }
+
+        let sawQualifiedGmgnListCandidate = false;
+        if (selectedDetail === null) {
+          const completeClassicTokens = completeCatalogTokens.filter((token) =>
+            token?.exploreKind === "token" && token.launchModel === "classic"
+          );
+          const classicTotalPages = Math.ceil(
+            completeClassicTokens.length / VISIBLE_EXPLORE_PAGE_SIZE,
+          );
+          const scanPages = Math.min(
+            classicTotalPages,
+            GMGN_CANONICAL_SCAN_MAXIMUM_PAGES,
+          );
+          for (let page = 1; page <= scanPages; page += 1) {
+            const gmgnCanonical = await request(
+              `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
+                `&page=${page}&sort=newest&model=classic`,
+            );
+            const gmgnCanonicalTokens = Array.isArray(
+              gmgnCanonical.body?.tokens,
+            ) ? gmgnCanonical.body.tokens : [];
+            const gmgnCanonicalCatalog = exactCatalogSnapshot(
+              { ...gmgnCanonical, body: {
+                ...gmgnCanonical.body,
+                total: gmgnCanonical.body?.catalog?.identityCount,
+              } },
+            );
+            const expectedIdentities = completeClassicTokens.slice(
+              (page - 1) * VISIBLE_EXPLORE_PAGE_SIZE,
+              page * VISIBLE_EXPLORE_PAGE_SIZE,
+            ).map(exactIdentity);
+            const actualIdentities = gmgnCanonicalTokens.map(exactIdentity);
+            if (
+              gmgnCanonical.status !== 200 ||
+              gmgnCanonical.body?.status !== "ready" ||
+              gmgnCanonical.body?.sort !== "newest" ||
+              gmgnCanonical.body?.ranking !== undefined ||
+              gmgnCanonical.body?.total !== completeClassicTokens.length ||
+              !exactExplorePage(gmgnCanonical, gmgnCanonicalTokens, {
+                page,
+                pageSize: VISIBLE_EXPLORE_PAGE_SIZE,
+              }) ||
+              gmgnCanonicalCatalog !== highestCatalog ||
+              !exactVisibleMarketRead(
+                gmgnCanonical,
+                gmgnCanonicalTokens,
+                now().getTime(),
+              ) ||
+              gmgnCanonicalTokens.some((token) =>
+                token?.exploreKind !== "token" || token.launchModel !== "classic"
+              ) ||
+              actualIdentities.some((identity) => identity === null) ||
+              actualIdentities.some((identity, index) =>
+                identity !== expectedIdentities[index]
+              )
+            ) {
+              throw new Error("Canonical GMGN list response contract is invalid");
+            }
+            const qualifiedCandidates = gmgnCanonicalTokens.filter((token) =>
+              exactGmgnEligibleCanonicalToken(token) &&
+              qualifiedGmgnFdv(token, now().getTime())
+            );
+            if (qualifiedCandidates.length > 0) {
+              sawQualifiedGmgnListCandidate = true;
+            }
+            for (const candidate of qualifiedCandidates) {
+              selectedDetail = await tryDetailCandidate(candidate);
+              if (selectedDetail !== null) break;
+            }
+            if (selectedDetail !== null) break;
+          }
+        }
+        if (selectedDetail === null) {
+          if (sawQualifiedGmgnListCandidate) {
+            throw new Error("Token detail GMGN market contract is required");
+          }
           throw new Error("Explore returned no GMGN-qualified canonical token");
         }
+      } else {
+        const selectedToken =
+          completeCatalogTokens.find(exactGmgnEligibleCanonicalToken) ??
+          completeCatalogTokens.find((token) => token?.exploreKind === "token");
+        selectedDetail = await readValidatedTokenDetail(selectedToken);
       }
 
-      const selectedToken = requireGmgnMarket
-        ? qualifiedGmgnCanonicalToken
-        : completeCatalogTokens.find(exactGmgnEligibleCanonicalToken) ??
-          completeCatalogTokens.find((token) => token?.exploreKind === "token");
-      const tokenAddress = selectedToken?.tokenAddress;
-      if (!tokenAddress || !selectedToken) {
-        throw new Error("Explore returned no token identity");
-      }
-      const detail = await request(
-        "/api/explore/token?address=" + encodeURIComponent(tokenAddress),
-      );
-      const detailToken = detail.body?.token ?? detail.body?.customProject;
-      const detailCatalog = exactCatalogSnapshot(
-        { ...detail, body: {
-          ...detail.body,
-          total: detail.body?.catalog?.identityCount,
-        } },
-        { requireLaunchIdentity: false },
-      );
-      if (detailCatalog === null) {
-        throw new Error("Token detail identity or market contract is invalid");
-      }
-      if (detailCatalog !== highestCatalog) {
-        throw new ExploreCatalogBoundaryDriftError(
-          "Explore catalog changed before token detail read",
-        );
-      }
-      if (
-        detail.status !== 200 ||
-        detail.body?.status !== "ready" ||
-        exactIdentity(detailToken) !== exactIdentity(selectedToken) ||
-        !exactDetailMarketRead(
-          detail,
-          detailToken,
-          catalogBoundary.launchSource,
-          now().getTime(),
-        )
-      ) throw new Error("Token detail identity or market contract is invalid");
+      const { detail, detailToken, tokenAddress } = selectedDetail;
       const detailMarketProvider = detail.headers.get(
         "x-programmable-market-provider",
       );
-      if (
-        requireGmgnMarket &&
-        (
-          detailMarketProvider !== "gmgn" ||
-          detail.headers.get("x-programmable-market-read-status") !==
-            "complete" ||
-          !qualifiedGmgnFdv(detailToken, now().getTime())
-        )
-      ) throw new Error("Token detail GMGN market contract is required");
       const detailStatus = qualifiedGmgnFdv(detailToken, now().getTime())
         ? "verified-gmgn-market"
         : qualifiedDexscreenerFdv(detailToken, now().getTime())

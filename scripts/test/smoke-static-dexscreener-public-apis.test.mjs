@@ -350,10 +350,28 @@ function gmgnValuedEntry(baseEntry = entry(0)) {
       },
       priceUsdWad,
       fdvUsdWad,
-      liquidityUsdWad: "1000000000000000000000",
+      liquidityUsdWad: "10000000000000000000000",
       volume24hUsdWad: "0",
       swapCount24h: 0,
     },
+  };
+}
+
+function dexscreenerValuedEntry(baseEntry = entry(0)) {
+  const fdvUsdWad = "1000000000000000000000000";
+  return {
+    ...baseEntry,
+    valuation: {
+      status: "available",
+      metric: "fdv",
+      supplyBasis: "total",
+      currency: "usd",
+      freshness: "provider-recent",
+      source: "dexscreener",
+      valueWad: fdvUsdWad,
+      asOfTime: NOW,
+    },
+    fdvUsdWad,
   };
 }
 
@@ -659,6 +677,222 @@ function gmgnStagedFetch(options = {}) {
               "x-programmable-market-as-of",
             ],
       };
+    },
+  );
+}
+
+function pagedGmgnStagedFetch({
+  entryCount = 10,
+  gmgnPage = 2,
+  marketCapProof = false,
+  marketCapObservedFallback = false,
+  gmgnLiquidityUsdWad,
+} = {}) {
+  const allEntries = Array.from({ length: entryCount }, (_, index) => entry(index));
+  const qualifiedIndex = marketCapProof
+    ? 0
+    : (gmgnPage - 1) * 9;
+  const qualifiedBase = allEntries[qualifiedIndex] ?? allEntries[0];
+  const qualifiedGmgn = gmgnValuedEntry(qualifiedBase);
+  if (gmgnLiquidityUsdWad !== undefined) {
+    qualifiedGmgn.gmgnMarketData = {
+      ...qualifiedGmgn.gmgnMarketData,
+      liquidityUsdWad: gmgnLiquidityUsdWad,
+    };
+  }
+  const pagedTransform = pagedCatalogTransform(allEntries);
+  return stagedFetch(
+    (input) => {
+      const { url } = input;
+      const transformed = pagedTransform(input);
+      if (url.pathname === "/api/explore") {
+        const sort = url.searchParams.get("sort");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        if (
+          sort === "market-cap" &&
+          (marketCapProof || marketCapObservedFallback)
+        ) {
+          const tokens = [...transformed.tokens];
+          tokens[0] = dexscreenerValuedEntry(allEntries[0]);
+          return {
+            ...transformed,
+            tokens,
+            marketRead: {
+              ...marketRead(entryCount),
+              status: "partial",
+              observedCount: 1,
+              qualifiedCount: 1,
+              unavailableCount: entryCount - 1,
+              oldestFetchedAt: NOW,
+              newestFetchedAt: NOW,
+            },
+            ranking: {
+              status: "partial",
+              requested: "fdv",
+              applied: "qualified-fdv-then-launch-order",
+              qualifiedCount: 1,
+              totalCount: entryCount,
+            },
+            dataQuality: {
+              ...transformed.dataQuality,
+              valuation: {
+                ...transformed.dataQuality.valuation,
+                status: "provider-recent",
+                available: 1,
+                unavailable: entryCount - 1,
+                asOfTime: NOW,
+              },
+            },
+          };
+        }
+        if (sort === "newest" && pageSize === 9) {
+          const pageHasGmgn = !marketCapProof && page === gmgnPage;
+          const tokens = transformed.tokens.map((token) =>
+            pageHasGmgn && token.tokenAddress === qualifiedBase.tokenAddress
+              ? qualifiedGmgn
+              : token
+          );
+          const qualifiedCount = pageHasGmgn ? 1 : 0;
+          const fallbackRequestedCount = tokens.length - qualifiedCount;
+          return {
+            ...transformed,
+            tokens,
+            marketRead: {
+              provider: "gmgn",
+              fallbackProvider: "dexscreener",
+              status: qualifiedCount === 0
+                ? "unavailable"
+                : fallbackRequestedCount === 0
+                  ? "complete"
+                  : "partial",
+              currency: "USD",
+              requestedCount: tokens.length,
+              observedCount: qualifiedCount,
+              qualifiedCount,
+              unavailableCount: tokens.length - qualifiedCount,
+              gmgnObservedCount: qualifiedCount,
+              gmgnQualifiedCount: qualifiedCount,
+              fallbackRequestedCount,
+              fallbackQualifiedCount: 0,
+              oldestFetchedAt: qualifiedCount > 0 ? NOW : null,
+              newestFetchedAt: qualifiedCount > 0 ? NOW : null,
+            },
+            dataQuality: {
+              ...transformed.dataQuality,
+              valuation: {
+                ...transformed.dataQuality.valuation,
+                status: qualifiedCount > 0
+                  ? "provider-recent"
+                  : "unavailable",
+                available: qualifiedCount,
+                unavailable: tokens.length - qualifiedCount,
+                asOfTime: qualifiedCount > 0 ? NOW : null,
+              },
+            },
+          };
+        }
+        return transformed;
+      }
+      if (url.pathname === "/api/explore/token") {
+        const address = url.searchParams.get("address")?.toLowerCase();
+        const token = address === qualifiedBase.tokenAddress.toLowerCase()
+          ? qualifiedGmgn
+          : allEntries.find((candidate) =>
+              candidate.tokenAddress.toLowerCase() === address
+            ) ?? transformed.token;
+        return { ...transformed, token };
+      }
+      if (url.pathname === "/api/explore/token/chart") {
+        return {
+          ...transformed,
+          identity: {
+            ...transformed.identity,
+            poolId: qualifiedBase.poolId,
+          },
+        };
+      }
+      return transformed;
+    },
+    ({ extraHeaders, omittedHeaders, url }) => {
+      const sort = url.searchParams.get("sort");
+      const page = Number(url.searchParams.get("page"));
+      const pageSize = Number(url.searchParams.get("limit"));
+      if (
+        url.pathname === "/api/explore" &&
+        sort === "newest" &&
+        pageSize === 9
+      ) {
+        const pageHasGmgn = !marketCapProof && page === gmgnPage;
+        const pageTokenCount = Math.min(
+          pageSize,
+          Math.max(0, entryCount - (page - 1) * pageSize),
+        );
+        const fallbackRequestedCount = pageTokenCount - (pageHasGmgn ? 1 : 0);
+        const provider = fallbackRequestedCount > 0
+          ? "gmgn+dexscreener"
+          : "gmgn";
+        return {
+          extraHeaders: {
+            ...extraHeaders,
+            "x-programmable-read-source": `envio-classic-v3+${provider}`,
+            "x-programmable-market-provider": provider,
+            "x-programmable-market-read-status": pageHasGmgn
+              ? fallbackRequestedCount === 0 ? "complete" : "partial"
+              : "unavailable",
+            ...(pageHasGmgn
+              ? {
+                  "x-programmable-market-source": "gmgn",
+                  "x-programmable-price-source": "gmgn",
+                  "x-programmable-market-as-of": NOW,
+                }
+              : {}),
+          },
+          omittedHeaders: pageHasGmgn
+            ? omittedHeaders
+            : [
+                ...omittedHeaders,
+                "x-programmable-market-source",
+                "x-programmable-price-source",
+                "x-programmable-market-as-of",
+              ],
+        };
+      }
+      const detailAddress = url.pathname === "/api/explore/token"
+        ? url.searchParams.get("address")?.toLowerCase()
+        : null;
+      if (
+        marketCapObservedFallback &&
+        detailAddress === allEntries[0].tokenAddress.toLowerCase()
+      ) {
+        return {
+          extraHeaders: {
+            ...extraHeaders,
+            "x-programmable-market-read-status": "partial",
+            "x-programmable-market-source": "dexscreener",
+          },
+          omittedHeaders: [
+            ...omittedHeaders,
+            "x-programmable-price-source",
+            "x-programmable-market-as-of",
+          ],
+        };
+      }
+      if (detailAddress === qualifiedBase.tokenAddress.toLowerCase()) {
+        return {
+          extraHeaders: {
+            ...extraHeaders,
+            "x-programmable-read-source": "envio-classic-v3+gmgn",
+            "x-programmable-market-provider": "gmgn",
+            "x-programmable-market-read-status": "complete",
+            "x-programmable-market-source": "gmgn",
+            "x-programmable-price-source": "gmgn",
+            "x-programmable-market-as-of": NOW,
+          },
+          omittedHeaders,
+        };
+      }
+      return { extraHeaders, omittedHeaders };
     },
   );
 }
@@ -992,6 +1226,45 @@ test("staged smoke accepts an exact detail observation without a qualified valua
   assert.equal(result.detailStatus, "verified-identity-market-unavailable");
 });
 
+test("staged smoke accepts a partial Dex observation below the liquidity gate", async () => {
+  const observedButUnqualified = {
+    ...entry(0),
+    valuation: {
+      status: "unavailable",
+      reason: "liquidity-unavailable",
+    },
+  };
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch(
+      ({ body, url }) => url.pathname === "/api/explore/token"
+        ? { ...body, token: observedButUnqualified }
+        : body,
+      ({ extraHeaders, omittedHeaders, url }) => ({
+        extraHeaders: url.pathname === "/api/explore/token"
+          ? {
+              ...extraHeaders,
+              "x-programmable-market-read-status": "partial",
+              "x-programmable-market-source": "dexscreener",
+            }
+          : extraHeaders,
+        omittedHeaders: url.pathname === "/api/explore/token"
+          ? [...omittedHeaders, "x-programmable-price-source"]
+          : omittedHeaders,
+      }),
+    ),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.detailMarketProvider, "dexscreener");
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+});
+
 test("staged smoke rejects a detail observation outside the selected provider", async () => {
   await assert.rejects(
     runStagedStaticDexscreenerSmokeV1({
@@ -1086,6 +1359,116 @@ test("staged smoke reports GMGN visible and detail providers dynamically", async
     url.searchParams.get("sort") === "newest" &&
     url.searchParams.get("model") === "classic"
   ));
+});
+
+test("staged smoke proves GMGN from the canonical market-cap candidates first", async () => {
+  const requests = [];
+  const fetchImpl = pagedGmgnStagedFetch({ marketCapProof: true });
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: (url, init) => {
+      requests.push(new URL(String(url)));
+      return fetchImpl(url, init);
+    },
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.tokenAddress, TOKEN);
+  assert.equal(result.detailMarketProvider, "gmgn");
+  assert.equal(result.detailStatus, "verified-gmgn-market");
+  assert.equal(requests.filter((url) =>
+    url.pathname === "/api/explore" &&
+    url.searchParams.get("model") === "classic"
+  ).length, 0);
+});
+
+test("staged smoke finds an exact GMGN proof after the newest nine Classic tokens", async () => {
+  const requests = [];
+  const fetchImpl = pagedGmgnStagedFetch({
+    entryCount: 10,
+    gmgnPage: 2,
+    marketCapObservedFallback: true,
+  });
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: (url, init) => {
+      requests.push(new URL(String(url)));
+      return fetchImpl(url, init);
+    },
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.tokenAddress, entry(9).tokenAddress);
+  assert.equal(result.detailMarketProvider, "gmgn");
+  assert.equal(result.detailStatus, "verified-gmgn-market");
+  assert.deepEqual(requests.filter((url) =>
+    url.pathname === "/api/explore" &&
+    url.searchParams.get("model") === "classic"
+  ).map((url) => url.searchParams.get("page")), ["1", "2"]);
+  assert.deepEqual(requests.filter((url) =>
+    url.pathname === "/api/explore/token"
+  ).map((url) => url.searchParams.get("address")), [
+    TOKEN,
+    entry(9).tokenAddress,
+  ]);
+});
+
+test("staged smoke bounds the fallback GMGN Classic scan to eight pages", async () => {
+  const requests = [];
+  const fetchImpl = pagedGmgnStagedFetch({ entryCount: 73, gmgnPage: 9 });
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: (url, init) => {
+        requests.push(new URL(String(url)));
+        return fetchImpl(url, init);
+      },
+      appendOutput: () => undefined,
+    }),
+    /Explore returned no GMGN-qualified canonical token/u,
+  );
+
+  assert.deepEqual(requests.filter((url) =>
+    url.pathname === "/api/explore" &&
+    url.searchParams.get("model") === "classic"
+  ).map((url) => url.searchParams.get("page")), [
+    "1", "2", "3", "4", "5", "6", "7", "8",
+  ]);
+});
+
+test("staged smoke keeps the exact $10k GMGN liquidity qualification gate", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: pagedGmgnStagedFetch({
+        entryCount: 10,
+        gmgnPage: 2,
+        gmgnLiquidityUsdWad: "9999999999999999999999",
+      }),
+      appendOutput: () => undefined,
+    }),
+    /Canonical GMGN list response contract is invalid/u,
+  );
 });
 
 test("staged smoke requires a complete GMGN detail runtime read", async () => {
@@ -2645,18 +3028,20 @@ test("the executable smoke contains no direct RPC or Bitquery reader", () => {
   );
   assert.match(source, /exactDetailMarketRead\(/u);
   assert.match(source, /environment\.PROGRAMMABLE_REQUIRE_GMGN_MARKET/u);
-  assert.match(source, /requireGmgnMarket &&/u);
-  assert.match(source, /detailMarketProvider !== "gmgn"/u);
+  assert.match(source, /if \(requireGmgnMarket\)/u);
+  assert.match(source, /exactGmgnDetailProof/u);
   assert.match(
     source,
-    /!qualifiedGmgnFdv\(detailToken, now\(\)\.getTime\(\)\)/u,
+    /qualifiedGmgnFdv\(candidate\.detailToken, now\(\)\.getTime\(\)\)/u,
   );
   assert.match(source, /VISIBLE_EXPLORE_PAGE_SIZE = 9/u);
+  assert.match(source, /GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8/u);
+  assert.match(source, /MINIMUM_FDV_LIQUIDITY_USD_WAD = 10_000n/u);
   assert.match(source, /model=classic/u);
   assert.match(source, /exactGmgnEligibleCanonicalToken/u);
   assert.match(
     source,
-    /x-programmable-market-read-status"\) !==\s*"complete"/u,
+    /x-programmable-market-read-status"\) ===\s*"complete"/u,
   );
   assert.match(
     source,
