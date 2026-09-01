@@ -48,6 +48,7 @@ import {
 } from "../lib/market-data/gmgn-canonical-ranking";
 import {
   readGmgnEthereumHotSearchesV1,
+  readGmgnEthereumMarketCapAuthorityRankV1,
   readGmgnEthereumSearchV1,
   readGmgnEthereumTrendingV1,
 } from "../lib/market-data/gmgn-discovery.server";
@@ -1296,6 +1297,50 @@ describe("GMGN discovery server adapter", () => {
       deadlineMs: Date.now() + 5_000,
     })).resolves.toBeNull();
     expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("awaits a fresh rank inside the shared market-cap authority lease", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    durableCacheHarness.productionAccountGate.mockReturnValue(gate);
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(
+        rankResponse([providerToken(79, 1)]),
+      ), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(
+        rankResponse([providerToken(80, 1)]),
+      ), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const options = {
+      interval: "1h" as const,
+      limit: 100 as const,
+      orderBy: "marketcap" as const,
+      direction: "asc" as const,
+    };
+
+    await expect(readGmgnEthereumTrendingV1(options, {
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(79) }],
+    });
+    expect(durableCacheHarness.entries.size).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(235_001);
+    await expect(readGmgnEthereumMarketCapAuthorityRankV1(options, {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(80) }],
+    });
+    await expect(readGmgnEthereumMarketCapAuthorityRankV1(options, {
+      deadlineMs: Date.now() + 5_000,
+    })).resolves.toMatchObject({
+      tokens: [{ tokenAddress: address(80) }],
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(durableCacheHarness.entries.size).toBe(1);
   });
 
   it("does not start a durable fill for a caller that cannot wait", async () => {

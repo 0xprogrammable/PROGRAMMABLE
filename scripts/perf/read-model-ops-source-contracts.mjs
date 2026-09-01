@@ -1051,11 +1051,11 @@ function exactExploreGmgnMarketCapRetryContract(source) {
   );
   if (directionProperties.length !== 1) return false;
 
-  const trendingCalls = directNamedCalls(
+  const authorityRankCalls = directNamedCalls(
     sourceFile,
-    "readGmgnEthereumTrendingV1",
+    "readGmgnEthereumMarketCapAuthorityRankV1",
   );
-  const rankCalls = trendingCalls.filter((call) =>
+  const rankCalls = authorityRankCalls.filter((call) =>
     call.arguments.length === 2 &&
     exactIdentifier(call.arguments[0], "rankOptions")
   );
@@ -1066,7 +1066,9 @@ function exactExploreGmgnMarketCapRetryContract(source) {
   const retryFunction = nearestFunctionLike(rankCalls[0]);
   return retryFunction !== null &&
     retryFunction === nearestFunctionLike(rankCalls[1]) &&
-    trendingCalls.filter((call) => nearestFunctionLike(call) === retryFunction)
+    authorityRankCalls.filter((call) =>
+      nearestFunctionLike(call) === retryFunction
+    )
       .length === 2;
 }
 
@@ -3630,7 +3632,14 @@ export function evaluateReadModelOperationsSourceContracts(
       "if (durableCacheEligible(wait))",
       "readDurablyCachedGmgnDiscoverySnapshotV1(",
       "if (durableSnapshotCurrent(durable.snapshot.fetchedAt))",
-      '["programmable-gmgn-ethereum-discovery-v2"]',
+      'export async function readGmgnEthereumMarketCapAuthorityRankV1(',
+      'type GmgnDiscoveryCacheModeV1 = "durable" | "shared-authority";',
+      'if (cacheMode === "shared-authority") {',
+      'normalized.interval !== "1h"',
+      "normalized.limit !== GMGN_TRENDING_MAXIMUM_LIMIT",
+      'normalized.orderBy !== "marketcap"',
+      "return readThroughCache(\n      discoveryCache,\n      discoveryInFlight,\n      key,\n      wait,",
+      '["programmable-gmgn-ethereum-discovery-v3"]',
       "{ revalidate: GMGN_DURABLE_CACHE_REVALIDATE_SECONDS }",
       "wait.fetchImpl === undefined",
       'return path === "/v1/market/hot_searches" ? 3 : 1;',
@@ -3726,12 +3735,12 @@ export function evaluateReadModelOperationsSourceContracts(
       "const MARKET_CAP_AUTHORITY_PUBLISH_RESERVE_MS = 3_000;",
       '"programmable.explore-market-cap-authority.v2"',
       '"programmable.explore-market-cap-authority-pin.v2"',
-      '"programmable.explore-market-cap-authority-input.v3"',
-      "EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3",
-      '"gmgn-qualified-rank+oldest-first-sentinels+cyclic-supply+same-bucket-supply-priority+cyclic-token-info+dexscreener.v3"',
-      "compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3",
+      '"programmable.explore-market-cap-authority-input.v4"',
+      "EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V4",
+      '"gmgn-qualified-rank+shared-authority-fresh-read+oldest-first-sentinels+cyclic-supply+same-bucket-supply-priority+cyclic-token-info+dexscreener.v4"',
+      "compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V4",
       "orderedCanonicalIdentities: entries.map((entry, index) => ({",
-      "const first = await readGmgnEthereumTrendingV1(",
+      "const first = await readGmgnEthereumMarketCapAuthorityRankV1(",
       "first !== null ||",
       "authorityDeadlineMs - Date.now() <",
       "rankOptions,",

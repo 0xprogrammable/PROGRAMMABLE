@@ -23,6 +23,7 @@ import {
 } from "../../../lib/market-data/gmgn-canonical-ranking";
 import {
   readGmgnEthereumHotSearchesV1,
+  readGmgnEthereumMarketCapAuthorityRankV1,
   readGmgnEthereumSearchV1,
   readGmgnEthereumTrendingV1,
 } from "../../../lib/market-data/gmgn-discovery.server";
@@ -106,8 +107,8 @@ const GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS =
 const MARKET_CAP_AUTHORITY_BUILD_BUDGET_MS = FAST_LANE_REQUEST_BUDGET_MS;
 const MARKET_CAP_AUTHORITY_PUBLISH_RESERVE_MS = 3_000;
 const MARKET_CAP_REQUEST_BUDGET_MS = 12_000;
-const EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3 =
-  "gmgn-qualified-rank+oldest-first-sentinels+cyclic-supply+same-bucket-supply-priority+cyclic-token-info+dexscreener.v3";
+const EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V4 =
+  "gmgn-qualified-rank+shared-authority-fresh-read+oldest-first-sentinels+cyclic-supply+same-bucket-supply-priority+cyclic-token-info+dexscreener.v4";
 const SHA256_COMMITMENT = /^sha256:[0-9a-f]{64}$/u;
 const UNSIGNED_INTEGER = /^(?:0|[1-9][0-9]*)$/u;
 const CLASSIC_EXCLUSIONS = Object.freeze([
@@ -973,9 +974,9 @@ export function exploreMarketCapAuthorityInputCommitmentV1(
   entries: readonly ExploreEntry[],
 ): `sha256:${string}` {
   return canonicalSha256(
-    "programmable.explore-market-cap-authority-input.v3",
+    "programmable.explore-market-cap-authority-input.v4",
     {
-      compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3,
+      compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V4,
       orderedCanonicalIdentities: entries.map((entry, index) => ({
         index,
         ...exactOrderedMarketIdentityV1(entry),
@@ -1493,7 +1494,7 @@ async function buildExploreMarketCapAuthorityV1(
   const rankCandidate = canonicalEntries.length === 0
     ? null
     : await (async () => {
-        const first = await readGmgnEthereumTrendingV1(
+        const first = await readGmgnEthereumMarketCapAuthorityRankV1(
           rankOptions,
           rankWait,
         ).catch(() => null);
@@ -1503,7 +1504,7 @@ async function buildExploreMarketCapAuthorityV1(
           authorityDeadlineMs - Date.now() <
             GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS
         ) return first;
-        return readGmgnEthereumTrendingV1(
+        return readGmgnEthereumMarketCapAuthorityRankV1(
           rankOptions,
           rankWait,
         ).catch(() => null);

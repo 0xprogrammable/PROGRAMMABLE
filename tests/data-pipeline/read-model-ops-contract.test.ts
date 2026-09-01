@@ -987,19 +987,25 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a legacy market-cap authority input policy domain",
+      '"programmable.explore-market-cap-authority-input.v4"',
       '"programmable.explore-market-cap-authority-input.v3"',
-      '"programmable.explore-market-cap-authority-input.v2"',
     ],
     [
       "an authority input detached from its composition policy",
-      "compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V3",
+      "compositionPolicy: EXPLORE_MARKET_CAP_AUTHORITY_COMPOSITION_POLICY_V4",
       'compositionPolicy: "legacy-prefix-token-info"',
     ],
     [
       "a drifted market-cap authority composition policy",
-      '"gmgn-qualified-rank+oldest-first-sentinels+cyclic-supply+' +
-        'same-bucket-supply-priority+cyclic-token-info+dexscreener.v3"',
+      '"gmgn-qualified-rank+shared-authority-fresh-read+' +
+        'oldest-first-sentinels+cyclic-supply+same-bucket-supply-priority+' +
+        'cyclic-token-info+dexscreener.v4"',
       '"gmgn-prefix-token-info+dexscreener.v2"',
+    ],
+    [
+      "a market-cap authority builder detached from its fresh rank read",
+      "const first = await readGmgnEthereumMarketCapAuthorityRankV1(",
+      "const first = await readGmgnEthereumTrendingV1(",
     ],
     [
       "a non-rotating canonical supply hydration prefix",
@@ -1130,11 +1136,11 @@ describe("read-model operations source contract", () => {
     const path = "app/api/explore/route.ts";
     const route = readFileSync(resolve(ROOT, path), "utf8");
     const retry =
-      "return readGmgnEthereumTrendingV1(\n" +
+      "return readGmgnEthereumMarketCapAuthorityRankV1(\n" +
       "          rankOptions,\n" +
       "          rankWait,";
     const oppositeDirectionRetry =
-      "return readGmgnEthereumTrendingV1(\n" +
+      "return readGmgnEthereumMarketCapAuthorityRankV1(\n" +
       "          {\n" +
       "            ...rankOptions,\n" +
       "            direction: direction === \"asc\" ? \"desc\" : \"asc\",\n" +
@@ -1343,6 +1349,12 @@ describe("read-model operations source contract", () => {
       "lib/market-data/gmgn-discovery.server.ts",
       "return envelope;",
       "return envelope.data;",
+    ],
+    [
+      "a market-cap authority rank restored to stale Next SWR",
+      "lib/market-data/gmgn-discovery.server.ts",
+      'if (cacheMode === "shared-authority") {',
+      'if (cacheMode === "disabled-shared-authority") {',
     ],
     [
       "an ignored nested discovery chain",
