@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 
 import {
   buildExploreDataQuality,
@@ -90,6 +91,11 @@ const GMGN_MARKET_CAP_RANK_REQUEST_BUDGET_MS = 2_500;
 const GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS =
   GMGN_MARKET_CAP_RANK_REQUEST_BUDGET_MS +
   MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS + GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
+const EXPLORE_MARKET_CAP_CACHE_REVALIDATE_SECONDS = 60;
+// Explore responses may spend up to 60 seconds in the public edge cache. Keep
+// both the completed composition and every provider ordering observation
+// inside the remaining 235-second origin budget of the five-minute contract.
+const EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS = 235_000;
 const CLASSIC_EXCLUSIONS = Object.freeze([
   "classic-v1",
   "classic-v2",
@@ -742,6 +748,7 @@ export function exploreMarketCapRankingV1(
   now = new Date(),
 ): Readonly<{
   orderedEntries: readonly ExploreEntry[];
+  orderingAsOfTimes: readonly (string | null)[];
   ranking: ExploreMarketCapRankingV1;
 }> {
   const hybrid = rankCanonicalExploreMarketCapEntriesWithGmgnV1(
@@ -798,6 +805,9 @@ export function exploreMarketCapRankingV1(
   );
   return {
     orderedEntries: hybrid.entries,
+    orderingAsOfTimes: Object.freeze(
+      hybrid.rows.map((row) => row.orderingAsOfTime),
+    ),
     ranking: {
       schemaVersion: "programmable.explore-market-cap-ranking.v1",
       requested: "market-cap",
@@ -847,6 +857,315 @@ export function exploreMarketCapRankingV1(
           .at(-1) ?? null,
     },
   };
+}
+
+type CachedExploreMarketCapCompositionV1 = Readonly<{
+  schemaVersion: "programmable.explore-market-cap-composition.v1";
+  inputCommitment: `sha256:${string}`;
+  direction: "asc" | "desc";
+  assembledAt: string;
+  orderedEntryIds: readonly string[];
+  orderingAsOfTimes: readonly (string | null)[];
+  ranking: ExploreMarketCapRankingV1;
+}>;
+
+function exploreMarketCapCompositionInputCommitmentV1(
+  entries: readonly ExploreEntry[],
+  direction: "asc" | "desc",
+): `sha256:${string}` {
+  return canonicalSha256(
+    "programmable.explore-market-cap-composition-input.v1",
+    { direction, entries },
+  );
+}
+
+async function assembleExploreMarketCapCompositionV1(
+  filteredNewest: readonly ExploreEntry[],
+  direction: "asc" | "desc",
+): Promise<Readonly<{
+  orderedEntries: readonly ExploreEntry[];
+  orderingAsOfTimes: readonly (string | null)[];
+  ranking: ExploreMarketCapRankingV1;
+}>> {
+  const deadlineMs = Date.now() + FAST_LANE_REQUEST_BUDGET_MS;
+  const readSignal = AbortSignal.timeout(FAST_LANE_REQUEST_BUDGET_MS);
+  const rankOptions = {
+    interval: "1h" as const,
+    limit: 100,
+    orderBy: "marketcap" as const,
+    direction,
+  } as const;
+  const rankWait = { signal: readSignal, deadlineMs };
+  const rankCandidate = filteredNewest.length === 0
+    ? null
+    : await (async () => {
+        const first = await readGmgnEthereumTrendingV1(
+          rankOptions,
+          rankWait,
+        ).catch(() => null);
+        if (
+          first !== null ||
+          rankWait.signal.aborted ||
+          deadlineMs - Date.now() <
+            GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS
+        ) return first;
+        return readGmgnEthereumTrendingV1(
+          rankOptions,
+          rankWait,
+        ).catch(() => null);
+      })();
+  const rank = rankCandidate?.kind === "trending" &&
+      rankCandidate.orderBy === "marketcap" &&
+      rankCandidate.direction === direction
+    ? rankCandidate
+    : null;
+  const marketCapNow = new Date();
+  const primary = rankCanonicalExploreMarketCapPrimaryWithGmgnV1(
+    filteredNewest,
+    rank === null ? [] : [rank],
+    direction,
+    marketCapNow,
+  );
+  const unobserved = primary.rows.flatMap((row) =>
+    row.gmgn === null ? [row.entry] : []
+  );
+  const supplyRequested = unobserved.filter(
+    canonicalTokenSupplyHydrationRequiredV1,
+  ).slice(0, MARKET_CAP_SUPPLY_HYDRATION_LIMIT);
+  const hydratedSupply = supplyRequested.length === 0
+    ? []
+    : await hydrateMissingCanonicalTokenSupplyBoundedV1(
+        supplyRequested,
+        {
+          signal: readSignal,
+          deadlineMs: deadlineMs - GMGN_MARKET_CAP_HYDRATION_RESERVE_MS,
+          maximumDurationMs: MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS,
+        },
+      ).catch(() => supplyRequested);
+  const hydratedSupplyById = new Map<string, ExploreEntry>();
+  for (const [index, original] of supplyRequested.entries()) {
+    const candidate = hydratedSupply[index];
+    if (
+      candidate !== undefined &&
+      !canonicalTokenSupplyHydrationRequiredV1(candidate) &&
+      exactExploreMarketIdentityV1(candidate, original)
+    ) hydratedSupplyById.set(original.id, candidate);
+  }
+  const hydrationUniverse = unobserved.map((entry) =>
+    hydratedSupplyById.get(entry.id) ?? entry
+  );
+  const gmgnHydrationEligible = hydrationUniverse.filter(
+    gmgnVisibleMarketEntryEligibleV1,
+  );
+  const gmgnRequested = gmgnHydrationEligible.slice(
+    0,
+    GMGN_MARKET_CAP_HYDRATION_LIMIT,
+  );
+  const gmgnHydrationDeadlineMs = deadlineMs -
+    GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
+  const gmgnSnapshots = gmgnRequested.length > 0 &&
+      gmgnHydrationDeadlineMs > Date.now()
+    ? await readGmgnExploreSnapshotsV1(gmgnRequested, {
+        signal: readSignal,
+        deadlineMs: gmgnHydrationDeadlineMs,
+      }).catch(() => new Map())
+    : new Map();
+  const gmgnHydratedEntries = gmgnRequested.flatMap((entry) => {
+    const snapshot = gmgnSnapshots.get(entry.id);
+    if (snapshot === undefined) return [];
+    const hydrated = gmgnTokenInfoFallbackEntryV1(
+      entry,
+      snapshot,
+      new Date(),
+    );
+    return hydrated === null ? [] : [hydrated];
+  });
+  const gmgnQualifiedIds = new Set(gmgnHydratedEntries.flatMap((entry) =>
+    valuationSortValue(entry) === null ? [] : [entry.id]
+  ));
+  const dexscreenerRequested = hydrationUniverse.filter(
+    (entry) => !gmgnQualifiedIds.has(entry.id),
+  );
+  const fallback = await readDexscreenerExploreEntriesV1(
+    dexscreenerRequested,
+    { signal: readSignal, deadlineMs },
+  );
+  return exploreMarketCapRankingV1(
+    filteredNewest,
+    rank,
+    {
+      gmgnHydrationLimit: GMGN_MARKET_CAP_HYDRATION_LIMIT,
+      gmgnHydrationEligibleEntryCount: gmgnHydrationEligible.length,
+      gmgnRequestedEntries: gmgnRequested,
+      gmgnEntries: gmgnHydratedEntries,
+      dexscreenerRequestedEntries: dexscreenerRequested,
+      dexscreenerEntries: fallback.entries,
+    },
+    direction,
+    new Date(),
+  );
+}
+
+// The Next Data Cache binds the complete provider composition, not just GMGN's
+// rank prefix, across serverless isolates. The callback receives no caller
+// signal: a timed-out request may stop waiting while the bounded fill finishes.
+const readDurablyCachedExploreMarketCapCompositionV1 = unstable_cache(
+  async (
+    inputCommitment: `sha256:${string}`,
+    direction: "asc" | "desc",
+    entries: readonly ExploreEntry[],
+  ): Promise<CachedExploreMarketCapCompositionV1> => {
+    if (
+      exploreMarketCapCompositionInputCommitmentV1(entries, direction) !==
+        inputCommitment
+    ) throw new Error("Explore market-cap cache input is not bound");
+    const composed = await assembleExploreMarketCapCompositionV1(
+      entries,
+      direction,
+    );
+    const assembledAt = new Date().toISOString();
+    if (
+      !currentExploreMarketCapOrderingTimesV1(
+        composed.orderingAsOfTimes,
+        entries.length,
+        composed.ranking.qualifiedCount,
+      ) ||
+      (composed.ranking.asOfTime === null &&
+        (composed.ranking.observedTokenCount > 0 ||
+          composed.ranking.qualifiedCount > 0)) ||
+      (composed.ranking.asOfTime !== null &&
+        !currentExploreMarketCapTimestampV1(composed.ranking.asOfTime))
+    ) throw new Error("Explore market-cap provider snapshot is stale");
+    return Object.freeze({
+      schemaVersion: "programmable.explore-market-cap-composition.v1",
+      inputCommitment,
+      direction,
+      assembledAt,
+      orderedEntryIds: Object.freeze(
+        composed.orderedEntries.map((entry) => entry.id),
+      ),
+      orderingAsOfTimes: Object.freeze([...composed.orderingAsOfTimes]),
+      ranking: composed.ranking,
+    });
+  },
+  ["programmable-explore-market-cap-composition-v1"],
+  { revalidate: EXPLORE_MARKET_CAP_CACHE_REVALIDATE_SECONDS },
+);
+
+function currentExploreMarketCapTimestampV1(value: string): boolean {
+  const observedAtMs = Date.parse(value);
+  const nowMs = Date.now();
+  return Number.isFinite(observedAtMs) &&
+    new Date(observedAtMs).toISOString() === value &&
+    observedAtMs <= nowMs &&
+    nowMs - observedAtMs <= EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS;
+}
+
+function currentExploreMarketCapOrderingTimesV1(
+  value: unknown,
+  expectedLength: number,
+  expectedQualifiedCount: number,
+): value is readonly (string | null)[] {
+  if (!Array.isArray(value) || value.length !== expectedLength) return false;
+  let qualifiedCount = 0;
+  for (const observedAt of value) {
+    if (observedAt === null) continue;
+    if (
+      typeof observedAt !== "string" ||
+      !currentExploreMarketCapTimestampV1(observedAt)
+    ) return false;
+    qualifiedCount += 1;
+  }
+  return qualifiedCount === expectedQualifiedCount;
+}
+
+async function waitForExploreMarketCapCompositionV1(
+  pending: Promise<CachedExploreMarketCapCompositionV1>,
+  signal: AbortSignal,
+  deadlineMs: number,
+): Promise<CachedExploreMarketCapCompositionV1> {
+  if (signal.aborted || deadlineMs <= Date.now()) {
+    throw signal.reason ?? new DOMException("Aborted", "AbortError");
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+      callback();
+    };
+    const abort = () => finish(() => reject(
+      signal.reason ?? new DOMException("Aborted", "AbortError"),
+    ));
+    signal.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(abort, Math.max(0, deadlineMs - Date.now()));
+    pending.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
+}
+
+async function readBoundExploreMarketCapCompositionV1(
+  entries: readonly ExploreEntry[],
+  direction: "asc" | "desc",
+  wait: Readonly<{ signal: AbortSignal; deadlineMs: number }>,
+): Promise<Readonly<{
+  orderedEntries: readonly ExploreEntry[];
+  ranking: ExploreMarketCapRankingV1;
+}>> {
+  const inputCommitment = exploreMarketCapCompositionInputCommitmentV1(
+    entries,
+    direction,
+  );
+  const cached = await waitForExploreMarketCapCompositionV1(
+    readDurablyCachedExploreMarketCapCompositionV1(
+      inputCommitment,
+      direction,
+      entries,
+    ),
+    wait.signal,
+    wait.deadlineMs,
+  );
+  if (
+    cached.schemaVersion !==
+      "programmable.explore-market-cap-composition.v1" ||
+    cached.inputCommitment !== inputCommitment ||
+    cached.direction !== direction ||
+    !currentExploreMarketCapTimestampV1(cached.assembledAt) ||
+    cached.ranking.direction !== direction ||
+    cached.ranking.canonicalEntryCount !== entries.length ||
+    cached.ranking.totalCount !== entries.length ||
+    !/^sha256:[0-9a-f]{64}$/u.test(cached.ranking.rankingCommitment) ||
+    (cached.ranking.asOfTime === null &&
+      (cached.ranking.observedTokenCount > 0 ||
+        cached.ranking.qualifiedCount > 0)) ||
+    (cached.ranking.asOfTime !== null &&
+      !currentExploreMarketCapTimestampV1(cached.ranking.asOfTime)) ||
+    cached.orderedEntryIds.length !== entries.length ||
+    !currentExploreMarketCapOrderingTimesV1(
+      cached.orderingAsOfTimes,
+      entries.length,
+      cached.ranking.qualifiedCount,
+    )
+  ) throw new Error("Explore market-cap cache result is invalid or stale");
+  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
+  if (entriesById.size !== entries.length) {
+    throw new Error("Explore market-cap cache input identities are duplicated");
+  }
+  const orderedIds = new Set(cached.orderedEntryIds);
+  if (
+    orderedIds.size !== entries.length ||
+    cached.orderedEntryIds.some((id) => !entriesById.has(id))
+  ) throw new Error("Explore market-cap cache order is not a permutation");
+  return Object.freeze({
+    orderedEntries: Object.freeze(
+      cached.orderedEntryIds.map((id) => entriesById.get(id)!),
+    ),
+    ranking: cached.ranking,
+  });
 }
 
 function generatedAgeMs(generatedAt: string): number | null {
@@ -1137,12 +1456,6 @@ export async function GET(request: NextRequest) {
     let discovery: ExploreDiscoveryRankingV1 | null = null;
     let searchRanking: ExploreSearchRankingV1 | null = null;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
-      const canonicalFilterUniverse = filterExploreEntries(
-        presentedPublicEntries,
-        "",
-        options.socials,
-        options.model,
-      );
       const localFilteredNewest = sortExploreEntries(
         filterExploreEntries(
           presentedPublicEntries,
@@ -1153,35 +1466,7 @@ export async function GET(request: NextRequest) {
         "newest",
       );
       const direction = options.sort === "market-cap" ? "desc" : "asc";
-      const rankOptions = {
-        interval: "1h" as const,
-        limit: 100,
-        orderBy: "marketcap" as const,
-        direction,
-      } as const;
-      const rankWait = { signal: readSignal, deadlineMs };
-      const rankRead = canonicalFilterUniverse.length === 0
-        ? Promise.resolve(null)
-        : (async () => {
-            const first = await readGmgnEthereumTrendingV1(
-              rankOptions,
-              rankWait,
-            ).catch(() => null);
-            if (
-              first !== null ||
-              rankWait.signal.aborted ||
-              deadlineMs - Date.now() <
-                GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS
-            ) return first;
-            return readGmgnEthereumTrendingV1(
-              rankOptions,
-              rankWait,
-            ).catch(() => null);
-          })();
-      const [rankCandidate, searchSnapshot] = await Promise.all([
-        rankRead,
-        searchRead,
-      ]);
+      const searchSnapshot = await searchRead;
       const searchResult = options.query === ""
         ? null
         : rankExploreSearchEntriesV1(
@@ -1196,98 +1481,10 @@ export async function GET(request: NextRequest) {
           );
       if (searchResult !== null) searchRanking = searchResult.search;
       const filteredNewest = searchResult?.entries ?? localFilteredNewest;
-      const rank = rankCandidate?.kind === "trending" &&
-          rankCandidate.orderBy === "marketcap" &&
-          rankCandidate.direction === direction
-        ? rankCandidate
-        : null;
-      const marketCapNow = new Date();
-      const primary = rankCanonicalExploreMarketCapPrimaryWithGmgnV1(
+      const ranked = await readBoundExploreMarketCapCompositionV1(
         filteredNewest,
-        rank === null ? [] : [rank],
         direction,
-        marketCapNow,
-      );
-      const unobserved = primary.rows.flatMap((row) =>
-        row.gmgn === null ? [row.entry] : []
-      );
-      const supplyRequested = unobserved.filter(
-        canonicalTokenSupplyHydrationRequiredV1,
-      ).slice(0, MARKET_CAP_SUPPLY_HYDRATION_LIMIT);
-      const hydratedSupply = supplyRequested.length === 0
-        ? []
-        : await hydrateMissingCanonicalTokenSupplyBoundedV1(
-            supplyRequested,
-            {
-              signal: readSignal,
-              deadlineMs: deadlineMs - GMGN_MARKET_CAP_HYDRATION_RESERVE_MS,
-              maximumDurationMs: MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS,
-            },
-          ).catch(() => supplyRequested);
-      const hydratedSupplyById = new Map<string, ExploreEntry>();
-      for (const [index, original] of supplyRequested.entries()) {
-        const candidate = hydratedSupply[index];
-        if (
-          candidate !== undefined &&
-          !canonicalTokenSupplyHydrationRequiredV1(candidate) &&
-          exactExploreMarketIdentityV1(candidate, original)
-        ) hydratedSupplyById.set(original.id, candidate);
-      }
-      const hydrationUniverse = unobserved.map((entry) =>
-        hydratedSupplyById.get(entry.id) ?? entry
-      );
-      const gmgnHydrationEligible = hydrationUniverse.filter(
-        gmgnVisibleMarketEntryEligibleV1,
-      );
-      const gmgnRequested = gmgnHydrationEligible.slice(
-        0,
-        GMGN_MARKET_CAP_HYDRATION_LIMIT,
-      );
-      const gmgnHydrationDeadlineMs = deadlineMs -
-        GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
-      const gmgnSnapshots = gmgnRequested.length > 0 &&
-          gmgnHydrationDeadlineMs > Date.now()
-        ? await readGmgnExploreSnapshotsV1(gmgnRequested, {
-            signal: readSignal,
-            deadlineMs: gmgnHydrationDeadlineMs,
-          }).catch(() => new Map())
-        : new Map();
-      const gmgnHydratedEntries = gmgnRequested.flatMap((entry) => {
-        const snapshot = gmgnSnapshots.get(entry.id);
-        if (snapshot === undefined) return [];
-        const hydrated = gmgnTokenInfoFallbackEntryV1(
-          entry,
-          snapshot,
-          new Date(),
-        );
-        return hydrated === null ? [] : [hydrated];
-      });
-      const gmgnQualifiedIds = new Set(gmgnHydratedEntries.flatMap((entry) =>
-        valuationSortValue(entry) === null ? [] : [entry.id]
-      ));
-      const dexscreenerRequested = hydrationUniverse.filter(
-        (entry) => !gmgnQualifiedIds.has(entry.id),
-      );
-      const fallback = await readDexscreenerExploreEntriesV1(
-        dexscreenerRequested,
-        {
-          signal: readSignal,
-          deadlineMs,
-        },
-      );
-      const ranked = exploreMarketCapRankingV1(
-        filteredNewest,
-        rank,
-        {
-          gmgnHydrationLimit: GMGN_MARKET_CAP_HYDRATION_LIMIT,
-          gmgnHydrationEligibleEntryCount: gmgnHydrationEligible.length,
-          gmgnRequestedEntries: gmgnRequested,
-          gmgnEntries: gmgnHydratedEntries,
-          dexscreenerRequestedEntries: dexscreenerRequested,
-          dexscreenerEntries: fallback.entries,
-        },
-        direction,
-        new Date(),
+        { signal: readSignal, deadlineMs },
       );
       marketCapRanking = ranked.ranking;
       const identityPage = paginateEntries(ranked.orderedEntries, options);

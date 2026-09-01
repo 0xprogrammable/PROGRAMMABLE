@@ -13,6 +13,7 @@ import { exploreEntryMarketIdentitiesV1 } from
   "../lib/market-data/explore-market-identities";
 
 const mocks = vi.hoisted(() => ({
+  durableCache: new Map<string, string>(),
   readCatalog: vi.fn(),
   readLastGoodCatalog: vi.fn(),
   readDex: vi.fn(),
@@ -35,6 +36,21 @@ const mocks = vi.hoisted(() => ({
   supplyRequired: vi.fn<(entry: ExploreEntry) => boolean>(),
   hydrateSupply: vi.fn(),
   hydrateSupplyUnbounded: vi.fn(),
+}));
+
+vi.mock("next/cache", () => ({
+  unstable_cache: (
+    callback: (...args: unknown[]) => Promise<unknown>,
+    keyParts: readonly string[] = [],
+  ) => async (...args: unknown[]) => {
+    const key = JSON.stringify([keyParts, args]);
+    const cached = mocks.durableCache.get(key);
+    if (cached !== undefined) return JSON.parse(cached) as unknown;
+    const value = await callback(...args);
+    const encoded = JSON.stringify(value);
+    mocks.durableCache.set(key, encoded);
+    return JSON.parse(encoded) as unknown;
+  },
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -422,6 +438,7 @@ function valued(
   input: readonly ExploreEntry[],
   qualifiedIndexes: ReadonlySet<number> = new Set(input.map((_entry, index) => index)),
 ): readonly ValuedExploreEntry[] {
+  const observedAt = new Date().toISOString();
   return input.map((entry, index) => qualifiedIndexes.has(index)
     ? {
         ...entry,
@@ -433,7 +450,7 @@ function valued(
           valueWad: (BigInt(entry.tokenAddress ?? "0x0") * 10n ** 18n).toString(),
           freshness: "provider-recent" as const,
           source: "dexscreener" as const,
-          asOfTime: NOW,
+          asOfTime: observedAt,
         },
       }
     : {
@@ -501,6 +518,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.durableCache.clear();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.readCatalog.mockResolvedValue(catalog());
     mocks.readLastGoodCatalog.mockRejectedValue(
@@ -1312,7 +1330,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     }));
   });
 
-  it("hydrates rank-unobserved canonical tokens with GMGN before Dex", async () => {
+  it("caches the full GMGN and Dex ranking composition across pages", async () => {
     const eligibleEntries = entries.slice(0, 5).map((entry) => ({
       ...entry,
       totalSupplyRaw: "1000000000000000000000",
@@ -1385,7 +1403,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       canonicalTailCount: 1,
       qualifiedCount: 4,
       totalCount: 5,
-      asOfTime: fetchedAt,
+      asOfTime: expect.any(String),
     });
     expect(mocks.readDex.mock.calls[0]?.[0].map((entry: ExploreEntry) => entry.id))
       .toEqual([
@@ -1412,9 +1430,86 @@ describe("Explore static identity and Dexscreener market contract", () => {
     const drifted = await json(await GET(
       request("sort=market-cap&page=2&limit=2"),
     ));
-    expect(drifted.ranking.rankingCommitment).not.toBe(
+    expect(drifted.ranking.rankingCommitment).toBe(
       body.ranking.rankingCommitment,
     );
+    expect(mocks.readGmgn).toHaveBeenCalledOnce();
+    expect(mocks.readDex.mock.calls.filter(([input]) =>
+      (input as readonly ExploreEntry[]).length === 3
+    )).toHaveLength(1);
+  });
+
+  it("expires a mixed-age composition when any ordering observation is stale", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
+    try {
+      const mixedAgeEntries = entries.slice(0, 3);
+      mocks.readCatalog.mockResolvedValue(catalog({ entries: mixedAgeEntries }));
+      const freshRankAt = new Date().toISOString();
+      const fallbackAt = new Date(Date.now() - 234_000).toISOString();
+      mocks.readTrending.mockResolvedValue({
+        ...discoverySnapshot(
+          "trending",
+          [mixedAgeEntries[2]!],
+          [],
+          { orderBy: "marketcap", direction: "desc" },
+        ),
+        fetchedAt: freshRankAt,
+      });
+      let compositionDexReads = 0;
+      mocks.readDex.mockImplementation(async (
+        input: readonly ExploreEntry[],
+      ) => {
+        const currentEntries = valued(input);
+        const compositionEntries = input.length === 2
+          ? currentEntries.map((entry) => {
+              if (entry.valuation.status !== "available") return entry;
+              return {
+                ...entry,
+                valuation: { ...entry.valuation, asOfTime: fallbackAt },
+              };
+            })
+          : currentEntries;
+        if (input.length === 2) compositionDexReads += 1;
+        return {
+          entries: compositionEntries,
+          marketRead: marketRead({
+            requested: input.length,
+            qualified: input.length,
+          }),
+        };
+      });
+
+      const firstResponse = await GET(
+        request("sort=market-cap&page=1&limit=1"),
+      );
+      const first = await json(firstResponse);
+
+      expect(firstResponse.status).toBe(200);
+      expect(first.ranking).toMatchObject({
+        source: "gmgn+dexscreener",
+        qualifiedCount: 3,
+        totalCount: 3,
+        asOfTime: freshRankAt,
+      });
+      expect(compositionDexReads).toBe(1);
+
+      vi.setSystemTime(Date.now() + 2_000);
+      const expiredResponse = await GET(
+        request("sort=market-cap&page=2&limit=1"),
+      );
+      const expired = await json(expiredResponse);
+
+      expect(expiredResponse.status).toBe(503);
+      expect(expired).toEqual({
+        error: "Token data is temporarily unavailable",
+      });
+      expect(first.ranking.asOfTime).toBe(freshRankAt);
+      expect(mocks.readTrending).toHaveBeenCalledOnce();
+      expect(compositionDexReads).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("bounds Registry Custom supply hydration before GMGN token info", async () => {
@@ -1717,7 +1812,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     }
   });
 
-  it("does not retry GMGN rank after the request signal aborts", async () => {
+  it("stops waiting for a composed cache fill after request abort", async () => {
     const controller = new AbortController();
     mocks.readTrending
       .mockImplementationOnce(async () => {
@@ -1731,9 +1826,9 @@ describe("Explore static identity and Dexscreener market contract", () => {
     ));
     const body = await json(response);
 
-    expect(response.status).toBe(200);
-    expect(body.ranking.gmgnStatus).toBe("unavailable");
-    expect(mocks.readTrending).toHaveBeenCalledOnce();
+    expect(response.status).toBe(503);
+    expect(body).toEqual({ error: "Token data is temporarily unavailable" });
+    expect(mocks.readTrending).toHaveBeenCalledTimes(2);
     expect(controller.signal.aborted).toBe(true);
   });
 
