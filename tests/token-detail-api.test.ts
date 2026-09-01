@@ -666,6 +666,37 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     );
   });
 
+  it("reports an exact Dexscreener observation without claiming a qualified price", async () => {
+    mocks.readDex.mockResolvedValueOnce({
+      entries: [{
+        ...entry,
+        valuation: { status: "unavailable", reason: "source-unavailable" },
+      }],
+      marketRead: {
+        ...marketRead("complete"),
+        observedCount: 1,
+        qualifiedCount: 0,
+        unavailableCount: 1,
+      },
+    });
+
+    const response = await GET(request());
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.token).toMatchObject({
+      id: entry.id,
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    });
+    expect(response.headers.get("x-programmable-market-read-status")).toBe(
+      "complete",
+    );
+    expect(response.headers.get("x-programmable-market-source")).toBe(
+      "dexscreener",
+    );
+    expect(response.headers.get("x-programmable-price-source")).toBeNull();
+    expect(response.headers.get("x-programmable-market-as-of")).toBeNull();
+  });
+
   it("retains the identity when the market adapter unexpectedly throws", async () => {
     mocks.readDex.mockRejectedValueOnce(new Error("Dex outage"));
     const response = await GET(request());

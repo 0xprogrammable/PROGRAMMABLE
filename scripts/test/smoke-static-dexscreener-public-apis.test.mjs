@@ -1007,6 +1007,7 @@ test("staged smoke rejects a detail observation outside the selected provider", 
           extraHeaders: url.pathname === "/api/explore/token"
             ? {
                 ...extraHeaders,
+                "x-programmable-market-read-status": "complete",
                 "x-programmable-market-source": "gmgn",
               }
             : extraHeaders,
