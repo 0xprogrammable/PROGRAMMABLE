@@ -224,7 +224,7 @@ export class PostgresGmgnAccountGateV1 implements GmgnAccountGateV1 {
     if (
       !Number.isSafeInteger(input.requestsPerSecond)
       || input.requestsPerSecond < 1
-      || input.requestsPerSecond > 50
+      || input.requestsPerSecond > 20
       || !isGmgnAccountGateCostV1(cost)
       || !Number.isFinite(input.deadlineMs)
     ) throw new TypeError("GMGN account gate reservation is invalid");

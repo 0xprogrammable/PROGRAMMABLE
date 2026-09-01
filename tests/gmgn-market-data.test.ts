@@ -188,6 +188,24 @@ describe("GMGN canonical market enrichment", () => {
     )).toBeNull();
   });
 
+  it("accepts only an exact optional Ethereum chain on the envelope and token", () => {
+    const entry = token(119);
+    const parse = (response: unknown) => parseGmgnMarketSnapshotV1(
+      response,
+      [identity(entry)],
+      { raw: 10_000n * 10n ** 18n, decimals: 18 },
+      NOW,
+    );
+    expect(parse({
+      chain: "eth",
+      data: { ...providerData(entry), chain: "eth" },
+    })).not.toBeNull();
+    expect(parse({ ...providerData(entry), chain: "bsc" })).toBeNull();
+    expect(parse({ chain: "bsc", data: providerData(entry) })).toBeNull();
+    expect(parse({ ...providerData(entry), chain: "ETH" })).toBeNull();
+    expect(parse({ ...providerData(entry), chain: undefined })).toBeNull();
+  });
+
   it("does not call GMGN without a server-side API key", async () => {
     const fetchImpl = vi.fn();
     await expect(readGmgnMarketSnapshotV1(token(2), {
@@ -229,6 +247,94 @@ describe("GMGN canonical market enrichment", () => {
     expect(new Headers(init?.headers).get("X-APIKEY")).toBe("test-server-key");
     expect(init?.redirect).toBe("error");
     expect(init?.credentials).toBe("omit");
+  });
+
+  it("rejects a foreign chain on the raw provider envelope", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(129);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      code: 0,
+      chain: "bsc",
+      data: providerData(entry),
+    }), { status: 200 }));
+
+    await expect(readGmgnMarketSnapshotV1(entry, {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => NOW,
+    })).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["20", 20, 130],
+    ["21", 1, 131],
+  ] as const)(
+    "maps configured RPS %s to the shared gate as %i",
+    async (configured, expected, index) => {
+      vi.stubEnv("GMGN_API_KEY", "test-server-key");
+      vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", configured);
+      const entry = token(index);
+      const reserveSlot = vi.fn(async () => GATE_RESERVATION);
+      const accountGate: GmgnAccountGateV1 = {
+        reserveSlot,
+        blockUntil: vi.fn(),
+        complete: vi.fn(async () => {}),
+      };
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+        code: 0,
+        data: providerData(entry),
+      }), { status: 200 }));
+
+      await expect(readGmgnMarketSnapshotV1(entry, {
+        fetchImpl: fetchImpl as typeof fetch,
+        accountGate,
+        now: () => NOW,
+      })).resolves.not.toBeNull();
+      expect(reserveSlot).toHaveBeenCalledWith({
+        requestsPerSecond: expected,
+        deadlineMs: NOW.getTime() + 2_500,
+        signal: expect.any(AbortSignal),
+      });
+    },
+  );
+
+  it("keeps shared provider work alive when the first caller aborts", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(132);
+    let resolveProvider: ((response: Response) => void) | undefined;
+    let providerSignal: AbortSignal | null | undefined;
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      providerSignal = init?.signal;
+      return new Promise<Response>((resolve) => {
+        resolveProvider = resolve;
+      });
+    });
+    const firstController = new AbortController();
+    const inputWait = {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    };
+
+    const first = readGmgnMarketSnapshotV1(entry, {
+      ...inputWait,
+      signal: firstController.signal,
+    });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    const second = readGmgnMarketSnapshotV1(entry, inputWait);
+    firstController.abort();
+    await expect(first).resolves.toBeNull();
+    expect(providerSignal).not.toBe(firstController.signal);
+    expect(providerSignal?.aborted).toBe(false);
+
+    resolveProvider?.(new Response(JSON.stringify({
+      code: 0,
+      data: providerData(entry),
+    }), { status: 200 }));
+    const exact = await second;
+    expect(exact?.identity).toEqual(identity(entry));
+    await expect(readGmgnMarketSnapshotV1(entry, inputWait)).resolves.toEqual(exact);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("never forwards X-APIKEY to a redirect target origin", async () => {

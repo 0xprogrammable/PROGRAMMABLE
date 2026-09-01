@@ -438,6 +438,60 @@ describe("GMGN exact Ethereum kline adapter", () => {
     }
   });
 
+  it.each([
+    ["20", 20, 215],
+    ["21", 1, 216],
+  ] as const)(
+    "maps configured RPS %s to the shared chart gate as %i",
+    async (configured, expected, index) => {
+      vi.stubEnv("GMGN_API_KEY", "test-server-key");
+      vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", configured);
+      const entry = token(index);
+      const reservation = {
+        kind: "reserved" as const,
+        reservedAtMs: NOW.getTime(),
+        generation: 1,
+        holder: "00000000-0000-4000-8000-000000000001",
+      };
+      const accountGate: GmgnAccountGateV1 = {
+        reserveSlot: vi.fn(async () => reservation),
+        blockUntil: vi.fn(),
+        complete: vi.fn(async () => undefined),
+      };
+      const from = NOW.getTime() - 60 * 60_000;
+      const fetchImpl = providerFetch(entry, [
+        candle(from),
+        candle(from + 60_000),
+      ]);
+
+      await expect(readGmgnMarketChartV1({
+        entry,
+        identity: identity(entry),
+        range: "1h",
+      }, {
+        fetchImpl: fetchImpl as typeof fetch,
+        accountGate,
+        now: () => NOW,
+      })).resolves.not.toBeNull();
+      expect(accountGate.reserveSlot).toHaveBeenNthCalledWith(1, {
+        requestsPerSecond: expected,
+        cost: 1,
+        deadlineMs: NOW.getTime() + 2_500,
+        signal: expect.any(AbortSignal),
+      });
+      expect(accountGate.reserveSlot).toHaveBeenNthCalledWith(2, {
+        requestsPerSecond: expected,
+        cost: 2,
+        deadlineMs: NOW.getTime() + 2_500,
+        signal: expect.any(AbortSignal),
+      });
+      const gateCalls = vi.mocked(accountGate.reserveSlot).mock.calls;
+      const firstSignal = gateCalls[0]?.[0].signal;
+      const secondSignal = gateCalls[1]?.[0].signal;
+      expect(firstSignal).toBe(secondSignal);
+    },
+  );
+
   it("stops before kline when GMGN cannot prove the canonical pool", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     const entry = token(206);
@@ -485,6 +539,58 @@ describe("GMGN exact Ethereum kline adapter", () => {
     const third = await readGmgnMarketChartV1(input, wait);
     expect(first).toEqual(second);
     expect(second).toEqual(third);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps shared chart work alive when the first caller aborts", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(217);
+    const from = NOW.getTime() - 60 * 60_000;
+    let resolveInfo: ((response: Response) => void) | undefined;
+    let providerSignal: AbortSignal | null | undefined;
+    const fetchImpl = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v1/token/info") {
+        providerSignal = init?.signal;
+        return new Promise<Response>((resolve) => {
+          resolveInfo = resolve;
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        code: 0,
+        data: { list: [candle(from), candle(from + 60_000)] },
+      }), { status: 200 }));
+    });
+    const input = {
+      entry,
+      identity: identity(entry),
+      range: "1h" as const,
+    };
+    const wait = {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    };
+    const firstController = new AbortController();
+
+    const first = readGmgnMarketChartV1(input, {
+      ...wait,
+      signal: firstController.signal,
+    });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    const second = readGmgnMarketChartV1(input, wait);
+    firstController.abort();
+    await expect(first).resolves.toBeNull();
+    expect(providerSignal).not.toBe(firstController.signal);
+    expect(providerSignal?.aborted).toBe(false);
+
+    resolveInfo?.(new Response(JSON.stringify({
+      code: 0,
+      data: tokenInfo(entry),
+    }), { status: 200 }));
+    const exact = await second;
+    expect(exact?.identity).toEqual(identity(entry));
+    await expect(readGmgnMarketChartV1(input, wait)).resolves.toEqual(exact);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
@@ -543,14 +649,14 @@ describe("GMGN exact Ethereum kline adapter", () => {
     expect(accountGate.reserveSlot).toHaveBeenNthCalledWith(1, {
       requestsPerSecond: 1,
       cost: 1,
-      deadlineMs: NOW.getTime() + 5_000,
-      signal: undefined,
+      deadlineMs: NOW.getTime() + 2_500,
+      signal: expect.any(AbortSignal),
     });
     expect(accountGate.reserveSlot).toHaveBeenNthCalledWith(2, {
       requestsPerSecond: 1,
       cost: 2,
-      deadlineMs: NOW.getTime() + 5_000,
-      signal: undefined,
+      deadlineMs: NOW.getTime() + 2_500,
+      signal: expect.any(AbortSignal),
     });
     expect(complete).toHaveBeenCalledWith(firstReservation);
     expect(blockUntil).toHaveBeenCalledWith({

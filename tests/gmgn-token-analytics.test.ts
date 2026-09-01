@@ -325,6 +325,39 @@ describe("GMGN Ethereum token analytics", () => {
     )).toBeNull();
   });
 
+  it("accepts an omitted or exact eth chain and rejects foreign provider chains", () => {
+    const market = identity(41);
+    expect(parseGmgnTokenSecurityV1(
+      { ...securityData(market), chain: "eth" },
+      market,
+      NOW,
+    )).not.toBeNull();
+    expect(parseGmgnTokenSecurityV1(
+      { ...securityData(market), chain: "sol" },
+      market,
+      NOW,
+    )).toBeNull();
+    expect(parseGmgnTokenPoolInfoV1(
+      { ...poolData(market), chain: "base" },
+      market,
+      NOW,
+    )).toBeNull();
+    expect(parseGmgnTokenWalletRankingV1(
+      { chain: "bsc", list: [rankedWallet()] },
+      "holders",
+      market,
+      rankingQuery(),
+      NOW,
+    )).toBeNull();
+    expect(parseGmgnTokenWalletRankingV1(
+      { list: [{ ...rankedWallet(), chain: "robinhood" }] },
+      "holders",
+      market,
+      rankingQuery(),
+      NOW,
+    )).toBeNull();
+  });
+
   it.each(["holders", "traders"] as const)(
     "parses the official shared %s row schema without settlement precision claims",
     (kind) => {
@@ -432,6 +465,23 @@ describe("GMGN Ethereum token analytics", () => {
     expect(gate.complete).toHaveBeenCalledTimes(1);
   });
 
+  it("falls back to one RPS when the override exceeds the official ceiling", async () => {
+    vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "21");
+    const market = identity(90);
+    const gate = accountGate();
+    const fetchImpl = vi.fn(async () => jsonResponse(securityData(market)));
+
+    await expect(readGmgnTokenSecurityV1(market, {
+      fetchImpl,
+      accountGate: gate,
+      now: () => NOW,
+    })).resolves.not.toBeNull();
+    expect(gate.reserveSlot).toHaveBeenCalledWith(expect.objectContaining({
+      requestsPerSecond: 1,
+      cost: 1,
+    }));
+  });
+
   it("caches successful security and pool reads independently", async () => {
     const securityMarket = identity(10);
     const poolMarket = identity(11);
@@ -463,6 +513,41 @@ describe("GMGN Ethereum token analytics", () => {
     expect(firstSecurity).toEqual(secondSecurity);
     expect(firstPool).toEqual(secondPool);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let an aborted first caller cancel or poison shared analytics", async () => {
+    const market = identity(91);
+    let resolveProvider: ((response: Response) => void) | undefined;
+    let providerSignal: AbortSignal | null | undefined;
+    const fetchImpl = vi.fn((_input: URL | RequestInfo, init?: RequestInit) => {
+      providerSignal = init?.signal;
+      return new Promise<Response>((resolve) => {
+        resolveProvider = resolve;
+      });
+    });
+    const firstController = new AbortController();
+    const wait = {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    };
+
+    const first = readGmgnTokenSecurityV1(market, {
+      ...wait,
+      signal: firstController.signal,
+    });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    const second = readGmgnTokenSecurityV1(market, wait);
+    firstController.abort();
+    await expect(first).resolves.toBeNull();
+    expect(providerSignal).not.toBe(firstController.signal);
+    expect(providerSignal?.aborted).toBe(false);
+
+    resolveProvider?.(jsonResponse(securityData(market)));
+    const exact = await second;
+    expect(exact?.tokenAddress).toBe(market.tokenAddress);
+    await expect(readGmgnTokenSecurityV1(market, wait)).resolves.toEqual(exact);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("rejects unbounded or unknown ranking controls before any request", async () => {

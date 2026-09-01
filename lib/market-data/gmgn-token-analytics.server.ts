@@ -37,13 +37,13 @@ const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
 const GMGN_REQUEST_TIMEOUT_MS = 2_500;
 const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000;
 const GMGN_ANALYTICS_CACHE_TTL_MS = 30_000;
-const GMGN_FAILURE_CACHE_TTL_MS = 5_000;
 const GMGN_MAXIMUM_CACHE_ENTRIES = 512;
 const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const UNSIGNED_INTEGER = /^(?:0|[1-9][0-9]*)$/u;
 const NON_NEGATIVE_DECIMAL = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
+const PROVIDER_OPERATION_TIMED_OUT = Symbol("gmgn-provider-operation-timed-out");
 
 type FetchImplementation = typeof fetch;
 type GmgnAnalyticsPath =
@@ -60,6 +60,19 @@ export type GmgnTokenAnalyticsReadWaitV1 = Readonly<{
   accountGate?: GmgnAccountGateV1;
 }>;
 
+type GmgnTokenAnalyticsProviderReadWaitV1 = Readonly<{
+  fetchImpl: FetchImplementation | undefined;
+  now: () => Date;
+  accountGate: GmgnAccountGateV1 | undefined;
+  deadlineMs: number;
+  signal: AbortSignal;
+}>;
+
+type ProviderOperationV1 = Pick<
+  GmgnTokenAnalyticsProviderReadWaitV1,
+  "now" | "deadlineMs" | "signal"
+>;
+
 export type GmgnTokenRankingOptionsV1 = Readonly<{
   limit?: number;
   orderBy?: GmgnTokenRankingOrderV1;
@@ -72,13 +85,13 @@ type CachedValue<T> = Readonly<{
   value: T;
 }>;
 
-const securityCache = new Map<string, CachedValue<GmgnTokenSecurityV1 | null>>();
+const securityCache = new Map<string, CachedValue<GmgnTokenSecurityV1>>();
 const securityInFlight = new Map<string, Promise<GmgnTokenSecurityV1 | null>>();
-const poolCache = new Map<string, CachedValue<GmgnTokenPoolInfoV1 | null>>();
+const poolCache = new Map<string, CachedValue<GmgnTokenPoolInfoV1>>();
 const poolInFlight = new Map<string, Promise<GmgnTokenPoolInfoV1 | null>>();
 const rankingCache = new Map<
   string,
-  CachedValue<GmgnTokenWalletRankingV1 | null>
+  CachedValue<GmgnTokenWalletRankingV1>
 >();
 const rankingInFlight = new Map<
   string,
@@ -102,17 +115,17 @@ export async function readGmgnTokenSecurityV1(
     securityInFlight,
     key,
     wait,
-    async () => {
+    async (providerWait) => {
       const data = await gmgnJsonRequest(
         "/v1/token/security",
         { chain: "eth", address: identity.tokenAddress },
         apiKey,
-        wait,
+        providerWait,
       );
       return parseGmgnTokenSecurityV1(
         data,
         identity,
-        currentDate(wait),
+        currentDate(providerWait),
       );
     },
   );
@@ -130,14 +143,18 @@ export async function readGmgnTokenPoolInfoV1(
     poolInFlight,
     key,
     wait,
-    async () => {
+    async (providerWait) => {
       const data = await gmgnJsonRequest(
         "/v1/token/pool_info",
         { chain: "eth", address: identity.tokenAddress },
         apiKey,
-        wait,
+        providerWait,
       );
-      return parseGmgnTokenPoolInfoV1(data, identity, currentDate(wait));
+      return parseGmgnTokenPoolInfoV1(
+        data,
+        identity,
+        currentDate(providerWait),
+      );
     },
   );
 }
@@ -184,7 +201,7 @@ async function readGmgnTokenWalletRankingV1(
     rankingInFlight,
     key,
     wait,
-    async () => {
+    async (providerWait) => {
       const path = kind === "holders"
         ? "/v1/market/token_top_holders" as const
         : "/v1/market/token_top_traders" as const;
@@ -196,13 +213,18 @@ async function readGmgnTokenWalletRankingV1(
         direction: query.direction,
       };
       if (query.tag !== null) providerQuery.tag = query.tag;
-      const data = await gmgnJsonRequest(path, providerQuery, apiKey, wait);
+      const data = await gmgnJsonRequest(
+        path,
+        providerQuery,
+        apiKey,
+        providerWait,
+      );
       return parseGmgnTokenWalletRankingV1(
         data,
         kind,
         identity,
         query,
-        currentDate(wait),
+        currentDate(providerWait),
       );
     },
   );
@@ -217,6 +239,7 @@ export function parseGmgnTokenSecurityV1(
   if (
     !isMarketChartIdentityV1(identity) ||
     !isRecord(data) ||
+    !providerEthereumChainMatchesIfPresent(response, data) ||
     canonicalAddress(data.address) !== identity.tokenAddress ||
     !Number.isFinite(fetchedAt.getTime())
   ) return null;
@@ -277,7 +300,11 @@ export function parseGmgnTokenPoolInfoV1(
   fetchedAt: Date,
 ): GmgnTokenPoolInfoV1 | null {
   const data = unwrapData(response);
-  if (!isMarketChartIdentityV1(identity) || !isRecord(data)) return null;
+  if (
+    !isMarketChartIdentityV1(identity) ||
+    !isRecord(data) ||
+    !providerEthereumChainMatchesIfPresent(response, data)
+  ) return null;
   const tokenAddress = canonicalAddress(data.address);
   const poolAddress = canonicalBytes32(data.pool_address);
   const baseAddress = canonicalAddress(data.base_address);
@@ -353,6 +380,8 @@ export function parseGmgnTokenWalletRankingV1(
     normalizedQuery === null ||
     !isRecord(data) ||
     !Array.isArray(data.list) ||
+    !providerEthereumChainMatchesIfPresent(response, data) ||
+    data.list.some((row) => !providerEthereumChainMatchesIfPresent(row)) ||
     data.list.length > normalizedQuery.limit ||
     !Number.isFinite(fetchedAt.getTime())
   ) return null;
@@ -574,49 +603,55 @@ function normalizeRankingQuery(
 }
 
 async function readThroughCache<T>(
-  cache: Map<string, CachedValue<T | null>>,
+  cache: Map<string, CachedValue<T>>,
   inFlight: Map<string, Promise<T | null>>,
   key: string,
   wait: GmgnTokenAnalyticsReadWaitV1,
-  read: () => Promise<T | null>,
+  read: (providerWait: GmgnTokenAnalyticsProviderReadWaitV1) =>
+    Promise<T | null>,
 ): Promise<T | null> {
   const nowMs = currentDate(wait).getTime();
+  if (!callerCanAwaitSharedRead(wait, nowMs)) return null;
   const cached = cache.get(key);
   if (cached && cached.expiresAtMs > nowMs) return cached.value;
   if (cached) cache.delete(key);
   const active = inFlight.get(key);
-  if (active) return active;
-  const promise = read().then((value) => {
-    const completedMs = currentDate(wait).getTime();
-    setCacheValue(
-      cache,
-      key,
-      value,
-      completedMs + (value === null
-        ? GMGN_FAILURE_CACHE_TTL_MS
-        : GMGN_ANALYTICS_CACHE_TTL_MS),
-    );
+  if (active) return awaitSharedReadForCaller(active, wait);
+  const providerWait = sharedProviderWait(wait);
+  const providerRead = read(providerWait);
+  const promise = settleProviderOperation(providerRead, providerWait).then((settled) => {
+    if (settled === PROVIDER_OPERATION_TIMED_OUT) return null;
+    const value = settled;
+    if (value !== null) {
+      setCacheValue(
+        cache,
+        key,
+        value,
+        currentDate(providerWait).getTime() + GMGN_ANALYTICS_CACHE_TTL_MS,
+      );
+    }
     return value;
   }).catch(() => null).finally(() => {
     if (inFlight.get(key) === promise) inFlight.delete(key);
   });
   inFlight.set(key, promise);
-  return promise;
+  return awaitSharedReadForCaller(promise, wait);
 }
 
 async function gmgnJsonRequest(
   path: GmgnAnalyticsPath,
   query: Readonly<Record<string, string>>,
   apiKey: string,
-  wait: GmgnTokenAnalyticsReadWaitV1,
+  wait: GmgnTokenAnalyticsProviderReadWaitV1,
 ): Promise<unknown | null> {
   const fetchImpl = wait.fetchImpl ?? fetch;
-  const now = wait.now ?? (() => new Date());
-  const implicitDeadlineMs = now().getTime() + GMGN_REQUEST_TIMEOUT_MS;
-  const requestDeadlineMs = wait.deadlineMs ?? implicitDeadlineMs;
+  const now = wait.now;
   const queuedAtMs = now().getTime();
+  const requestDeadlineMs = wait.deadlineMs;
   if (
-    wait.signal?.aborted ||
+    wait.signal.aborted ||
+    !Number.isFinite(queuedAtMs) ||
+    !Number.isFinite(requestDeadlineMs) ||
     requestDeadlineMs <= queuedAtMs ||
     localBlockedUntilMs > queuedAtMs
   ) return null;
@@ -631,12 +666,12 @@ async function gmgnJsonRequest(
       (process.env.NODE_ENV === "production" || fetchImpl === fetch)
     ) accountGate = getProductionGmgnAccountGateV1();
     if (accountGate !== null) {
-      const decision = await accountGate.reserveSlot({
+      const decision = await reserveProviderSlot(accountGate, {
         requestsPerSecond: configuredRequestsPerSecond(),
         cost: gmgnRequestCost(path),
         deadlineMs: requestDeadlineMs,
         signal: wait.signal,
-      });
+      }, wait);
       if (decision?.kind !== "reserved") return null;
       reservation = decision;
     }
@@ -646,7 +681,7 @@ async function gmgnJsonRequest(
   const nowMs = now().getTime();
   const remainingMs = requestDeadlineMs - nowMs;
   if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
-    await completeProviderRequest(accountGate, reservation);
+    await completeProviderRequest(accountGate, reservation, wait);
     return null;
   }
   const url = new URL(path, GMGN_API_ORIGIN);
@@ -655,12 +690,6 @@ async function gmgnJsonRequest(
   }
   url.searchParams.set("timestamp", String(Math.floor(nowMs / 1_000)));
   url.searchParams.set("client_id", crypto.randomUUID());
-  const timeout = AbortSignal.timeout(
-    Math.max(1, Math.min(GMGN_REQUEST_TIMEOUT_MS, remainingMs)),
-  );
-  const signal = wait.signal
-    ? AbortSignal.any([wait.signal, timeout])
-    : timeout;
   let response: Response;
   try {
     response = await fetchImpl(url, {
@@ -669,10 +698,10 @@ async function gmgnJsonRequest(
       redirect: "error",
       credentials: "omit",
       cache: "no-store",
-      signal,
+      signal: wait.signal,
     });
   } catch {
-    await completeProviderRequest(accountGate, reservation);
+    await completeProviderRequest(accountGate, reservation, wait);
     return null;
   }
   const declaredLength = Number(response.headers.get("Content-Length"));
@@ -686,6 +715,7 @@ async function gmgnJsonRequest(
       response,
       null,
       nowMs,
+      wait,
     );
     return null;
   }
@@ -700,6 +730,7 @@ async function gmgnJsonRequest(
       response,
       null,
       nowMs,
+      wait,
     );
     return null;
   }
@@ -713,6 +744,7 @@ async function gmgnJsonRequest(
       response,
       null,
       nowMs,
+      wait,
     );
     return null;
   }
@@ -731,8 +763,9 @@ async function gmgnJsonRequest(
       response,
       envelope,
       nowMs,
+      wait,
     );
-  } else if (!await completeProviderRequest(accountGate, reservation)) {
+  } else if (!await completeProviderRequest(accountGate, reservation, wait)) {
     return null;
   }
   if (!response.ok || rateLimited || !isRecord(envelope)) return null;
@@ -749,9 +782,10 @@ async function finalizeRejectedResponse(
   response: Response,
   envelope: unknown,
   nowMs: number,
+  operation: ProviderOperationV1,
 ): Promise<void> {
   if (response.status !== 429) {
-    await completeProviderRequest(accountGate, reservation);
+    await completeProviderRequest(accountGate, reservation, operation);
     return;
   }
   const blockedUntilMs = providerCooldownFromResponse(
@@ -766,6 +800,7 @@ async function finalizeRejectedResponse(
     response,
     envelope,
     nowMs,
+    operation,
   );
 }
 
@@ -809,7 +844,128 @@ function readApiKey(): string | null {
 
 function configuredRequestsPerSecond(): number {
   const value = Number(process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1");
-  return Number.isSafeInteger(value) && value >= 1 && value <= 50 ? value : 1;
+  return Number.isSafeInteger(value) && value >= 1 && value <= 20 ? value : 1;
+}
+
+function sharedProviderWait(
+  wait: GmgnTokenAnalyticsReadWaitV1,
+): GmgnTokenAnalyticsProviderReadWaitV1 {
+  const now = wait.now ?? (() => new Date());
+  const startedAtMs = now().getTime();
+  return {
+    fetchImpl: wait.fetchImpl,
+    now,
+    accountGate: wait.accountGate,
+    deadlineMs: Number.isFinite(startedAtMs)
+      ? startedAtMs + GMGN_REQUEST_TIMEOUT_MS
+      : Date.now() + GMGN_REQUEST_TIMEOUT_MS,
+    signal: AbortSignal.timeout(GMGN_REQUEST_TIMEOUT_MS),
+  };
+}
+
+async function settleProviderOperation<T>(
+  pending: Promise<T>,
+  operation: ProviderOperationV1,
+): Promise<T | typeof PROVIDER_OPERATION_TIMED_OUT> {
+  const remainingMs = operation.deadlineMs - operation.now().getTime();
+  if (
+    operation.signal.aborted ||
+    !Number.isFinite(remainingMs) ||
+    remainingMs <= 0
+  ) {
+    void pending.catch(() => undefined);
+    return PROVIDER_OPERATION_TIMED_OUT;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let onAbort: (() => void) | null = null;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<typeof PROVIDER_OPERATION_TIMED_OUT>((resolve) => {
+        const timeout = () => resolve(PROVIDER_OPERATION_TIMED_OUT);
+        onAbort = timeout;
+        operation.signal.addEventListener("abort", timeout, { once: true });
+        if (operation.signal.aborted) {
+          timeout();
+          return;
+        }
+        timer = setTimeout(
+          timeout,
+          Math.min(Math.ceil(remainingMs), 2_147_483_647),
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+    if (onAbort !== null) operation.signal.removeEventListener("abort", onAbort);
+  }
+}
+
+async function reserveProviderSlot(
+  accountGate: GmgnAccountGateV1,
+  input: Parameters<GmgnAccountGateV1["reserveSlot"]>[0],
+  operation: ProviderOperationV1,
+): Promise<Awaited<ReturnType<GmgnAccountGateV1["reserveSlot"]>>> {
+  const pending = accountGate.reserveSlot(input);
+  const settled = await settleProviderOperation(pending, operation);
+  if (settled !== PROVIDER_OPERATION_TIMED_OUT) return settled;
+  void pending.then(async (decision) => {
+    if (decision?.kind !== "reserved") return;
+    try {
+      await accountGate.complete(decision);
+    } catch {
+      // The database retains its bounded lease when exact late cleanup fails.
+    }
+  }).catch(() => undefined);
+  return null;
+}
+
+function callerCanAwaitSharedRead(
+  wait: GmgnTokenAnalyticsReadWaitV1,
+  nowMs: number,
+): boolean {
+  if (!Number.isFinite(nowMs) || wait.signal?.aborted) return false;
+  return wait.deadlineMs === undefined || (
+    Number.isFinite(wait.deadlineMs) && wait.deadlineMs > nowMs
+  );
+}
+
+function awaitSharedReadForCaller<T>(
+  promise: Promise<T | null>,
+  wait: GmgnTokenAnalyticsReadWaitV1,
+): Promise<T | null> {
+  const nowMs = currentDate(wait).getTime();
+  if (!callerCanAwaitSharedRead(wait, nowMs)) return Promise.resolve(null);
+  if (wait.signal === undefined && wait.deadlineMs === undefined) return promise;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const finish = (value: T | null) => {
+      if (settled) return;
+      settled = true;
+      if (timeout !== undefined) clearTimeout(timeout);
+      wait.signal?.removeEventListener("abort", abort);
+      resolve(value);
+    };
+    const abort = () => finish(null);
+    wait.signal?.addEventListener("abort", abort, { once: true });
+    if (wait.signal?.aborted) {
+      finish(null);
+      return;
+    }
+    if (wait.deadlineMs !== undefined) {
+      timeout = setTimeout(
+        () => finish(null),
+        Math.max(1, Math.min(
+          Math.ceil(wait.deadlineMs - nowMs),
+          2_147_483_647,
+        )),
+      );
+    }
+    promise.then(finish, () => finish(null));
+  });
 }
 
 function gmgnRequestCost(path: GmgnAnalyticsPath): 1 | 5 {
@@ -866,10 +1022,11 @@ async function publishProviderBlock(
   response: Response,
   envelope: unknown,
   nowMs: number,
+  operation: ProviderOperationV1,
 ): Promise<void> {
   if (accountGate === null || reservation === null) return;
   try {
-    await accountGate.blockUntil({
+    const pending = accountGate.blockUntil({
       reservation,
       blockedUntilMs: providerCooldownFromResponse(
         response.headers,
@@ -880,6 +1037,7 @@ async function publishProviderBlock(
         ? "http-429"
         : "provider-envelope",
     });
+    await settleProviderOperation(pending, operation);
   } catch {
     // The read already fails soft. A future production request must pass the
     // shared gate again before another provider request can be made.
@@ -892,12 +1050,16 @@ async function completeProviderRequest(
     Awaited<ReturnType<GmgnAccountGateV1["reserveSlot"]>>,
     { kind: "reserved" }
   > | null,
+  operation: ProviderOperationV1,
 ): Promise<boolean> {
   if (accountGate === null) return true;
   if (reservation === null) return false;
   try {
-    await accountGate.complete(reservation);
-    return true;
+    const settled = await settleProviderOperation(
+      accountGate.complete(reservation),
+      operation,
+    );
+    return settled !== PROVIDER_OPERATION_TIMED_OUT;
   } catch {
     return false;
   }
@@ -910,6 +1072,16 @@ function providerBoolean(...values: readonly unknown[]): boolean | null {
     if (value === 0 || value === "0" || value === "no") return false;
   }
   return null;
+}
+
+function providerEthereumChainMatchesIfPresent(
+  ...values: readonly unknown[]
+): boolean {
+  return values.every((value) =>
+    !isRecord(value) ||
+    !Object.prototype.hasOwnProperty.call(value, "chain") ||
+    value.chain === "eth"
+  );
 }
 
 function providerRatio(value: unknown): string | null {
@@ -1019,7 +1191,7 @@ function canonicalBytes32(value: unknown): `0x${string}` | null {
   return BYTES32.test(normalized) ? normalized as `0x${string}` : null;
 }
 
-function currentDate(wait: GmgnTokenAnalyticsReadWaitV1): Date {
+function currentDate(wait: Readonly<{ now?: (() => Date) | undefined }>): Date {
   return (wait.now ?? (() => new Date()))();
 }
 

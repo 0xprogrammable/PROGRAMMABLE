@@ -30,7 +30,7 @@ describe("GMGN account gate", () => {
     const deadlineMs = Date.now() + 2_000;
 
     const concurrent = await Promise.all(Array.from({ length: 4 }, () =>
-      gate.reserveSlot({ requestsPerSecond: 50, deadlineMs })));
+      gate.reserveSlot({ requestsPerSecond: 20, deadlineMs })));
     const winner = concurrent.find((reservation) =>
       reservation?.kind === "reserved"
     );
@@ -40,10 +40,10 @@ describe("GMGN account gate", () => {
     expect(concurrent.filter((reservation) => reservation === null)).toHaveLength(3);
     if (winner?.kind !== "reserved") throw new Error("test lease unavailable");
     await gate.complete(winner);
-    const successor = await gate.reserveSlot({ requestsPerSecond: 50, deadlineMs });
+    const successor = await gate.reserveSlot({ requestsPerSecond: 20, deadlineMs });
     expect(successor?.kind).toBe("reserved");
     if (successor?.kind !== "reserved") throw new Error("successor lease unavailable");
-    expect(successor.reservedAtMs - winner.reservedAtMs).toBeGreaterThanOrEqual(19);
+    expect(successor.reservedAtMs - winner.reservedAtMs).toBeGreaterThanOrEqual(49);
     await gate.complete(successor);
 
     await database.exec("RESET ROLE");
@@ -59,7 +59,7 @@ describe("GMGN account gate", () => {
     expect(evidence.rows).toHaveLength(4);
     expect(evidence.rows.filter((row) => row.decision_kind === "reserved")
       .every((row) =>
-      row.decision_kind === "reserved" && row.interval_ms === 20
+      row.decision_kind === "reserved" && row.interval_ms === 50
     )).toBe(true);
     expect(evidence.rows.filter((row) => row.decision_kind === "completed"))
       .toHaveLength(2);
@@ -130,11 +130,34 @@ describe("GMGN account gate", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it("accepts the official 20 unit ceiling and rejects 21 before database access", async () => {
+    const { pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const lease = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(lease?.kind).toBe("reserved");
+    if (lease?.kind !== "reserved") throw new Error("test lease unavailable");
+    await gate.complete(lease);
+
+    const query = vi.fn();
+    const rejectingGate = new PostgresGmgnAccountGateV1({
+      connect: vi.fn(),
+      query,
+    });
+    await expect(rejectingGate.reserveSlot({
+      requestsPerSecond: 21,
+      deadlineMs: Date.now() + 1_000,
+    })).rejects.toThrow("GMGN account gate reservation is invalid");
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("publishes one central blocked_until and Retry-After decision", async () => {
     const { database, pool } = await migratedGate();
     const gate = new PostgresGmgnAccountGateV1(pool);
     const lease = await gate.reserveSlot({
-      requestsPerSecond: 50,
+      requestsPerSecond: 20,
       cost: 5,
       deadlineMs: Date.now() + 1_000,
     });
@@ -148,7 +171,7 @@ describe("GMGN account gate", () => {
 
     expect(block.retryAfterMs).toBeGreaterThan(1_000);
     const reservation = await gate.reserveSlot({
-      requestsPerSecond: 50,
+      requestsPerSecond: 20,
       deadlineMs: Date.now() + 5_000,
     });
     expect(reservation?.kind).toBe("blocked");
@@ -263,7 +286,7 @@ describe("GMGN account gate", () => {
         new OutcomeFailPool(pool, failedDecision),
       );
       const lease = await failingGate.reserveSlot({
-        requestsPerSecond: 50,
+        requestsPerSecond: 20,
         deadlineMs: Date.now() + 1_000,
       });
       expect(lease?.kind).toBe("reserved");
@@ -283,7 +306,7 @@ describe("GMGN account gate", () => {
 
       const independentGate = new PostgresGmgnAccountGateV1(pool);
       await expect(independentGate.reserveSlot({
-        requestsPerSecond: 50,
+        requestsPerSecond: 20,
         deadlineMs: Date.now() + 100,
       })).resolves.toBeNull();
     },
@@ -293,7 +316,7 @@ describe("GMGN account gate", () => {
     const { pool } = await migratedGate();
     const gate = new PostgresGmgnAccountGateV1(pool);
     const lease = await gate.reserveSlot({
-      requestsPerSecond: 50,
+      requestsPerSecond: 20,
       deadlineMs: Date.now() + 1_000,
     });
     if (lease?.kind !== "reserved") throw new Error("test lease unavailable");
@@ -302,7 +325,7 @@ describe("GMGN account gate", () => {
       generation: lease.generation + 1,
     })).rejects.toThrow("lease is stale or unavailable");
     await expect(gate.reserveSlot({
-      requestsPerSecond: 50,
+      requestsPerSecond: 20,
       deadlineMs: Date.now() + 100,
     })).resolves.toBeNull();
   });
@@ -311,7 +334,7 @@ describe("GMGN account gate", () => {
     const { database, pool } = await migratedGate();
     const gate = new PostgresGmgnAccountGateV1(pool);
     const lease = await gate.reserveSlot({
-      requestsPerSecond: 50,
+      requestsPerSecond: 20,
       deadlineMs: Date.now() + 1_000,
     });
     if (lease?.kind !== "reserved") throw new Error("test lease unavailable");
