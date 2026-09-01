@@ -49,6 +49,7 @@ const EXPLORE_MARKET_PROVIDERS = new Set([
 ]);
 const EXPLORE_SNAPSHOT_ATTEMPTS = 3;
 const EXPLORE_SNAPSHOT_RETRY_DELAY_MS = 16_000;
+const STAGED_503_RETRY_AFTER_MAXIMUM_MS = 5_000;
 const VISIBLE_EXPLORE_PAGE_SIZE = 9;
 const TRENDING_EXPLORE_PAGE_SIZE = 100;
 const TRENDING_EXPLORE_MAXIMUM_PAGES = 100;
@@ -133,12 +134,24 @@ function currentProviderTimestamp(value, nowMs) {
     nowMs - observedAtMs <= PROVIDER_RECENT_MAXIMUM_AGE_MS;
 }
 
+function boundedStagedRetryAfterMs(response) {
+  const retryAfter = response.headers.get("retry-after")?.trim() ?? "";
+  if (!/^(?:0|[1-9][0-9]{0,2})$/u.test(retryAfter)) {
+    return STAGED_503_RETRY_AFTER_MAXIMUM_MS;
+  }
+  return Math.min(
+    Number(retryAfter) * 1_000,
+    STAGED_503_RETRY_AFTER_MAXIMUM_MS,
+  );
+}
+
 async function requestJson(
   target,
   headers,
   path,
   fetchImpl,
   acceptedStatuses = new Set([200]),
+  waitForStagedRetryAfter = null,
 ) {
   const requestUrl = new URL(path, target);
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -147,7 +160,13 @@ async function requestJson(
       redirect: "error",
       signal: AbortSignal.timeout(30_000),
     });
-    if (response.status === 503 && attempt === 0) continue;
+    if (response.status === 503 && attempt === 0) {
+      await response.body?.cancel();
+      if (waitForStagedRetryAfter !== null) {
+        await waitForStagedRetryAfter(boundedStagedRetryAfterMs(response));
+      }
+      continue;
+    }
     const text = await readBoundedResponseText(response, {
       maximumBytes: 4 * 1024 * 1024,
       label: `public API ${path}`,
@@ -2169,9 +2188,13 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const fetchImpl = input.fetchImpl ?? fetch;
   const appendOutput = input.appendOutput ?? appendFileSync;
   const waitForCatalogConvergence = input.waitForCatalogConvergence ?? sleep;
+  const waitForStagedRetryAfter = input.waitForStagedRetryAfter ?? sleep;
   const now = input.now ?? (() => new Date());
   if (typeof waitForCatalogConvergence !== "function") {
     throw new Error("Explore catalog convergence wait is invalid");
+  }
+  if (typeof waitForStagedRetryAfter !== "function") {
+    throw new Error("Public API staged Retry-After wait is invalid");
   }
   if (typeof now !== "function" || !Number.isFinite(now().getTime())) {
     throw new Error("Public API smoke clock is invalid");
@@ -2192,7 +2215,14 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       }
     : {};
   const request = (path, acceptedStatuses) =>
-    requestJson(target, headers, path, fetchImpl, acceptedStatuses);
+    requestJson(
+      target,
+      headers,
+      path,
+      fetchImpl,
+      acceptedStatuses,
+      targetKind === "staged" ? waitForStagedRetryAfter : null,
+    );
   const gmgnMarketRequirement =
     environment.PROGRAMMABLE_REQUIRE_GMGN_MARKET;
   if (
