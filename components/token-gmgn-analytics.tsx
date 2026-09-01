@@ -34,7 +34,6 @@ type SecuritySignals = Readonly<{
 
 type PoolSignals = Readonly<{
   fetchedAt: string;
-  poolAddress: string;
   liquidityUsd: string;
   feeRatio: string | null;
 }>;
@@ -343,7 +342,7 @@ function SummaryPanel({
     return (
       <AnalyticsMessage
         title="No GMGN analytics yet"
-        body="GMGN has not returned verified analytics for this exact pool."
+        body="GMGN has not returned verified token analytics yet."
       />
     );
   }
@@ -351,8 +350,8 @@ function SummaryPanel({
   const security = state.data.security;
   const pool = state.data.pool;
   const metrics = [
-    { label: "Pool liquidity", value: formatUsd(pool?.liquidityUsd ?? null) },
-    { label: "Pool fee", value: formatRatio(pool?.feeRatio ?? null) },
+    { label: "GMGN liquidity", value: formatUsd(pool?.liquidityUsd ?? null) },
+    { label: "GMGN fee", value: formatRatio(pool?.feeRatio ?? null) },
     {
       label: "Top 10 concentration",
       value: formatRatio(security?.top10HolderRatio ?? null),
@@ -390,8 +389,8 @@ function SummaryPanel({
         />
       </div>
       <p className={styles.provenance}>
-        Pool figures and heuristic signals are read from GMGN for the canonical
-        Programmable token and its exact Uniswap v4 pool.
+        Security and pool figures are token-level GMGN observations bound to
+        this verified Programmable token. Pool attribution is unavailable.
       </p>
     </div>
   );
@@ -429,7 +428,7 @@ function RankingPanel({
     return (
       <AnalyticsMessage
         title={`No ${section} ranking yet`}
-        body="GMGN has not returned a ranking verified against this exact token and pool."
+        body="GMGN has not returned a token-level ranking for this verified Programmable token."
         retry={retry}
       />
     );
@@ -615,6 +614,8 @@ export function parseTokenAnalyticsResponse(
     !isRecord(value) ||
     value.schemaVersion !== "programmable.token-analytics.v1" ||
     value.provider !== "gmgn" ||
+    value.analyticsScope !== "token" ||
+    value.poolAttribution !== "unavailable" ||
     value.section !== section ||
     !isAnalyticsStatus(value.status) ||
     !isRecord(value.analytics)
@@ -728,10 +729,12 @@ function parsePool(
   if (
     !isRecord(value) ||
     value.source !== "gmgn" ||
+    value.marketScope !== "token" ||
+    value.poolAttribution !== "unavailable" ||
     value.exchange !== "uniswap_v4" ||
     value.tokenAddress !== tokenAddress ||
-    typeof value.poolAddress !== "string" ||
-    value.poolAddress !== identity.poolId ||
+    value.providerAddress !== tokenAddress ||
+    value.baseAddress !== tokenAddress ||
     !sameAnalyticsIdentity(value.identity, identity) ||
     !isExactIsoTime(value.fetchedAt) ||
     !isNonNegativeDecimal(value.liquidityUsd) ||
@@ -739,7 +742,6 @@ function parsePool(
   ) return null;
   return {
     fetchedAt: value.fetchedAt,
-    poolAddress: value.poolAddress,
     liquidityUsd: value.liquidityUsd,
     feeRatio: value.feeRatio as string | null,
   };

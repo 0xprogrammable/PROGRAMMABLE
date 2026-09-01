@@ -43,6 +43,18 @@ describe("agent-readable public surface", () => {
     expect(programmableLlmsIndex).toContain(
       "every Stock family, and Custom launches without a verified Registry record or finalized Router stamp",
     );
+    expect(programmableLlmsIndex).toContain(
+      "GMGN is the bounded primary provider for visible-page market enrichment",
+    );
+    expect(programmableLlmsIndex).toContain(
+      "Dexscreener batch-sorts the complete unmatched canonical remainder",
+    );
+    expect(programmableLlmsIndex).toContain(
+      "Bitquery remains the exact-pool chart fallback",
+    );
+    expect(programmableLlmsIndex).toContain(
+      "not a cross-provider numeric merge or a claim of full GMGN coverage",
+    );
     expect(programmableLlmsIndex).not.toMatch(
       /^# Programmable Launch Stamp Router$/mu,
     );
@@ -63,6 +75,7 @@ describe("agent-readable public surface", () => {
       "/api/explore/token",
       "/api/explore/token/analytics",
       "/api/explore/token/chart",
+      "/api/ops/health",
       "/openapi.json",
       "/v1/custom-launches",
       "/v1/custom-launches/{launchId}",
@@ -86,6 +99,7 @@ describe("agent-readable public surface", () => {
       "/api/explore/token",
       "/api/explore/token/analytics",
       "/api/explore/token/chart",
+      "/api/ops/health",
       "/openapi.json",
     ] as const;
     for (const path of readOnlyPaths) {

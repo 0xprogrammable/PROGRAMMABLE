@@ -9,6 +9,8 @@ import type { ValuedExploreEntry } from "../lib/explore-financial-data";
 import { SHARD_PUBLIC_PRESENTATION_V1 } from
   "../lib/custom-launch/router-trade-adapters-v1";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
+import { exploreEntryMarketIdentitiesV1 } from
+  "../lib/market-data/explore-market-identities";
 
 const mocks = vi.hoisted(() => ({
   readCatalog: vi.fn(),
@@ -25,9 +27,14 @@ const mocks = vi.hoisted(() => ({
   readRouter: vi.fn(),
   routerStatus: vi.fn((): "current" | "last-known-good" => "current"),
   gmgnConfigured: vi.fn(() => false),
+  gmgnEligible: vi.fn<(entry: ExploreEntry) => boolean>(),
   readGmgn: vi.fn(),
   readTrending: vi.fn(),
   readHotSearches: vi.fn(),
+  readSearch: vi.fn(),
+  supplyRequired: vi.fn<(entry: ExploreEntry) => boolean>(),
+  hydrateSupply: vi.fn(),
+  hydrateSupplyUnbounded: vi.fn(),
 }));
 
 vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
@@ -42,13 +49,20 @@ vi.mock("../lib/market-data/last-good-launch-catalog.server", () => ({
 vi.mock("../lib/market-data/dexscreener-explore.server", () => ({
   readDexscreenerExploreEntriesV1: mocks.readDex,
 }));
+vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
+  canonicalTokenSupplyHydrationRequiredV1: mocks.supplyRequired,
+  hydrateMissingCanonicalTokenSupplyV1: mocks.hydrateSupplyUnbounded,
+  hydrateMissingCanonicalTokenSupplyBoundedV1: mocks.hydrateSupply,
+}));
 vi.mock("../lib/market-data/gmgn.server", () => ({
   gmgnMarketDataConfiguredV1: mocks.gmgnConfigured,
+  gmgnVisibleMarketEntryEligibleV1: mocks.gmgnEligible,
   readGmgnExploreSnapshotsV1: mocks.readGmgn,
 }));
 vi.mock("../lib/market-data/gmgn-discovery.server", () => ({
   readGmgnEthereumTrendingV1: mocks.readTrending,
   readGmgnEthereumHotSearchesV1: mocks.readHotSearches,
+  readGmgnEthereumSearchV1: mocks.readSearch,
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
@@ -90,7 +104,7 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
   ].join("+"),
 }));
 
-import { GET } from "../app/api/explore/route";
+import { GET, paginateTrendingExploreEntriesV1 } from "../app/api/explore/route";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
@@ -125,7 +139,7 @@ function token(index: number): ExploreEntry {
       modelId: "classic",
       modelVersion: "classic-v3",
     },
-  };
+  } as const;
 }
 
 const entries = Array.from({ length: TOKEN_COUNT }, (_, index) => token(index + 1));
@@ -134,6 +148,10 @@ function discoverySnapshot(
   kind: "trending" | "hot-search",
   ranked: readonly ExploreEntry[],
   foreignAddresses: readonly `0x${string}`[] = [],
+  rankingIntent: Readonly<{
+    orderBy: "marketcap";
+    direction: "asc" | "desc";
+  }> | null = null,
 ) {
   const addresses = [
     ...foreignAddresses,
@@ -146,6 +164,8 @@ function discoverySnapshot(
     providerChain: "eth",
     kind,
     interval: kind === "trending" ? "1h" : "24h",
+    orderBy: rankingIntent?.orderBy ?? null,
+    direction: rankingIntent?.direction ?? null,
     requestedLimit: 100,
     fetchedAt: kind === "trending"
       ? "2026-08-16T08:00:02.000Z"
@@ -155,8 +175,8 @@ function discoverySnapshot(
     discardedProviderItemCount: 0,
     duplicateProviderItemCount: 0,
     tokens: addresses.map((tokenAddress, index) => ({
-      chain: "eth",
-      tokenAddress: tokenAddress.toLowerCase(),
+      chain: "eth" as const,
+      tokenAddress: tokenAddress.toLowerCase() as `0x${string}`,
       rank: index + 1,
       visitingCount: null,
       hotLevel: null,
@@ -165,11 +185,130 @@ function discoverySnapshot(
       sells: null,
       holderCount: null,
       priceUsd: null,
-      marketCapUsd: null,
-      liquidityUsd: null,
+      marketCapUsd: rankingIntent === null ? null : 1_000_000 - index,
+      liquidityUsd: rankingIntent === null ? null : 20_000,
       volumeUsd: null,
     })),
-  };
+  } as const;
+}
+
+function searchSnapshot(
+  query: string,
+  ranked: readonly ExploreEntry[],
+  input: Readonly<{
+    foreignAddresses?: readonly `0x${string}`[];
+    discardedProviderItemCount?: number;
+    duplicateProviderItemCount?: number;
+    fetchedAt?: string;
+  }> = {},
+) {
+  const foreignAddresses = input.foreignAddresses ?? [];
+  const addresses = [
+    ...ranked.flatMap((entry) => entry.tokenAddress ? [entry.tokenAddress] : []),
+    ...foreignAddresses,
+  ];
+  const discardedProviderItemCount =
+    input.discardedProviderItemCount ?? 0;
+  const duplicateProviderItemCount =
+    input.duplicateProviderItemCount ?? 0;
+  return {
+    schemaVersion: "programmable.gmgn-search.v1",
+    source: "gmgn",
+    chainId: "1",
+    providerChain: "eth",
+    query,
+    orderBy: "weight",
+    fetchedAt: input.fetchedAt ?? new Date().toISOString(),
+    providerItemCount: addresses.length + discardedProviderItemCount +
+      duplicateProviderItemCount,
+    discardedProviderItemCount,
+    duplicateProviderItemCount,
+    tokens: addresses.map((tokenAddress, index) => ({
+      chain: "eth" as const,
+      tokenAddress: tokenAddress.toLowerCase() as `0x${string}`,
+      rank: index + 1,
+    })),
+  } as const;
+}
+
+function gmgnMarketSnapshot(
+  entry: ExploreEntry,
+  input: Readonly<{
+    fdvUsd: number;
+    liquidityUsd: number;
+    fetchedAt: string;
+  }>,
+) {
+  const [identity] = exploreEntryMarketIdentitiesV1(entry);
+  if (identity === undefined) throw new Error("market identity required");
+  const wad = 10n ** 18n;
+  return {
+    schemaVersion: "programmable.gmgn-market-snapshot.v1",
+    source: "gmgn",
+    marketScope: "token",
+    poolAttribution: "unavailable",
+    currency: "USD",
+    fetchedAt: input.fetchedAt,
+    identity,
+    priceUsdWad: wad.toString(),
+    fdvUsdWad: (BigInt(input.fdvUsd) * wad).toString(),
+    liquidityUsdWad: (BigInt(input.liquidityUsd) * wad).toString(),
+    volume24hUsdWad: "0",
+    swapCount24h: 0,
+  } as const;
+}
+
+function registryCustom(index: number): ExploreEntry {
+  const tokenAddress =
+    `0x${(1_000 + index).toString(16).padStart(40, "0")}` as const;
+  const quoteAddress =
+    "0x7777777777777777777777777777777777777777" as const;
+  const projectId = `sha256:${index.toString(16).padStart(64, "0")}`;
+  const launchId = `sha256:${(index + 1).toString(16).padStart(64, "0")}`;
+  return {
+    exploreKind: "custom-project",
+    id: `custom:${projectId}`,
+    name: `Registry Custom ${index}`,
+    symbol: `RC${index}`,
+    links: [],
+    launchedAt: new Date(Date.parse(NOW) + index * 1_000).toISOString(),
+    finalizedAt: new Date(Date.parse(NOW) + index * 1_000).toISOString(),
+    chainId: "1",
+    modelId: "registry-custom",
+    customProjectId: projectId,
+    customLaunchId: launchId,
+    launchingWallet: {
+      namespace: "eip155:1",
+      value: "0x6666666666666666666666666666666666666666",
+    },
+    postLaunchAuthorityInventory: {},
+    postLaunchAuthorityInventoryHash: `sha256:${"99".repeat(32)}`,
+    tokenAddress,
+    tokenDecimals: 18,
+    markets: [{
+      marketId: `market-${index}`,
+      kind: "uniswap-v4",
+      status: "active",
+      poolId: `0x${index.toString(16).padStart(64, "0")}`,
+      baseAsset: {
+        assetId: "token",
+        identity: { namespace: "eip155:1", value: tokenAddress },
+      },
+      quoteAsset: {
+        assetId: "quote",
+        identity: { namespace: "eip155:1", value: quoteAddress },
+      },
+    }],
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "custom",
+      source: "registry.custom-launched",
+      projectId,
+      launchId,
+      sourceRecordBindingHash: `sha256:${"ab".repeat(32)}`,
+      finalizedLaunchBindingHash: `sha256:${"cd".repeat(32)}`,
+    },
+  } as unknown as ExploreEntry;
 }
 
 const multiMarketCustom = {
@@ -317,6 +456,34 @@ async function json(response: Response) {
 }
 
 describe("Explore static identity and Dexscreener market contract", () => {
+  it("binds every page of one discovery snapshot to one deterministic commitment", () => {
+    const snapshots = [
+      discoverySnapshot("trending", [entries[3]!, entries[19]!]),
+      discoverySnapshot("hot-search", [entries[1]!]),
+    ];
+    const input = { pageSize: 7, query: "", socials: null, model: null } as const;
+    const first = paginateTrendingExploreEntriesV1(entries, snapshots, {
+      ...input,
+      page: 1,
+    });
+    const second = paginateTrendingExploreEntriesV1(entries, snapshots, {
+      ...input,
+      page: 2,
+    });
+    expect(second.discovery).toEqual(first.discovery);
+    expect(second.discovery.rankingCommitment).toMatch(
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    expect(second.discovery).not.toHaveProperty("providerRank");
+    const drifted = paginateTrendingExploreEntriesV1(entries, [{
+      ...snapshots[0]!,
+      fetchedAt: "2026-08-16T08:00:04.000Z",
+    }, snapshots[1]!], { ...input, page: 1 });
+    expect(drifted.discovery.rankingCommitment).not.toBe(
+      first.discovery.rankingCommitment,
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -329,12 +496,162 @@ describe("Explore static identity and Dexscreener market contract", () => {
     mocks.readRouter.mockResolvedValue([]);
     mocks.routerStatus.mockReturnValue("current");
     mocks.gmgnConfigured.mockReturnValue(false);
+    mocks.gmgnEligible.mockReturnValue(false);
+    mocks.readGmgn.mockResolvedValue(new Map());
     mocks.readTrending.mockResolvedValue(null);
     mocks.readHotSearches.mockResolvedValue(null);
+    mocks.readSearch.mockResolvedValue(null);
+    mocks.supplyRequired.mockReturnValue(false);
+    mocks.hydrateSupply.mockImplementation(async (
+      input: readonly ExploreEntry[],
+    ) => [...input]);
+    mocks.hydrateSupplyUnbounded.mockImplementation(async (
+      input: readonly ExploreEntry[],
+    ) => [...input]);
     mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
       entries: valued(input),
       marketRead: marketRead({ requested: input.length, qualified: input.length }),
     }));
+  });
+
+  it("intersects GMGN search with the canonical catalog across pages", async () => {
+    const firstFetchedAt = new Date(Date.now() - 2_000).toISOString();
+    const snapshot = searchSnapshot(
+      "token",
+      [entries[6]!, entries[3]!, entries[1]!],
+      {
+        foreignAddresses: [
+          "0xffffffffffffffffffffffffffffffffffffffff",
+        ],
+        discardedProviderItemCount: 2,
+        duplicateProviderItemCount: 1,
+        fetchedAt: firstFetchedAt,
+      },
+    );
+    mocks.readSearch.mockResolvedValue(snapshot);
+
+    const firstResponse = await GET(request("q=token&page=1&limit=5"));
+    const first = await json(firstResponse);
+    const second = await json(await GET(request("q=token&page=2&limit=5")));
+
+    expect(first.total).toBe(TOKEN_COUNT);
+    expect(first.tokens.slice(0, 3).map((entry: ExploreEntry) => entry.id))
+      .toEqual([entries[6]!.id, entries[3]!.id, entries[1]!.id]);
+    expect(first.tokens.some((entry: ExploreEntry) =>
+      entry.tokenAddress === "0xffffffffffffffffffffffffffffffffffffffff"
+    )).toBe(false);
+    expect(first.search).toMatchObject({
+      schemaVersion: "programmable.explore-search-ranking.v1",
+      provider: "gmgn",
+      requested: "search",
+      orderBy: "weight",
+      status: "partial",
+      applied: "gmgn-canonical-search-with-local-match-fallback",
+      observedTokenCount: 4,
+      matchedTokenCount: 3,
+      matchedUniqueTokenCount: 3,
+      canonicalMatchCount: TOKEN_COUNT,
+      canonicalMatchTokenCount: TOKEN_COUNT,
+      unobservedCanonicalMatchCount: TOKEN_COUNT - 3,
+      providerOnlyCanonicalTokenCount: 1,
+      foreignTokenCount: 1,
+      discardedProviderItemCount: 2,
+      duplicateProviderItemCount: 1,
+      canonicalAddressCoverageBps: Math.floor(3 * 10_000 / TOKEN_COUNT),
+      asOfTime: firstFetchedAt,
+    });
+    expect(first.search.rankingCommitment).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(second.search.rankingCommitment).toBe(
+      first.search.rankingCommitment,
+    );
+    expect(firstResponse.headers.get("x-programmable-search-provider")).toBe(
+      "gmgn",
+    );
+    expect(firstResponse.headers.get("x-programmable-search-read-status")).toBe(
+      "partial",
+    );
+    expect(firstResponse.headers.get("x-programmable-search-matched-count"))
+      .toBe("3");
+    expect(firstResponse.headers.get(
+      "x-programmable-search-matched-unique-count",
+    )).toBe("3");
+    expect(firstResponse.headers.get(
+      "x-programmable-search-ranking-commitment",
+    )).toBe(first.search.rankingCommitment);
+    expect(firstResponse.headers.get("x-programmable-read-source"))
+      .toContain("+gmgn-search");
+    expect(mocks.readSearch).toHaveBeenCalledWith("token",
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        deadlineMs: expect.any(Number),
+      }));
+
+    mocks.readSearch.mockResolvedValue({
+      ...snapshot,
+      fetchedAt: new Date(Date.now() - 500).toISOString(),
+    });
+    const drifted = await json(await GET(request("q=token&page=1&limit=5")));
+    expect(drifted.search.rankingCommitment).not.toBe(
+      first.search.rankingCommitment,
+    );
+  });
+
+  it("keeps local matches for zero-result and timed-out GMGN searches", async () => {
+    mocks.readSearch.mockResolvedValue(searchSnapshot("token", []));
+    const zeroResponse = await GET(request("q=token&page=1&limit=100"));
+    const zero = await json(zeroResponse);
+    expect(zero.total).toBe(TOKEN_COUNT - 1);
+    expect(zero.search).toMatchObject({
+      status: "partial",
+      applied: "local-match-order",
+      observedTokenCount: 0,
+      matchedTokenCount: 0,
+      canonicalMatchCount: TOKEN_COUNT - 1,
+      providerOnlyCanonicalTokenCount: 0,
+    });
+    expect(zero.search.asOfTime).not.toBeNull();
+
+    mocks.readSearch.mockResolvedValue(null);
+    const timeoutResponse = await GET(request("q=token&page=1&limit=100"));
+    const timeout = await json(timeoutResponse);
+    expect(timeout.total).toBe(TOKEN_COUNT - 1);
+    expect(timeout.search).toMatchObject({
+      status: "unavailable",
+      applied: "local-match-order",
+      canonicalMatchCount: TOKEN_COUNT - 1,
+    });
+    expect(timeout.search.asOfTime).toBeNull();
+    expect(timeoutResponse.headers.get("x-programmable-read-source"))
+      .not.toContain("+gmgn-search");
+  });
+
+  it("starts chosen provider sorting for a canonical search alias", async () => {
+    const fetchedAt = new Date(Date.now() - 1_000).toISOString();
+    mocks.readSearch.mockResolvedValue(searchSnapshot(
+      "provider-alias",
+      [entries[6]!],
+      { fetchedAt },
+    ));
+    mocks.readTrending.mockResolvedValue({
+      ...discoverySnapshot("trending", [entries[6]!]),
+      fetchedAt,
+    });
+
+    const response = await GET(request(
+      "q=provider-alias&sort=trending&page=1&limit=9",
+    ));
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.tokens[0].id).toBe(entries[6]!.id);
+    expect(body.search.providerOnlyCanonicalTokenCount).toBe(1);
+    expect(mocks.readTrending).toHaveBeenCalledWith(
+      { interval: "1h", limit: 100 },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        deadlineMs: expect.any(Number),
+      }),
+    );
   });
 
   it("returns an honest planned Robinhood state without reading Ethereum", async () => {
@@ -422,6 +739,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       schemaVersion: "programmable.explore-discovery-ranking.v1",
       provider: "gmgn",
       requested: "trending",
+      rankingCommitment: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
       status: "partial",
       applied: "gmgn-ranked-with-launch-order-fallback",
       rankInterval: "1h",
@@ -429,6 +747,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
       snapshotCount: 2,
       observedTokenCount: 4,
       matchedTokenCount: 3,
+      matchedUniqueTokenCount: 3,
       canonicalEntryCount: 18,
       canonicalTokenCount: 18,
       unobservedCanonicalEntryCount: 15,
@@ -452,6 +771,13 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(response.headers.get("x-programmable-discovery-provider")).toBe("gmgn");
     expect(response.headers.get("x-programmable-discovery-read-status")).toBe("partial");
     expect(response.headers.get("x-programmable-discovery-matched-count")).toBe("3");
+    expect(response.headers.get("x-programmable-discovery-matched-unique-count"))
+      .toBe("3");
+    expect(
+      response.headers.get("x-programmable-discovery-ranking-commitment"),
+    ).toBe(body.discovery.rankingCommitment);
+    expect(body.discovery).not.toHaveProperty("matches");
+    expect(JSON.stringify(body.discovery)).not.toContain("providerRank");
     expect(response.headers.get("x-programmable-read-source")).toContain(
       "+gmgn-discovery",
     );
@@ -483,6 +809,9 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(response.headers.get("x-programmable-discovery-provider")).toBe("gmgn");
     expect(response.headers.get("x-programmable-discovery-read-status"))
       .toBe("unavailable");
+    expect(
+      response.headers.get("x-programmable-discovery-ranking-commitment"),
+    ).toBe(body.discovery.rankingCommitment);
     expect(response.headers.get("x-programmable-read-source"))
       .not.toContain("gmgn-discovery");
   });
@@ -879,7 +1208,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(body.dataQuality.launchIdentity.custom).toBe("unavailable");
   });
 
-  it("derives ranking counts from entries when one Custom has two markets", async () => {
+  it("reports visible-entry market reads when one Custom has two markets", async () => {
     mocks.readCatalog.mockResolvedValue(catalog({ entries: [] }));
     mocks.customEnabled.mockReturnValue(true);
     mocks.readCustom.mockResolvedValue([multiMarketCustom]);
@@ -901,17 +1230,19 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(response.status).toBe(200);
     expect(body.total).toBe(1);
     expect(body.marketRead).toMatchObject({
-      requestedCount: 2,
-      qualifiedCount: 2,
+      requestedCount: 1,
+      qualifiedCount: 1,
     });
-    expect(body.ranking).toEqual({
+    expect(body.ranking).toMatchObject({
+      schemaVersion: "programmable.explore-market-cap-ranking.v1",
       status: "unavailable",
-      requested: "fdv",
+      gmgnStatus: "unavailable",
+      requested: "market-cap",
       applied: "launch-order",
       qualifiedCount: 0,
       totalCount: 1,
     });
-    expect(body.tokens[0].valuation.status).toBe("unavailable");
+    expect(body.tokens[0].valuation.status).toBe("available");
   });
 
   it("serves last-good identities with exact-source Dexscreener FDV", async () => {
@@ -928,7 +1259,8 @@ describe("Explore static identity and Dexscreener market contract", () => {
       sort: "market-cap",
       ranking: {
         status: "complete",
-        requested: "fdv",
+        gmgnStatus: "unavailable",
+        requested: "market-cap",
         applied: "fdv",
         qualifiedCount: TOKEN_COUNT,
         totalCount: TOKEN_COUNT,
@@ -953,12 +1285,309 @@ describe("Explore static identity and Dexscreener market contract", () => {
       "dexscreener",
     );
     expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(TOKEN_COUNT);
+    expect(mocks.readDex.mock.calls[1]?.[0]).toHaveLength(5);
+    expect(mocks.readTrending).toHaveBeenCalledWith({
+      interval: "1h",
+      limit: 100,
+      orderBy: "marketcap",
+      direction: "desc",
+    }, expect.objectContaining({
+      signal: expect.any(AbortSignal),
+      deadlineMs: expect.any(Number),
+    }));
+  });
+
+  it("hydrates rank-unobserved canonical tokens with GMGN before Dex", async () => {
+    const eligibleEntries = entries.slice(0, 5).map((entry) => ({
+      ...entry,
+      totalSupplyRaw: "1000000000000000000000",
+      tokenDecimals: 18,
+    })) as readonly ExploreEntry[];
+    mocks.readCatalog.mockResolvedValue(catalog({ entries: eligibleEntries }));
+    mocks.gmgnEligible.mockReturnValue(true);
+    const fetchedAt = new Date(Date.now() - 2_000).toISOString();
+    mocks.readGmgn.mockImplementation(async (
+      input: readonly ExploreEntry[],
+    ) => {
+      expect(input).toEqual([...eligibleEntries].reverse());
+      return new Map([
+        [eligibleEntries[4]!.id, gmgnMarketSnapshot(eligibleEntries[4]!, {
+          fdvUsd: 10,
+          liquidityUsd: 20_000,
+          fetchedAt,
+        })],
+        [eligibleEntries[3]!.id, gmgnMarketSnapshot(eligibleEntries[3]!, {
+          fdvUsd: 50,
+          liquidityUsd: 20_000,
+          fetchedAt,
+        })],
+        [eligibleEntries[2]!.id, gmgnMarketSnapshot(eligibleEntries[2]!, {
+          fdvUsd: 500,
+          liquidityUsd: 1,
+          fetchedAt,
+        })],
+      ]);
+    });
+    mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
+      entries: valued(
+        input,
+        input.length === 3 ? new Set([0, 1]) : undefined,
+      ),
+      marketRead: marketRead({
+        requested: input.length,
+        qualified: input.length === 3 ? 2 : input.length,
+      }),
+    }));
+
+    const response = await GET(request("sort=market-cap&page=1&limit=5"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.tokens.map((entry: ExploreEntry) => entry.id)).toEqual([
+      eligibleEntries[3]!.id,
+      eligibleEntries[4]!.id,
+      eligibleEntries[2]!.id,
+      eligibleEntries[1]!.id,
+      eligibleEntries[0]!.id,
+    ]);
+    expect(body.ranking).toMatchObject({
+      source: "gmgn+dexscreener",
+      status: "partial",
+      gmgnStatus: "partial",
+      applied:
+        "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order",
+      metricOrder:
+        "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order",
+      matchedTokenCount: 0,
+      gmgnHydrationLimit: 100,
+      gmgnHydrationEligibleCount: 5,
+      gmgnHydrationRequestedCount: 5,
+      gmgnHydrationObservedCount: 3,
+      gmgnHydrationQualifiedCount: 2,
+      gmgnHydrationDeferredCount: 0,
+      fallbackRequestedCount: 3,
+      fallbackQualifiedCount: 2,
+      canonicalTailCount: 1,
+      qualifiedCount: 4,
+      totalCount: 5,
+      asOfTime: fetchedAt,
+    });
+    expect(mocks.readDex.mock.calls[0]?.[0].map((entry: ExploreEntry) => entry.id))
+      .toEqual([
+        eligibleEntries[2]!.id,
+        eligibleEntries[1]!.id,
+        eligibleEntries[0]!.id,
+      ]);
+    expect(response.headers.get("x-programmable-ranking-gmgn-status")).toBe(
+      "partial",
+    );
+
+    mocks.readGmgn.mockImplementation(async () => new Map([
+      [eligibleEntries[4]!.id, gmgnMarketSnapshot(eligibleEntries[4]!, {
+        fdvUsd: 10,
+        liquidityUsd: 20_000,
+        fetchedAt: new Date(Date.now() - 500).toISOString(),
+      })],
+      [eligibleEntries[3]!.id, gmgnMarketSnapshot(eligibleEntries[3]!, {
+        fdvUsd: 50,
+        liquidityUsd: 20_000,
+        fetchedAt: new Date(Date.now() - 500).toISOString(),
+      })],
+    ]));
+    const drifted = await json(await GET(
+      request("sort=market-cap&page=2&limit=2"),
+    ));
+    expect(drifted.ranking.rankingCommitment).not.toBe(
+      body.ranking.rankingCommitment,
+    );
+  });
+
+  it("bounds Registry Custom supply hydration before GMGN token info", async () => {
+    const customEntries = Array.from({ length: 25 }, (_, index) =>
+      registryCustom(index + 1));
+    mocks.readCatalog.mockResolvedValue(catalog({ entries: [] }));
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.readCustom.mockResolvedValue(customEntries);
+    mocks.supplyRequired.mockImplementation((entry: ExploreEntry) =>
+      entry.exploreKind === "custom-project" &&
+      typeof entry.totalSupplyRaw !== "string"
+    );
+    mocks.hydrateSupply.mockImplementation(async (
+      input: readonly ExploreEntry[],
+      wait: Readonly<{
+        signal: AbortSignal;
+        deadlineMs: number;
+        maximumDurationMs: number;
+      }>,
+    ) => {
+      expect(input).toHaveLength(20);
+      expect(wait).toMatchObject({
+        signal: expect.any(AbortSignal),
+        deadlineMs: expect.any(Number),
+        maximumDurationMs: 1_800,
+      });
+      return input.map((entry) => ({
+        ...entry,
+        totalSupplyRaw: "1000000000000000000000",
+        tokenDecimals: 18,
+      }));
+    });
+    mocks.gmgnEligible.mockImplementation((entry: ExploreEntry) =>
+      typeof entry.totalSupplyRaw === "string"
+    );
+    const fetchedAt = new Date(Date.now() - 1_000).toISOString();
+    mocks.readGmgn.mockImplementation(async (
+      input: readonly ExploreEntry[],
+    ) => new Map([[input[0]!.id, gmgnMarketSnapshot(input[0]!, {
+      fdvUsd: 100,
+      liquidityUsd: 20_000,
+      fetchedAt,
+    })]]));
+
+    const response = await GET(request("sort=market-cap&page=1&limit=9"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(mocks.hydrateSupply).toHaveBeenCalledOnce();
+    expect(mocks.readGmgn.mock.calls[0]?.[0]).toHaveLength(20);
+    expect(mocks.readGmgn.mock.calls[0]?.[0].every(
+      (entry: ExploreEntry) => entry.exploreKind === "custom-project" &&
+        typeof entry.totalSupplyRaw === "string",
+    )).toBe(true);
+    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(24);
+    expect(body.ranking).toMatchObject({
+      source: "gmgn+dexscreener",
+      status: "complete",
+      gmgnStatus: "partial",
+      applied: "gmgn-token-info-fdv-then-dexscreener-fdv",
+      gmgnHydrationEligibleCount: 20,
+      gmgnHydrationRequestedCount: 20,
+      gmgnHydrationObservedCount: 1,
+      gmgnHydrationQualifiedCount: 1,
+      fallbackRequestedCount: 24,
+      fallbackQualifiedCount: 24,
+      canonicalTailCount: 0,
+      qualifiedCount: 25,
+      totalCount: 25,
+    });
+  });
+
+  it("uses GMGN market-cap prefixes in both directions with a stable commitment", async () => {
+    const fresh = new Date().toISOString();
+    const descSnapshot = {
+      ...discoverySnapshot(
+        "trending",
+        [entries[3]!, entries[19]!],
+        ["0xffffffffffffffffffffffffffffffffffffffff"],
+        { orderBy: "marketcap", direction: "desc" },
+      ),
+      fetchedAt: fresh,
+    } as const;
+    mocks.readTrending.mockResolvedValue(descSnapshot);
+
+    const descResponse = await GET(request("sort=market-cap&page=1&limit=5"));
+    const desc = await json(descResponse);
+    const descSecondPage = await json(await GET(
+      request("sort=market-cap&page=2&limit=5"),
+    ));
+
+    expect(desc.tokens.slice(0, 2).map((entry: ExploreEntry) => entry.id)).toEqual([
+      entries[3]!.id,
+      entries[19]!.id,
+    ]);
+    expect(desc.sortMetric).toBe(
+      "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback",
+    );
+    expect(desc.ranking).toMatchObject({
+      schemaVersion: "programmable.explore-market-cap-ranking.v1",
+      requested: "market-cap",
+      direction: "desc",
+      primaryProvider: "gmgn",
+      source: "gmgn+dexscreener",
+      fallbackProvider: "dexscreener",
+      status: "complete",
+      gmgnStatus: "partial",
+      applied: "gmgn-market-cap-then-dexscreener-fdv",
+      observedTokenCount: 3,
+      matchedTokenCount: 2,
+      matchedUniqueTokenCount: 2,
+      canonicalEntryCount: TOKEN_COUNT,
+      unobservedCanonicalEntryCount: TOKEN_COUNT - 2,
+      canonicalAddressCoverageBps: Math.floor(2 * 10_000 / TOKEN_COUNT),
+      foreignTokenCount: 1,
+      fallbackRequestedCount: TOKEN_COUNT - 2,
+      fallbackQualifiedCount: TOKEN_COUNT - 2,
+      qualifiedCount: TOKEN_COUNT,
+      totalCount: TOKEN_COUNT,
+      asOfTime: fresh,
+    });
+    expect(desc.ranking.rankingCommitment).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(descSecondPage.ranking.rankingCommitment).toBe(
+      desc.ranking.rankingCommitment,
+    );
+    expect(descResponse.headers.get("x-programmable-ranking-primary-provider")).toBe(
+      "gmgn",
+    );
+    expect(descResponse.headers.get("x-programmable-ranking-source")).toBe(
+      "gmgn+dexscreener",
+    );
+    expect(descResponse.headers.get("x-programmable-ranking-read-status")).toBe(
+      "complete",
+    );
+    expect(descResponse.headers.get("x-programmable-ranking-gmgn-status")).toBe(
+      "partial",
+    );
+    expect(descResponse.headers.get("x-programmable-ranking-commitment")).toBe(
+      desc.ranking.rankingCommitment,
+    );
+    expect(descResponse.headers.get("x-programmable-read-source")).toContain(
+      "+gmgn-ranking",
+    );
+    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(TOKEN_COUNT - 2);
+    expect(mocks.readDex.mock.calls[1]?.[0]).toHaveLength(5);
+
+    const ascSnapshot = {
+      ...discoverySnapshot(
+        "trending",
+        [entries[1]!, entries[0]!],
+        [],
+        { orderBy: "marketcap", direction: "asc" },
+      ),
+      fetchedAt: fresh,
+    } as const;
+    mocks.readTrending.mockResolvedValue(ascSnapshot);
+    const asc = await json(await GET(
+      request("sort=market-cap-asc&page=1&limit=5"),
+    ));
+
+    expect(asc.tokens.slice(0, 2).map((entry: ExploreEntry) => entry.id)).toEqual([
+      entries[1]!.id,
+      entries[0]!.id,
+    ]);
+    expect(asc.ranking).toMatchObject({
+      direction: "asc",
+      gmgnStatus: "partial",
+      matchedTokenCount: 2,
+      fallbackRequestedCount: TOKEN_COUNT - 2,
+    });
+    expect(asc.ranking.rankingCommitment).not.toBe(
+      desc.ranking.rankingCommitment,
+    );
+    expect(mocks.readTrending).toHaveBeenLastCalledWith({
+      interval: "1h",
+      limit: 100,
+      orderBy: "marketcap",
+      direction: "asc",
+    }, expect.objectContaining({
+      signal: expect.any(AbortSignal),
+      deadlineMs: expect.any(Number),
+    }));
   });
 
   it.each(["market-cap", "market-cap-asc"] as const)(
     "retains every identity and applies launch order for zero-qualified %s",
     async (sort) => {
-      mocks.readDex.mockImplementationOnce(async (input: readonly ExploreEntry[]) => ({
+      mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => ({
         entries: valued(input, new Set()),
         marketRead: marketRead({
           requested: input.length,
@@ -975,9 +1604,11 @@ describe("Explore static identity and Dexscreener market contract", () => {
       expect(body.tokens).toHaveLength(TOKEN_COUNT);
       expect(new Set(body.tokens.map((entry: ExploreEntry) => entry.id)).size)
         .toBe(TOKEN_COUNT);
-      expect(body.ranking).toEqual({
+      expect(body.ranking).toMatchObject({
+        schemaVersion: "programmable.explore-market-cap-ranking.v1",
         status: "unavailable",
-        requested: "fdv",
+        gmgnStatus: "unavailable",
+        requested: "market-cap",
         applied: "launch-order",
         qualifiedCount: 0,
         totalCount: TOKEN_COUNT,
@@ -993,7 +1624,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
   it("keeps 351 identities when the bounded Dex producer returns unavailable", async () => {
     const largeCatalog = Array.from({ length: 351 }, (_, index) => token(index + 1));
     mocks.readCatalog.mockResolvedValue(catalog({ entries: largeCatalog }));
-    mocks.readDex.mockImplementationOnce(async (
+    mocks.readDex.mockImplementation(async (
       input: readonly ExploreEntry[],
       wait: Readonly<{ signal: AbortSignal; deadlineMs: number }>,
     ) => {
@@ -1041,20 +1672,22 @@ describe("Explore static identity and Dexscreener market contract", () => {
     const body = await json(response);
 
     expect(response.status).toBe(200);
-    expect(body.ranking).toEqual({
+    expect(body.ranking).toMatchObject({
+      schemaVersion: "programmable.explore-market-cap-ranking.v1",
       status: "partial",
-      requested: "fdv",
-      applied: "qualified-fdv-then-launch-order",
+      gmgnStatus: "unavailable",
+      requested: "market-cap",
+        applied: "qualified-fdv-then-launch-order",
       qualifiedCount: 3,
       totalCount: TOKEN_COUNT,
     });
     expect(body.tokens.slice(0, 3).map((entry: ExploreEntry) => entry.id)).toEqual([
-      entries[4]!.id,
-      entries[2]!.id,
-      entries[0]!.id,
+      entries[35]!.id,
+      entries[33]!.id,
+      entries[31]!.id,
     ]);
     const unavailable = [...entries].reverse()
-      .filter((entry) => !new Set([entries[0]!.id, entries[2]!.id, entries[4]!.id])
+      .filter((entry) => !new Set([entries[35]!.id, entries[33]!.id, entries[31]!.id])
         .has(entry.id));
     expect(body.tokens.slice(3).map((entry: ExploreEntry) => entry.id)).toEqual(
       unavailable.map((entry) => entry.id),
@@ -1099,6 +1732,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     "socials=maybe",
     "model=anything",
     "chain=10",
+    `q=${"x".repeat(101)}`,
   ])(
     "rejects unsupported query shape: %s",
     async (query) => {

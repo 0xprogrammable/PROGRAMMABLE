@@ -105,11 +105,14 @@ export type GmgnTokenSecurityV1 = Readonly<{
 export type GmgnTokenPoolInfoV1 = Readonly<{
   schemaVersion: typeof PROGRAMMABLE_GMGN_TOKEN_POOL_INFO_SCHEMA_VERSION;
   source: "gmgn";
+  marketScope: "token";
+  poolAttribution: "unavailable";
   currency: "USD";
   fetchedAt: string;
   identity: MarketChartIdentityV1;
   tokenAddress: `0x${string}`;
-  poolAddress: `0x${string}`;
+  /** GMGN pool_info `address`; on v4 this is the queried token address. */
+  providerAddress: `0x${string}`;
   baseAddress: `0x${string}`;
   quoteAddress: `0x${string}`;
   token0Address: `0x${string}`;
@@ -288,21 +291,27 @@ export function isGmgnTokenPoolInfoV1(
   if (!isRecord(value) || !isMarketChartIdentityV1(value.identity)) {
     return false;
   }
-  const pair = [value.token0Address, value.token1Address];
+  const token0Address = value.token0Address;
+  const token1Address = value.token1Address;
+  const pair = [token0Address, token1Address];
   return value.schemaVersion === PROGRAMMABLE_GMGN_TOKEN_POOL_INFO_SCHEMA_VERSION &&
     value.source === "gmgn" &&
+    value.marketScope === "token" &&
+    value.poolAttribution === "unavailable" &&
     value.currency === "USD" &&
     exactIsoTime(value.fetchedAt) &&
     value.tokenAddress === value.identity.tokenAddress &&
     value.baseAddress === value.identity.tokenAddress &&
-    value.poolAddress === value.identity.poolId &&
+    value.providerAddress === value.identity.tokenAddress &&
     value.quoteAddress === value.identity.quoteAddress &&
     canonicalAddress(value.tokenAddress) &&
-    canonicalBytes32(value.poolAddress) &&
+    canonicalAddress(value.providerAddress) &&
     canonicalAddress(value.baseAddress) &&
     canonicalAddress(value.quoteAddress) &&
-    pair.every(canonicalAddress) &&
+    canonicalAddress(token0Address) &&
+    canonicalAddress(token1Address) &&
     new Set(pair).size === 2 &&
+    token0Address < token1Address &&
     pair.includes(value.identity.tokenAddress) &&
     pair.includes(value.identity.quoteAddress) &&
     value.exchange === "uniswap_v4" &&

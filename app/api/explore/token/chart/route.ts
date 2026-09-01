@@ -3,6 +3,8 @@ import { getAddress, isAddress } from "viem";
 
 import { readBitqueryMarketChartV1 } from
   "../../../../../lib/market-data/bitquery.server";
+import { hydrateMissingCanonicalTokenSupplyBoundedV1 } from
+  "../../../../../lib/market-data/canonical-token-supply.server";
 import {
   mergeEnvioClassicV3CatalogEntriesV1,
   readEnvioClassicV3CatalogV1,
@@ -11,14 +13,14 @@ import {
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../../lib/market-data/explore-market-identities";
 import {
-  isGmgnMarketChartForIdentityV1,
-  preferExactGmgnMarketChartV1,
+  isGmgnTokenSeriesForAdmissionIdentityV1,
+  preferAdmittedGmgnTokenSeriesV1,
   type GmgnMarketChartV1,
 } from "../../../../../lib/market-data/gmgn-chart-data-v1";
 import { readGmgnMarketChartV1 } from
   "../../../../../lib/market-data/gmgn-chart.server";
 import type {
-  MarketChartErrorV1,
+  MarketChartErrorV2,
   MarketChartIdentityV1,
   MarketChartV1,
 } from "../../../../../lib/market-data/market-data-v1";
@@ -60,11 +62,16 @@ export async function GET(request: NextRequest) {
     return json({ error: "Choose a supported chart range" }, 400);
   }
   const address = getAddress(rawAddress);
+  const deadlineMs = Date.now() + 8_000;
+  const signal = AbortSignal.any([
+    request.signal,
+    AbortSignal.timeout(8_000),
+  ]);
 
   try {
     const catalog = await readEnvioClassicV3CatalogV1({
-      signal: request.signal,
-      deadlineMs: Date.now() + 8_000,
+      signal,
+      deadlineMs,
     });
     let entries = catalog.entries;
     let customStatus: "current" | "unavailable" = "unavailable";
@@ -72,7 +79,7 @@ export async function GET(request: NextRequest) {
     if (isCustomLaunchRegistryPublicReadEnabled()) {
       let customEntries;
       try {
-        customEntries = await readProductionCustomExploreDirectoryV1(request.signal);
+        customEntries = await readProductionCustomExploreDirectoryV1(signal);
       } catch {
         // A Custom Registry outage cannot invalidate an already committed
         // canonical identity. Unknown identities remain indeterminate until
@@ -89,8 +96,8 @@ export async function GET(request: NextRequest) {
     try {
       const verifiedRouterEntries =
         await readFinalizedRouterCustomExploreEntriesV1({
-          signal: request.signal,
-          deadlineMs: Date.now() + 8_000,
+          signal,
+          deadlineMs,
         });
       entries = mergeRouterCustomExploreEntriesV1(
         entries,
@@ -120,10 +127,10 @@ export async function GET(request: NextRequest) {
     ) {
       throw new Error("Token chart launch source is not catalog-bound");
     }
-    const entry = entries.find((candidate) =>
+    const resolvedEntry = entries.find((candidate) =>
       candidate.tokenAddress?.toLowerCase() === address.toLowerCase()
     );
-    if (entry === undefined) {
+    if (resolvedEntry === undefined) {
       if (customReadFailed || routerReadFailed) {
         return unavailable({
           address,
@@ -136,8 +143,13 @@ export async function GET(request: NextRequest) {
       }
       return json({ error: "Token not found" }, 404);
     }
+    const hydratedEntries = await hydrateMissingCanonicalTokenSupplyBoundedV1(
+      [resolvedEntry],
+      { signal, deadlineMs },
+    );
+    const entry = hydratedEntries[0] ?? resolvedEntry;
     const identities = exploreEntryMarketIdentitiesV1(entry);
-    if (identities.length !== 1) {
+    if (identities.length === 0) {
       return unavailable({
         address,
         range,
@@ -155,7 +167,10 @@ export async function GET(request: NextRequest) {
         routerStatus,
       });
     }
-    const identity = identities[0];
+    // Custom Registry projects may expose several canonical v4 markets. The
+    // identity helper sorts those by PoolId, so the first identity is a stable
+    // Programmable admission choice made before any provider response.
+    const identity = identities[0]!;
     let gmgnChart: GmgnMarketChartV1 | null = null;
     try {
       gmgnChart = await readGmgnMarketChartV1({
@@ -163,17 +178,31 @@ export async function GET(request: NextRequest) {
         identity,
         range,
       }, {
-        signal: request.signal,
+        signal,
+        deadlineMs,
       });
     } catch {
-      // GMGN is an enrichment provider. Its failure must not hide a canonical
-      // launch or prevent the existing exact-pool history fallback.
+      // GMGN provides token-address history after exact current admission.
+      // Its failure must not hide a launch or prevent the exact-pool fallback.
       console.error("Token chart GMGN read unavailable", {
         name: "GmgnChartReadError",
       });
     }
     const gmgnReadAt = new Date();
-    if (isFreshExactReadyGmgnChart(gmgnChart, identity, range, gmgnReadAt)) {
+    const gmgnAdmissionIdentity = gmgnTokenSeriesAdmissionIdentity(
+      gmgnChart,
+      identities,
+      range,
+    );
+    if (
+      gmgnAdmissionIdentity !== null &&
+      isFreshReadyGmgnTokenSeries(
+        gmgnChart,
+        gmgnAdmissionIdentity,
+        range,
+        gmgnReadAt,
+      )
+    ) {
       return chartResponse(
         gmgnChart,
         launchSource,
@@ -182,16 +211,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const fallbackIdentity = gmgnAdmissionIdentity ?? identity;
     const bitqueryChart = await readBitqueryMarketChartV1({
-      identity,
+      identity: fallbackIdentity,
       range,
       ...(range === "all" ? { historyStart: entry.launchedAt } : {}),
-      signal: request.signal,
+      signal,
     });
-    const chart = preferExactGmgnMarketChartV1({
+    const chart = preferAdmittedGmgnTokenSeriesV1({
       candidate: gmgnChart,
       fallback: bitqueryChart,
-      identity,
+      identity: fallbackIdentity,
       range,
       now: new Date(),
       maximumCandidateAgeMs: GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS,
@@ -217,14 +247,24 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function isFreshExactReadyGmgnChart(
+function gmgnTokenSeriesAdmissionIdentity(
+  chart: unknown,
+  identities: readonly MarketChartIdentityV1[],
+  range: MarketChartV1["range"],
+): MarketChartIdentityV1 | null {
+  return identities.find((identity) =>
+    isGmgnTokenSeriesForAdmissionIdentityV1(chart, identity, range)
+  ) ?? null;
+}
+
+function isFreshReadyGmgnTokenSeries(
   chart: unknown,
   identity: MarketChartIdentityV1,
   range: MarketChartV1["range"],
   now: Date,
 ): chart is GmgnMarketChartV1 {
   if (
-    !isGmgnMarketChartForIdentityV1(chart, identity, range) ||
+    !isGmgnTokenSeriesForAdmissionIdentityV1(chart, identity, range) ||
     chart.status !== "ready" ||
     !Number.isFinite(now.getTime())
   ) return false;
@@ -247,14 +287,14 @@ function unavailable(input: Readonly<{
   address: `0x${string}`;
   range: "1h" | "1d" | "1w" | "all";
   launchSource: string;
-  reason: MarketChartErrorV1["reason"];
+  reason: MarketChartErrorV2["reason"];
   routerStatus?: "current" | "unavailable";
   status?: 200 | 503;
 }>) {
   const status = input.status ?? 200;
-  const body: MarketChartErrorV1 = {
-    schemaVersion: "programmable.market-chart-error.v1",
-    source: "bitquery",
+  const body: MarketChartErrorV2 = {
+    schemaVersion: "programmable.market-chart-error.v2",
+    source: "programmable",
     status: "unavailable",
     generatedAt: new Date().toISOString(),
     address: input.address,
@@ -285,6 +325,10 @@ function chartResponse(
   isCanonicalToken: boolean,
   routerStatus: "current" | "unavailable",
 ) {
+  const chartScope = chart.source === "gmgn" ? chart.seriesScope : "pool";
+  const chartPoolAttribution = chart.source === "gmgn"
+    ? chart.poolAttribution
+    : "exact";
   const dataQuality = chart.status === "ready" ||
       chart.status === "insufficient-history"
     ? "current"
@@ -306,6 +350,8 @@ function chartResponse(
       "X-Programmable-Router-Read-Status": routerStatus,
       "X-Programmable-Market-Provider": chart.source,
       "X-Programmable-Market-Read-Status": chart.readStatus,
+      "X-Programmable-Chart-Scope": chartScope,
+      "X-Programmable-Chart-Pool-Attribution": chartPoolAttribution,
       ...(hasPriceHistory
         ? {
             "X-Programmable-Market-Source": chart.source,

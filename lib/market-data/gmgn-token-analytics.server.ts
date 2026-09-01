@@ -28,6 +28,8 @@ import {
   getProductionGmgnAccountGateV1,
   type GmgnAccountGateV1,
 } from "./gmgn-account-gate.server";
+import { gmgnEffectiveRequestsPerSecondV1 } from
+  "./gmgn-runtime-config.server";
 import {
   isMarketChartIdentityV1,
   type MarketChartIdentityV1,
@@ -305,23 +307,25 @@ export function parseGmgnTokenPoolInfoV1(
     !isRecord(data) ||
     !providerEthereumChainMatchesIfPresent(response, data)
   ) return null;
-  const tokenAddress = canonicalAddress(data.address);
-  const poolAddress = canonicalBytes32(data.pool_address);
+  // Live Ethereum v4 pool_info uses `address` and `base_address` for the
+  // queried token. It does not return a bytes32 v4 PoolId. Keep the canonical
+  // PoolId only as admission context and never attribute these token-level
+  // figures to that pool.
+  const providerAddress = canonicalAddress(data.address);
   const baseAddress = canonicalAddress(data.base_address);
   const quoteAddress = canonicalAddress(data.quote_address);
-  const token0Address = canonicalAddress(data.token0_address);
-  const token1Address = canonicalAddress(data.token1_address);
-  const pair = [token0Address, token1Address];
+  const tokenAddress = baseAddress;
+  const providerPair = requiredProviderPair(
+    data.token0_address,
+    data.token1_address,
+  );
   if (
     tokenAddress !== identity.tokenAddress ||
+    providerAddress !== identity.tokenAddress ||
     baseAddress !== identity.tokenAddress ||
-    poolAddress !== identity.poolId ||
     quoteAddress !== identity.quoteAddress ||
-    String(data.exchange).toLowerCase() !== "uniswap_v4" ||
-    pair.some((address) => address === null) ||
-    new Set(pair).size !== 2 ||
-    !pair.includes(identity.tokenAddress) ||
-    !pair.includes(identity.quoteAddress) ||
+    data.exchange !== "uniswap_v4" ||
+    providerPair === null ||
     !Number.isFinite(fetchedAt.getTime())
   ) return null;
   const liquidityUsd = providerDecimal(data.liquidity);
@@ -333,17 +337,26 @@ export function parseGmgnTokenPoolInfoV1(
     baseReserve === null ||
     quoteReserve === null ||
     creationTimestamp === null ||
-    token0Address === null ||
-    token1Address === null
+    providerAddress === null ||
+    baseAddress === null ||
+    quoteAddress === null
+  ) return null;
+  const token0Address = baseAddress < quoteAddress ? baseAddress : quoteAddress;
+  const token1Address = baseAddress < quoteAddress ? quoteAddress : baseAddress;
+  if (
+    providerPair !== null &&
+    (providerPair[0] !== token0Address || providerPair[1] !== token1Address)
   ) return null;
   const snapshot: GmgnTokenPoolInfoV1 = {
     schemaVersion: PROGRAMMABLE_GMGN_TOKEN_POOL_INFO_SCHEMA_VERSION,
     source: "gmgn",
+    marketScope: "token",
+    poolAttribution: "unavailable",
     currency: "USD",
     fetchedAt: fetchedAt.toISOString(),
     identity,
     tokenAddress,
-    poolAddress,
+    providerAddress,
     baseAddress,
     quoteAddress,
     token0Address,
@@ -363,6 +376,19 @@ export function parseGmgnTokenPoolInfoV1(
     creationTimestamp,
   };
   return isGmgnTokenPoolInfoV1(snapshot) ? Object.freeze(snapshot) : null;
+}
+
+function requiredProviderPair(
+  token0: unknown,
+  token1: unknown,
+): readonly [`0x${string}`, `0x${string}`] | null {
+  const token0Address = canonicalAddress(token0);
+  const token1Address = canonicalAddress(token1);
+  return token0Address !== null &&
+      token1Address !== null &&
+      token0Address < token1Address
+    ? [token0Address, token1Address]
+    : null;
 }
 
 export function parseGmgnTokenWalletRankingV1(
@@ -667,7 +693,7 @@ async function gmgnJsonRequest(
     ) accountGate = getProductionGmgnAccountGateV1();
     if (accountGate !== null) {
       const decision = await reserveProviderSlot(accountGate, {
-        requestsPerSecond: configuredRequestsPerSecond(),
+        requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
         cost: gmgnRequestCost(path),
         deadlineMs: requestDeadlineMs,
         signal: wait.signal,
@@ -843,11 +869,6 @@ async function readBoundedResponseBytes(
 function readApiKey(): string | null {
   const value = process.env.GMGN_API_KEY?.trim();
   return value ? value : null;
-}
-
-function configuredRequestsPerSecond(): number {
-  const value = Number(process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1");
-  return Number.isSafeInteger(value) && value >= 1 && value <= 20 ? value : 1;
 }
 
 function sharedProviderWait(

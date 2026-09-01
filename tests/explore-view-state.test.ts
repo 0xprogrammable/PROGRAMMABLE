@@ -26,15 +26,179 @@ import {
   paginateTokensByExploreFilters,
   paginateTokensByExploreSelections,
   paginateTokensBySocialPresence,
+  parseExploreDiscoveryRanking,
+  parseExploreRanking,
+  parseExploreSearchRanking,
   preserveExplorePayloadOnRefreshFailure,
   requiresCompleteExploreDataset,
   resolveExploreServerSort,
   sortExploreEntriesBySelections,
+  stabilizeExploreRevalidationPayload,
   tokenHasSocialLinks,
   tokenLaunchModelGroup,
 } from "../components/explore-view";
 import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
+
+describe("Explore discovery client contract", () => {
+  const duplicateAddressDiscovery = {
+    schemaVersion: "programmable.explore-discovery-ranking.v1",
+    provider: "gmgn",
+    requested: "trending",
+    rankingCommitment: `sha256:${"ab".repeat(32)}`,
+    status: "complete",
+    applied: "gmgn-ranked-with-launch-order-fallback",
+    rankInterval: "1h",
+    hotSearchInterval: "24h",
+    snapshotCount: 1,
+    observedTokenCount: 1,
+    matchedTokenCount: 2,
+    matchedUniqueTokenCount: 1,
+    canonicalEntryCount: 2,
+    canonicalTokenCount: 1,
+    unobservedCanonicalEntryCount: 0,
+    canonicalAddressCoverageBps: 10_000,
+    foreignTokenCount: 0,
+    discardedProviderItemCount: 0,
+    asOfTime: "2026-09-01T08:00:00.000Z",
+  } as const;
+
+  it("keeps matched entries separate from unique-address coverage", () => {
+    expect(parseExploreDiscoveryRanking(duplicateAddressDiscovery, 2))
+      .toEqual(duplicateAddressDiscovery);
+    expect(parseExploreDiscoveryRanking({
+      ...duplicateAddressDiscovery,
+      matchedUniqueTokenCount: 2,
+    }, 2)).toBeNull();
+    expect(parseExploreDiscoveryRanking({
+      ...duplicateAddressDiscovery,
+      rankingCommitment: "sha256:not-a-digest",
+    }, 2)).toBeNull();
+  });
+});
+
+describe("Explore search client contract", () => {
+  const search = {
+    schemaVersion: "programmable.explore-search-ranking.v1",
+    provider: "gmgn",
+    requested: "search",
+    orderBy: "weight",
+    rankingCommitment: `sha256:${"bc".repeat(32)}`,
+    status: "partial",
+    applied: "gmgn-canonical-search-with-local-match-fallback",
+    observedTokenCount: 3,
+    matchedTokenCount: 2,
+    matchedUniqueTokenCount: 2,
+    canonicalMatchCount: 3,
+    canonicalMatchTokenCount: 3,
+    unobservedCanonicalMatchCount: 1,
+    providerOnlyCanonicalTokenCount: 1,
+    foreignTokenCount: 1,
+    discardedProviderItemCount: 2,
+    duplicateProviderItemCount: 1,
+    canonicalAddressCoverageBps: 6_666,
+    asOfTime: "2026-09-01T08:00:00.000Z",
+  } as const;
+
+  it("parses only the aggregate canonical-intersection proof", () => {
+    expect(parseExploreSearchRanking(search, 3)).toEqual(search);
+    expect(parseExploreSearchRanking({
+      ...search,
+      observedTokenCount: 2,
+    }, 3)).toBeNull();
+    expect(parseExploreSearchRanking({
+      ...search,
+      canonicalAddressCoverageBps: 10_000,
+    }, 3)).toBeNull();
+    expect(parseExploreSearchRanking({
+      ...search,
+      rankingCommitment: "sha256:not-a-digest",
+    }, 3)).toBeNull();
+  });
+
+  it("rejects raw foreign provider rows instead of retaining them as proof", () => {
+    expect(parseExploreSearchRanking({
+      ...search,
+      coins: [{
+        chain: "eth",
+        address: "0xffffffffffffffffffffffffffffffffffffffff",
+      }],
+    }, 3)).toBeNull();
+    expect(parseExploreSearchRanking({
+      ...search,
+      wallets: ["0xffffffffffffffffffffffffffffffffffffffff"],
+    }, 3)).toBeNull();
+  });
+});
+
+describe("Explore market-cap ranking client contract", () => {
+  const ranking = {
+    schemaVersion: "programmable.explore-market-cap-ranking.v1",
+    requested: "market-cap",
+    direction: "desc",
+    primaryProvider: "gmgn",
+    source: "gmgn+dexscreener",
+    fallbackProvider: "dexscreener",
+    rankingCommitment: `sha256:${"cd".repeat(32)}`,
+    status: "partial",
+    gmgnStatus: "partial",
+    applied:
+      "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order",
+    metricOrder:
+      "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order",
+    rankInterval: "1h",
+    rankLimit: 100,
+    observedTokenCount: 2,
+    matchedTokenCount: 1,
+    matchedUniqueTokenCount: 1,
+    canonicalEntryCount: 4,
+    canonicalTokenCount: 4,
+    unobservedCanonicalEntryCount: 3,
+    canonicalAddressCoverageBps: 2_500,
+    foreignTokenCount: 1,
+    discardedProviderItemCount: 1,
+    gmgnHydrationLimit: 100,
+    gmgnHydrationEligibleCount: 3,
+    gmgnHydrationRequestedCount: 3,
+    gmgnHydrationObservedCount: 2,
+    gmgnHydrationQualifiedCount: 1,
+    gmgnHydrationDeferredCount: 0,
+    fallbackRequestedCount: 2,
+    fallbackQualifiedCount: 1,
+    canonicalTailCount: 1,
+    qualifiedCount: 3,
+    totalCount: 4,
+    asOfTime: "2026-09-01T08:00:00.000Z",
+  } as const;
+
+  it("keeps aggregate and GMGN-only coverage distinct", () => {
+    expect(parseExploreRanking(ranking, 4)).toEqual(ranking);
+    expect(parseExploreRanking({
+      ...ranking,
+      gmgnStatus: "complete",
+    }, 4)).toBeNull();
+    expect(parseExploreRanking({
+      ...ranking,
+      source: "gmgn",
+    }, 4)).toBeNull();
+    expect(parseExploreRanking({
+      ...ranking,
+      rankingCommitment: "sha256:not-a-digest",
+    }, 4)).toBeNull();
+    expect(parseExploreRanking({
+      ...ranking,
+      gmgnHydrationRequestedCount: 2,
+    }, 4)).toBeNull();
+    expect(parseExploreRanking({
+      ...ranking,
+      fallbackRequestedCount: 3,
+    }, 4)).toBeNull();
+    expect(parseExploreRanking({
+      ...ranking,
+      canonicalTailCount: 0,
+    }, 4)).toBeNull();
+  });
+});
 
 const classicProvenance = {
   schemaVersion: "programmable.explore-launch-category-provenance.v1",
@@ -347,6 +511,326 @@ function modelPageDataQuality(available: number, unavailable: number) {
     },
   };
 }
+
+function unavailableMarketCapRanking(
+  total: number,
+  rankingCommitment: `sha256:${string}`,
+) {
+  return {
+    schemaVersion: "programmable.explore-market-cap-ranking.v1",
+    requested: "market-cap",
+    direction: "desc",
+    primaryProvider: "gmgn",
+    source: "canonical-launch-order",
+    fallbackProvider: "dexscreener",
+    rankingCommitment,
+    status: "unavailable",
+    gmgnStatus: "unavailable",
+    applied: "launch-order",
+    metricOrder:
+      "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order",
+    rankInterval: "1h",
+    rankLimit: 100,
+    observedTokenCount: 0,
+    matchedTokenCount: 0,
+    matchedUniqueTokenCount: 0,
+    canonicalEntryCount: total,
+    canonicalTokenCount: total,
+    unobservedCanonicalEntryCount: total,
+    canonicalAddressCoverageBps: 0,
+    foreignTokenCount: 0,
+    discardedProviderItemCount: 0,
+    gmgnHydrationLimit: 100,
+    gmgnHydrationEligibleCount: 0,
+    gmgnHydrationRequestedCount: 0,
+    gmgnHydrationObservedCount: 0,
+    gmgnHydrationQualifiedCount: 0,
+    gmgnHydrationDeferredCount: 0,
+    fallbackRequestedCount: total,
+    fallbackQualifiedCount: 0,
+    canonicalTailCount: total,
+    qualifiedCount: 0,
+    totalCount: total,
+    asOfTime: null,
+  } as const;
+}
+
+describe("Explore provider-ranked revalidation", () => {
+  const entries = Array.from(
+    { length: 4 },
+    (_, index) => modelFilterEntry(100 + index, "unavailable"),
+  );
+
+  it("adopts a recovered GMGN search page and its expanded alias total atomically", () => {
+    const previousSearch = {
+      schemaVersion: "programmable.explore-search-ranking.v1",
+      provider: "gmgn",
+      requested: "search",
+      orderBy: "weight",
+      rankingCommitment: `sha256:${"10".repeat(32)}`,
+      status: "unavailable",
+      applied: "local-match-order",
+      observedTokenCount: 0,
+      matchedTokenCount: 0,
+      matchedUniqueTokenCount: 0,
+      canonicalMatchCount: 3,
+      canonicalMatchTokenCount: 3,
+      unobservedCanonicalMatchCount: 3,
+      providerOnlyCanonicalTokenCount: 0,
+      foreignTokenCount: 0,
+      discardedProviderItemCount: 0,
+      duplicateProviderItemCount: 0,
+      canonicalAddressCoverageBps: 0,
+      asOfTime: null,
+    } as const;
+    const incomingSearch = {
+      ...previousSearch,
+      rankingCommitment: `sha256:${"11".repeat(32)}`,
+      status: "partial",
+      applied: "gmgn-canonical-search-with-local-match-fallback",
+      observedTokenCount: 1,
+      matchedTokenCount: 1,
+      matchedUniqueTokenCount: 1,
+      canonicalMatchCount: 4,
+      canonicalMatchTokenCount: 4,
+      unobservedCanonicalMatchCount: 3,
+      providerOnlyCanonicalTokenCount: 1,
+      canonicalAddressCoverageBps: 2_500,
+      asOfTime: "2026-09-01T08:01:00.000Z",
+    } as const;
+    const previous = {
+      ...payload,
+      tokens: [entries[0]!, entries[1]!],
+      pageSize: 2,
+      total: 3,
+      totalPages: 2,
+      search: previousSearch,
+    };
+    const incoming = {
+      ...payload,
+      tokens: [entries[3]!, entries[0]!],
+      pageSize: 2,
+      total: 4,
+      totalPages: 2,
+      search: incomingSearch,
+    };
+
+    const stable = stabilizeExploreRevalidationPayload(previous, incoming);
+
+    expect(stable.tokens.map((token) => token.id)).toEqual([
+      entries[3]!.id,
+      entries[0]!.id,
+    ]);
+    expect(stable.total).toBe(4);
+    expect(stable.totalPages).toBe(2);
+    expect(stable.search).toEqual(incomingSearch);
+  });
+
+  it("adopts a changed GMGN alias relevance order with its new commitment", () => {
+    const previousSearch = {
+      schemaVersion: "programmable.explore-search-ranking.v1",
+      provider: "gmgn",
+      requested: "search",
+      orderBy: "weight",
+      rankingCommitment: `sha256:${"20".repeat(32)}`,
+      status: "partial",
+      applied: "gmgn-canonical-search-with-local-match-fallback",
+      observedTokenCount: 2,
+      matchedTokenCount: 2,
+      matchedUniqueTokenCount: 2,
+      canonicalMatchCount: 3,
+      canonicalMatchTokenCount: 3,
+      unobservedCanonicalMatchCount: 1,
+      providerOnlyCanonicalTokenCount: 1,
+      foreignTokenCount: 0,
+      discardedProviderItemCount: 0,
+      duplicateProviderItemCount: 0,
+      canonicalAddressCoverageBps: 6_666,
+      asOfTime: "2026-09-01T08:02:00.000Z",
+    } as const;
+    const incomingSearch = {
+      ...previousSearch,
+      rankingCommitment: `sha256:${"21".repeat(32)}`,
+      asOfTime: "2026-09-01T08:03:00.000Z",
+    } as const;
+    const previous = {
+      ...payload,
+      tokens: [entries[0]!, entries[1]!],
+      pageSize: 2,
+      total: 3,
+      totalPages: 2,
+      search: previousSearch,
+    };
+    const incoming = {
+      ...previous,
+      tokens: [entries[1]!, entries[0]!],
+      search: incomingSearch,
+    };
+
+    const stable = stabilizeExploreRevalidationPayload(previous, incoming);
+
+    expect(stable.tokens.map((token) => token.id)).toEqual([
+      entries[1]!.id,
+      entries[0]!.id,
+    ]);
+    expect(stable.search?.rankingCommitment).toBe(
+      incomingSearch.rankingCommitment,
+    );
+  });
+
+  it("keeps market-cap membership, order, totals, and commitment from one payload", () => {
+    const previousRanking = {
+      schemaVersion: "programmable.explore-market-cap-ranking.v1",
+      requested: "market-cap",
+      direction: "desc",
+      primaryProvider: "gmgn",
+      source: "gmgn",
+      fallbackProvider: "dexscreener",
+      rankingCommitment: `sha256:${"30".repeat(32)}`,
+      status: "complete",
+      gmgnStatus: "complete",
+      applied: "gmgn-market-cap",
+      metricOrder:
+        "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order",
+      rankInterval: "1h",
+      rankLimit: 100,
+      observedTokenCount: 2,
+      matchedTokenCount: 2,
+      matchedUniqueTokenCount: 2,
+      canonicalEntryCount: 2,
+      canonicalTokenCount: 2,
+      unobservedCanonicalEntryCount: 0,
+      canonicalAddressCoverageBps: 10_000,
+      foreignTokenCount: 0,
+      discardedProviderItemCount: 0,
+      gmgnHydrationLimit: 100,
+      gmgnHydrationEligibleCount: 0,
+      gmgnHydrationRequestedCount: 0,
+      gmgnHydrationObservedCount: 0,
+      gmgnHydrationQualifiedCount: 0,
+      gmgnHydrationDeferredCount: 0,
+      fallbackRequestedCount: 0,
+      fallbackQualifiedCount: 0,
+      canonicalTailCount: 0,
+      qualifiedCount: 2,
+      totalCount: 2,
+      asOfTime: "2026-09-01T08:04:00.000Z",
+    } as const;
+    const incomingRanking = {
+      ...previousRanking,
+      rankingCommitment: `sha256:${"31".repeat(32)}`,
+      asOfTime: "2026-09-01T08:05:00.000Z",
+    } as const;
+    const previous = {
+      ...payload,
+      tokens: [entries[0]!, entries[1]!],
+      pageSize: 2,
+      total: 2,
+      totalPages: 1,
+      ranking: previousRanking,
+    };
+    const incoming = {
+      ...previous,
+      tokens: [entries[1]!, entries[0]!],
+      ranking: incomingRanking,
+    };
+
+    const stable = stabilizeExploreRevalidationPayload(previous, incoming);
+
+    expect(stable.tokens.map((token) => token.id)).toEqual([
+      entries[1]!.id,
+      entries[0]!.id,
+    ]);
+    expect(stable.total).toBe(incoming.total);
+    expect(stable.totalPages).toBe(incoming.totalPages);
+    expect(stable.ranking).toEqual(incomingRanking);
+  });
+
+  it("drops provider-order proofs from a locally reordered market-cap and oldest page", () => {
+    const sharedValueWad = "500000000000000000000";
+    const newer = {
+      ...modelFilterEntry(200, "available"),
+      launchedAt: "2026-08-04T00:00:00.000Z",
+      fdvUsdWad: sharedValueWad,
+      valuation: {
+        ...modelFilterEntry(200, "available").valuation,
+        valueWad: sharedValueWad,
+      },
+    };
+    const older = {
+      ...modelFilterEntry(201, "available"),
+      launchedAt: "2026-08-01T00:00:00.000Z",
+      fdvUsdWad: sharedValueWad,
+      valuation: {
+        ...modelFilterEntry(201, "available").valuation,
+        valueWad: sharedValueWad,
+      },
+    };
+    const ranking = {
+      requested: "market-cap",
+      rankingCommitment: `sha256:${"40".repeat(32)}`,
+    };
+    const discovery = {
+      requested: "trending",
+      rankingCommitment: `sha256:${"41".repeat(32)}`,
+    };
+    const search = {
+      requested: "search",
+      rankingCommitment: `sha256:${"42".repeat(32)}`,
+    };
+    const dataset = {
+      ...payload,
+      tokens: [newer, older],
+      pageSize: 100,
+      total: 2,
+      totalPages: 1,
+      dataQuality: modelPageDataQuality(2, 0),
+      ranking,
+      discovery,
+      search,
+    };
+
+    const locallyOrdered = paginateExploreModelDataset(
+      dataset as never,
+      "all",
+      1,
+      9,
+      "highest",
+      "oldest",
+      "all",
+    );
+
+    expect(locallyOrdered.tokens.map((token) => token.id)).toEqual([
+      older.id,
+      newer.id,
+    ]);
+    expect(locallyOrdered.ranking).toBeUndefined();
+    expect(locallyOrdered.discovery).toBeUndefined();
+    expect(locallyOrdered.search).toBeUndefined();
+    expect(locallyOrdered.catalog).toEqual(catalogBoundary);
+    expect(locallyOrdered.dataQuality?.valuation).toMatchObject({
+      available: 2,
+      unavailable: 0,
+    });
+
+    const providerOrdered = paginateExploreModelDataset(
+      dataset as never,
+      "all",
+      1,
+      9,
+      "highest",
+      "none",
+      "all",
+    );
+    expect(providerOrdered.tokens.map((token) => token.id)).toEqual([
+      newer.id,
+      older.id,
+    ]);
+    expect(providerOrdered.ranking).toBe(ranking);
+    expect(providerOrdered.discovery).toBe(discovery);
+    expect(providerOrdered.search).toBe(search);
+  });
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -946,7 +1430,7 @@ describe("Explore refresh state", () => {
     });
   });
 
-  it("announces Newest as the default and FDV ranking as an override", () => {
+  it("announces Newest as the default and market-cap ranking as an override", () => {
     expect(exploreActiveSelectionState({
       valuationSort: "highest",
       ageSort: "none",
@@ -954,7 +1438,7 @@ describe("Explore refresh state", () => {
       modelFilter: "all",
     })).toEqual({
       count: 1,
-      summary: "Highest FDV selected",
+      summary: "Highest market cap selected",
     });
     expect(exploreActiveSelectionState({
       valuationSort: "none",
@@ -1092,6 +1576,58 @@ describe("Explore refresh state", () => {
       "commitment-drift-model-dataset",
       new URLSearchParams({ sort: "newest", page: "1", limit: "9" }),
     )).rejects.toThrow("Tokens changed while filters were loading");
+  });
+
+  it("rejects model pages from different provider-order commitments", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "unavailable"),
+    );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        const pageTokens = tokens.slice(
+          (page - 1) * pageSize,
+          page * pageSize,
+        );
+        return new Response(JSON.stringify({
+          status: "ready",
+          tokens: pageTokens,
+          page,
+          pageSize,
+          total: tokens.length,
+          totalPages: 2,
+          catalog: { ...catalogBoundary, identityCount: tokens.length },
+          dataQuality: modelPageDataQuality(0, pageTokens.length),
+          marketRead: {
+            provider: "bitquery",
+            status: "unavailable",
+            category: "transport",
+            phase: "market-core",
+          },
+          ranking: unavailableMarketCapRanking(
+            tokens.length,
+            page === 1
+              ? `sha256:${"50".repeat(32)}`
+              : `sha256:${"51".repeat(32)}`,
+          ),
+        }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Programmable-Market-Read-Status": "transport-unavailable",
+          },
+        });
+      },
+    );
+
+    await expect(loadExploreModelDataset(
+      "provider-order-commitment-drift-model-dataset",
+      new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+    )).rejects.toThrow("Tokens changed while filters were loading");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("retries once when the launch identity changes between model pages", async () => {
@@ -1338,12 +1874,12 @@ describe("Explore refresh state", () => {
     });
     expect(filtered).toMatchObject({
       marketRead: { status: "unavailable" },
-      ranking: { status: "unavailable", applied: "launch-order" },
       dataQuality: {
         status: "partial",
         valuation: { status: "unavailable", available: 0, unavailable: 9 },
       },
     });
+    expect(filtered.ranking).toBeUndefined();
     expect(dataset.tokens.every((entry) =>
       entry.valuation.status === "unavailable" &&
       !("fdvUsdWad" in entry) &&

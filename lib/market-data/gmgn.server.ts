@@ -18,6 +18,8 @@ import {
   getProductionGmgnAccountGateV1,
   type GmgnAccountGateV1,
 } from "./gmgn-account-gate.server";
+import { gmgnEffectiveRequestsPerSecondV1 } from
+  "./gmgn-runtime-config.server";
 import type { MarketChartIdentityV1 } from "./market-data-v1";
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
@@ -25,10 +27,13 @@ const GMGN_REQUEST_TIMEOUT_MS = 2_500;
 const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000;
 const GMGN_MARKET_CACHE_TTL_MS = 30_000;
 const GMGN_MAXIMUM_CACHE_ENTRIES = 512;
-const GMGN_MAXIMUM_CONCURRENCY = 3;
+const GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT = 100;
+const GMGN_VISIBLE_CHUNK_SIZE = 20;
+const GMGN_MAXIMUM_CONCURRENCY = 20;
 const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const UINT256_MAX = (1n << 256n) - 1n;
 const USD_WAD = 10n ** 18n;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const CANONICAL_INTEGER = /^(?:0|[1-9][0-9]*)$/u;
@@ -81,17 +86,53 @@ export async function readGmgnExploreSnapshotsV1(
   wait: GmgnReadWaitV1 = {},
 ): Promise<ReadonlyMap<string, GmgnMarketSnapshotV1>> {
   if (!gmgnMarketDataConfiguredV1()) return new Map();
-  const results = await mapWithConcurrency(
-    entries,
+  const snapshots = new Map<string, GmgnMarketSnapshotV1>();
+  const boundedEntries = entries.slice(0, GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT);
+  for (
+    let offset = 0;
+    offset < boundedEntries.length;
+    offset += GMGN_VISIBLE_CHUNK_SIZE
+  ) {
+    if (visibleReadCannotStart(wait)) break;
+    const chunk = boundedEntries.slice(offset, offset + GMGN_VISIBLE_CHUNK_SIZE);
+    const results = await mapWithConcurrency(
+      chunk,
+      gmgnVisibleMarketConcurrencyV1(chunk.length),
+      async (entry) => {
+        try {
+          return [
+            entry.id,
+            await readGmgnMarketSnapshotV1(entry, wait),
+          ] as const;
+        } catch {
+          return [entry.id, null] as const;
+        }
+      },
+    );
+    for (const [entryId, snapshot] of results) {
+      if (snapshot !== null) snapshots.set(entryId, snapshot);
+    }
+  }
+  return snapshots;
+}
+
+export function gmgnVisibleMarketConcurrencyV1(batchSize: number): number {
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) return 0;
+  return Math.min(
+    batchSize,
+    GMGN_VISIBLE_CHUNK_SIZE,
     GMGN_MAXIMUM_CONCURRENCY,
-    async (entry) => [entry.id, await readGmgnMarketSnapshotV1(entry, wait)] as const,
+    gmgnEffectiveRequestsPerSecondV1(),
   );
-  return new Map(
-    results.filter(
-      (result): result is readonly [string, GmgnMarketSnapshotV1] =>
-        result[1] !== null,
-    ),
-  );
+}
+
+export function gmgnVisibleMarketEntryEligibleV1(
+  entry: ExploreEntry,
+): boolean {
+  const identities = exploreEntryMarketIdentitiesV1(entry);
+  return canonicalSupplyV1(entry) !== null &&
+    productionPoolManagerBoundV1(entry) &&
+    gmgnCanonicalIdentitySetV1(identities) !== null;
 }
 
 export async function readGmgnMarketSnapshotV1(
@@ -101,20 +142,19 @@ export async function readGmgnMarketSnapshotV1(
   const apiKey = readApiKey();
   const canonicalSupply = canonicalSupplyV1(entry);
   const identities = exploreEntryMarketIdentitiesV1(entry);
+  const canonicalIdentities = gmgnCanonicalIdentitySetV1(identities);
   if (
     apiKey === null ||
     canonicalSupply === null ||
     !productionPoolManagerBoundV1(entry) ||
-    identities.length === 0
+    canonicalIdentities === null
   ) {
     return null;
   }
-  const chain = gmgnChainSlugV1(identities[0]?.chainId ?? "");
-  if (chain === null || identities.some((identity) =>
-    gmgnChainSlugV1(identity.chainId) !== chain
-  )) return null;
+  const chain = gmgnChainSlugV1(canonicalIdentities[0]!.chainId);
+  if (chain === null) return null;
 
-  const cacheKey = snapshotCacheKey(entry, identities, canonicalSupply);
+  const cacheKey = snapshotCacheKey(entry, canonicalIdentities, canonicalSupply);
   const nowMs = (wait.now ?? (() => new Date()))().getTime();
   if (!callerCanAwaitSharedRead(wait, nowMs)) return null;
   const cached = currentCacheValue(snapshotCache, cacheKey, nowMs);
@@ -126,13 +166,13 @@ export async function readGmgnMarketSnapshotV1(
   const providerRead = (async () => {
     const value = await gmgnJsonRequest(
       "/v1/token/info",
-      { chain, address: identities[0]!.tokenAddress },
+      { chain, address: canonicalIdentities[0]!.tokenAddress },
       apiKey,
       providerWait,
     );
     const snapshot = parseGmgnMarketSnapshotV1(
       value,
-      identities,
+      canonicalIdentities,
       canonicalSupply,
       providerWait.now(),
     );
@@ -167,8 +207,10 @@ export function parseGmgnMarketSnapshotV1(
   canonicalSupply: Readonly<{ raw: bigint; decimals: number }>,
   fetchedAt: Date,
 ): GmgnMarketSnapshotV1 | null {
+  const canonicalIdentities = gmgnCanonicalIdentitySetV1(identities);
   const data = unwrapData(response);
   if (
+    canonicalIdentities === null ||
     !hasExactOptionalEthereumChain(response) ||
     !hasExactOptionalEthereumChain(data) ||
     !isRecord(data) ||
@@ -177,21 +219,18 @@ export function parseGmgnMarketSnapshotV1(
   ) {
     return null;
   }
-  const tokenAddress = canonicalAddress(data.address);
-  const poolId = canonicalBytes32(data.pool.pool_address);
-  const quoteAddress = canonicalAddress(data.pool.quote_address);
-  const identity = identities.find((candidate) =>
-    candidate.protocol === "uniswap_v4" &&
-    candidate.tokenAddress === tokenAddress &&
-    candidate.poolId === poolId &&
-    candidate.quoteAddress === quoteAddress
+  const selection = tokenInfoPoolSelectionV1(
+    data.pool.pool_address,
+    data.biggest_pool_address,
+    data.address,
+    data.pool.quote_address,
+    canonicalIdentities,
   );
+  if (selection === null) return null;
+  const { identity, poolAttribution } = selection;
   if (
-    identity === undefined ||
     String(data.pool.exchange).toLowerCase() !== "uniswap_v4" ||
     !poolBaseQuoteMatchesV1(data.pool, identity) ||
-    (data.biggest_pool_address !== undefined &&
-      canonicalBytes32(data.biggest_pool_address) !== identity.poolId) ||
     !providerSupplyMatchesCanonical(
       data.total_supply,
       canonicalSupply.raw,
@@ -219,6 +258,8 @@ export function parseGmgnMarketSnapshotV1(
   const snapshot: GmgnMarketSnapshotV1 = {
     schemaVersion: PROGRAMMABLE_GMGN_MARKET_SNAPSHOT_SCHEMA_VERSION,
     source: "gmgn",
+    marketScope: "token",
+    poolAttribution,
     currency: "USD",
     fetchedAt: fetchedAt.toISOString(),
     identity,
@@ -234,18 +275,21 @@ export function parseGmgnMarketSnapshotV1(
 function canonicalSupplyV1(
   entry: ExploreEntry,
 ): Readonly<{ raw: bigint; decimals: number }> | null {
+  const supply = entry as ExploreEntry & Readonly<{
+    totalSupplyRaw?: unknown;
+    tokenDecimals?: unknown;
+  }>;
   if (
-    entry.exploreKind !== "token" ||
-    typeof entry.totalSupplyRaw !== "string" ||
-    !CANONICAL_INTEGER.test(entry.totalSupplyRaw) ||
-    typeof entry.tokenDecimals !== "number" ||
-    !Number.isSafeInteger(entry.tokenDecimals) ||
-    entry.tokenDecimals < 0 || entry.tokenDecimals > 255
+    typeof supply.totalSupplyRaw !== "string" ||
+    !CANONICAL_INTEGER.test(supply.totalSupplyRaw) ||
+    typeof supply.tokenDecimals !== "number" ||
+    !Number.isSafeInteger(supply.tokenDecimals) ||
+    supply.tokenDecimals < 0 || supply.tokenDecimals > 255
   ) return null;
   try {
-    const raw = BigInt(entry.totalSupplyRaw);
+    const raw = BigInt(supply.totalSupplyRaw);
     return raw > 0n && raw <= UINT256_MAX
-      ? { raw, decimals: entry.tokenDecimals }
+      ? { raw, decimals: supply.tokenDecimals }
       : null;
   } catch {
     return null;
@@ -253,7 +297,10 @@ function canonicalSupplyV1(
 }
 
 function productionPoolManagerBoundV1(entry: ExploreEntry): boolean {
-  if (entry.exploreKind !== "token") return false;
+  if (entry.exploreKind === "custom-project") {
+    return entry.chainId === "1" &&
+      entry.launchCategoryProvenance.source === "registry.custom-launched";
+  }
   const provenance = entry.launchCategoryProvenance;
   if (provenance.source === "canonical-launch-read-model") return true;
   const stamp = entry.launchStampProvenance;
@@ -335,7 +382,7 @@ async function gmgnJsonRequest(
     }
     if (accountGate !== null) {
       const decision = await reserveProviderSlot(accountGate, {
-        requestsPerSecond: configuredRequestsPerSecond(),
+        requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
         deadlineMs: requestDeadlineMs,
         signal: wait.signal,
       }, wait);
@@ -490,14 +537,6 @@ function readApiKey(): string | null {
   return value ? value : null;
 }
 
-function configuredRequestsPerSecond(): number {
-  // GMGN's public OpenAPI notice documents one request per second by default.
-  // A paid account may opt into its written allowance through the server-only
-  // override without changing the provider contract in application code.
-  const value = Number(process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1");
-  return Number.isSafeInteger(value) && value >= 1 && value <= 20 ? value : 1;
-}
-
 function sharedProviderWait(wait: GmgnReadWaitV1): GmgnProviderReadWaitV1 {
   const now = wait.now ?? (() => new Date());
   const startedAtMs = now().getTime();
@@ -578,6 +617,11 @@ function callerCanAwaitSharedRead(
   return wait.deadlineMs === undefined || (
     Number.isFinite(wait.deadlineMs) && wait.deadlineMs > nowMs
   );
+}
+
+function visibleReadCannotStart(wait: GmgnReadWaitV1): boolean {
+  const nowMs = (wait.now ?? (() => new Date()))().getTime();
+  return !callerCanAwaitSharedRead(wait, nowMs);
 }
 
 function awaitSharedReadForCaller<T>(
@@ -783,6 +827,90 @@ function canonicalBytes32(value: unknown): `0x${string}` | null {
   if (typeof value !== "string") return null;
   const normalized = value.toLowerCase();
   return BYTES32.test(normalized) ? normalized as `0x${string}` : null;
+}
+
+function tokenInfoPoolSelectionV1(
+  poolLocator: unknown,
+  biggestPoolLocator: unknown,
+  tokenLocator: unknown,
+  quoteLocator: unknown,
+  identities: readonly MarketChartIdentityV1[],
+): Readonly<{
+  identity: MarketChartIdentityV1;
+  poolAttribution: "exact" | "unavailable";
+}> | null {
+  const tokenAddress = canonicalAddress(tokenLocator);
+  const quoteAddress = canonicalAddress(quoteLocator);
+  if (tokenAddress === null || quoteAddress === null) return null;
+  const candidates = identities.filter((identity) =>
+    identity.tokenAddress === tokenAddress &&
+    identity.quoteAddress === quoteAddress
+  );
+  if (candidates.length === 0) return null;
+
+  const providerPoolAddress = canonicalAddress(poolLocator);
+  const biggestPoolAddress = canonicalAddress(biggestPoolLocator);
+  if (providerPoolAddress !== null || biggestPoolAddress !== null) {
+    return providerPoolAddress !== null &&
+        biggestPoolAddress === providerPoolAddress &&
+        providerPoolAddress !== ZERO_ADDRESS &&
+        providerPoolAddress !== tokenAddress &&
+        identities.every((identity) =>
+          providerPoolAddress !== identity.quoteAddress
+        )
+      ? {
+          identity: candidates[0]!,
+          poolAttribution: "unavailable",
+        }
+      : null;
+  }
+
+  const providerPoolId = canonicalBytes32(poolLocator);
+  const biggestPoolId = canonicalBytes32(biggestPoolLocator);
+  if (providerPoolId === null || biggestPoolId !== providerPoolId) return null;
+  const identity = candidates.find((candidate) =>
+    candidate.poolId === providerPoolId
+  );
+  return identity
+    ? { identity, poolAttribution: "exact" }
+    : null;
+}
+
+function gmgnCanonicalIdentitySetV1(
+  identities: readonly MarketChartIdentityV1[],
+): readonly MarketChartIdentityV1[] | null {
+  if (identities.length === 0) return null;
+  const normalized = identities.map((candidate) => {
+    const tokenAddress = canonicalAddress(candidate.tokenAddress);
+    const poolId = canonicalBytes32(candidate.poolId);
+    const quoteAddress = canonicalAddress(candidate.quoteAddress);
+    return candidate.chainId === "1" &&
+        candidate.protocol === "uniswap_v4" &&
+        tokenAddress !== null &&
+        poolId !== null &&
+        quoteAddress !== null &&
+        tokenAddress !== quoteAddress
+      ? {
+          chainId: "1" as const,
+          protocol: "uniswap_v4" as const,
+          tokenAddress,
+          poolId,
+          quoteAddress,
+        }
+      : null;
+  });
+  if (normalized.some((identity) => identity === null)) return null;
+  const valid = normalized as MarketChartIdentityV1[];
+  const tokenAddress = valid[0]!.tokenAddress;
+  if (valid.some((identity) => identity.tokenAddress !== tokenAddress)) {
+    return null;
+  }
+  return [...new Map(valid.map((identity) => [
+    identityKey(identity),
+    identity,
+  ])).values()].sort((first, second) =>
+    identityKey(first).localeCompare(identityKey(second))
+  );
 }
 
 function identityKey(identity: MarketChartIdentityV1) {

@@ -12,6 +12,8 @@ import {
   readEnvioClassicV3CatalogV1,
 } from
   "../../../../../lib/market-data/envio-classic-v3-catalog.server";
+import { hydrateMissingCanonicalTokenSupplyBoundedV1 } from
+  "../../../../../lib/market-data/canonical-token-supply.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../../lib/market-data/explore-market-identities";
 import {
@@ -81,7 +83,7 @@ type PublicWalletRankingV1 = Readonly<{
 
 type ReadyCanonicalToken = Readonly<{
   kind: "ready";
-  entry: Extract<ExploreEntry, { exploreKind: "token" }>;
+  entry: ExploreEntry;
   launchSource: string;
   lastIndexedAt: string;
   canonicalStatus: CanonicalReadStatus;
@@ -162,7 +164,7 @@ export async function GET(request: NextRequest) {
   }
 
   const identities = exploreEntryMarketIdentitiesV1(canonical.entry);
-  if (identities.length !== 1) {
+  if (identities.length === 0) {
     return analyticsResponse({
       canonical,
       section: query.section,
@@ -171,11 +173,12 @@ export async function GET(request: NextRequest) {
       analytics: emptyAnalytics(query.section),
     });
   }
-  const identity = identities[0]!;
+  const deterministicFallbackIdentity = identities[0]!;
   const wait = { signal, deadlineMs } as const;
 
-  // Every analytics response is subordinate to the exact token_info proof.
-  // That adapter binds token, v4 pool, quote and canonical raw supply. It also
+  // Every analytics response is subordinate to the strict token_info proof.
+  // That adapter binds token, quote, v4 exchange, canonical raw supply and
+  // either an exact PoolId or a coherent provider pool contract locator. It
   // prevents address-only security echoes from becoming public analytics.
   let verification: GmgnMarketSnapshotV1 | null = null;
   try {
@@ -183,7 +186,6 @@ export async function GET(request: NextRequest) {
     verification = exactMarketVerification(
         candidate,
         canonical.entry,
-        identity,
       )
       ? candidate
       : null;
@@ -195,10 +197,14 @@ export async function GET(request: NextRequest) {
       canonical,
       section: query.section,
       status: "unavailable",
-      identity,
+      identity: deterministicFallbackIdentity,
       analytics: emptyAnalytics(query.section),
     });
   }
+  // token_info must select only from the canonical Registry/Envio identity
+  // set. The verified snapshot carries that exact admitted identity; analytics
+  // never reconstructs or accepts a provider-created market identity.
+  const identity = verification.identity;
 
   if (query.section === "summary") {
     const [securityRead, poolRead] = await Promise.allSettled([
@@ -210,7 +216,7 @@ export async function GET(request: NextRequest) {
       ? securityRead.value
       : null;
     const pool = poolRead.status === "fulfilled" &&
-        exactPoolForIdentity(poolRead.value, identity)
+        tokenPoolForIdentity(poolRead.value, identity)
       ? poolRead.value
       : null;
     const acceptedCount = Number(security !== null) + Number(pool !== null);
@@ -463,7 +469,7 @@ async function resolveCanonicalTokenV1(
     };
   }
 
-  if (!entry || entry.exploreKind !== "token") {
+  if (!entry) {
     if (canonicalReadFailed || registryReadFailed || routerReadFailed) {
       return {
         kind: "unavailable",
@@ -490,9 +496,13 @@ async function resolveCanonicalTokenV1(
       routerStatus,
     };
   }
+  const [hydratedEntry] = await hydrateMissingCanonicalTokenSupplyBoundedV1(
+    [entry],
+    { signal, deadlineMs },
+  );
   return {
     kind: "ready",
-    entry,
+    entry: hydratedEntry ?? entry,
     launchSource,
     lastIndexedAt,
     canonicalStatus,
@@ -503,12 +513,10 @@ async function resolveCanonicalTokenV1(
 function exactMarketVerification(
   value: GmgnMarketSnapshotV1 | null,
   entry: ExploreEntry,
-  identity: MarketChartIdentityV1,
 ): value is GmgnMarketSnapshotV1 {
   return isGmgnMarketSnapshotV1(value) &&
     !hasExplicitForeignProviderChain(value) &&
-    isGmgnMarketSnapshotForExploreEntryV1(value, entry) &&
-    sameIdentity(value.identity, identity);
+    isGmgnMarketSnapshotForExploreEntryV1(value, entry);
 }
 
 function exactSecurityForIdentity(
@@ -521,15 +529,18 @@ function exactSecurityForIdentity(
     sameIdentity(value.identity, identity);
 }
 
-function exactPoolForIdentity(
+function tokenPoolForIdentity(
   value: GmgnTokenPoolInfoV1 | null,
   identity: MarketChartIdentityV1,
 ): value is GmgnTokenPoolInfoV1 {
   return isGmgnTokenPoolInfoV1(value) &&
     !hasExplicitForeignProviderChain(value) &&
     value.tokenAddress === identity.tokenAddress &&
-    value.poolAddress === identity.poolId &&
+    value.providerAddress === identity.tokenAddress &&
+    value.baseAddress === identity.tokenAddress &&
     value.quoteAddress === identity.quoteAddress &&
+    value.marketScope === "token" &&
+    value.poolAttribution === "unavailable" &&
     value.exchange === "uniswap_v4" &&
     sameIdentity(value.identity, identity);
 }
@@ -626,11 +637,13 @@ function publicPoolV1(value: GmgnTokenPoolInfoV1): GmgnTokenPoolInfoV1 {
   return {
     schemaVersion: value.schemaVersion,
     source: value.source,
+    marketScope: value.marketScope,
+    poolAttribution: value.poolAttribution,
     currency: value.currency,
     fetchedAt: value.fetchedAt,
     identity: value.identity,
     tokenAddress: value.tokenAddress,
-    poolAddress: value.poolAddress,
+    providerAddress: value.providerAddress,
     baseAddress: value.baseAddress,
     quoteAddress: value.quoteAddress,
     token0Address: value.token0Address,
@@ -697,6 +710,8 @@ function analyticsResponse(input: Readonly<{
       schemaVersion: "programmable.token-analytics.v1" as const,
       status: input.status,
       provider: "gmgn" as const,
+      analyticsScope: "token" as const,
+      poolAttribution: "unavailable" as const,
       section: input.section,
       identity: input.identity,
       analytics: input.analytics,
@@ -716,6 +731,8 @@ function analyticsResponse(input: Readonly<{
         "X-Programmable-Identity-Last-Indexed-At":
           input.canonical.lastIndexedAt,
         "X-Programmable-Analytics-Provider": "gmgn",
+        "X-Programmable-Analytics-Scope": "token",
+        "X-Programmable-Analytics-Pool-Attribution": "unavailable",
         "X-Programmable-Analytics-Read-Status": input.status,
         "X-Programmable-Market-Provider": "gmgn",
         "X-Programmable-Market-Read-Status": marketReadStatus,

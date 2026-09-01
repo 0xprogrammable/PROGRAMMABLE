@@ -27,7 +27,10 @@ export type GmgnChartIdentityProofV1 = Readonly<{
     typeof PROGRAMMABLE_GMGN_CHART_IDENTITY_PROOF_SCHEMA_VERSION;
   source: "gmgn-token-info";
   verifiedAt: string;
+  /** Canonical request context. */
   identity: MarketChartIdentityV1;
+  /** Current token_info locator attribution; never per-candle provenance. */
+  poolAttribution: "exact" | "unavailable";
   canonicalSupply: Readonly<{
     totalSupplyRaw: string;
     tokenDecimals: number;
@@ -52,6 +55,9 @@ export type GmgnMarketChartPointV1 = Readonly<{
 export type GmgnMarketChartV1 = Readonly<{
   schemaVersion: typeof PROGRAMMABLE_GMGN_MARKET_CHART_SCHEMA_VERSION;
   source: "gmgn";
+  seriesScope: "token";
+  /** Current token_info admission attribution; series remains token-scoped. */
+  poolAttribution: "exact" | "unavailable";
   readStatus: "live";
   status: "ready" | "insufficient-history" | "partial";
   generatedAt: string;
@@ -100,6 +106,8 @@ export function isGmgnChartIdentityProofV1(
     value.source === "gmgn-token-info" &&
     exactIsoTime(value.verifiedAt) &&
     isMarketChartIdentityV1(value.identity) &&
+    (value.poolAttribution === "exact" ||
+      value.poolAttribution === "unavailable") &&
     isCanonicalSupplyV1(value.canonicalSupply);
 }
 
@@ -110,6 +118,9 @@ export function isGmgnMarketChartV1(
     !isRecord(value) ||
     value.schemaVersion !== PROGRAMMABLE_GMGN_MARKET_CHART_SCHEMA_VERSION ||
     value.source !== "gmgn" ||
+    value.seriesScope !== "token" ||
+    (value.poolAttribution !== "exact" &&
+      value.poolAttribution !== "unavailable") ||
     value.readStatus !== "live" ||
     !["ready", "insufficient-history", "partial"].includes(
       String(value.status),
@@ -118,6 +129,7 @@ export function isGmgnMarketChartV1(
     !isMarketChartIdentityV1(value.identity) ||
     !isGmgnChartIdentityProofV1(value.identityProof) ||
     !sameIdentity(value.identity, value.identityProof.identity) ||
+    value.poolAttribution !== value.identityProof.poolAttribution ||
     !["1h", "1d", "1w", "all"].includes(String(value.range)) ||
     !isGmgnKlineResolutionV1(value.resolution) ||
     !exactIsoTime(value.requestedFrom) ||
@@ -171,7 +183,7 @@ export function isGmgnMarketChartV1(
     : typedPoints.length === 1;
 }
 
-export function isGmgnMarketChartForIdentityV1(
+export function isGmgnTokenSeriesForAdmissionIdentityV1(
   value: unknown,
   identity: MarketChartIdentityV1,
   range?: GmgnMarketChartRangeV1,
@@ -183,11 +195,13 @@ export function isGmgnMarketChartForIdentityV1(
 }
 
 /**
- * Selects GMGN only when its exact token/pool/quote proof is current and its
- * OHLCV result is richer than the existing Bitquery result. A partial GMGN
- * range cannot displace a complete Bitquery range.
+ * Selects GMGN only when its current token/quote/v4-exchange/supply admission
+ * proof is current and its token-address OHLCV result is richer than the
+ * existing exact-pool Bitquery result. The canonical PoolId remains request
+ * context and the GMGN series never gains pool attribution from that admission
+ * proof. A partial GMGN range cannot displace a complete Bitquery range.
  */
-export function preferExactGmgnMarketChartV1(input: Readonly<{
+export function preferAdmittedGmgnTokenSeriesV1(input: Readonly<{
   candidate: unknown;
   fallback: MarketChartV1;
   identity: MarketChartIdentityV1;
@@ -196,7 +210,7 @@ export function preferExactGmgnMarketChartV1(input: Readonly<{
   maximumCandidateAgeMs?: number;
 }>): GmgnMarketChartV1 | MarketChartV1 {
   if (
-    !isGmgnMarketChartForIdentityV1(
+    !isGmgnTokenSeriesForAdmissionIdentityV1(
       input.candidate,
       input.identity,
       input.range,

@@ -5,11 +5,20 @@ vi.mock("server-only", () => ({}));
 
 import {
   gmgnChainSlugV1,
+  gmgnVisibleMarketConcurrencyV1,
+  gmgnVisibleMarketEntryEligibleV1,
   parseGmgnMarketSnapshotV1,
+  readGmgnExploreSnapshotsV1,
   readGmgnMarketSnapshotV1,
 } from "../lib/market-data/gmgn.server";
-import { isGmgnMarketSnapshotForExploreEntryV1 } from
-  "../lib/market-data/gmgn-market-data-v1";
+import { gmgnEffectiveRequestsPerSecondV1 } from
+  "../lib/market-data/gmgn-runtime-config.server";
+import { exploreEntryMarketIdentitiesV1 } from
+  "../lib/market-data/explore-market-identities";
+import {
+  isGmgnMarketSnapshotForExploreEntryV1,
+  isGmgnMarketSnapshotV1,
+} from "../lib/market-data/gmgn-market-data-v1";
 import type { MarketChartIdentityV1 } from
   "../lib/market-data/market-data-v1";
 import type { GmgnAccountGateV1 } from
@@ -18,6 +27,9 @@ import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const NOW = new Date("2026-08-30T12:00:00.000Z");
 const QUOTE = "0x0000000000000000000000000000000000000000" as const;
+const PROVIDER_POOL = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
+const OTHER_PROVIDER_POOL =
+  "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
 const GATE_RESERVATION = Object.freeze({
   kind: "reserved" as const,
   reservedAtMs: NOW.getTime(),
@@ -68,7 +80,7 @@ function identity(entry: ReturnType<typeof token>): MarketChartIdentityV1 {
 function providerData(entry: ReturnType<typeof token>) {
   return {
     address: entry.tokenAddress,
-    biggest_pool_address: entry.poolId,
+    biggest_pool_address: PROVIDER_POOL,
     total_supply: "10000",
     price: {
       price: "3.3111698",
@@ -76,11 +88,98 @@ function providerData(entry: ReturnType<typeof token>) {
       swaps_24h: "17",
     },
     pool: {
-      pool_address: entry.poolId,
-      base_address: entry.tokenAddress,
-      token0_address: QUOTE,
-      token1_address: entry.tokenAddress,
+      pool_address: PROVIDER_POOL,
       quote_address: QUOTE,
+      exchange: "uniswap_v4",
+      liquidity: "12000.5",
+    },
+  };
+}
+
+function registryCustom(index = 200): Extract<
+  ExploreEntry,
+  { exploreKind: "custom-project" }
+> {
+  const tokenAddress = `0x${index.toString(16).padStart(40, "0")}` as const;
+  return {
+    exploreKind: "custom-project",
+    id: `custom:sha256:${index.toString(16).padStart(64, "0")}`,
+    name: `Registry Custom ${index}`,
+    symbol: `RC${index}`,
+    links: [],
+    launchedAt: NOW.toISOString(),
+    finalizedAt: NOW.toISOString(),
+    chainId: "1",
+    modelId: "registry-custom",
+    customProjectId: `sha256:${index.toString(16).padStart(64, "0")}`,
+    customLaunchId: `sha256:${(index + 1).toString(16).padStart(64, "0")}`,
+    launchingWallet: {
+      namespace: "eip155:1",
+      value: "0x6666666666666666666666666666666666666666",
+    },
+    postLaunchAuthorityInventory: {} as never,
+    postLaunchAuthorityInventoryHash: `sha256:${"99".repeat(32)}`,
+    tokenAddress,
+    tokenDecimals: 18,
+    totalSupplyRaw: "10000000000000000000000",
+    markets: [
+      {
+        marketId: "market-b",
+        kind: "uniswap-v4",
+        status: "active",
+        poolId: `0x${"bb".repeat(32)}`,
+        baseAsset: {
+          assetId: "token",
+          identity: { namespace: "eip155:1", value: tokenAddress },
+        },
+        quoteAsset: {
+          assetId: "quote-b",
+          identity: {
+            namespace: "eip155:1",
+            value: "0x7777777777777777777777777777777777777777",
+          },
+        },
+      },
+      {
+        marketId: "market-a",
+        kind: "uniswap-v4",
+        status: "active",
+        poolId: `0x${"aa".repeat(32)}`,
+        baseAsset: {
+          assetId: "token",
+          identity: { namespace: "eip155:1", value: tokenAddress },
+        },
+        quoteAsset: {
+          assetId: "native-eth",
+          identity: { namespace: "eip155:1", value: QUOTE },
+        },
+      },
+    ],
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "custom",
+      source: "registry.custom-launched",
+      projectId: `sha256:${index.toString(16).padStart(64, "0")}`,
+      launchId: `sha256:${(index + 1).toString(16).padStart(64, "0")}`,
+      sourceRecordBindingHash: `sha256:${"ab".repeat(32)}`,
+      finalizedLaunchBindingHash: `sha256:${"cd".repeat(32)}`,
+    },
+  } as unknown as Extract<ExploreEntry, { exploreKind: "custom-project" }>;
+}
+
+function providerDataForIdentity(identity: MarketChartIdentityV1) {
+  return {
+    address: identity.tokenAddress,
+    biggest_pool_address: PROVIDER_POOL,
+    total_supply: "10000",
+    price: {
+      price: "3.3111698",
+      volume_24h: "123.45",
+      swaps_24h: "17",
+    },
+    pool: {
+      pool_address: PROVIDER_POOL,
+      quote_address: identity.quoteAddress,
       exchange: "uniswap_v4",
       liquidity: "12000.5",
     },
@@ -105,10 +204,146 @@ describe("GMGN canonical market enrichment", () => {
     expect(gmgnChainSlugV1(8453)).toBeNull();
   });
 
-  it("computes FDV from canonical raw supply and exact provider price", () => {
+  it.each([
+    [undefined, 1],
+    ["", 1],
+    ["0", 1],
+    ["1.5", 1],
+    [" 20 ", 1],
+    ["020", 1],
+    ["2e1", 1],
+    ["20.0", 1],
+    ["20", 20],
+    ["21", 1],
+  ] as const)(
+    "parses the effective server-only RPS value %s as %i",
+    (configured, expected) => {
+      if (configured === undefined) {
+        vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", undefined);
+      } else {
+        vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", configured);
+      }
+      expect(gmgnEffectiveRequestsPerSecondV1()).toBe(expected);
+    },
+  );
+
+  it("derives visible token-info concurrency from effective RPS and batch size", () => {
+    vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "20");
+    expect(gmgnVisibleMarketConcurrencyV1(0)).toBe(0);
+    expect(gmgnVisibleMarketConcurrencyV1(1)).toBe(1);
+    expect(gmgnVisibleMarketConcurrencyV1(7)).toBe(7);
+    expect(gmgnVisibleMarketConcurrencyV1(20)).toBe(20);
+    expect(gmgnVisibleMarketConcurrencyV1(100)).toBe(20);
+
+    vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "3");
+    expect(gmgnVisibleMarketConcurrencyV1(20)).toBe(3);
+
+    vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "20.0");
+    expect(gmgnVisibleMarketConcurrencyV1(20)).toBe(1);
+    expect(gmgnVisibleMarketConcurrencyV1(Number.NaN)).toBe(0);
+  });
+
+  it("admits only supply-backed verified Registry Custom market identities", () => {
+    const custom = registryCustom();
+    expect(exploreEntryMarketIdentitiesV1(custom)).toHaveLength(2);
+    expect(gmgnVisibleMarketEntryEligibleV1(custom)).toBe(true);
+    expect(gmgnVisibleMarketEntryEligibleV1({
+      ...custom,
+      totalSupplyRaw: undefined,
+    })).toBe(false);
+    expect(gmgnVisibleMarketEntryEligibleV1({
+      ...custom,
+      launchCategoryProvenance: {
+        ...custom.launchCategoryProvenance,
+        source: "interface-preview",
+      } as typeof custom.launchCategoryProvenance,
+    })).toBe(false);
+    expect(gmgnVisibleMarketEntryEligibleV1({
+      ...custom,
+      chainId: "4663",
+    })).toBe(false);
+  });
+
+  it("binds a multi-market token response to its exact canonical quote identity", () => {
+    const custom = registryCustom(201);
+    const identities = exploreEntryMarketIdentitiesV1(custom);
+    expect(identities.map((value) => value.poolId)).toEqual([
+      `0x${"aa".repeat(32)}`,
+      `0x${"bb".repeat(32)}`,
+    ]);
+    const admission = identities[0]!;
+    const accepted = parseGmgnMarketSnapshotV1(
+      providerDataForIdentity(admission),
+      [...identities].reverse(),
+      { raw: 10_000n * 10n ** 18n, decimals: 18 },
+      NOW,
+    );
+    expect(accepted?.identity).toEqual(admission);
+    expect(parseGmgnMarketSnapshotV1(
+      providerDataForIdentity(identities[1]!),
+      identities,
+      { raw: 10_000n * 10n ** 18n, decimals: 18 },
+      NOW,
+    )?.identity).toEqual(identities[1]);
+
+    const assetAsPool = providerDataForIdentity(
+      identities[0]!,
+    ) as unknown as Record<string, unknown> & { pool: Record<string, unknown> };
+    assetAsPool.pool.pool_address = identities[1]!.quoteAddress;
+    assetAsPool.biggest_pool_address = identities[1]!.quoteAddress;
+    expect(parseGmgnMarketSnapshotV1(
+      assetAsPool,
+      identities,
+      { raw: 10_000n * 10n ** 18n, decimals: 18 },
+      NOW,
+    )).toBeNull();
+  });
+
+  it("selects deterministically among token-scoped same-quote markets and honors an exact PoolId", () => {
+    const entry = token(202);
+    const lower = {
+      ...identity(entry),
+      poolId: `0x${"aa".repeat(32)}` as const,
+    };
+    const upper = {
+      ...identity(entry),
+      poolId: `0x${"bb".repeat(32)}` as const,
+    };
+    const tokenScoped = providerDataForIdentity(lower);
+    const parse = (
+      response: unknown,
+      identities: readonly MarketChartIdentityV1[],
+    ) => parseGmgnMarketSnapshotV1(
+      response,
+      identities,
+      { raw: 10_000n * 10n ** 18n, decimals: 18 },
+      NOW,
+    );
+    expect(parse(tokenScoped, [upper, lower])?.identity).toEqual(lower);
+    expect(parse(tokenScoped, [lower, upper])?.identity).toEqual(lower);
+
+    const exact = structuredClone(tokenScoped) as unknown as Record<string, unknown> & {
+      pool: Record<string, unknown>;
+    };
+    exact.pool.pool_address = upper.poolId;
+    exact.biggest_pool_address = upper.poolId;
+    expect(parse(exact, [lower, upper])).toMatchObject({
+      identity: upper,
+      poolAttribution: "exact",
+    });
+  });
+
+  it("accepts the documented token-info pool shape without treating its contract address as a v4 PoolId", () => {
     const entry = token();
+    const provider = providerData(entry);
+    expect(provider.pool).not.toHaveProperty("base_address");
+    expect(provider.pool).not.toHaveProperty("token_address");
+    expect(provider.pool).not.toHaveProperty("token0_address");
+    expect(provider.pool).not.toHaveProperty("token1_address");
+    expect(provider.pool.pool_address).toHaveLength(42);
+    expect(provider.pool.pool_address).not.toBe(entry.poolId);
     const snapshot = parseGmgnMarketSnapshotV1(
-      providerData(entry),
+      provider,
       [identity(entry)],
       { raw: 10_000n * 10n ** 18n, decimals: 18 },
       NOW,
@@ -116,6 +351,8 @@ describe("GMGN canonical market enrichment", () => {
     expect(snapshot).toEqual({
       schemaVersion: "programmable.gmgn-market-snapshot.v1",
       source: "gmgn",
+      marketScope: "token",
+      poolAttribution: "unavailable",
       currency: "USD",
       fetchedAt: NOW.toISOString(),
       identity: identity(entry),
@@ -124,6 +361,34 @@ describe("GMGN canonical market enrichment", () => {
       liquidityUsdWad: "12000500000000000000000",
       volume24hUsdWad: "123450000000000000000",
       swapCount24h: 17,
+    });
+    expect(isGmgnMarketSnapshotV1(snapshot)).toBe(true);
+    expect(isGmgnMarketSnapshotV1({
+      ...snapshot!,
+      marketScope: "pool",
+    })).toBe(false);
+    expect(isGmgnMarketSnapshotV1({
+      ...snapshot!,
+      poolAttribution: "exact",
+    })).toBe(true);
+  });
+
+  it("accepts coherent canonical bytes32 v4 PoolId locators with exact attribution", () => {
+    const entry = token(116);
+    const data = providerData(entry) as unknown as Record<string, unknown> & {
+      pool: Record<string, unknown>;
+    };
+    data.pool.pool_address = entry.poolId;
+    data.biggest_pool_address = entry.poolId;
+    expect(parseGmgnMarketSnapshotV1(
+      data,
+      [identity(entry)],
+      { raw: 10_000n * 10n ** 18n, decimals: 18 },
+      NOW,
+    )).toMatchObject({
+      marketScope: "token",
+      poolAttribution: "exact",
+      identity: identity(entry),
     });
   });
 
@@ -151,10 +416,10 @@ describe("GMGN canonical market enrichment", () => {
       data.address = "0x9999999999999999999999999999999999999999";
     }],
     ["pool", (data: ReturnType<typeof providerData>) => {
-      data.pool.pool_address = `0x${"99".repeat(32)}`;
+      Reflect.set(data.pool, "pool_address", OTHER_PROVIDER_POOL);
     }],
     ["biggest pool", (data: ReturnType<typeof providerData>) => {
-      data.biggest_pool_address = `0x${"99".repeat(32)}`;
+      Reflect.set(data, "biggest_pool_address", OTHER_PROVIDER_POOL);
     }],
     ["quote", (data: ReturnType<typeof providerData>) => {
       Reflect.set(
@@ -167,11 +432,19 @@ describe("GMGN canonical market enrichment", () => {
       data.pool.exchange = "uniswap_v3";
     }],
     ["base", (data: ReturnType<typeof providerData>) => {
-      data.pool.base_address = "0x9999999999999999999999999999999999999999";
+      Reflect.set(
+        data.pool,
+        "base_address",
+        "0x9999999999999999999999999999999999999999",
+      );
     }],
     ["token pair", (data: ReturnType<typeof providerData>) => {
-      data.pool.token1_address =
-        "0x9999999999999999999999999999999999999999";
+      Reflect.set(data.pool, "token0_address", QUOTE);
+      Reflect.set(
+        data.pool,
+        "token1_address",
+        "0x9999999999999999999999999999999999999999",
+      );
     }],
     ["supply", (data: ReturnType<typeof providerData>) => {
       data.total_supply = "10001";
@@ -180,6 +453,26 @@ describe("GMGN canonical market enrichment", () => {
     const entry = token();
     const data = providerData(entry);
     mutate(data);
+    expect(parseGmgnMarketSnapshotV1(
+      data,
+      [identity(entry)],
+      { raw: 10_000n * 10n ** 18n, decimals: 18 },
+      NOW,
+    )).toBeNull();
+  });
+
+  it.each([
+    ["zero", "0x0000000000000000000000000000000000000000"],
+    ["token contract", token(117).tokenAddress],
+    ["foreign bytes32 PoolId", `0x${"44".repeat(32)}`],
+    ["malformed", "0x1234"],
+  ])("rejects a %s token-info pool locator", (_label, poolAddress) => {
+    const entry = token(117);
+    const data = providerData(entry) as unknown as Record<string, unknown> & {
+      pool: Record<string, unknown>;
+    };
+    data.pool.pool_address = poolAddress;
+    data.biggest_pool_address = poolAddress;
     expect(parseGmgnMarketSnapshotV1(
       data,
       [identity(entry)],
@@ -247,6 +540,49 @@ describe("GMGN canonical market enrichment", () => {
     expect(new Headers(init?.headers).get("X-APIKEY")).toBe("test-server-key");
     expect(init?.redirect).toBe("error");
     expect(init?.credentials).toBe("omit");
+  });
+
+  it("processes the 100-entry API maximum in bounded 20-request chunks", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "20");
+    const entries = Array.from({ length: 100 }, (_, index) => token(index + 300));
+    const byAddress = new Map(entries.map((entry) => [entry.tokenAddress, entry]));
+    let active = 0;
+    let maximumActive = 0;
+    let generation = 0;
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => ({
+        ...GATE_RESERVATION,
+        generation: ++generation,
+      })),
+      blockUntil: vi.fn(),
+      complete: vi.fn(async () => {}),
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      active -= 1;
+      const address = new URL(String(input)).searchParams.get("address") ?? "";
+      const matched = byAddress.get(address as `0x${string}`);
+      return new Response(JSON.stringify({
+        code: 0,
+        data: matched ? providerData(matched) : {},
+      }), { status: 200 });
+    });
+
+    const snapshots = await readGmgnExploreSnapshotsV1(entries, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 8_000,
+    });
+
+    expect(snapshots.size).toBe(100);
+    expect(fetchImpl).toHaveBeenCalledTimes(100);
+    expect(maximumActive).toBe(20);
+    expect(accountGate.reserveSlot).toHaveBeenCalledTimes(100);
+    expect(accountGate.complete).toHaveBeenCalledTimes(100);
   });
 
   it("rejects a foreign chain on the raw provider envelope", async () => {

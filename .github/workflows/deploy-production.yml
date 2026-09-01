@@ -220,6 +220,28 @@ jobs:
     environment:
       name: production
       url: ${{ steps.deploy.outputs.url }}
+    outputs:
+      gmgn_account_gate_mode: ${{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}
+      gmgn_requests_per_second: ${{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}
+      discovery_status: ${{ steps.public-provider-smoke.outputs.discovery_status }}
+      discovery_matched_count: ${{ steps.public-provider-smoke.outputs.discovery_matched_count }}
+      discovery_ranking_commitment: ${{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}
+      search_status: ${{ steps.public-provider-smoke.outputs.search_status }}
+      search_matched_count: ${{ steps.public-provider-smoke.outputs.search_matched_count }}
+      search_ranking_commitment: ${{ steps.public-provider-smoke.outputs.search_ranking_commitment }}
+      analytics_summary_status: ${{ steps.public-provider-smoke.outputs.analytics_summary_status }}
+      analytics_holders_status: ${{ steps.public-provider-smoke.outputs.analytics_holders_status }}
+      analytics_traders_status: ${{ steps.public-provider-smoke.outputs.analytics_traders_status }}
+      market_cap_desc_source: ${{ steps.public-provider-smoke.outputs.market_cap_desc_source }}
+      market_cap_desc_status: ${{ steps.public-provider-smoke.outputs.market_cap_desc_status }}
+      market_cap_desc_gmgn_status: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}
+      market_cap_desc_matched_count: ${{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}
+      market_cap_desc_ranking_commitment: ${{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}
+      market_cap_asc_source: ${{ steps.public-provider-smoke.outputs.market_cap_asc_source }}
+      market_cap_asc_status: ${{ steps.public-provider-smoke.outputs.market_cap_asc_status }}
+      market_cap_asc_gmgn_status: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}
+      market_cap_asc_matched_count: ${{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}
+      market_cap_asc_ranking_commitment: ${{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -290,24 +312,40 @@ jobs:
 
       - name: Resolve staged GMGN market requirement
         id: gmgn-market-requirement
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
-          env -u GMGN_API_KEY node --env-file=.vercel/.env.production.local --input-type=module -e '
-            import { appendFileSync } from "node:fs";
-            const requireGmgnMarket =
-              (process.env.GMGN_API_KEY ?? "").trim() !== "";
-            appendFileSync(
-              process.env.GITHUB_OUTPUT,
-              `require_gmgn_market=${requireGmgnMarket}\n`,
-              { encoding: "utf8", mode: 0o600 },
-            );
-            process.stdout.write(
-              `${JSON.stringify({
-                status: "resolved",
-                requireGmgnMarket,
-              })}\n`,
-            );
-          '
+          metadata_file="$RUNNER_TEMP/vercel-production-env-metadata.json"
+          test ! -e "$metadata_file"
+          vercel env ls production --format json --token="$VERCEL_TOKEN" |
+            node scripts/bind-vercel-sensitive-production-metadata.mjs \
+              --metadata-file "$metadata_file" \
+              --vercel-project-id "$VERCEL_PROJECT_ID"
+          require_gmgn_market="$(
+            node scripts/resolve-gmgn-production-requirement.mjs \
+              --metadata-file "$metadata_file" \
+              --vercel-project-id "$VERCEL_PROJECT_ID"
+          )"
+          readonly require_gmgn_market
+          case "$require_gmgn_market" in
+            true|false) ;;
+            *) echo "The GMGN market requirement is invalid" >&2; exit 1 ;;
+          esac
+          echo "require_gmgn_market=$require_gmgn_market" >> "$GITHUB_OUTPUT"
+          printf '{"status":"resolved","requireGmgnMarket":%s}\n' \
+            "$require_gmgn_market"
+
+      - name: Validate staged read-model release policy
+        id: read-model-policy
+        env:
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}
+          PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT }}
+        run: >-
+          npm run perf:read-model:deploy-policy --
+          --env-file .vercel/.env.production.local
+          --sensitive-env-metadata "$RUNNER_TEMP/vercel-production-env-metadata.json"
+          --github-output "$GITHUB_OUTPUT"
 
       - name: Reject mixed legacy and V3 Custom Launch release authority
         if: >-
@@ -818,7 +856,13 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          deployment_url="$(vercel deploy --prod --skip-domain --archive=tgz --meta githubCommitSha="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" --token="$VERCEL_TOKEN")"
+          set -euo pipefail
+          deployment_url="$(vercel deploy --prod --skip-domain --archive=tgz \
+            --meta githubCommitSha="$GITHUB_SHA" \
+            --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" \
+            --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" \
+            --env PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true \
+            --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
             *)
@@ -837,6 +881,19 @@ jobs:
           npm run perf:read-model:staged-deployment --
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
+
+      - name: Verify staged QuickNode wake authentication
+        id: wake-canary
+        if: steps.read-model-policy.outputs.wake_canary_required == 'true'
+        env:
+          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
+        run: |
+          set -euo pipefail
+          npm run perf:read-model:wake-canary -- \
+            --target-url "$STAGED_TARGET_URL"
+          echo "status=passed" >> "$GITHUB_OUTPUT"
 
       - name: Probe staged token image runtime without writes
         env:
@@ -1165,7 +1222,7 @@ jobs:
               "$AUTHENTICATED_INGRESS_EVIDENCE_SHA256"
             )
           fi
-          vercel env run --environment=production --token="$VERCEL_TOKEN" -- \
+          vercel env run -e production --token="$VERCEL_TOKEN" -- \
             npm run probe:custom-v2:stage -- "${args[@]}"
           evidence_sha256="$(node --input-type=module -e '
             import { createHash } from "node:crypto";
@@ -1536,16 +1593,44 @@ jobs:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           STABLE_PREVIEW_URL: ${{ steps.stable-preview.outputs.stable_preview_url }}
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.production-before.outputs.deployment_id }}
+          PREVIOUS_DEPLOYMENT_URL: ${{ steps.production-before.outputs.deployment_url }}
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
+          READ_MODEL_POLICY_MODE: ${{ steps.read-model-policy.outputs.mode }}
+          READ_MODEL_EVIDENCE_REQUIRED: ${{ steps.read-model-policy.outputs.evidence_required }}
+          WAKE_CANARY_REQUIRED: ${{ steps.read-model-policy.outputs.wake_canary_required }}
+          WAKE_CANARY_STATUS: ${{ steps.wake-canary.outputs.status }}
           GMGN_MARKET_REQUIRED: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}
+          GMGN_ACCOUNT_GATE_MODE: ${{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}
+          GMGN_REQUESTS_PER_SECOND: ${{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
           CUSTOM_LAUNCH_V3_RELEASE: ${{ inputs.custom_launch_v3_release }}
           MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.market_provider }}
           MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
           DETAIL_MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.detail_market_provider }}
           DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
+          DISCOVERY_STATUS: ${{ steps.public-provider-smoke.outputs.discovery_status }}
+          DISCOVERY_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.discovery_matched_count }}
+          DISCOVERY_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}
+          SEARCH_STATUS: ${{ steps.public-provider-smoke.outputs.search_status }}
+          SEARCH_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.search_matched_count }}
+          SEARCH_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.search_ranking_commitment }}
+          ANALYTICS_SUMMARY_STATUS: ${{ steps.public-provider-smoke.outputs.analytics_summary_status }}
+          ANALYTICS_HOLDERS_STATUS: ${{ steps.public-provider-smoke.outputs.analytics_holders_status }}
+          ANALYTICS_TRADERS_STATUS: ${{ steps.public-provider-smoke.outputs.analytics_traders_status }}
+          MARKET_CAP_DESC_SOURCE: ${{ steps.public-provider-smoke.outputs.market_cap_desc_source }}
+          MARKET_CAP_DESC_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_desc_status }}
+          MARKET_CAP_DESC_GMGN_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}
+          MARKET_CAP_DESC_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}
+          MARKET_CAP_DESC_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}
+          MARKET_CAP_ASC_SOURCE: ${{ steps.public-provider-smoke.outputs.market_cap_asc_source }}
+          MARKET_CAP_ASC_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_asc_status }}
+          MARKET_CAP_ASC_GMGN_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}
+          MARKET_CAP_ASC_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}
+          MARKET_CAP_ASC_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}
           SHARD_TRADE_STATUS: ${{ steps.public-provider-smoke.outputs.shard_trade_status }}
           CHART_PROVIDER: ${{ steps.public-provider-smoke.outputs.chart_provider }}
+          CHART_SCOPE: ${{ steps.public-provider-smoke.outputs.chart_scope }}
+          CHART_POOL_ATTRIBUTION: ${{ steps.public-provider-smoke.outputs.chart_pool_attribution }}
           CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
           CATALOG_BLOCK_NUMBER: ${{ steps.envio-catalog-probe.outputs.block_number }}
           CATALOG_TOKEN_COUNT: ${{ steps.envio-catalog-probe.outputs.token_count }}
@@ -1559,8 +1644,16 @@ jobs:
             echo "- Target: $STAGED_TARGET_URL"
             echo "- Stable protected preview: $STABLE_PREVIEW_URL"
             echo "- Previous production deployment: \`$PREVIOUS_DEPLOYMENT_ID\`"
+            echo "- Previous production deployment URL: $PREVIOUS_DEPLOYMENT_URL"
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
+            echo "- Read-model policy mode: \`$READ_MODEL_POLICY_MODE\`"
+            echo "- Read-model evidence required: \`$READ_MODEL_EVIDENCE_REQUIRED\`"
+            echo "- QuickNode wake canary required: \`$WAKE_CANARY_REQUIRED\`"
+            echo "- QuickNode wake canary: \`${WAKE_CANARY_STATUS:-not-required}\`"
+            echo "- Candidate-only provider retry flag: \`true\`"
             echo "- GMGN market required by staged public smoke: \`$GMGN_MARKET_REQUIRED\`"
+            echo "- GMGN account gate mode: \`${GMGN_ACCOUNT_GATE_MODE:-not-run}\`"
+            echo "- Effective GMGN requests per second: \`${GMGN_REQUESTS_PER_SECOND:-not-run}\`"
             echo "- Launch identities: validated current Classic or bounded Router fallback"
             echo "- Catalog mode: \`$CATALOG_MODE\`"
             echo "- Catalog progress block: \`$CATALOG_BLOCK_NUMBER\`"
@@ -1569,9 +1662,21 @@ jobs:
             echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
             echo "- Token detail market provider: \`${DETAIL_MARKET_PROVIDER:-not-run}\`"
             echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"
-            echo "- Full-catalog FDV ranking provider: Dexscreener"
+            echo "- GMGN discovery status: \`${DISCOVERY_STATUS:-not-run}\`"
+            echo "- GMGN discovery matched canonical entries: \`${DISCOVERY_MATCHED_COUNT:-not-run}\`"
+            echo "- GMGN discovery ranking commitment: \`${DISCOVERY_RANKING_COMMITMENT:-not-run}\`"
+            echo "- GMGN search status: \`${SEARCH_STATUS:-not-run}\`"
+            echo "- GMGN search matched canonical entries: \`${SEARCH_MATCHED_COUNT:-not-run}\`"
+            echo "- GMGN search ranking commitment: \`${SEARCH_RANKING_COMMITMENT:-not-run}\`"
+            echo "- GMGN analytics summary: \`${ANALYTICS_SUMMARY_STATUS:-not-run}\`"
+            echo "- GMGN analytics holders: \`${ANALYTICS_HOLDERS_STATUS:-not-run}\`"
+            echo "- GMGN analytics traders: \`${ANALYTICS_TRADERS_STATUS:-not-run}\`"
+            echo "- Descending market-cap ranking: source \`${MARKET_CAP_DESC_SOURCE:-not-run}\`, status \`${MARKET_CAP_DESC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_DESC_GMGN_STATUS:-not-run}\`, canonical matches \`${MARKET_CAP_DESC_MATCHED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_DESC_RANKING_COMMITMENT:-not-run}\`"
+            echo "- Ascending market-cap ranking: source \`${MARKET_CAP_ASC_SOURCE:-not-run}\`, status \`${MARKET_CAP_ASC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_ASC_GMGN_STATUS:-not-run}\`, canonical matches \`${MARKET_CAP_ASC_MATCHED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_ASC_RANKING_COMMITMENT:-not-run}\`"
             echo "- SHARD trade adapter smoke: \`${SHARD_TRADE_STATUS:-not-run}\`"
             echo "- Market chart provider: \`${CHART_PROVIDER:-not-run}\`"
+            echo "- Market chart series scope: \`${CHART_SCOPE:-not-run}\`"
+            echo "- Market chart pool attribution: \`${CHART_POOL_ATTRIBUTION:-not-run}\`"
             echo "- Market chart smoke: \`${CHART_SMOKE_STATUS:-not-run}\`"
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then

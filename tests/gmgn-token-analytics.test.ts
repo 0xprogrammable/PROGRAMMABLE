@@ -13,8 +13,10 @@ import {
 } from "../lib/market-data/gmgn-token-analytics.server";
 import type { GmgnAccountGateV1 } from
   "../lib/market-data/gmgn-account-gate.server";
-import type {
-  GmgnTokenRankingQueryV1,
+import {
+  isGmgnTokenPoolInfoV1,
+  type GmgnTokenPoolInfoV1,
+  type GmgnTokenRankingQueryV1,
 } from "../lib/market-data/gmgn-token-analytics-v1";
 import type { MarketChartIdentityV1 } from
   "../lib/market-data/market-data-v1";
@@ -75,7 +77,6 @@ function securityData(value: MarketChartIdentityV1) {
 function poolData(value: MarketChartIdentityV1) {
   return {
     address: value.tokenAddress,
-    pool_address: value.poolId,
     base_address: value.tokenAddress,
     quote_address: value.quoteAddress,
     token0_address: value.quoteAddress,
@@ -294,22 +295,26 @@ describe("GMGN Ethereum token analytics", () => {
     )).toBeNull();
   });
 
-  it("accepts only the exact canonical Uniswap v4 pool binding", () => {
+  it("accepts the live token-level v4 pool_info shape without exact-pool attribution", () => {
     const market = identity(4);
     expect(parseGmgnTokenPoolInfoV1(poolData(market), market, NOW))
       .toMatchObject({
         schemaVersion: "programmable.gmgn-token-pool-info.v1",
         identity: market,
+        marketScope: "token",
+        poolAttribution: "unavailable",
         tokenAddress: market.tokenAddress,
-        poolAddress: market.poolId,
+        providerAddress: market.tokenAddress,
         quoteAddress: market.quoteAddress,
+        token0Address: market.quoteAddress,
+        token1Address: market.tokenAddress,
         exchange: "uniswap_v4",
         liquidityUsd: "114067973.55976297",
         feeRatio: "0.003",
       });
 
     expect(parseGmgnTokenPoolInfoV1(
-      { ...poolData(market), pool_address: identity(5).poolId },
+      { ...poolData(market), address: identity(5).tokenAddress },
       market,
       NOW,
     )).toBeNull();
@@ -319,10 +324,58 @@ describe("GMGN Ethereum token analytics", () => {
       NOW,
     )).toBeNull();
     expect(parseGmgnTokenPoolInfoV1(
-      { ...poolData(market), token0_address: market.tokenAddress },
+      { ...poolData(market), base_address: identity(5).tokenAddress },
       market,
       NOW,
     )).toBeNull();
+    expect(parseGmgnTokenPoolInfoV1(
+      { ...poolData(market), quote_address: identity(5).tokenAddress },
+      market,
+      NOW,
+    )).toBeNull();
+    expect(parseGmgnTokenPoolInfoV1(
+      { ...poolData(market), exchange: "UNISWAP_V4" },
+      market,
+      NOW,
+    )).toBeNull();
+  });
+
+  it("requires the exact address-sorted provider token pair", () => {
+    const market = identity(42);
+    expect(parseGmgnTokenPoolInfoV1({
+      ...poolData(market),
+      token0_address: market.quoteAddress,
+      token1_address: market.tokenAddress,
+    }, market, NOW)).toMatchObject({
+      token0Address: market.quoteAddress,
+      token1Address: market.tokenAddress,
+    });
+    expect(parseGmgnTokenPoolInfoV1({
+      ...poolData(market),
+      token0_address: market.tokenAddress,
+      token1_address: market.quoteAddress,
+    }, market, NOW)).toBeNull();
+    const missingToken1 = { ...poolData(market) } as Record<string, unknown>;
+    delete missingToken1.token1_address;
+    expect(parseGmgnTokenPoolInfoV1(missingToken1, market, NOW)).toBeNull();
+    expect(parseGmgnTokenPoolInfoV1({
+      ...poolData(market),
+      token0_address: identity(43).tokenAddress,
+      token1_address: market.quoteAddress,
+    }, market, NOW)).toBeNull();
+  });
+
+  it("keeps the normalized pool currency fields address-sorted", () => {
+    const market = identity(44);
+    const parsed = parseGmgnTokenPoolInfoV1(poolData(market), market, NOW);
+    expect(parsed).not.toBeNull();
+    if (parsed === null) throw new Error("expected a token-level pool projection");
+    expect(isGmgnTokenPoolInfoV1(parsed)).toBe(true);
+    expect(isGmgnTokenPoolInfoV1({
+      ...parsed,
+      token0Address: parsed.token1Address,
+      token1Address: parsed.token0Address,
+    } satisfies GmgnTokenPoolInfoV1)).toBe(false);
   });
 
   it("accepts an omitted or exact eth chain and rejects foreign provider chains", () => {

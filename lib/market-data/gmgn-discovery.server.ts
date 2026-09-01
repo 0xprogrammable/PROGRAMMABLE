@@ -5,14 +5,19 @@ import {
   type GmgnAccountGateCostV1,
   type GmgnAccountGateV1,
 } from "./gmgn-account-gate.server";
+import { gmgnEffectiveRequestsPerSecondV1 } from
+  "./gmgn-runtime-config.server";
 import {
   GMGN_DISCOVERY_INTERVALS,
   GMGN_HOT_SEARCH_MAXIMUM_LIMIT,
   GMGN_TRENDING_MAXIMUM_LIMIT,
+  normalizeGmgnSearchQueryV1,
   parseGmgnDiscoverySnapshotV1,
+  parseGmgnSearchSnapshotV1,
   type GmgnDiscoveryIntervalV1,
   type GmgnDiscoveryKindV1,
   type GmgnDiscoverySnapshotV1,
+  type GmgnSearchSnapshotV1,
 } from "./gmgn-discovery-v1";
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
@@ -25,7 +30,8 @@ const PROVIDER_OPERATION_TIMED_OUT = Symbol("provider-operation-timed-out");
 
 type FetchImplementation = typeof fetch;
 type GmgnDiscoveryPath = "/v1/market/rank" |
-  "/v1/market/hot_searches";
+  "/v1/market/hot_searches" |
+  "/v1/market/search";
 type ProviderOperationV1 = Readonly<{
   deadlineMs: number;
   now: () => Date;
@@ -44,6 +50,11 @@ export type GmgnDiscoveryReadOptionsV1 = Readonly<{
   limit?: number;
 }>;
 
+export type GmgnTrendingReadOptionsV1 = GmgnDiscoveryReadOptionsV1 & Readonly<{
+  orderBy?: "marketcap";
+  direction?: "asc" | "desc";
+}>;
+
 type CachedValue<T> = Readonly<{
   expiresAtMs: number;
   value: T;
@@ -57,6 +68,14 @@ const discoveryInFlight = new Map<
   string,
   Promise<GmgnDiscoverySnapshotV1 | null>
 >();
+const searchCache = new Map<
+  string,
+  CachedValue<GmgnSearchSnapshotV1>
+>();
+const searchInFlight = new Map<
+  string,
+  Promise<GmgnSearchSnapshotV1 | null>
+>();
 let localBlockedUntilMs = 0;
 
 export function gmgnDiscoveryConfiguredV1(): boolean {
@@ -64,7 +83,7 @@ export function gmgnDiscoveryConfiguredV1(): boolean {
 }
 
 export async function readGmgnEthereumTrendingV1(
-  options: GmgnDiscoveryReadOptionsV1 = {},
+  options: GmgnTrendingReadOptionsV1 = {},
   wait: GmgnDiscoveryReadWaitV1 = {},
 ): Promise<GmgnDiscoverySnapshotV1 | null> {
   return readGmgnEthereumDiscoveryV1("trending", options, wait);
@@ -77,16 +96,62 @@ export async function readGmgnEthereumHotSearchesV1(
   return readGmgnEthereumDiscoveryV1("hot-search", options, wait);
 }
 
+export async function readGmgnEthereumSearchV1(
+  query: string,
+  wait: GmgnDiscoveryReadWaitV1 = {},
+): Promise<GmgnSearchSnapshotV1 | null> {
+  const apiKey = readApiKey();
+  const normalizedQuery = normalizeGmgnSearchQueryV1(query);
+  if (apiKey === null || normalizedQuery === null) return null;
+  const key = `search:${normalizedQuery}`;
+  return readThroughCache(
+    searchCache,
+    searchInFlight,
+    key,
+    wait,
+    async (providerWait) => {
+      const data = await gmgnJsonRequest(
+        "/v1/market/search",
+        {
+          query: {
+            query: normalizedQuery,
+            chain: "eth",
+            order_by: "weight",
+          },
+          body: null,
+        },
+        apiKey,
+        providerWait,
+      );
+      return parseGmgnSearchSnapshotV1(data, {
+        query: normalizedQuery,
+        fetchedAt: currentDate(providerWait),
+      });
+    },
+  );
+}
+
 async function readGmgnEthereumDiscoveryV1(
   kind: GmgnDiscoveryKindV1,
-  options: GmgnDiscoveryReadOptionsV1,
+  options: GmgnTrendingReadOptionsV1,
   wait: GmgnDiscoveryReadWaitV1,
 ): Promise<GmgnDiscoverySnapshotV1 | null> {
   const apiKey = readApiKey();
   const normalized = normalizeOptions(kind, options);
   if (apiKey === null || normalized === null) return null;
-  const key = [kind, normalized.interval, normalized.limit].join(":");
-  return readThroughCache(key, wait, async (providerWait) => {
+  const key = [
+    kind,
+    normalized.interval,
+    normalized.limit,
+    normalized.orderBy ?? "default",
+    normalized.direction ?? "default",
+  ].join(":");
+  return readThroughCache(
+    discoveryCache,
+    discoveryInFlight,
+    key,
+    wait,
+    async (providerWait) => {
     const path = kind === "trending"
       ? "/v1/market/rank" as const
       : "/v1/market/hot_searches" as const;
@@ -98,6 +163,12 @@ async function readGmgnEthereumDiscoveryV1(
               chain: "eth",
               interval: normalized.interval,
               limit: String(normalized.limit),
+              ...(normalized.orderBy === null
+                ? {}
+                : {
+                    order_by: normalized.orderBy,
+                    direction: normalized.direction ?? "desc",
+                  }),
             },
             body: null,
           }
@@ -118,48 +189,67 @@ async function readGmgnEthereumDiscoveryV1(
     return parseGmgnDiscoverySnapshotV1(data, {
       kind,
       interval: normalized.interval,
+      ...(normalized.orderBy === null
+        ? {}
+        : {
+            orderBy: normalized.orderBy,
+            direction: normalized.direction ?? "desc",
+          }),
       limit: normalized.limit,
       fetchedAt: currentDate(providerWait),
     });
-  });
+    },
+  );
 }
 
 function normalizeOptions(
   kind: GmgnDiscoveryKindV1,
-  options: GmgnDiscoveryReadOptionsV1,
+  options: GmgnTrendingReadOptionsV1,
 ): Readonly<{
   interval: GmgnDiscoveryIntervalV1;
   limit: number;
+  orderBy: "marketcap" | null;
+  direction: "asc" | "desc" | null;
 }> | null {
   const interval = options.interval ?? (kind === "trending" ? "1h" : "24h");
   const maximum = kind === "trending"
     ? GMGN_TRENDING_MAXIMUM_LIMIT
     : GMGN_HOT_SEARCH_MAXIMUM_LIMIT;
   const limit = options.limit ?? maximum;
+  const orderBy = options.orderBy ?? null;
+  const direction = orderBy === null ? null : options.direction ?? "desc";
   if (
     !GMGN_DISCOVERY_INTERVALS.includes(interval) ||
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
-    limit > maximum
+    limit > maximum ||
+    (kind === "hot-search" &&
+      (options.orderBy !== undefined || options.direction !== undefined)) ||
+    (kind === "trending" &&
+      ((orderBy !== null && orderBy !== "marketcap") ||
+        (options.direction !== undefined && orderBy === null) ||
+        (direction !== null && direction !== "asc" && direction !== "desc")))
   ) return null;
-  return Object.freeze({ interval, limit });
+  return Object.freeze({ interval, limit, orderBy, direction });
 }
 
-async function readThroughCache(
+async function readThroughCache<Value>(
+  cache: Map<string, CachedValue<Value>>,
+  inFlight: Map<string, Promise<Value | null>>,
   key: string,
   wait: GmgnDiscoveryReadWaitV1,
   read: (
     providerWait: GmgnDiscoveryReadWaitV1,
-  ) => Promise<GmgnDiscoverySnapshotV1 | null>,
-): Promise<GmgnDiscoverySnapshotV1 | null> {
+  ) => Promise<Value | null>,
+): Promise<Value | null> {
   if (!callerCanWait(wait)) return null;
   const nowMs = currentDate(wait).getTime();
-  const cached = discoveryCache.get(key);
+  const cached = cache.get(key);
   if (cached && cached.expiresAtMs > nowMs) {
     return waitForCaller(cached.value, wait);
   }
-  if (cached) discoveryCache.delete(key);
-  let active = discoveryInFlight.get(key);
+  if (cached) cache.delete(key);
+  let active = inFlight.get(key);
   if (!active) {
     const providerWait = providerWorkWait(wait);
     const operation = providerOperation(providerWait);
@@ -168,19 +258,20 @@ async function readThroughCache(
       (settled) => settled === PROVIDER_OPERATION_TIMED_OUT ? null : settled,
     ).then((value) => {
       if (value !== null) {
-        setCacheValue(
-          key,
-          value,
+          setCacheValue(
+            cache,
+            key,
+            value,
           currentDate(providerWait).getTime() + GMGN_DISCOVERY_CACHE_TTL_MS,
         );
       }
       return value;
     }).catch(() => null).finally(() => {
-      if (discoveryInFlight.get(key) === promise) {
-        discoveryInFlight.delete(key);
+      if (inFlight.get(key) === promise) {
+        inFlight.delete(key);
       }
     });
-    discoveryInFlight.set(key, promise);
+    inFlight.set(key, promise);
     active = promise;
   }
   return waitForCaller(active, wait);
@@ -235,11 +326,10 @@ async function settleProviderOperation<Value>(
   }
 }
 
-async function waitForCaller(
-  value: GmgnDiscoverySnapshotV1 |
-    Promise<GmgnDiscoverySnapshotV1 | null>,
+async function waitForCaller<Value>(
+  value: Value | Promise<Value | null>,
   wait: GmgnDiscoveryReadWaitV1,
-): Promise<GmgnDiscoverySnapshotV1 | null> {
+): Promise<Value | null> {
   if (!(value instanceof Promise)) {
     return callerCanWait(wait) ? value : null;
   }
@@ -258,7 +348,7 @@ async function waitForCaller(
   return new Promise((resolve) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const finish = (result: GmgnDiscoverySnapshotV1 | null) => {
+    const finish = (result: Value | null) => {
       if (settled) return;
       settled = true;
       if (timer !== null) clearTimeout(timer);
@@ -344,7 +434,7 @@ async function gmgnJsonRequest(
     ) accountGate = getProductionGmgnAccountGateV1();
     if (accountGate !== null) {
       const decision = await reserveProviderSlot(accountGate, {
-        requestsPerSecond: configuredRequestsPerSecond(),
+        requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
         cost: endpointCost(path),
         deadlineMs: requestDeadlineMs,
         signal: wait.signal,
@@ -560,13 +650,6 @@ function readApiKey(): string | null {
   return value ? value : null;
 }
 
-function configuredRequestsPerSecond(): number {
-  // Keep the provider's documented public default until a key-specific Pro
-  // allowance is explicitly bound in the production environment.
-  const value = Number(process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1");
-  return Number.isSafeInteger(value) && value >= 1 && value <= 20 ? value : 1;
-}
-
 function isRateLimitedEnvelope(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const nested = isRecord(value.data) ? value.data : null;
@@ -675,17 +758,18 @@ async function completeProviderRequest(
   }
 }
 
-function setCacheValue(
+function setCacheValue<Value>(
+  cache: Map<string, CachedValue<Value>>,
   key: string,
-  value: GmgnDiscoverySnapshotV1,
+  value: Value,
   expiresAtMs: number,
 ): void {
-  discoveryCache.delete(key);
-  discoveryCache.set(key, { expiresAtMs, value });
-  while (discoveryCache.size > GMGN_MAXIMUM_CACHE_ENTRIES) {
-    const oldest = discoveryCache.keys().next().value as string | undefined;
+  cache.delete(key);
+  cache.set(key, { expiresAtMs, value });
+  while (cache.size > GMGN_MAXIMUM_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value as string | undefined;
     if (oldest === undefined) break;
-    discoveryCache.delete(oldest);
+    cache.delete(oldest);
   }
 }
 

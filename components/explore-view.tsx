@@ -192,7 +192,7 @@ type ExploreMarketRead =
   | GmgnExploreMarketRead
   | LegacyBitqueryExploreMarketRead;
 
-type ExploreRanking = Readonly<{
+type LegacyExploreRanking = Readonly<{
   status: "complete" | "partial" | "unavailable";
   requested: "fdv";
   applied: "fdv" | "qualified-fdv-then-launch-order" | "launch-order";
@@ -200,10 +200,70 @@ type ExploreRanking = Readonly<{
   totalCount?: number;
 }>;
 
+type ExploreMarketCapRanking = Readonly<{
+  schemaVersion: "programmable.explore-market-cap-ranking.v1";
+  requested: "market-cap";
+  direction: "asc" | "desc";
+  primaryProvider: "gmgn";
+  source:
+    | "gmgn"
+    | "gmgn+dexscreener"
+    | "dexscreener"
+    | "canonical-launch-order";
+  fallbackProvider: "dexscreener";
+  rankingCommitment: `sha256:${string}`;
+  status: "complete" | "partial" | "unavailable";
+  gmgnStatus: "complete" | "partial" | "unavailable";
+  applied:
+    | "gmgn-market-cap"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv-then-launch-order"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+    | "gmgn-market-cap-then-dexscreener-fdv"
+    | "gmgn-market-cap-then-dexscreener-fdv-then-launch-order"
+    | "gmgn-market-cap-then-launch-order"
+    | "gmgn-token-info-fdv"
+    | "gmgn-token-info-fdv-then-launch-order"
+    | "gmgn-token-info-fdv-then-dexscreener-fdv"
+    | "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+    | "fdv"
+    | "qualified-fdv-then-launch-order"
+    | "launch-order";
+  metricOrder:
+    "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order";
+  rankInterval: "1h";
+  rankLimit: 100;
+  observedTokenCount: number;
+  matchedTokenCount: number;
+  matchedUniqueTokenCount: number;
+  canonicalEntryCount: number;
+  canonicalTokenCount: number;
+  unobservedCanonicalEntryCount: number;
+  canonicalAddressCoverageBps: number;
+  foreignTokenCount: number;
+  discardedProviderItemCount: number;
+  gmgnHydrationLimit: 100;
+  gmgnHydrationEligibleCount: number;
+  gmgnHydrationRequestedCount: number;
+  gmgnHydrationObservedCount: number;
+  gmgnHydrationQualifiedCount: number;
+  gmgnHydrationDeferredCount: number;
+  fallbackRequestedCount: number;
+  fallbackQualifiedCount: number;
+  canonicalTailCount: number;
+  qualifiedCount: number;
+  totalCount: number;
+  asOfTime: string | null;
+}>;
+
+type ExploreRanking = LegacyExploreRanking | ExploreMarketCapRanking;
+
 type ExploreDiscoveryRanking = Readonly<{
   schemaVersion: "programmable.explore-discovery-ranking.v1";
   provider: "gmgn";
   requested: "trending";
+  rankingCommitment: `sha256:${string}`;
   status: "complete" | "partial" | "unavailable";
   applied: "gmgn-ranked-with-launch-order-fallback" | "launch-order";
   rankInterval: "1h";
@@ -211,12 +271,37 @@ type ExploreDiscoveryRanking = Readonly<{
   snapshotCount: number;
   observedTokenCount: number;
   matchedTokenCount: number;
+  matchedUniqueTokenCount: number;
   canonicalEntryCount: number;
   canonicalTokenCount: number;
   unobservedCanonicalEntryCount: number;
   canonicalAddressCoverageBps: number;
   foreignTokenCount: number;
   discardedProviderItemCount: number;
+  asOfTime: string | null;
+}>;
+
+type ExploreSearchRanking = Readonly<{
+  schemaVersion: "programmable.explore-search-ranking.v1";
+  provider: "gmgn";
+  requested: "search";
+  orderBy: "weight";
+  rankingCommitment: `sha256:${string}`;
+  status: "complete" | "partial" | "unavailable";
+  applied:
+    | "gmgn-canonical-search-with-local-match-fallback"
+    | "local-match-order";
+  observedTokenCount: number;
+  matchedTokenCount: number;
+  matchedUniqueTokenCount: number;
+  canonicalMatchCount: number;
+  canonicalMatchTokenCount: number;
+  unobservedCanonicalMatchCount: number;
+  providerOnlyCanonicalTokenCount: number;
+  foreignTokenCount: number;
+  discardedProviderItemCount: number;
+  duplicateProviderItemCount: number;
+  canonicalAddressCoverageBps: number;
   asOfTime: string | null;
 }>;
 
@@ -299,6 +384,7 @@ type ExplorePayload = {
   marketRead?: ExploreMarketRead;
   ranking?: ExploreRanking;
   discovery?: ExploreDiscoveryRanking;
+  search?: ExploreSearchRanking;
   catalog?: ExploreCatalogBoundary;
 };
 
@@ -426,7 +512,12 @@ function preserveKnownMarketObservation(
 export function stabilizeExploreRevalidationPayload(
   previous: ExplorePayload,
   incoming: ExplorePayload,
+  options: Readonly<{
+    incomingIsCompleteLocalSelection?: boolean;
+  }> = {},
 ): ExplorePayload {
+  if (options.incomingIsCompleteLocalSelection) return incoming;
+
   if (
     previous.status !== "ready" ||
     incoming.status !== "ready" ||
@@ -438,7 +529,15 @@ export function stabilizeExploreRevalidationPayload(
     return incoming;
   }
 
-  if (incoming.discovery !== undefined) {
+  // The caller reaches this function only for the same content key, which
+  // binds query, sort, filters, page and page size. Provider-ranked responses
+  // therefore have to move membership, order, pagination and their proof
+  // together; mixing an incoming commitment with previous tokens would make
+  // the client state internally inconsistent.
+  const providerOrdered = incoming.discovery !== undefined ||
+    incoming.search !== undefined ||
+    incoming.ranking?.requested === "market-cap";
+  if (providerOrdered) {
     const previousById = new Map(
       previous.tokens.map((token) => [token.id, token] as const),
     );
@@ -466,6 +565,7 @@ export function stabilizeExploreRevalidationPayload(
     marketRead: incoming.marketRead ?? previous.marketRead,
     ranking: incoming.ranking ?? previous.ranking,
     discovery: incoming.discovery ?? previous.discovery,
+    search: incoming.search ?? previous.search,
   };
 }
 
@@ -730,8 +830,8 @@ export function exploreActiveSelectionState({
     valuationSort !== "none" &&
     valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT
       ? valuationSort === "highest"
-        ? "Highest FDV"
-        : "Lowest FDV"
+        ? "Highest market cap"
+        : "Lowest market cap"
       : newestLaunchOrderApplied
         ? "Newest launch order"
         : null,
@@ -1323,7 +1423,14 @@ function parseExploreMarketRead(value: unknown): ExploreMarketRead | null {
   return value as ExploreMarketRead;
 }
 
-function parseExploreRanking(value: unknown, total: unknown): ExploreRanking | null {
+export function parseExploreRanking(
+  value: unknown,
+  total: unknown,
+): ExploreRanking | null {
+  if (
+    isRecord(value) &&
+    value.schemaVersion === "programmable.explore-market-cap-ranking.v1"
+  ) return parseExploreMarketCapRanking(value, total);
   if (
     isRecord(value) &&
     value.status === "unavailable" &&
@@ -1360,7 +1467,276 @@ function parseExploreRanking(value: unknown, total: unknown): ExploreRanking | n
   return value as ExploreRanking;
 }
 
-function parseExploreDiscoveryRanking(
+function parseExploreMarketCapRanking(
+  value: Record<string, unknown>,
+  total: unknown,
+): ExploreMarketCapRanking | null {
+  const integerFields = [
+    "observedTokenCount",
+    "matchedTokenCount",
+    "matchedUniqueTokenCount",
+    "canonicalEntryCount",
+    "canonicalTokenCount",
+    "unobservedCanonicalEntryCount",
+    "canonicalAddressCoverageBps",
+    "foreignTokenCount",
+    "discardedProviderItemCount",
+    "gmgnHydrationLimit",
+    "gmgnHydrationEligibleCount",
+    "gmgnHydrationRequestedCount",
+    "gmgnHydrationObservedCount",
+    "gmgnHydrationQualifiedCount",
+    "gmgnHydrationDeferredCount",
+    "fallbackRequestedCount",
+    "fallbackQualifiedCount",
+    "canonicalTailCount",
+    "qualifiedCount",
+    "totalCount",
+  ] as const;
+  if (
+    value.requested !== "market-cap" ||
+    (value.direction !== "asc" && value.direction !== "desc") ||
+    value.primaryProvider !== "gmgn" ||
+    ![
+      "gmgn",
+      "gmgn+dexscreener",
+      "dexscreener",
+      "canonical-launch-order",
+    ].includes(String(value.source)) ||
+    value.fallbackProvider !== "dexscreener" ||
+    typeof value.rankingCommitment !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.rankingCommitment) ||
+    !["complete", "partial", "unavailable"].includes(String(value.status)) ||
+    !["complete", "partial", "unavailable"].includes(String(value.gmgnStatus)) ||
+    value.metricOrder !==
+      "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order" ||
+    value.rankInterval !== "1h" ||
+    value.rankLimit !== 100 ||
+    value.gmgnHydrationLimit !== 100 ||
+    !Number.isSafeInteger(total) ||
+    !integerFields.every((field) =>
+      Number.isSafeInteger(value[field]) && Number(value[field]) >= 0
+    ) ||
+    value.totalCount !== total ||
+    value.canonicalEntryCount !== total ||
+    Number(value.canonicalTokenCount) > Number(value.canonicalEntryCount) ||
+    Number(value.matchedTokenCount) > Number(value.canonicalEntryCount) ||
+    Number(value.matchedUniqueTokenCount) > Number(value.matchedTokenCount) ||
+    Number(value.matchedUniqueTokenCount) > Number(value.canonicalTokenCount) ||
+    Number(value.observedTokenCount) > Number(value.rankLimit) ||
+    Number(value.observedTokenCount) !==
+      Number(value.matchedUniqueTokenCount) + Number(value.foreignTokenCount) ||
+    Number(value.unobservedCanonicalEntryCount) !==
+      Number(value.canonicalEntryCount) - Number(value.matchedTokenCount) ||
+    Number(value.gmgnHydrationEligibleCount) >
+      Number(value.unobservedCanonicalEntryCount) ||
+    Number(value.gmgnHydrationRequestedCount) !==
+      Math.min(
+        Number(value.gmgnHydrationEligibleCount),
+        Number(value.gmgnHydrationLimit),
+      ) ||
+    Number(value.gmgnHydrationObservedCount) >
+      Number(value.gmgnHydrationRequestedCount) ||
+    Number(value.gmgnHydrationQualifiedCount) >
+      Number(value.gmgnHydrationObservedCount) ||
+    Number(value.gmgnHydrationDeferredCount) !==
+      Number(value.gmgnHydrationEligibleCount) -
+        Number(value.gmgnHydrationRequestedCount) ||
+    Number(value.fallbackRequestedCount) !==
+      Number(value.unobservedCanonicalEntryCount) -
+        Number(value.gmgnHydrationQualifiedCount) ||
+    Number(value.fallbackQualifiedCount) > Number(value.fallbackRequestedCount) ||
+    Number(value.qualifiedCount) !==
+      Number(value.matchedTokenCount) +
+        Number(value.gmgnHydrationQualifiedCount) +
+        Number(value.fallbackQualifiedCount) ||
+    Number(value.canonicalTailCount) !==
+      Number(value.totalCount) - Number(value.qualifiedCount) ||
+    Number(value.canonicalAddressCoverageBps) > 10_000 ||
+    Number(value.canonicalAddressCoverageBps) !==
+      (Number(value.canonicalTokenCount) === 0
+        ? 0
+        : Math.floor(
+            Number(value.matchedUniqueTokenCount) * 10_000 /
+              Number(value.canonicalTokenCount),
+          )) ||
+    (value.asOfTime !== null && !exactIsoTimestamp(value.asOfTime)) ||
+    (Number(value.qualifiedCount) === 0 && value.asOfTime !== null) ||
+    (Number(value.qualifiedCount) > 0 && value.asOfTime === null)
+  ) return null;
+  const count = Number(value.totalCount);
+  const qualified = Number(value.qualifiedCount);
+  const matched = Number(value.matchedTokenCount);
+  const hydrated = Number(value.gmgnHydrationQualifiedCount);
+  const fallbackQualified = Number(value.fallbackQualifiedCount);
+  const expectedStatus = qualified === 0 || count === 0
+    ? "unavailable"
+    : qualified === count
+      ? "complete"
+      : "partial";
+  const gmgnQualified = matched + hydrated;
+  const expectedGmgnStatus = gmgnQualified === 0 || count === 0
+    ? "unavailable"
+    : gmgnQualified === count
+      ? "complete"
+      : "partial";
+  const expectedSource = gmgnQualified > 0
+    ? fallbackQualified > 0
+      ? "gmgn+dexscreener"
+      : "gmgn"
+    : fallbackQualified > 0
+      ? "dexscreener"
+      : "canonical-launch-order";
+  const hasRank = matched > 0;
+  const hasHydration = hydrated > 0;
+  const hasFallback = fallbackQualified > 0;
+  const hasTail = Number(value.canonicalTailCount) > 0;
+  let expectedApplied: ExploreMarketCapRanking["applied"] = "launch-order";
+  if (count > 0 && hasRank && hasHydration && hasFallback) {
+    expectedApplied = hasTail
+      ? "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv";
+  } else if (count > 0 && hasRank && hasHydration) {
+    expectedApplied = hasTail
+      ? "gmgn-market-cap-then-gmgn-token-info-fdv-then-launch-order"
+      : "gmgn-market-cap-then-gmgn-token-info-fdv";
+  } else if (count > 0 && hasRank && hasFallback) {
+    expectedApplied = hasTail
+      ? "gmgn-market-cap-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-market-cap-then-dexscreener-fdv";
+  } else if (count > 0 && hasRank) {
+    expectedApplied = matched === count
+      ? "gmgn-market-cap"
+      : "gmgn-market-cap-then-launch-order";
+  } else if (count > 0 && hasHydration && hasFallback) {
+    expectedApplied = hasTail
+      ? "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-token-info-fdv-then-dexscreener-fdv";
+  } else if (count > 0 && hasHydration) {
+    expectedApplied = hasTail
+      ? "gmgn-token-info-fdv-then-launch-order"
+      : "gmgn-token-info-fdv";
+  } else if (count > 0 && hasFallback) {
+    expectedApplied = hasTail ? "qualified-fdv-then-launch-order" : "fdv";
+  }
+  if (
+    value.status !== expectedStatus ||
+    value.gmgnStatus !== expectedGmgnStatus ||
+    value.source !== expectedSource ||
+    value.applied !== expectedApplied
+  ) return null;
+  return value as unknown as ExploreMarketCapRanking;
+}
+
+const EXPLORE_SEARCH_RANKING_FIELDS = [
+  "schemaVersion",
+  "provider",
+  "requested",
+  "orderBy",
+  "rankingCommitment",
+  "status",
+  "applied",
+  "observedTokenCount",
+  "matchedTokenCount",
+  "matchedUniqueTokenCount",
+  "canonicalMatchCount",
+  "canonicalMatchTokenCount",
+  "unobservedCanonicalMatchCount",
+  "providerOnlyCanonicalTokenCount",
+  "foreignTokenCount",
+  "discardedProviderItemCount",
+  "duplicateProviderItemCount",
+  "canonicalAddressCoverageBps",
+  "asOfTime",
+] as const;
+
+export function parseExploreSearchRanking(
+  value: unknown,
+  total: unknown,
+): ExploreSearchRanking | null {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== EXPLORE_SEARCH_RANKING_FIELDS.length ||
+    !EXPLORE_SEARCH_RANKING_FIELDS.every((field) => Object.hasOwn(value, field)) ||
+    value.schemaVersion !== "programmable.explore-search-ranking.v1" ||
+    value.provider !== "gmgn" ||
+    value.requested !== "search" ||
+    value.orderBy !== "weight" ||
+    typeof value.rankingCommitment !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.rankingCommitment) ||
+    !["complete", "partial", "unavailable"].includes(String(value.status)) ||
+    ![
+      "gmgn-canonical-search-with-local-match-fallback",
+      "local-match-order",
+    ].includes(String(value.applied)) ||
+    !Number.isSafeInteger(total) ||
+    Number(total) < 0 ||
+    ![
+      "observedTokenCount",
+      "matchedTokenCount",
+      "matchedUniqueTokenCount",
+      "canonicalMatchCount",
+      "canonicalMatchTokenCount",
+      "unobservedCanonicalMatchCount",
+      "providerOnlyCanonicalTokenCount",
+      "foreignTokenCount",
+      "discardedProviderItemCount",
+      "duplicateProviderItemCount",
+      "canonicalAddressCoverageBps",
+    ].every((field) =>
+      Number.isSafeInteger(value[field]) && Number(value[field]) >= 0
+    ) ||
+    Number(value.observedTokenCount) > 1_000 ||
+    Number(value.foreignTokenCount) > 1_000 ||
+    Number(value.discardedProviderItemCount) > 1_000 ||
+    Number(value.duplicateProviderItemCount) > 1_000 ||
+    value.canonicalMatchCount !== total ||
+    Number(value.canonicalMatchTokenCount) > Number(value.canonicalMatchCount) ||
+    Number(value.matchedTokenCount) > Number(value.canonicalMatchCount) ||
+    Number(value.matchedUniqueTokenCount) > Number(value.matchedTokenCount) ||
+    Number(value.matchedUniqueTokenCount) > Number(value.canonicalMatchTokenCount) ||
+    Number(value.unobservedCanonicalMatchCount) !==
+      Number(value.canonicalMatchCount) - Number(value.matchedTokenCount) ||
+    Number(value.providerOnlyCanonicalTokenCount) >
+      Number(value.matchedUniqueTokenCount) ||
+    Number(value.observedTokenCount) !==
+      Number(value.matchedUniqueTokenCount) + Number(value.foreignTokenCount) ||
+    Number(value.canonicalAddressCoverageBps) > 10_000 ||
+    Number(value.canonicalAddressCoverageBps) !==
+      (Number(value.canonicalMatchTokenCount) === 0
+        ? 0
+        : Math.floor(
+            Number(value.matchedUniqueTokenCount) * 10_000 /
+              Number(value.canonicalMatchTokenCount),
+          )) ||
+    (value.asOfTime !== null && !exactIsoTimestamp(value.asOfTime))
+  ) return null;
+
+  const matched = Number(value.matchedTokenCount);
+  const count = Number(value.canonicalMatchCount);
+  const expectedApplied = matched > 0
+    ? "gmgn-canonical-search-with-local-match-fallback"
+    : "local-match-order";
+  if (
+    value.applied !== expectedApplied ||
+    (value.status === "complete" && matched !== count) ||
+    (value.status === "partial" && matched >= count) ||
+    (value.status === "unavailable" &&
+      (matched !== 0 ||
+        Number(value.observedTokenCount) !== 0 ||
+        Number(value.matchedUniqueTokenCount) !== 0 ||
+        Number(value.providerOnlyCanonicalTokenCount) !== 0 ||
+        Number(value.foreignTokenCount) !== 0 ||
+        Number(value.discardedProviderItemCount) !== 0 ||
+        Number(value.duplicateProviderItemCount) !== 0)) ||
+    (value.status === "unavailable"
+      ? value.asOfTime !== null
+      : value.asOfTime === null)
+  ) return null;
+  return value as unknown as ExploreSearchRanking;
+}
+
+export function parseExploreDiscoveryRanking(
   value: unknown,
   total: unknown,
 ): ExploreDiscoveryRanking | null {
@@ -1369,6 +1745,8 @@ function parseExploreDiscoveryRanking(
     value.schemaVersion !== "programmable.explore-discovery-ranking.v1" ||
     value.provider !== "gmgn" ||
     value.requested !== "trending" ||
+    typeof value.rankingCommitment !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.rankingCommitment) ||
     !["complete", "partial", "unavailable"].includes(String(value.status)) ||
     ![
       "gmgn-ranked-with-launch-order-fallback",
@@ -1381,6 +1759,7 @@ function parseExploreDiscoveryRanking(
       "snapshotCount",
       "observedTokenCount",
       "matchedTokenCount",
+      "matchedUniqueTokenCount",
       "canonicalEntryCount",
       "canonicalTokenCount",
       "unobservedCanonicalEntryCount",
@@ -1392,7 +1771,10 @@ function parseExploreDiscoveryRanking(
     ) ||
     value.canonicalEntryCount !== total ||
     Number(value.matchedTokenCount) > Number(value.canonicalEntryCount) ||
-    Number(value.matchedTokenCount) > Number(value.canonicalTokenCount) ||
+    Number(value.matchedUniqueTokenCount) > Number(value.matchedTokenCount) ||
+    Number(value.matchedUniqueTokenCount) > Number(value.canonicalTokenCount) ||
+    Number(value.observedTokenCount) !==
+      Number(value.matchedUniqueTokenCount) + Number(value.foreignTokenCount) ||
     Number(value.unobservedCanonicalEntryCount) !==
       Number(value.canonicalEntryCount) - Number(value.matchedTokenCount) ||
     Number(value.canonicalAddressCoverageBps) > 10_000 ||
@@ -1400,7 +1782,7 @@ function parseExploreDiscoveryRanking(
       (Number(value.canonicalTokenCount) === 0
         ? 0
         : Math.floor(
-            Number(value.matchedTokenCount) * 10_000 /
+            Number(value.matchedUniqueTokenCount) * 10_000 /
               Number(value.canonicalTokenCount),
           )) ||
     (value.asOfTime !== null && !exactIsoTimestamp(value.asOfTime))
@@ -1415,7 +1797,8 @@ function parseExploreDiscoveryRanking(
       (matched === 0 || matched >= count ||
         value.applied !== "gmgn-ranked-with-launch-order-fallback")) ||
     (value.status === "unavailable" &&
-      (matched !== 0 || value.applied !== "launch-order"))
+      (matched !== 0 || Number(value.matchedUniqueTokenCount) !== 0 ||
+        value.applied !== "launch-order"))
   ) return null;
   return value as ExploreDiscoveryRanking;
 }
@@ -1643,6 +2026,39 @@ function exploreCatalogBoundaryKey(value: ExploreCatalogBoundary) {
   });
 }
 
+function exploreProviderOrderCommitmentKey(value: ExplorePayload) {
+  return JSON.stringify({
+    ranking: value.ranking === undefined
+      ? null
+      : value.ranking.requested === "market-cap"
+        ? {
+            schemaVersion: value.ranking.schemaVersion,
+            requested: value.ranking.requested,
+            direction: value.ranking.direction,
+            rankingCommitment: value.ranking.rankingCommitment,
+          }
+        : {
+            requested: value.ranking.requested,
+            status: value.ranking.status,
+            applied: value.ranking.applied,
+            qualifiedCount: value.ranking.qualifiedCount ?? null,
+            totalCount: value.ranking.totalCount ?? null,
+          },
+    discovery: value.discovery === undefined
+      ? null
+      : {
+          schemaVersion: value.discovery.schemaVersion,
+          rankingCommitment: value.discovery.rankingCommitment,
+        },
+    search: value.search === undefined
+      ? null
+      : {
+          schemaVersion: value.search.schemaVersion,
+          rankingCommitment: value.search.rankingCommitment,
+        },
+  });
+}
+
 function parseExplorePayload(value: unknown): ExplorePayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
@@ -1697,6 +2113,13 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     (discovery === null || marketRead === null)
   ) {
     throw new Error("The token registry returned invalid discovery data");
+  }
+  const search = parseExploreSearchRanking(value.search, value.total);
+  if (
+    value.search !== undefined &&
+    (search === null || marketRead === null)
+  ) {
+    throw new Error("The token registry returned invalid search data");
   }
   const catalog = parseExploreCatalog(value.catalog);
   if (catalog === null) {
@@ -1762,6 +2185,7 @@ function parseExplorePayload(value: unknown): ExplorePayload {
     ...(marketRead === null ? {} : { marketRead }),
     ...(ranking === null ? {} : { ranking }),
     ...(discovery === null ? {} : { discovery }),
+    ...(search === null ? {} : { search }),
     catalog,
   };
 }
@@ -2208,7 +2632,13 @@ async function loadExploreModelDatasetAttempt(
     throw new Error("Tokens changed while filters were loading");
   }
   const firstPageCatalog = firstPage.catalog;
+  const firstPageProviderOrderCommitment =
+    exploreProviderOrderCommitmentKey(firstPage);
   if (firstPage.totalPages <= 1) {
+    if (firstPage.page !== 1 || firstPage.tokens.length !== firstPage.total) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    assertUniqueExploreDatasetEntries(firstPage.tokens);
     return firstPage;
   }
 
@@ -2229,7 +2659,9 @@ async function loadExploreModelDatasetAttempt(
         payload.totalPages !== firstPage.totalPages ||
         payload.catalog === undefined ||
         exploreCatalogBoundaryKey(payload.catalog) !==
-          exploreCatalogBoundaryKey(firstPageCatalog)
+          exploreCatalogBoundaryKey(firstPageCatalog) ||
+        exploreProviderOrderCommitmentKey(payload) !==
+          firstPageProviderOrderCommitment
       ) {
         throw new Error("Tokens changed while filters were loading");
       }
@@ -2241,6 +2673,9 @@ async function loadExploreModelDatasetAttempt(
   let tokens = pages.flatMap(
     (payload) => payload.tokens,
   );
+  if (tokens.length !== firstPage.total) {
+    throw new Error("Tokens changed while filters were loading");
+  }
   assertUniqueExploreDatasetEntries(tokens);
   const degradedPages = pages.filter(
     (payload) => payload.marketRead?.status === "unavailable",
@@ -2378,15 +2813,30 @@ export function paginateExploreModelDataset(
   ageSort: ExploreAgeSort = "none",
   socialFilter: ExploreSocialFilter = "all",
 ): ExplorePayload {
-  const page = paginateTokensByExploreSelections(
-    dataset.tokens,
-    socialFilter,
-    modelFilter,
+  const selectedTokens = sortExploreEntriesBySelections(
+    filterTokensByLaunchModel(
+      filterTokensBySocialPresence(dataset.tokens, socialFilter),
+      modelFilter,
+    ),
     valuationSort,
     ageSort,
-    requestedPage,
-    pageSize,
   );
+  const totalPages = Math.ceil(selectedTokens.length / pageSize);
+  const pageNumber = totalPages === 0
+    ? 1
+    : Math.min(requestedPage, totalPages);
+  const offset = (pageNumber - 1) * pageSize;
+  const page = {
+    tokens: selectedTokens.slice(offset, offset + pageSize),
+    page: pageNumber,
+    pageSize,
+    total: selectedTokens.length,
+    totalPages,
+  };
+  const providerOrderProofMatchesLocalSelection =
+    dataset.tokens.length === dataset.total &&
+    selectedTokens.length === dataset.tokens.length &&
+    selectedTokens.every((token, index) => token.id === dataset.tokens[index]?.id);
   return {
     status: dataset.status,
     ...page,
@@ -2406,7 +2856,16 @@ export function paginateExploreModelDataset(
     ...(dataset.marketRead === undefined
       ? {}
       : { marketRead: dataset.marketRead }),
-    ...(dataset.ranking === undefined ? {} : { ranking: dataset.ranking }),
+    ...(dataset.catalog === undefined ? {} : { catalog: dataset.catalog }),
+    ...(!providerOrderProofMatchesLocalSelection || dataset.ranking === undefined
+      ? {}
+      : { ranking: dataset.ranking }),
+    ...(!providerOrderProofMatchesLocalSelection || dataset.discovery === undefined
+      ? {}
+      : { discovery: dataset.discovery }),
+    ...(!providerOrderProofMatchesLocalSelection || dataset.search === undefined
+      ? {}
+      : { search: dataset.search }),
   };
 }
 
@@ -3130,7 +3589,7 @@ export function ExploreView({
     async function loadTokens() {
       try {
         let payload: ExplorePayload;
-        if (isBackgroundRevalidation || !requiresCompleteDataset) {
+        if (!requiresCompleteDataset) {
           payload = await loadExplorePage(
             activeRequestContentKey,
             search,
@@ -3181,7 +3640,9 @@ export function ExploreView({
             isBackgroundRevalidation &&
               current.phase === "ready" &&
               current.contentKey === contentKey
-              ? stabilizeExploreRevalidationPayload(current.payload, payload)
+              ? stabilizeExploreRevalidationPayload(current.payload, payload, {
+                  incomingIsCompleteLocalSelection: requiresCompleteDataset,
+                })
               : payload,
           requestKey,
           contentKey,
@@ -3804,9 +4265,9 @@ export function ExploreView({
                         <p
                           className={styles.filterLabel}
                           id="explore-valuation-label"
-                          title="Fully diluted valuation"
+                          title="GMGN market cap with FDV fallback for unmatched launches"
                         >
-                          FDV
+                          Market cap
                         </p>
                         {valuationSortOptions.map((option) => (
                           <button

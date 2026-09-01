@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GmgnMarketChartV1 } from
   "../lib/market-data/gmgn-chart-data-v1";
-import type { MarketChartV1 } from "../lib/market-data/market-data-v1";
+import {
+  isMarketChartError,
+  type MarketChartV1,
+} from "../lib/market-data/market-data-v1";
 
 vi.mock("server-only", () => ({}));
 
@@ -78,7 +81,9 @@ const chart = {
   truncated: false,
 } as const satisfies MarketChartV1;
 
-function gmgnReadyChart(): GmgnMarketChartV1 {
+function gmgnReadyChart(
+  marketIdentity: MarketChartV1["identity"] = chart.identity,
+): GmgnMarketChartV1 {
   const generatedAt = new Date();
   const requestedToMs = Math.floor(generatedAt.getTime() / 60_000) * 60_000;
   const requestedFromMs = requestedToMs - 2 * 60_000;
@@ -115,15 +120,18 @@ function gmgnReadyChart(): GmgnMarketChartV1 {
   return {
     schemaVersion: "programmable.gmgn-market-chart.v1",
     source: "gmgn",
+    seriesScope: "token",
+    poolAttribution: "unavailable",
     readStatus: "live",
     status: "ready",
     generatedAt: generatedAt.toISOString(),
-    identity: chart.identity,
+    identity: marketIdentity,
     identityProof: {
       schemaVersion: "programmable.gmgn-chart-identity-proof.v1",
       source: "gmgn-token-info",
       verifiedAt: generatedAt.toISOString(),
-      identity: chart.identity,
+      identity: marketIdentity,
+      poolAttribution: "unavailable",
       canonicalSupply: {
         totalSupplyRaw: "1000000000000000000000000",
         tokenDecimals: 18,
@@ -147,6 +155,7 @@ const mocks = vi.hoisted(() => ({
   customEnabled: vi.fn(),
   customDirectory: vi.fn(),
   readRouter: vi.fn(),
+  hydrateSupply: vi.fn(),
   readGmgnChart: vi.fn(),
   readChart: vi.fn(),
 }));
@@ -159,6 +168,9 @@ vi.mock("../lib/market-data/bitquery.server", () => ({
 }));
 vi.mock("../lib/market-data/gmgn-chart.server", () => ({
   readGmgnMarketChartV1: mocks.readGmgnChart,
+}));
+vi.mock("../lib/market-data/canonical-token-supply.server", () => ({
+  hydrateMissingCanonicalTokenSupplyBoundedV1: mocks.hydrateSupply,
 }));
 vi.mock("../lib/server/custom-launch/public-readiness", () => ({
   isCustomLaunchRegistryPublicReadEnabled: mocks.customEnabled,
@@ -190,7 +202,7 @@ function request(query = `address=${address}&range=1d`) {
   return new NextRequest(`http://localhost/api/explore/token/chart?${query}`);
 }
 
-describe("pool-bound token chart API", () => {
+describe("scoped token chart API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.catalog.mockResolvedValue({
@@ -207,11 +219,12 @@ describe("pool-bound token chart API", () => {
       ...custom,
     ]);
     mocks.readRouter.mockResolvedValue([]);
+    mocks.hydrateSupply.mockImplementation(async (entries) => [...entries]);
     mocks.readGmgnChart.mockResolvedValue(null);
     mocks.readChart.mockResolvedValue(chart);
   });
 
-  it("returns a fresh exact GMGN chart without waiting for Bitquery", async () => {
+  it("returns a fresh token-level GMGN chart without waiting for Bitquery", async () => {
     const gmgn = gmgnReadyChart();
     mocks.readGmgnChart.mockResolvedValue(gmgn);
 
@@ -226,6 +239,10 @@ describe("pool-bound token chart API", () => {
     );
     expect(response.headers.get("x-programmable-market-read-status")).toBe(
       "live",
+    );
+    expect(response.headers.get("x-programmable-chart-scope")).toBe("token");
+    expect(response.headers.get("x-programmable-chart-pool-attribution")).toBe(
+      "unavailable",
     );
     expect(response.headers.get("x-programmable-market-source")).toBe(
       "gmgn",
@@ -243,10 +260,14 @@ describe("pool-bound token chart API", () => {
     expect(mocks.readChart).not.toHaveBeenCalled();
   });
 
-  it("falls back to Bitquery when GMGN has no exact chart", async () => {
+  it("falls back to exact-pool Bitquery when GMGN has no admitted series", async () => {
     const response = await GET(request());
 
     await expect(response.json()).resolves.toEqual(chart);
+    expect(response.headers.get("x-programmable-chart-scope")).toBe("pool");
+    expect(response.headers.get("x-programmable-chart-pool-attribution")).toBe(
+      "exact",
+    );
     expect(mocks.readGmgnChart).toHaveBeenCalledTimes(1);
     expect(mocks.readChart).toHaveBeenCalledTimes(1);
     expect(mocks.readGmgnChart.mock.invocationCallOrder[0]).toBeLessThan(
@@ -286,7 +307,7 @@ describe("pool-bound token chart API", () => {
     expect(mocks.readChart).toHaveBeenCalledTimes(1);
   });
 
-  it("uses an exact one-candle GMGN result over an unavailable fallback", async () => {
+  it("uses an admitted one-candle GMGN token series over an unavailable fallback", async () => {
     const gmgn = gmgnReadyChart();
     const point = gmgn.points[0]!;
     mocks.readGmgnChart.mockResolvedValue({
@@ -398,7 +419,8 @@ describe("pool-bound token chart API", () => {
   });
 
   it("labels a successful Custom Registry boundary and reads one verified pool", async () => {
-    const customAddress = "0x9999999999999999999999999999999999999999";
+    const customAddress =
+      "0x9999999999999999999999999999999999999999" as const;
     const customPoolId = `0x${"99".repeat(32)}`;
     mocks.customEnabled.mockReturnValue(true);
     mocks.customDirectory.mockResolvedValue([{
@@ -442,10 +464,70 @@ describe("pool-bound token chart API", () => {
     }));
   });
 
-  it("fails closed instead of choosing between multiple verified Custom pools", async () => {
-    const customAddress = "0x9999999999999999999999999999999999999999";
+  it("serves a hydrated Registry Custom token from GMGN", async () => {
+    const customAddress =
+      "0x9999999999999999999999999999999999999999" as const;
+    const customPoolId = `0x${"99".repeat(32)}` as const;
+    const customEntry = {
+      exploreKind: "custom-project",
+      id: `custom:sha256:${"99".repeat(32)}`,
+      tokenAddress: customAddress,
+      launchedAt: "2026-08-17T00:00:00.000Z",
+      chainId: "1",
+      markets: [{
+        status: "active",
+        poolId: customPoolId,
+        baseAsset: { identity: { value: customAddress } },
+        quoteAsset: { identity: { value: nativeEth } },
+      }],
+    };
+    const hydratedEntry = {
+      ...customEntry,
+      tokenDecimals: 18,
+      totalSupplyRaw: "1000000000000000000000000",
+    };
+    const customIdentity = {
+      ...chart.identity,
+      tokenAddress: customAddress,
+      poolId: customPoolId,
+    } satisfies MarketChartV1["identity"];
     mocks.customEnabled.mockReturnValue(true);
-    mocks.customDirectory.mockResolvedValue([{
+    mocks.customDirectory.mockResolvedValue([customEntry]);
+    mocks.hydrateSupply.mockResolvedValue([hydratedEntry]);
+    mocks.readGmgnChart.mockResolvedValue(gmgnReadyChart(customIdentity));
+
+    const response = await GET(request(`address=${customAddress}&range=1d`));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-programmable-market-provider")).toBe("gmgn");
+    expect(response.headers.get("x-programmable-chart-scope")).toBe("token");
+    expect(response.headers.get("x-programmable-chart-pool-attribution")).toBe(
+      "unavailable",
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(mocks.hydrateSupply).toHaveBeenCalledWith(
+      [customEntry],
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        deadlineMs: expect.any(Number),
+      }),
+    );
+    expect(mocks.readGmgnChart).toHaveBeenCalledWith({
+      entry: hydratedEntry,
+      identity: customIdentity,
+      range: "1d",
+    }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(mocks.readChart).not.toHaveBeenCalled();
+  });
+
+  it("accepts the provider market only when it is in the canonical multi-market set", async () => {
+    const customAddress =
+      "0x9999999999999999999999999999999999999999" as const;
+    const deterministicPoolId = `0x${"98".repeat(32)}` as const;
+    const otherPoolId = `0x${"99".repeat(32)}` as const;
+    const otherQuote =
+      "0x7777777777777777777777777777777777777777" as const;
+    const customEntry = {
       exploreKind: "custom-project",
       id: `custom:sha256:${"99".repeat(32)}`,
       tokenAddress: customAddress,
@@ -454,37 +536,56 @@ describe("pool-bound token chart API", () => {
       markets: [
         {
           status: "active",
-          poolId: `0x${"98".repeat(32)}`,
+          poolId: otherPoolId,
           baseAsset: { identity: { value: customAddress } },
-          quoteAsset: { identity: { value: nativeEth } },
+          quoteAsset: { identity: { value: otherQuote } },
         },
         {
           status: "active",
-          poolId: `0x${"99".repeat(32)}`,
+          poolId: deterministicPoolId,
           baseAsset: { identity: { value: customAddress } },
           quoteAsset: { identity: { value: nativeEth } },
         },
       ],
-    }]);
+    };
+    const hydratedEntry = {
+      ...customEntry,
+      tokenDecimals: 18,
+      totalSupplyRaw: "1000000000000000000000000",
+    };
+    const deterministicIdentity = {
+      ...chart.identity,
+      tokenAddress: customAddress,
+      poolId: deterministicPoolId,
+    } satisfies MarketChartV1["identity"];
+    const providerMatchedIdentity = {
+      ...chart.identity,
+      tokenAddress: customAddress,
+      poolId: otherPoolId,
+      quoteAddress: otherQuote,
+    } satisfies MarketChartV1["identity"];
+    mocks.customEnabled.mockReturnValue(true);
+    mocks.customDirectory.mockResolvedValue([customEntry]);
+    mocks.hydrateSupply.mockResolvedValue([hydratedEntry]);
+    mocks.readGmgnChart.mockResolvedValue(
+      gmgnReadyChart(providerMatchedIdentity),
+    );
 
     const response = await GET(request(`address=${customAddress}&range=1d`));
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("x-programmable-data-quality")).toBe(
-      "unavailable",
-    );
+    expect(response.headers.get("x-programmable-data-quality")).toBe("current");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("x-programmable-market-provider")).toBeNull();
+    expect(response.headers.get("x-programmable-market-provider")).toBe("gmgn");
     await expect(response.json()).resolves.toMatchObject({
-      schemaVersion: "programmable.market-chart-error.v1",
-      source: "bitquery",
-      status: "unavailable",
-      reason: "identity-unavailable",
-      address: customAddress,
-      range: "1d",
+      schemaVersion: "programmable.gmgn-market-chart.v1",
+      source: "gmgn",
+      identity: providerMatchedIdentity,
     });
     expect(mocks.readChart).not.toHaveBeenCalled();
-    expect(mocks.readGmgnChart).not.toHaveBeenCalled();
+    expect(mocks.readGmgnChart).toHaveBeenCalledWith(expect.objectContaining({
+      identity: deterministicIdentity,
+    }), expect.any(Object));
   });
 
   it("preserves a known token identity when the market provider is unavailable", async () => {
@@ -584,6 +685,11 @@ describe("pool-bound token chart API", () => {
     expect(response.headers.get("x-programmable-launch-source")).toBe(
       "envio-classic-v3",
     );
+    await expect(response.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.market-chart-error.v2",
+      source: "programmable",
+      reason: "market-data-unavailable",
+    });
   });
 
   it("returns 503 only when the identity catalog cannot be read", async () => {
@@ -592,6 +698,37 @@ describe("pool-bound token chart API", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("retry-after")).toBe("5");
     expect(response.headers.get("x-programmable-market-source")).toBeNull();
+    await expect(response.json()).resolves.toMatchObject({
+      schemaVersion: "programmable.market-chart-error.v2",
+      source: "programmable",
+      reason: "market-data-unavailable",
+    });
+  });
+
+  it("parses provider-neutral v2 errors and legacy v1 client payloads", () => {
+    const common = {
+      status: "unavailable",
+      generatedAt: "2026-09-01T12:00:00.000Z",
+      address,
+      range: "1d",
+      reason: "identity-unavailable",
+      error: "Price history is temporarily unavailable",
+    } as const;
+    expect(isMarketChartError({
+      ...common,
+      schemaVersion: "programmable.market-chart-error.v2",
+      source: "programmable",
+    })).toBe(true);
+    expect(isMarketChartError({
+      ...common,
+      schemaVersion: "programmable.market-chart-error.v1",
+      source: "bitquery",
+    })).toBe(true);
+    expect(isMarketChartError({
+      ...common,
+      schemaVersion: "programmable.market-chart-error.v2",
+      source: "bitquery",
+    })).toBe(false);
   });
 
   it.each([

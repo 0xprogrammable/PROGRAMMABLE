@@ -30,6 +30,8 @@ function envelope(
   return {
     schemaVersion: "programmable.token-analytics.v1",
     provider: "gmgn",
+    analyticsScope: "token",
+    poolAttribution: "unavailable",
     status,
     section,
     identity,
@@ -59,10 +61,13 @@ function security(overrides: Record<string, unknown> = {}) {
 function pool(overrides: Record<string, unknown> = {}) {
   return {
     source: "gmgn",
+    marketScope: "token",
+    poolAttribution: "unavailable",
     fetchedAt: NOW,
     identity,
     tokenAddress: TOKEN,
-    poolAddress: POOL,
+    providerAddress: TOKEN,
+    baseAddress: TOKEN,
     exchange: "uniswap_v4",
     liquidityUsd: "125000.45",
     feeRatio: "0.003",
@@ -92,7 +97,6 @@ describe("GMGN token analytics UI contract", () => {
       },
       pool: {
         fetchedAt: NOW,
-        poolAddress: POOL,
         liquidityUsd: "125000.45",
         feeRatio: "0.003",
       },
@@ -101,7 +105,7 @@ describe("GMGN token analytics UI contract", () => {
     expect(JSON.stringify(parsed)).not.toContain("avatar.png");
   });
 
-  it("rejects provider data bound to another token or pool", () => {
+  it("rejects provider data bound to another token", () => {
     expect(parseTokenAnalyticsResponse(
       envelope("summary", {
         security: security({ tokenAddress: OTHER_TOKEN }),
@@ -113,7 +117,7 @@ describe("GMGN token analytics UI contract", () => {
     expect(parseTokenAnalyticsResponse(
       envelope("summary", {
         security: security(),
-        pool: pool({ poolAddress: `0x${"44".repeat(32)}` }),
+        pool: pool({ providerAddress: OTHER_TOKEN }),
       }),
       "summary",
       TOKEN,
@@ -216,6 +220,25 @@ describe("GMGN token analytics UI contract", () => {
     expect(source).toContain('if (section !== "summary") search.set("limit", String(ANALYTICS_LIMIT))');
     expect(source).toContain("const ANALYTICS_LIMIT = 20");
     expect(source).toContain('event.key === "ArrowRight"');
+    expect(source).toContain(
+      "GMGN has not returned verified token analytics yet.",
+    );
+    expect(source).toContain(
+      "Security and pool figures are token-level GMGN observations bound to",
+    );
+    expect(source).toContain(
+      "this verified Programmable token. Pool attribution is unavailable.",
+    );
+    expect(source).toContain('{ label: "GMGN liquidity"');
+    expect(source).toContain('{ label: "GMGN fee"');
+    expect(source).not.toContain('{ label: "Pool liquidity"');
+    expect(source).not.toContain('{ label: "Pool fee"');
+    expect(source).toContain(
+      "GMGN has not returned a token-level ranking for this verified Programmable token.",
+    );
+    expect(source).not.toContain(
+      "ranking verified against this exact token and pool",
+    );
     expect(css).toMatch(/\.panel\s*\{[^}]*min-height:\s*318px;/su);
     expect(css).toMatch(/\.rankingViewport\s*\{[^}]*height:\s*min\(52vh, 460px\);/su);
     expect(css).toContain("@media (max-width: 720px)");

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acceptChartPayload,
   bindMarketCapHistory,
+  chartSeriesScopeLabel,
   chartPointContext,
   createSerializedChartRefresh,
   createChartGeometry,
@@ -64,6 +65,8 @@ const MARKET_CHART = {
 const GMGN_CHART = {
   schemaVersion: "programmable.gmgn-market-chart.v1",
   source: "gmgn",
+  seriesScope: "token",
+  poolAttribution: "unavailable",
   readStatus: "live",
   status: "ready",
   generatedAt: "2026-08-11T14:03:00.000Z",
@@ -73,6 +76,7 @@ const GMGN_CHART = {
     source: "gmgn-token-info",
     verifiedAt: "2026-08-11T14:03:00.000Z",
     identity: MARKET_CHART.identity,
+    poolAttribution: "unavailable",
     canonicalSupply: {
       totalSupplyRaw: "1000000000000000000000000",
       tokenDecimals: 18,
@@ -251,7 +255,7 @@ describe("token price chart refresh", () => {
     expect(acceptChartPayload("token:1d", payload!).payload).toBe(payload);
   });
 
-  it("accepts exact GMGN period-close OHLCV without inventing blocks or swaps", () => {
+  it("accepts token-address GMGN period-close OHLCV without inventing pool attribution", () => {
     expect(isAuthoritativeChartPayload(GMGN_CHART)).toBe(true);
 
     const payload = parseAuthoritativeChartPayload(GMGN_CHART);
@@ -273,6 +277,18 @@ describe("token price chart refresh", () => {
     expect(chartPointContext({ priceUsd: "1" })).toBe(
       "Verified observation",
     );
+    expect(chartSeriesScopeLabel(GMGN_CHART)).toBe(
+      "Token-level history · Pool attribution unavailable",
+    );
+    expect(chartSeriesScopeLabel(MARKET_CHART)).toBe("Exact-pool history");
+    expect(isAuthoritativeChartPayload({
+      ...GMGN_CHART,
+      seriesScope: undefined,
+    })).toBe(false);
+    expect(isAuthoritativeChartPayload({
+      ...GMGN_CHART,
+      poolAttribution: "exact",
+    })).toBe(false);
   });
 
   it("rejects every chart-owned valuation path", () => {

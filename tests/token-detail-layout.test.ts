@@ -26,7 +26,7 @@ describe("token detail layout", () => {
     expect(chartSource).not.toContain(': "Onchain"');
   });
 
-  it("keeps detail charts lazy while enabling exact pool-bound history", () => {
+  it("keeps detail charts lazy while exposing provider-specific history scope", () => {
     const viewSource = detailSource.slice(
       detailSource.indexOf("export function TokenDetailView"),
     );
@@ -35,6 +35,10 @@ describe("token detail layout", () => {
     expect(chartSource).toContain(
       "const historyEnabled = shouldEnablePriceHistory(launchModel);",
     );
+    expect(chartSource).toContain(
+      '"Token-level history · Pool attribution unavailable"',
+    );
+    expect(chartSource).toContain('"Exact-pool history"');
   });
 
   it("keeps the inspected date in the header without a floating tooltip", () => {
@@ -178,6 +182,21 @@ describe("token detail layout", () => {
     expect(detailSource).toContain("data-pool-id={market.poolId}");
     expect(detailSource).toContain("customMarketIdentityDescription(market)");
     expect(detailSource).toContain("customMarketIdentityLabel(market)");
+  });
+
+  it("shows token-level GMGN analytics for live Ethereum Custom details only", () => {
+    const customContent = detailSource.slice(
+      detailSource.indexOf("function CustomProjectDetailContent"),
+      detailSource.indexOf("export function TokenDetailView"),
+    );
+    expect(customContent).toMatch(
+      /chainId === 1 && !preview && project\.tokenAddress[\s\S]*?<TokenGmgnAnalytics[\s\S]*?tokenAddress=\{project\.tokenAddress\}[\s\S]*?tokenName=\{project\.name\}/su,
+    );
+    expect(detailSource).toMatch(
+      /previewCustomProject[\s\S]*?<CustomProjectDetailContent[\s\S]*?preview/su,
+    );
+    expect(detailSource).toContain("totalSupplyRaw?: string;");
+    expect(detailSource).toContain("return formatUnits(BigInt(rawSupply)");
   });
 
   it("keeps canonical detail valuation independent from chart history", () => {

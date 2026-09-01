@@ -8,14 +8,34 @@ import {
 } from "../../../lib/explore-financial-data";
 import { readDexscreenerExploreEntriesV1 } from
   "../../../lib/market-data/dexscreener-explore.server";
-import { rankCanonicalExploreEntriesWithGmgnDiscoveryV1 } from
-  "../../../lib/market-data/gmgn-canonical-ranking";
+import {
+  canonicalTokenSupplyHydrationRequiredV1,
+  hydrateMissingCanonicalTokenSupplyBoundedV1,
+} from "../../../lib/market-data/canonical-token-supply.server";
+import { exploreEntryMarketIdentitiesV1 } from
+  "../../../lib/market-data/explore-market-identities";
+import {
+  gmgnTokenInfoFallbackEntryV1,
+  rankCanonicalExploreEntriesWithGmgnDiscoveryV1,
+  rankCanonicalExploreEntriesWithGmgnSearchV1,
+  rankCanonicalExploreMarketCapEntriesWithGmgnV1,
+  rankCanonicalExploreMarketCapPrimaryWithGmgnV1,
+} from "../../../lib/market-data/gmgn-canonical-ranking";
 import {
   readGmgnEthereumHotSearchesV1,
+  readGmgnEthereumSearchV1,
   readGmgnEthereumTrendingV1,
 } from "../../../lib/market-data/gmgn-discovery.server";
-import type { GmgnDiscoverySnapshotV1 } from
-  "../../../lib/market-data/gmgn-discovery-v1";
+import {
+  GMGN_TRENDING_MAXIMUM_LIMIT,
+  normalizeGmgnSearchQueryV1,
+  type GmgnDiscoverySnapshotV1,
+  type GmgnSearchSnapshotV1,
+} from "../../../lib/market-data/gmgn-discovery-v1";
+import {
+  gmgnVisibleMarketEntryEligibleV1,
+  readGmgnExploreSnapshotsV1,
+} from "../../../lib/market-data/gmgn.server";
 import {
   exploreMarketProviderHeaderV1,
   exploreMarketPriceSourcesV1,
@@ -62,6 +82,10 @@ import { tryParseViewChainId } from "../../../lib/view-chain";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 const FAST_LANE_REQUEST_BUDGET_MS = 8_000;
+const GMGN_MARKET_CAP_HYDRATION_LIMIT = GMGN_TRENDING_MAXIMUM_LIMIT;
+const MARKET_CAP_SUPPLY_HYDRATION_LIMIT = 20;
+const MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS = 1_800;
+const GMGN_MARKET_CAP_HYDRATION_RESERVE_MS = 2_500;
 const CLASSIC_EXCLUSIONS = Object.freeze([
   "classic-v1",
   "classic-v2",
@@ -156,6 +180,31 @@ function entryChainId(entry: ExploreEntry): string | null {
   if (entry.exploreKind === "custom-project") return entry.chainId;
   const [chainId] = entry.id.split(":", 1);
   return /^\d+$/u.test(chainId ?? "") ? chainId : null;
+}
+
+function exactExploreMarketIdentityV1(
+  candidate: ExploreEntry,
+  canonical: ExploreEntry,
+): boolean {
+  if (
+    candidate.id !== canonical.id ||
+    candidate.exploreKind !== canonical.exploreKind ||
+    candidate.tokenAddress?.toLowerCase() !==
+      canonical.tokenAddress?.toLowerCase()
+  ) return false;
+  const key = (entry: ExploreEntry) => exploreEntryMarketIdentitiesV1(entry)
+    .map((identity) => [
+      identity.chainId,
+      identity.protocol,
+      identity.tokenAddress,
+      identity.poolId,
+      identity.quoteAddress,
+    ].join(":"));
+  const candidateKeys = key(candidate);
+  const canonicalKeys = key(canonical);
+  return canonicalKeys.length > 0 &&
+    candidateKeys.length === canonicalKeys.length &&
+    candidateKeys.every((value, index) => value === canonicalKeys[index]);
 }
 
 function entryLaunchOrder(
@@ -328,10 +377,148 @@ export function paginateExploreEntriesV1(
   return paginateEntries(sortExploreEntries(filtered, input.sort), input);
 }
 
+export type ExploreSearchRankingV1 = Readonly<{
+  schemaVersion: "programmable.explore-search-ranking.v1";
+  provider: "gmgn";
+  requested: "search";
+  orderBy: "weight";
+  rankingCommitment: `sha256:${string}`;
+  status: "complete" | "partial" | "unavailable";
+  applied:
+    | "gmgn-canonical-search-with-local-match-fallback"
+    | "local-match-order";
+  observedTokenCount: number;
+  matchedTokenCount: number;
+  matchedUniqueTokenCount: number;
+  canonicalMatchCount: number;
+  canonicalMatchTokenCount: number;
+  unobservedCanonicalMatchCount: number;
+  providerOnlyCanonicalTokenCount: number;
+  foreignTokenCount: number;
+  discardedProviderItemCount: number;
+  duplicateProviderItemCount: number;
+  canonicalAddressCoverageBps: number;
+  asOfTime: string | null;
+}>;
+
+function localSearchMatchPriorityV1(
+  entry: ExploreEntry,
+  query: string,
+): number {
+  const normalized = normalizeGmgnSearchQueryV1(query);
+  if (normalized === null) return 1;
+  const exact = [
+    entry.name,
+    entry.symbol,
+    entry.tokenAddress,
+    ...(entry.exploreKind === "custom-project" ? [entry.modelId] : []),
+  ].some((value) => typeof value === "string" &&
+    value.toLowerCase() === normalized);
+  return exact ? 0 : 1;
+}
+
+export function rankExploreSearchEntriesV1(
+  entries: readonly ExploreEntry[],
+  snapshot: GmgnSearchSnapshotV1 | null,
+  input: Readonly<{
+    query: string;
+    socials: "yes" | "no" | null;
+    model: "classic" | "custom" | null;
+    fallbackSort: ExploreSort;
+    now?: Date;
+  }>,
+): Readonly<{
+  entries: readonly ExploreEntry[];
+  search: ExploreSearchRankingV1;
+}> {
+  const canonicalUniverse = filterExploreEntries(
+    entries,
+    "",
+    input.socials,
+    input.model,
+  );
+  const localMatches = sortExploreEntries(
+    filterExploreEntries(
+      canonicalUniverse,
+      input.query,
+      null,
+      null,
+    ),
+    input.fallbackSort,
+  ).map((entry, stableIndex) => ({ entry, stableIndex }))
+    .sort((left, right) =>
+      localSearchMatchPriorityV1(left.entry, input.query) -
+        localSearchMatchPriorityV1(right.entry, input.query) ||
+      left.stableIndex - right.stableIndex
+    )
+    .map(({ entry }) => entry);
+  const ranked = rankCanonicalExploreEntriesWithGmgnSearchV1(
+    canonicalUniverse,
+    localMatches,
+    snapshot,
+    input.query,
+    input.now ?? new Date(),
+  );
+  const coverage = ranked.coverage;
+  const matched = coverage.gmgnMatchedEntryCount;
+  const usableSnapshot = coverage.gmgnSnapshotCount === 1 ? snapshot : null;
+  const status = usableSnapshot === null
+    ? "unavailable" as const
+    : matched === ranked.entries.length
+      ? "complete" as const
+      : "partial" as const;
+  const rankingCommitment = canonicalSha256(
+    "programmable.explore-search-ranking-commitment.v1",
+    {
+      query: normalizeGmgnSearchQueryV1(input.query),
+      providerSnapshot: usableSnapshot === null
+        ? null
+        : {
+            fetchedAt: usableSnapshot.fetchedAt,
+            orderBy: usableSnapshot.orderBy,
+            providerItemCount: usableSnapshot.providerItemCount,
+          },
+      orderedCanonicalMatches: ranked.entries.map((entry, index) => ({
+        index,
+        id: entry.id,
+        tokenAddress: entry.tokenAddress?.toLowerCase() ?? null,
+      })),
+    },
+  );
+  return Object.freeze({
+    entries: ranked.entries,
+    search: Object.freeze({
+      schemaVersion: "programmable.explore-search-ranking.v1",
+      provider: "gmgn",
+      requested: "search",
+      orderBy: "weight",
+      rankingCommitment,
+      status,
+      applied: matched > 0
+        ? "gmgn-canonical-search-with-local-match-fallback"
+        : "local-match-order",
+      observedTokenCount: coverage.gmgnObservedUniqueTokenCount,
+      matchedTokenCount: matched,
+      matchedUniqueTokenCount: coverage.gmgnMatchedUniqueTokenCount,
+      canonicalMatchCount: coverage.canonicalMatchEntryCount,
+      canonicalMatchTokenCount: coverage.canonicalMatchTokenCount,
+      unobservedCanonicalMatchCount: coverage.unobservedLocalMatchEntryCount,
+      providerOnlyCanonicalTokenCount:
+        coverage.providerOnlyCanonicalTokenCount,
+      foreignTokenCount: coverage.foreignGmgnTokenCount,
+      discardedProviderItemCount: coverage.discardedProviderItemCount,
+      duplicateProviderItemCount: coverage.duplicateGmgnTokenCount,
+      canonicalAddressCoverageBps: coverage.canonicalAddressCoverageBps,
+      asOfTime: usableSnapshot?.fetchedAt ?? null,
+    }),
+  });
+}
+
 export type ExploreDiscoveryRankingV1 = Readonly<{
   schemaVersion: "programmable.explore-discovery-ranking.v1";
   provider: "gmgn";
   requested: "trending";
+  rankingCommitment: `sha256:${string}`;
   status: "complete" | "partial" | "unavailable";
   applied: "gmgn-ranked-with-launch-order-fallback" | "launch-order";
   rankInterval: "1h";
@@ -339,12 +526,70 @@ export type ExploreDiscoveryRankingV1 = Readonly<{
   snapshotCount: number;
   observedTokenCount: number;
   matchedTokenCount: number;
+  matchedUniqueTokenCount: number;
   canonicalEntryCount: number;
   canonicalTokenCount: number;
   unobservedCanonicalEntryCount: number;
   canonicalAddressCoverageBps: number;
   foreignTokenCount: number;
   discardedProviderItemCount: number;
+  asOfTime: string | null;
+}>;
+
+export type ExploreMarketCapRankingV1 = Readonly<{
+  schemaVersion: "programmable.explore-market-cap-ranking.v1";
+  requested: "market-cap";
+  direction: "asc" | "desc";
+  primaryProvider: "gmgn";
+  source:
+    | "gmgn"
+    | "gmgn+dexscreener"
+    | "dexscreener"
+    | "canonical-launch-order";
+  fallbackProvider: "dexscreener";
+  rankingCommitment: `sha256:${string}`;
+  status: "complete" | "partial" | "unavailable";
+  gmgnStatus: "complete" | "partial" | "unavailable";
+  applied:
+    | "gmgn-market-cap"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv-then-launch-order"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv"
+    | "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+    | "gmgn-market-cap-then-dexscreener-fdv"
+    | "gmgn-market-cap-then-dexscreener-fdv-then-launch-order"
+    | "gmgn-market-cap-then-launch-order"
+    | "gmgn-token-info-fdv"
+    | "gmgn-token-info-fdv-then-launch-order"
+    | "gmgn-token-info-fdv-then-dexscreener-fdv"
+    | "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+    | "fdv"
+    | "qualified-fdv-then-launch-order"
+    | "launch-order";
+  metricOrder:
+    "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order";
+  rankInterval: "1h";
+  rankLimit: 100;
+  observedTokenCount: number;
+  matchedTokenCount: number;
+  matchedUniqueTokenCount: number;
+  canonicalEntryCount: number;
+  canonicalTokenCount: number;
+  unobservedCanonicalEntryCount: number;
+  canonicalAddressCoverageBps: number;
+  foreignTokenCount: number;
+  discardedProviderItemCount: number;
+  gmgnHydrationLimit: number;
+  gmgnHydrationEligibleCount: number;
+  gmgnHydrationRequestedCount: number;
+  gmgnHydrationObservedCount: number;
+  gmgnHydrationQualifiedCount: number;
+  gmgnHydrationDeferredCount: number;
+  fallbackRequestedCount: number;
+  fallbackQualifiedCount: number;
+  canonicalTailCount: number;
+  qualifiedCount: number;
+  totalCount: number;
   asOfTime: string | null;
 }>;
 
@@ -386,12 +631,32 @@ export function paginateTrendingExploreEntriesV1(
     .map((snapshot) => snapshot.fetchedAt)
     .filter((value) => Number.isFinite(Date.parse(value)))
     .sort();
+  const rankingCommitment = canonicalSha256(
+    "programmable.explore-discovery-ranking-commitment.v1",
+    {
+      canonicalEntryCount: coverage.canonicalEntryCount,
+      matches: ranked.rows.flatMap((row) =>
+        row.gmgn === null || row.tokenAddress === null
+          ? []
+          : [{
+              canonicalIndex: row.canonicalIndex,
+              tokenAddress: row.tokenAddress,
+              snapshotKind: row.gmgn.kind,
+              snapshotInterval: row.gmgn.interval,
+              snapshotOrderBy: row.gmgn.orderBy,
+              snapshotDirection: row.gmgn.direction,
+              snapshotFetchedAt: row.gmgn.fetchedAt,
+            }]
+      ),
+    },
+  );
   return {
     paginated: paginateEntries(ranked.entries, input),
     discovery: {
       schemaVersion: "programmable.explore-discovery-ranking.v1",
       provider: "gmgn",
       requested: "trending",
+      rankingCommitment,
       status,
       applied: matched > 0
         ? "gmgn-ranked-with-launch-order-fallback"
@@ -401,6 +666,7 @@ export function paginateTrendingExploreEntriesV1(
       snapshotCount: coverage.gmgnSnapshotCount,
       observedTokenCount: coverage.gmgnObservedUniqueTokenCount,
       matchedTokenCount: matched,
+      matchedUniqueTokenCount: coverage.gmgnMatchedUniqueTokenCount,
       canonicalEntryCount: coverage.canonicalEntryCount,
       canonicalTokenCount: coverage.canonicalUniqueTokenCount,
       unobservedCanonicalEntryCount: coverage.unobservedCanonicalEntryCount,
@@ -408,6 +674,172 @@ export function paginateTrendingExploreEntriesV1(
       foreignTokenCount: coverage.foreignGmgnTokenCount,
       discardedProviderItemCount: coverage.discardedProviderItemCount,
       asOfTime: acceptedTimes.at(-1) ?? null,
+    },
+  };
+}
+
+function marketCapAppliedV1(input: Readonly<{
+  totalCount: number;
+  gmgnMatchedCount: number;
+  gmgnHydrationQualifiedCount: number;
+  fallbackQualifiedCount: number;
+}>): ExploreMarketCapRankingV1["applied"] {
+  if (input.totalCount === 0) return "launch-order";
+  const hasRank = input.gmgnMatchedCount > 0;
+  const hasHydration = input.gmgnHydrationQualifiedCount > 0;
+  const hasFallback = input.fallbackQualifiedCount > 0;
+  const hasTail = input.gmgnMatchedCount +
+      input.gmgnHydrationQualifiedCount + input.fallbackQualifiedCount <
+    input.totalCount;
+  if (hasRank && hasHydration && hasFallback) {
+    return hasTail
+      ? "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv";
+  }
+  if (hasRank && hasHydration) {
+    return hasTail
+      ? "gmgn-market-cap-then-gmgn-token-info-fdv-then-launch-order"
+      : "gmgn-market-cap-then-gmgn-token-info-fdv";
+  }
+  if (hasRank && hasFallback) {
+    return hasTail
+      ? "gmgn-market-cap-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-market-cap-then-dexscreener-fdv";
+  }
+  if (hasRank) {
+    return input.gmgnMatchedCount === input.totalCount
+      ? "gmgn-market-cap"
+      : "gmgn-market-cap-then-launch-order";
+  }
+  if (hasHydration && hasFallback) {
+    return hasTail
+      ? "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order"
+      : "gmgn-token-info-fdv-then-dexscreener-fdv";
+  }
+  if (hasHydration) {
+    return hasTail
+      ? "gmgn-token-info-fdv-then-launch-order"
+      : "gmgn-token-info-fdv";
+  }
+  if (hasFallback) {
+    return hasTail
+      ? "qualified-fdv-then-launch-order"
+      : "fdv";
+  }
+  return "launch-order";
+}
+
+export function exploreMarketCapRankingV1(
+  canonicalEntries: readonly ExploreEntry[],
+  snapshot: GmgnDiscoverySnapshotV1 | null,
+  fallback: Parameters<
+    typeof rankCanonicalExploreMarketCapEntriesWithGmgnV1
+  >[2],
+  direction: "asc" | "desc",
+  now = new Date(),
+): Readonly<{
+  orderedEntries: readonly ExploreEntry[];
+  ranking: ExploreMarketCapRankingV1;
+}> {
+  const hybrid = rankCanonicalExploreMarketCapEntriesWithGmgnV1(
+    canonicalEntries,
+    snapshot === null ? [] : [snapshot],
+    fallback,
+    direction,
+    now,
+  );
+  const coverage = hybrid.coverage;
+  const matched = coverage.gmgnMatchedEntryCount;
+  const qualifiedCount = matched + hybrid.gmgnHydrationQualifiedEntryCount +
+    hybrid.fallbackQualifiedEntryCount;
+  const status = qualifiedCount === 0 || canonicalEntries.length === 0
+    ? "unavailable" as const
+    : qualifiedCount === canonicalEntries.length
+      ? "complete" as const
+      : "partial" as const;
+  const gmgnQualifiedCount = matched + hybrid.gmgnHydrationQualifiedEntryCount;
+  const gmgnStatus = gmgnQualifiedCount === 0 || canonicalEntries.length === 0
+    ? "unavailable" as const
+    : gmgnQualifiedCount === canonicalEntries.length
+      ? "complete" as const
+      : "partial" as const;
+  const source = gmgnQualifiedCount > 0
+    ? hybrid.fallbackQualifiedEntryCount > 0
+      ? "gmgn+dexscreener" as const
+      : "gmgn" as const
+    : hybrid.fallbackQualifiedEntryCount > 0
+      ? "dexscreener" as const
+      : "canonical-launch-order" as const;
+  const rankingCommitment = canonicalSha256(
+    "programmable.explore-market-cap-ranking-commitment.v1",
+    {
+      direction,
+      gmgnSnapshot: snapshot === null || coverage.gmgnSnapshotCount === 0
+        ? null
+        : {
+            interval: snapshot.interval,
+            orderBy: snapshot.orderBy,
+            direction: snapshot.direction,
+            requestedLimit: snapshot.requestedLimit,
+            fetchedAt: snapshot.fetchedAt,
+          },
+      orderedCanonicalEntries: hybrid.rows.map((row, index) => ({
+        index,
+        id: row.entry.id,
+        tokenAddress: row.tokenAddress,
+        source: row.orderingSource,
+        valueWad: row.orderingValueWad,
+        asOfTime: row.orderingAsOfTime,
+      })),
+    },
+  );
+  return {
+    orderedEntries: hybrid.entries,
+    ranking: {
+      schemaVersion: "programmable.explore-market-cap-ranking.v1",
+      requested: "market-cap",
+      direction,
+      primaryProvider: "gmgn",
+      source,
+      fallbackProvider: "dexscreener",
+      rankingCommitment,
+      status,
+      gmgnStatus,
+      applied: marketCapAppliedV1({
+        totalCount: canonicalEntries.length,
+        gmgnMatchedCount: matched,
+        gmgnHydrationQualifiedCount:
+          hybrid.gmgnHydrationQualifiedEntryCount,
+        fallbackQualifiedCount: hybrid.fallbackQualifiedEntryCount,
+      }),
+      metricOrder:
+        "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order",
+      rankInterval: "1h",
+      rankLimit: 100,
+      observedTokenCount: coverage.gmgnObservedUniqueTokenCount,
+      matchedTokenCount: matched,
+      matchedUniqueTokenCount: coverage.gmgnMatchedUniqueTokenCount,
+      canonicalEntryCount: coverage.canonicalEntryCount,
+      canonicalTokenCount: coverage.canonicalUniqueTokenCount,
+      unobservedCanonicalEntryCount: coverage.unobservedCanonicalEntryCount,
+      canonicalAddressCoverageBps: coverage.canonicalAddressCoverageBps,
+      foreignTokenCount: coverage.foreignGmgnTokenCount,
+      discardedProviderItemCount: coverage.discardedProviderItemCount,
+      gmgnHydrationLimit: hybrid.gmgnHydrationLimit,
+      gmgnHydrationEligibleCount: hybrid.gmgnHydrationEligibleEntryCount,
+      gmgnHydrationRequestedCount: hybrid.gmgnHydrationRequestedEntryCount,
+      gmgnHydrationObservedCount: hybrid.gmgnHydrationAcceptedEntryCount,
+      gmgnHydrationQualifiedCount: hybrid.gmgnHydrationQualifiedEntryCount,
+      gmgnHydrationDeferredCount: hybrid.gmgnHydrationDeferredEntryCount,
+      fallbackRequestedCount: hybrid.fallbackRequestedEntryCount,
+      fallbackQualifiedCount: hybrid.fallbackQualifiedEntryCount,
+      canonicalTailCount: hybrid.canonicalTailEntryCount,
+      qualifiedCount,
+      totalCount: canonicalEntries.length,
+      asOfTime: hybrid.rows.map((row) => row.orderingAsOfTime)
+        .filter((value): value is string => value !== null)
+        .sort()
+        .at(-1) ?? null,
     },
   };
 }
@@ -447,6 +879,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const query = search.get("q")?.trim() ?? "";
+  if (query !== "" && normalizeGmgnSearchQueryV1(query) === null) {
+    return NextResponse.json(
+      { error: "Unsupported search query" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   const chainValue = search.get("chain");
   const chain = chainValue === null ? 1 : tryParseViewChainId(chainValue);
   if (chain === null) {
@@ -480,7 +920,7 @@ export async function GET(request: NextRequest) {
         total: 0,
         totalPages: 0,
         sort: requestedSort,
-        query: search.get("q")?.trim() ?? "",
+        query,
       },
       {
         headers: {
@@ -496,7 +936,7 @@ export async function GET(request: NextRequest) {
   try {
     const options = {
       chain,
-      query: search.get("q")?.trim() ?? "",
+      query,
       sort: requestedSort,
       page: integerQuery(search.get("page"), 1),
       pageSize: integerQuery(search.get("limit"), 9),
@@ -679,36 +1119,26 @@ export async function GET(request: NextRequest) {
       includedSources.add("registry.custom-launched");
     }
     if (routerAvailable) includedSources.add(ROUTER_CUSTOM_LAUNCH_SOURCE);
+    const searchRead: Promise<GmgnSearchSnapshotV1 | null> =
+      options.query === ""
+        ? Promise.resolve(null)
+        : readGmgnEthereumSearchV1(options.query, {
+            signal: readSignal,
+            deadlineMs,
+          }).catch(() => null);
     let paginated: ReturnType<typeof paginateExploreEntriesV1>;
     let marketRead: ExploreMarketReadV1;
-    let marketQualifiedEntryCount = 0;
+    let marketCapRanking: ExploreMarketCapRankingV1 | null = null;
     let discovery: ExploreDiscoveryRankingV1 | null = null;
+    let searchRanking: ExploreSearchRankingV1 | null = null;
     if (options.sort === "market-cap" || options.sort === "market-cap-asc") {
-      const filtered = filterExploreEntries(
+      const canonicalFilterUniverse = filterExploreEntries(
         presentedPublicEntries,
-        options.query,
+        "",
         options.socials,
         options.model,
       );
-      // Market-cap ranking and displayed FDV remain one coherent Dexscreener
-      // snapshot. GMGN's one-token endpoint enriches only non-market-cap pages
-      // and single-token detail reads.
-      const valued = await readDexscreenerExploreEntriesV1(filtered, {
-        signal: readSignal,
-        deadlineMs,
-      });
-      marketRead = valued.marketRead;
-      marketQualifiedEntryCount = valued.entries.filter(
-        (entry) => valuationSortValue(entry) !== null,
-      ).length;
-      paginated = paginateExploreEntriesV1(valued.entries, {
-        ...options,
-        query: "",
-        socials: null,
-        model: null,
-      });
-    } else if (options.sort === "trending") {
-      const filteredNewest = sortExploreEntries(
+      const localFilteredNewest = sortExploreEntries(
         filterExploreEntries(
           presentedPublicEntries,
           options.query,
@@ -717,12 +1147,178 @@ export async function GET(request: NextRequest) {
         ),
         "newest",
       );
+      const direction = options.sort === "market-cap" ? "desc" : "asc";
+      const rankRead = canonicalFilterUniverse.length === 0
+        ? Promise.resolve(null)
+        : readGmgnEthereumTrendingV1({
+            interval: "1h",
+            limit: 100,
+            orderBy: "marketcap",
+            direction,
+          }, {
+            signal: readSignal,
+            deadlineMs,
+          }).catch(() => null);
+      const [rankCandidate, searchSnapshot] = await Promise.all([
+        rankRead,
+        searchRead,
+      ]);
+      const searchResult = options.query === ""
+        ? null
+        : rankExploreSearchEntriesV1(
+            presentedPublicEntries,
+            searchSnapshot,
+            {
+              query: options.query,
+              socials: options.socials,
+              model: options.model,
+              fallbackSort: "newest",
+            },
+          );
+      if (searchResult !== null) searchRanking = searchResult.search;
+      const filteredNewest = searchResult?.entries ?? localFilteredNewest;
+      const rank = rankCandidate?.kind === "trending" &&
+          rankCandidate.orderBy === "marketcap" &&
+          rankCandidate.direction === direction
+        ? rankCandidate
+        : null;
+      const marketCapNow = new Date();
+      const primary = rankCanonicalExploreMarketCapPrimaryWithGmgnV1(
+        filteredNewest,
+        rank === null ? [] : [rank],
+        direction,
+        marketCapNow,
+      );
+      const unobserved = primary.rows.flatMap((row) =>
+        row.gmgn === null ? [row.entry] : []
+      );
+      const supplyRequested = unobserved.filter(
+        canonicalTokenSupplyHydrationRequiredV1,
+      ).slice(0, MARKET_CAP_SUPPLY_HYDRATION_LIMIT);
+      const hydratedSupply = supplyRequested.length === 0
+        ? []
+        : await hydrateMissingCanonicalTokenSupplyBoundedV1(
+            supplyRequested,
+            {
+              signal: readSignal,
+              deadlineMs: deadlineMs - GMGN_MARKET_CAP_HYDRATION_RESERVE_MS,
+              maximumDurationMs: MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS,
+            },
+          ).catch(() => supplyRequested);
+      const hydratedSupplyById = new Map<string, ExploreEntry>();
+      for (const [index, original] of supplyRequested.entries()) {
+        const candidate = hydratedSupply[index];
+        if (
+          candidate !== undefined &&
+          !canonicalTokenSupplyHydrationRequiredV1(candidate) &&
+          exactExploreMarketIdentityV1(candidate, original)
+        ) hydratedSupplyById.set(original.id, candidate);
+      }
+      const hydrationUniverse = unobserved.map((entry) =>
+        hydratedSupplyById.get(entry.id) ?? entry
+      );
+      const gmgnHydrationEligible = hydrationUniverse.filter(
+        gmgnVisibleMarketEntryEligibleV1,
+      );
+      const gmgnRequested = gmgnHydrationEligible.slice(
+        0,
+        GMGN_MARKET_CAP_HYDRATION_LIMIT,
+      );
+      const gmgnHydrationDeadlineMs = deadlineMs -
+        GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
+      const gmgnSnapshots = gmgnRequested.length > 0 &&
+          gmgnHydrationDeadlineMs > Date.now()
+        ? await readGmgnExploreSnapshotsV1(gmgnRequested, {
+            signal: readSignal,
+            deadlineMs: gmgnHydrationDeadlineMs,
+          }).catch(() => new Map())
+        : new Map();
+      const gmgnHydratedEntries = gmgnRequested.flatMap((entry) => {
+        const snapshot = gmgnSnapshots.get(entry.id);
+        if (snapshot === undefined) return [];
+        const hydrated = gmgnTokenInfoFallbackEntryV1(
+          entry,
+          snapshot,
+          new Date(),
+        );
+        return hydrated === null ? [] : [hydrated];
+      });
+      const gmgnQualifiedIds = new Set(gmgnHydratedEntries.flatMap((entry) =>
+        valuationSortValue(entry) === null ? [] : [entry.id]
+      ));
+      const dexscreenerRequested = hydrationUniverse.filter(
+        (entry) => !gmgnQualifiedIds.has(entry.id),
+      );
+      const fallback = await readDexscreenerExploreEntriesV1(
+        dexscreenerRequested,
+        {
+          signal: readSignal,
+          deadlineMs,
+        },
+      );
+      const ranked = exploreMarketCapRankingV1(
+        filteredNewest,
+        rank,
+        {
+          gmgnHydrationLimit: GMGN_MARKET_CAP_HYDRATION_LIMIT,
+          gmgnHydrationEligibleEntryCount: gmgnHydrationEligible.length,
+          gmgnRequestedEntries: gmgnRequested,
+          gmgnEntries: gmgnHydratedEntries,
+          dexscreenerRequestedEntries: dexscreenerRequested,
+          dexscreenerEntries: fallback.entries,
+        },
+        direction,
+        new Date(),
+      );
+      marketCapRanking = ranked.ranking;
+      const identityPage = paginateEntries(ranked.orderedEntries, options);
+      const valued = await readExploreMarketEntriesV1(
+        identityPage.tokens,
+        { signal: readSignal, deadlineMs },
+      );
+      marketRead = valued.marketRead;
+      paginated = { ...identityPage, tokens: [...valued.entries] };
+    } else if (options.sort === "trending") {
+      const canonicalFilterUniverse = filterExploreEntries(
+        presentedPublicEntries,
+        "",
+        options.socials,
+        options.model,
+      );
+      const localFilteredNewest = sortExploreEntries(
+        filterExploreEntries(
+          presentedPublicEntries,
+          options.query,
+          options.socials,
+          options.model,
+        ),
+        "newest",
+      );
+      const [rank, searchSnapshot] = await Promise.all([
+        canonicalFilterUniverse.length === 0
+          ? Promise.resolve(null)
+          : readGmgnEthereumTrendingV1(
+              { interval: "1h", limit: 100 },
+              { signal: readSignal, deadlineMs },
+            ).catch(() => null),
+        searchRead,
+      ]);
+      const searchResult = options.query === ""
+        ? null
+        : rankExploreSearchEntriesV1(
+            presentedPublicEntries,
+            searchSnapshot,
+            {
+              query: options.query,
+              socials: options.socials,
+              model: options.model,
+              fallbackSort: "newest",
+            },
+          );
+      if (searchResult !== null) searchRanking = searchResult.search;
+      const filteredNewest = searchResult?.entries ?? localFilteredNewest;
       const snapshots: GmgnDiscoverySnapshotV1[] = [];
       if (filteredNewest.length > 0) {
-        const rank = await readGmgnEthereumTrendingV1(
-          { interval: "1h", limit: 100 },
-          { signal: readSignal, deadlineMs },
-        ).catch(() => null);
         if (rank !== null) snapshots.push(rank);
         const rankCoverage = rankCanonicalExploreEntriesWithGmgnDiscoveryV1(
           filteredNewest,
@@ -764,10 +1360,23 @@ export async function GET(request: NextRequest) {
         tokens: [...valued.entries],
       };
     } else {
-      const identityPage = paginateExploreEntriesV1(
-        presentedPublicEntries,
-        options,
-      );
+      const searchSnapshot = await searchRead;
+      const searchResult = options.query === ""
+        ? null
+        : rankExploreSearchEntriesV1(
+            presentedPublicEntries,
+            searchSnapshot,
+            {
+              query: options.query,
+              socials: options.socials,
+              model: options.model,
+              fallbackSort: options.sort,
+            },
+          );
+      if (searchResult !== null) searchRanking = searchResult.search;
+      const identityPage = searchResult === null
+        ? paginateExploreEntriesV1(presentedPublicEntries, options)
+        : paginateEntries(searchResult.entries, options);
       const valued = await readExploreMarketEntriesV1(
         identityPage.tokens,
         { signal: readSignal, deadlineMs },
@@ -789,14 +1398,6 @@ export async function GET(request: NextRequest) {
     });
     const marketSort = options.sort === "market-cap" ||
       options.sort === "market-cap-asc";
-    const qualifiedCount = marketSort
-      ? marketQualifiedEntryCount
-      : pageEntries.filter((entry) => valuationSortValue(entry) !== null).length;
-    const rankingStatus = qualifiedCount === 0
-      ? "unavailable" as const
-      : qualifiedCount === paginated.total
-        ? "complete" as const
-        : "partial" as const;
     const marketProvider = exploreMarketProviderHeaderV1(marketRead);
     const marketSources = exploreMarketSourcesV1(marketRead);
     const priceSources = exploreMarketPriceSourcesV1(marketRead);
@@ -811,11 +1412,14 @@ export async function GET(request: NextRequest) {
         query: options.query,
         sortMetric: options.sort === "trending"
           ? "gmgn-trending" as const
-          : "fdv" as const,
+          : marketSort
+            ? "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback" as const
+            : "fdv" as const,
         dataQuality,
         snapshot: null,
         marketRead,
         ...(discovery === null ? {} : { discovery }),
+        ...(searchRanking === null ? {} : { search: searchRanking }),
         catalog: {
           source: catalog?.source ?? ("envio-classic-v3" as const),
           launchSource,
@@ -863,21 +1467,7 @@ export async function GET(request: NextRequest) {
               : {}),
           },
         },
-        ...(marketSort
-          ? {
-              ranking: {
-                status: rankingStatus,
-                requested: "fdv" as const,
-                applied: rankingStatus === "complete"
-                  ? "fdv" as const
-                  : rankingStatus === "partial"
-                    ? "qualified-fdv-then-launch-order" as const
-                    : "launch-order" as const,
-                qualifiedCount,
-                totalCount: paginated.total,
-              },
-            }
-          : {}),
+        ...(marketCapRanking === null ? {} : { ranking: marketCapRanking }),
       },
       {
         headers: {
@@ -889,6 +1479,15 @@ export async function GET(request: NextRequest) {
           "X-Programmable-Read-Source": `${launchSource}+${marketProvider}${
             discovery !== null && discovery.status !== "unavailable"
               ? "+gmgn-discovery"
+              : ""
+          }${
+            marketCapRanking !== null &&
+              marketCapRanking.gmgnStatus !== "unavailable"
+              ? "+gmgn-ranking"
+              : ""
+          }${
+            searchRanking !== null && searchRanking.asOfTime !== null
+              ? "+gmgn-search"
               : ""
           }`,
           "X-Programmable-Market-Read-Status": marketRead.status,
@@ -902,6 +1501,34 @@ export async function GET(request: NextRequest) {
                 "X-Programmable-Discovery-Read-Status": discovery.status,
                 "X-Programmable-Discovery-Matched-Count":
                   String(discovery.matchedTokenCount),
+                "X-Programmable-Discovery-Matched-Unique-Count":
+                  String(discovery.matchedUniqueTokenCount),
+                "X-Programmable-Discovery-Ranking-Commitment":
+                  discovery.rankingCommitment,
+              }),
+          ...(marketCapRanking === null
+            ? {}
+            : {
+                "X-Programmable-Ranking-Primary-Provider": "gmgn",
+                "X-Programmable-Ranking-Source": marketCapRanking.source,
+                "X-Programmable-Ranking-Read-Status":
+                  marketCapRanking.status,
+                "X-Programmable-Ranking-GMGN-Status":
+                  marketCapRanking.gmgnStatus,
+                "X-Programmable-Ranking-Commitment":
+                  marketCapRanking.rankingCommitment,
+              }),
+          ...(searchRanking === null
+            ? {}
+            : {
+                "X-Programmable-Search-Provider": "gmgn",
+                "X-Programmable-Search-Read-Status": searchRanking.status,
+                "X-Programmable-Search-Matched-Count":
+                  String(searchRanking.matchedTokenCount),
+                "X-Programmable-Search-Matched-Unique-Count":
+                  String(searchRanking.matchedUniqueTokenCount),
+                "X-Programmable-Search-Ranking-Commitment":
+                  searchRanking.rankingCommitment,
               }),
           ...(marketSources.length > 0
             ? {

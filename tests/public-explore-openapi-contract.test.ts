@@ -27,11 +27,22 @@ describe("public Explore OpenAPI contract", () => {
     expect(gmgnSchema).toMatchObject({
       properties: {
         source: { const: "gmgn" },
+        marketScope: { const: "token" },
+        poolAttribution: {
+          type: "string",
+          enum: ["exact", "unavailable"],
+        },
         identity: { $ref: "#/components/schemas/GmgnMarketIdentity" },
       },
       additionalProperties: false,
     });
-    expect(gmgnSchema.description).toContain("exact Programmable token");
+    expect(gmgnSchema.required).toEqual(expect.arrayContaining([
+      "marketScope",
+      "poolAttribution",
+    ]));
+    expect(gmgnSchema.description).toContain("GMGN token-level");
+    expect(gmgnSchema.description).toContain("20-byte pool locators");
+    expect(gmgnSchema.description).toContain("canonical request PoolId");
   });
 
   it("documents concrete Dexscreener and GMGN market-read variants", () => {
@@ -72,6 +83,96 @@ describe("public Explore OpenAPI contract", () => {
     expect(schemas.ExploreReadyListResponse.properties.marketRead).toEqual({
       $ref: "#/components/schemas/ExploreMarketRead",
     });
+  });
+
+  it("documents GMGN-primary market-cap ranking without claiming full coverage", () => {
+    const schema = programmablePublicOpenApi.components.schemas
+      .ExploreMarketCapRanking;
+    expect(schema).toMatchObject({
+      required: expect.arrayContaining([
+        "primaryProvider",
+        "source",
+        "rankingCommitment",
+        "status",
+        "gmgnStatus",
+        "matchedTokenCount",
+        "metricOrder",
+        "gmgnHydrationRequestedCount",
+        "gmgnHydrationQualifiedCount",
+        "fallbackRequestedCount",
+        "canonicalTailCount",
+      ]),
+      properties: {
+        requested: { const: "market-cap" },
+        primaryProvider: { const: "gmgn" },
+        fallbackProvider: { const: "dexscreener" },
+        rankingCommitment: {
+          type: "string",
+          pattern: "^sha256:[0-9a-f]{64}$",
+        },
+      },
+      additionalProperties: false,
+    });
+    expect(schema.description).toContain("never compared across tiers");
+    const ready = programmablePublicOpenApi.components.schemas
+      .ExploreReadyListResponse;
+    expect(ready.properties.ranking).toEqual({
+      $ref: "#/components/schemas/ExploreMarketCapRanking",
+    });
+    expect(ready.properties.sortMetric.enum).toContain(
+      "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback",
+    );
+    const headers = programmablePublicOpenApi.paths["/api/explore"].get
+      .responses["200"].headers;
+    expect(headers["X-Programmable-Ranking-Primary-Provider"].schema).toEqual({
+      const: "gmgn",
+    });
+    expect(headers["X-Programmable-Ranking-Commitment"].schema).toEqual({
+      type: "string",
+      pattern: "^sha256:[0-9a-f]{64}$",
+    });
+  });
+
+  it("documents canonical GMGN search intersection and headers", () => {
+    const schemas = programmablePublicOpenApi.components.schemas;
+    const response = programmablePublicOpenApi.paths["/api/explore"].get
+      .responses["200"];
+    const query = programmablePublicOpenApi.paths["/api/explore"].get
+      .parameters.find((parameter) => parameter.name === "q");
+
+    expect(query).toMatchObject({
+      schema: { type: "string", minLength: 1, maxLength: 100 },
+    });
+    expect(query?.description).toContain("foreign coins and wallet rows");
+    expect(schemas.ExploreReadyListResponse.properties.search).toEqual({
+      $ref: "#/components/schemas/ExploreSearchRanking",
+    });
+    expect(schemas.ExploreSearchRanking).toMatchObject({
+      required: expect.arrayContaining([
+        "rankingCommitment",
+        "matchedUniqueTokenCount",
+        "providerOnlyCanonicalTokenCount",
+        "duplicateProviderItemCount",
+      ]),
+      properties: {
+        provider: { const: "gmgn" },
+        requested: { const: "search" },
+        orderBy: { const: "weight" },
+      },
+      additionalProperties: false,
+    });
+    expect(schemas.ExploreSearchRanking.description).toContain(
+      "canonical Ethereum Programmable catalog",
+    );
+    expect(response.headers["X-Programmable-Search-Provider"].schema)
+      .toEqual({ const: "gmgn" });
+    expect(response.headers["X-Programmable-Search-Read-Status"].schema.enum)
+      .toEqual(["complete", "partial", "unavailable"]);
+    expect(response.headers["X-Programmable-Search-Ranking-Commitment"].schema)
+      .toEqual({
+        type: "string",
+        pattern: "^sha256:[0-9a-f]{64}$",
+      });
   });
 
   it("validates both provider reads and rejects cross-provider fields", () => {

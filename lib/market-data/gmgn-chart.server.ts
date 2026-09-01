@@ -19,6 +19,8 @@ import {
   type GmgnMarketChartRangeV1,
   type GmgnMarketChartV1,
 } from "./gmgn-chart-data-v1";
+import { gmgnEffectiveRequestsPerSecondV1 } from
+  "./gmgn-runtime-config.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "./explore-market-identities";
 import {
@@ -37,6 +39,7 @@ const GMGN_OBSERVED_DEFAULT_CANDLE_LIMIT = 100;
 const GMGN_MAXIMUM_RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const UINT256_MAX = (1n << 256n) - 1n;
 const USD_WAD = 10n ** 18n;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const BYTES32 = /^0x[0-9a-f]{64}$/u;
 const CANONICAL_INTEGER = /^(?:0|[1-9][0-9]*)$/u;
@@ -100,25 +103,28 @@ const chartInFlight = new Map<
 >();
 
 /**
- * GMGN's kline payload does not carry a pool or quote locator. The adapter
- * therefore accepts candles only after GMGN token info names the requested
- * canonical v4 pool as that token's biggest pool and proves the exact pair
- * and canonical token supply.
- * This is provider identity evidence at read time; it is not per-candle
- * onchain provenance, so any missing or changed locator fails soft to null.
+ * GMGN token_kline is queried by token address and does not carry a pool or
+ * quote locator. Its candles are therefore token-address-level OHLCV with no
+ * pool attribution. The adapter admits that series only after GMGN token info
+ * proves the exact token, quote, v4 exchange and canonical supply through
+ * GMGN's documented token-info fields. Production responses may carry either
+ * coherent 20-byte provider pool contract locators or the canonical bytes32
+ * v4 PoolId in both locator fields. Only the latter earns exact current
+ * admission attribution. The proof is never per-candle or historical pool
+ * provenance. Any mixed, missing or changed admission locator fails soft.
  */
 export async function readGmgnMarketChartV1(
   input: GmgnMarketChartReadV1,
   wait: GmgnChartReadWaitV1 = {},
 ): Promise<GmgnMarketChartV1 | null> {
   const apiKey = readApiKey();
-  const identity = exactExploreIdentity(input.entry, input.identity);
+  const identities = exactExploreIdentities(input.entry, input.identity);
   const canonicalSupply = canonicalSupplyV1(input.entry);
   const now = wait.now ?? (() => new Date());
   const initialNow = now();
   if (
     apiKey === null ||
-    identity === null ||
+    identities.length === 0 ||
     canonicalSupply === null ||
     !isGmgnMarketChartRangeV1(input.range) ||
     !Number.isFinite(initialNow.getTime())
@@ -130,7 +136,7 @@ export async function readGmgnMarketChartV1(
     initialNow,
   );
   if (window === null) return null;
-  const bindingKey = entryIdentityBindingKey(input.entry, identity);
+  const bindingKey = entryIdentitySetBindingKey(input.entry, identities);
   const cacheKey = [
     bindingKey,
     input.range,
@@ -147,7 +153,7 @@ export async function readGmgnMarketChartV1(
   const providerRead = (async () => {
     const proof = await readGmgnChartIdentityProofV1(
       input.entry,
-      identity,
+      identities,
       canonicalSupply,
       apiKey,
       providerWait,
@@ -157,7 +163,7 @@ export async function readGmgnMarketChartV1(
       "/v1/market/token_kline",
       {
         chain: "eth",
-        address: identity.tokenAddress,
+        address: identities[0]!.tokenAddress,
         resolution: window.resolution,
         from: String(window.from.getTime()),
         to: String(window.to.getTime()),
@@ -205,11 +211,28 @@ export function parseGmgnChartIdentityProofV1(
   canonicalSupply: CanonicalSupplyV1,
   verifiedAt: Date,
 ): GmgnChartIdentityProofV1 | null {
+  return parseGmgnChartIdentityProofForCanonicalSetV1(
+    response,
+    [expectedIdentity],
+    canonicalSupply,
+    verifiedAt,
+  );
+}
+
+export function parseGmgnChartIdentityProofForCanonicalSetV1(
+  response: unknown,
+  expectedIdentities: readonly MarketChartIdentityV1[],
+  canonicalSupply: CanonicalSupplyV1,
+  verifiedAt: Date,
+): GmgnChartIdentityProofV1 | null {
   const data = unwrapData(response);
+  const canonicalIdentities = canonicalAdmissionIdentitySetV1(
+    expectedIdentities,
+  );
   if (
     !hasExactOptionalEthereumChain(response) ||
     !hasExactOptionalEthereumChain(data) ||
-    !isMarketChartIdentityV1(expectedIdentity) ||
+    canonicalIdentities.length === 0 ||
     !isCanonicalSupplyV1(canonicalSupply) ||
     !Number.isFinite(verifiedAt.getTime()) ||
     !isRecord(data) ||
@@ -217,40 +240,36 @@ export function parseGmgnChartIdentityProofV1(
   ) return null;
   const pool = data.pool;
   const tokenAddress = canonicalAddress(data.address);
-  const poolId = canonicalBytes32(pool.pool_address);
-  const biggestPoolId = canonicalBytes32(data.biggest_pool_address);
   const quoteAddress = canonicalAddress(pool.quote_address);
-  const declaredBaseAddress = tokenLocatorAddress(
-    pool.base_address ?? pool.token_address,
+  const matchingIdentities = canonicalIdentities.filter((identity) =>
+    identity.chainId === "1" &&
+    identity.protocol === "uniswap_v4" &&
+    identity.tokenAddress === tokenAddress &&
+    identity.quoteAddress === quoteAddress
   );
-  const token0Address = tokenLocatorAddress(pool.token0_address);
-  const token1Address = tokenLocatorAddress(pool.token1_address);
+  const admission = selectTokenInfoAdmissionIdentityV1(
+    matchingIdentities,
+    pool.pool_address,
+    data.biggest_pool_address,
+  );
   if (
-    expectedIdentity.chainId !== "1" ||
-    expectedIdentity.protocol !== "uniswap_v4" ||
-    tokenAddress !== expectedIdentity.tokenAddress ||
-    poolId !== expectedIdentity.poolId ||
-    biggestPoolId !== expectedIdentity.poolId ||
-    quoteAddress !== expectedIdentity.quoteAddress ||
-    declaredBaseAddress !== expectedIdentity.tokenAddress ||
-    token0Address === null ||
-    token1Address === null ||
-    token0Address === token1Address ||
-    ![token0Address, token1Address].includes(expectedIdentity.tokenAddress) ||
-    ![token0Address, token1Address].includes(expectedIdentity.quoteAddress) ||
+    admission === null ||
     String(pool.exchange).toLowerCase() !== "uniswap_v4" ||
+    !poolBaseQuoteMatchesV1(pool, admission.identity) ||
     !providerSupplyMatchesCanonical(
       data.total_supply,
       canonicalSupply.raw,
       canonicalSupply.decimals,
     )
   ) return null;
-
+  // identity remains canonical route context. poolAttribution describes only
+  // the current token_info locator proof, never historical candle provenance.
   const proof: GmgnChartIdentityProofV1 = {
     schemaVersion: PROGRAMMABLE_GMGN_CHART_IDENTITY_PROOF_SCHEMA_VERSION,
     source: "gmgn-token-info",
     verifiedAt: verifiedAt.toISOString(),
-    identity: expectedIdentity,
+    identity: admission.identity,
+    poolAttribution: admission.poolAttribution,
     canonicalSupply: {
       totalSupplyRaw: canonicalSupply.raw.toString(),
       tokenDecimals: canonicalSupply.decimals,
@@ -331,6 +350,8 @@ export function parseGmgnKlineMarketChartV1(
   const chart: GmgnMarketChartV1 = {
     schemaVersion: PROGRAMMABLE_GMGN_MARKET_CHART_SCHEMA_VERSION,
     source: "gmgn",
+    seriesScope: "token",
+    poolAttribution: input.identityProof.poolAttribution,
     readStatus: "live",
     status,
     generatedAt: input.fetchedAt.toISOString(),
@@ -403,12 +424,12 @@ export function gmgnKlineResolutionForDurationV1(
 
 async function readGmgnChartIdentityProofV1(
   entry: ExploreEntry,
-  identity: MarketChartIdentityV1,
+  identities: readonly MarketChartIdentityV1[],
   canonicalSupply: CanonicalSupplyV1,
   apiKey: string,
   wait: GmgnChartProviderReadWaitV1,
 ): Promise<GmgnChartIdentityProofV1 | null> {
-  const key = entryIdentityBindingKey(entry, identity);
+  const key = entryIdentitySetBindingKey(entry, identities);
   const now = wait.now ?? (() => new Date());
   const nowMs = now().getTime();
   const cached = currentCacheValue(identityCache, key, nowMs);
@@ -418,14 +439,14 @@ async function readGmgnChartIdentityProofV1(
   const providerRead = (async () => {
     const response = await gmgnJsonRequest(
       "/v1/token/info",
-      { chain: "eth", address: identity.tokenAddress },
+      { chain: "eth", address: identities[0]!.tokenAddress },
       apiKey,
       wait,
     );
     const verifiedAt = now();
-    const proof = parseGmgnChartIdentityProofV1(
+    const proof = parseGmgnChartIdentityProofForCanonicalSetV1(
       response,
-      identity,
+      identities,
       canonicalSupply,
       verifiedAt,
     );
@@ -530,7 +551,7 @@ async function gmgnJsonRequest(
     }
     if (accountGate !== null) {
       const decision = await reserveProviderSlot(accountGate, {
-        requestsPerSecond: configuredRequestsPerSecond(),
+        requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
         cost: path === "/v1/market/token_kline" ? 2 : 1,
         deadlineMs: requestDeadlineMs,
         signal: wait.signal,
@@ -683,24 +704,27 @@ async function readBoundedResponseBytes(
   return output;
 }
 
-function exactExploreIdentity(
+function exactExploreIdentities(
   entry: ExploreEntry,
   identity: MarketChartIdentityV1,
-): MarketChartIdentityV1 | null {
+): readonly MarketChartIdentityV1[] {
   if (
     !isMarketChartIdentityV1(identity) ||
     !productionAuthorizedEntryV1(entry)
-  ) return null;
-  return exploreEntryMarketIdentitiesV1(entry).find((candidate) =>
-    sameIdentity(candidate, identity)
-  ) ?? null;
+  ) return [];
+  const identities = canonicalAdmissionIdentitySetV1(
+    exploreEntryMarketIdentitiesV1(entry),
+  );
+  return identities.some((candidate) => sameIdentity(candidate, identity))
+    ? identities
+    : [];
 }
 
 function productionAuthorizedEntryV1(entry: ExploreEntry): boolean {
   const provenance = entry.launchCategoryProvenance;
   if (entry.exploreKind === "custom-project") {
-    return provenance.source === "registry.custom-launched" ||
-      provenance.source === "canonical-launch-stamp-router";
+    return entry.chainId === "1" &&
+      provenance.source === "registry.custom-launched";
   }
   if (provenance.source === "canonical-launch-read-model") return true;
   const stamp = entry.launchStampProvenance;
@@ -714,7 +738,6 @@ function productionAuthorizedEntryV1(entry: ExploreEntry): boolean {
 
 function canonicalSupplyV1(entry: ExploreEntry): CanonicalSupplyV1 | null {
   if (
-    entry.exploreKind !== "token" ||
     typeof entry.totalSupplyRaw !== "string" ||
     !CANONICAL_INTEGER.test(entry.totalSupplyRaw) ||
     typeof entry.tokenDecimals !== "number" ||
@@ -760,6 +783,8 @@ function entryIdentityBindingKey(
         customProjectId: entry.customProjectId,
         customLaunchId: entry.customLaunchId,
         finalizedAt: entry.finalizedAt,
+        totalSupplyRaw: entry.totalSupplyRaw ?? null,
+        tokenDecimals: entry.tokenDecimals ?? null,
         markets: entry.markets
           .filter((market) => market.poolId?.toLowerCase() === identity.poolId)
           .map((market) => ({
@@ -776,6 +801,15 @@ function entryIdentityBindingKey(
     identityKey(identity),
     JSON.stringify(authority),
   ].join(":");
+}
+
+function entryIdentitySetBindingKey(
+  entry: ExploreEntry,
+  identities: readonly MarketChartIdentityV1[],
+): string {
+  return canonicalAdmissionIdentitySetV1(identities)
+    .map((identity) => entryIdentityBindingKey(entry, identity))
+    .join("||");
 }
 
 function identityKey(identity: MarketChartIdentityV1): string {
@@ -795,14 +829,61 @@ function sameIdentity(
   return identityKey(first) === identityKey(second);
 }
 
+function canonicalAdmissionIdentitySetV1(
+  identities: readonly MarketChartIdentityV1[],
+): readonly MarketChartIdentityV1[] {
+  if (
+    identities.length === 0 ||
+    identities.some((identity) => !isMarketChartIdentityV1(identity))
+  ) return [];
+  const byIdentity = new Map(identities.map((identity) => [
+    identityKey(identity),
+    identity,
+  ]));
+  return [...byIdentity.values()].sort((first, second) =>
+    identityKey(first).localeCompare(identityKey(second))
+  );
+}
+
+function selectTokenInfoAdmissionIdentityV1(
+  identities: readonly MarketChartIdentityV1[],
+  poolLocator: unknown,
+  biggestPoolLocator: unknown,
+): Readonly<{
+  identity: MarketChartIdentityV1;
+  poolAttribution: "exact" | "unavailable";
+}> | null {
+  const canonicalIdentities = canonicalAdmissionIdentitySetV1(identities);
+  if (canonicalIdentities.length === 0) return null;
+
+  const providerPoolAddress = canonicalAddress(poolLocator);
+  const biggestPoolAddress = canonicalAddress(biggestPoolLocator);
+  if (providerPoolAddress !== null || biggestPoolAddress !== null) {
+    const identity = canonicalIdentities[0]!;
+    return providerPoolAddress !== null &&
+        biggestPoolAddress === providerPoolAddress &&
+        providerPoolAddress !== ZERO_ADDRESS &&
+        providerPoolAddress !== identity.tokenAddress &&
+        canonicalIdentities.every((candidate) =>
+          providerPoolAddress !== candidate.quoteAddress)
+      ? { identity, poolAttribution: "unavailable" }
+      : null;
+  }
+
+  const providerPoolId = canonicalBytes32(poolLocator);
+  const biggestPoolId = canonicalBytes32(biggestPoolLocator);
+  if (providerPoolId === null || biggestPoolId !== providerPoolId) return null;
+  const identity = canonicalIdentities.find((candidate) =>
+    candidate.poolId === providerPoolId
+  );
+  return identity === undefined
+    ? null
+    : { identity, poolAttribution: "exact" };
+}
+
 function readApiKey(): string | null {
   const value = process.env.GMGN_API_KEY?.trim();
   return value ? value : null;
-}
-
-function configuredRequestsPerSecond(): number {
-  const value = Number(process.env.GMGN_MAX_REQUESTS_PER_SECOND ?? "1");
-  return Number.isSafeInteger(value) && value >= 1 && value <= 20 ? value : 1;
 }
 
 function sharedProviderWait(
@@ -1014,6 +1095,28 @@ function canonicalBytes32(value: unknown): `0x${string}` | null {
   if (typeof value !== "string") return null;
   const normalized = value.toLowerCase();
   return BYTES32.test(normalized) ? normalized as `0x${string}` : null;
+}
+
+function poolBaseQuoteMatchesV1(
+  pool: Record<string, unknown>,
+  identity: MarketChartIdentityV1,
+): boolean {
+  const declaredBases = [pool.base_address, pool.token_address]
+    .filter((value) => value !== undefined)
+    .map(tokenLocatorAddress);
+  if (declaredBases.some((value) => value !== identity.tokenAddress)) {
+    return false;
+  }
+  const tokenPair = [pool.token0_address, pool.token1_address].filter(
+    (value) => value !== undefined,
+  );
+  if (tokenPair.length === 0) return true;
+  if (tokenPair.length !== 2) return false;
+  const addresses = tokenPair.map(tokenLocatorAddress);
+  return addresses.every((address): address is `0x${string}` => address !== null) &&
+    new Set(addresses).size === 2 &&
+    addresses.includes(identity.tokenAddress) &&
+    addresses.includes(identity.quoteAddress);
 }
 
 function tokenLocatorAddress(value: unknown): `0x${string}` | null {

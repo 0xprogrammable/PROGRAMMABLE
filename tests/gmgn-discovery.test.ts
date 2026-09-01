@@ -5,19 +5,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import {
+  normalizeGmgnSearchQueryV1,
   parseGmgnDiscoverySnapshotV1,
+  parseGmgnSearchSnapshotV1,
   type GmgnDiscoverySnapshotV1,
 } from "../lib/market-data/gmgn-discovery-v1";
 import {
   rankCanonicalEntriesWithGmgnDiscoveryV1,
+  rankCanonicalEntriesWithGmgnSearchV1,
+  rankCanonicalExploreMarketCapEntriesWithGmgnV1,
 } from "../lib/market-data/gmgn-canonical-ranking";
 import {
   readGmgnEthereumHotSearchesV1,
+  readGmgnEthereumSearchV1,
   readGmgnEthereumTrendingV1,
 } from "../lib/market-data/gmgn-discovery.server";
 import type {
   GmgnAccountGateV1,
 } from "../lib/market-data/gmgn-account-gate.server";
+import type { ValuedExploreEntry } from "../lib/explore-financial-data";
+import type { ExploreEntry } from "../lib/tokens";
 
 const NOW = new Date("2026-09-01T12:00:00.000Z");
 const RESERVATION = Object.freeze({
@@ -79,6 +86,63 @@ function hotResponse(
       tokens: items,
     }],
   };
+}
+
+function searchResponse(
+  coins: readonly unknown[],
+  wallets: readonly unknown[] = [],
+) {
+  return {
+    code: 0,
+    data: { coins, wallets },
+  };
+}
+
+function canonicalExploreToken(index: number): ExploreEntry {
+  const tokenAddress = address(index);
+  return {
+    id: `1:${tokenAddress}`,
+    exploreKind: "token",
+    name: `Token ${index}`,
+    symbol: `T${index}`,
+    tokenAddress,
+    hookAddress: address(900),
+    poolId: `0x${index.toString(16).padStart(64, "0")}`,
+    launchedAt: new Date(NOW.getTime() + index * 1_000).toISOString(),
+    totalSwapFeeBps: 100,
+    liquidityPath: "meme",
+    launchModel: "classic",
+    launchModelVersion: "classic-v3",
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "classic",
+      source: "canonical-launch-read-model",
+      recordId: `1:${tokenAddress}`,
+      modelId: "classic",
+      modelVersion: "classic-v3",
+    },
+  } as ExploreEntry;
+}
+
+function valuedEntry(
+  entry: ExploreEntry,
+  provider: "gmgn" | "dexscreener",
+  value: number | null,
+): ValuedExploreEntry {
+  return {
+    ...entry,
+    valuation: value === null
+      ? { status: "unavailable", reason: "liquidity-unavailable" }
+      : {
+          status: "available",
+          metric: "fdv",
+          supplyBasis: "total",
+          currency: "usd",
+          valueWad: String(value),
+          freshness: "provider-recent",
+          source: provider,
+        },
+  } as ValuedExploreEntry;
 }
 
 function accountGate() {
@@ -241,6 +305,138 @@ describe("GMGN Ethereum discovery schemas", () => {
   });
 });
 
+describe("GMGN Ethereum search schema and canonical boundary", () => {
+  it("normalizes bounded user queries and strips invisible controls", () => {
+    expect(normalizeGmgnSearchQueryV1("  $\u200bTo\u0000Ken  ")).toBe("token");
+    expect(normalizeGmgnSearchQueryV1("$  ")).toBeNull();
+    expect(normalizeGmgnSearchQueryV1("x".repeat(100))).toBe("x".repeat(100));
+    expect(normalizeGmgnSearchQueryV1("x".repeat(101))).toBeNull();
+  });
+
+  it("keeps only unique exact-Ethereum coins and never wallet rows", () => {
+    const snapshot = parseGmgnSearchSnapshotV1(searchResponse([
+      { chain: "eth", address: address(2), symbol: "T2" },
+      { chain: "bsc", address: address(90), symbol: "FOREIGN" },
+      { chain: "eth", address: "invalid", symbol: "BAD" },
+      { chain: "eth", address: address(2), symbol: "DUP" },
+      { chain: "eth", address: address(1), symbol: "T1" },
+    ], [{ chain: "eth", address: address(77), name: "wallet" }]), {
+      query: "$Token",
+      fetchedAt: NOW,
+    });
+
+    expect(snapshot).toMatchObject({
+      schemaVersion: "programmable.gmgn-search.v1",
+      source: "gmgn",
+      providerChain: "eth",
+      query: "token",
+      orderBy: "weight",
+      providerItemCount: 5,
+      discardedProviderItemCount: 2,
+      duplicateProviderItemCount: 1,
+    });
+    expect(snapshot?.tokens).toEqual([
+      { chain: "eth", tokenAddress: address(2), rank: 1 },
+      { chain: "eth", tokenAddress: address(1), rank: 5 },
+    ]);
+    expect(snapshot?.tokens).not.toContainEqual(expect.objectContaining({
+      tokenAddress: address(77),
+    }));
+  });
+
+  it("fails closed for wrong-chain envelopes and oversized wallet lists", () => {
+    const input = { query: "token", fetchedAt: NOW };
+    expect(parseGmgnSearchSnapshotV1({
+      ...searchResponse([]),
+      chain: "sol",
+    }, input)).toBeNull();
+    expect(parseGmgnSearchSnapshotV1({
+      code: 0,
+      data: { ...searchResponse([]).data, chain: "base" },
+    }, input)).toBeNull();
+    expect(parseGmgnSearchSnapshotV1(
+      searchResponse([], Array.from({ length: 51 }, () => ({}))),
+      input,
+    )).toBeNull();
+  });
+
+  it("unions provider-matched canonical aliases with stable local matches", () => {
+    const alpha = { id: "alpha" };
+    const beta = { id: "beta" };
+    const aliasOnly = { id: "alias-only" };
+    const localTail = { id: "local-tail" };
+    const canonical = [alpha, beta, aliasOnly, localTail];
+    const identities = new Map([
+      ["alpha", { chainId: 1, tokenAddress: address(1) }],
+      ["beta", { chainId: 1, tokenAddress: address(2) }],
+      ["alias-only", { chainId: 1, tokenAddress: address(3) }],
+      ["local-tail", { chainId: 1, tokenAddress: address(4) }],
+    ]);
+    const snapshot = parseGmgnSearchSnapshotV1(searchResponse([
+      { chain: "eth", address: address(3) },
+      { chain: "eth", address: address(99) },
+      { chain: "eth", address: address(1) },
+      { chain: "eth", address: address(3) },
+    ]), { query: "alias", fetchedAt: NOW });
+    if (snapshot === null) throw new Error("fixture unavailable");
+
+    const result = rankCanonicalEntriesWithGmgnSearchV1(
+      canonical,
+      [alpha, localTail],
+      snapshot,
+      "alias",
+      (entry) => identities.get(entry.id) ?? null,
+      NOW,
+    );
+
+    expect(result.entries).toEqual([aliasOnly, alpha, localTail]);
+    result.entries.forEach((entry) => expect(canonical).toContain(entry));
+    expect(result.coverage).toMatchObject({
+      canonicalUniverseTokenCount: 4,
+      localMatchEntryCount: 2,
+      canonicalMatchEntryCount: 3,
+      gmgnObservedUniqueTokenCount: 3,
+      gmgnMatchedEntryCount: 2,
+      gmgnMatchedUniqueTokenCount: 2,
+      unobservedLocalMatchEntryCount: 1,
+      providerOnlyCanonicalTokenCount: 1,
+      foreignGmgnTokenCount: 1,
+      duplicateGmgnTokenCount: 1,
+      canonicalAddressCoverageBps: 6_666,
+    });
+
+    const zero = parseGmgnSearchSnapshotV1(searchResponse([]), {
+      query: "alias",
+      fetchedAt: NOW,
+    });
+    expect(rankCanonicalEntriesWithGmgnSearchV1(
+      canonical,
+      [alpha, localTail],
+      zero,
+      "alias",
+      (entry) => identities.get(entry.id) ?? null,
+      NOW,
+    ).entries).toEqual([alpha, localTail]);
+
+    expect(rankCanonicalEntriesWithGmgnSearchV1(
+      canonical,
+      [alpha, localTail],
+      snapshot,
+      "wrong-query",
+      (entry) => identities.get(entry.id) ?? null,
+      NOW,
+    ).entries).toEqual([alpha, localTail]);
+    expect(rankCanonicalEntriesWithGmgnSearchV1(
+      canonical,
+      [alpha, localTail],
+      snapshot,
+      "alias",
+      (entry) => identities.get(entry.id) ?? null,
+      new Date(NOW.getTime() + 5 * 60_000 + 1),
+    ).entries).toEqual([alpha, localTail]);
+  });
+});
+
 describe("GMGN canonical discovery intersection", () => {
   it("moves only observed canonical tokens forward and keeps every fallback stable", () => {
     const alpha = { id: "alpha", metadata: { canonical: true } };
@@ -263,6 +459,8 @@ describe("GMGN canonical discovery intersection", () => {
     ]), {
       kind: "trending",
       interval: "1h",
+      orderBy: "marketcap",
+      direction: "desc",
       limit: 10,
       fetchedAt: NOW,
     });
@@ -347,6 +545,162 @@ describe("GMGN canonical discovery intersection", () => {
       invalidGmgnSnapshotCount: 1,
       gmgnMatchedEntryCount: 0,
       unobservedCanonicalEntryCount: 2,
+    });
+  });
+
+  it("keeps canonical objects while Dexscreener ranks only the GMGN remainder", () => {
+    const canonical = [1, 2, 3, 4].map(canonicalExploreToken);
+    const snapshot = parseGmgnDiscoverySnapshotV1(rankResponse([
+      providerToken(4, 1, {
+        market_cap: "999999999999",
+        liquidity: "9999.99",
+      }),
+      providerToken(3, 2),
+      providerToken(1, 3),
+      providerToken(90, 4),
+    ]), {
+      kind: "trending",
+      interval: "1h",
+      orderBy: "marketcap",
+      direction: "desc",
+      limit: 10,
+      fetchedAt: NOW,
+    });
+    if (snapshot === null) throw new Error("fixture unavailable");
+    const foreign = {
+      ...valuedEntry(canonical[1]!, "dexscreener", 999),
+      id: `1:${address(99)}`,
+      tokenAddress: address(99),
+      poolId: `0x${"63".padStart(64, "0")}`,
+    } as ValuedExploreEntry;
+    const sameIdForeignIdentity = {
+      ...valuedEntry(canonical[1]!, "dexscreener", 2_000),
+      tokenAddress: address(98),
+      poolId: `0x${"62".padStart(64, "0")}`,
+    } as ValuedExploreEntry;
+    const fallbackEntries = [
+      valuedEntry(canonical[1]!, "dexscreener", 20),
+      valuedEntry(canonical[3]!, "dexscreener", 40),
+      foreign,
+      sameIdForeignIdentity,
+      valuedEntry(canonical[1]!, "dexscreener", 1),
+    ];
+    const fallback = {
+      gmgnHydrationLimit: 100,
+      gmgnHydrationEligibleEntryCount: 0,
+      gmgnRequestedEntries: [],
+      gmgnEntries: [],
+      dexscreenerRequestedEntries: [canonical[1]!, canonical[3]!],
+      dexscreenerEntries: fallbackEntries,
+    } as const;
+
+    const result = rankCanonicalExploreMarketCapEntriesWithGmgnV1(
+      canonical,
+      [snapshot],
+      fallback,
+      "desc",
+      NOW,
+    );
+
+    expect(result.entries).toEqual([
+      canonical[2],
+      canonical[0],
+      canonical[3],
+      canonical[1],
+    ]);
+    result.entries.forEach((entry) => {
+      expect(canonical).toContain(entry);
+      expect(entry).not.toHaveProperty("valuation");
+    });
+    expect(result).toMatchObject({
+      fallbackRequestedEntryCount: 2,
+      fallbackAcceptedEntryCount: 2,
+      fallbackQualifiedEntryCount: 2,
+      discardedFallbackEntryCount: 3,
+      coverage: {
+        canonicalEntryCount: 4,
+        gmgnMatchedEntryCount: 2,
+        foreignGmgnTokenCount: 1,
+        discardedProviderItemCount: 1,
+      },
+    });
+    const wrongDirection = rankCanonicalExploreMarketCapEntriesWithGmgnV1(
+      canonical,
+      [snapshot],
+      fallback,
+      "asc",
+      NOW,
+    );
+    expect(wrongDirection.coverage.gmgnSnapshotCount).toBe(0);
+    expect(wrongDirection.coverage.gmgnMatchedEntryCount).toBe(0);
+    const stale = rankCanonicalExploreMarketCapEntriesWithGmgnV1(
+      canonical,
+      [snapshot],
+      fallback,
+      "desc",
+      new Date(NOW.getTime() + 5 * 60_000 + 1),
+    );
+    expect(stale.coverage.gmgnSnapshotCount).toBe(0);
+    expect(stale.coverage.gmgnMatchedEntryCount).toBe(0);
+  });
+
+  it("keeps GMGN token-info FDV and Dex FDV in separate ordered tiers", () => {
+    const canonical = [1, 2, 3, 4, 5].map(canonicalExploreToken);
+    const sameIdForeignGmgn = {
+      ...valuedEntry(canonical[0]!, "gmgn", 99_999),
+      tokenAddress: address(91),
+      poolId: `0x${"5b".padStart(64, "0")}`,
+    } as ValuedExploreEntry;
+    const result = rankCanonicalExploreMarketCapEntriesWithGmgnV1(
+      canonical,
+      [],
+      {
+        gmgnHydrationLimit: 3,
+        gmgnHydrationEligibleEntryCount: 5,
+        gmgnRequestedEntries: canonical.slice(0, 3),
+        gmgnEntries: [
+          valuedEntry(canonical[0]!, "gmgn", 10),
+          valuedEntry(canonical[1]!, "gmgn", 50),
+          valuedEntry(canonical[2]!, "gmgn", null),
+          sameIdForeignGmgn,
+        ],
+        dexscreenerRequestedEntries: canonical.slice(2),
+        dexscreenerEntries: [
+          valuedEntry(canonical[2]!, "dexscreener", 999),
+          valuedEntry(canonical[3]!, "dexscreener", 100),
+          valuedEntry(canonical[4]!, "dexscreener", null),
+        ],
+      },
+      "desc",
+      NOW,
+    );
+
+    expect(result.entries).toEqual([
+      canonical[1],
+      canonical[0],
+      canonical[2],
+      canonical[3],
+      canonical[4],
+    ]);
+    expect(result.rows.map((row) => row.orderingSource)).toEqual([
+      "gmgn-token-info-fdv",
+      "gmgn-token-info-fdv",
+      "dexscreener-fdv",
+      "dexscreener-fdv",
+      "canonical-launch-order",
+    ]);
+    expect(result).toMatchObject({
+      gmgnHydrationLimit: 3,
+      gmgnHydrationEligibleEntryCount: 5,
+      gmgnHydrationRequestedEntryCount: 3,
+      gmgnHydrationAcceptedEntryCount: 3,
+      gmgnHydrationQualifiedEntryCount: 2,
+      gmgnHydrationDeferredEntryCount: 2,
+      discardedGmgnHydrationEntryCount: 1,
+      fallbackRequestedEntryCount: 3,
+      fallbackAcceptedEntryCount: 3,
+      fallbackQualifiedEntryCount: 2,
+      canonicalTailEntryCount: 1,
     });
   });
 });
@@ -442,6 +796,125 @@ describe("GMGN discovery server adapter", () => {
       signal: undefined,
     });
     expect(complete).toHaveBeenCalledWith(RESERVATION);
+  });
+
+  it("uses the official Ethereum search request with weight one", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate, reserveSlot, complete } = accountGate();
+    const fetchImpl = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => {
+      void _input;
+      void _init;
+      return new Response(JSON.stringify(
+        searchResponse([{ chain: "eth", address: address(31) }]),
+      ), { status: 200 });
+    });
+
+    const result = await readGmgnEthereumSearchV1(" $Search Alias ", {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    });
+
+    expect(result).toMatchObject({
+      query: "search alias",
+      orderBy: "weight",
+      tokens: [{ tokenAddress: address(31), rank: 1 }],
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const [request, init] = fetchImpl.mock.calls[0]!;
+    const url = new URL(String(request));
+    expect(url.origin).toBe("https://openapi.gmgn.ai");
+    expect(url.pathname).toBe("/v1/market/search");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      query: "search alias",
+      chain: "eth",
+      order_by: "weight",
+      timestamp: "1788264000",
+    });
+    expect(url.searchParams.get("client_id")).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(new Headers(init?.headers).get("X-APIKEY")).toBe("test-server-key");
+    expect(init?.method).toBe("GET");
+    expect(init?.body).toBeUndefined();
+    expect(reserveSlot).toHaveBeenCalledWith({
+      requestsPerSecond: 1,
+      cost: 1,
+      deadlineMs: NOW.getTime() + 2_500,
+      signal: undefined,
+    });
+    expect(complete).toHaveBeenCalledWith(RESERVATION);
+  });
+
+  it("requests isolated official market-cap rankings in either direction", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate, reserveSlot } = accountGate();
+    const fetchImpl = vi.fn(async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) => {
+      void _input;
+      void _init;
+      return new Response(JSON.stringify(
+        rankResponse([providerToken(22, 1)]),
+      ), { status: 200 });
+    });
+
+    await expect(readGmgnEthereumTrendingV1({
+      interval: "1h",
+      limit: 22,
+      orderBy: "marketcap",
+      direction: "desc",
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.not.toBeNull();
+    await expect(readGmgnEthereumTrendingV1({
+      interval: "1h",
+      limit: 22,
+      orderBy: "marketcap",
+      direction: "asc",
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.not.toBeNull();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls.map(([request]) => {
+      const params = new URL(String(request)).searchParams;
+      return {
+        chain: params.get("chain"),
+        interval: params.get("interval"),
+        limit: params.get("limit"),
+        orderBy: params.get("order_by"),
+        direction: params.get("direction"),
+      };
+    })).toEqual([{
+      chain: "eth",
+      interval: "1h",
+      limit: "22",
+      orderBy: "marketcap",
+      direction: "desc",
+    }, {
+      chain: "eth",
+      interval: "1h",
+      limit: "22",
+      orderBy: "marketcap",
+      direction: "asc",
+    }]);
+    expect(reserveSlot).toHaveBeenCalledTimes(2);
+    expect(reserveSlot).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      cost: 1,
+    }));
+    expect(reserveSlot).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      cost: 1,
+    }));
   });
 
   it("sends the exact Ethereum hot-search body and charges weight three", async () => {
@@ -689,6 +1162,28 @@ describe("GMGN discovery server adapter", () => {
       tokens: [{ tokenAddress: address(21) }],
     });
     expect(retryFetch).toHaveBeenCalledOnce();
+  });
+
+  it("fails a search softly when its shared gate deadline expires", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const reserveSlot = vi.fn(() => new Promise<never>(() => undefined));
+    const fetchImpl = vi.fn();
+    const stalledRead = readGmgnEthereumSearchV1("gate-timeout", {
+      fetchImpl,
+      accountGate: {
+        reserveSlot,
+        blockUntil: vi.fn(),
+        complete: vi.fn(),
+      },
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    await expect(stalledRead).resolves.toBeNull();
+    expect(reserveSlot).toHaveBeenCalledOnce();
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("rejects redirects without forwarding the API key to the target", async () => {

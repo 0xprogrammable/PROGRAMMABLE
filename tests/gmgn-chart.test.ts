@@ -4,13 +4,14 @@ vi.mock("server-only", () => ({}));
 
 import {
   gmgnChartWindowV1,
+  parseGmgnChartIdentityProofForCanonicalSetV1,
   parseGmgnChartIdentityProofV1,
   parseGmgnKlineMarketChartV1,
   readGmgnMarketChartV1,
 } from "../lib/market-data/gmgn-chart.server";
 import {
   isGmgnMarketChartV1,
-  preferExactGmgnMarketChartV1,
+  preferAdmittedGmgnTokenSeriesV1,
   type GmgnChartIdentityProofV1,
   type GmgnMarketChartV1,
 } from "../lib/market-data/gmgn-chart-data-v1";
@@ -24,6 +25,10 @@ import type { ExploreEntry, LauncherToken } from "../lib/tokens";
 
 const NOW = new Date("2026-09-01T12:00:00.000Z");
 const QUOTE = "0x0000000000000000000000000000000000000000" as const;
+const PROVIDER_POOL =
+  "0x4444444444444444444444444444444444444444" as const;
+const OTHER_PROVIDER_POOL =
+  "0x5555555555555555555555555555555555555555" as const;
 
 function token(index: number): Extract<ExploreEntry, { exploreKind: "token" }> {
   const tokenAddress = `0x${index.toString(16).padStart(40, "0")}` as const;
@@ -65,19 +70,114 @@ function identity(entry: ReturnType<typeof token>): MarketChartIdentityV1 {
   };
 }
 
+function customEntry(): Extract<ExploreEntry, { exploreKind: "custom-project" }> {
+  const tokenAddress = "0x7777777777777777777777777777777777777777";
+  const quoteTwo = "0x8888888888888888888888888888888888888888";
+  return {
+    exploreKind: "custom-project",
+    id: `custom:sha256:${"77".repeat(32)}`,
+    name: "Registry Custom",
+    links: [],
+    launchedAt: "2026-08-31T00:00:00.000Z",
+    finalizedAt: "2026-08-31T00:01:00.000Z",
+    chainId: "1",
+    modelId: "custom-v4",
+    customProjectId: `sha256:${"77".repeat(32)}`,
+    customLaunchId: `sha256:${"78".repeat(32)}`,
+    launchingWallet: {
+      namespace: "eip155:1",
+      value: "0x9999999999999999999999999999999999999999",
+    },
+    postLaunchAuthorityInventory: {} as never,
+    postLaunchAuthorityInventoryHash: `sha256:${"79".repeat(32)}`,
+    tokenAddress,
+    tokenDecimals: 18,
+    totalSupplyRaw: "10000000000000000000000",
+    markets: [
+      {
+        marketId: "z-market",
+        kind: "uniswap-v4",
+        status: "active",
+        poolId: `0x${"99".repeat(32)}`,
+        baseAsset: {
+          assetId: "token",
+          identity: { namespace: "eip155:1:erc20", value: tokenAddress },
+        },
+        quoteAsset: {
+          assetId: "quote-two",
+          identity: { namespace: "eip155:1:erc20", value: quoteTwo },
+        },
+      },
+      {
+        marketId: "a-market",
+        kind: "uniswap-v4",
+        status: "active",
+        poolId: `0x${"88".repeat(32)}`,
+        baseAsset: {
+          assetId: "token",
+          identity: { namespace: "eip155:1:erc20", value: tokenAddress },
+        },
+        quoteAsset: {
+          assetId: "eth",
+          identity: { namespace: "eip155:1", value: QUOTE },
+        },
+      },
+    ],
+    launchCategoryProvenance: {
+      schemaVersion: "programmable.explore-launch-category-provenance.v1",
+      category: "custom",
+      source: "registry.custom-launched",
+      projectId: `sha256:${"77".repeat(32)}`,
+      launchId: `sha256:${"78".repeat(32)}`,
+      sourceRecordBindingHash: `sha256:${"7a".repeat(32)}`,
+      finalizedLaunchBindingHash: `sha256:${"7b".repeat(32)}`,
+      registryAddress: "0x9999999999999999999999999999999999999999",
+      registryStartBlock: "1",
+      transactionHash: `0x${"7c".repeat(32)}`,
+      blockHash: `0x${"7d".repeat(32)}`,
+      blockNumber: "1",
+      transactionIndex: 0,
+      logIndex: 0,
+      configurationHash: `0x${"7e".repeat(32)}`,
+    },
+  };
+}
+
+function customIdentities(
+  entry = customEntry(),
+): readonly MarketChartIdentityV1[] {
+  return [
+    {
+      chainId: "1",
+      protocol: "uniswap_v4",
+      tokenAddress: entry.tokenAddress!,
+      poolId: entry.markets[1]!.poolId!,
+      quoteAddress: QUOTE,
+    },
+    {
+      chainId: "1",
+      protocol: "uniswap_v4",
+      tokenAddress: entry.tokenAddress!,
+      poolId: entry.markets[0]!.poolId!,
+      quoteAddress: entry.markets[0]!.quoteAsset.identity.value as `0x${string}`,
+    },
+  ];
+}
+
 function tokenInfo(entry: ReturnType<typeof token>) {
   return {
     chain: "eth",
     address: entry.tokenAddress,
     total_supply: "10000",
-    biggest_pool_address: entry.poolId,
+    biggest_pool_address: PROVIDER_POOL as string,
     pool: {
-      pool_address: entry.poolId,
-      base_address: entry.tokenAddress,
-      token0_address: QUOTE,
-      token1_address: entry.tokenAddress,
+      pool_address: PROVIDER_POOL as string,
       quote_address: QUOTE,
       exchange: "uniswap_v4",
+      base_address: entry.tokenAddress,
+      token_address: entry.tokenAddress,
+      token0_address: QUOTE,
+      token1_address: entry.tokenAddress,
     },
   };
 }
@@ -180,7 +280,7 @@ function bitqueryChart(
   };
 }
 
-describe("GMGN exact Ethereum kline adapter", () => {
+describe("GMGN admitted Ethereum token-address kline adapter", () => {
   beforeEach(() => {
     vi.stubEnv("GMGN_API_KEY", "");
   });
@@ -199,10 +299,13 @@ describe("GMGN exact Ethereum kline adapter", () => {
       .toMatchObject({ resolution: "4h" });
   });
 
-  it("binds GMGN token info to the exact token, biggest v4 pool, and quote", () => {
+  it("accepts the live token-info shape and binds every explicit pair field", () => {
     const entry = token(201);
+    const documentedShape = tokenInfo(entry);
+    expect(documentedShape.pool.pool_address).toHaveLength(42);
+    expect(documentedShape.pool.pool_address).not.toBe(entry.poolId);
     expect(parseGmgnChartIdentityProofV1(
-      tokenInfo(entry),
+      documentedShape,
       identity(entry),
       canonicalSupply(entry),
       NOW,
@@ -211,21 +314,147 @@ describe("GMGN exact Ethereum kline adapter", () => {
       source: "gmgn-token-info",
       verifiedAt: NOW.toISOString(),
       identity: identity(entry),
+      poolAttribution: "unavailable",
       canonicalSupply: {
         totalSupplyRaw: entry.totalSupplyRaw,
         tokenDecimals: entry.tokenDecimals,
       },
     });
+  });
 
+  it("accepts the documented minimal token-info shape when optional pair fields are omitted", () => {
+    const entry = token(220);
+    const value = tokenInfo(entry) as unknown as Record<string, unknown> & {
+      pool: Record<string, unknown>;
+    };
+    delete value.pool.base_address;
+    delete value.pool.token_address;
+    delete value.pool.token0_address;
+    delete value.pool.token1_address;
+    expect(parseGmgnChartIdentityProofV1(
+      value,
+      identity(entry),
+      canonicalSupply(entry),
+      NOW,
+    )).toMatchObject({ poolAttribution: "unavailable" });
+  });
+
+  it("accepts coherent canonical bytes32 v4 PoolId locators as exact current attribution", () => {
+    const entry = token(219);
+    const value = tokenInfo(entry);
+    value.pool.pool_address = entry.poolId;
+    value.biggest_pool_address = entry.poolId;
+    const exactProof = parseGmgnChartIdentityProofV1(
+      value,
+      identity(entry),
+      canonicalSupply(entry),
+      NOW,
+    );
+    expect(exactProof).toMatchObject({
+      identity: identity(entry),
+      poolAttribution: "exact",
+    });
+
+    const from = new Date(NOW.getTime() - 120_000);
+    const chart = parseGmgnKlineMarketChartV1({
+      list: [candle(from.getTime()), candle(from.getTime() + 60_000)],
+    }, {
+      identityProof: exactProof!,
+      range: "1h",
+      resolution: "1m",
+      requestedFrom: from,
+      requestedTo: NOW,
+      fetchedAt: NOW,
+    });
+    expect(chart).toMatchObject({
+      seriesScope: "token",
+      poolAttribution: "exact",
+    });
+    expect(isGmgnMarketChartV1(chart)).toBe(true);
+  });
+
+  it("binds multi-market token info only to a matching canonical identity", () => {
+    const entry = customEntry();
+    const identities = customIdentities(entry);
+    const selected = identities[1]!;
+    const value = {
+      ...tokenInfo(token(221)),
+      address: entry.tokenAddress,
+      total_supply: "10000",
+      pool: {
+        ...tokenInfo(token(221)).pool,
+        quote_address: selected.quoteAddress,
+        base_address: entry.tokenAddress,
+        token_address: entry.tokenAddress,
+        token0_address: entry.tokenAddress,
+        token1_address: selected.quoteAddress,
+      },
+    };
+
+    const proof = parseGmgnChartIdentityProofForCanonicalSetV1(
+      value,
+      [...identities].reverse(),
+      { raw: BigInt(entry.totalSupplyRaw!), decimals: entry.tokenDecimals! },
+      NOW,
+    );
+
+    expect(proof).toMatchObject({
+      identity: selected,
+      poolAttribution: "unavailable",
+    });
+    expect(parseGmgnChartIdentityProofForCanonicalSetV1(
+      {
+        ...value,
+        pool: {
+          ...value.pool,
+          quote_address: "0x6666666666666666666666666666666666666666",
+        },
+      },
+      identities,
+      { raw: BigInt(entry.totalSupplyRaw!), decimals: entry.tokenDecimals! },
+      NOW,
+    )).toBeNull();
+  });
+
+  it("requires a bytes32 locator to match the same canonical multi-market identity", () => {
+    const entry = customEntry();
+    const identities = customIdentities(entry);
+    const selected = identities[1]!;
+    const value = {
+      ...tokenInfo(token(222)),
+      address: entry.tokenAddress,
+      total_supply: "10000",
+      biggest_pool_address: identities[0]!.poolId,
+      pool: {
+        ...tokenInfo(token(222)).pool,
+        pool_address: identities[0]!.poolId,
+        quote_address: selected.quoteAddress,
+        base_address: entry.tokenAddress,
+        token_address: entry.tokenAddress,
+        token0_address: entry.tokenAddress,
+        token1_address: selected.quoteAddress,
+      },
+    };
+
+    expect(parseGmgnChartIdentityProofForCanonicalSetV1(
+      value,
+      identities,
+      { raw: BigInt(entry.totalSupplyRaw!), decimals: entry.tokenDecimals! },
+      NOW,
+    )).toBeNull();
+  });
+
+  it("rejects every documented identity mismatch despite plausible undocumented decoys", () => {
+    const entry = token(201);
     const mismatches: Array<(value: ReturnType<typeof tokenInfo>) => void> = [
       (value) => {
         value.address = "0x9999999999999999999999999999999999999999";
       },
       (value) => {
-        value.biggest_pool_address = `0x${"99".repeat(32)}`;
+        value.biggest_pool_address = OTHER_PROVIDER_POOL;
       },
       (value) => {
-        value.pool.pool_address = `0x${"98".repeat(32)}`;
+        value.pool.pool_address = OTHER_PROVIDER_POOL;
       },
       (value) => {
         Reflect.set(
@@ -235,19 +464,28 @@ describe("GMGN exact Ethereum kline adapter", () => {
         );
       },
       (value) => {
+        value.pool.exchange = "uniswap_v3";
+      },
+      (value) => {
         value.pool.base_address =
           "0x9999999999999999999999999999999999999999";
       },
       (value) => {
-        value.pool.token1_address =
-          "0x9999999999999999999999999999999999999999";
-      },
-      (value) => {
-        value.pool.exchange = "uniswap_v3";
+        Reflect.set(
+          value.pool,
+          "token0_address",
+          "0x9999999999999999999999999999999999999999",
+        );
       },
     ];
     for (const mutate of mismatches) {
       const mismatched = tokenInfo(entry);
+      Object.assign(mismatched.pool, {
+        base_address: entry.tokenAddress,
+        token_address: entry.tokenAddress,
+        token0_address: QUOTE,
+        token1_address: entry.tokenAddress,
+      });
       mutate(mismatched);
       expect(parseGmgnChartIdentityProofV1(
         mismatched,
@@ -256,6 +494,33 @@ describe("GMGN exact Ethereum kline adapter", () => {
         NOW,
       )).toBeNull();
     }
+  });
+
+  it.each([
+    [
+      "zero provider pool",
+      "0x0000000000000000000000000000000000000000",
+      "0x0000000000000000000000000000000000000000",
+    ],
+    ["inconsistent provider pools", PROVIDER_POOL, OTHER_PROVIDER_POOL],
+    [
+      "foreign bytes32 locators",
+      `0x${"44".repeat(32)}`,
+      `0x${"44".repeat(32)}`,
+    ],
+  ])("rejects %s", (_label, poolAddress, biggestPoolAddress) => {
+    const entry = token(218);
+    const value = tokenInfo(entry) as unknown as Record<string, unknown> & {
+      pool: Record<string, unknown>;
+    };
+    value.pool.pool_address = poolAddress;
+    value.biggest_pool_address = biggestPoolAddress;
+    expect(parseGmgnChartIdentityProofV1(
+      value,
+      identity(entry),
+      canonicalSupply(entry),
+      NOW,
+    )).toBeNull();
   });
 
   it("rejects a GMGN token-info proof with the wrong total supply", () => {
@@ -340,6 +605,10 @@ describe("GMGN exact Ethereum kline adapter", () => {
     });
 
     expect(chart?.status).toBe("ready");
+    expect(chart).toMatchObject({
+      seriesScope: "token",
+      poolAttribution: "unavailable",
+    });
     expect(chart?.points.map((point) => point.bucketStart)).toEqual([
       from.toISOString(),
       new Date(from.getTime() + 60_000).toISOString(),
@@ -352,6 +621,14 @@ describe("GMGN exact Ethereum kline adapter", () => {
     });
     expect(chart?.volumeUsdWad).toBe("15500000000000000000");
     expect(isGmgnMarketChartV1(chart)).toBe(true);
+    expect(isGmgnMarketChartV1({
+      ...chart,
+      seriesScope: undefined,
+    })).toBe(false);
+    expect(isGmgnMarketChartV1({
+      ...chart,
+      poolAttribution: "exact",
+    })).toBe(false);
   });
 
   it.each([
@@ -439,7 +716,56 @@ describe("GMGN exact Ethereum kline adapter", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("uses only the official read-only endpoints and millisecond kline bounds", async () => {
+  it("reads a hydrated Registry Custom multi-market token with canonical admission", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = customEntry();
+    const identities = customIdentities(entry);
+    const selected = identities[1]!;
+    const from = NOW.getTime() - 60 * 60_000;
+    const info = {
+      ...tokenInfo(token(223)),
+      address: entry.tokenAddress,
+      total_supply: "10000",
+      pool: {
+        ...tokenInfo(token(223)).pool,
+        quote_address: selected.quoteAddress,
+        base_address: entry.tokenAddress,
+        token_address: entry.tokenAddress,
+        token0_address: entry.tokenAddress,
+        token1_address: selected.quoteAddress,
+      },
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      return new Response(JSON.stringify({
+        code: 0,
+        data: url.pathname === "/v1/token/info"
+          ? info
+          : { list: [candle(from), candle(from + 60_000)] },
+      }), { status: 200 });
+    });
+
+    const result = await readGmgnMarketChartV1({
+      entry,
+      identity: identities[0]!,
+      range: "1h",
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    });
+
+    expect(result).toMatchObject({
+      source: "gmgn",
+      seriesScope: "token",
+      poolAttribution: "unavailable",
+      identity: selected,
+      identityProof: { identity: selected },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses only the official read-only endpoints and 13-digit direct-API millisecond bounds", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     const entry = token(205);
     const from = NOW.getTime() - 60 * 60_000;
@@ -471,6 +797,14 @@ describe("GMGN exact Ethereum kline adapter", () => {
     expect(klineUrl.searchParams.get("resolution")).toBe("1m");
     expect(klineUrl.searchParams.get("from")).toBe(String(from));
     expect(klineUrl.searchParams.get("to")).toBe(String(NOW.getTime()));
+    expect(klineUrl.searchParams.get("from")).toMatch(/^[0-9]{13}$/u);
+    expect(klineUrl.searchParams.get("to")).toMatch(/^[0-9]{13}$/u);
+    expect(klineUrl.searchParams.get("from")).not.toBe(
+      String(Math.floor(from / 1_000)),
+    );
+    expect(klineUrl.searchParams.get("to")).not.toBe(
+      String(Math.floor(NOW.getTime() / 1_000)),
+    );
     expect(klineUrl.searchParams.get("timestamp")).toBe("1788264000");
     expect(klineUrl.searchParams.get("client_id"))
       .toMatch(/^[0-9a-f-]{36}$/u);
@@ -560,7 +894,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
     },
   );
 
-  it("stops before kline when GMGN cannot prove the canonical pool", async () => {
+  it("stops before kline when GMGN returns a non-address pool locator", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     const entry = token(206);
     const mismatched = tokenInfo(entry);
@@ -582,7 +916,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("coalesces concurrent reads and serves the current exact chart cache", async () => {
+  it("coalesces concurrent reads and serves the admitted token-series cache", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     const entry = token(207);
     const from = NOW.getTime() - 60 * 60_000;
@@ -656,9 +990,9 @@ describe("GMGN exact Ethereum kline adapter", () => {
       code: 0,
       data: tokenInfo(entry),
     }), { status: 200 }));
-    const exact = await second;
-    expect(exact?.identity).toEqual(identity(entry));
-    await expect(readGmgnMarketChartV1(input, wait)).resolves.toEqual(exact);
+    const admitted = await second;
+    expect(admitted?.identity).toEqual(identity(entry));
+    await expect(readGmgnMarketChartV1(input, wait)).resolves.toEqual(admitted);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
@@ -734,7 +1068,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
     });
   });
 
-  it("replaces Bitquery only with a fresh, exact, higher-quality GMGN chart", () => {
+  it("prefers only a fresh, admitted, higher-quality GMGN token series", () => {
     const entry = token(209);
     const expectedIdentity = identity(entry);
     const from = new Date(NOW.getTime() - 120_000);
@@ -749,7 +1083,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
       fetchedAt: NOW,
     }) as GmgnMarketChartV1;
     const fallback = bitqueryChart(expectedIdentity);
-    expect(preferExactGmgnMarketChartV1({
+    expect(preferAdmittedGmgnTokenSeriesV1({
       candidate: gmgn,
       fallback,
       identity: expectedIdentity,
@@ -757,7 +1091,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
       now: NOW,
     })).toBe(gmgn);
 
-    expect(preferExactGmgnMarketChartV1({
+    expect(preferAdmittedGmgnTokenSeriesV1({
       candidate: { ...gmgn, identity: identity(token(210)) },
       fallback,
       identity: expectedIdentity,
@@ -765,7 +1099,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
       now: NOW,
     })).toBe(fallback);
 
-    expect(preferExactGmgnMarketChartV1({
+    expect(preferAdmittedGmgnTokenSeriesV1({
       candidate: { ...gmgn, status: "partial", truncated: true },
       fallback,
       identity: expectedIdentity,
@@ -773,7 +1107,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
       now: NOW,
     })).toBe(fallback);
 
-    expect(preferExactGmgnMarketChartV1({
+    expect(preferAdmittedGmgnTokenSeriesV1({
       candidate: gmgn,
       fallback,
       identity: expectedIdentity,
@@ -782,7 +1116,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
     })).toBe(fallback);
   });
 
-  it("lets a complete GMGN OHLCV chart replace a partial Bitquery result", () => {
+  it("lets a complete GMGN token series replace a partial Bitquery result", () => {
     const entry = token(211);
     const expectedIdentity = identity(entry);
     const from = new Date(NOW.getTime() - 120_000);
@@ -797,7 +1131,7 @@ describe("GMGN exact Ethereum kline adapter", () => {
       fetchedAt: NOW,
     });
     const fallback = bitqueryChart(expectedIdentity, "partial");
-    expect(preferExactGmgnMarketChartV1({
+    expect(preferAdmittedGmgnTokenSeriesV1({
       candidate: gmgn,
       fallback,
       identity: expectedIdentity,

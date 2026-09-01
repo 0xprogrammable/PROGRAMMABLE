@@ -1,10 +1,13 @@
-// Provider contract: GMGNAI/gmgn-skills@267ff6ba86aaeb5d4a4f23409b3cfef7ef32ff62.
+// Provider contract: GMGNAI/gmgn-skills@7a87b8f09de83209d7f55f2924cd5967ec197fda.
 // This projection deliberately keeps only identity and numeric ranking signals.
 // Programmable's canonical launch catalog remains the authority for token names,
 // metadata, launch identity, and visibility.
 
 export const PROGRAMMABLE_GMGN_DISCOVERY_SCHEMA_VERSION =
   "programmable.gmgn-discovery.v1" as const;
+
+export const PROGRAMMABLE_GMGN_SEARCH_SCHEMA_VERSION =
+  "programmable.gmgn-search.v1" as const;
 
 export const GMGN_DISCOVERY_INTERVALS = [
   "1m",
@@ -16,6 +19,7 @@ export const GMGN_DISCOVERY_INTERVALS = [
 
 export const GMGN_TRENDING_MAXIMUM_LIMIT = 100 as const;
 export const GMGN_HOT_SEARCH_MAXIMUM_LIMIT = 500 as const;
+export const GMGN_SEARCH_MAXIMUM_QUERY_CODE_POINTS = 100 as const;
 
 export type GmgnDiscoveryIntervalV1 =
   typeof GMGN_DISCOVERY_INTERVALS[number];
@@ -44,6 +48,8 @@ export type GmgnDiscoverySnapshotV1 = Readonly<{
   providerChain: "eth";
   kind: GmgnDiscoveryKindV1;
   interval: GmgnDiscoveryIntervalV1;
+  orderBy: "marketcap" | null;
+  direction: "asc" | "desc" | null;
   requestedLimit: number;
   fetchedAt: string;
   providerVersion: string | null;
@@ -56,13 +62,148 @@ export type GmgnDiscoverySnapshotV1 = Readonly<{
 export type ParseGmgnDiscoverySnapshotInputV1 = Readonly<{
   kind: GmgnDiscoveryKindV1;
   interval: GmgnDiscoveryIntervalV1;
+  orderBy?: "marketcap";
+  direction?: "asc" | "desc";
   limit: number;
+  fetchedAt: Date;
+}>;
+
+export type GmgnSearchTokenV1 = Readonly<{
+  chain: "eth";
+  tokenAddress: `0x${string}`;
+  rank: number;
+}>;
+
+export type GmgnSearchSnapshotV1 = Readonly<{
+  schemaVersion: typeof PROGRAMMABLE_GMGN_SEARCH_SCHEMA_VERSION;
+  source: "gmgn";
+  chainId: "1";
+  providerChain: "eth";
+  query: string;
+  orderBy: "weight";
+  fetchedAt: string;
+  providerItemCount: number;
+  discardedProviderItemCount: number;
+  duplicateProviderItemCount: number;
+  tokens: readonly GmgnSearchTokenV1[];
+}>;
+
+export type ParseGmgnSearchSnapshotInputV1 = Readonly<{
+  query: string;
   fetchedAt: Date;
 }>;
 
 const ADDRESS = /^0x[0-9a-f]{40}$/u;
 const MAXIMUM_PROVIDER_ITEMS = 1_000;
 const MAXIMUM_PROVIDER_VERSION_LENGTH = 256;
+const INVISIBLE_OR_CONTROL = /[\p{Cc}\p{Cf}]/gu;
+
+/**
+ * Mirrors GMGN's public search boundary while keeping local `$SYMBOL` search
+ * behavior. The provider cache and ranking commitment use the case-folded
+ * value so equivalent queries share one immutable snapshot.
+ */
+export function normalizeGmgnSearchQueryV1(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 1_024) return null;
+  const normalized = value.normalize("NFC")
+    .replace(INVISIBLE_OR_CONTROL, "")
+    .trim()
+    .replace(/^\$/u, "")
+    .trim()
+    .toLowerCase();
+  const codePoints = [...normalized];
+  return codePoints.length >= 1 &&
+      codePoints.length <= GMGN_SEARCH_MAXIMUM_QUERY_CODE_POINTS
+    ? normalized
+    : null;
+}
+
+export function parseGmgnSearchSnapshotV1(
+  response: unknown,
+  input: ParseGmgnSearchSnapshotInputV1,
+): GmgnSearchSnapshotV1 | null {
+  const query = normalizeGmgnSearchQueryV1(input.query);
+  if (query === null || !Number.isFinite(input.fetchedAt.getTime())) return null;
+  const data = unwrapSuccessfulData(response);
+  if (
+    data === null ||
+    !isRecord(data) ||
+    !Array.isArray(data.coins) ||
+    !Array.isArray(data.wallets) ||
+    data.coins.length > MAXIMUM_PROVIDER_ITEMS ||
+    data.wallets.length > 50
+  ) return null;
+
+  const tokens: GmgnSearchTokenV1[] = [];
+  const addresses = new Set<string>();
+  let discardedProviderItemCount = 0;
+  let duplicateProviderItemCount = 0;
+  for (const [providerIndex, coin] of data.coins.entries()) {
+    if (!isRecord(coin) || coin.chain !== "eth") {
+      discardedProviderItemCount += 1;
+      continue;
+    }
+    const tokenAddress = canonicalAddress(coin.address);
+    if (tokenAddress === null) {
+      discardedProviderItemCount += 1;
+      continue;
+    }
+    if (addresses.has(tokenAddress)) {
+      duplicateProviderItemCount += 1;
+      continue;
+    }
+    addresses.add(tokenAddress);
+    tokens.push(Object.freeze({
+      chain: "eth",
+      tokenAddress,
+      rank: providerIndex + 1,
+    }));
+  }
+
+  const snapshot: GmgnSearchSnapshotV1 = Object.freeze({
+    schemaVersion: PROGRAMMABLE_GMGN_SEARCH_SCHEMA_VERSION,
+    source: "gmgn",
+    chainId: "1",
+    providerChain: "eth",
+    query,
+    orderBy: "weight",
+    fetchedAt: input.fetchedAt.toISOString(),
+    providerItemCount: data.coins.length,
+    discardedProviderItemCount,
+    duplicateProviderItemCount,
+    tokens: Object.freeze(tokens),
+  });
+  return isGmgnSearchSnapshotV1(snapshot) ? snapshot : null;
+}
+
+export function isGmgnSearchSnapshotV1(
+  value: unknown,
+): value is GmgnSearchSnapshotV1 {
+  if (!isRecord(value)) return false;
+  if (
+    value.schemaVersion !== PROGRAMMABLE_GMGN_SEARCH_SCHEMA_VERSION ||
+    value.source !== "gmgn" ||
+    value.chainId !== "1" ||
+    value.providerChain !== "eth" ||
+    normalizeGmgnSearchQueryV1(value.query) !== value.query ||
+    value.orderBy !== "weight" ||
+    !exactIsoTime(value.fetchedAt) ||
+    !unsignedSafeInteger(value.providerItemCount) ||
+    !unsignedSafeInteger(value.discardedProviderItemCount) ||
+    !unsignedSafeInteger(value.duplicateProviderItemCount) ||
+    !Array.isArray(value.tokens) ||
+    value.tokens.length > MAXIMUM_PROVIDER_ITEMS ||
+    value.tokens.some((token) => !isGmgnSearchTokenV1(token)) ||
+    Number(value.providerItemCount) !== value.tokens.length +
+      Number(value.discardedProviderItemCount) +
+      Number(value.duplicateProviderItemCount)
+  ) return false;
+  const tokens = value.tokens as readonly GmgnSearchTokenV1[];
+  return new Set(tokens.map((token) => token.tokenAddress)).size ===
+      tokens.length &&
+    tokens.every((token, index) => index === 0 ||
+      tokens[index - 1]!.rank < token.rank);
+}
 
 export function parseGmgnDiscoverySnapshotV1(
   response: unknown,
@@ -114,6 +255,8 @@ export function parseGmgnDiscoverySnapshotV1(
     providerChain: "eth",
     kind: input.kind,
     interval: input.interval,
+    orderBy: input.orderBy ?? null,
+    direction: input.direction ?? null,
     requestedLimit: input.limit,
     fetchedAt: input.fetchedAt.toISOString(),
     providerVersion: extracted.providerVersion,
@@ -136,6 +279,11 @@ export function isGmgnDiscoverySnapshotV1(
     value.providerChain !== "eth" ||
     (value.kind !== "trending" && value.kind !== "hot-search") ||
     !isDiscoveryInterval(value.interval) ||
+    !validRankingIntent(
+      value.kind,
+      value.orderBy,
+      value.direction,
+    ) ||
     !validLimit(value.kind, value.requestedLimit) ||
     !exactIsoTime(value.fetchedAt) ||
     !nullableBoundedString(value.providerVersion, MAXIMUM_PROVIDER_VERSION_LENGTH) ||
@@ -253,6 +401,13 @@ function isGmgnDiscoveryTokenV1(value: unknown): value is GmgnDiscoveryTokenV1 {
     nullableNonNegativeNumber(value.volumeUsd);
 }
 
+function isGmgnSearchTokenV1(value: unknown): value is GmgnSearchTokenV1 {
+  return isRecord(value) &&
+    value.chain === "eth" &&
+    canonicalAddress(value.tokenAddress) === value.tokenAddress &&
+    positiveSafeInteger(value.rank) !== null;
+}
+
 function unwrapSuccessfulData(value: unknown): unknown | null {
   let current = value;
   for (let depth = 0; depth < 2; depth += 1) {
@@ -275,8 +430,25 @@ function hasExactOptionalEthereumChain(value: unknown): boolean {
 function validParseInput(input: ParseGmgnDiscoverySnapshotInputV1): boolean {
   return (input.kind === "trending" || input.kind === "hot-search") &&
     isDiscoveryInterval(input.interval) &&
+    validRankingIntent(
+      input.kind,
+      input.orderBy ?? null,
+      input.direction ?? null,
+    ) &&
     validLimit(input.kind, input.limit) &&
     Number.isFinite(input.fetchedAt.getTime());
+}
+
+function validRankingIntent(
+  kind: unknown,
+  orderBy: unknown,
+  direction: unknown,
+): boolean {
+  if (kind === "hot-search") return orderBy === null && direction === null;
+  if (kind !== "trending") return false;
+  return (orderBy === null && direction === null) ||
+    (orderBy === "marketcap" &&
+      (direction === "asc" || direction === "desc"));
 }
 
 function validLimit(kind: unknown, value: unknown): boolean {

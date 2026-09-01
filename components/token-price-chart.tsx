@@ -146,6 +146,20 @@ export function isAuthoritativeChartPayload(
   return parseAuthoritativeChartPayload(value) !== null;
 }
 
+export function chartSeriesScopeLabel(
+  value: MarketChartV1 | GmgnMarketChartV1 | undefined,
+): string | null {
+  if (value?.source === "gmgn") {
+    if (value.seriesScope !== "token") return null;
+    return value.poolAttribution === "exact"
+      ? "Token-level history · Current pool binding exact"
+      : value.poolAttribution === "unavailable"
+        ? "Token-level history · Pool attribution unavailable"
+        : null;
+  }
+  return value?.source === "bitquery" ? "Exact-pool history" : null;
+}
+
 export function preserveChartPayloadOnFailure(
   current: ChartRequestState | null,
   key: string,
@@ -608,7 +622,8 @@ export function TokenPriceChart({
   preview?: boolean;
   onVolumeChange?: (volume: TokenChartVolume | null) => void;
 }) {
-  // Live history is read only through the exact pool-bound chart endpoint.
+  // Live history uses an explicit provider scope: GMGN is token-address-level
+  // while Bitquery is the exact-pool fallback.
   // Stock-Paired families intentionally remain outside the public chart scope.
   const historyEnabled = shouldEnablePriceHistory(launchModel);
   const [request, setRequest] = useState<ChartRequestState | null>(null);
@@ -744,6 +759,7 @@ export function TokenPriceChart({
           ? `${historyLabel} loaded from 1 point`
           : `${historyLabel} loaded with ${chart.points.length} points`
         : emptyMessage;
+  const seriesScopeLabel = chartSeriesScopeLabel(payload?.marketData);
 
   useEffect(() => {
     if (!historyEnabled || launchModel === "stock-paired" || range === "all") {
@@ -850,6 +866,9 @@ export function TokenPriceChart({
                 ? `1 verified observation · ${chartPointContext(singleObservation)}`
                 : "\u00A0"}
           </p>
+          {seriesScopeLabel ? (
+            <p className={styles.scope}>{seriesScopeLabel}</p>
+          ) : null}
         </div>
         {historyEnabled && launchModel !== "stock-paired" ? (
           <div className={styles.ranges} aria-label="Chart range" role="group">

@@ -245,6 +245,8 @@ describe("token detail metrics", () => {
     const gmgnMarketData = {
       schemaVersion: "programmable.gmgn-market-snapshot.v1",
       source: "gmgn",
+      marketScope: "token",
+      poolAttribution: "unavailable",
       currency: "USD",
       fetchedAt: "2026-08-31T12:00:00.000Z",
       identity: {

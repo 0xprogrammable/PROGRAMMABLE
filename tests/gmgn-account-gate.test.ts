@@ -24,26 +24,28 @@ afterEach(async () => {
 });
 
 describe("GMGN account gate", () => {
-  it("serializes parallel reservations through one database singleton", async () => {
+  it("rate-spaces reservations while allowing twenty requests in flight", async () => {
     const { database, pool } = await migratedGate();
     const gate = new PostgresGmgnAccountGateV1(pool);
     const deadlineMs = Date.now() + 2_000;
 
-    const concurrent = await Promise.all(Array.from({ length: 4 }, () =>
+    const concurrent = await Promise.all(Array.from({ length: 20 }, () =>
       gate.reserveSlot({ requestsPerSecond: 20, deadlineMs })));
-    const winner = concurrent.find((reservation) =>
-      reservation?.kind === "reserved"
+    const leases = concurrent.flatMap((reservation) =>
+      reservation?.kind === "reserved" ? [reservation] : []
     );
-    expect(concurrent.filter((reservation) =>
-      reservation?.kind === "reserved"
-    )).toHaveLength(1);
-    expect(concurrent.filter((reservation) => reservation === null)).toHaveLength(3);
-    if (winner?.kind !== "reserved") throw new Error("test lease unavailable");
-    await gate.complete(winner);
+    expect(leases).toHaveLength(20);
+    const reservedAt = leases.map(({ reservedAtMs }) => reservedAtMs)
+      .sort((first, second) => first - second);
+    for (let index = 1; index < reservedAt.length; index += 1) {
+      expect(reservedAt[index]! - reservedAt[index - 1]!)
+        .toBeGreaterThanOrEqual(49);
+    }
+    await Promise.all(leases.map((lease) => gate.complete(lease)));
     const successor = await gate.reserveSlot({ requestsPerSecond: 20, deadlineMs });
     expect(successor?.kind).toBe("reserved");
     if (successor?.kind !== "reserved") throw new Error("successor lease unavailable");
-    expect(successor.reservedAtMs - winner.reservedAtMs).toBeGreaterThanOrEqual(49);
+    expect(successor.reservedAtMs - reservedAt.at(-1)!).toBeGreaterThanOrEqual(49);
     await gate.complete(successor);
 
     await database.exec("RESET ROLE");
@@ -56,13 +58,296 @@ describe("GMGN account gate", () => {
         FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
        ORDER BY generation
     `);
-    expect(evidence.rows).toHaveLength(4);
+    expect(evidence.rows).toHaveLength(42);
     expect(evidence.rows.filter((row) => row.decision_kind === "reserved")
       .every((row) =>
       row.decision_kind === "reserved" && row.interval_ms === 50
     )).toBe(true);
     expect(evidence.rows.filter((row) => row.decision_kind === "completed"))
-      .toHaveLength(2);
+      .toHaveLength(21);
+  });
+
+  it("bounds account-wide concurrency and admits a successor after exact release", async () => {
+    const { database, pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const leases = await Promise.all(Array.from({ length: 20 }, async () => {
+      const decision = await gate.reserveSlot({
+        requestsPerSecond: 20,
+        deadlineMs: Date.now() + 2_000,
+      });
+      if (decision?.kind !== "reserved") throw new Error("test lease unavailable");
+      return decision;
+    }));
+
+    await expect(gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 80,
+    })).resolves.toBeNull();
+    await gate.complete(leases[0]!);
+    const successor = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(successor?.kind).toBe("reserved");
+
+    await database.exec("RESET ROLE");
+    const active = await database.query<{ count: number }>(`
+      SELECT count(*) AS count
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+       WHERE lease_until > clock_timestamp()
+    `);
+    expect(active.rows).toEqual([{ count: 20 }]);
+  });
+
+  it("cancels a capacity wait without allocating a twenty-first lease", async () => {
+    const { database, pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const leases = await Promise.all(Array.from({ length: 20 }, async () => {
+      const decision = await gate.reserveSlot({
+        requestsPerSecond: 20,
+        deadlineMs: Date.now() + 2_000,
+      });
+      if (decision?.kind !== "reserved") throw new Error("test lease unavailable");
+      return decision;
+    }));
+    const enteredDelay = Promise.withResolvers<void>();
+    const waitingGate = new PostgresGmgnAccountGateV1(pool, {
+      delay: vi.fn((_ms: number, signal?: AbortSignal) =>
+        new Promise<boolean>((resolve) => {
+          enteredDelay.resolve();
+          const abort = () => resolve(false);
+          signal?.addEventListener("abort", abort, { once: true });
+        })),
+    });
+    const controller = new AbortController();
+    const waiting = waitingGate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 2_000,
+      signal: controller.signal,
+    });
+    await enteredDelay.promise;
+    controller.abort();
+    await expect(waiting).resolves.toBeNull();
+
+    await database.exec("RESET ROLE");
+    const active = await database.query<{ count: number }>(`
+      SELECT count(*) AS count
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+       WHERE lease_until > clock_timestamp()
+    `);
+    expect(active.rows).toEqual([{ count: 20 }]);
+    void leases;
+  });
+
+  it.each(["abort", "deadline"] as const)(
+    "rolls back a newly written lease when the caller %s wins before commit",
+    async (mode) => {
+      const { database, pool } = await migratedGate();
+      const controller = new AbortController();
+      let localNowMs = Date.now();
+      const deadlineMs = localNowMs + 100;
+      const gate = new PostgresGmgnAccountGateV1(
+        new AfterReservationPool(pool, () => {
+          if (mode === "abort") controller.abort();
+          else localNowMs = deadlineMs;
+        }),
+        { nowMs: () => localNowMs },
+      );
+
+      await expect(gate.reserveSlot({
+        requestsPerSecond: 20,
+        deadlineMs,
+        signal: controller.signal,
+      })).resolves.toBeNull();
+
+      await database.exec("RESET ROLE");
+      const state = await database.query<{
+        active: number;
+        generation: bigint;
+        lease_holder: string | null;
+        reserved_history: number;
+      }>(`
+        SELECT
+          (SELECT count(*)
+             FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1)
+            AS active,
+          gate.generation,
+          gate.lease_holder,
+          (SELECT count(*)
+             FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+            WHERE decision_kind = 'reserved') AS reserved_history
+          FROM programmable_website_projection_v1.gmgn_account_gate_v1 AS gate
+      `);
+      expect(state.rows).toEqual([{
+        active: 0,
+        generation: 0,
+        lease_holder: null,
+        reserved_history: 0,
+      }]);
+    },
+  );
+
+  it.each(["55P03", "57014"])(
+    "fails closed when PostgreSQL enforces reservation deadline code %s",
+    async (code) => {
+      const pool = new PostgresDeadlinePool(code);
+      const gate = new PostgresGmgnAccountGateV1(pool);
+      await expect(gate.reserveSlot({
+        requestsPerSecond: 20,
+        deadlineMs: Date.now() + 1_000,
+      })).resolves.toBeNull();
+      expect(pool.rolledBack).toBe(true);
+      expect(pool.released).toBe(true);
+    },
+  );
+
+  it("re-reads lease capacity after each concurrent row-lock waiter acquires the lock", async () => {
+    const pool = new ReadCommittedWaiterModelPool();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const deadlineMs = Date.now() + 45;
+
+    const decisions = await Promise.all(Array.from({ length: 21 }, () =>
+      gate.reserveSlot({ requestsPerSecond: 20, deadlineMs })));
+
+    expect(decisions.filter((decision) => decision?.kind === "reserved"))
+      .toHaveLength(20);
+    expect(decisions.filter((decision) => decision === null)).toHaveLength(1);
+    expect(pool.maximumActiveLeases).toBe(20);
+    expect(pool.snapshotsTakenBeforeWaiting.filter((count) => count === 0).length)
+      .toBeGreaterThan(1);
+    expect(pool.stateReads).toBe(21);
+  });
+
+  it("completes and provider-blocks parallel leases without clearing a survivor", async () => {
+    const { database, pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const leases = await Promise.all(Array.from({ length: 3 }, async () => {
+      const decision = await gate.reserveSlot({
+        requestsPerSecond: 20,
+        deadlineMs: Date.now() + 2_000,
+      });
+      if (decision?.kind !== "reserved") throw new Error("test lease unavailable");
+      return decision;
+    }));
+    await Promise.all([
+      gate.complete(leases[0]!),
+      gate.blockUntil({
+        reservation: leases[1]!,
+        blockedUntilMs: Date.now() + 2_000,
+        providerSignal: "http-429",
+      }),
+    ]);
+    await expect(gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    })).resolves.toMatchObject({ kind: "blocked" });
+
+    await database.exec("RESET ROLE");
+    const state = await database.query<{
+      active: number;
+      marker: string;
+      outcomes_at_epoch: boolean;
+    }>(`
+      SELECT
+        (SELECT count(*)
+           FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+          WHERE lease_until > clock_timestamp()) AS active,
+        gate.lease_holder AS marker,
+        (SELECT bool_and(lease_until = TIMESTAMPTZ 'epoch')
+           FROM programmable_website_projection_v1.gmgn_account_gate_decisions_v1
+          WHERE decision_kind IN ('completed', 'provider-blocked'))
+          AS outcomes_at_epoch
+        FROM programmable_website_projection_v1.gmgn_account_gate_v1 AS gate
+    `);
+    expect(state.rows).toEqual([{
+      active: 1,
+      marker: "ffffffff-ffff-4fff-bfff-ffffffffffff",
+      outcomes_at_epoch: true,
+    }]);
+  });
+
+  it("keeps 0006 runtime compatible across the explicit 0007 upgrade", async () => {
+    const { database, pool } = await migratedGate({ multiflight: false });
+    const legacyMultiflightReadiness = vi.fn(async () => {});
+    const legacyGate = new PostgresGmgnAccountGateV1(pool, {
+      assertMultiflightReady: legacyMultiflightReadiness,
+    });
+    const legacyLease = await legacyGate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(legacyLease?.kind).toBe("reserved");
+    if (legacyLease?.kind !== "reserved") throw new Error("legacy lease unavailable");
+    expect(legacyMultiflightReadiness).not.toHaveBeenCalled();
+    await expect(legacyGate.status()).resolves.toEqual({
+      mode: "legacy-singleflight-v1",
+    });
+
+    await database.exec("RESET ROLE");
+    const migration = await readFile(new URL(
+      "../ops/website-projection-target/migrations/0007_gmgn_account_gate_multiflight_v1.sql",
+      import.meta.url,
+    ), "utf8");
+    await database.exec(migration);
+    await database.exec("SET ROLE programmable_website_projection_runtime");
+
+    const upgradedMultiflightReadiness = vi.fn(async () => {});
+    const upgradedGate = new PostgresGmgnAccountGateV1(pool, {
+      assertMultiflightReady: upgradedMultiflightReadiness,
+    });
+    await expect(upgradedGate.status()).resolves.toEqual({ mode: "multiflight-v1" });
+    await expect(upgradedGate.complete(legacyLease)).resolves.toBeUndefined();
+    const upgradedLease = await upgradedGate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(upgradedLease?.kind).toBe("reserved");
+    if (upgradedLease?.kind !== "reserved") throw new Error("upgrade lease unavailable");
+    expect(upgradedMultiflightReadiness.mock.calls.length)
+      .toBeGreaterThanOrEqual(2);
+
+    await database.exec("RESET ROLE");
+    const active = await database.query<{ count: number }>(`
+      SELECT count(*) AS count
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+       WHERE generation = ${upgradedLease.generation}
+         AND lease_holder = '${upgradedLease.holder}'
+    `);
+    expect(active.rows).toEqual([{ count: 1 }]);
+  });
+
+  it("re-attests multiflight readiness after the first successful schema probe", async () => {
+    const { pool } = await migratedGate();
+    let drifted = false;
+    const assertMultiflightReady = vi.fn(async () => {
+      if (drifted) throw new Error("injected lease privilege drift");
+    });
+    const gate = new PostgresGmgnAccountGateV1(pool, {
+      assertMultiflightReady,
+    });
+    const first = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(first?.kind).toBe("reserved");
+
+    drifted = true;
+    await expect(gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    })).rejects.toThrow("injected lease privilege drift");
+    expect(assertMultiflightReady).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports an unavailable mode without exposing readiness failure details", async () => {
+    const { pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool, {
+      assertMultiflightReady: async () => {
+        throw new Error("secret database diagnostic");
+      },
+    });
+
+    await expect(gate.status()).resolves.toEqual({ mode: "unavailable" });
   });
 
   it.each([
@@ -235,8 +520,23 @@ describe("GMGN account gate", () => {
         has_column_privilege('programmable_website_projection_runtime',
           'programmable_website_projection_v1.gmgn_account_gate_decisions_v1',
           'decision_kind', 'SELECT') AS runtime_history_decision_select,
+        has_table_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+          'SELECT') AS runtime_leases_select,
+        has_table_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+          'INSERT') AS runtime_leases_insert,
+        has_table_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+          'DELETE') AS runtime_leases_delete,
+        has_table_privilege('programmable_website_projection_runtime',
+          'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
+          'UPDATE,TRUNCATE,REFERENCES,TRIGGER') AS runtime_leases_forbidden,
         has_table_privilege('anon',
           'programmable_website_projection_v1.gmgn_account_gate_v1',
+          'SELECT,INSERT,UPDATE,DELETE')
+          OR has_table_privilege('anon',
+          'programmable_website_projection_v1.gmgn_account_gate_leases_v1',
           'SELECT,INSERT,UPDATE,DELETE') AS anon_any,
         (SELECT relrowsecurity AND relforcerowsecurity
            FROM pg_class
@@ -245,7 +545,11 @@ describe("GMGN account gate", () => {
         (SELECT relrowsecurity AND relforcerowsecurity
            FROM pg_class
           WHERE oid = 'programmable_website_projection_v1.gmgn_account_gate_decisions_v1'::regclass)
-          AS history_rls_forced
+          AS history_rls_forced,
+        (SELECT relrowsecurity AND relforcerowsecurity
+           FROM pg_class
+          WHERE oid = 'programmable_website_projection_v1.gmgn_account_gate_leases_v1'::regclass)
+          AS leases_rls_forced
     `);
     expect(privileges.rows[0]).toEqual({
       runtime_state_select: true,
@@ -257,9 +561,14 @@ describe("GMGN account gate", () => {
       runtime_history_update: false,
       runtime_history_prune_columns: true,
       runtime_history_decision_select: false,
+      runtime_leases_select: true,
+      runtime_leases_insert: true,
+      runtime_leases_delete: true,
+      runtime_leases_forbidden: false,
       anon_any: false,
       state_rls_forced: true,
       history_rls_forced: true,
+      leases_rls_forced: true,
     });
   });
 
@@ -281,7 +590,7 @@ describe("GMGN account gate", () => {
   it.each(["completed", "provider-blocked"] as const)(
     "keeps the lease after a failed %s outcome write",
     async (failedDecision) => {
-      const { pool } = await migratedGate();
+      const { database, pool } = await migratedGate();
       const failingGate = new PostgresGmgnAccountGateV1(
         new OutcomeFailPool(pool, failedDecision),
       );
@@ -304,16 +613,19 @@ describe("GMGN account gate", () => {
         })).rejects.toThrow("injected outcome write failure");
       }
 
-      const independentGate = new PostgresGmgnAccountGateV1(pool);
-      await expect(independentGate.reserveSlot({
-        requestsPerSecond: 20,
-        deadlineMs: Date.now() + 100,
-      })).resolves.toBeNull();
+      await database.exec("RESET ROLE");
+      const active = await database.query<{ count: number }>(`
+        SELECT count(*) AS count
+          FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+         WHERE generation = ${lease.generation}
+           AND lease_holder = '${lease.holder}'
+      `);
+      expect(active.rows).toEqual([{ count: 1 }]);
     },
   );
 
   it("rejects a stale generation release without clearing the active lease", async () => {
-    const { pool } = await migratedGate();
+    const { database, pool } = await migratedGate();
     const gate = new PostgresGmgnAccountGateV1(pool);
     const lease = await gate.reserveSlot({
       requestsPerSecond: 20,
@@ -324,10 +636,14 @@ describe("GMGN account gate", () => {
       ...lease,
       generation: lease.generation + 1,
     })).rejects.toThrow("lease is stale or unavailable");
-    await expect(gate.reserveSlot({
-      requestsPerSecond: 20,
-      deadlineMs: Date.now() + 100,
-    })).resolves.toBeNull();
+    await database.exec("RESET ROLE");
+    const active = await database.query<{ count: number }>(`
+      SELECT count(*) AS count
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+       WHERE generation = ${lease.generation}
+         AND lease_holder = '${lease.holder}'
+    `);
+    expect(active.rows).toEqual([{ count: 1 }]);
   });
 
   it("cannot release a successor lease after an exact-holder race", async () => {
@@ -341,12 +657,10 @@ describe("GMGN account gate", () => {
     const successorHolder = "22222222-2222-4222-8222-222222222222";
     await database.exec(`
       RESET ROLE;
-      UPDATE programmable_website_projection_v1.gmgn_account_gate_v1
-         SET generation = generation + 1,
-             lease_holder = '${successorHolder}',
-             lease_until = clock_timestamp() + INTERVAL '5 minutes',
-             updated_at = clock_timestamp()
-       WHERE gate_id = 'gmgn-openapi-v1';
+      UPDATE programmable_website_projection_v1.gmgn_account_gate_leases_v1
+         SET lease_holder = '${successorHolder}'
+       WHERE gate_id = 'gmgn-openapi-v1'
+         AND generation = ${lease.generation};
       SET ROLE programmable_website_projection_runtime;
     `);
 
@@ -359,10 +673,10 @@ describe("GMGN account gate", () => {
       lease_holder: string;
     }>(`
       SELECT generation, lease_holder
-        FROM programmable_website_projection_v1.gmgn_account_gate_v1
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
     `);
     expect(state.rows[0]).toMatchObject({
-      generation: lease.generation + 1,
+      generation: lease.generation,
       lease_holder: successorHolder,
     });
   });
@@ -424,7 +738,9 @@ describe("GMGN account gate", () => {
   });
 });
 
-async function migratedGate(): Promise<Readonly<{
+async function migratedGate(
+  options: Readonly<{ multiflight?: boolean }> = {},
+): Promise<Readonly<{
   database: PGlite;
   pool: ProjectionTargetPostgresPoolV1;
 }>> {
@@ -436,10 +752,14 @@ async function migratedGate(): Promise<Readonly<{
     CREATE ROLE authenticated NOLOGIN;
     CREATE ROLE service_role NOLOGIN;
   `);
-  const migrations = await Promise.all([
+  const files = [
     "0001_projection_records_v1.sql",
     "0006_gmgn_account_gate_v1.sql",
-  ].map((file) => readFile(new URL(
+    ...(options.multiflight === false
+      ? []
+      : ["0007_gmgn_account_gate_multiflight_v1.sql"]),
+  ];
+  const migrations = await Promise.all(files.map((file) => readFile(new URL(
     `../ops/website-projection-target/migrations/${file}`,
     import.meta.url,
   ), "utf8")));
@@ -453,19 +773,41 @@ async function migratedGate(): Promise<Readonly<{
 }
 
 class PGlitePool implements ProjectionTargetPostgresPoolV1 {
+  private connectionTail = Promise.resolve();
+
   constructor(private readonly database: PGlite) {}
 
   async connect(): Promise<ProjectionTargetPostgresClientV1> {
-    return Object.freeze({
+    let unlock = () => {};
+    const previous = this.connectionTail;
+    this.connectionTail = new Promise<void>((resolve) => {
+      unlock = resolve;
+    });
+    await previous;
+    let released = false;
+    return {
       query: <Row extends Record<string, unknown>>(
         text: string,
         values: readonly unknown[] = [],
-      ) => this.query<Row>(text, values),
-      release() {},
-    });
+      ) => this.directQuery<Row>(text, values),
+      release() {
+        if (released) return;
+        released = true;
+        unlock();
+      },
+    };
   }
 
   async query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    text: string,
+    values: readonly unknown[] = [],
+  ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
+    return this.directQuery<Row>(text, values);
+  }
+
+  private async directQuery<
+    Row extends Record<string, unknown> = Record<string, unknown>,
+  >(
     text: string,
     values: readonly unknown[] = [],
   ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
@@ -477,6 +819,172 @@ class PGlitePool implements ProjectionTargetPostgresPoolV1 {
   }
 }
 
+// PostgreSQL READ COMMITTED takes a statement snapshot before a SELECT FOR
+// UPDATE waiter acquires its row lock. This model deliberately records that
+// stale pre-wait snapshot, then exposes the current lease count only to the
+// separate state statement issued after the lock is held.
+class ReadCommittedWaiterModelPool implements ProjectionTargetPostgresPoolV1 {
+  activeLeases = 0;
+  generation = 0;
+  maximumActiveLeases = 0;
+  stateReads = 0;
+  readonly snapshotsTakenBeforeWaiting: number[] = [];
+  private lockTail = Promise.resolve();
+
+  async connect(): Promise<ProjectionTargetPostgresClientV1> {
+    let unlock: (() => void) | null = null;
+    return {
+      query: async <Row extends Record<string, unknown>>(
+        sql: string,
+        values: readonly unknown[] = [],
+      ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> => {
+        if (sql === "BEGIN") return result<Row>([]);
+        if (sql.includes("set_config('lock_timeout'")) return result<Row>([]);
+        if (sql.includes("FOR UPDATE")) {
+          this.snapshotsTakenBeforeWaiting.push(this.activeLeases);
+          const previous = this.lockTail;
+          this.lockTail = new Promise<void>((resolve) => {
+            unlock = resolve;
+          });
+          await previous;
+          return result<Row>([{ gate_id: "gmgn-openapi-v1" }]);
+        }
+        if (sql.includes("AS active_leases")) {
+          this.stateReads += 1;
+          const now = new Date();
+          const leaseUntil = new Date(now.getTime() + 300_000);
+          return result<Row>([{
+            decided_at: now,
+            generation: this.generation,
+            next_slot_at: new Date(0),
+            blocked_until: new Date(0),
+            lease_holder: this.activeLeases > 0
+              ? "ffffffff-ffff-4fff-bfff-ffffffffffff"
+              : null,
+            lease_until: this.activeLeases > 0 ? leaseUntil : new Date(0),
+            active_leases: this.activeLeases,
+            earliest_lease_until: this.activeLeases > 0 ? leaseUntil : null,
+            latest_lease_until: this.activeLeases > 0 ? leaseUntil : null,
+          }]);
+        }
+        if (sql.includes("INSERT INTO programmable_website_projection_v1.gmgn_account_gate_leases_v1")) {
+          this.activeLeases += 1;
+          this.generation += 1;
+          this.maximumActiveLeases = Math.max(
+            this.maximumActiveLeases,
+            this.activeLeases,
+          );
+          return result<Row>([{
+            decided_at: values[5],
+            next_slot_at: values[5],
+            blocked_until: new Date(0),
+            generation: this.generation,
+            lease_holder: values[2],
+          }]);
+        }
+        if (sql === "COMMIT" || sql === "ROLLBACK") {
+          unlock?.();
+          unlock = null;
+          return result<Row>([]);
+        }
+        throw new Error(`unexpected modeled gate statement: ${sql.slice(0, 80)}`);
+      },
+      release() {
+        unlock?.();
+        unlock = null;
+      },
+    };
+  }
+
+  async query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    sql: string,
+  ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
+    if (!sql.includes("to_regclass")) throw new Error("unexpected schema query");
+    return result<Row>([{
+      relation:
+        "programmable_website_projection_v1.gmgn_account_gate_leases_v1",
+    }]);
+  }
+}
+
+class PostgresDeadlinePool implements ProjectionTargetPostgresPoolV1 {
+  rolledBack = false;
+  released = false;
+
+  constructor(private readonly code: string) {}
+
+  async connect(): Promise<ProjectionTargetPostgresClientV1> {
+    return {
+      query: async <Row extends Record<string, unknown>>(
+        sql: string,
+      ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> => {
+        if (sql === "BEGIN" || sql.includes("set_config('lock_timeout'")) {
+          return result<Row>([]);
+        }
+        if (sql.includes("FOR UPDATE")) {
+          throw Object.assign(new Error("modeled PostgreSQL deadline"), {
+            code: this.code,
+          });
+        }
+        if (sql === "ROLLBACK") {
+          this.rolledBack = true;
+          return result<Row>([]);
+        }
+        throw new Error("unexpected deadline model statement");
+      },
+      release: () => {
+        this.released = true;
+      },
+    };
+  }
+
+  async query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    sql: string,
+  ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
+    if (!sql.includes("to_regclass")) throw new Error("unexpected schema query");
+    return result<Row>([{
+      relation:
+        "programmable_website_projection_v1.gmgn_account_gate_leases_v1",
+    }]);
+  }
+}
+
+function result<Row extends Record<string, unknown>>(
+  rows: readonly Record<string, unknown>[],
+): ProjectionTargetPostgresQueryResultV1<Row> {
+  return Object.freeze({ rows: [...rows] as Row[], rowCount: rows.length });
+}
+
+class AfterReservationPool implements ProjectionTargetPostgresPoolV1 {
+  constructor(
+    private readonly inner: ProjectionTargetPostgresPoolV1,
+    private readonly afterReservation: () => void,
+  ) {}
+
+  connect(): Promise<ProjectionTargetPostgresClientV1> {
+    return this.inner.connect().then((client) => ({
+      query: async <Row extends Record<string, unknown>>(
+        sql: string,
+        values: readonly unknown[] = [],
+      ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> => {
+        const queryResult = await client.query<Row>(sql, values);
+        if (sql.includes(
+          "INSERT INTO programmable_website_projection_v1.gmgn_account_gate_leases_v1",
+        )) this.afterReservation();
+        return queryResult;
+      },
+      release: () => client.release(),
+    }));
+  }
+
+  query<Row extends Record<string, unknown> = Record<string, unknown>>(
+    sql: string,
+    values: readonly unknown[] = [],
+  ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> {
+    return this.inner.query<Row>(sql, values);
+  }
+}
+
 class OutcomeFailPool implements ProjectionTargetPostgresPoolV1 {
   constructor(
     private readonly inner: ProjectionTargetPostgresPoolV1,
@@ -484,7 +992,18 @@ class OutcomeFailPool implements ProjectionTargetPostgresPoolV1 {
   ) {}
 
   connect(): Promise<ProjectionTargetPostgresClientV1> {
-    return this.inner.connect();
+    return this.inner.connect().then((client) => ({
+      query: async <Row extends Record<string, unknown>>(
+        text: string,
+        values: readonly unknown[] = [],
+      ): Promise<ProjectionTargetPostgresQueryResultV1<Row>> => {
+        if (text.includes(`'${this.failedDecision}'`)) {
+          throw new Error("injected outcome write failure");
+        }
+        return client.query<Row>(text, values);
+      },
+      release: () => client.release(),
+    }));
   }
 
   async query<Row extends Record<string, unknown> = Record<string, unknown>>(

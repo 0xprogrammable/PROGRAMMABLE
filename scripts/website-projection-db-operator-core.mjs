@@ -47,6 +47,15 @@ export const WEBSITE_PROJECTION_RETAINED_PLAN_SHA256 =
 export const WEBSITE_PROJECTION_RETAINED_ORDER_SHA256 =
   "0xce50954bfa6ff3b66b849bb5b53e8f1adf93abbe12cf865c19375100f2571cc2";
 export const WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT = 5;
+export const WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_COMMIT =
+  "9a4f5244612d39c387022ce290de40760b112540";
+export const WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_TREE =
+  "6daaa529fac0d95e2c12e05d77fc61ecc4247f3c";
+export const WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_SHA256 =
+  "0x04f9e0a4c52c4e8b4f22062339a6c30aa0a2fb8d65d38c08ce492438e49f0a4d";
+export const WEBSITE_PROJECTION_PREDECESSOR_0006_ORDER_SHA256 =
+  "0x603f0721eadf7e55131c4c2800b46b41dd0fa08ec09613d3f02d019cb65d300c";
+export const WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT = 6;
 export const WEBSITE_PROJECTION_ADOPTION_TARGET_PROJECT_REF =
   "mnnvlrqwhfoppogslsje";
 export const WEBSITE_PROJECTION_ADOPTION_CURRENT_OPERATOR_COMMIT =
@@ -61,12 +70,13 @@ export const WEBSITE_PROJECTION_MIGRATION_FILES = Object.freeze([
   "0004_approval_v3_artifacts_v1.sql",
   "0005_generic_launch_materializations_v2.sql",
   "0006_gmgn_account_gate_v1.sql",
+  "0007_gmgn_account_gate_multiflight_v1.sql",
 ]);
 
 const GIT_OBJECT = /^[0-9a-f]{40}$/u;
 const HEX_SHA256 = /^0x[0-9a-f]{64}$/u;
 const PROJECT_REF = /^[a-z0-9]{20}$/u;
-const MIGRATION_FILE = /^(000[1-6])_([a-z][a-z0-9_]*)\.sql$/u;
+const MIGRATION_FILE = /^(000[1-7])_([a-z][a-z0-9_]*)\.sql$/u;
 const TRANSACTION_WRAPPER = /^BEGIN;\r?\n([\s\S]+)\r?\nCOMMIT;\r?\n?$/u;
 
 function isPlainObject(value) {
@@ -138,7 +148,9 @@ async function discoverWebsiteProjectionPlanFiles({
   if (names.length !== migrationFiles.length
     || names.some((name, index) =>
       name !== migrationFiles[index])) {
-    const count = migrationFiles.length === 6 ? "six" : "five";
+    const count = migrationFiles.length === 7
+      ? "seven"
+      : migrationFiles.length === 6 ? "six" : "five";
     throw new Error(
       `migration directory must contain exactly the ${count} canonical files`,
     );
@@ -270,10 +282,15 @@ export function validateWebsiteProjectionPlan(value) {
     }
     return value;
   }
-  return validateWebsiteProjectionPlanFiles(
+  if (
+    value?.migrationCount ===
+      WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT
+  ) return validateWebsiteProjectionPredecessor0006Plan(value);
+  const plan = validateWebsiteProjectionPlanFiles(
     value,
     WEBSITE_PROJECTION_MIGRATION_FILES,
   );
+  return plan;
 }
 
 export function validateRetainedWebsiteProjectionPlan(value) {
@@ -284,6 +301,62 @@ export function validateRetainedWebsiteProjectionPlan(value) {
       WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT,
     ),
   );
+}
+
+export function validateWebsiteProjectionPredecessor0006Plan(value) {
+  validateWebsiteProjectionPlanFiles(
+    value,
+    WEBSITE_PROJECTION_MIGRATION_FILES.slice(
+      0,
+      WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT,
+    ),
+  );
+  if (
+    value.repositoryCommit !== WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_COMMIT
+    || value.repositoryTree !== WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_TREE
+    || value.planSha256 !== WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_SHA256
+    || value.orderSha256 !== WEBSITE_PROJECTION_PREDECESSOR_0006_ORDER_SHA256
+  ) {
+    throw new Error(
+      "website projection 0006 predecessor migration plan is invalid",
+    );
+  }
+  return value;
+}
+
+export function websiteProjectionPredecessor0006Plan(successorPlan) {
+  if (
+    successorPlan?.migrationCount ===
+      WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT
+  ) return validateWebsiteProjectionPredecessor0006Plan(successorPlan);
+  validateWebsiteProjectionPlanFiles(
+    successorPlan,
+    WEBSITE_PROJECTION_MIGRATION_FILES,
+  );
+  const migrations = Object.freeze(successorPlan.migrations.slice(
+    0,
+    WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT,
+  ));
+  const predecessor = {
+    ...successorPlan,
+    repositoryCommit: WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_COMMIT,
+    repositoryTree: WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_TREE,
+    migrationCount: WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT,
+    orderSha256: WEBSITE_PROJECTION_PREDECESSOR_0006_ORDER_SHA256,
+    migrations,
+  };
+  const plan = Object.freeze({
+    ...predecessor,
+    planSha256: sha256(canonicalJson(planPayload(predecessor))),
+  });
+  validateWebsiteProjectionPredecessor0006Plan(plan);
+  if (migrationOrderSha256(plan.migrations)
+      !== WEBSITE_PROJECTION_PREDECESSOR_0006_ORDER_SHA256) {
+    throw new Error(
+      "website projection successor does not preserve the exact reviewed 0001-0006 plan",
+    );
+  }
+  return plan;
 }
 
 function retainedWebsiteProjectionPlan(successorPlan) {
@@ -437,11 +510,31 @@ export function compareWebsiteProjectionEvidence({
       WEBSITE_PROJECTION_RETAINED_PLAN_SHA256
     ? retainedWebsiteProjectionPlan(plan)
     : null;
+  const predecessor0006EvidencePresent = evidenceRows[0]?.plan_sha256 ===
+      WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_SHA256
+    || (evidenceRows[0]?.plan_sha256 === WEBSITE_PROJECTION_RETAINED_PLAN_SHA256
+      && evidenceRows[WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT]
+        ?.plan_sha256 === WEBSITE_PROJECTION_PREDECESSOR_0006_PLAN_SHA256);
+  const predecessor0006Plan = predecessor0006EvidencePresent
+      && plan.migrationCount >=
+        WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT
+    ? websiteProjectionPredecessor0006Plan(plan)
+    : null;
+  const predecessor0006Prefix = predecessor0006Plan !== null
+    && evidenceRows[0]?.plan_sha256 === predecessor0006Plan.planSha256;
   for (const [index, row] of evidenceRows.entries()) {
-    const evidencePlan = retainedPlan !== null
-        && index < WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT
-      ? retainedPlan
-      : plan;
+    let evidencePlan = plan;
+    if (predecessor0006Prefix
+      && index < WEBSITE_PROJECTION_PREDECESSOR_0006_MIGRATION_COUNT) {
+      evidencePlan = predecessor0006Plan;
+    } else if (retainedPlan !== null
+      && index < WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT) {
+      evidencePlan = retainedPlan;
+    } else if (retainedPlan !== null
+      && index === WEBSITE_PROJECTION_RETAINED_MIGRATION_COUNT
+      && row?.plan_sha256 === predecessor0006Plan?.planSha256) {
+      evidencePlan = predecessor0006Plan;
+    }
     const migration = evidencePlan.migrations[index];
     if (!migration || !isPlainObject(row)
       || Number(row.ordinal) !== migration.ordinal
