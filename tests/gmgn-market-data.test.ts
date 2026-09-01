@@ -944,6 +944,155 @@ describe("GMGN canonical market enrichment", () => {
     expect(blockUntil).not.toHaveBeenCalled();
   });
 
+  it("awaits exact lease cleanup after the real provider timer expires", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    let resolveComplete!: () => void;
+    const completion = new Promise<void>((resolve) => {
+      resolveComplete = resolve;
+    });
+    const complete = vi.fn((_reservation: typeof GATE_RESERVATION) => {
+      void _reservation;
+      return completion;
+    });
+    const reserveSlot = vi.fn(async () => GATE_RESERVATION);
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot,
+      blockUntil: vi.fn(),
+      complete,
+    };
+    const fetchImpl = vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      setTimeout(
+        () => reject(new DOMException("timed out", "AbortError")),
+        2_501,
+      );
+    }));
+
+    let readSettled = false;
+    const read = readGmgnMarketSnapshotV1(token(111), {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+    });
+    void read.then(
+      () => {
+        readSettled = true;
+      },
+      () => {
+        readSettled = true;
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(complete).not.toHaveBeenCalled();
+    expect(readSettled).toBe(false);
+
+    // The public request times out at 2.500 ms. The provider notices one
+    // millisecond later and begins exact lease cleanup inside lifecycle grace.
+    await vi.advanceTimersByTimeAsync(2);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(readSettled).toBe(false);
+
+    resolveComplete();
+    await expect(read).resolves.toBeNull();
+    expect(reserveSlot).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledWith(GATE_RESERVATION);
+    expect(complete.mock.calls[0]?.[0]).toBe(GATE_RESERVATION);
+    expect(accountGate.blockUntil).not.toHaveBeenCalled();
+  });
+
+  it("bounds a provider that ignores its timeout by lifecycle grace", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => GATE_RESERVATION),
+      blockUntil: vi.fn(),
+      complete: vi.fn(),
+    };
+    const fetchImpl = vi.fn(() => new Promise<Response>(() => {}));
+    let readSettled = false;
+    const read = readGmgnMarketSnapshotV1(token(112), {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+    });
+    void read.then(
+      () => {
+        readSettled = true;
+      },
+      () => {
+        readSettled = true;
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(readSettled).toBe(false);
+    await vi.advanceTimersByTimeAsync(3_499);
+    expect(readSettled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(read).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(accountGate.complete).not.toHaveBeenCalled();
+  });
+
+  it("uses a fresh outcome deadline to publish a late provider 429", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const blockedUntilMs = NOW.getTime() + 2_499 + 1_250;
+    let releaseBlock!: () => void;
+    const blockOutcome = {
+      blockedUntilMs,
+      retryAfterMs: 1_250,
+    };
+    const deferredBlock = new Promise<typeof blockOutcome>((resolve) => {
+      releaseBlock = () => resolve(blockOutcome);
+    });
+    const blockUntil = vi.fn(() => deferredBlock);
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => GATE_RESERVATION),
+      blockUntil,
+      complete: vi.fn(),
+    };
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      setTimeout(() => resolve(new Response(JSON.stringify({
+        code: 429,
+        error: "RATE_LIMIT_EXCEEDED",
+        data: {},
+      }), { status: 429, headers: { "Retry-After": "1" } })), 2_499);
+    }));
+    let readSettled = false;
+    const read = readGmgnMarketSnapshotV1(token(113), {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+    });
+    void read.then(
+      () => {
+        readSettled = true;
+      },
+      () => {
+        readSettled = true;
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(blockUntil).toHaveBeenCalledOnce();
+    expect(readSettled).toBe(false);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(readSettled).toBe(false);
+
+    releaseBlock();
+    await expect(read).resolves.toBeNull();
+    expect(blockUntil).toHaveBeenCalledWith({
+      reservation: GATE_RESERVATION,
+      blockedUntilMs,
+      providerSignal: "http-429",
+    });
+    expect(accountGate.complete).not.toHaveBeenCalled();
+  });
+
   it("fails soft when an errored fetch races a stale exact lease", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     const complete = vi.fn(async () => {

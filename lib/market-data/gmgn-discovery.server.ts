@@ -22,6 +22,9 @@ import {
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
 const GMGN_REQUEST_TIMEOUT_MS = 2_500;
+const GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS = 3_000;
+const GMGN_PROVIDER_LIFECYCLE_GRACE_MS =
+  GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS + 500;
 const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000;
 const GMGN_DISCOVERY_CACHE_TTL_MS = 30_000;
 const GMGN_MAXIMUM_CACHE_ENTRIES = 64;
@@ -254,7 +257,7 @@ async function readThroughCache<Value>(
     const providerWait = providerWorkWait(wait);
     const operation = providerOperation(providerWait);
     const providerRead = read(providerWait);
-    const promise = settleProviderOperation(providerRead, operation).then(
+    const promise = settleProviderReadLifecycle(providerRead, operation).then(
       (settled) => settled === PROVIDER_OPERATION_TIMED_OUT ? null : settled,
     ).then((value) => {
       if (value !== null) {
@@ -312,7 +315,7 @@ async function settleProviderOperation<Value>(
   }
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
-    return await Promise.race([
+    const settled = await Promise.race([
       pending,
       new Promise<typeof PROVIDER_OPERATION_TIMED_OUT>((resolve) => {
         timer = setTimeout(
@@ -321,9 +324,45 @@ async function settleProviderOperation<Value>(
         );
       }),
     ]);
+    if (settled === PROVIDER_OPERATION_TIMED_OUT) {
+      void pending.catch(() => undefined);
+    }
+    return settled;
   } finally {
     if (timer !== null) clearTimeout(timer);
   }
+}
+
+async function settleProviderReadLifecycle<Value>(
+  pending: Promise<Value>,
+  requestOperation: ProviderOperationV1,
+): Promise<Value | typeof PROVIDER_OPERATION_TIMED_OUT> {
+  const timely = await settleProviderOperation(pending, requestOperation);
+  if (timely !== PROVIDER_OPERATION_TIMED_OUT) return timely;
+
+  // Keep the singleflight alive while a timed-out provider call finalizes its
+  // exact database lease, without accepting a late provider response.
+  await settleProviderOperation(
+    pending,
+    providerLifecycleOperation(),
+  );
+  return PROVIDER_OPERATION_TIMED_OUT;
+}
+
+function providerLifecycleOperation(): ProviderOperationV1 {
+  const startedAtMs = Date.now();
+  return Object.freeze({
+    now: () => new Date(),
+    deadlineMs: startedAtMs + GMGN_PROVIDER_LIFECYCLE_GRACE_MS,
+  });
+}
+
+function providerOutcomeOperation(): ProviderOperationV1 {
+  const startedAtMs = Date.now();
+  return Object.freeze({
+    now: () => new Date(),
+    deadlineMs: startedAtMs + GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS,
+  });
 }
 
 async function waitForCaller<Value>(
@@ -384,17 +423,20 @@ async function reserveProviderSlot(
   const pending = accountGate.reserveSlot(input);
   const settled = await settleProviderOperation(pending, operation);
   if (settled !== PROVIDER_OPERATION_TIMED_OUT) return settled;
+  const lateOutcome = providerOutcomeOperation();
+  const lateDecision = await settleProviderOperation(pending, lateOutcome);
+  if (lateDecision !== PROVIDER_OPERATION_TIMED_OUT) {
+    if (lateDecision?.kind === "reserved") {
+      await completeProviderRequest(accountGate, lateDecision, lateOutcome);
+    }
+    return null;
+  }
 
-  // A database query that ignores its AbortSignal may reserve after the local
-  // operation deadline. Release that exact late lease without allowing it to
-  // trigger a provider request or keep this singleflight pending.
+  // A gate implementation that outlives both bounded budgets must still
+  // release the exact late lease if it eventually commits.
   void pending.then(async (decision) => {
     if (decision?.kind !== "reserved") return;
-    try {
-      await accountGate.complete(decision);
-    } catch {
-      // The database gate retains its bounded five-minute lease on failure.
-    }
+    await completeProviderRequest(accountGate, decision);
   }).catch(() => undefined);
   return null;
 }
@@ -450,7 +492,7 @@ async function gmgnJsonRequest(
   const nowMs = now().getTime();
   const remainingMs = requestDeadlineMs - nowMs;
   if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
-    await completeProviderRequest(accountGate, reservation, operation);
+    await completeProviderRequest(accountGate, reservation);
     return null;
   }
   const url = new URL(path, GMGN_API_ORIGIN);
@@ -482,7 +524,7 @@ async function gmgnJsonRequest(
       signal,
     });
   } catch {
-    await completeProviderRequest(accountGate, reservation, operation);
+    await completeProviderRequest(accountGate, reservation);
     return null;
   }
 
@@ -499,7 +541,6 @@ async function gmgnJsonRequest(
       response,
       null,
       responseAtMs,
-      operation,
     );
     return null;
   }
@@ -515,7 +556,6 @@ async function gmgnJsonRequest(
       response,
       null,
       responseAtMs,
-      operation,
     );
     return null;
   }
@@ -530,7 +570,6 @@ async function gmgnJsonRequest(
       response,
       null,
       responseAtMs,
-      operation,
     );
     return null;
   }
@@ -551,12 +590,10 @@ async function gmgnJsonRequest(
       response,
       envelope,
       responseAtMs,
-      operation,
     );
   } else if (!await completeProviderRequest(
     accountGate,
     reservation,
-    operation,
   )) {
     return null;
   }
@@ -585,10 +622,9 @@ async function finalizeRejectedResponse(
   response: Response,
   envelope: unknown,
   nowMs: number,
-  operation: ProviderOperationV1,
 ): Promise<void> {
   if (response.status !== 429) {
-    await completeProviderRequest(accountGate, reservation, operation);
+    await completeProviderRequest(accountGate, reservation);
     return;
   }
   const blockedUntilMs = providerCooldownFromResponse(
@@ -603,7 +639,6 @@ async function finalizeRejectedResponse(
     response,
     envelope,
     nowMs,
-    operation,
   );
 }
 
@@ -715,7 +750,6 @@ async function publishProviderBlock(
   response: Response,
   envelope: unknown,
   nowMs: number,
-  operation: ProviderOperationV1,
 ): Promise<void> {
   if (accountGate === null || reservation === null) return;
   try {
@@ -730,7 +764,7 @@ async function publishProviderBlock(
         ? "http-429"
         : "provider-envelope",
     });
-    await settleProviderOperation(pending, operation);
+    await settleProviderOperation(pending, providerOutcomeOperation());
   } catch {
     // This read already fails soft. A later production request must pass the
     // shared database gate again before another provider call can occur.
@@ -743,14 +777,14 @@ async function completeProviderRequest(
     Awaited<ReturnType<GmgnAccountGateV1["reserveSlot"]>>,
     { kind: "reserved" }
   > | null,
-  operation: ProviderOperationV1,
+  outcomeOperation: ProviderOperationV1 = providerOutcomeOperation(),
 ): Promise<boolean> {
   if (accountGate === null) return true;
   if (reservation === null) return false;
   try {
     const settled = await settleProviderOperation(
       accountGate.complete(reservation),
-      operation,
+      outcomeOperation,
     );
     return settled !== PROVIDER_OPERATION_TIMED_OUT;
   } catch {

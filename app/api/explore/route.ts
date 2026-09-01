@@ -86,6 +86,10 @@ const GMGN_MARKET_CAP_HYDRATION_LIMIT = GMGN_TRENDING_MAXIMUM_LIMIT;
 const MARKET_CAP_SUPPLY_HYDRATION_LIMIT = 20;
 const MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS = 1_800;
 const GMGN_MARKET_CAP_HYDRATION_RESERVE_MS = 2_500;
+const GMGN_MARKET_CAP_RANK_REQUEST_BUDGET_MS = 2_500;
+const GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS =
+  GMGN_MARKET_CAP_RANK_REQUEST_BUDGET_MS +
+  MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS + GMGN_MARKET_CAP_HYDRATION_RESERVE_MS;
 const CLASSIC_EXCLUSIONS = Object.freeze([
   "classic-v1",
   "classic-v2",
@@ -1150,17 +1154,31 @@ export async function GET(request: NextRequest) {
         "newest",
       );
       const direction = options.sort === "market-cap" ? "desc" : "asc";
+      const rankOptions = {
+        interval: "1h" as const,
+        limit: 100,
+        orderBy: "marketcap" as const,
+        direction,
+      } as const;
+      const rankWait = { signal: readSignal, deadlineMs };
       const rankRead = canonicalFilterUniverse.length === 0
         ? Promise.resolve(null)
-        : readGmgnEthereumTrendingV1({
-            interval: "1h",
-            limit: 100,
-            orderBy: "marketcap",
-            direction,
-          }, {
-            signal: readSignal,
-            deadlineMs,
-          }).catch(() => null);
+        : (async () => {
+            const first = await readGmgnEthereumTrendingV1(
+              rankOptions,
+              rankWait,
+            ).catch(() => null);
+            if (
+              first !== null ||
+              rankWait.signal.aborted ||
+              deadlineMs - Date.now() <
+                GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS
+            ) return first;
+            return readGmgnEthereumTrendingV1(
+              rankOptions,
+              rankWait,
+            ).catch(() => null);
+          })();
       const [rankCandidate, searchSnapshot] = await Promise.all([
         rankRead,
         searchRead,

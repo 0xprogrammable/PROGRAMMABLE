@@ -1080,6 +1080,70 @@ describe("GMGN discovery server adapter", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a timed-out provider read pending until its exact lease is released", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    let releaseComplete!: () => void;
+    const completeDeferred = new Promise<void>((resolve) => {
+      releaseComplete = resolve;
+    });
+    const reserveSlot = vi.fn(async () => RESERVATION);
+    const complete = vi.fn((_reservation: typeof RESERVATION) => {
+      void _reservation;
+      return completeDeferred;
+    });
+    const gate = {
+      reserveSlot,
+      blockUntil: vi.fn(),
+      complete,
+    } satisfies GmgnAccountGateV1;
+    let providerRejected = false;
+    const fetchImpl = vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      setTimeout(() => {
+        providerRejected = true;
+        reject(new DOMException("provider request timed out", "AbortError"));
+      }, 2_501);
+    }));
+
+    const publicRead = readGmgnEthereumTrendingV1({
+      interval: "5m",
+      limit: 97,
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => new Date(),
+      deadlineMs: NOW.getTime() + 10_000,
+    });
+    let publicReadSettled = false;
+    void publicRead.then(
+      () => {
+        publicReadSettled = true;
+      },
+      () => {
+        publicReadSettled = true;
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reserveSlot).toHaveResolvedWith(RESERVATION);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(providerRejected).toBe(false);
+    expect(complete).not.toHaveBeenCalled();
+    expect(publicReadSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(providerRejected).toBe(true);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(complete.mock.calls[0]?.[0]).toBe(RESERVATION);
+    expect(publicReadSettled).toBe(false);
+
+    releaseComplete();
+    await expect(publicRead).resolves.toBeNull();
+    expect(publicReadSettled).toBe(true);
+  });
+
   it("fails soft for invalid controls, envelopes, and oversized bodies", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     const fetchImpl = vi.fn();
@@ -1143,7 +1207,7 @@ describe("GMGN discovery server adapter", () => {
       now: () => NOW,
       deadlineMs: NOW.getTime() + 5_000,
     });
-    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.advanceTimersByTimeAsync(5_500);
     await expect(stalledRead).resolves.toBeNull();
     expect(reserveSlot).toHaveBeenCalledOnce();
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -1180,7 +1244,7 @@ describe("GMGN discovery server adapter", () => {
       deadlineMs: NOW.getTime() + 5_000,
     });
 
-    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.advanceTimersByTimeAsync(5_500);
     await expect(stalledRead).resolves.toBeNull();
     expect(reserveSlot).toHaveBeenCalledOnce();
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -1289,5 +1353,86 @@ describe("GMGN discovery server adapter", () => {
     })).resolves.toBeNull();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(reserveSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a timed-out 429 read pending for its fresh gate outcome budget", async () => {
+    vi.useFakeTimers();
+    const startedAt = new Date(NOW.getTime() + 10 * 60_000);
+    vi.setSystemTime(startedAt);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+
+    let releaseBlock!: () => void;
+    const blockDeferred = new Promise<Readonly<{
+      blockedUntilMs: number;
+      retryAfterMs: number;
+    }>>((resolve) => {
+      releaseBlock = () => resolve({
+        blockedUntilMs: startedAt.getTime() + 3_749,
+        retryAfterMs: 1_250,
+      });
+    });
+    const reserveSlot = vi.fn(async () => RESERVATION);
+    const blockUntil = vi.fn(() => blockDeferred);
+    const complete = vi.fn(async () => undefined);
+    const gate = {
+      reserveSlot,
+      blockUntil,
+      complete,
+    } satisfies GmgnAccountGateV1;
+    let providerResponded = false;
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      setTimeout(() => {
+        providerResponded = true;
+        resolve(new Response(JSON.stringify({
+          code: 429,
+          error: "RATE_LIMIT_EXCEEDED",
+          data: {},
+        }), {
+          status: 429,
+          headers: { "Retry-After": "1" },
+        }));
+      }, 2_499);
+    }));
+
+    const publicRead = readGmgnEthereumTrendingV1({
+      interval: "1m",
+      limit: 98,
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => new Date(),
+      deadlineMs: startedAt.getTime() + 10_000,
+    });
+    let publicReadSettled = false;
+    void publicRead.then(
+      () => {
+        publicReadSettled = true;
+      },
+      () => {
+        publicReadSettled = true;
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(providerResponded).toBe(true);
+    expect(blockUntil).toHaveBeenCalledOnce();
+    expect(blockUntil).toHaveBeenCalledWith({
+      reservation: RESERVATION,
+      blockedUntilMs: startedAt.getTime() + 3_749,
+      providerSignal: "http-429",
+    });
+    expect(publicReadSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(publicReadSettled).toBe(false);
+    await vi.advanceTimersByTimeAsync(2_998);
+    expect(publicReadSettled).toBe(false);
+    expect(complete).not.toHaveBeenCalled();
+
+    releaseBlock();
+    await expect(publicRead).resolves.toBeNull();
+    expect(publicReadSettled).toBe(true);
   });
 });
