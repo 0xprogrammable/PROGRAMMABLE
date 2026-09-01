@@ -1448,12 +1448,9 @@ function stableMarketCapRankingMetadata(ranking) {
 }
 
 function exactRequiredGmgnMarketCapRanking(response, nowMs) {
-  const ranking = response.body?.ranking;
-  return ranking?.gmgnStatus !== "unavailable" &&
-    ranking?.matchedTokenCount > 0 &&
-    ranking?.matchedUniqueTokenCount > 0 &&
-    currentProviderTimestamp(ranking?.asOfTime, nowMs) &&
-    /^sha256:[0-9a-f]{64}$/u.test(String(ranking?.rankingCommitment ?? ""));
+  // Canonical coverage is not provider liveness. exactMarketCapRanking already
+  // validates the GMGN intersection plus Dexscreener remainder and stable tail.
+  return exactRequiredGmgnMarketCapLiveness(response, "desc", nowMs);
 }
 
 function exactRequiredGmgnMarketCapLiveness(response, direction, nowMs) {
@@ -2365,7 +2362,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       if (
         requireGmgnMarket &&
         !exactRequiredGmgnMarketCapRanking(highest, now().getTime())
-      ) throw new Error("GMGN descending market-cap rank match is required");
+      ) throw new Error("GMGN descending market-cap liveness is required");
       const identities = completeCatalogTokens.map(exactIdentity);
       if (
         identities.some((identity) => identity === null) ||

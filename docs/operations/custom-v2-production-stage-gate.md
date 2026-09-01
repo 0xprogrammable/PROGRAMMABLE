@@ -110,6 +110,14 @@ throughput. Market-cap pagination additionally requires the current `0008`
 Explore authority readiness before the staged smoke can accept a cross-page
 ranking commitment.
 
+The required descending market-cap check treats a fresh, non-empty GMGN rank
+as provider liveness even when every observed address is foreign to the exact
+Programmable catalog. Canonical GMGN coverage remains a separate field and may
+therefore stay `unavailable`; it is not relabeled as a provider outage. The
+ranking contract still requires exact observed/matched/foreign accounting, a
+current commitment, Dexscreener qualification only for the unmatched canonical
+remainder, and the original canonical launch order for the stable tail.
+
 Trending pagination records
 `discovery_consistency=ranking-identity+monotonic-current-freshness`. The
 server-side discovery ranking commitment binds the ordered canonical ranking

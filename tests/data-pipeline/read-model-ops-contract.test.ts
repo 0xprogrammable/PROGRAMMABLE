@@ -1380,6 +1380,25 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it("rejects a staged descending GMGN canonical-match requirement", () => {
+    const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const needle =
+      'return exactRequiredGmgnMarketCapLiveness(response, "desc", nowMs);';
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: source.replaceAll(
+          needle,
+          "return response.body?.ranking?.matchedUniqueTokenCount > 0;",
+        ),
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
   it.each([
     "lib/market-data/gmgn.server.ts",
     "lib/market-data/gmgn-chart.server.ts",
