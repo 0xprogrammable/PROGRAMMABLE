@@ -1024,7 +1024,9 @@ function gmgnStagedFetch(options = {}) {
         const sort = url.searchParams.get("sort");
         return {
           ...body,
-          ranking: gmgnMatchedMarketCapRanking(sort, 2),
+          ranking: sort === "market-cap-asc" && options.ascendingRanking
+            ? options.ascendingRanking
+            : gmgnMatchedMarketCapRanking(sort, 2),
         };
       }
       if (
@@ -2379,46 +2381,101 @@ test("staged smoke requires a live canonical GMGN search match in required mode"
   );
 });
 
-test("staged smoke rejects foreign-only GMGN market-cap ranks in required mode", async () => {
+test("staged smoke rejects a foreign-only descending GMGN market-cap rank", async () => {
   const foreignOnly = (sort, totalCount) => marketCapRanking(sort, totalCount, {
     observedTokenCount: 1,
     foreignTokenCount: 1,
-    discardedProviderItemCount: 1,
+    asOfTime: NOW,
   });
-  for (const scenario of [
-    {
-      foreignSort: "market-cap",
-      error: /GMGN descending market-cap rank match is required/u,
-    },
-    {
-      foreignSort: "market-cap-asc",
-      error: /GMGN ascending market-cap rank match is required/u,
-    },
-  ]) {
-    await assert.rejects(
-      runStagedStaticDexscreenerSmokeV1({
-        environment: {
-          STAGED_TARGET_URL: "https://candidate.vercel.app/",
-          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
-          PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
-          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
-        },
-        fetchImpl: stagedFetch(({ body, url }) => {
-          if (url.pathname !== "/api/explore") return body;
-          const sort = url.searchParams.get("sort");
-          if (sort !== "market-cap" && sort !== "market-cap-asc") return body;
-          return {
-            ...body,
-            ranking: sort === scenario.foreignSort
-              ? foreignOnly(sort, body.total)
-              : gmgnMatchedMarketCapRanking(sort, body.total),
-          };
-        }),
-        appendOutput: () => undefined,
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch(({ body, url }) => {
+        if (url.pathname !== "/api/explore") return body;
+        const sort = url.searchParams.get("sort");
+        if (sort !== "market-cap" && sort !== "market-cap-asc") return body;
+        return {
+          ...body,
+          ranking: sort === "market-cap"
+            ? foreignOnly(sort, body.total)
+            : gmgnMatchedMarketCapRanking(sort, body.total),
+        };
       }),
-      scenario.error,
-    );
-  }
+      appendOutput: () => undefined,
+    }),
+    /GMGN descending market-cap rank match is required/u,
+  );
+});
+
+test("staged smoke accepts a live foreign-only ascending GMGN bottom rank", async () => {
+  const output = [];
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: gmgnStagedFetch({
+      ascendingRanking: marketCapRanking("market-cap-asc", 2, {
+        observedTokenCount: 2,
+        foreignTokenCount: 2,
+        asOfTime: NOW,
+      }),
+    }),
+    appendOutput: (...args) => output.push(args),
+  });
+
+  assert.equal(result.marketCapAscMatchedCount, 0);
+  assert.equal(result.marketCapAscGmgnStatus, "unavailable");
+  assert.match(output[0][1], /market_cap_asc_gmgn_status=unavailable/u);
+});
+
+test("staged smoke rejects a stale foreign-only ascending GMGN bottom rank", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        ascendingRanking: marketCapRanking("market-cap-asc", 2, {
+          observedTokenCount: 2,
+          foreignTokenCount: 2,
+          asOfTime: new Date(
+            Date.parse(NOW) - 5 * 60_000 - 1,
+          ).toISOString(),
+        }),
+      }),
+      appendOutput: () => undefined,
+    }),
+    /Lowest market-cap ranking contract is invalid/u,
+  );
+});
+
+test("staged smoke rejects an unavailable ascending GMGN market-cap read", async () => {
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        ascendingRanking: marketCapRanking("market-cap-asc", 2),
+      }),
+      appendOutput: () => undefined,
+    }),
+    /GMGN ascending market-cap liveness is required/u,
+  );
 });
 
 test("staged smoke accepts a token-address GMGN-primary chart", async () => {

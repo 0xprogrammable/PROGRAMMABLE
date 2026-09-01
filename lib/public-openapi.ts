@@ -2305,6 +2305,8 @@ export const programmablePublicOpenApi = {
           qualifiedCount: { type: "integer", minimum: 0 },
           totalCount: { type: "integer", minimum: 0 },
           asOfTime: {
+            description:
+              "When the accepted GMGN global rank observed any qualified Ethereum token, this is exactly that rank snapshot time even if no token intersects the canonical catalog. Otherwise it is the latest accepted GMGN token_info or Dexscreener ordering time, or null when no provider ordering signal was accepted.",
             oneOf: [
               { type: "string", format: "date-time" },
               { type: "null" },

@@ -131,6 +131,9 @@ describe("public Explore OpenAPI contract", () => {
       type: "string",
       pattern: "^sha256:[0-9a-f]{64}$",
     });
+    expect(schema.properties.asOfTime.description).toContain(
+      "exactly that rank snapshot time",
+    );
   });
 
   it("documents canonical GMGN search intersection and headers", () => {

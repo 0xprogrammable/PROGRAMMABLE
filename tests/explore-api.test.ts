@@ -1556,9 +1556,10 @@ describe("Explore static identity and Dexscreener market contract", () => {
       fetchedAt: fresh,
     } as const;
     mocks.readTrending.mockResolvedValue(ascSnapshot);
-    const asc = await json(await GET(
+    const ascResponse = await GET(
       request("sort=market-cap-asc&page=1&limit=5"),
-    ));
+    );
+    const asc = await json(ascResponse);
 
     expect(asc.tokens.slice(0, 2).map((entry: ExploreEntry) => entry.id)).toEqual([
       entries[1]!.id,
@@ -1573,6 +1574,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(asc.ranking.rankingCommitment).not.toBe(
       desc.ranking.rankingCommitment,
     );
+    expect(asc.ranking.asOfTime).toBe(fresh);
     expect(mocks.readTrending).toHaveBeenLastCalledWith({
       interval: "1h",
       limit: 100,
@@ -1582,6 +1584,38 @@ describe("Explore static identity and Dexscreener market contract", () => {
       signal: expect.any(AbortSignal),
       deadlineMs: expect.any(Number),
     }));
+  });
+
+  it("reports a fresh ascending GMGN rank without canonical overlap", async () => {
+    const fresh = new Date().toISOString();
+    const snapshot = {
+      ...discoverySnapshot(
+        "trending",
+        [],
+        [
+          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "0xffffffffffffffffffffffffffffffffffffffff",
+        ],
+        { orderBy: "marketcap", direction: "asc" },
+      ),
+      fetchedAt: fresh,
+    } as const;
+    mocks.readTrending.mockResolvedValue(snapshot);
+
+    const response = await GET(
+      request("sort=market-cap-asc&page=1&limit=5"),
+    );
+    const body = await json(response);
+
+    expect(body.ranking).toMatchObject({
+      direction: "asc",
+      gmgnStatus: "unavailable",
+      observedTokenCount: 2,
+      matchedTokenCount: 0,
+      matchedUniqueTokenCount: 0,
+      foreignTokenCount: 2,
+      asOfTime: fresh,
+    });
   });
 
   it.each(["market-cap", "market-cap-asc"] as const)(

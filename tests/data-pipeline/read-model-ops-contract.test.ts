@@ -892,6 +892,11 @@ describe("read-model operations source contract", () => {
       "input.gmgnHydrationQualifiedCount + input.fallbackQualifiedCount ===",
     ],
     [
+      "fallback time allowed to mask primary rank freshness",
+      "asOfTime: coverage.gmgnObservedUniqueTokenCount > 0 && snapshot !== null",
+      "asOfTime: false",
+    ],
+    [
       "no GMGN search read for nonempty q",
       "readGmgnEthereumSearchV1(options.query, {",
       "Promise.resolve(null as GmgnSearchSnapshotV1 | null); void ({",
@@ -1191,6 +1196,18 @@ describe("read-model operations source contract", () => {
       "lib/market-data/explore-market.server.ts",
       'if (marketRead.fallbackObservedCount > 0) sources.push("dexscreener");',
       'if (marketRead.fallbackQualifiedCount > 0) sources.push("dexscreener");',
+    ],
+    [
+      "a pure-Dex empty observation with a timestamp window",
+      "lib/market-data/dexscreener-explore.server.ts",
+      "oldestFetchedAt: snapshot.observedCount === 0",
+      "oldestFetchedAt: false",
+    ],
+    [
+      "a market-cap client that ignores primary rank observations",
+      "components/explore-view.tsx",
+      "Number(value.observedTokenCount) === 0 &&",
+      "true &&",
     ],
   ])("rejects GMGN enrichment with %s", (_label, path, needle, replacement) => {
     const source = readFileSync(resolve(ROOT, path), "utf8");
@@ -1797,6 +1814,11 @@ describe("read-model operations source contract", () => {
       "no GMGN-primary full-catalog market-cap ranking contract",
       'highest,\n          completeCatalogTokens,\n          "desc",',
       'highest,\n          [],\n          "desc",',
+    ],
+    [
+      "no live GMGN ascending bottom-rank proof",
+      "ranking.observedTokenCount > 0",
+      "ranking.observedTokenCount >= 0",
     ],
     [
       "no dynamic token detail market contract",

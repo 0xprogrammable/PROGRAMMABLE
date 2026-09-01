@@ -98,8 +98,12 @@ export async function readDexscreenerExploreEntriesV1(
       observedCount: snapshot.observedCount,
       qualifiedCount,
       unavailableCount: snapshot.requestedCount - qualifiedCount,
-      oldestFetchedAt: snapshot.sourceReadWindow?.oldestFetchedAt ?? null,
-      newestFetchedAt: snapshot.sourceReadWindow?.newestFetchedAt ?? null,
+      oldestFetchedAt: snapshot.observedCount === 0
+        ? null
+        : snapshot.sourceReadWindow?.oldestFetchedAt ?? null,
+      newestFetchedAt: snapshot.observedCount === 0
+        ? null
+        : snapshot.sourceReadWindow?.newestFetchedAt ?? null,
     },
   };
 }

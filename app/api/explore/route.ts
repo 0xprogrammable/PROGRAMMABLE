@@ -836,10 +836,12 @@ export function exploreMarketCapRankingV1(
       canonicalTailCount: hybrid.canonicalTailEntryCount,
       qualifiedCount,
       totalCount: canonicalEntries.length,
-      asOfTime: hybrid.rows.map((row) => row.orderingAsOfTime)
-        .filter((value): value is string => value !== null)
-        .sort()
-        .at(-1) ?? null,
+      asOfTime: coverage.gmgnObservedUniqueTokenCount > 0 && snapshot !== null
+        ? snapshot.fetchedAt
+        : hybrid.rows.map((row) => row.orderingAsOfTime)
+          .filter((value): value is string => value !== null)
+          .sort()
+          .at(-1) ?? null,
     },
   };
 }

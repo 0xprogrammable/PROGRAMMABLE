@@ -254,6 +254,31 @@ describe("Dexscreener Explore adapter", () => {
     });
   });
 
+  it("clears an empty public observation window from the provider snapshot", async () => {
+    const token = entry(1);
+    mocks.readDex.mockResolvedValue({
+      ...snapshot([{
+        identity: identity(token),
+        status: "unavailable",
+        reason: "provider-missing",
+      }]),
+      sourceReadWindow: {
+        oldestFetchedAt: NOW,
+        newestFetchedAt: NOW,
+      },
+    });
+
+    await expect(readDexscreenerExploreEntriesV1([token])).resolves
+      .toMatchObject({
+        marketRead: {
+          observedCount: 0,
+          qualifiedCount: 0,
+          oldestFetchedAt: null,
+          newestFetchedAt: null,
+        },
+      });
+  });
+
   it("fails soft for an unexpected provider exception", async () => {
     const tokens = [entry(1), entry(2)];
     mocks.readDex.mockRejectedValue(new Error("provider down"));
