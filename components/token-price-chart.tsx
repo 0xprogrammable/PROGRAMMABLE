@@ -17,16 +17,20 @@ import {
   isMarketChartV1,
   type MarketChartV1,
 } from "@/lib/market-data/market-data-v1";
+import {
+  isGmgnMarketChartV1,
+  type GmgnMarketChartV1,
+} from "@/lib/market-data/gmgn-chart-data-v1";
 
 import styles from "./token-price-chart.module.css";
 
 export type TokenChartPoint = {
-  blockNumber: string;
+  blockNumber?: string;
   time?: string;
   bucketStart?: string;
   bucketEnd?: string;
   observedAt?: string;
-  valueSemantics?: "period-median";
+  valueSemantics?: "period-median" | "period-close";
   priceEth?: string;
   priceUsd?: string;
   marketCapUsd?: string;
@@ -41,11 +45,11 @@ export type TokenChartPayload = {
     | "partial"
     | "waiting-for-first-trade";
   points: TokenChartPoint[];
-  swapCount: number;
+  swapCount?: number;
   volumeWei?: string;
   volumeEth?: string;
   volumeUsdWad?: string;
-  marketData?: MarketChartV1;
+  marketData?: MarketChartV1 | GmgnMarketChartV1;
 };
 type ChartPayload = TokenChartPayload;
 type ChartRequestState = {
@@ -64,7 +68,7 @@ export type ChartRange = "1h" | "1d" | "1w" | "all";
 export type TokenChartVolume = {
   range: ChartRange;
   pending: boolean;
-  source?: "bitquery";
+  source?: "bitquery" | "gmgn";
   volumeEth?: string;
   volumeUsdWad?: string;
 };
@@ -101,23 +105,39 @@ export function isAuthoritativeChartPayloadStatus(status: unknown) {
 export function parseAuthoritativeChartPayload(
   value: unknown,
 ): ChartPayload | null {
+  if (isMarketChartV1(value)) {
+    if (
+      value.status === "unavailable" ||
+      value.valuation.status !== "unavailable" ||
+      value.valuation.reason !== "source-unavailable" ||
+      hasChartOwnedValuation(value)
+    ) return null;
+    return {
+      status: value.status,
+      points: [...value.points],
+      swapCount: value.swapCount,
+      ...(value.volumeUsdWad ? { volumeUsdWad: value.volumeUsdWad } : {}),
+      marketData: value,
+    };
+  }
   if (
-    !isMarketChartV1(value) ||
-    value.status === "unavailable" ||
-    value.valuation.status !== "unavailable" ||
-    value.valuation.reason !== "source-unavailable" ||
-    "fdvEthWei" in value ||
-    "fdvEth" in value ||
-    "fdvUsdWad" in value ||
-    "valuationMetric" in value
+    !isGmgnMarketChartV1(value) ||
+    hasChartOwnedValuation(value) ||
+    "valuation" in value
   ) return null;
   return {
     status: value.status,
     points: [...value.points],
-    swapCount: value.swapCount,
-    ...(value.volumeUsdWad ? { volumeUsdWad: value.volumeUsdWad } : {}),
+    volumeUsdWad: value.volumeUsdWad,
     marketData: value,
   };
+}
+
+function hasChartOwnedValuation(value: object) {
+  return "fdvEthWei" in value ||
+    "fdvEth" in value ||
+    "fdvUsdWad" in value ||
+    "valuationMetric" in value;
 }
 
 export function isAuthoritativeChartPayload(
@@ -415,10 +435,10 @@ export function selectChartMetric(
     : "price";
 }
 
-function chartPointContext(point: TokenChartPoint): string {
+export function chartPointContext(point: TokenChartPoint): string {
   const timestamp = point.valueSemantics === "period-median"
     ? point.time ?? point.bucketEnd ?? point.bucketStart
-    : point.time;
+    : point.time ?? point.bucketEnd ?? point.bucketStart;
   if (timestamp && Number.isFinite(Date.parse(timestamp))) {
     return new Intl.DateTimeFormat("en-US", {
       month: "short",
@@ -429,7 +449,7 @@ function chartPointContext(point: TokenChartPoint): string {
       hour12: true,
     }).format(new Date(timestamp));
   }
-  return `Block ${point.blockNumber}`;
+  return point.blockNumber ? `Block ${point.blockNumber}` : "Verified observation";
 }
 
 function linePath(points: PlottedPoint[]) {
@@ -742,8 +762,9 @@ export function TokenPriceChart({
     onVolumeChange?.({
       range,
       pending: false,
-      ...(payload.marketData?.source === "bitquery"
-        ? { source: "bitquery" as const }
+      ...(payload.marketData?.source === "bitquery" ||
+          payload.marketData?.source === "gmgn"
+        ? { source: payload.marketData.source }
         : {}),
       volumeEth: payload.volumeEth,
       volumeUsdWad: payload.volumeUsdWad,

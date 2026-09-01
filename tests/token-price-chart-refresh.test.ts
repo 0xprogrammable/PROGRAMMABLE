@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acceptChartPayload,
   bindMarketCapHistory,
+  chartPointContext,
   createSerializedChartRefresh,
   createChartGeometry,
   formatPrice,
@@ -15,6 +16,8 @@ import {
   selectChartMetric,
   shouldClearChartInspectionAfterPointerUp,
 } from "../components/token-price-chart";
+import type { GmgnMarketChartV1 } from
+  "../lib/market-data/gmgn-chart-data-v1";
 import type { MarketChartV1 } from "../lib/market-data/market-data-v1";
 
 const MARKET_CHART = {
@@ -57,6 +60,60 @@ const MARKET_CHART = {
   asOfTime: "2026-08-11T14:01:59.000Z",
   truncated: false,
 } as const satisfies MarketChartV1;
+
+const GMGN_CHART = {
+  schemaVersion: "programmable.gmgn-market-chart.v1",
+  source: "gmgn",
+  readStatus: "live",
+  status: "ready",
+  generatedAt: "2026-08-11T14:03:00.000Z",
+  identity: MARKET_CHART.identity,
+  identityProof: {
+    schemaVersion: "programmable.gmgn-chart-identity-proof.v1",
+    source: "gmgn-token-info",
+    verifiedAt: "2026-08-11T14:03:00.000Z",
+    identity: MARKET_CHART.identity,
+    canonicalSupply: {
+      totalSupplyRaw: "1000000000000000000000000",
+      tokenDecimals: 18,
+    },
+  },
+  range: "1d",
+  resolution: "1m",
+  requestedFrom: "2026-08-11T14:00:00.000Z",
+  requestedTo: "2026-08-11T14:02:00.000Z",
+  points: [{
+    time: "2026-08-11T14:01:00.000Z",
+    bucketStart: "2026-08-11T14:00:00.000Z",
+    bucketEnd: "2026-08-11T14:01:00.000Z",
+    valueSemantics: "period-close",
+    priceUsd: "0.00001",
+    ohlcUsd: {
+      open: "0.000009",
+      high: "0.000011",
+      low: "0.000008",
+      close: "0.00001",
+    },
+    volumeUsdWad: "1000000000000000000",
+  }, {
+    time: "2026-08-11T14:02:00.000Z",
+    bucketStart: "2026-08-11T14:01:00.000Z",
+    bucketEnd: "2026-08-11T14:02:00.000Z",
+    valueSemantics: "period-close",
+    priceUsd: "0.000012",
+    ohlcUsd: {
+      open: "0.00001",
+      high: "0.000013",
+      low: "0.000009",
+      close: "0.000012",
+    },
+    volumeUsdWad: "2000000000000000000",
+  }],
+  candleCount: 2,
+  volumeUsdWad: "3000000000000000000",
+  asOfTime: "2026-08-11T14:02:00.000Z",
+  truncated: false,
+} as const satisfies GmgnMarketChartV1;
 
 describe("token price chart inspection", () => {
   it("keeps small and changing prices compact without changing their unit", () => {
@@ -177,7 +234,7 @@ describe("token price chart refresh", () => {
     vi.useRealTimers();
   });
 
-  it("accepts only quote-bound period-median chart DTOs", () => {
+  it("keeps current quote-bound period-median Bitquery DTO compatibility", () => {
     expect(isAuthoritativeChartPayloadStatus("ready")).toBe(true);
     expect(isAuthoritativeChartPayloadStatus("insufficient-history")).toBe(true);
     expect(isAuthoritativeChartPayloadStatus("partial")).toBe(true);
@@ -192,6 +249,30 @@ describe("token price chart refresh", () => {
       marketData: MARKET_CHART,
     });
     expect(acceptChartPayload("token:1d", payload!).payload).toBe(payload);
+  });
+
+  it("accepts exact GMGN period-close OHLCV without inventing blocks or swaps", () => {
+    expect(isAuthoritativeChartPayload(GMGN_CHART)).toBe(true);
+
+    const payload = parseAuthoritativeChartPayload(GMGN_CHART);
+    expect(payload).toMatchObject({
+      status: "ready",
+      points: GMGN_CHART.points,
+      volumeUsdWad: GMGN_CHART.volumeUsdWad,
+      marketData: GMGN_CHART,
+    });
+    expect(payload).not.toHaveProperty("swapCount");
+    expect(payload?.points[0]?.blockNumber).toBeUndefined();
+    expect(createChartGeometry(payload!.points)).toMatchObject({
+      unit: "USD",
+      latestValue: 0.000012,
+    });
+    expect(chartPointContext(payload!.points[0]!)).not.toContain(
+      "Block undefined",
+    );
+    expect(chartPointContext({ priceUsd: "1" })).toBe(
+      "Verified observation",
+    );
   });
 
   it("rejects every chart-owned valuation path", () => {
@@ -220,6 +301,14 @@ describe("token price chart refresh", () => {
       status: "ready",
       points: MARKET_CHART.points,
       swapCount: 2,
+    })).toBe(false);
+    expect(isAuthoritativeChartPayload({
+      ...GMGN_CHART,
+      fdvUsdWad: "3000000000000000000000000",
+    })).toBe(false);
+    expect(isAuthoritativeChartPayload({
+      ...GMGN_CHART,
+      valuation: { status: "available" },
     })).toBe(false);
   });
 

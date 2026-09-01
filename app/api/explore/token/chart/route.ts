@@ -10,8 +10,16 @@ import {
   "../../../../../lib/market-data/envio-classic-v3-catalog.server";
 import { exploreEntryMarketIdentitiesV1 } from
   "../../../../../lib/market-data/explore-market-identities";
+import {
+  isGmgnMarketChartForIdentityV1,
+  preferExactGmgnMarketChartV1,
+  type GmgnMarketChartV1,
+} from "../../../../../lib/market-data/gmgn-chart-data-v1";
+import { readGmgnMarketChartV1 } from
+  "../../../../../lib/market-data/gmgn-chart.server";
 import type {
   MarketChartErrorV1,
+  MarketChartIdentityV1,
   MarketChartV1,
 } from "../../../../../lib/market-data/market-data-v1";
 import { isTokenChartRange } from "../../../../../lib/onchain/chart";
@@ -31,6 +39,8 @@ export const runtime = "nodejs";
 
 const TOKEN_CHART_CACHE_CONTROL =
   "public, max-age=0, s-maxage=2, stale-while-revalidate=2";
+const GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS = 60_000;
+const GMGN_PRIMARY_CHART_MAXIMUM_CLOCK_SKEW_MS = 5_000;
 
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
@@ -145,11 +155,46 @@ export async function GET(request: NextRequest) {
         routerStatus,
       });
     }
-    const chart = await readBitqueryMarketChartV1({
-      identity: identities[0],
+    const identity = identities[0];
+    let gmgnChart: GmgnMarketChartV1 | null = null;
+    try {
+      gmgnChart = await readGmgnMarketChartV1({
+        entry,
+        identity,
+        range,
+      }, {
+        signal: request.signal,
+      });
+    } catch {
+      // GMGN is an enrichment provider. Its failure must not hide a canonical
+      // launch or prevent the existing exact-pool history fallback.
+      console.error("Token chart GMGN read unavailable", {
+        name: "GmgnChartReadError",
+      });
+    }
+    const gmgnReadAt = new Date();
+    if (isFreshExactReadyGmgnChart(gmgnChart, identity, range, gmgnReadAt)) {
+      return chartResponse(
+        gmgnChart,
+        launchSource,
+        entry.exploreKind === "token",
+        routerStatus,
+      );
+    }
+
+    const bitqueryChart = await readBitqueryMarketChartV1({
+      identity,
       range,
       ...(range === "all" ? { historyStart: entry.launchedAt } : {}),
       signal: request.signal,
+    });
+    const chart = preferExactGmgnMarketChartV1({
+      candidate: gmgnChart,
+      fallback: bitqueryChart,
+      identity,
+      range,
+      now: new Date(),
+      maximumCandidateAgeMs: GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS,
     });
     return chartResponse(
       chart,
@@ -170,6 +215,25 @@ export async function GET(request: NextRequest) {
       status: 503,
     });
   }
+}
+
+function isFreshExactReadyGmgnChart(
+  chart: unknown,
+  identity: MarketChartIdentityV1,
+  range: MarketChartV1["range"],
+  now: Date,
+): chart is GmgnMarketChartV1 {
+  if (
+    !isGmgnMarketChartForIdentityV1(chart, identity, range) ||
+    chart.status !== "ready" ||
+    !Number.isFinite(now.getTime())
+  ) return false;
+  const generatedAtMs = Date.parse(chart.generatedAt);
+  const proofAtMs = Date.parse(chart.identityProof.verifiedAt);
+  return generatedAtMs <=
+      now.getTime() + GMGN_PRIMARY_CHART_MAXIMUM_CLOCK_SKEW_MS &&
+    now.getTime() - generatedAtMs <= GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS &&
+    generatedAtMs - proofAtMs <= GMGN_PRIMARY_CHART_MAXIMUM_AGE_MS;
 }
 
 function json(body: unknown, status: number) {
@@ -216,7 +280,7 @@ function unavailable(input: Readonly<{
 }
 
 function chartResponse(
-  chart: MarketChartV1,
+  chart: MarketChartV1 | GmgnMarketChartV1,
   launchSource: string,
   isCanonicalToken: boolean,
   routerStatus: "current" | "unavailable",
@@ -231,21 +295,21 @@ function chartResponse(
   return NextResponse.json(chart, {
     headers: {
       // Registry Custom visibility stays fail-closed at the identity boundary.
-      // Only canonical token charts with a live Bitquery result may be shared
+      // Only canonical token charts with a live provider result may be shared
       // at the edge; transient fallbacks must be retried instead of cached.
       "Cache-Control": isCanonicalToken && chart.readStatus === "live"
         ? TOKEN_CHART_CACHE_CONTROL
         : "no-store",
       "X-Programmable-Data-Quality": dataQuality,
       "X-Programmable-Launch-Source": launchSource,
-      "X-Programmable-Read-Source": `${launchSource}+bitquery`,
+      "X-Programmable-Read-Source": `${launchSource}+${chart.source}`,
       "X-Programmable-Router-Read-Status": routerStatus,
-      "X-Programmable-Market-Provider": "bitquery",
+      "X-Programmable-Market-Provider": chart.source,
       "X-Programmable-Market-Read-Status": chart.readStatus,
       ...(hasPriceHistory
         ? {
-            "X-Programmable-Market-Source": "bitquery",
-            "X-Programmable-Price-Source": "bitquery",
+            "X-Programmable-Market-Source": chart.source,
+            "X-Programmable-Price-Source": chart.source,
           }
         : {}),
       ...(chart.asOfTime
