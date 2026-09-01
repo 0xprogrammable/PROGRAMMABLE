@@ -780,6 +780,37 @@ describe("GMGN discovery server adapter", () => {
     })).resolves.toBeNull();
   });
 
+  it("keeps provider bodies and credentials out of discovery diagnostics", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const providerSentinel = "SENTINEL_PROVIDER_ACCOUNT_654321";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { gate } = accountGate();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      code: providerSentinel,
+      data: { data: { rank: [providerToken(10, 1)] } },
+    }), { status: 200 }));
+
+    await expect(readGmgnEthereumTrendingV1({
+      interval: "1h",
+      limit: 10,
+      orderBy: "marketcap",
+      direction: "asc",
+    }, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.toBeNull();
+
+    const diagnostics = JSON.stringify(warn.mock.calls);
+    expect(diagnostics).toContain("envelope-rejected");
+    expect(diagnostics).toContain("asc");
+    expect(diagnostics).not.toContain(providerSentinel);
+    expect(diagnostics).not.toContain("test-server-key");
+    expect(diagnostics).not.toContain(address(10));
+  });
+
   it("uses only the official read-only rank request and weight one", async () => {
     vi.stubEnv("GMGN_API_KEY", "test-server-key");
     const { gate, reserveSlot, complete } = accountGate();
@@ -818,6 +849,8 @@ describe("GMGN discovery server adapter", () => {
     expect(url.searchParams.get("client_id")).toMatch(/^[0-9a-f-]{36}$/u);
     const headers = new Headers(init?.headers);
     expect(headers.get("X-APIKEY")).toBe("test-server-key");
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("User-Agent")).toBe("programmable-market-indexer/1.0");
     expect(headers.get("X-Signature")).toBeNull();
     expect(init?.method).toBe("GET");
     expect(init?.body).toBeUndefined();

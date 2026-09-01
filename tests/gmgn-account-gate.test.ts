@@ -99,6 +99,48 @@ describe("GMGN account gate", () => {
     expect(active.rows).toEqual([{ count: 20 }]);
   });
 
+  it("keeps account-wide headroom for ranking beside bulk token-info reads", async () => {
+    const { database, pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const bulkLeases = await Promise.all(Array.from({ length: 12 }, async () => {
+      const decision = await gate.reserveSlot({
+        requestsPerSecond: 20,
+        maximumConcurrentLeases: 12,
+        deadlineMs: Date.now() + 2_000,
+      });
+      if (decision?.kind !== "reserved") {
+        throw new Error("bulk test lease unavailable");
+      }
+      return decision;
+    }));
+
+    await expect(gate.reserveSlot({
+      requestsPerSecond: 20,
+      maximumConcurrentLeases: 12,
+      deadlineMs: Date.now() + 80,
+    })).resolves.toBeNull();
+    const rankLease = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(rankLease?.kind).toBe("reserved");
+    if (rankLease?.kind !== "reserved") {
+      throw new Error("ranking headroom lease unavailable");
+    }
+
+    await database.exec("RESET ROLE");
+    const active = await database.query<{ count: number }>(`
+      SELECT count(*) AS count
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+       WHERE lease_until > clock_timestamp()
+    `);
+    expect(active.rows).toEqual([{ count: 13 }]);
+    await Promise.all([
+      ...bulkLeases.map((lease) => gate.complete(lease)),
+      gate.complete(rankLease),
+    ]);
+  });
+
   it("cancels a capacity wait without allocating a twenty-first lease", async () => {
     const { database, pool } = await migratedGate();
     const gate = new PostgresGmgnAccountGateV1(pool);
@@ -437,6 +479,23 @@ describe("GMGN account gate", () => {
     })).rejects.toThrow("GMGN account gate reservation is invalid");
     expect(query).not.toHaveBeenCalled();
   });
+
+  it.each([0, 21, 1.5] as const)(
+    "rejects invalid maximum concurrent leases %p before database access",
+    async (maximumConcurrentLeases) => {
+      const query = vi.fn();
+      const gate = new PostgresGmgnAccountGateV1({
+        connect: vi.fn(),
+        query,
+      });
+      await expect(gate.reserveSlot({
+        requestsPerSecond: 20,
+        maximumConcurrentLeases,
+        deadlineMs: Date.now() + 1_000,
+      })).rejects.toThrow("GMGN account gate reservation is invalid");
+      expect(query).not.toHaveBeenCalled();
+    },
+  );
 
   it("publishes one central blocked_until and Retry-After decision", async () => {
     const { database, pool } = await migratedGate();

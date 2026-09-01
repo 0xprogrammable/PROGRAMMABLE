@@ -29,6 +29,7 @@ import {
 } from "./market-data-v1";
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
+const GMGN_API_USER_AGENT = "programmable-market-indexer/1.0" as const;
 const GMGN_REQUEST_TIMEOUT_MS = 2_500;
 const GMGN_ACCOUNT_GATE_OUTCOME_TIMEOUT_MS = 3_000;
 const GMGN_PROVIDER_LIFECYCLE_GRACE_MS =
@@ -586,6 +587,7 @@ async function gmgnJsonRequest(
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+        "User-Agent": GMGN_API_USER_AGENT,
         "X-APIKEY": apiKey,
       },
       redirect: "error",

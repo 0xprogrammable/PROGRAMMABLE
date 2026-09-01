@@ -23,6 +23,7 @@ import {
 } from "./gmgn-discovery-v1";
 
 const GMGN_API_ORIGIN = "https://openapi.gmgn.ai" as const;
+const GMGN_API_USER_AGENT = "programmable-market-indexer/1.0" as const;
 const GMGN_REQUEST_TIMEOUT_MS = 2_500;
 // Cold database readiness and account-wide scheduling must not consume the
 // provider's response budget after a slot has actually been reserved.
@@ -98,6 +99,7 @@ const searchInFlight = new Map<
   Promise<GmgnSearchSnapshotV1 | null>
 >();
 let localBlockedUntilMs = 0;
+const providerFailureLoggedAt = new Map<string, number>();
 
 export function gmgnDiscoveryConfiguredV1(): boolean {
   return readApiKey() !== null;
@@ -265,7 +267,7 @@ async function readGmgnDiscoverySnapshotFromProviderV1(
     apiKey,
     providerWait,
   );
-  return parseGmgnDiscoverySnapshotV1(data, {
+  const snapshot = parseGmgnDiscoverySnapshotV1(data, {
     kind,
     interval: normalized.interval,
     ...(normalized.orderBy === null
@@ -277,6 +279,22 @@ async function readGmgnDiscoverySnapshotFromProviderV1(
     limit: normalized.limit,
     fetchedAt: currentDate(providerWait),
   });
+  if (data !== null && snapshot === null) {
+    logGmgnProviderUnavailableV1(
+      path,
+      kind === "trending"
+        ? {
+            query: {
+              direction: normalized.direction ?? "desc",
+            },
+            body: null,
+          }
+        : { query: {}, body: null },
+      "schema-rejected",
+      200,
+    );
+  }
+  return snapshot;
 }
 
 async function readGmgnSearchSnapshotFromProviderV1(
@@ -583,9 +601,12 @@ async function gmgnJsonRequest(
     wait.signal?.aborted ||
     !Number.isFinite(queuedAtMs) ||
     !Number.isFinite(requestDeadlineMs) ||
-    requestDeadlineMs <= queuedAtMs ||
-    localBlockedUntilMs > queuedAtMs
+    requestDeadlineMs <= queuedAtMs
   ) return null;
+  if (localBlockedUntilMs > queuedAtMs) {
+    logGmgnProviderUnavailableV1(path, request, "local-cooldown");
+    return null;
+  }
 
   let accountGate: GmgnAccountGateV1 | null = wait.accountGate ?? null;
   let reservation: Extract<
@@ -609,11 +630,21 @@ async function gmgnJsonRequest(
         deadlineMs: gateDeadlineMs,
         signal: wait.signal,
       }, gateOperation);
-      if (decision?.kind !== "reserved") return null;
+      if (decision?.kind !== "reserved") {
+        logGmgnProviderUnavailableV1(
+          path,
+          request,
+          decision?.kind === "blocked"
+            ? "account-gate-blocked"
+            : "account-gate-unavailable",
+        );
+        return null;
+      }
       reservation = decision;
     }
   } catch {
     // A production request must never bypass the shared database gate.
+    logGmgnProviderUnavailableV1(path, request, "account-gate-error");
     return null;
   }
 
@@ -642,7 +673,8 @@ async function gmgnJsonRequest(
       method,
       headers: {
         Accept: "application/json",
-        ...(request.body === null ? {} : { "Content-Type": "application/json" }),
+        "Content-Type": "application/json",
+        "User-Agent": GMGN_API_USER_AGENT,
         "X-APIKEY": apiKey,
       },
       body: request.body === null ? undefined : JSON.stringify(request.body),
@@ -653,6 +685,7 @@ async function gmgnJsonRequest(
     });
   } catch {
     await completeProviderRequest(accountGate, reservation);
+    logGmgnProviderUnavailableV1(path, request, "fetch-error");
     return null;
   }
 
@@ -719,22 +752,71 @@ async function gmgnJsonRequest(
       envelope,
       responseAtMs,
     );
+    logGmgnProviderUnavailableV1(
+      path,
+      request,
+      "rate-limited",
+      response.status,
+    );
   } else if (!await completeProviderRequest(
     accountGate,
     reservation,
   )) {
     return null;
   }
+  if (rateLimited) return null;
+  if (!response.ok) {
+    logGmgnProviderUnavailableV1(
+      path,
+      request,
+      "http-error",
+      response.status,
+    );
+    return null;
+  }
   if (
-    !response.ok ||
-    rateLimited ||
     !isRecord(envelope) ||
     (envelope.code !== 0 && envelope.code !== "0") ||
     envelope.data === undefined
-  ) return null;
+  ) {
+    logGmgnProviderUnavailableV1(
+      path,
+      request,
+      "envelope-rejected",
+      response.status,
+    );
+    return null;
+  }
   // Preserve the provider envelope so the schema parser can validate every
   // explicit outer and nested chain declaration before unwrapping its data.
   return envelope;
+}
+
+function logGmgnProviderUnavailableV1(
+  path: GmgnDiscoveryPath,
+  request: Readonly<{
+    query: Readonly<Record<string, string>>;
+    body: Readonly<Record<string, unknown>> | null;
+  }>,
+  phase: string,
+  httpStatus?: number,
+): void {
+  if (process.env.NODE_ENV !== "production") return;
+  const direction = request.query.direction === "asc" ||
+      request.query.direction === "desc"
+    ? request.query.direction
+    : null;
+  const key = `${path}:${phase}:${direction ?? "none"}:${httpStatus ?? "none"}`;
+  const nowMs = Date.now();
+  const lastLoggedAt = providerFailureLoggedAt.get(key) ?? 0;
+  if (nowMs - lastLoggedAt < 10_000) return;
+  providerFailureLoggedAt.set(key, nowMs);
+  console.warn("GMGN provider read unavailable", {
+    endpoint: path,
+    phase,
+    direction,
+    httpStatus: Number.isSafeInteger(httpStatus) ? httpStatus : null,
+  });
 }
 
 function endpointCost(path: GmgnDiscoveryPath): GmgnAccountGateCostV1 {
