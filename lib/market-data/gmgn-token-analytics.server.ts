@@ -632,7 +632,8 @@ async function gmgnJsonRequest(
     ) accountGate = getProductionGmgnAccountGateV1();
     if (accountGate !== null) {
       const decision = await accountGate.reserveSlot({
-        requestsPerSecond: effectiveRequestsPerSecond(path),
+        requestsPerSecond: configuredRequestsPerSecond(),
+        cost: gmgnRequestCost(path),
         deadlineMs: requestDeadlineMs,
         signal: wait.signal,
       });
@@ -811,9 +812,8 @@ function configuredRequestsPerSecond(): number {
   return Number.isSafeInteger(value) && value >= 1 && value <= 50 ? value : 1;
 }
 
-function effectiveRequestsPerSecond(path: GmgnAnalyticsPath): number {
-  const weight = path.includes("token_top_") ? 5 : 1;
-  return Math.max(1, Math.floor(configuredRequestsPerSecond() / weight));
+function gmgnRequestCost(path: GmgnAnalyticsPath): 1 | 5 {
+  return path.includes("token_top_") ? 5 : 1;
 }
 
 function isRateLimitedEnvelope(value: unknown): boolean {

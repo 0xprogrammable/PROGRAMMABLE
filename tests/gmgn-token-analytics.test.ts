@@ -426,7 +426,8 @@ describe("GMGN Ethereum token analytics", () => {
     expect(reads.every((value) => value?.wallets.length === 1)).toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(gate.reserveSlot).toHaveBeenCalledWith(expect.objectContaining({
-      requestsPerSecond: 4,
+      requestsPerSecond: 20,
+      cost: 5,
     }));
     expect(gate.complete).toHaveBeenCalledTimes(1);
   });
