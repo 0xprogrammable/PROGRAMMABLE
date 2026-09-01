@@ -176,6 +176,47 @@ export function parseGmgnSearchSnapshotV1(
   return isGmgnSearchSnapshotV1(snapshot) ? snapshot : null;
 }
 
+/**
+ * GMGN's dedicated token-info route is the deterministic provider lookup for
+ * an exact contract address. This projection proves identity only; market,
+ * pool, chart, and analytics reads retain their stricter dedicated parsers.
+ */
+export function parseGmgnTokenInfoSearchSnapshotV1(
+  response: unknown,
+  input: ParseGmgnSearchSnapshotInputV1,
+): GmgnSearchSnapshotV1 | null {
+  const query = normalizeGmgnSearchQueryV1(input.query);
+  if (
+    query === null ||
+    !ADDRESS.test(query) ||
+    !Number.isFinite(input.fetchedAt.getTime())
+  ) return null;
+  const data = unwrapSuccessfulData(response);
+  if (
+    !isRecord(data) ||
+    canonicalAddress(data.address) !== query
+  ) return null;
+
+  const snapshot: GmgnSearchSnapshotV1 = Object.freeze({
+    schemaVersion: PROGRAMMABLE_GMGN_SEARCH_SCHEMA_VERSION,
+    source: "gmgn",
+    chainId: "1",
+    providerChain: "eth",
+    query,
+    orderBy: "weight",
+    fetchedAt: input.fetchedAt.toISOString(),
+    providerItemCount: 1,
+    discardedProviderItemCount: 0,
+    duplicateProviderItemCount: 0,
+    tokens: Object.freeze([Object.freeze({
+      chain: "eth" as const,
+      tokenAddress: query as `0x${string}`,
+      rank: 1,
+    })]),
+  });
+  return isGmgnSearchSnapshotV1(snapshot) ? snapshot : null;
+}
+
 export function isGmgnSearchSnapshotV1(
   value: unknown,
 ): value is GmgnSearchSnapshotV1 {

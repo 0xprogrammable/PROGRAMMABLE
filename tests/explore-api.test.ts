@@ -881,6 +881,54 @@ describe("Explore static identity and Dexscreener market contract", () => {
     );
   });
 
+  it("binds an exact canonical address search to its GMGN identity proof", async () => {
+    const selected = entries[0]!;
+    if (typeof selected.tokenAddress !== "string") {
+      throw new Error("Expected a token address fixture");
+    }
+    const query = selected.tokenAddress.toLowerCase();
+    const fetchedAt = new Date(Date.now() - 500).toISOString();
+    mocks.readSearch.mockResolvedValue(searchSnapshot(
+      query,
+      [selected],
+      { fetchedAt },
+    ));
+
+    const response = await GET(request(
+      `q=${query}&sort=newest&page=1&limit=100`,
+    ));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.tokens.map((entry: ExploreEntry) => entry.id))
+      .toEqual([selected.id]);
+    expect(body.search).toMatchObject({
+      status: "complete",
+      applied: "gmgn-canonical-search-with-local-match-fallback",
+      observedTokenCount: 1,
+      matchedTokenCount: 1,
+      matchedUniqueTokenCount: 1,
+      canonicalMatchCount: 1,
+      canonicalMatchTokenCount: 1,
+      unobservedCanonicalMatchCount: 0,
+      providerOnlyCanonicalTokenCount: 0,
+      foreignTokenCount: 0,
+      asOfTime: fetchedAt,
+    });
+    expect(response.headers.get("x-programmable-search-read-status"))
+      .toBe("complete");
+    expect(response.headers.get("x-programmable-search-matched-count"))
+      .toBe("1");
+    expect(response.headers.get("x-programmable-read-source"))
+      .toContain("+gmgn-search");
+    expect(mocks.readSearch).toHaveBeenCalledWith(query,
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        deadlineMs: expect.any(Number),
+      }));
+  });
+
   it("keeps local matches for zero-result and timed-out GMGN searches", async () => {
     mocks.readSearch.mockResolvedValue(searchSnapshot("token", []));
     const zeroResponse = await GET(request("q=token&page=1&limit=100"));
