@@ -67,6 +67,13 @@ class ExploreCatalogBoundaryDriftError extends Error {
   }
 }
 
+class ExploreMarketCapSnapshotDriftError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ExploreMarketCapSnapshotDriftError";
+  }
+}
+
 class ExploreDiscoverySnapshotDriftError extends Error {
   constructor(message) {
     super(message);
@@ -2394,16 +2401,26 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
             completeCatalogTokens,
             "desc",
             now().getTime(),
-          ) ||
-          JSON.stringify(highestSecondPage.body.ranking) !==
-            JSON.stringify(highest.body.ranking) ||
+          )
+        ) throw new Error("Market-cap pagination commitment is invalid");
+        if (
           secondPageIdentities.some((identity) => identity === null) ||
           new Set(secondPageIdentities).size !== secondPageIdentities.length ||
           secondPageIdentities.some((identity) =>
-            !completeIdentitySet.has(identity) ||
-            highestIdentities.includes(identity)
+            !completeIdentitySet.has(identity)
           )
         ) throw new Error("Market-cap pagination commitment is invalid");
+        if (
+          JSON.stringify(highestSecondPage.body.ranking) !==
+            JSON.stringify(highest.body.ranking) ||
+          secondPageIdentities.some((identity) =>
+            highestIdentities.includes(identity)
+          )
+        ) {
+          throw new ExploreMarketCapSnapshotDriftError(
+            "Market-cap ranking changed during pagination",
+          );
+        }
       }
       const lowest = await request(
         `/api/explore?limit=${VISIBLE_EXPLORE_PAGE_SIZE}` +
@@ -2722,7 +2739,10 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       };
       break;
     } catch (error) {
-      if (!(error instanceof ExploreCatalogBoundaryDriftError)) throw error;
+      if (
+        !(error instanceof ExploreCatalogBoundaryDriftError) &&
+        !(error instanceof ExploreMarketCapSnapshotDriftError)
+      ) throw error;
       if (snapshotAttempt === EXPLORE_SNAPSHOT_ATTEMPTS - 1) {
         throw new Error(
           `${error.message} after ${EXPLORE_SNAPSHOT_ATTEMPTS} bounded attempts`,

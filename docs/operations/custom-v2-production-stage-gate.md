@@ -164,6 +164,19 @@ change skips that unrelated Explore/read-model smoke and is proved by the
 Registry, Generic readiness/feed/detail, and Custom UI route checks above. The
 retired global read-model gates are not reintroduced.
 
+Market-cap pages never assemble separate provider snapshots. The route commits
+the exact filtered canonical input and direction, then durably caches the one
+completed GMGN rank, bounded supply hydration, GMGN `token_info`, Dexscreener
+fallback, and canonical-tail composition for all pages. The cache revalidates
+after 60 seconds, persists and checks every non-null per-row ordering
+observation, rejects any observation older than the remaining 235-second origin
+freshness budget, and rejects duplicate, missing, or foreign ordered identities
+instead of reconstructing a partial order. The staged smoke retries
+the whole Explore sequence only when otherwise-valid page metadata or membership
+proves cross-page ranking drift, for at most three total attempts separated by
+16 seconds. Malformed response, ranking, header, or identity contracts are not
+classified as convergence and fail immediately.
+
 ## Handoff boundary
 
 A green artifact means only that the exact unaliased candidate passed its

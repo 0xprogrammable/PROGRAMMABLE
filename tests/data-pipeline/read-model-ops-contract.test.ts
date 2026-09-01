@@ -858,8 +858,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "Bitquery enrichment before the GMGN-unqualified remainder",
-      "readDexscreenerExploreEntriesV1(\n        dexscreenerRequested,",
-      "readBitqueryTokenMarketDataStrictV1(\n        dexscreenerRequested,",
+      "readDexscreenerExploreEntriesV1(\n    dexscreenerRequested,",
+      "readBitqueryTokenMarketDataStrictV1(\n    dexscreenerRequested,",
     ],
     [
       "unbounded Custom supply hydration before GMGN eligibility",
@@ -917,6 +917,46 @@ describe("read-model operations source contract", () => {
       "true ||",
     ],
     [
+      "no durable full market-cap composition",
+      "const readDurablyCachedExploreMarketCapCompositionV1 = unstable_cache(",
+      "const readDurablyCachedExploreMarketCapCompositionV1 = passthrough(",
+    ],
+    [
+      "an unbound market-cap composition cache result",
+      "cached.inputCommitment !== inputCommitment",
+      "false",
+    ],
+    [
+      "an unbounded market-cap composition cache age",
+      "const EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS = 235_000",
+      "const EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS = 300_000",
+    ],
+    [
+      "a non-canonical market-cap composition timestamp",
+      "new Date(observedAtMs).toISOString() === value",
+      "true",
+    ],
+    [
+      "no persisted per-row market-cap ordering observations",
+      "orderingAsOfTimes: Object.freeze([...composed.orderingAsOfTimes])",
+      "orderingAsOfTimes: Object.freeze([])",
+    ],
+    [
+      "a stale per-row market-cap ordering observation",
+      "!currentExploreMarketCapTimestampV1(observedAt)",
+      "false",
+    ],
+    [
+      "a per-row market-cap observation count detached from qualification",
+      "qualifiedCount === expectedQualifiedCount",
+      "true",
+    ],
+    [
+      "a market-cap cache order that is not a full permutation",
+      "orderedIds.size !== entries.length",
+      "false",
+    ],
+    [
       "a discovery ranking identity coupled to observed freshness",
       "snapshotDirection: row.gmgn.direction,",
       "snapshotDirection: row.gmgn.direction,\n" +
@@ -942,15 +982,15 @@ describe("read-model operations source contract", () => {
     const route = readFileSync(resolve(ROOT, path), "utf8");
     const retry =
       "return readGmgnEthereumTrendingV1(\n" +
-      "              rankOptions,\n" +
-      "              rankWait,";
+      "          rankOptions,\n" +
+      "          rankWait,";
     const oppositeDirectionRetry =
       "return readGmgnEthereumTrendingV1(\n" +
-      "              {\n" +
-      "                ...rankOptions,\n" +
-      "                direction: direction === \"asc\" ? \"desc\" : \"asc\",\n" +
-      "              },\n" +
-      "              rankWait,";
+      "          {\n" +
+      "            ...rankOptions,\n" +
+      "            direction: direction === \"asc\" ? \"desc\" : \"asc\",\n" +
+      "          },\n" +
+      "          rankWait,";
     expect(route).toContain(retry);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: {
@@ -2075,6 +2115,26 @@ describe("read-model operations source contract", () => {
       "no account-gate-mode release output",
       "`gmgn_account_gate_mode=${gmgnAccountGateMode}`",
       "`gmgn_account_gate_mode=unavailable`",
+    ],
+    [
+      "no bounded market-cap ranking drift class",
+      "class ExploreMarketCapSnapshotDriftError extends Error",
+      "class IgnoredMarketCapSnapshotDriftError extends Error",
+    ],
+    [
+      "no bounded market-cap ranking drift retry",
+      "error instanceof ExploreMarketCapSnapshotDriftError",
+      "false",
+    ],
+    [
+      "a cross-page market-cap ranking drift accepted",
+      "JSON.stringify(highestSecondPage.body.ranking) !==",
+      "JSON.stringify(highestSecondPage.body.ranking) ===",
+    ],
+    [
+      "cross-page market-cap membership overlap accepted",
+      "highestIdentities.includes(identity)",
+      "false",
     ],
     [
       "no monotonic discovery freshness proof",

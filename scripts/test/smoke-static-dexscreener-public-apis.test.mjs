@@ -3852,6 +3852,141 @@ test("staged smoke retries identity drift before clamped page validation", async
   assert.deepEqual(waits, [16_000]);
 });
 
+test("staged smoke retries one full market-cap ranking drift", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  const waits = [];
+  let snapshotAttempt = 0;
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: stagedFetch((input) => {
+      const body = paged(input);
+      if (
+        input.url.pathname === "/api/explore" &&
+        input.url.searchParams.get("sort") === "market-cap" &&
+        input.url.searchParams.get("page") === "1"
+      ) snapshotAttempt += 1;
+      if (
+        snapshotAttempt === 1 &&
+        input.url.pathname === "/api/explore" &&
+        input.url.searchParams.get("sort") === "market-cap" &&
+        input.url.searchParams.get("page") === "2"
+      ) {
+        return {
+          ...body,
+          ranking: {
+            ...body.ranking,
+            rankingCommitment: `sha256:${"ef".repeat(32)}`,
+          },
+        };
+      }
+      return body;
+    }),
+    appendOutput: () => undefined,
+    waitForCatalogConvergence: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+  });
+
+  assert.equal(result.detailStatus, "verified-identity-market-unavailable");
+  assert.equal(snapshotAttempt, 2);
+  assert.deepEqual(waits, [16_000]);
+});
+
+test("staged smoke fails closed after bounded market-cap ranking drift", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  const waits = [];
+  let snapshotAttempt = 0;
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch((input) => {
+        const body = paged(input);
+        if (
+          input.url.pathname === "/api/explore" &&
+          input.url.searchParams.get("sort") === "market-cap" &&
+          input.url.searchParams.get("page") === "1"
+        ) snapshotAttempt += 1;
+        if (
+          input.url.pathname === "/api/explore" &&
+          input.url.searchParams.get("sort") === "market-cap" &&
+          input.url.searchParams.get("page") === "2"
+        ) {
+          return {
+            ...body,
+            ranking: {
+              ...body.ranking,
+              rankingCommitment:
+                `sha256:${snapshotAttempt.toString(16).padStart(64, "0")}`,
+            },
+          };
+        }
+        return body;
+      }),
+      appendOutput: () => undefined,
+      waitForCatalogConvergence: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    }),
+    /Market-cap ranking changed during pagination after 3 bounded attempts/u,
+  );
+
+  assert.equal(snapshotAttempt, 3);
+  assert.deepEqual(waits, [16_000, 16_000]);
+});
+
+test("staged smoke does not retry a malformed market-cap page contract", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  const waits = [];
+  let snapshotAttempt = 0;
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: stagedFetch((input) => {
+        const body = paged(input);
+        if (
+          input.url.pathname === "/api/explore" &&
+          input.url.searchParams.get("sort") === "market-cap" &&
+          input.url.searchParams.get("page") === "1"
+        ) snapshotAttempt += 1;
+        if (
+          input.url.pathname === "/api/explore" &&
+          input.url.searchParams.get("sort") === "market-cap" &&
+          input.url.searchParams.get("page") === "2"
+        ) {
+          return {
+            ...body,
+            ranking: { ...body.ranking, schemaVersion: "invalid" },
+          };
+        }
+        return body;
+      }),
+      appendOutput: () => undefined,
+      waitForCatalogConvergence: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    }),
+    /Market-cap pagination commitment is invalid/u,
+  );
+
+  assert.equal(snapshotAttempt, 1);
+  assert.deepEqual(waits, []);
+});
+
 test("staged smoke separates one Trending rank identity from monotonic freshness", async () => {
   const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
   const paged = pagedCatalogTransform(allEntries);
