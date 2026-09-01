@@ -134,6 +134,38 @@ extends Record<string, unknown> {
   ssl_bits: number | null;
 }
 
+export interface ExploreMarketCapAuthoritySecurityAttestationRowV1
+extends Record<string, unknown> {
+  runtime_role: string;
+  session_role: string;
+  rolsuper: boolean;
+  rolcreaterole: boolean;
+  rolcreatedb: boolean;
+  rolreplication: boolean;
+  rolbypassrls: boolean;
+  schema_usage: boolean;
+  schema_create: boolean;
+  heads_select: boolean;
+  heads_insert: boolean;
+  heads_delete: boolean;
+  heads_update: boolean;
+  heads_forbidden_access: boolean;
+  generations_select: boolean;
+  generations_insert: boolean;
+  generations_delete: boolean;
+  generations_forbidden_access: boolean;
+  heads_rls: boolean;
+  heads_force_rls: boolean;
+  generations_rls: boolean;
+  generations_force_rls: boolean;
+  expected_policies: boolean;
+  provider_roles_excluded: boolean;
+  ssl: boolean;
+  ssl_version: string | null;
+  ssl_cipher: string | null;
+  ssl_bits: number | null;
+}
+
 export interface VerifiedPostgresTlsConfigurationV1 {
   readonly connectionString: string;
   readonly servername: string;
@@ -390,11 +422,12 @@ export function verifiedPostgresTlsConfigurationV1(
   });
 }
 
-interface ProductionProjectionTargetPostgresPoolV1
+export interface ProductionProjectionTargetPostgresPoolV1
 extends ProjectionTargetPostgresPoolV1 {
   assertProductionReadiness(): Promise<void>;
   assertGmgnAccountGateReadiness(): Promise<void>;
   assertGmgnAccountGateMultiflightReadiness(): Promise<void>;
+  assertExploreMarketCapAuthorityReadiness(): Promise<void>;
 }
 
 class NodePostgresProjectionTargetPoolV1
@@ -407,6 +440,8 @@ implements ProductionProjectionTargetPostgresPoolV1 {
   #gmgnReadinessAttestedAtMs = 0;
   #gmgnMultiflightReadiness: Promise<void> | null = null;
   #gmgnMultiflightReadinessAttestedAtMs = 0;
+  #exploreMarketCapAuthorityReadiness: Promise<void> | null = null;
+  #exploreMarketCapAuthorityReadinessAttestedAtMs = 0;
 
   constructor(pool: Pool, expectedRuntimeRole: string) {
     this.#pool = pool;
@@ -468,6 +503,26 @@ implements ProductionProjectionTargetPostgresPoolV1 {
       throw error;
     } finally {
       this.#gmgnMultiflightReadiness = null;
+    }
+  }
+
+  async assertExploreMarketCapAuthorityReadiness(): Promise<void> {
+    if (
+      this.#exploreMarketCapAuthorityReadinessAttestedAtMs > 0 &&
+      Date.now() - this.#exploreMarketCapAuthorityReadinessAttestedAtMs < 30_000
+    ) return;
+    this.#exploreMarketCapAuthorityReadiness ??=
+      this.#performExploreMarketCapAuthorityReadinessAttestation()
+        .then(() => {
+          this.#exploreMarketCapAuthorityReadinessAttestedAtMs = Date.now();
+        });
+    try {
+      await this.#exploreMarketCapAuthorityReadiness;
+    } catch (error) {
+      this.#exploreMarketCapAuthorityReadinessAttestedAtMs = 0;
+      throw error;
+    } finally {
+      this.#exploreMarketCapAuthorityReadiness = null;
     }
   }
 
@@ -844,6 +899,152 @@ implements ProductionProjectionTargetPostgresPoolV1 {
     }
   }
 
+  async #performExploreMarketCapAuthorityReadinessAttestation(): Promise<void> {
+    const client = await this.#pool.connect();
+    try {
+      const result = await client.query<
+      ExploreMarketCapAuthoritySecurityAttestationRowV1>(`
+        SELECT current_user::text AS runtime_role,
+               session_user::text AS session_role,
+               role.rolsuper, role.rolcreaterole, role.rolcreatedb,
+               role.rolreplication, role.rolbypassrls,
+               has_schema_privilege(current_user,
+                 'programmable_website_projection_v1', 'USAGE') AS schema_usage,
+               has_schema_privilege(current_user,
+                 'programmable_website_projection_v1', 'CREATE') AS schema_create,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                 'SELECT') AS heads_select,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                 'INSERT') AS heads_insert,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                 'DELETE') AS heads_delete,
+               (
+                 has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'current_generation', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'lease_generation', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'lease_holder', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'lease_until', 'UPDATE')
+                 AND has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'updated_at', 'UPDATE')
+               ) AS heads_update,
+               (
+                 has_table_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'UPDATE,TRUNCATE,REFERENCES,TRIGGER')
+                 OR has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'authority_key', 'UPDATE')
+                 OR has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'input_commitment', 'UPDATE')
+                 OR has_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'direction', 'UPDATE')
+                 OR has_any_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                   'REFERENCES')
+               ) AS heads_forbidden_access,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                 'SELECT') AS generations_select,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                 'INSERT') AS generations_insert,
+               has_table_privilege(current_user,
+                 'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                 'DELETE') AS generations_delete,
+               (
+                 has_table_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                   'UPDATE,TRUNCATE,REFERENCES,TRIGGER')
+                 OR has_any_column_privilege(current_user,
+                   'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                   'UPDATE,REFERENCES')
+               ) AS generations_forbidden_access,
+               heads.relrowsecurity AS heads_rls,
+               heads.relforcerowsecurity AS heads_force_rls,
+               generations.relrowsecurity AS generations_rls,
+               generations.relforcerowsecurity AS generations_force_rls,
+               (
+                 SELECT count(*) = 7
+                    AND bool_and(
+                      policies.roles = ARRAY['programmable_website_projection_runtime']::name[]
+                    )
+                    AND string_agg(
+                      policies.policyname || ':' || policies.cmd,
+                      ',' ORDER BY policies.policyname
+                    ) = 'explore_market_cap_authority_generations_v1_runtime_delete:DELETE,explore_market_cap_authority_generations_v1_runtime_insert:INSERT,explore_market_cap_authority_generations_v1_runtime_select:SELECT,explore_market_cap_authority_heads_v1_runtime_delete:DELETE,explore_market_cap_authority_heads_v1_runtime_insert:INSERT,explore_market_cap_authority_heads_v1_runtime_select:SELECT,explore_market_cap_authority_heads_v1_runtime_update:UPDATE'
+                   FROM pg_policies AS policies
+                  WHERE policies.schemaname = 'programmable_website_projection_v1'
+                    AND policies.tablename IN (
+                      'explore_market_cap_authority_heads_v1',
+                      'explore_market_cap_authority_generations_v1'
+                    )
+               ) AS expected_policies,
+               NOT EXISTS (
+                 SELECT 1
+                   FROM pg_roles AS provider_role
+                  WHERE provider_role.rolname IN ('anon', 'authenticated', 'service_role')
+                    AND (
+                      has_table_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                      OR has_table_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                      OR has_any_column_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                        'SELECT,INSERT,UPDATE,REFERENCES')
+                      OR has_any_column_privilege(provider_role.rolname,
+                        'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                        'SELECT,INSERT,UPDATE,REFERENCES')
+                    )
+               ) AS provider_roles_excluded,
+               COALESCE(ssl.ssl, false) AS ssl,
+               ssl.version AS ssl_version,
+               ssl.cipher AS ssl_cipher,
+               ssl.bits AS ssl_bits
+          FROM pg_roles AS role
+          JOIN pg_namespace AS schema
+            ON schema.nspname = 'programmable_website_projection_v1'
+          JOIN pg_class AS heads
+            ON heads.relnamespace = schema.oid
+           AND heads.relname = 'explore_market_cap_authority_heads_v1'
+          JOIN pg_class AS generations
+            ON generations.relnamespace = schema.oid
+           AND generations.relname = 'explore_market_cap_authority_generations_v1'
+          LEFT JOIN pg_stat_ssl AS ssl ON ssl.pid = pg_backend_pid()
+         WHERE role.rolname = current_user
+           AND pg_get_userbyid(schema.nspowner) <> current_user
+           AND pg_get_userbyid(heads.relowner) <> current_user
+           AND pg_get_userbyid(generations.relowner) <> current_user
+      `);
+      const value = result.rows[0];
+      if (result.rows.length !== 1 || value === undefined) {
+        throw new TypeError(
+          "Explore market-cap authority database attestation failed",
+        );
+      }
+      assertExploreMarketCapAuthoritySecurityAttestationV1(
+        value,
+        this.#expectedRuntimeRole,
+      );
+    } finally {
+      client.release();
+    }
+  }
+
   async connect(): Promise<ProjectionTargetPostgresClientV1> {
     const client = await this.#pool.connect();
     return new NodePostgresProjectionTargetClientV1(client);
@@ -931,6 +1132,33 @@ export function assertGmgnAccountGateMultiflightSecurityAttestationV1(
   ) {
     throw new TypeError(
       "GMGN account gate multiflight database attestation failed",
+    );
+  }
+}
+
+export function assertExploreMarketCapAuthoritySecurityAttestationV1(
+  value: Readonly<ExploreMarketCapAuthoritySecurityAttestationRowV1>,
+  expectedRuntimeRole: string,
+): void {
+  if (
+    value.runtime_role !== expectedRuntimeRole ||
+    value.runtime_role !== "programmable_website_projection_runtime" ||
+    value.session_role !== value.runtime_role ||
+    value.rolsuper || value.rolcreaterole || value.rolcreatedb ||
+    value.rolreplication || value.rolbypassrls ||
+    !value.schema_usage || value.schema_create ||
+    !value.heads_select || !value.heads_insert || !value.heads_delete ||
+    !value.heads_update || value.heads_forbidden_access ||
+    !value.generations_select || !value.generations_insert ||
+    !value.generations_delete || value.generations_forbidden_access ||
+    !value.heads_rls || !value.heads_force_rls ||
+    !value.generations_rls || !value.generations_force_rls ||
+    !value.expected_policies || !value.provider_roles_excluded ||
+    !value.ssl || value.ssl_version === null ||
+    value.ssl_cipher === null || (value.ssl_bits ?? 0) < 128
+  ) {
+    throw new TypeError(
+      "Explore market-cap authority database attestation failed",
     );
   }
 }

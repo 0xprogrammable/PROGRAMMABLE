@@ -583,6 +583,43 @@ function unavailableMarketCapRanking(
   } as const;
 }
 
+function unavailableGmgnMarketRead(total: number) {
+  return {
+    provider: "gmgn",
+    status: "unavailable",
+    currency: "USD",
+    requestedCount: total,
+    observedCount: 0,
+    qualifiedCount: 0,
+    unavailableCount: total,
+    oldestFetchedAt: null,
+    newestFetchedAt: null,
+    fallbackProvider: "dexscreener",
+    gmgnObservedCount: 0,
+    gmgnQualifiedCount: 0,
+    fallbackRequestedCount: total,
+    fallbackObservedCount: 0,
+    fallbackQualifiedCount: 0,
+  } as const;
+}
+
+function sparseDexscreenerMarketCapRanking(
+  total: number,
+  qualified: number,
+  rankingCommitment: `sha256:${string}`,
+) {
+  return {
+    ...unavailableMarketCapRanking(total, rankingCommitment),
+    source: "dexscreener",
+    status: "partial",
+    applied: "qualified-fdv-then-launch-order",
+    fallbackQualifiedCount: qualified,
+    canonicalTailCount: total - qualified,
+    qualifiedCount: qualified,
+    asOfTime: "2026-08-16T08:00:00.000Z",
+  } as const;
+}
+
 describe("Explore provider-ranked revalidation", () => {
   const entries = Array.from(
     { length: 4 },
@@ -1606,6 +1643,74 @@ describe("Explore refresh state", () => {
     )).rejects.toThrow("Tokens changed while filters were loading");
   });
 
+  it("pins model pages and restarts the whole dataset after a ranking 409", async () => {
+    const tokens = Array.from(
+      { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
+      (_, index) => modelFilterEntry(index, "unavailable"),
+    );
+    const firstCommitment = `sha256:${"64".repeat(32)}` as const;
+    const recoveredCommitment = `sha256:${"65".repeat(32)}` as const;
+    let request = 0;
+    const requestedPins: Array<string | null> = [];
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        request += 1;
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        const pageSize = Number(url.searchParams.get("limit"));
+        requestedPins.push(url.searchParams.get("rankingCommitment"));
+        const commitment = request <= 2 ? firstCommitment : recoveredCommitment;
+        if (request === 2) {
+          return new Response(
+            JSON.stringify({
+              error: "Market-cap ranking changed; restart from page 1",
+            }),
+            { status: 409 },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            status: "ready",
+            tokens: tokens.slice((page - 1) * pageSize, page * pageSize),
+            page,
+            pageSize,
+            total: tokens.length,
+            totalPages: 2,
+            catalog: { ...catalogBoundary, identityCount: tokens.length },
+            dataQuality: modelPageDataQuality(
+              0,
+              tokens.slice((page - 1) * pageSize, page * pageSize).length,
+            ),
+            marketRead: unavailableGmgnMarketRead(tokens.length),
+            ranking: unavailableMarketCapRanking(tokens.length, commitment),
+          }),
+          {
+            status: 200,
+            headers: { "X-Programmable-Market-Read-Status": "unavailable" },
+          },
+        );
+      });
+
+    await expect(
+      loadExploreModelDataset(
+        "ranking-restart-model-dataset",
+        new URLSearchParams({ sort: "market-cap", page: "1", limit: "9" }),
+      ),
+    ).resolves.toMatchObject({
+      total: tokens.length,
+      tokens: tokens.map((token) => expect.objectContaining({ id: token.id })),
+      ranking: { rankingCommitment: recoveredCommitment },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(requestedPins).toEqual([
+      null,
+      firstCommitment,
+      null,
+      recoveredCommitment,
+    ]);
+  });
+
   it("rejects model pages from different provider-order commitments", async () => {
     const tokens = Array.from(
       { length: EXPLORE_MODEL_FILTER_SERVER_PAGE_SIZE + 1 },
@@ -1859,11 +1964,10 @@ describe("Explore refresh state", () => {
           category: "transport",
           phase,
         },
-        ranking: {
-          status: "unavailable",
-          requested: "fdv",
-          applied: "launch-order",
-        },
+        ranking: unavailableMarketCapRanking(
+          tokens.length,
+          `sha256:${"66".repeat(32)}`,
+        ),
       }), {
         status: 200,
         headers: {
@@ -1978,20 +2082,35 @@ describe("Explore refresh state", () => {
                   category: "transport",
                   phase: "market-price",
                 },
-                ranking: {
-                  status: "unavailable",
-                  requested: "fdv",
-                  applied: "launch-order",
-                },
+                ranking: unavailableMarketCapRanking(
+                  tokens.length,
+                  `sha256:${"67".repeat(32)}`,
+                ),
               }
-            : {}),
+            : {
+                marketRead: {
+                  provider: "dexscreener",
+                  status: "complete",
+                  currency: "USD",
+                  requestedCount: tokens.length,
+                  observedCount: tokens.length,
+                  qualifiedCount: tokens.length,
+                  unavailableCount: 0,
+                  oldestFetchedAt: "2026-08-16T08:00:00.000Z",
+                  newestFetchedAt: "2026-08-16T08:00:00.000Z",
+                },
+                ranking: unavailableMarketCapRanking(
+                  tokens.length,
+                  `sha256:${"67".repeat(32)}`,
+                ),
+              }),
         }), {
           status: 200,
           headers: {
             "Content-Type": "application/json",
             "X-Programmable-Market-Read-Status": degraded
               ? "transport-unavailable"
-              : "current",
+              : "complete",
           },
         });
       },
@@ -2035,6 +2154,250 @@ describe("Explore refresh state", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     },
   );
+
+  it.each(["market-cap", "market-cap-asc"] as const)(
+    "pins a direct second %s page to the first-page ranking commitment",
+    async (sort) => {
+      const commitment = `sha256:${"61".repeat(32)}` as const;
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input) => {
+          const url = new URL(String(input), "https://example.test");
+          const page = Number(url.searchParams.get("page"));
+          expect(url.searchParams.get("sort")).toBe(sort);
+          expect(url.searchParams.get("rankingCommitment")).toBe(
+            page === 1 ? null : commitment,
+          );
+          return new Response(
+            JSON.stringify({
+              ...payload,
+              page,
+              dataQuality: modelPageDataQuality(0, 0),
+              ranking: {
+                ...unavailableMarketCapRanking(payload.total, commitment),
+                direction: sort === "market-cap" ? "desc" : "asc",
+              },
+              marketRead: unavailableGmgnMarketRead(payload.total),
+            }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "X-Programmable-Market-Read-Status": "unavailable",
+              },
+            },
+          );
+        });
+
+      await expect(
+        loadExplorePage(
+          `pinned-direct-${sort}-page-two`,
+          new URLSearchParams({ sort, page: "2", limit: "9" }),
+        ),
+      ).resolves.toMatchObject({ page: 2 });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("keeps one first-page market-cap commitment across page navigation", async () => {
+    const commitment = `sha256:${"69".repeat(32)}` as const;
+    const requestedPins: Array<string | null> = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        const url = new URL(String(input), "https://example.test");
+        const page = Number(url.searchParams.get("page"));
+        requestedPins.push(url.searchParams.get("rankingCommitment"));
+        return new Response(JSON.stringify({
+          ...payload,
+          page,
+          total: 27,
+          totalPages: 3,
+          dataQuality: modelPageDataQuality(0, 0),
+          marketRead: {
+            provider: "dexscreener",
+            status: "complete",
+            currency: "USD",
+            requestedCount: 27,
+            observedCount: 0,
+            qualifiedCount: 0,
+            unavailableCount: 27,
+            oldestFetchedAt: null,
+            newestFetchedAt: null,
+          },
+          ranking: unavailableMarketCapRanking(27, commitment),
+        }), {
+          status: 200,
+          headers: { "X-Programmable-Market-Read-Status": "complete" },
+        });
+      },
+    );
+
+    await loadExplorePage(
+      "market-cap-session-page-one",
+      new URLSearchParams({
+        q: "session-ranking",
+        sort: "market-cap",
+        page: "1",
+        limit: "9",
+      }),
+    );
+    await loadExplorePage(
+      "market-cap-session-page-two",
+      new URLSearchParams({
+        q: "session-ranking",
+        sort: "market-cap",
+        page: "2",
+        limit: "9",
+      }),
+    );
+    await loadExplorePage(
+      "market-cap-session-page-three",
+      new URLSearchParams({
+        q: "session-ranking",
+        sort: "market-cap",
+        page: "3",
+        limit: "9",
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(requestedPins).toEqual([null, commitment, commitment]);
+  });
+
+  it("restarts direct market-cap pagination once after a 409", async () => {
+    const firstCommitment = `sha256:${"62".repeat(32)}` as const;
+    const recoveredCommitment = `sha256:${"63".repeat(32)}` as const;
+    let request = 0;
+    const requestedUrls: URL[] = [];
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        request += 1;
+        const url = new URL(String(input), "https://example.test");
+        requestedUrls.push(url);
+        const page = Number(url.searchParams.get("page"));
+        const commitment = request <= 2 ? firstCommitment : recoveredCommitment;
+        if (request === 2) {
+          return new Response(
+            JSON.stringify({
+              error: "Market-cap ranking changed; restart from page 1",
+            }),
+            { status: 409 },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            ...payload,
+            page,
+            dataQuality: modelPageDataQuality(0, 0),
+            marketRead: unavailableGmgnMarketRead(payload.total),
+            ranking: unavailableMarketCapRanking(payload.total, commitment),
+          }),
+          {
+            status: 200,
+            headers: { "X-Programmable-Market-Read-Status": "unavailable" },
+          },
+        );
+      });
+
+    await expect(
+      loadExplorePage(
+        "restart-direct-market-cap-page-two",
+        new URLSearchParams({
+          q: "restart-ranking",
+          sort: "market-cap",
+          page: "2",
+          limit: "9",
+        }),
+      ),
+    ).resolves.toMatchObject({
+      page: 2,
+      ranking: { rankingCommitment: recoveredCommitment },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(
+      requestedUrls.map((url) => ({
+        page: url.searchParams.get("page"),
+        rankingCommitment: url.searchParams.get("rankingCommitment"),
+      })),
+    ).toEqual([
+      { page: "1", rankingCommitment: null },
+      { page: "2", rankingCommitment: firstCommitment },
+      { page: "1", rankingCommitment: null },
+      { page: "2", rankingCommitment: recoveredCommitment },
+    ]);
+  });
+
+  it("purges a separately cached page-one pin before a 409 restart", async () => {
+    const staleCommitment = `sha256:${"64".repeat(32)}` as const;
+    const recoveredCommitment = `sha256:${"65".repeat(32)}` as const;
+    const requestedUrls: URL[] = [];
+    let request = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) => {
+        request += 1;
+        const url = new URL(String(input), "https://example.test");
+        requestedUrls.push(url);
+        const page = Number(url.searchParams.get("page"));
+        if (request === 2) {
+          return new Response(JSON.stringify({
+            error: "Market-cap ranking changed; restart from page 1",
+          }), { status: 409 });
+        }
+        const commitment = request === 1
+          ? staleCommitment
+          : recoveredCommitment;
+        return new Response(JSON.stringify({
+          ...payload,
+          page,
+          dataQuality: modelPageDataQuality(0, 0),
+          marketRead: {
+            provider: "dexscreener",
+            status: "complete",
+            currency: "USD",
+            requestedCount: payload.total,
+            observedCount: 0,
+            qualifiedCount: 0,
+            unavailableCount: payload.total,
+            oldestFetchedAt: null,
+            newestFetchedAt: null,
+          },
+          ranking: unavailableMarketCapRanking(payload.total, commitment),
+        }), {
+          status: 200,
+          headers: { "X-Programmable-Market-Read-Status": "complete" },
+        });
+      },
+    );
+    const search = {
+      q: "seeded-restart-ranking",
+      sort: "market-cap",
+      limit: "9",
+    } as const;
+
+    await loadExplorePage(
+      "seeded-restart-market-cap-page-one",
+      new URLSearchParams({ ...search, page: "1" }),
+    );
+    await expect(loadExplorePage(
+      "seeded-restart-market-cap-page-two",
+      new URLSearchParams({ ...search, page: "2" }),
+    )).resolves.toMatchObject({
+      page: 2,
+      ranking: { rankingCommitment: recoveredCommitment },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(requestedUrls.map((url) => ({
+      page: url.searchParams.get("page"),
+      rankingCommitment: url.searchParams.get("rankingCommitment"),
+    }))).toEqual([
+      { page: "1", rankingCommitment: null },
+      { page: "2", rankingCommitment: staleCommitment },
+      { page: "1", rankingCommitment: null },
+      { page: "2", rankingCommitment: recoveredCommitment },
+    ]);
+  });
 
   it("presents total-supply valuation using the public market cap label", () => {
     const token = {
@@ -2894,13 +3257,11 @@ describe("Explore refresh state", () => {
             oldestFetchedAt: "2026-08-16T08:00:00.000Z",
             newestFetchedAt: "2026-08-16T08:00:00.000Z",
           },
-          ranking: {
-            status: "partial",
-            requested: "fdv",
-            applied: "qualified-fdv-then-launch-order",
-            qualifiedCount: 18,
-            totalCount: 351,
-          },
+          ranking: sparseDexscreenerMarketCapRanking(
+            351,
+            18,
+            `sha256:${"68".repeat(32)}`,
+          ),
         }), {
           status: 200,
           headers: { "X-Programmable-Market-Read-Status": "complete" },

@@ -45,11 +45,13 @@ import type {
 } from "../lib/server/projection-target/protocol";
 import {
   createWebsiteProjectionTargetV1,
+  assertExploreMarketCapAuthoritySecurityAttestationV1,
   assertGmgnAccountGateMultiflightSecurityAttestationV1,
   assertGmgnAccountGateSecurityAttestationV1,
   assertProjectionTargetSecurityAttestationV1,
   assertProductionDatabaseLoginRoleV1,
   verifiedPostgresTlsConfigurationV1,
+  type ExploreMarketCapAuthoritySecurityAttestationRowV1,
   type GmgnAccountGateMultiflightSecurityAttestationRowV1,
   type GmgnAccountGateSecurityAttestationRowV1,
   type ProjectionTargetSecurityAttestationRowV1,
@@ -1444,6 +1446,290 @@ describe("Website projection target", () => {
     }
   });
 
+  it("fails the market-cap authority readiness attestation for every weakened axis", () => {
+    const secure = exploreMarketCapAuthoritySecurityAttestationFixture();
+    expect(() => assertExploreMarketCapAuthoritySecurityAttestationV1(
+      secure,
+      "programmable_website_projection_runtime",
+    )).not.toThrow();
+    for (const mutation of [
+      { runtime_role: "unexpected_runtime_role" },
+      { session_role: "unexpected_session_role" },
+      { rolsuper: true },
+      { rolcreaterole: true },
+      { rolcreatedb: true },
+      { rolreplication: true },
+      { rolbypassrls: true },
+      { schema_usage: false },
+      { schema_create: true },
+      { heads_select: false },
+      { heads_insert: false },
+      { heads_delete: false },
+      { heads_update: false },
+      { heads_forbidden_access: true },
+      { generations_select: false },
+      { generations_insert: false },
+      { generations_delete: false },
+      { generations_forbidden_access: true },
+      { heads_rls: false },
+      { heads_force_rls: false },
+      { generations_rls: false },
+      { generations_force_rls: false },
+      { expected_policies: false },
+      { provider_roles_excluded: false },
+      { ssl: false },
+      { ssl_version: null },
+      { ssl_cipher: null },
+      { ssl_bits: 127 },
+    ] satisfies Array<Partial<
+      ExploreMarketCapAuthoritySecurityAttestationRowV1
+    >>) {
+      expect(() => assertExploreMarketCapAuthoritySecurityAttestationV1(
+        { ...secure, ...mutation },
+        "programmable_website_projection_runtime",
+      )).toThrow("Explore market-cap authority database attestation failed");
+    }
+    expect(() => assertExploreMarketCapAuthoritySecurityAttestationV1(
+      secure,
+      "different_expected_role",
+    )).toThrow("Explore market-cap authority database attestation failed");
+  });
+
+  it("applies market-cap authority storage with forced RLS and exact runtime grants", async () => {
+    const database = await pgliteExploreMarketCapAuthorityDatabase();
+    const state = await database.query<{
+      heads_rls: boolean;
+      heads_force_rls: boolean;
+      generations_rls: boolean;
+      generations_force_rls: boolean;
+      expected_policies: boolean;
+      providers_excluded: boolean;
+    }>(`
+      SELECT heads.relrowsecurity AS heads_rls,
+             heads.relforcerowsecurity AS heads_force_rls,
+             generations.relrowsecurity AS generations_rls,
+             generations.relforcerowsecurity AS generations_force_rls,
+             (
+               SELECT count(*) = 7
+                 AND bool_and(
+                   policies.roles =
+                     ARRAY['programmable_website_projection_runtime']::name[]
+                 )
+                 AND string_agg(
+                   policies.policyname || ':' || policies.cmd,
+                   ',' ORDER BY policies.policyname
+                 ) = 'explore_market_cap_authority_generations_v1_runtime_delete:DELETE,explore_market_cap_authority_generations_v1_runtime_insert:INSERT,explore_market_cap_authority_generations_v1_runtime_select:SELECT,explore_market_cap_authority_heads_v1_runtime_delete:DELETE,explore_market_cap_authority_heads_v1_runtime_insert:INSERT,explore_market_cap_authority_heads_v1_runtime_select:SELECT,explore_market_cap_authority_heads_v1_runtime_update:UPDATE'
+                 FROM pg_policies AS policies
+                WHERE policies.schemaname = 'programmable_website_projection_v1'
+                  AND policies.tablename IN (
+                    'explore_market_cap_authority_heads_v1',
+                    'explore_market_cap_authority_generations_v1'
+                  )
+             ) AS expected_policies,
+             NOT EXISTS (
+               SELECT 1
+                 FROM pg_roles AS role
+                WHERE role.rolname IN ('anon', 'authenticated', 'service_role')
+                  AND (
+                    has_table_privilege(
+                      role.rolname,
+                      'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                      'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+                    )
+                    OR has_table_privilege(
+                      role.rolname,
+                      'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                      'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+                    )
+                    OR has_any_column_privilege(
+                      role.rolname,
+                      'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+                      'SELECT,INSERT,UPDATE,REFERENCES'
+                    )
+                    OR has_any_column_privilege(
+                      role.rolname,
+                      'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+                      'SELECT,INSERT,UPDATE,REFERENCES'
+                    )
+                  )
+             ) AS providers_excluded
+        FROM pg_namespace AS schema
+        JOIN pg_class AS heads
+          ON heads.relnamespace = schema.oid
+         AND heads.relname = 'explore_market_cap_authority_heads_v1'
+        JOIN pg_class AS generations
+          ON generations.relnamespace = schema.oid
+         AND generations.relname =
+           'explore_market_cap_authority_generations_v1'
+       WHERE schema.nspname = 'programmable_website_projection_v1'
+    `);
+    expect(state.rows).toEqual([{
+      heads_rls: true,
+      heads_force_rls: true,
+      generations_rls: true,
+      generations_force_rls: true,
+      expected_policies: true,
+      providers_excluded: true,
+    }]);
+
+    const authorityKey = `sha256:${"a".repeat(64)}`;
+    const inputCommitment = `sha256:${"b".repeat(64)}`;
+    const authorityCommitment = `sha256:${"c".repeat(64)}`;
+    const rankingCommitment = `sha256:${"d".repeat(64)}`;
+    await database.exec("SET ROLE programmable_website_projection_runtime");
+    const runtimePrivileges = await database.query<{
+      heads_select_insert_delete: boolean;
+      heads_allowed_updates: boolean;
+      heads_forbidden_updates: boolean;
+      generations_select_insert_delete: boolean;
+      generations_forbidden_mutation: boolean;
+    }>(`
+      SELECT
+        has_table_privilege(
+          current_user,
+          'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+          'SELECT,INSERT,DELETE'
+        ) AS heads_select_insert_delete,
+        (
+          SELECT bool_and(has_column_privilege(
+            current_user,
+            'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+            column_name,
+            'UPDATE'
+          ))
+            FROM unnest(ARRAY[
+              'current_generation', 'lease_generation', 'lease_holder',
+              'lease_until', 'updated_at'
+            ]) AS columns(column_name)
+        ) AS heads_allowed_updates,
+        (
+          SELECT bool_or(has_column_privilege(
+            current_user,
+            'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+            column_name,
+            'UPDATE'
+          ))
+            FROM unnest(ARRAY[
+              'authority_key', 'input_commitment', 'direction'
+            ]) AS columns(column_name)
+        ) AS heads_forbidden_updates,
+        has_table_privilege(
+          current_user,
+          'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+          'SELECT,INSERT,DELETE'
+        ) AS generations_select_insert_delete,
+        (
+          has_table_privilege(
+            current_user,
+            'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+            'UPDATE,TRUNCATE,REFERENCES,TRIGGER'
+          )
+          OR has_any_column_privilege(
+            current_user,
+            'programmable_website_projection_v1.explore_market_cap_authority_generations_v1',
+            'UPDATE,REFERENCES'
+          )
+        ) AS generations_forbidden_mutation
+    `);
+    expect(runtimePrivileges.rows).toEqual([{
+      heads_select_insert_delete: true,
+      heads_allowed_updates: true,
+      heads_forbidden_updates: false,
+      generations_select_insert_delete: true,
+      generations_forbidden_mutation: false,
+    }]);
+    await database.query(`
+      INSERT INTO programmable_website_projection_v1
+        .explore_market_cap_authority_heads_v1 (
+          authority_key, input_commitment, direction
+        ) VALUES ($1, $2, 'desc')
+    `, [authorityKey, inputCommitment]);
+    await database.query(`
+      UPDATE programmable_website_projection_v1
+        .explore_market_cap_authority_heads_v1
+         SET current_generation = 1,
+             updated_at = pg_catalog.clock_timestamp()
+       WHERE authority_key = $1
+    `, [authorityKey]);
+    await database.query(`
+      INSERT INTO programmable_website_projection_v1
+        .explore_market_cap_authority_generations_v1 (
+          authority_key, generation, authority_commitment,
+          ranking_commitment, gmgn_status, generated_at,
+          refresh_after, valid_until, canonical_authority
+        ) VALUES (
+          $1, 1, $2, $3, 'complete',
+          TIMESTAMPTZ '2026-09-01T12:00:00Z',
+          TIMESTAMPTZ '2026-09-01T12:01:00Z',
+          TIMESTAMPTZ '2026-09-01T12:03:55Z',
+          '{}'
+        )
+    `, [authorityKey, authorityCommitment, rankingCommitment]);
+    await expect(database.query(`
+      UPDATE programmable_website_projection_v1
+        .explore_market_cap_authority_heads_v1
+         SET direction = 'asc'
+       WHERE authority_key = $1
+    `, [authorityKey])).rejects.toThrow(/permission denied/u);
+    await expect(database.query(`
+      UPDATE programmable_website_projection_v1
+        .explore_market_cap_authority_generations_v1
+         SET gmgn_status = 'partial'
+       WHERE authority_key = $1
+    `, [authorityKey])).rejects.toThrow(/permission denied/u);
+    await expect(database.exec(`
+      TRUNCATE programmable_website_projection_v1
+        .explore_market_cap_authority_generations_v1
+    `)).rejects.toThrow(/permission denied/u);
+    const readable = await database.query<{ count: string }>(`
+      SELECT count(*)::text AS count
+        FROM programmable_website_projection_v1
+          .explore_market_cap_authority_generations_v1
+    `);
+    expect(readable.rows).toEqual([{ count: "1" }]);
+
+    await database.exec("RESET ROLE");
+    await database.exec(`
+      GRANT SELECT (authority_key)
+        ON programmable_website_projection_v1
+          .explore_market_cap_authority_heads_v1
+        TO anon
+    `);
+    const columnGrant = await database.query<{
+      table_select: boolean;
+      any_column_select: boolean;
+    }>(`
+      SELECT has_table_privilege(
+               'anon',
+               'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+               'SELECT'
+             ) AS table_select,
+             has_any_column_privilege(
+               'anon',
+               'programmable_website_projection_v1.explore_market_cap_authority_heads_v1',
+               'SELECT'
+             ) AS any_column_select
+    `);
+    expect(columnGrant.rows).toEqual([{
+      table_select: false,
+      any_column_select: true,
+    }]);
+    await database.exec(`
+      REVOKE SELECT (authority_key)
+        ON programmable_website_projection_v1
+          .explore_market_cap_authority_heads_v1
+        FROM anon
+    `);
+    for (const providerRole of ["anon", "authenticated", "service_role"]) {
+      await database.exec(`SET ROLE ${providerRole}`);
+      await expect(database.query(`
+        SELECT * FROM programmable_website_projection_v1
+          .explore_market_cap_authority_heads_v1
+      `)).rejects.toThrow(/permission denied/u);
+      await database.exec("RESET ROLE");
+    }
+  });
+
   it("forces RLS, excludes provider roles, and enforces lane-specific metadata", async () => {
     const pool = await pglitePool();
     const state = await pool.query<{
@@ -1573,6 +1859,29 @@ async function pglitePool(): Promise<ProjectionTargetPostgresPoolV1> {
     SET ROLE programmable_website_projection_runtime;
   `);
   return new PGliteProjectionPool(database);
+}
+
+async function pgliteExploreMarketCapAuthorityDatabase(): Promise<PGlite> {
+  const database = new PGlite();
+  databases.push(database);
+  await database.exec(`
+    CREATE ROLE programmable_website_projection_runtime NOLOGIN;
+    CREATE ROLE anon NOLOGIN;
+    CREATE ROLE authenticated NOLOGIN;
+    CREATE ROLE service_role NOLOGIN;
+    CREATE SCHEMA programmable_website_projection_v1;
+    REVOKE ALL ON SCHEMA programmable_website_projection_v1 FROM PUBLIC;
+    REVOKE ALL ON SCHEMA programmable_website_projection_v1
+      FROM anon, authenticated, service_role;
+    GRANT USAGE ON SCHEMA programmable_website_projection_v1
+      TO programmable_website_projection_runtime;
+  `);
+  const migration = await readFile(new URL(
+    "../ops/website-projection-target/migrations/0008_explore_market_cap_authority_v1.sql",
+    import.meta.url,
+  ), "utf8");
+  await database.exec(migration);
+  return database;
 }
 
 class PGliteProjectionPool implements ProjectionTargetPostgresPoolV1 {
@@ -1958,6 +2267,40 @@ GmgnAccountGateMultiflightSecurityAttestationRowV1 {
     gmgn_leases_forbidden_access: false,
     gmgn_leases_rls: true,
     gmgn_leases_force_rls: true,
+    expected_policies: true,
+    provider_roles_excluded: true,
+    ssl: true,
+    ssl_version: "TLSv1.3",
+    ssl_cipher: "TLS_AES_256_GCM_SHA384",
+    ssl_bits: 256,
+  };
+}
+
+function exploreMarketCapAuthoritySecurityAttestationFixture():
+ExploreMarketCapAuthoritySecurityAttestationRowV1 {
+  return {
+    runtime_role: "programmable_website_projection_runtime",
+    session_role: "programmable_website_projection_runtime",
+    rolsuper: false,
+    rolcreaterole: false,
+    rolcreatedb: false,
+    rolreplication: false,
+    rolbypassrls: false,
+    schema_usage: true,
+    schema_create: false,
+    heads_select: true,
+    heads_insert: true,
+    heads_delete: true,
+    heads_update: true,
+    heads_forbidden_access: false,
+    generations_select: true,
+    generations_insert: true,
+    generations_delete: true,
+    generations_forbidden_access: false,
+    heads_rls: true,
+    heads_force_rls: true,
+    generations_rls: true,
+    generations_force_rls: true,
     expected_policies: true,
     provider_roles_excluded: true,
     ssl: true,

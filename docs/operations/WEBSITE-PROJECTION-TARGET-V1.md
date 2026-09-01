@@ -40,6 +40,7 @@ before starting the runtime, in this exact order:
 5. `ops/website-projection-target/migrations/0005_generic_launch_materializations_v2.sql`
 6. `ops/website-projection-target/migrations/0006_gmgn_account_gate_v1.sql`
 7. `ops/website-projection-target/migrations/0007_gmgn_account_gate_multiflight_v1.sql`
+8. `ops/website-projection-target/migrations/0008_explore_market_cap_authority_v1.sql`
 
 `0001` creates the private schema, immutable projection and credential-use
 tables, policies and initial indexes. `0002` then upgrades finalized Custom
@@ -55,7 +56,13 @@ instances. `0007` adds the private forced-RLS lease table used for at most 20
 concurrent account-wide reservations; a 21st reservation waits for a lease to
 complete or expire. Its `(gate_id, generation)` primary key,
 unique `(gate_id, lease_holder)` binding, singleton foreign key and exact lease
-times prevent a holder or generation from being reused. Together they provide:
+times prevent a holder or generation from being reused. `0008` adds the private
+Explore market-cap authority head and immutable generation tables. One
+compare-and-swap lease serializes each complete canonical-universe commitment
+and sort direction across runtime instances. A published generation remains
+pin-addressable for at most 235 seconds; the runtime keeps at most 32 retained
+generations per authority and removes expired orphan heads without a broad
+maintenance role. Together they provide:
 
 - a primary key on `(lane, projection_key)`;
 - a global unique index on `idempotency_key`;
@@ -72,6 +79,9 @@ times prevent a holder or generation from being reused. Together they provide:
   failure release, and the
   latest 256 generations of reservation, completion, and provider-block
   decisions (at most 512 gate-path rows);
+- a durable Explore market-cap ordering authority with one current head,
+  immutable commitment-addressed generations, 32 retained generations,
+  a 16 MiB canonical payload ceiling, and a maximum pin lifetime of 235 seconds;
 - lane-specific constraints requiring complete entitlement metadata and forbidding
   that metadata on custom-launch records;
 - enabled and forced RLS on every application table;
@@ -128,13 +138,22 @@ GRANT INSERT, DELETE
 GRANT SELECT, INSERT, DELETE
   ON programmable_website_projection_v1.gmgn_account_gate_leases_v1
   TO programmable_website_projection_runtime;
+GRANT SELECT, INSERT, DELETE
+  ON programmable_website_projection_v1.explore_market_cap_authority_heads_v1,
+     programmable_website_projection_v1.explore_market_cap_authority_generations_v1
+  TO programmable_website_projection_runtime;
+GRANT UPDATE (
+  current_generation, lease_generation, lease_holder, lease_until, updated_at
+) ON programmable_website_projection_v1.explore_market_cap_authority_heads_v1
+  TO programmable_website_projection_runtime;
 GRANT EXECUTE ON FUNCTION
   programmable_website_projection_v1.enforce_approval_v3_capacity_v1()
   TO programmable_website_projection_runtime;
 ```
 
 Do not grant `UPDATE` on the immutable projection or credential tables. Do not
-grant `DELETE` except on the GMGN decision history and exact lease table, or
+grant `DELETE` except on the GMGN decision history, exact lease table, and the
+two bounded Explore authority tables, or
 grant `TRUNCATE`, schema
 creation, role management, or access to approval-service tables. The narrowly
 scoped column-level `UPDATE` grant on the
@@ -153,6 +172,13 @@ provider ban instead advances the generation and publishes the bounded shared
 cooldown. The runtime attests the exact current role,
 grants, RLS/force-RLS state, policies, provider-role exclusion, table ownership,
 and live `pg_stat_ssl` connection before serving requests.
+The Explore authority path separately calls
+`assertExploreMarketCapAuthorityReadiness` before its first database operation.
+That readiness probe requires both authority tables, their owner, the exact
+seven-policy set, forced RLS, the documented runtime grants, forbidden-grant
+absence, provider-role exclusion, and the same live TLS-bound runtime role. A
+readiness failure disables the authority read instead of accepting an
+instance-local pagination order.
 
 Put the dedicated role's connection string in
 `PROGRAMMABLE_WEBSITE_PROJECTION_DATABASE_URL`, its exact role name in
@@ -392,17 +418,21 @@ exact `0001` through `0006` database remains a safe legacy single-flight prefix,
 but it is not multiflight release evidence and cannot authorize this release's
 GMGN Pro throughput claim.
 
-1. migrations `0001` through `0007` were applied in that exact order on the
+1. migrations `0001` through `0008` were applied in that exact order on the
    intended hosted database, their exact reviewed digests are retained, and live
    catalog proof confirms the complete application schema, including the `0002`
    wallet/profile changes and the `0006` GMGN gate singleton, policies, grants,
    decision history and constraints, plus the `0007` lease table, foreign and
-   unique bindings, three runtime policies and least-privilege grants;
+   unique bindings, three runtime policies and least-privilege grants, plus the
+   `0008` authority head/generation tables, constraints, indexes, exact
+   seven-policy set, forced RLS and narrow runtime grants;
 2. the runtime uses the dedicated least-privilege role, the base production
    readiness attestation proves the existing `0001` through `0005` contract,
    and the separate GMGN runtime attestation proves the usable `0006`/`0007`
    relations, ownership, grants, forced RLS, exact policy set and provider-role
-   exclusion against that hosted database. The operator catalog proof in step 1,
+   exclusion, and `assertExploreMarketCapAuthorityReadiness` proves the complete
+   `0008` authority relation, grant and policy posture against that hosted
+   database. The operator catalog proof in step 1,
    rather than this runtime probe, binds the full column, constraint and index
    definitions;
 3. Supabase Postgres SSL enforcement is enabled, the current Server root

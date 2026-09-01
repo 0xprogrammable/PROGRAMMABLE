@@ -818,10 +818,10 @@ describe("read-model operations source contract", () => {
       "ignoreGmgnAccountGateMultiflightSecurityAttestationV1(",
     ],
     [
-      "the only-pending-0007 operator instruction",
+      "the exact 20-flight operator instruction",
       "docs/operations/WEBSITE-PROJECTION-DATABASE-OPERATOR-V1.md",
-      "dry-run must report only `0007` pending",
-      "dry-run may report any prefix pending",
+      "at most 20 active holder-bound leases",
+      "at most 21 active holder-bound leases",
     ],
   ])(
     "rejects a GMGN multiflight release without %s",
@@ -833,6 +833,69 @@ describe("read-model operations source contract", () => {
       });
       expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
         "ops-gmgn-account-gate-multiflight-migration",
+      );
+    },
+  );
+
+  it.each([
+    [
+      "forced RLS on the authority tables",
+      "ops/website-projection-target/migrations/0008_explore_market_cap_authority_v1.sql",
+      "FORCE ROW LEVEL SECURITY;",
+      "DISABLE ROW LEVEL SECURITY;",
+    ],
+    [
+      "migration 0008 in the exact operator inventory",
+      "scripts/website-projection-db-operator-core.mjs",
+      '"0008_explore_market_cap_authority_v1.sql"',
+      '"0008_unreviewed.sql"',
+    ],
+    [
+      "the live-verified 0007 predecessor commitment",
+      "scripts/website-projection-db-operator-core.mjs",
+      '"0xbb99064008299faf0173b4fd0199017358327a02f091436c4ef878f36df14ea8"',
+      `"0x${"1".repeat(64)}"`,
+    ],
+    [
+      "eight-row migration evidence",
+      "scripts/website-projection-db-postgres.mjs",
+      "CHECK (ordinal BETWEEN 1 AND 8)",
+      "CHECK (ordinal BETWEEN 1 AND 7)",
+    ],
+    [
+      "the final authority grant reset",
+      "scripts/website-projection-db-postgres.mjs",
+      "const FINAL_EXPLORE_MARKET_CAP_AUTHORITY_PRIVILEGES",
+      "const IGNORED_EXPLORE_MARKET_CAP_AUTHORITY_PRIVILEGES",
+    ],
+    [
+      "the runtime authority readiness attestation",
+      "lib/server/projection-target/website-target.ts",
+      "assertExploreMarketCapAuthoritySecurityAttestationV1(",
+      "ignoreExploreMarketCapAuthoritySecurityAttestationV1(",
+    ],
+    [
+      "bounded retained generations",
+      "lib/market-data/explore-market-cap-authority.server.ts",
+      "EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_RETAINED_GENERATIONS = 32;",
+      "EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_RETAINED_GENERATIONS = 31;",
+    ],
+    [
+      "the only-pending-0008 operator instruction",
+      "docs/operations/WEBSITE-PROJECTION-DATABASE-OPERATOR-V1.md",
+      "dry-run must report only `0008` pending",
+      "dry-run may report any prefix pending",
+    ],
+  ])(
+    "rejects an Explore market-cap authority release without %s",
+    (_label, path, needle, replacement) => {
+      const source = readFileSync(resolve(ROOT, path), "utf8");
+      expect(source).toContain(needle);
+      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+        sourceOverrides: { [path]: source.replaceAll(needle, replacement) },
+      });
+      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+        "ops-explore-market-cap-authority-migration",
       );
     },
   );
@@ -917,44 +980,49 @@ describe("read-model operations source contract", () => {
       "true ||",
     ],
     [
-      "no durable full market-cap composition",
-      "const readDurablyCachedExploreMarketCapCompositionV1 = unstable_cache(",
-      "const readDurablyCachedExploreMarketCapCompositionV1 = passthrough(",
+      "no durable market-cap authority store",
+      "const authorityStore = getProductionExploreMarketCapAuthorityStoreV1();",
+      "const authorityStore = disabledMarketCapAuthorityStore();",
     ],
     [
-      "an unbound market-cap composition cache result",
-      "cached.inputCommitment !== inputCommitment",
+      "an authority detached from its canonical input",
+      "authority.inputCommitment !== input.inputCommitment",
       "false",
     ],
     [
-      "an unbounded market-cap composition cache age",
-      "const EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS = 235_000",
-      "const EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS = 300_000",
-    ],
-    [
-      "a non-canonical market-cap composition timestamp",
-      "new Date(observedAtMs).toISOString() === value",
+      "an unbounded market-cap authority age",
+      "nowMs - timestampMs <= EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS",
       "true",
     ],
     [
-      "no persisted per-row market-cap ordering observations",
-      "orderingAsOfTimes: Object.freeze([...composed.orderingAsOfTimes])",
-      "orderingAsOfTimes: Object.freeze([])",
-    ],
-    [
-      "a stale per-row market-cap ordering observation",
-      "!currentExploreMarketCapTimestampV1(observedAt)",
-      "false",
-    ],
-    [
-      "a per-row market-cap observation count detached from qualification",
-      "qualifiedCount === expectedQualifiedCount",
+      "a non-canonical market-cap authority timestamp",
+      "new Date(timestampMs).toISOString() === value",
       "true",
     ],
     [
-      "a market-cap cache order that is not a full permutation",
-      "orderedIds.size !== entries.length",
+      "a public pin detached from frozen filter facets",
+      '"programmable.explore-market-cap-authority-pin.v2"',
+      '"programmable.explore-market-cap-authority-unbound.v2"',
+    ],
+    [
+      "stale provider evidence admitted into an authority",
+      "currentMarketCapAuthorityTimestampV1(value, nowMs)",
+      "true",
+    ],
+    [
+      "a retained pin conflict silently accepted",
+      'resolution.kind === "ranking-conflict"',
       "false",
+    ],
+    [
+      "a market-cap authority order that is not a full permutation",
+      "return seen.size === byId.size ? Object.freeze(ordered) : null;",
+      "return Object.freeze(ordered);",
+    ],
+    [
+      "a filtered page that replaces the retained public pin",
+      "rankingCommitment: authority.ranking.rankingCommitment,",
+      "rankingCommitment: ranked.ranking.rankingCommitment,",
     ],
     [
       "a discovery ranking identity coupled to observed freshness",
@@ -2128,8 +2196,8 @@ describe("read-model operations source contract", () => {
     ],
     [
       "a cross-page market-cap ranking drift accepted",
-      "JSON.stringify(highestSecondPage.body.ranking) !==",
-      "JSON.stringify(highestSecondPage.body.ranking) ===",
+      "highestSecondPage.body.ranking.rankingCommitment !==",
+      "highestSecondPage.body.ranking.rankingCommitment ===",
     ],
     [
       "cross-page market-cap membership overlap accepted",

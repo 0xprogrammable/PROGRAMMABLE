@@ -48,6 +48,7 @@ const FILES = [
   "0005_generic_launch_materializations_v2.sql",
   "0006_gmgn_account_gate_v1.sql",
   "0007_gmgn_account_gate_multiflight_v1.sql",
+  "0008_explore_market_cap_authority_v1.sql",
 ];
 const BACKEND_HANDOFF_CONTRACT = path.join(
   WORKSPACE,
@@ -200,7 +201,7 @@ test("ALTER ROLE password is transaction-safe and does not retain the plaintext 
 
 test("lost credential commit acknowledgement fails closed as WPR01", async () => {
   const posture = Object.freeze({
-    migrationEvidence: Object.freeze({ migrationCount: 7 }),
+    migrationEvidence: Object.freeze({ migrationCount: 8 }),
     catalogSha256: DIGEST,
     operatorCatalogSha256: DIGEST,
     runtimeRoleStatus: "current",
@@ -294,7 +295,7 @@ test("receipt is secret-free and records single-password forward recovery", () =
       database: "postgres",
     },
     migrationEvidence: {
-      migrationCount: 7,
+      migrationCount: 8,
       planSha256: DIGEST,
       repositoryCommit: OID,
       repositoryTree: OID,

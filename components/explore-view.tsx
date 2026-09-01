@@ -2061,6 +2061,42 @@ function exploreProviderOrderCommitmentKey(value: ExplorePayload) {
   });
 }
 
+function exploreMarketCapRankingCommitment(value: ExplorePayload) {
+  return value.ranking?.requested === "market-cap"
+    ? value.ranking.rankingCommitment
+    : undefined;
+}
+
+function readResolvedExploreMarketCapRankingCommitment(
+  search: URLSearchParams,
+) {
+  const collectionIdentity = canonicalExploreCollectionIdentity(search);
+  let commitment: `sha256:${string}` | undefined;
+  for (const [key, cached] of resolvedExplorePayloads) {
+    if (Date.now() - cached.updatedAt >= RESOLVED_EXPLORE_PAYLOAD_TTL_MS) {
+      resolvedExplorePayloads.delete(key);
+      continue;
+    }
+    if (
+      cached.collectionIdentity === collectionIdentity &&
+      cached.payload.page === 1
+    ) {
+      commitment = exploreMarketCapRankingCommitment(cached.payload) ??
+        commitment;
+    }
+  }
+  return commitment;
+}
+
+function expireResolvedExploreCollectionPayloads(search: URLSearchParams) {
+  const collectionIdentity = canonicalExploreCollectionIdentity(search);
+  for (const [key, cached] of resolvedExplorePayloads) {
+    if (cached.collectionIdentity === collectionIdentity) {
+      resolvedExplorePayloads.delete(key);
+    }
+  }
+}
+
 function parseExplorePayload(value: unknown): ExplorePayload {
   if (!isRecord(value)) {
     throw new Error("The token registry returned an invalid response");
@@ -2312,6 +2348,7 @@ function canonicalExploreSearchIdentity(search: URLSearchParams) {
 function canonicalExploreCollectionIdentity(search: URLSearchParams) {
   const canonical = new URLSearchParams(search);
   canonical.delete("page");
+  canonical.delete("rankingCommitment");
   canonical.sort();
   return canonical.toString();
 }
@@ -2493,6 +2530,9 @@ async function fetchExplorePayload(
       const body: unknown = await response.json().catch(() => null);
       signal.throwIfAborted();
       if (timedOut) throw new Error("Tokens took too long to respond");
+      if (response.status === 409) {
+        throw new ExploreRankingRestartError(readApiError(body));
+      }
       if (response.status !== 200) {
         throw new Error(readApiError(body));
       }
@@ -2548,6 +2588,13 @@ async function fetchExplorePayload(
     }
   }
   throw new Error("Tokens are temporarily unavailable");
+}
+
+class ExploreRankingRestartError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExploreRankingRestartError";
+  }
 }
 
 export function loadExplorePayload(
@@ -2616,7 +2663,48 @@ export async function loadExplorePage(
   contentKey: string,
   search: URLSearchParams,
 ) {
-  return loadExplorePayload(contentKey, new URLSearchParams(search));
+  const requestedSearch = new URLSearchParams(search);
+  const contract = exploreRequestContract(requestedSearch);
+  const sort = requestedSearch.get("sort");
+  const requiresRankingPin = contract.page > 1 &&
+    (sort === "market-cap" || sort === "market-cap-asc");
+  if (!requiresRankingPin || requestedSearch.has("rankingCommitment")) {
+    return loadExplorePayload(contentKey, requestedSearch);
+  }
+
+  const firstPageContentKey = `${contentKey}\u0000market-cap-ranking-page:1`;
+  const loadPinnedPage = async () => {
+    const firstPageSearch = new URLSearchParams(requestedSearch);
+    firstPageSearch.set("page", "1");
+    firstPageSearch.delete("rankingCommitment");
+    const cachedRankingCommitment =
+      readResolvedExploreMarketCapRankingCommitment(firstPageSearch);
+    const firstPage = cachedRankingCommitment === undefined
+      ? await loadExplorePayload(firstPageContentKey, firstPageSearch)
+      : null;
+    const rankingCommitment = cachedRankingCommitment ??
+      (firstPage === null
+        ? undefined
+        : exploreMarketCapRankingCommitment(firstPage));
+    if (rankingCommitment === undefined) {
+      throw new Error("Tokens changed while filters were loading");
+    }
+    const pinnedSearch = new URLSearchParams(requestedSearch);
+    pinnedSearch.set("rankingCommitment", rankingCommitment);
+    return loadExplorePayload(contentKey, pinnedSearch);
+  };
+
+  try {
+    return await loadPinnedPage();
+  } catch (error) {
+    if (!(error instanceof ExploreRankingRestartError)) throw error;
+    abortExplorePayload(contentKey);
+    expireResolvedExplorePayloadCache(contentKey);
+    abortExplorePayload(firstPageContentKey);
+    expireResolvedExplorePayloadCache(firstPageContentKey);
+    expireResolvedExploreCollectionPayloads(requestedSearch);
+    return loadPinnedPage();
+  }
 }
 
 async function loadExploreModelDatasetAttempt(
@@ -2636,6 +2724,14 @@ async function loadExploreModelDatasetAttempt(
   const firstPageCatalog = firstPage.catalog;
   const firstPageProviderOrderCommitment =
     exploreProviderOrderCommitmentKey(firstPage);
+  const marketCapSort = firstPageSearch.get("sort") === "market-cap" ||
+    firstPageSearch.get("sort") === "market-cap-asc";
+  const rankingCommitment = marketCapSort
+    ? exploreMarketCapRankingCommitment(firstPage)
+    : undefined;
+  if (marketCapSort && rankingCommitment === undefined) {
+    throw new Error("Tokens changed while filters were loading");
+  }
   if (firstPage.totalPages <= 1) {
     if (firstPage.page !== 1 || firstPage.tokens.length !== firstPage.total) {
       throw new Error("Tokens changed while filters were loading");
@@ -2649,6 +2745,9 @@ async function loadExploreModelDatasetAttempt(
       const page = index + 2;
       const pageSearch = new URLSearchParams(firstPageSearch);
       pageSearch.set("page", String(page));
+      if (rankingCommitment !== undefined) {
+        pageSearch.set("rankingCommitment", rankingCommitment);
+      }
       const payload = await loadExplorePayload(
         `${contentKey}\u0000model-page:${page}`,
         pageSearch,
@@ -2797,7 +2896,8 @@ export async function loadExploreModelDataset(
   } catch (error) {
     if (
       !(error instanceof Error) ||
-      error.message !== "Tokens changed while filters were loading"
+      (error.message !== "Tokens changed while filters were loading" &&
+        !(error instanceof ExploreRankingRestartError))
     ) {
       throw error;
     }

@@ -227,6 +227,59 @@ describe("GMGN canonical market enrichment", () => {
     },
   );
 
+  it("keeps the token-info HTTP budget after a cold shared-gate reservation", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(133);
+    const reservation = {
+      ...GATE_RESERVATION,
+      reservedAtMs: NOW.getTime() + 3_000,
+    };
+    const reserveSlot = vi.fn(() => new Promise<typeof reservation>((resolve) => {
+      setTimeout(() => resolve(reservation), 3_000);
+    }));
+    const complete = vi.fn(async () => {});
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot,
+      blockUntil: vi.fn(),
+      complete,
+    };
+    let providerSignal: AbortSignal | null | undefined;
+    const fetchImpl = vi.fn((
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      providerSignal = init?.signal;
+      return Promise.resolve(new Response(JSON.stringify({
+        code: 0,
+        data: providerData(entry),
+      }), { status: 200 }));
+    });
+
+    const read = readGmgnMarketSnapshotV1(entry, {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => new Date(),
+      deadlineMs: NOW.getTime() + 8_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(read).resolves.toMatchObject({
+      source: "gmgn",
+      identity: identity(entry),
+    });
+    expect(reserveSlot).toHaveBeenCalledWith({
+      requestsPerSecond: 1,
+      deadlineMs: NOW.getTime() + 5_000,
+      signal: expect.any(AbortSignal),
+    });
+    expect(providerSignal?.aborted).toBe(false);
+    expect(complete).toHaveBeenCalledWith(reservation);
+  });
+
   it("derives visible token-info concurrency from effective RPS and batch size", () => {
     vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "20");
     expect(gmgnVisibleMarketConcurrencyV1(0)).toBe(0);
@@ -632,7 +685,7 @@ describe("GMGN canonical market enrichment", () => {
       })).resolves.not.toBeNull();
       expect(reserveSlot).toHaveBeenCalledWith({
         requestsPerSecond: expected,
-        deadlineMs: NOW.getTime() + 2_500,
+        deadlineMs: NOW.getTime() + 5_000,
         signal: expect.any(AbortSignal),
       });
     },
@@ -993,7 +1046,7 @@ describe("GMGN canonical market enrichment", () => {
     expect(complete).not.toHaveBeenCalled();
     expect(readSettled).toBe(false);
 
-    // The public request times out at 2.500 ms. The provider notices one
+    // The provider HTTP budget expires at 2.500 ms. The fetch notices one
     // millisecond later and begins exact lease cleanup inside lifecycle grace.
     await vi.advanceTimersByTimeAsync(2);
     expect(complete).toHaveBeenCalledOnce();
@@ -1031,7 +1084,7 @@ describe("GMGN canonical market enrichment", () => {
       },
     );
 
-    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.advanceTimersByTimeAsync(7_500);
     expect(readSettled).toBe(false);
     await vi.advanceTimersByTimeAsync(3_499);
     expect(readSettled).toBe(false);

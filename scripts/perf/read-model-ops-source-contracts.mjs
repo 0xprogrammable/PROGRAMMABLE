@@ -2823,6 +2823,12 @@ export function evaluateReadModelOperationsSourceContracts(
     source(
       "ops/website-projection-target/migrations/0007_gmgn_account_gate_multiflight_v1.sql",
     ) ?? "";
+  const exploreMarketCapAuthorityMigration =
+    source(
+      "ops/website-projection-target/migrations/0008_explore_market_cap_authority_v1.sql",
+    ) ?? "";
+  const exploreMarketCapAuthorityStore =
+    source("lib/market-data/explore-market-cap-authority.server.ts") ?? "";
   const websiteProjectionOperatorCore =
     source("scripts/website-projection-db-operator-core.mjs") ?? "";
   const websiteProjectionPostgres =
@@ -3691,7 +3697,10 @@ export function evaluateReadModelOperationsSourceContracts(
       ),
     ) &&
     includesEverySourceFragment(publicExplore, [
-      'import { unstable_cache } from "next/cache";',
+      "EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS,",
+      "EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_BYTES,",
+      "exploreMarketCapAuthorityStorageCommitmentV1,",
+      "getProductionExploreMarketCapAuthorityStoreV1,",
       "readEnvioClassicV3CatalogV1({",
       "readProductionCustomExploreDirectoryV1(",
       "readFinalizedRouterCustomIdentitySnapshotV1({",
@@ -3704,12 +3713,14 @@ export function evaluateReadModelOperationsSourceContracts(
       'orderBy: "marketcap"',
       "direction,",
       "GMGN_MARKET_CAP_RETRY_MINIMUM_REMAINING_MS",
-      "const EXPLORE_MARKET_CAP_CACHE_REVALIDATE_SECONDS = 60",
-      "const EXPLORE_MARKET_CAP_CACHE_MAXIMUM_AGE_MS = 235_000",
-      '"programmable.explore-market-cap-composition-input.v1"',
+      "const MARKET_CAP_AUTHORITY_PUBLISH_RESERVE_MS = 3_000;",
+      '"programmable.explore-market-cap-authority.v2"',
+      '"programmable.explore-market-cap-authority-pin.v2"',
+      '"programmable.explore-market-cap-authority-input.v2"',
+      "orderedCanonicalIdentities: entries.map((entry, index) => ({",
       "const first = await readGmgnEthereumTrendingV1(",
       "first !== null ||",
-      "deadlineMs - Date.now() <",
+      "authorityDeadlineMs - Date.now() <",
       "rankOptions,",
       "rankCanonicalExploreMarketCapEntriesWithGmgnV1(",
       "rankCanonicalExploreMarketCapPrimaryWithGmgnV1(",
@@ -3718,28 +3729,34 @@ export function evaluateReadModelOperationsSourceContracts(
       "MARKET_CAP_SUPPLY_HYDRATION_LIMIT",
       "MARKET_CAP_SUPPLY_HYDRATION_BUDGET_MS",
       "exactExploreMarketIdentityV1(candidate, original)",
-      "const gmgnHydrationEligible = hydrationUniverse.filter(",
+      "const gmgnHydrationEligible = primary.coverage.gmgnMatchedEntryCount === 0",
+      ": hydrationUniverse.filter(gmgnVisibleMarketEntryEligibleV1)",
       "readGmgnExploreSnapshotsV1(gmgnRequested, {",
       "gmgnTokenInfoFallbackEntryV1(",
       "const dexscreenerRequested = hydrationUniverse.filter(",
-      "readDexscreenerExploreEntriesV1(\n        dexscreenerRequested,",
+      "readDexscreenerExploreEntriesV1(\n    dexscreenerRequested,",
       "exploreMarketCapRankingV1(",
-      "const readDurablyCachedExploreMarketCapCompositionV1 = unstable_cache(",
-      '["programmable-explore-market-cap-composition-v1"]',
-      "{ revalidate: EXPLORE_MARKET_CAP_CACHE_REVALIDATE_SECONDS }",
-      "cached.inputCommitment !== inputCommitment",
-      "Explore market-cap provider snapshot is stale",
-      "composed.ranking.qualifiedCount > 0",
-      "orderingAsOfTimes: Object.freeze([...composed.orderingAsOfTimes])",
-      "currentExploreMarketCapOrderingTimesV1(",
-      "qualifiedCount === expectedQualifiedCount",
-      "!currentExploreMarketCapTimestampV1(observedAt)",
-      "cached.orderingAsOfTimes,",
-      "!currentExploreMarketCapTimestampV1(cached.assembledAt)",
-      "new Date(observedAtMs).toISOString() === value",
-      "cached.orderedEntryIds.length !== entries.length",
-      "orderedIds.size !== entries.length",
-      "readBoundExploreMarketCapCompositionV1(",
+      "new Date(timestampMs).toISOString() === value",
+      "nowMs - timestampMs <= EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS",
+      "authority.orderedIdentities.length !== byId.size",
+      "return seen.size === byId.size ? Object.freeze(ordered) : null;",
+      "authority.inputCommitment !== input.inputCommitment",
+      "!currentMarketCapAuthorityTimestampV1(authority.generatedAt, nowMs)",
+      "currentMarketCapAuthorityTimestampV1(value, nowMs)",
+      "authority.ranking.rankingCommitment !== authorityPin",
+      "buildExploreMarketCapAuthorityV1(",
+      "const canonicalAuthority = canonicalizeJson(authority);",
+      "exploreMarketCapAuthorityStorageCommitmentV1(canonicalAuthority)",
+      "validUntil: new Date(validUntilMs).toISOString()",
+      "parseStrictJson(canonicalAuthority, {",
+      "maximumBytes: EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_BYTES,",
+      "rankingCommitment: authority.ranking.rankingCommitment,",
+      "const authorityStore = getProductionExploreMarketCapAuthorityStoreV1();",
+      "? await authorityStore.resolve({",
+      "acceptPinnedAuthority: (canonicalAuthority) => {",
+      'resolution.kind === "ranking-conflict"',
+      'code: "MARKET_CAP_RANKING_RESTART_REQUIRED"',
+      "projectExploreMarketCapAuthorityV1(",
       "readExploreMarketEntriesV1(\n        identityPage.tokens,",
       'registryCustomStatus === "current" && routerCustomStatus === "current"',
       'requested: "market-cap"',
@@ -3934,6 +3951,7 @@ export function evaluateReadModelOperationsSourceContracts(
       '"X-Programmable-Read-Source": `${launchSource}+${chart.source}`',
       "TOKEN_CHART_CACHE_CONTROL",
     ]) &&
+    !publicExplore.includes("unstable_cache") &&
     !publicChart.includes('"programmable.market-chart-error.v1"') &&
     gmgnChartReadStart >= 0 &&
     gmgnChartAcceptanceStart > gmgnChartReadStart &&
@@ -3991,7 +4009,7 @@ export function evaluateReadModelOperationsSourceContracts(
     ]) &&
       includesEverySourceFragment(websiteProjectionOperatorCore, [
         '"0007_gmgn_account_gate_multiflight_v1.sql"',
-        "MIGRATION_FILE = /^(000[1-7])_([a-z][a-z0-9_]*)\\.sql$/u",
+        "MIGRATION_FILE = /^(000[1-8])_([a-z][a-z0-9_]*)\\.sql$/u",
       ]) &&
       includesEverySourceFragment(websiteProjectionPostgres, [
         "const EVIDENCE_0007_DDL",
@@ -4018,19 +4036,101 @@ export function evaluateReadModelOperationsSourceContracts(
       includesEverySourceFragment(websiteProjectionTargetRunbook, [
         "at most 20",
         "a 21st reservation waits",
-        "migrations `0001` through `0007`",
+        "migrations `0001` through `0008`",
         "safe legacy single-flight prefix",
         "cannot authorize this release's GMGN Pro throughput claim",
       ]) &&
       includesEverySourceFragment(websiteProjectionOperatorRunbook, [
-        "`0001` through `0007`",
+        "`0001` through `0008`",
         "at most 20 active holder-bound leases",
         "a 21st reservation waits",
-        "seven ordered file/execution hashes",
-        "dry-run must report only `0007` pending",
+        "eight ordered file/execution hashes",
+        "dry-run must report only `0008` pending",
         "The Stage workflow never applies database migrations",
       ]),
     "migration 0007, operator inventory, hosted readiness and runbooks bind the exact 20-flight GMGN account gate while 0006 remains a rolling-only prefix",
+  );
+  check(
+    "ops-explore-market-cap-authority-migration",
+    includesEverySourceFragment(exploreMarketCapAuthorityMigration, [
+      "CREATE TABLE programmable_website_projection_v1.explore_market_cap_authority_heads_v1",
+      "CREATE TABLE programmable_website_projection_v1.explore_market_cap_authority_generations_v1",
+      "PRIMARY KEY (authority_key, generation)",
+      "FOREIGN KEY (authority_key)",
+      "ON DELETE CASCADE",
+      "valid_until <= generated_at + INTERVAL '235 seconds'",
+      "octet_length(canonical_authority) BETWEEN 2 AND 16777216",
+      "explore_market_cap_authority_generations_v1_ranking_idx",
+      "ENABLE ROW LEVEL SECURITY",
+      "FORCE ROW LEVEL SECURITY",
+      "explore_market_cap_authority_heads_v1_runtime_select",
+      "explore_market_cap_authority_heads_v1_runtime_insert",
+      "explore_market_cap_authority_heads_v1_runtime_update",
+      "explore_market_cap_authority_heads_v1_runtime_delete",
+      "explore_market_cap_authority_generations_v1_runtime_select",
+      "explore_market_cap_authority_generations_v1_runtime_insert",
+      "explore_market_cap_authority_generations_v1_runtime_delete",
+      "GRANT UPDATE (",
+      "current_generation, lease_generation, lease_holder, lease_until, updated_at",
+      "rolname = 'anon'",
+      "rolname = 'authenticated'",
+      "rolname = 'service_role'",
+    ]) &&
+      includesEverySourceFragment(websiteProjectionOperatorCore, [
+        '"0008_explore_market_cap_authority_v1.sql"',
+        "WEBSITE_PROJECTION_PREDECESSOR_0007_PLAN_COMMIT",
+        '"9d81af890e14e39aef415399b7df80745670483c"',
+        "WEBSITE_PROJECTION_PREDECESSOR_0007_PLAN_SHA256",
+        '"0xbb99064008299faf0173b4fd0199017358327a02f091436c4ef878f36df14ea8"',
+        "WEBSITE_PROJECTION_PREDECESSOR_0007_ORDER_SHA256",
+        '"0x3097a113366d96591241f9ed423b2fef1beb551959e04a6663847b3a1f55ee56"',
+        "validateWebsiteProjectionPredecessor0007Plan",
+        "websiteProjectionPredecessor0007Plan",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionPostgres, [
+        "const EVIDENCE_0008_DDL",
+        "CHECK (ordinal BETWEEN 1 AND 8)",
+        "CHECK (version ~ '^000[1-8]$')",
+        "if (migration.ordinal === 8)",
+        "await executeSimple(transaction, EVIDENCE_0008_DDL)",
+        "const FINAL_EXPLORE_MARKET_CAP_AUTHORITY_PRIVILEGES",
+        "explore_market_cap_authority_heads_v1",
+        "explore_market_cap_authority_generations_v1",
+      ]) &&
+      includesEverySourceFragment(exploreMarketCapAuthorityStore, [
+        "EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_AGE_MS = 235_000",
+        "EXPLORE_MARKET_CAP_AUTHORITY_MAXIMUM_RETAINED_GENERATIONS = 32;",
+        "DELETE FROM programmable_website_projection_v1.explore_market_cap_authority_generations_v1",
+        "DELETE FROM programmable_website_projection_v1.explore_market_cap_authority_heads_v1",
+        "assertReady: () => pool.assertExploreMarketCapAuthorityReadiness()",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionTarget, [
+        "assertExploreMarketCapAuthorityReadiness(): Promise<void>",
+        "assertExploreMarketCapAuthoritySecurityAttestationV1(",
+        "heads_select",
+        "heads_insert",
+        "heads_delete",
+        "heads_update",
+        "heads_forbidden_access",
+        "generations_select",
+        "generations_insert",
+        "generations_delete",
+        "generations_forbidden_access",
+        "expected_policies",
+        "provider_roles_excluded",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionTargetRunbook, [
+        "0008_explore_market_cap_authority_v1.sql",
+        "32 retained generations",
+        "235 seconds",
+        "assertExploreMarketCapAuthorityReadiness",
+      ]) &&
+      includesEverySourceFragment(websiteProjectionOperatorRunbook, [
+        "0007 predecessor",
+        "dry-run must report only `0008` pending",
+        "current eight-row `verify` result",
+      ]),
+    "migration 0008, exact production predecessor evidence, operator closure, least-privilege runtime readiness and bounded durable generation retention bind Explore market-cap pagination to one cross-instance authority",
   );
   const publicProfileAndActionRoutes = [
     publicCreatorProfile,
@@ -4447,7 +4547,8 @@ export function evaluateReadModelOperationsSourceContracts(
         "new Set(highestIdentities).size !== highestIdentities.length",
         "Highest market-cap page is outside the paged catalog",
         "Market-cap ranking changed during pagination",
-        "JSON.stringify(highestSecondPage.body.ranking) !==",
+        "highestSecondPage.body.ranking.rankingCommitment !==",
+        "stableMarketCapRankingMetadata(highestSecondPage.body.ranking) !==",
         "highestIdentities.includes(identity)",
         "function exactMarketCapRanking(response, canonicalTokens, direction, nowMs)",
         "function exactRequiredGmgnMarketCapRanking(response, nowMs)",

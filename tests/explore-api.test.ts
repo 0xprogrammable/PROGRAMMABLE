@@ -5,6 +5,93 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+const durableMarketCapCacheHarness = vi.hoisted(() => {
+  type Candidate = Readonly<{
+    canonicalAuthority: string;
+    rankingCommitment: string;
+    gmgnStatus: "complete" | "partial" | "unavailable";
+    generatedAt: string;
+    validUntil: string;
+  }>;
+  type Generation = Candidate & Readonly<{ refreshAfterMs: number }>;
+  type ResolveInput = Readonly<{
+    inputCommitment: string;
+    direction: "asc" | "desc";
+    rankingCommitment?: string;
+    acceptPinnedAuthority?: (canonicalAuthority: string) => boolean;
+    build?: () => Promise<Candidate>;
+  }>;
+  const entries = new Map<string, Generation[]>();
+  const pending = new Map<string, Promise<Generation | null>>();
+  const resolve = vi.fn(async (input: ResolveInput) => {
+    const key = `${input.inputCommitment}:${input.direction}`;
+    const generations = entries.get(key) ?? [];
+    const nowMs = Date.now();
+    if (input.rankingCommitment !== undefined) {
+      for (const generation of [...generations].reverse()) {
+        if (
+          generation.rankingCommitment === input.rankingCommitment &&
+          Date.parse(generation.validUntil) >= nowMs &&
+          input.acceptPinnedAuthority?.(generation.canonicalAuthority)
+        ) {
+          return { kind: "ready" as const,
+            canonicalAuthority: generation.canonicalAuthority };
+        }
+      }
+      return { kind: "ranking-conflict" as const };
+    }
+    const current = generations.at(-1);
+    if (
+      current !== undefined && Date.parse(current.validUntil) >= nowMs &&
+      current.refreshAfterMs > nowMs
+    ) {
+      return { kind: "ready" as const,
+        canonicalAuthority: current.canonicalAuthority };
+    }
+    if (input.build === undefined) return { kind: "unavailable" as const };
+    let fill = pending.get(key);
+    if (fill === undefined) {
+      fill = input.build().then((candidate) => {
+        const generatedAtMs = Date.parse(candidate.generatedAt);
+        const validUntilMs = Date.parse(candidate.validUntil);
+        if (!Number.isFinite(generatedAtMs) || validUntilMs < Date.now()) {
+          return null;
+        }
+        const generation: Generation = {
+          ...candidate,
+          refreshAfterMs: Math.min(
+            validUntilMs,
+            generatedAtMs +
+              (candidate.gmgnStatus === "unavailable" ? 10_000 : 60_000),
+          ),
+        };
+        const retained = (entries.get(key) ?? []).filter(
+          (item) => Date.parse(item.validUntil) >= Date.now(),
+        );
+        retained.push(generation);
+        entries.set(key, retained.slice(-32));
+        return generation;
+      }).catch(() => null).finally(() => pending.delete(key));
+      pending.set(key, fill);
+    }
+    const generation = await fill;
+    return generation === null
+      ? { kind: "unavailable" as const }
+      : { kind: "ready" as const,
+          canonicalAuthority: generation.canonicalAuthority };
+  });
+  return { entries, pending, resolve };
+});
+
+vi.mock("../lib/market-data/explore-market-cap-authority.server", async (
+  importOriginal,
+) => ({
+  ...await importOriginal(),
+  getProductionExploreMarketCapAuthorityStoreV1: () => ({
+    resolve: durableMarketCapCacheHarness.resolve,
+  }),
+}));
+
 import type { ValuedExploreEntry } from "../lib/explore-financial-data";
 import { SHARD_PUBLIC_PRESENTATION_V1 } from
   "../lib/custom-launch/router-trade-adapters-v1";
@@ -120,7 +207,11 @@ vi.mock("../lib/alchemy/router-custom-public.server", () => ({
   ].join("+"),
 }));
 
-import { GET, paginateTrendingExploreEntriesV1 } from "../app/api/explore/route";
+import {
+  exploreMarketCapRankingV1,
+  GET,
+  paginateTrendingExploreEntriesV1,
+} from "../app/api/explore/route";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
@@ -437,8 +528,8 @@ function marketRead(input: Readonly<{
 function valued(
   input: readonly ExploreEntry[],
   qualifiedIndexes: ReadonlySet<number> = new Set(input.map((_entry, index) => index)),
+  asOfTime = new Date(Date.now() - 30_000).toISOString(),
 ): readonly ValuedExploreEntry[] {
-  const observedAt = new Date().toISOString();
   return input.map((entry, index) => qualifiedIndexes.has(index)
     ? {
         ...entry,
@@ -450,7 +541,7 @@ function valued(
           valueWad: (BigInt(entry.tokenAddress ?? "0x0") * 10n ** 18n).toString(),
           freshness: "provider-recent" as const,
           source: "dexscreener" as const,
-          asOfTime: observedAt,
+          asOfTime,
         },
       }
     : {
@@ -517,6 +608,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
   });
 
   beforeEach(() => {
+    durableMarketCapCacheHarness.entries.clear();
     vi.clearAllMocks();
     mocks.durableCache.clear();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -1339,10 +1431,24 @@ describe("Explore static identity and Dexscreener market contract", () => {
     mocks.readCatalog.mockResolvedValue(catalog({ entries: eligibleEntries }));
     mocks.gmgnEligible.mockReturnValue(true);
     const fetchedAt = new Date(Date.now() - 2_000).toISOString();
+    mocks.readTrending.mockResolvedValue({
+      ...discoverySnapshot(
+        "trending",
+        [eligibleEntries[3]!],
+        [],
+        { orderBy: "marketcap", direction: "desc" },
+      ),
+      fetchedAt,
+    });
     mocks.readGmgn.mockImplementation(async (
       input: readonly ExploreEntry[],
     ) => {
-      expect(input).toEqual([...eligibleEntries].reverse());
+      expect(input).toEqual([
+        eligibleEntries[4]!,
+        eligibleEntries[2]!,
+        eligibleEntries[1]!,
+        eligibleEntries[0]!,
+      ]);
       return new Map([
         [eligibleEntries[4]!.id, gmgnMarketSnapshot(eligibleEntries[4]!, {
           fdvUsd: 10,
@@ -1388,15 +1494,15 @@ describe("Explore static identity and Dexscreener market contract", () => {
       status: "partial",
       gmgnStatus: "partial",
       applied:
-        "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order",
+        "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order",
       metricOrder:
         "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order",
-      matchedTokenCount: 0,
+      matchedTokenCount: 1,
       gmgnHydrationLimit: 100,
-      gmgnHydrationEligibleCount: 5,
-      gmgnHydrationRequestedCount: 5,
-      gmgnHydrationObservedCount: 3,
-      gmgnHydrationQualifiedCount: 2,
+      gmgnHydrationEligibleCount: 4,
+      gmgnHydrationRequestedCount: 4,
+      gmgnHydrationObservedCount: 2,
+      gmgnHydrationQualifiedCount: 1,
       gmgnHydrationDeferredCount: 0,
       fallbackRequestedCount: 3,
       fallbackQualifiedCount: 2,
@@ -1428,10 +1534,17 @@ describe("Explore static identity and Dexscreener market contract", () => {
       })],
     ]));
     const drifted = await json(await GET(
-      request("sort=market-cap&page=2&limit=2"),
+      request(
+        `sort=market-cap&page=2&limit=2&rankingCommitment=${
+          encodeURIComponent(body.ranking.rankingCommitment)
+        }`,
+      ),
     ));
     expect(drifted.ranking.rankingCommitment).toBe(
       body.ranking.rankingCommitment,
+    );
+    expect(drifted.tokens.map((entry: ExploreEntry) => entry.id)).toEqual(
+      body.tokens.slice(2, 4).map((entry: ExploreEntry) => entry.id),
     );
     expect(mocks.readGmgn).toHaveBeenCalledOnce();
     expect(mocks.readDex.mock.calls.filter(([input]) =>
@@ -1496,13 +1609,18 @@ describe("Explore static identity and Dexscreener market contract", () => {
 
       vi.setSystemTime(Date.now() + 2_000);
       const expiredResponse = await GET(
-        request("sort=market-cap&page=2&limit=1"),
+        request(
+          `sort=market-cap&page=2&limit=1&rankingCommitment=${encodeURIComponent(
+            first.ranking.rankingCommitment,
+          )}`,
+        ),
       );
       const expired = await json(expiredResponse);
 
-      expect(expiredResponse.status).toBe(503);
+      expect(expiredResponse.status).toBe(409);
       expect(expired).toEqual({
-        error: "Token data is temporarily unavailable",
+        error: "Market-cap ranking changed; restart from page 1",
+        code: "MARKET_CAP_RANKING_RESTART_REQUIRED",
       });
       expect(first.ranking.asOfTime).toBe(freshRankAt);
       expect(mocks.readTrending).toHaveBeenCalledOnce();
@@ -1510,6 +1628,25 @@ describe("Explore static identity and Dexscreener market contract", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("skips token_info fanout when the direct GMGN rank is unavailable", async () => {
+    mocks.gmgnEligible.mockReturnValue(true);
+    mocks.readTrending.mockResolvedValue(null);
+
+    const response = await GET(request("sort=market-cap&page=1&limit=5"));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(mocks.readTrending).toHaveBeenCalledTimes(2);
+    expect(mocks.readGmgn).not.toHaveBeenCalled();
+    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(TOKEN_COUNT);
+    expect(body.ranking).toMatchObject({
+      matchedTokenCount: 0,
+      gmgnHydrationEligibleCount: 0,
+      gmgnHydrationRequestedCount: 0,
+      gmgnStatus: "unavailable",
+    });
   });
 
   it("bounds Registry Custom supply hydration before GMGN token info", async () => {
@@ -1546,6 +1683,15 @@ describe("Explore static identity and Dexscreener market contract", () => {
       typeof entry.totalSupplyRaw === "string"
     );
     const fetchedAt = new Date(Date.now() - 1_000).toISOString();
+    mocks.readTrending.mockResolvedValue({
+      ...discoverySnapshot(
+        "trending",
+        [customEntries[24]!],
+        [],
+        { orderBy: "marketcap", direction: "desc" },
+      ),
+      fetchedAt,
+    });
     mocks.readGmgn.mockImplementation(async (
       input: readonly ExploreEntry[],
     ) => new Map([[input[0]!.id, gmgnMarketSnapshot(input[0]!, {
@@ -1564,18 +1710,19 @@ describe("Explore static identity and Dexscreener market contract", () => {
       (entry: ExploreEntry) => entry.exploreKind === "custom-project" &&
         typeof entry.totalSupplyRaw === "string",
     )).toBe(true);
-    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(24);
+    expect(mocks.readDex.mock.calls[0]?.[0]).toHaveLength(23);
     expect(body.ranking).toMatchObject({
       source: "gmgn+dexscreener",
       status: "complete",
       gmgnStatus: "partial",
-      applied: "gmgn-token-info-fdv-then-dexscreener-fdv",
+      applied:
+        "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv",
       gmgnHydrationEligibleCount: 20,
       gmgnHydrationRequestedCount: 20,
       gmgnHydrationObservedCount: 1,
       gmgnHydrationQualifiedCount: 1,
-      fallbackRequestedCount: 24,
-      fallbackQualifiedCount: 24,
+      fallbackRequestedCount: 23,
+      fallbackQualifiedCount: 23,
       canonicalTailCount: 0,
       qualifiedCount: 25,
       totalCount: 25,
@@ -1598,7 +1745,11 @@ describe("Explore static identity and Dexscreener market contract", () => {
     const descResponse = await GET(request("sort=market-cap&page=1&limit=5"));
     const desc = await json(descResponse);
     const descSecondPage = await json(await GET(
-      request("sort=market-cap&page=2&limit=5"),
+      request(
+        `sort=market-cap&page=2&limit=5&rankingCommitment=${
+          encodeURIComponent(desc.ranking.rankingCommitment)
+        }`,
+      ),
     ));
 
     expect(desc.tokens.slice(0, 2).map((entry: ExploreEntry) => entry.id)).toEqual([
@@ -1694,6 +1845,278 @@ describe("Explore static identity and Dexscreener market contract", () => {
       signal: expect.any(AbortSignal),
       deadlineMs: expect.any(Number),
     }));
+  });
+
+  it("commits only to the frozen market-cap identity order", () => {
+    const canonicalEntries = entries.slice(0, 3);
+    const firstFetchedAt = new Date(Date.now() - 2_000).toISOString();
+    const secondFetchedAt = new Date(Date.now() - 1_000).toISOString();
+    const fallback = {
+      gmgnHydrationLimit: 100,
+      gmgnHydrationEligibleEntryCount: 0,
+      gmgnRequestedEntries: [] as const,
+      gmgnEntries: [] as const,
+      dexscreenerRequestedEntries: canonicalEntries,
+      dexscreenerEntries: [] as const,
+    };
+    const first = exploreMarketCapRankingV1(
+      canonicalEntries,
+      {
+        ...discoverySnapshot(
+          "trending",
+          [canonicalEntries[0]!, canonicalEntries[2]!],
+          [],
+          { orderBy: "marketcap", direction: "desc" },
+        ),
+        fetchedAt: firstFetchedAt,
+      },
+      fallback,
+      "desc",
+    );
+    const refreshed = exploreMarketCapRankingV1(
+      canonicalEntries,
+      {
+        ...discoverySnapshot(
+          "trending",
+          [canonicalEntries[0]!, canonicalEntries[2]!],
+          [],
+          { orderBy: "marketcap", direction: "desc" },
+        ),
+        fetchedAt: secondFetchedAt,
+      },
+      fallback,
+      "desc",
+    );
+    const reranked = exploreMarketCapRankingV1(
+      canonicalEntries,
+      {
+        ...discoverySnapshot(
+          "trending",
+          [canonicalEntries[2]!, canonicalEntries[0]!],
+          [],
+          { orderBy: "marketcap", direction: "desc" },
+        ),
+        fetchedAt: secondFetchedAt,
+      },
+      fallback,
+      "desc",
+    );
+
+    expect(refreshed.ranking.rankingCommitment).toBe(
+      first.ranking.rankingCommitment,
+    );
+    expect(refreshed.ranking.asOfTime).not.toBe(first.ranking.asOfTime);
+    expect(reranked.ranking.rankingCommitment).not.toBe(
+      first.ranking.rankingCommitment,
+    );
+  });
+
+  it("freezes a cold partial fallback across pages when provider data warms", async () => {
+    let providerWarm = false;
+    let fullAuthorityReads = 0;
+    mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => {
+      if (input.length === TOKEN_COUNT) {
+        fullAuthorityReads += 1;
+        const qualified = providerWarm
+          ? new Set([input.length - 1])
+          : new Set<number>();
+        return {
+          entries: valued(input, qualified),
+          marketRead: marketRead({
+            requested: input.length,
+            qualified: qualified.size,
+            observed: qualified.size,
+          }),
+        };
+      }
+      return {
+        entries: valued(input),
+        marketRead: marketRead({
+          requested: input.length,
+          qualified: input.length,
+        }),
+      };
+    });
+
+    const first = await json(await GET(
+      request("sort=market-cap&page=1&limit=8"),
+    ));
+    providerWarm = true;
+    const second = await json(await GET(
+      request(
+        `sort=market-cap&page=2&limit=8&rankingCommitment=${
+          encodeURIComponent(first.ranking.rankingCommitment)
+        }`,
+      ),
+    ));
+    const expectedOrder = [...entries].reverse().map((entry) => entry.id);
+    const firstIds = first.tokens.map((entry: ExploreEntry) => entry.id);
+    const secondIds = second.tokens.map((entry: ExploreEntry) => entry.id);
+
+    expect(fullAuthorityReads).toBe(1);
+    expect(first.ranking.rankingCommitment).toBe(
+      second.ranking.rankingCommitment,
+    );
+    expect(firstIds).toEqual(expectedOrder.slice(0, 8));
+    expect(secondIds).toEqual(expectedOrder.slice(8, 16));
+    expect(new Set([...firstIds, ...secondIds]).size).toBe(16);
+  });
+
+  it("binds query facets to the pin and retains the old filtered generation", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
+    try {
+      const first = await json(await GET(request(
+        "sort=market-cap&q=token&page=1&limit=8",
+      )));
+      const frozenOrder = [...entries]
+        .filter((entry) => entry.name.toLowerCase().includes("token"))
+        .reverse()
+        .map((entry) => entry.id);
+      const changedPresentation = entries.map((entry) =>
+        entry.id === entries[19]!.id
+          ? { ...entry, name: "Renamed without the search term" }
+          : entry
+      );
+      mocks.readCatalog.mockResolvedValue(catalog({
+        entries: changedPresentation,
+        generatedAt: "2026-08-16T08:00:30.000Z",
+        asOfBlock: "25740030",
+      }));
+
+      vi.setSystemTime(Date.now() + 60_000);
+      const refreshed = await json(await GET(request(
+        "sort=market-cap&q=token&page=1&limit=8",
+      )));
+      expect(refreshed.ranking.rankingCommitment).not.toBe(
+        first.ranking.rankingCommitment,
+      );
+      expect(refreshed.total).toBe(first.total - 1);
+
+      const oldSecond = await json(await GET(request(
+        `sort=market-cap&q=token&page=2&limit=8&rankingCommitment=${
+          encodeURIComponent(first.ranking.rankingCommitment)
+        }`,
+      )));
+      expect(oldSecond.total).toBe(first.total);
+      expect(first.tokens.map((entry: ExploreEntry) => entry.id)).toEqual(
+        frozenOrder.slice(0, 8),
+      );
+      expect(oldSecond.tokens.map((entry: ExploreEntry) => entry.id)).toEqual(
+        frozenOrder.slice(8, 16),
+      );
+      expect(oldSecond.ranking.rankingCommitment).toBe(
+        first.ranking.rankingCommitment,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("accepts the shared authority at 235 seconds and fails closed after it", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
+    try {
+      let fullAuthorityReads = 0;
+      mocks.readDex.mockImplementation(async (input: readonly ExploreEntry[]) => {
+        if (input.length === TOKEN_COUNT) fullAuthorityReads += 1;
+        return {
+          entries: valued(input, undefined, new Date().toISOString()),
+          marketRead: marketRead({
+            requested: input.length,
+            qualified: input.length,
+          }),
+        };
+      });
+
+      const initial = await GET(
+        request("sort=market-cap&page=1&limit=8"),
+      );
+      const initialBody = await json(initial);
+      expect(initial.status).toBe(200);
+      const pinnedPageTwo =
+        `sort=market-cap&page=2&limit=8&rankingCommitment=${
+          encodeURIComponent(initialBody.ranking.rankingCommitment)
+        }`;
+
+      vi.setSystemTime(Date.now() + 235_000);
+      const boundary = await GET(
+        request(pinnedPageTwo),
+      );
+      expect(boundary.status).toBe(200);
+
+      vi.setSystemTime(Date.now() + 1);
+      const expired = await GET(
+        request(pinnedPageTwo),
+      );
+      expect(expired.status).toBe(409);
+      expect(expired.headers.get("cache-control")).toBe("no-store");
+      expect(await json(expired)).toEqual({
+        error: "Market-cap ranking changed; restart from page 1",
+        code: "MARKET_CAP_RANKING_RESTART_REQUIRED",
+      });
+      expect(fullAuthorityReads).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recovers an unavailable rank after 10 seconds without drifting old pages", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
+    try {
+      mocks.readTrending.mockResolvedValue(null);
+      const first = await json(await GET(request(
+        "sort=market-cap&page=1&limit=8",
+      )));
+      const oldOrder = [...entries].reverse().map((entry) => entry.id);
+      expect(first.ranking.matchedTokenCount).toBe(0);
+
+      vi.setSystemTime(Date.now() + 10_000);
+      mocks.readTrending.mockResolvedValue({
+        ...discoverySnapshot(
+          "trending",
+          [entries[0]!],
+          [],
+          { orderBy: "marketcap", direction: "desc" },
+        ),
+        fetchedAt: new Date().toISOString(),
+      });
+      const recovered = await json(await GET(request(
+        "sort=market-cap&page=1&limit=8",
+      )));
+      expect(recovered.ranking.matchedTokenCount).toBe(1);
+      expect(recovered.ranking.rankingCommitment).not.toBe(
+        first.ranking.rankingCommitment,
+      );
+
+      const oldSecond = await json(await GET(request(
+        `sort=market-cap&page=2&limit=8&rankingCommitment=${
+          encodeURIComponent(first.ranking.rankingCommitment)
+        }`,
+      )));
+      const newSecond = await json(await GET(request(
+        `sort=market-cap&page=2&limit=8&rankingCommitment=${
+          encodeURIComponent(recovered.ranking.rankingCommitment)
+        }`,
+      )));
+      const recoveredOrder = [
+        entries[0]!.id,
+        ...oldOrder.filter((id) => id !== entries[0]!.id),
+      ];
+      expect(oldSecond.tokens.map((entry: ExploreEntry) => entry.id)).toEqual(
+        oldOrder.slice(8, 16),
+      );
+      expect(newSecond.tokens.map((entry: ExploreEntry) => entry.id)).toEqual(
+        recoveredOrder.slice(8, 16),
+      );
+      expect(new Set([
+        ...first.tokens.map((entry: ExploreEntry) => entry.id),
+        ...oldSecond.tokens.map((entry: ExploreEntry) => entry.id),
+      ]).size).toBe(16);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reports a fresh ascending GMGN rank without canonical overlap", async () => {
@@ -1812,7 +2235,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     }
   });
 
-  it("stops waiting for a composed cache fill after request abort", async () => {
+  it("keeps a shared rank fill independent from the request signal", async () => {
     const controller = new AbortController();
     mocks.readTrending
       .mockImplementationOnce(async () => {
@@ -1826,8 +2249,8 @@ describe("Explore static identity and Dexscreener market contract", () => {
     ));
     const body = await json(response);
 
-    expect(response.status).toBe(503);
-    expect(body).toEqual({ error: "Token data is temporarily unavailable" });
+    expect(response.status).toBe(200);
+    expect(body.ranking.gmgnStatus).toBe("unavailable");
     expect(mocks.readTrending).toHaveBeenCalledTimes(2);
     expect(controller.signal.aborted).toBe(true);
   });
@@ -1898,7 +2321,9 @@ describe("Explore static identity and Dexscreener market contract", () => {
     ) => {
       expect(wait.signal).toBeInstanceOf(AbortSignal);
       expect(wait.deadlineMs).toBeGreaterThan(Date.now());
-      expect(wait.deadlineMs - Date.now()).toBeLessThanOrEqual(8_000);
+      expect(wait.deadlineMs - Date.now()).toBeLessThanOrEqual(
+        input.length === largeCatalog.length ? 8_000 : 12_000,
+      );
       return {
         entries: valued(input, new Set()),
         marketRead: marketRead({
@@ -2011,6 +2436,32 @@ describe("Explore static identity and Dexscreener market contract", () => {
       expect(mocks.readDex).not.toHaveBeenCalled();
     },
   );
+
+  it("requires an exact retained ranking pin after market-cap page 1", async () => {
+    const missing = await GET(request("sort=market-cap&page=2&limit=5"));
+    expect(missing.status).toBe(400);
+    expect(missing.headers.get("cache-control")).toBe("no-store");
+    expect(await json(missing)).toMatchObject({
+      code: "MARKET_CAP_RANKING_COMMITMENT_REQUIRED",
+    });
+
+    const malformed = await GET(request(
+      "sort=market-cap&page=2&limit=5&rankingCommitment=sha256%3Abad",
+    ));
+    expect(malformed.status).toBe(400);
+
+    const unknown = await GET(request(
+      `sort=market-cap&page=2&limit=5&rankingCommitment=${
+        encodeURIComponent(`sha256:${"ee".repeat(32)}`)
+      }`,
+    ));
+    expect(unknown.status).toBe(409);
+    expect(unknown.headers.get("cache-control")).toBe("no-store");
+    expect(await json(unknown)).toEqual({
+      error: "Market-cap ranking changed; restart from page 1",
+      code: "MARKET_CAP_RANKING_RESTART_REQUIRED",
+    });
+  });
 
   it("contains no runtime dRPC or Bitquery dependency", () => {
     for (const relative of [

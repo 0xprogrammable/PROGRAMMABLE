@@ -104,8 +104,11 @@ The staged public smoke records both `gmgn_requests_per_second` and
 fails closed unless the health response proves exactly 20 requests per second
 and `providers[0].accountGateMode=multiflight-v1`. The
 `legacy-singleflight-v1` mode from a database through migration `0006` is a
-rolling-availability prefix only; Stage does not apply migration `0007`, and
-that mode cannot authorize promotion at Pro throughput.
+rolling-availability prefix only; Stage never applies database migrations,
+including `0007` or `0008`, and that mode cannot authorize promotion at Pro
+throughput. Market-cap pagination additionally requires the current `0008`
+Explore authority readiness before the staged smoke can accept a cross-page
+ranking commitment.
 
 Trending pagination records
 `discovery_consistency=ranking-identity+monotonic-current-freshness`. The

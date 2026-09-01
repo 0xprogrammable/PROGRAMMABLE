@@ -255,6 +255,16 @@ ALTER TABLE programmable_website_projection_migrations.migration_evidence_v1
     CHECK (version ~ '^000[1-7]$');
 `;
 
+const EVIDENCE_0008_DDL = `
+ALTER TABLE programmable_website_projection_migrations.migration_evidence_v1
+  DROP CONSTRAINT migration_evidence_v1_ordinal_check,
+  DROP CONSTRAINT migration_evidence_v1_version_check,
+  ADD CONSTRAINT migration_evidence_v1_ordinal_check
+    CHECK (ordinal BETWEEN 1 AND 8),
+  ADD CONSTRAINT migration_evidence_v1_version_check
+    CHECK (version ~ '^000[1-8]$');
+`;
+
 function evidenceDdl(plan) {
   validateWebsiteProjectionPlan(plan);
   return EVIDENCE_DDL.replace(
@@ -322,6 +332,17 @@ GRANT SELECT (gate_id, generation)
 const FINAL_GMGN_MULTIFLIGHT_PRIVILEGES = `
 GRANT SELECT, INSERT, DELETE
   ON programmable_website_projection_v1.gmgn_account_gate_leases_v1
+  TO programmable_website_projection_runtime;
+`;
+
+const FINAL_EXPLORE_MARKET_CAP_AUTHORITY_PRIVILEGES = `
+GRANT SELECT, INSERT, DELETE
+  ON programmable_website_projection_v1.explore_market_cap_authority_heads_v1,
+     programmable_website_projection_v1.explore_market_cap_authority_generations_v1
+  TO programmable_website_projection_runtime;
+GRANT UPDATE (
+  current_generation, lease_generation, lease_holder, lease_until, updated_at
+) ON programmable_website_projection_v1.explore_market_cap_authority_heads_v1
   TO programmable_website_projection_runtime;
 `;
 
@@ -1711,6 +1732,9 @@ async function applyOneMigration({
     if (migration.ordinal === 7) {
       await executeSimple(transaction, EVIDENCE_0007_DDL);
     }
+    if (migration.ordinal === 8) {
+      await executeSimple(transaction, EVIDENCE_0008_DDL);
+    }
     await executeSimple(transaction, executionSource);
     if (migration.ordinal === plan.migrationCount) {
       await executeSimple(transaction, FINAL_PRIVILEGES);
@@ -1719,6 +1743,12 @@ async function applyOneMigration({
       }
       if (plan.migrationCount >= 7) {
         await executeSimple(transaction, FINAL_GMGN_MULTIFLIGHT_PRIVILEGES);
+      }
+      if (plan.migrationCount >= 8) {
+        await executeSimple(
+          transaction,
+          FINAL_EXPLORE_MARKET_CAP_AUTHORITY_PRIVILEGES,
+        );
       }
     }
     const roleGraph = await readRoleGraph(transaction, migration.ordinal);
