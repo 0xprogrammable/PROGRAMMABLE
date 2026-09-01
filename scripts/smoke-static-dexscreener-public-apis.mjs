@@ -1448,15 +1448,26 @@ function stableMarketCapRankingMetadata(ranking) {
 }
 
 function exactRequiredGmgnMarketCapRanking(response, nowMs) {
-  // Canonical coverage is not provider liveness. exactMarketCapRanking already
-  // validates the GMGN intersection plus Dexscreener remainder and stable tail.
-  return exactRequiredGmgnMarketCapLiveness(response, "desc", nowMs);
+  const ranking = response.body?.ranking;
+  const gmgnQualifiedCount = ranking?.matchedUniqueTokenCount +
+    ranking?.gmgnHydrationQualifiedCount;
+  return ranking?.gmgnStatus !== "unavailable" &&
+    Number.isSafeInteger(gmgnQualifiedCount) &&
+    gmgnQualifiedCount > 0 &&
+    ranking?.observedTokenCount > 0 &&
+    currentProviderTimestamp(ranking?.asOfTime, nowMs) &&
+    /^sha256:[0-9a-f]{64}$/u.test(String(ranking?.rankingCommitment ?? ""));
 }
 
 function exactRequiredGmgnMarketCapLiveness(response, direction, nowMs) {
   const ranking = response.body?.ranking;
+  const gmgnQualifiedCount = ranking?.matchedUniqueTokenCount +
+    ranking?.gmgnHydrationQualifiedCount;
   return ranking?.primaryProvider === "gmgn" &&
     ranking?.direction === direction &&
+    ranking?.gmgnStatus !== "unavailable" &&
+    Number.isSafeInteger(gmgnQualifiedCount) &&
+    gmgnQualifiedCount > 0 &&
     Number.isSafeInteger(ranking?.observedTokenCount) &&
     ranking.observedTokenCount > 0 &&
     ranking.observedTokenCount ===
@@ -2362,7 +2373,11 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       if (
         requireGmgnMarket &&
         !exactRequiredGmgnMarketCapRanking(highest, now().getTime())
-      ) throw new Error("GMGN descending market-cap liveness is required");
+      ) {
+        throw new Error(
+          "GMGN descending market-cap canonical qualification is required",
+        );
+      }
       const identities = completeCatalogTokens.map(exactIdentity);
       if (
         identities.some((identity) => identity === null) ||
@@ -2526,7 +2541,11 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
           "asc",
           now().getTime(),
         )
-      ) throw new Error("GMGN ascending market-cap liveness is required");
+      ) {
+        throw new Error(
+          "GMGN ascending market-cap canonical qualification is required",
+        );
+      }
       for (let index = 1; index < completeCatalogTokens.length; index += 1) {
         if (
           Date.parse(completeCatalogTokens[index - 1].launchedAt) <
@@ -2619,14 +2638,15 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
           return exactGmgnDetailProof(detailCandidate) ? detailCandidate : null;
         };
 
-        // The already-bound GMGN market-cap prefix is the strongest bounded
-        // candidate set. Prefix admission used a fresh positive market-cap
-        // observation and the shared $10k liquidity gate; the following
-        // token_info detail read independently proves visible FDV evidence.
+        // The already-bound GMGN market-cap plus token_info prefix is the
+        // strongest bounded candidate set. Rank entries passed the fresh
+        // market-cap/liquidity gate and hydrated entries independently passed
+        // the canonical token_info FDV/liquidity gate.
         const marketCapCandidates = highestTokens.slice(
           0,
           Math.min(
-            highest.body.ranking.matchedTokenCount,
+            highest.body.ranking.matchedTokenCount +
+              highest.body.ranking.gmgnHydrationQualifiedCount,
             highestTokens.length,
           ),
         ).filter(exactGmgnEligibleCanonicalToken);
@@ -3095,11 +3115,13 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
         `market_cap_desc_status=${marketCapDescRanking.status}`,
         `market_cap_desc_gmgn_status=${marketCapDescRanking.gmgnStatus}`,
         `market_cap_desc_matched_count=${marketCapDescRanking.matchedTokenCount}`,
+        `market_cap_desc_gmgn_hydration_qualified_count=${marketCapDescRanking.gmgnHydrationQualifiedCount}`,
         `market_cap_desc_ranking_commitment=${marketCapDescRanking.rankingCommitment}`,
         `market_cap_asc_source=${marketCapAscRanking.source}`,
         `market_cap_asc_status=${marketCapAscRanking.status}`,
         `market_cap_asc_gmgn_status=${marketCapAscRanking.gmgnStatus}`,
         `market_cap_asc_matched_count=${marketCapAscRanking.matchedTokenCount}`,
+        `market_cap_asc_gmgn_hydration_qualified_count=${marketCapAscRanking.gmgnHydrationQualifiedCount}`,
         `market_cap_asc_ranking_commitment=${marketCapAscRanking.rankingCommitment}`,
         `discovery_status=${trendingDiscovery.status}`,
         `discovery_matched_count=${trendingDiscovery.matchedTokenCount}`,
@@ -3140,11 +3162,15 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
     marketCapDescStatus: marketCapDescRanking.status,
     marketCapDescGmgnStatus: marketCapDescRanking.gmgnStatus,
     marketCapDescMatchedCount: marketCapDescRanking.matchedTokenCount,
+    marketCapDescGmgnHydrationQualifiedCount:
+      marketCapDescRanking.gmgnHydrationQualifiedCount,
     marketCapDescRankingCommitment: marketCapDescRanking.rankingCommitment,
     marketCapAscSource: marketCapAscRanking.source,
     marketCapAscStatus: marketCapAscRanking.status,
     marketCapAscGmgnStatus: marketCapAscRanking.gmgnStatus,
     marketCapAscMatchedCount: marketCapAscRanking.matchedTokenCount,
+    marketCapAscGmgnHydrationQualifiedCount:
+      marketCapAscRanking.gmgnHydrationQualifiedCount,
     marketCapAscRankingCommitment: marketCapAscRanking.rankingCommitment,
     discoveryStatus: trendingDiscovery.status,
     discoveryMatchedCount: trendingDiscovery.matchedTokenCount,
