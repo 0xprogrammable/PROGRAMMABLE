@@ -39,6 +39,7 @@ import {
   normalizeGmgnSearchQueryV1,
   parseGmgnDiscoverySnapshotV1,
   parseGmgnSearchSnapshotV1,
+  parseGmgnTokenInfoSearchSnapshotV1,
   type GmgnDiscoverySnapshotV1,
 } from "../lib/market-data/gmgn-discovery-v1";
 import {
@@ -338,6 +339,47 @@ describe("GMGN Ethereum discovery schemas", () => {
 });
 
 describe("GMGN Ethereum search schema and canonical boundary", () => {
+  it("projects an exact token-info identity into a one-token search proof", () => {
+    const snapshot = parseGmgnTokenInfoSearchSnapshotV1({
+      code: 0,
+      chain: "eth",
+      data: { chain: "eth", address: address(30).toUpperCase() },
+    }, {
+      query: address(30),
+      fetchedAt: NOW,
+    });
+
+    expect(snapshot).toEqual({
+      schemaVersion: "programmable.gmgn-search.v1",
+      source: "gmgn",
+      chainId: "1",
+      providerChain: "eth",
+      query: address(30),
+      orderBy: "weight",
+      fetchedAt: NOW.toISOString(),
+      providerItemCount: 1,
+      discardedProviderItemCount: 0,
+      duplicateProviderItemCount: 0,
+      tokens: [{ chain: "eth", tokenAddress: address(30), rank: 1 }],
+    });
+  });
+
+  it("rejects token-info identity proofs for a mismatched address or chain", () => {
+    const input = { query: address(31), fetchedAt: NOW };
+    expect(parseGmgnTokenInfoSearchSnapshotV1({
+      code: 0,
+      data: { address: address(32) },
+    }, input)).toBeNull();
+    expect(parseGmgnTokenInfoSearchSnapshotV1({
+      code: 0,
+      data: { chain: "bsc", address: address(31) },
+    }, input)).toBeNull();
+    expect(parseGmgnTokenInfoSearchSnapshotV1({
+      code: 0,
+      data: { address: address(31) },
+    }, { query: "0x1234", fetchedAt: NOW })).toBeNull();
+  });
+
   it("normalizes bounded user queries and strips invisible controls", () => {
     expect(normalizeGmgnSearchQueryV1("  $\u200bTo\u0000Ken  ")).toBe("token");
     expect(normalizeGmgnSearchQueryV1("$  ")).toBeNull();
@@ -898,11 +940,13 @@ describe("GMGN discovery server adapter", () => {
     expect(url.origin).toBe("https://openapi.gmgn.ai");
     expect(url.pathname).toBe("/v1/market/search");
     expect(Object.fromEntries(url.searchParams)).toMatchObject({
-      query: "search alias",
+      q: "search alias",
       chain: "eth",
-      order_by: "weight",
+      orderby: "weight",
       timestamp: "1788264000",
     });
+    expect(url.searchParams.has("query")).toBe(false);
+    expect(url.searchParams.has("order_by")).toBe(false);
     expect(url.searchParams.get("client_id")).toMatch(/^[0-9a-f-]{36}$/u);
     expect(new Headers(init?.headers).get("X-APIKEY")).toBe("test-server-key");
     expect(init?.method).toBe("GET");
@@ -914,6 +958,81 @@ describe("GMGN discovery server adapter", () => {
       signal: undefined,
     });
     expect(complete).toHaveBeenCalledWith(RESERVATION);
+  });
+
+  it("uses GMGN token info as the exact Ethereum address search proof", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate, reserveSlot, complete } = accountGate();
+    const requested = address(32);
+    const fetchImpl = vi.fn(async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      void init;
+      const url = new URL(String(input));
+      if (url.pathname === "/v1/market/search") {
+        return new Response(JSON.stringify({
+          code: 400,
+          error: "INVALID_REQUEST",
+        }), { status: 400 });
+      }
+      return new Response(JSON.stringify({
+        code: 0,
+        data: { chain: "eth", address: requested.toUpperCase() },
+      }), { status: 200 });
+    });
+
+    const result = await readGmgnEthereumSearchV1(requested.toUpperCase(), {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    });
+
+    expect(result).toMatchObject({
+      query: requested,
+      orderBy: "weight",
+      providerItemCount: 1,
+      tokens: [{ chain: "eth", tokenAddress: requested, rank: 1 }],
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const [request, init] = fetchImpl.mock.calls[0]!;
+    const url = new URL(String(request));
+    expect(url.pathname).toBe("/v1/token/info");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      chain: "eth",
+      address: requested,
+      timestamp: "1788264000",
+    });
+    expect(url.searchParams.has("q")).toBe(false);
+    expect(url.searchParams.has("query")).toBe(false);
+    expect(url.searchParams.has("orderby")).toBe(false);
+    expect(new Headers(init?.headers).get("X-APIKEY")).toBe("test-server-key");
+    expect(init?.method).toBe("GET");
+    expect(reserveSlot).toHaveBeenCalledWith({
+      requestsPerSecond: 1,
+      cost: 1,
+      deadlineMs: NOW.getTime() + 5_000,
+      signal: undefined,
+    });
+    expect(complete).toHaveBeenCalledWith(RESERVATION);
+  });
+
+  it("fails an address search closed when GMGN returns another identity", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const { gate } = accountGate();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      code: 0,
+      data: { chain: "eth", address: address(34) },
+    }), { status: 200 }));
+
+    await expect(readGmgnEthereumSearchV1(address(33), {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate: gate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 5_000,
+    })).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it("keeps the GMGN HTTP budget after a cold shared-gate reservation", async () => {

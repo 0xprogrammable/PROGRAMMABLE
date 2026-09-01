@@ -16,6 +16,7 @@ import {
   normalizeGmgnSearchQueryV1,
   parseGmgnDiscoverySnapshotV1,
   parseGmgnSearchSnapshotV1,
+  parseGmgnTokenInfoSearchSnapshotV1,
   type GmgnDiscoveryIntervalV1,
   type GmgnDiscoveryKindV1,
   type GmgnDiscoverySnapshotV1,
@@ -47,7 +48,8 @@ const PROVIDER_OPERATION_TIMED_OUT = Symbol("provider-operation-timed-out");
 type FetchImplementation = typeof fetch;
 type GmgnDiscoveryPath = "/v1/market/rank" |
   "/v1/market/hot_searches" |
-  "/v1/market/search";
+  "/v1/market/search" |
+  "/v1/token/info";
 type ProviderOperationV1 = Readonly<{
   deadlineMs: number;
   now: () => Date;
@@ -348,23 +350,46 @@ async function readGmgnSearchSnapshotFromProviderV1(
   apiKey: string,
   providerWait: GmgnDiscoveryReadWaitV1,
 ): Promise<GmgnSearchSnapshotV1 | null> {
+  const exactAddressQuery = /^0x[0-9a-f]{40}$/u.test(normalizedQuery);
+  const endpoint = exactAddressQuery
+    ? "/v1/token/info" as const
+    : "/v1/market/search" as const;
   const data = await gmgnJsonRequest(
-    "/v1/market/search",
-    {
-      query: {
-        query: normalizedQuery,
-        chain: "eth",
-        order_by: "weight",
-      },
-      body: null,
-    },
+    endpoint,
+    exactAddressQuery
+      ? {
+          query: { chain: "eth", address: normalizedQuery },
+          body: null,
+        }
+      : {
+          query: {
+            q: normalizedQuery,
+            chain: "eth",
+            orderby: "weight",
+          },
+          body: null,
+        },
     apiKey,
     providerWait,
   );
-  return parseGmgnSearchSnapshotV1(data, {
+  const input = {
     query: normalizedQuery,
     fetchedAt: currentDate(providerWait),
-  });
+  };
+  const snapshot = exactAddressQuery
+    ? parseGmgnTokenInfoSearchSnapshotV1(data, input)
+    : parseGmgnSearchSnapshotV1(data, input);
+  if (data !== null && snapshot === null) {
+    logGmgnProviderUnavailableV1(
+      endpoint,
+      exactAddressQuery
+        ? { query: { chain: "eth" }, body: null }
+        : { query: {}, body: null },
+      "schema-rejected",
+      200,
+    );
+  }
+  return snapshot;
 }
 
 // The Next Data Cache shares completed discovery snapshots across serverless
