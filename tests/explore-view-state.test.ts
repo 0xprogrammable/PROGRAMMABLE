@@ -198,6 +198,34 @@ describe("Explore market-cap ranking client contract", () => {
       canonicalTailCount: 0,
     }, 4)).toBeNull();
   });
+
+  it("keeps a rank snapshot time for foreign-only GMGN observations", () => {
+    const foreignOnly = {
+      ...ranking,
+      source: "canonical-launch-order",
+      status: "unavailable",
+      gmgnStatus: "unavailable",
+      applied: "launch-order",
+      observedTokenCount: 2,
+      matchedTokenCount: 0,
+      matchedUniqueTokenCount: 0,
+      unobservedCanonicalEntryCount: 4,
+      canonicalAddressCoverageBps: 0,
+      foreignTokenCount: 2,
+      gmgnHydrationEligibleCount: 4,
+      gmgnHydrationRequestedCount: 4,
+      gmgnHydrationObservedCount: 0,
+      gmgnHydrationQualifiedCount: 0,
+      fallbackRequestedCount: 4,
+      fallbackQualifiedCount: 0,
+      canonicalTailCount: 4,
+      qualifiedCount: 0,
+      asOfTime: "2026-09-01T08:00:00.000Z",
+    } as const;
+
+    expect(parseExploreRanking(foreignOnly, 4)).toEqual(foreignOnly);
+    expect(parseExploreRanking({ ...foreignOnly, asOfTime: null }, 4)).toBeNull();
+  });
 });
 
 const classicProvenance = {

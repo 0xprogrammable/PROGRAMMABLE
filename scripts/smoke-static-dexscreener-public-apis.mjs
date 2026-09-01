@@ -1376,7 +1376,8 @@ function exactMarketCapRanking(response, canonicalTokens, direction, nowMs) {
     : gmgnQualifiedCount === ranking.totalCount
       ? "complete"
       : "partial";
-  const exactAsOfTime = ranking.qualifiedCount === 0
+  const exactAsOfTime = ranking.observedTokenCount === 0 &&
+      ranking.qualifiedCount === 0
     ? ranking.asOfTime === null
     : currentProviderTimestamp(ranking.asOfTime, nowMs);
   return ranking.status === expectedStatus &&
@@ -1399,6 +1400,18 @@ function exactRequiredGmgnMarketCapRanking(response, nowMs) {
   return ranking?.gmgnStatus !== "unavailable" &&
     ranking?.matchedTokenCount > 0 &&
     ranking?.matchedUniqueTokenCount > 0 &&
+    currentProviderTimestamp(ranking?.asOfTime, nowMs) &&
+    /^sha256:[0-9a-f]{64}$/u.test(String(ranking?.rankingCommitment ?? ""));
+}
+
+function exactRequiredGmgnMarketCapLiveness(response, direction, nowMs) {
+  const ranking = response.body?.ranking;
+  return ranking?.primaryProvider === "gmgn" &&
+    ranking?.direction === direction &&
+    Number.isSafeInteger(ranking?.observedTokenCount) &&
+    ranking.observedTokenCount > 0 &&
+    ranking.observedTokenCount ===
+      ranking.matchedUniqueTokenCount + ranking.foreignTokenCount &&
     currentProviderTimestamp(ranking?.asOfTime, nowMs) &&
     /^sha256:[0-9a-f]{64}$/u.test(String(ranking?.rankingCommitment ?? ""));
 }
@@ -2371,8 +2384,12 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       ) throw new Error("Lowest market-cap ranking contract is invalid");
       if (
         requireGmgnMarket &&
-        !exactRequiredGmgnMarketCapRanking(lowest, now().getTime())
-      ) throw new Error("GMGN ascending market-cap rank match is required");
+        !exactRequiredGmgnMarketCapLiveness(
+          lowest,
+          "asc",
+          now().getTime(),
+        )
+      ) throw new Error("GMGN ascending market-cap liveness is required");
       for (let index = 1; index < completeCatalogTokens.length; index += 1) {
         if (
           Date.parse(completeCatalogTokens[index - 1].launchedAt) <

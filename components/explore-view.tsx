@@ -1561,8 +1561,10 @@ function parseExploreMarketCapRanking(
               Number(value.canonicalTokenCount),
           )) ||
     (value.asOfTime !== null && !exactIsoTimestamp(value.asOfTime)) ||
-    (Number(value.qualifiedCount) === 0 && value.asOfTime !== null) ||
-    (Number(value.qualifiedCount) > 0 && value.asOfTime === null)
+    (Number(value.observedTokenCount) === 0 &&
+      Number(value.qualifiedCount) === 0 && value.asOfTime !== null) ||
+    ((Number(value.observedTokenCount) > 0 ||
+      Number(value.qualifiedCount) > 0) && value.asOfTime === null)
   ) return null;
   const count = Number(value.totalCount);
   const qualified = Number(value.qualifiedCount);
