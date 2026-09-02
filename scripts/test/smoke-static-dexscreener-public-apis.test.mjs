@@ -4373,6 +4373,46 @@ test("staged smoke retries the whole bounded Trending pagination once on freshne
   assert.deepEqual(Object.fromEntries(pages), { 1: 2, 2: 2, 3: 1 });
 });
 
+test("staged smoke recovers when the first Trending ranking generation drifts", async () => {
+  const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
+  const paged = pagedCatalogTransform(allEntries);
+  let attempt = 0;
+  const pages = new Map();
+  const fetchImpl = stagedFetch((input) => {
+    const body = paged(input);
+    if (
+      input.url.pathname !== "/api/explore" ||
+      input.url.searchParams.get("sort") !== "trending"
+    ) return body;
+    const page = Number(input.url.searchParams.get("page"));
+    if (page === 1) attempt += 1;
+    pages.set(page, (pages.get(page) ?? 0) + 1);
+    return {
+      ...body,
+      discovery: liveTrendingDiscovery(
+        body.discovery,
+        allEntries.length,
+        NOW,
+        attempt === 1 && page === 2
+          ? `sha256:${"12".repeat(32)}`
+          : body.discovery.rankingCommitment,
+      ),
+    };
+  }, liveTrendingHeaders);
+
+  await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl,
+    appendOutput: () => {},
+  });
+
+  assert.deepEqual(Object.fromEntries(pages), { 1: 2, 2: 2, 3: 1 });
+});
+
 test("staged smoke fails closed after two Trending ranking identity drifts", async () => {
   const allEntries = Array.from({ length: 299 }, (_, index) => entry(index));
   const paged = pagedCatalogTransform(allEntries);

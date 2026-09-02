@@ -1042,6 +1042,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     const body = await json(response);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(body.sort).toBe("trending");
     expect(body.sortMetric).toBe("gmgn-trending");
     expect(body.total).toBe(18);
@@ -1217,6 +1218,9 @@ describe("Explore static identity and Dexscreener market contract", () => {
     const response = await GET(request("sort=newest&page=1&limit=100"));
     const body = await json(response);
     expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
+    );
     expect(body.total).toBe(TOKEN_COUNT + 1);
     expect(body.catalog).toMatchObject({
       identityCount: TOKEN_COUNT + 1,

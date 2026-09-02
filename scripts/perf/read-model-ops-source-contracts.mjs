@@ -3828,6 +3828,7 @@ export function evaluateReadModelOperationsSourceContracts(
       '"X-Programmable-Search-Ranking-Commitment":',
       'searchRanking !== null && searchRanking.asOfTime !== null',
       '? "+gmgn-search"',
+      'options.sort === "trending"\n              ? "no-store"',
       'options.sort === "trending"',
       "readGmgnEthereumTrendingV1(",
       '{ interval: "1h", limit: 100 }',
