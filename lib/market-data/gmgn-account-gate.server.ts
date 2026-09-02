@@ -9,7 +9,12 @@ import {
 } from "../server/projection-target/website-target";
 
 const GATE_ID = "gmgn-openapi-v1" as const;
-const MAXIMUM_BLOCK_MS = 5 * 60_000;
+const MAXIMUM_PROVIDER_COOLDOWN_MS = 5 * 60_000;
+// Callers stop awaiting provider work and exact cleanup within six seconds;
+// holder/generation fencing keeps any late outcome safe. Keep nine seconds of
+// failure margin without letting a dead invocation hold scarce account-wide
+// capacity for the provider cooldown.
+const MAXIMUM_RESERVATION_LEASE_MS = 15_000;
 const MAXIMUM_TRANSACTION_MS = 2_500;
 const HISTORY_RETENTION_GENERATIONS = 256;
 // GMGN's documented account ceiling is 20 requests per second. Keep the
@@ -155,7 +160,7 @@ const RESERVE_SLOT_SQL = `
            next_slot_at = $6::timestamptz
              + ($1::integer * $4::integer * INTERVAL '1 millisecond'),
            lease_holder = $5::uuid,
-           lease_until = $7::timestamptz,
+           lease_until = GREATEST(gate.lease_until, $7::timestamptz),
            updated_at = $6::timestamptz
      WHERE gate.gate_id = $2
     RETURNING gate.gate_id, gate.generation, $6::timestamptz AS decided_at,
@@ -165,7 +170,7 @@ const RESERVE_SLOT_SQL = `
     INSERT INTO programmable_website_projection_v1.gmgn_account_gate_leases_v1 (
       gate_id, generation, lease_holder, reserved_at, lease_until
     )
-    SELECT gate_id, generation, $3::uuid, decided_at, lease_until
+    SELECT gate_id, generation, $3::uuid, decided_at, $7::timestamptz
       FROM reservation
     RETURNING gate_id, generation, lease_holder, reserved_at, lease_until
   ), pruned AS (
@@ -726,7 +731,7 @@ export class PostgresGmgnAccountGateV1 implements GmgnAccountGateV1 {
             return null;
           }
           const holder = reservationHolder();
-          const leaseUntilMs = decidedAtMs + MAXIMUM_BLOCK_MS;
+          const leaseUntilMs = decidedAtMs + MAXIMUM_RESERVATION_LEASE_MS;
           const result = await client.query<GateReservationRowV1>(
             RESERVE_SLOT_SQL,
             [
@@ -797,7 +802,7 @@ export class PostgresGmgnAccountGateV1 implements GmgnAccountGateV1 {
     ) throw new TypeError("GMGN account gate block decision is invalid");
     const localNowMs = this.#nowMs();
     const requestedUntilMs = Math.min(
-      localNowMs + MAXIMUM_BLOCK_MS,
+      localNowMs + MAXIMUM_PROVIDER_COOLDOWN_MS,
       Math.max(localNowMs, Math.ceil(input.blockedUntilMs)),
     );
     await this.#assertReady();

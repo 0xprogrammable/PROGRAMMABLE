@@ -1255,6 +1255,24 @@ describe("read-model operations source contract", () => {
       "lease_until = authority.decided_at",
     ],
     [
+      "a reservation lease recoupled to provider cooldown",
+      "lib/market-data/gmgn-account-gate.server.ts",
+      "const leaseUntilMs = decidedAtMs + MAXIMUM_RESERVATION_LEASE_MS",
+      "const leaseUntilMs = decidedAtMs + MAXIMUM_PROVIDER_COOLDOWN_MS",
+    ],
+    [
+      "a mixed-version reservation that shortens the global marker",
+      "lib/market-data/gmgn-account-gate.server.ts",
+      "lease_until = GREATEST(gate.lease_until, $7::timestamptz)",
+      "lease_until = $7::timestamptz",
+    ],
+    [
+      "a short reservation that inherits a longer mixed-version marker",
+      "lib/market-data/gmgn-account-gate.server.ts",
+      "SELECT gate_id, generation, $3::uuid, decided_at, $7::timestamptz",
+      "SELECT gate_id, generation, $3::uuid, decided_at, lease_until",
+    ],
+    [
       "no generation-bound stale completion guard",
       "lib/market-data/gmgn-account-gate.server.ts",
       "AND gate.generation = $2::bigint",
