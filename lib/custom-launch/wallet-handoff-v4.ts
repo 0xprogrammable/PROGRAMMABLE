@@ -2086,7 +2086,9 @@ async function assertProviderState(
     }
     for (const accounts of [accountsBefore, accountsFinal]) {
       if (!Array.isArray(accounts) || accounts.length === 0
-        || canonicalAddress(accounts[0]) !== expectedAccount) return invalid();
+        || typeof accounts[0] !== "string"
+        || !isAddress(accounts[0])
+        || getAddress(accounts[0]) !== expectedAccount) return invalid();
     }
     for (const code of [codeBefore, codeFinal]) {
       const runtime = exactHex(code, true);

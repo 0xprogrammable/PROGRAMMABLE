@@ -63,6 +63,10 @@ const walletProviderSource = readFileSync(
   new URL("../components/wallet-provider.tsx", import.meta.url),
   "utf8",
 );
+const walletHandoffV4Source = readFileSync(
+  new URL("../lib/custom-launch/wallet-handoff-v4.ts", import.meta.url),
+  "utf8",
+);
 
 const PROJECT_METADATA = Object.freeze({
   schemaVersion: "programmable.project-metadata.v1",
@@ -1476,6 +1480,17 @@ describe("developer launch history interface", () => {
   });
 
   it("keeps the V4 handoff owner-controlled and sends only its hash as a discovery hint", () => {
+    expect(walletHandoffV4Source).toContain(
+      'typeof accounts[0] !== "string"',
+    );
+    expect(walletHandoffV4Source).toContain("!isAddress(accounts[0])");
+    expect(walletHandoffV4Source).toContain(
+      "getAddress(accounts[0]) !== expectedAccount",
+    );
+    expect(walletHandoffV4Source).not.toContain(
+      "canonicalAddress(accounts[0]) !== expectedAccount",
+    );
+
     const walletStart = walletProviderSource.indexOf(
       "const sendCustomLaunchWalletActionV4 = useCallback",
     );
