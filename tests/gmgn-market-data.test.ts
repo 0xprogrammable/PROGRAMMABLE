@@ -273,7 +273,7 @@ describe("GMGN canonical market enrichment", () => {
     });
     expect(reserveSlot).toHaveBeenCalledWith({
       requestsPerSecond: 1,
-      maximumConcurrentLeases: 12,
+      maximumConcurrentLeases: 20,
       deadlineMs: NOW.getTime() + 5_000,
       signal: expect.any(AbortSignal),
     });
@@ -643,7 +643,137 @@ describe("GMGN canonical market enrichment", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(100);
     expect(maximumActive).toBe(12);
     expect(accountGate.reserveSlot).toHaveBeenCalledTimes(100);
+    for (const [reservation] of vi.mocked(accountGate.reserveSlot).mock.calls) {
+      expect(reservation.maximumConcurrentLeases).toBe(12);
+    }
     expect(accountGate.complete).toHaveBeenCalledTimes(100);
+  });
+
+  it("keeps foreground token-info admission separate from a matching visible read", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    vi.stubEnv("GMGN_MAX_REQUESTS_PER_SECOND", "20");
+    const entry = token(134);
+    let generation = 0;
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => ({
+        ...GATE_RESERVATION,
+        generation: ++generation,
+      })),
+      blockUntil: vi.fn(),
+      complete: vi.fn(async () => {}),
+    };
+    const resolvers: Array<(response: Response) => void> = [];
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      resolvers.push(resolve);
+    }));
+    const wait = {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 8_000,
+    };
+
+    const visible = readGmgnExploreSnapshotsV1([entry], wait);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    const foreground = readGmgnMarketSnapshotV1(entry, wait);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(accountGate.reserveSlot).mock.calls.map(
+      ([reservation]) => reservation.maximumConcurrentLeases,
+    )).toEqual([12, 20]);
+    resolvers[1]?.(new Response(JSON.stringify({
+      code: 0,
+      data: providerData(entry),
+    }), { status: 200 }));
+    await expect(foreground).resolves.toMatchObject({
+      identity: identity(entry),
+    });
+    const lateVisibleData = providerData(entry);
+    lateVisibleData.price.price = "1.0000000";
+    resolvers[0]?.(new Response(JSON.stringify({
+      code: 0,
+      data: lateVisibleData,
+    }), { status: 200 }));
+    await expect(visible).resolves.toEqual(new Map([[entry.id, expect.objectContaining({
+      identity: identity(entry),
+      priceUsdWad: "1000000000000000000",
+    })]]));
+    await expect(readGmgnMarketSnapshotV1(entry, wait)).resolves.toMatchObject({
+      identity: identity(entry),
+      priceUsdWad: "3311169800000000000",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(accountGate.complete).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares a completed token-info success across foreground and visible lanes", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(135);
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => GATE_RESERVATION),
+      blockUntil: vi.fn(),
+      complete: vi.fn(async () => {}),
+    };
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      code: 0,
+      data: providerData(entry),
+    }), { status: 200 }));
+    const wait = {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 8_000,
+    };
+
+    const foreground = await readGmgnMarketSnapshotV1(entry, wait);
+    const visible = await readGmgnExploreSnapshotsV1([entry], wait);
+
+    expect(foreground).not.toBeNull();
+    expect(visible.get(entry.id)).toEqual(foreground);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(accountGate.reserveSlot).toHaveBeenCalledTimes(1);
+    expect(accountGate.reserveSlot).toHaveBeenCalledWith(
+      expect.objectContaining({ maximumConcurrentLeases: 20 }),
+    );
+  });
+
+  it("lets a visible caller join matching foreground token-info work", async () => {
+    vi.stubEnv("GMGN_API_KEY", "test-server-key");
+    const entry = token(136);
+    const accountGate: GmgnAccountGateV1 = {
+      reserveSlot: vi.fn(async () => GATE_RESERVATION),
+      blockUntil: vi.fn(),
+      complete: vi.fn(async () => {}),
+    };
+    let resolveProvider: ((response: Response) => void) | undefined;
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveProvider = resolve;
+    }));
+    const wait = {
+      fetchImpl: fetchImpl as typeof fetch,
+      accountGate,
+      now: () => NOW,
+      deadlineMs: NOW.getTime() + 8_000,
+    };
+
+    const foreground = readGmgnMarketSnapshotV1(entry, wait);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    const visible = readGmgnExploreSnapshotsV1([entry], wait);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(accountGate.reserveSlot).toHaveBeenCalledTimes(1);
+    expect(accountGate.reserveSlot).toHaveBeenCalledWith(
+      expect.objectContaining({ maximumConcurrentLeases: 20 }),
+    );
+    resolveProvider?.(new Response(JSON.stringify({
+      code: 0,
+      data: providerData(entry),
+    }), { status: 200 }));
+    const foregroundSnapshot = await foreground;
+    await expect(visible).resolves.toEqual(new Map([
+      [entry.id, foregroundSnapshot],
+    ]));
   });
 
   it("rejects a foreign chain on the raw provider envelope", async () => {
@@ -718,7 +848,7 @@ describe("GMGN canonical market enrichment", () => {
       })).resolves.not.toBeNull();
       expect(reserveSlot).toHaveBeenCalledWith({
         requestsPerSecond: expected,
-        maximumConcurrentLeases: 12,
+        maximumConcurrentLeases: 20,
         deadlineMs: NOW.getTime() + 5_000,
         signal: expect.any(AbortSignal),
       });

@@ -1028,8 +1028,61 @@ function gmgnStagedFetch(options = {}) {
   const visibleNewestFetchedAt = options.visibleNewestFetchedAt ?? NOW;
   const visibleFallbackObservedCount =
     options.visibleFallbackObservedCount ?? 0;
+  const catalogBoundary = options.catalogBoundary;
+  const fixtureCatalog = catalogBoundary?.catalog;
+  const catalogLaunchSource = fixtureCatalog?.launchSource ??
+    "envio-classic-v3";
+  const catalogCanonicalReadStatus = fixtureCatalog?.completeness?.classic ??
+    "last-known-good";
+  const catalogRouterReadStatus = fixtureCatalog?.completeness?.routerCustom ??
+    "unavailable";
+  const catalogLastIndexedAt = fixtureCatalog?.lastIndexedAt ?? NOW;
+  const withCatalogBoundary = (body, url) => {
+    if (catalogBoundary === undefined || body?.catalog === undefined) {
+      return body;
+    }
+    return {
+      ...body,
+      ...(url.pathname === "/api/explore" &&
+          catalogBoundary.launchIdentity !== undefined
+        ? {
+            dataQuality: {
+              ...body.dataQuality,
+              launchIdentity: catalogBoundary.launchIdentity,
+            },
+          }
+        : {}),
+      catalog: fixtureCatalog,
+    };
+  };
+  const withCatalogHeaders = (
+    extraHeaders,
+    readSource,
+    lastIndexedAt = catalogLastIndexedAt,
+  ) => ({
+    ...extraHeaders,
+    "x-programmable-launch-source": catalogLaunchSource,
+    "x-programmable-read-source": readSource,
+    "x-programmable-canonical-read-status": catalogCanonicalReadStatus,
+    "x-programmable-router-read-status": catalogRouterReadStatus,
+    "x-programmable-identity-last-indexed-at": lastIndexedAt,
+  });
+  const analyticsResponseCounts = new Map();
+  const analyticsStatusAt = (section, responseIndex) => {
+    const sequence = options.analyticsStatusSequence?.[section];
+    return Array.isArray(sequence) && sequence.length > 0
+      ? sequence[Math.min(responseIndex, sequence.length - 1)]
+      : "ready";
+  };
+  const analyticsLastIndexedAtAt = (section, responseIndex) => {
+    const sequence = options.analyticsLastIndexedAtSequence?.[section];
+    return Array.isArray(sequence) && sequence.length > 0
+      ? sequence[Math.min(responseIndex, sequence.length - 1)]
+      : options.analyticsLastIndexedAt ?? NOW;
+  };
   return stagedFetch(
-    ({ body, url }) => {
+    ({ body: initialBody, url }) => {
+      const body = withCatalogBoundary(initialBody, url);
       if (
         url.pathname === "/api/explore" &&
         url.searchParams.get("sort") === "trending"
@@ -1125,11 +1178,26 @@ function gmgnStagedFetch(options = {}) {
       }
       if (url.pathname === "/api/explore/token/analytics") {
         const section = url.searchParams.get("section") ?? "summary";
+        const responseIndex = analyticsResponseCounts.get(section) ?? 0;
+        analyticsResponseCounts.set(section, responseIndex + 1);
+        const status = analyticsStatusAt(section, responseIndex);
         const identity = body.identity;
+        if (status === "unavailable") {
+          const value = {
+            ...body,
+            status,
+            ...(Object.hasOwn(options, "analyticsUnavailableIdentity")
+              ? { identity: options.analyticsUnavailableIdentity }
+              : {}),
+          };
+          return typeof options.mutateGmgnAnalytics === "function"
+            ? options.mutateGmgnAnalytics(value, section, responseIndex)
+            : value;
+        }
         if (section !== "summary") {
           const value = {
             ...body,
-            status: "ready",
+            status,
             analytics: {
               ranking: {
                 fetchedAt: NOW,
@@ -1146,12 +1214,12 @@ function gmgnStagedFetch(options = {}) {
             },
           };
           return typeof options.mutateGmgnAnalytics === "function"
-            ? options.mutateGmgnAnalytics(value, section)
+            ? options.mutateGmgnAnalytics(value, section, responseIndex)
             : value;
         }
         const value = {
           ...body,
-          status: "ready",
+          status,
           analytics: {
             security: {
               schemaVersion: "programmable.gmgn-token-security.v1",
@@ -1189,9 +1257,19 @@ function gmgnStagedFetch(options = {}) {
             },
           },
         };
-        return typeof options.mutateGmgnAnalytics === "function"
-          ? options.mutateGmgnAnalytics(value, section)
+        const projectedValue = status === "partial"
+          ? {
+              ...value,
+              analytics: { ...value.analytics, pool: null },
+            }
           : value;
+        return typeof options.mutateGmgnAnalytics === "function"
+          ? options.mutateGmgnAnalytics(
+              projectedValue,
+              section,
+              responseIndex,
+            )
+          : projectedValue;
       }
       if (
         url.pathname === "/api/explore/token/chart" &&
@@ -1259,19 +1337,21 @@ function gmgnStagedFetch(options = {}) {
         options.gmgnChart !== false;
       if (chart) {
         return {
-          extraHeaders: {
-            ...extraHeaders,
-            "cache-control": "public, max-age=0",
-            "x-programmable-data-quality": "current",
-            "x-programmable-read-source": "envio-classic-v3+gmgn",
-            "x-programmable-market-provider": "gmgn",
-            "x-programmable-market-read-status": "live",
-            "x-programmable-chart-scope": "token",
-            "x-programmable-chart-pool-attribution": chartPoolAttribution,
-            "x-programmable-market-source": "gmgn",
-            "x-programmable-price-source": "gmgn",
-            "x-programmable-market-as-of": NOW,
-          },
+          extraHeaders: withCatalogHeaders(
+            {
+              ...extraHeaders,
+              "cache-control": "public, max-age=0",
+              "x-programmable-data-quality": "current",
+              "x-programmable-market-provider": "gmgn",
+              "x-programmable-market-read-status": "live",
+              "x-programmable-chart-scope": "token",
+              "x-programmable-chart-pool-attribution": chartPoolAttribution,
+              "x-programmable-market-source": "gmgn",
+              "x-programmable-price-source": "gmgn",
+              "x-programmable-market-as-of": NOW,
+            },
+            `${catalogLaunchSource}+gmgn`,
+          ),
           omittedHeaders: omittedHeaders.filter((name) => ![
             "x-programmable-market-source",
             "x-programmable-price-source",
@@ -1281,29 +1361,44 @@ function gmgnStagedFetch(options = {}) {
       }
       if (analytics) {
         const section = url.searchParams.get("section") ?? "summary";
+        const responseIndex = (analyticsResponseCounts.get(section) ?? 1) - 1;
+        const status = analyticsStatusAt(section, responseIndex);
+        const unavailable = status === "unavailable";
         return {
-          extraHeaders: {
-            ...extraHeaders,
-            "cache-control": section === "summary"
-              ? "public, max-age=0"
-              : "private, max-age=0, no-store",
-            "x-content-type-options": "nosniff",
-            "referrer-policy": "no-referrer",
-            "x-programmable-chain-id": "1",
-            "x-programmable-canonical-read-status": "last-known-good",
-            "x-programmable-router-read-status": "unavailable",
-            "x-programmable-read-source": "envio-classic-v3+gmgn",
-            "x-programmable-analytics-provider": "gmgn",
-            "x-programmable-analytics-scope": "token",
-            "x-programmable-analytics-pool-attribution": "unavailable",
-            "x-programmable-analytics-read-status": "ready",
-            "x-programmable-market-provider": "gmgn",
-            "x-programmable-market-read-status": "complete",
-            "x-programmable-data-quality": "current",
-            "x-programmable-market-source": "gmgn",
-          },
+          extraHeaders: withCatalogHeaders(
+            {
+              ...extraHeaders,
+              "cache-control": unavailable
+                ? "no-store"
+                : status === "partial" && section === "summary"
+                  ? "public, max-age=0, s-maxage=15, stale-while-revalidate=30"
+                  : section === "summary"
+                    ? "public, max-age=0"
+                    : "private, max-age=0, no-store",
+              "x-content-type-options": "nosniff",
+              "referrer-policy": "no-referrer",
+              "x-programmable-chain-id": "1",
+              "x-programmable-analytics-provider": "gmgn",
+              "x-programmable-analytics-scope": "token",
+              "x-programmable-analytics-pool-attribution": "unavailable",
+              "x-programmable-analytics-read-status": status,
+              "x-programmable-market-provider": "gmgn",
+              "x-programmable-market-read-status": status === "ready"
+                ? "complete"
+                : status,
+              "x-programmable-data-quality": status === "ready"
+                ? "current"
+                : status,
+              ...(unavailable
+                ? {}
+                : { "x-programmable-market-source": "gmgn" }),
+            },
+            `${catalogLaunchSource}+gmgn`,
+            analyticsLastIndexedAtAt(section, responseIndex),
+          ),
           omittedHeaders: [
             ...omittedHeaders,
+            ...(unavailable ? ["x-programmable-market-source"] : []),
             "x-programmable-price-source",
             "x-programmable-market-as-of",
             "x-programmable-valuation-block",
@@ -1312,39 +1407,64 @@ function gmgnStagedFetch(options = {}) {
       }
       if (trending) {
         if (options.discoveryUnavailable) {
-          return { extraHeaders, omittedHeaders };
+          return {
+            extraHeaders: withCatalogHeaders(
+              extraHeaders,
+              `${catalogLaunchSource}+dexscreener`,
+            ),
+            omittedHeaders,
+          };
         }
         return {
-          extraHeaders: {
-            ...extraHeaders,
-            "x-programmable-read-source":
-              "envio-classic-v3+dexscreener+gmgn-discovery",
-          },
+          extraHeaders: withCatalogHeaders(
+            extraHeaders,
+            `${catalogLaunchSource}+dexscreener+gmgn-discovery`,
+          ),
           omittedHeaders,
         };
       }
-      if (!newest && !detail) return { extraHeaders, omittedHeaders };
+      if (!newest && !detail) {
+        if (![
+          "/api/explore",
+          "/api/explore/token/chart",
+        ].includes(url.pathname)) return { extraHeaders, omittedHeaders };
+        const defaultReadSource = url.pathname.endsWith("/chart")
+          ? "envio-classic-v3+bitquery"
+          : "envio-classic-v3+dexscreener";
+        const inheritedReadSource =
+          extraHeaders["x-programmable-read-source"] ?? defaultReadSource;
+        const readSource = inheritedReadSource.replace(
+          /^envio-classic-v3/u,
+          catalogLaunchSource,
+        );
+        return {
+          extraHeaders: withCatalogHeaders(extraHeaders, readSource),
+          omittedHeaders,
+        };
+      }
       const provider = newest ? "gmgn+dexscreener" : detailProvider;
       const detailUsesGmgn = newest || detailProvider === "gmgn";
       return {
-        extraHeaders: {
-          ...extraHeaders,
-          "x-programmable-read-source": `envio-classic-v3+${provider}`,
-          "x-programmable-market-provider": provider,
-          "x-programmable-market-read-status": newest
-            ? "partial"
-            : detailReadStatus,
-          ...(detailUsesGmgn
-            ? {
-                "x-programmable-market-source": newest &&
-                    visibleFallbackObservedCount > 0
-                  ? "gmgn+dexscreener"
-                  : "gmgn",
-                "x-programmable-price-source": "gmgn",
-              }
-            : {}),
-          "x-programmable-market-as-of": NOW,
-        },
+        extraHeaders: withCatalogHeaders(
+          {
+            ...extraHeaders,
+            "x-programmable-market-provider": provider,
+            "x-programmable-market-read-status": newest
+              ? "partial"
+              : detailReadStatus,
+            ...(detailUsesGmgn
+              ? {
+                  "x-programmable-market-source": newest &&
+                      visibleFallbackObservedCount > 0
+                    ? "gmgn+dexscreener"
+                    : "gmgn",
+                  "x-programmable-price-source": "gmgn",
+                }
+              : {}),
+            "x-programmable-market-as-of": NOW,
+          },
+          `${catalogLaunchSource}+${provider}`,
+        ),
         omittedHeaders: detailUsesGmgn
           ? omittedHeaders
           : [
@@ -2417,6 +2537,389 @@ test("staged smoke binds an observed unqualified fallback to GMGN market sources
   assert.equal(result.marketProvider, "gmgn+dexscreener");
   assert.equal(result.marketReadStatus, "partial");
   assert.equal(result.detailMarketProvider, "gmgn");
+});
+
+test("staged smoke accepts required GMGN analytics on a Router-only catalog", async () => {
+  for (const routerReadStatus of ["current", "last-known-good"]) {
+    const routerCatalog = {
+      source: "envio-classic-v3",
+      launchSource: "canonical-launch-stamp-router",
+      status: "last-known-good",
+      lastIndexedAt: NOW,
+      asOfBlock: "25740001",
+      asOfBlockHash: `0x${"ab".repeat(32)}`,
+      identityCount: 2,
+      identityCommitment: `sha256:${"de".repeat(32)}`,
+      completeness: {
+        classic: "unavailable",
+        stock: "excluded",
+        custom: "unavailable",
+        registryCustom: "unavailable",
+        routerCustom: routerReadStatus,
+      },
+      scope: {
+        included: ["canonical-launch-stamp-router"],
+        excluded: [
+          "classic-v1",
+          "classic-v2",
+          "stock-paired-v1",
+          "stock-paired-v2",
+          "stock-paired-v3",
+        ],
+        publicCategories: ["classic", "custom"],
+      },
+      routerStamp: {
+        source: "canonical-launch-stamp-router",
+        status: routerReadStatus,
+        finalityConfirmations: 64,
+        verifiedIdentityCount: 2,
+        projectedIdentityCount: 2,
+        generatedAt: NOW,
+        asOfBlock: "25740001",
+        asOfBlockHash: `0x${"ab".repeat(32)}`,
+        identityCommitment: `sha256:${"ac".repeat(32)}`,
+      },
+    };
+    const result = await runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        catalogBoundary: {
+          catalog: routerCatalog,
+          launchIdentity: {
+            status: "partial",
+            canonical: "unavailable",
+            custom: "unavailable",
+            ageMs: 1_000,
+          },
+        },
+        analyticsLastIndexedAtSequence: {
+          summary: [new Date(Date.parse(NOW) + 1_000).toISOString()],
+          holders: [new Date(Date.parse(NOW) + 2_000).toISOString()],
+          traders: [new Date(Date.parse(NOW) + 3_000).toISOString()],
+        },
+      }),
+      appendOutput: () => undefined,
+    });
+
+    assert.equal(result.catalogSource, "envio-classic-v3");
+    assert.equal(result.analyticsSummaryStatus, "ready");
+    assert.equal(result.analyticsHoldersStatus, "ready");
+    assert.equal(result.analyticsTradersStatus, "ready");
+  }
+});
+
+test("staged smoke accepts a newer monotonic GMGN analytics identity timestamp", async () => {
+  const summaryLastIndexedAt = new Date(Date.parse(NOW) + 1_000).toISOString();
+  const holdersLastIndexedAt = new Date(Date.parse(NOW) + 2_000).toISOString();
+  const tradersLastIndexedAt = new Date(Date.parse(NOW) + 3_000).toISOString();
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: gmgnStagedFetch({
+      analyticsLastIndexedAtSequence: {
+        summary: [summaryLastIndexedAt],
+        holders: [holdersLastIndexedAt],
+        traders: [tradersLastIndexedAt],
+      },
+    }),
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.analyticsSummaryStatus, "ready");
+  assert.equal(result.analyticsHoldersStatus, "ready");
+  assert.equal(result.analyticsTradersStatus, "ready");
+});
+
+test("staged smoke rejects a cross-section GMGN analytics timestamp regression", async () => {
+  const summaryLastIndexedAt = new Date(Date.parse(NOW) + 2_000).toISOString();
+  const holdersLastIndexedAt = new Date(Date.parse(NOW) + 1_000).toISOString();
+  const waits = [];
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: gmgnStagedFetch({
+        analyticsLastIndexedAtSequence: {
+          summary: [summaryLastIndexedAt],
+          holders: [holdersLastIndexedAt],
+        },
+      }),
+      waitForGmgnAnalyticsRecovery: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+      appendOutput: () => undefined,
+    }),
+    /GMGN holders analytics envelope is invalid/u,
+  );
+  assert.deepEqual(waits, []);
+});
+
+test("staged smoke retries one self-consistent unavailable GMGN analytics read", async () => {
+  const waits = [];
+  const analyticsResponses = [];
+  const fixtureFetch = gmgnStagedFetch({
+    analyticsStatusSequence: { summary: ["unavailable", "ready"] },
+    analyticsUnavailableIdentity: null,
+  });
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: async (url, init) => {
+      const response = await fixtureFetch(url, init);
+      if (
+        url.pathname === "/api/explore/token/analytics" &&
+        url.searchParams.get("section") === "summary"
+      ) {
+        analyticsResponses.push({
+          status: (await response.clone().json()).status,
+          cacheControl: response.headers.get("cache-control"),
+          marketSource: response.headers.get("x-programmable-market-source"),
+        });
+      }
+      return response;
+    },
+    waitForGmgnAnalyticsRecovery: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.analyticsSummaryStatus, "ready");
+  assert.deepEqual(waits, [16_000]);
+  assert.deepEqual(analyticsResponses, [
+    {
+      status: "unavailable",
+      cacheControl: "no-store",
+      marketSource: null,
+    },
+    {
+      status: "ready",
+      cacheControl: "public, max-age=0",
+      marketSource: "gmgn",
+    },
+  ]);
+});
+
+test("staged smoke rejects drifted non-null unavailable GMGN identities without waiting", async () => {
+  const cases = [
+    ["wrong pool", (identity) => ({
+      ...identity,
+      poolId: `0x${"44".repeat(32)}`,
+    })],
+    ["null pool", (identity) => ({ ...identity, poolId: null })],
+    ["wrong quote", (identity) => ({
+      ...identity,
+      quoteAddress: "0x5555555555555555555555555555555555555555",
+    })],
+    ["null quote", (identity) => ({ ...identity, quoteAddress: null })],
+  ];
+  for (const [label, mutateIdentity] of cases) {
+    const waits = [];
+    let summaryRequests = 0;
+    const fixtureFetch = gmgnStagedFetch({
+      analyticsStatusSequence: { summary: ["unavailable", "ready"] },
+      mutateGmgnAnalytics: (value, section, responseIndex) =>
+        section === "summary" && responseIndex === 0
+          ? { ...value, identity: mutateIdentity(value.identity) }
+          : value,
+    });
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: async (url, init) => {
+          if (
+            url.pathname === "/api/explore/token/analytics" &&
+            url.searchParams.get("section") === "summary"
+          ) summaryRequests += 1;
+          return fixtureFetch(url, init);
+        },
+        waitForGmgnAnalyticsRecovery: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+        appendOutput: () => undefined,
+      }),
+      /GMGN summary analytics envelope is invalid/u,
+    );
+    assert.equal(summaryRequests, 1, label);
+    assert.deepEqual(waits, [], label);
+  }
+});
+
+test("staged smoke waits beyond a partial summary cache before retrying GMGN analytics", async () => {
+  const waits = [];
+  const summaryResponses = [];
+  const fixtureFetch = gmgnStagedFetch({
+    analyticsStatusSequence: { summary: ["partial", "ready"] },
+  });
+  const result = await runStagedStaticDexscreenerSmokeV1({
+    environment: {
+      STAGED_TARGET_URL: "https://candidate.vercel.app/",
+      VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+      PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+      GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+    },
+    fetchImpl: async (url, init) => {
+      const response = await fixtureFetch(url, init);
+      if (
+        url.pathname === "/api/explore/token/analytics" &&
+        url.searchParams.get("section") === "summary"
+      ) {
+        summaryResponses.push({
+          status: (await response.clone().json()).status,
+          cacheControl: response.headers.get("cache-control"),
+        });
+      }
+      return response;
+    },
+    waitForGmgnAnalyticsRecovery: async (milliseconds) => {
+      waits.push(milliseconds);
+    },
+    appendOutput: () => undefined,
+  });
+
+  assert.equal(result.analyticsSummaryStatus, "ready");
+  assert.deepEqual(waits, [46_000]);
+  assert.deepEqual(summaryResponses, [
+    {
+      status: "partial",
+      cacheControl:
+        "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+    },
+    { status: "ready", cacheControl: "public, max-age=0" },
+  ]);
+});
+
+test("staged smoke fails a persistently unavailable GMGN analytics read after one retry", async () => {
+  const waits = [];
+  let summaryRequests = 0;
+  const fixtureFetch = gmgnStagedFetch({
+    analyticsStatusSequence: { summary: ["unavailable"] },
+  });
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: async (url, init) => {
+        if (
+          url.pathname === "/api/explore/token/analytics" &&
+          url.searchParams.get("section") === "summary"
+        ) summaryRequests += 1;
+        return fixtureFetch(url, init);
+      },
+      waitForGmgnAnalyticsRecovery: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+      appendOutput: () => undefined,
+    }),
+    /GMGN summary analytics is required/u,
+  );
+  assert.equal(summaryRequests, 2);
+  assert.deepEqual(waits, [16_000]);
+});
+
+test("staged smoke rejects a malformed unavailable GMGN envelope without retrying", async () => {
+  const waits = [];
+  let summaryRequests = 0;
+  const fixtureFetch = gmgnStagedFetch({
+    analyticsStatusSequence: { summary: ["unavailable", "ready"] },
+    mutateGmgnAnalytics: (value, section, responseIndex) => {
+      if (section !== "summary" || responseIndex !== 0) return value;
+      const malformed = structuredClone(value);
+      delete malformed.provider;
+      return malformed;
+    },
+  });
+  await assert.rejects(
+    runStagedStaticDexscreenerSmokeV1({
+      environment: {
+        STAGED_TARGET_URL: "https://candidate.vercel.app/",
+        VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+        PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+        GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+      },
+      fetchImpl: async (url, init) => {
+        if (
+          url.pathname === "/api/explore/token/analytics" &&
+          url.searchParams.get("section") === "summary"
+        ) summaryRequests += 1;
+        return fixtureFetch(url, init);
+      },
+      waitForGmgnAnalyticsRecovery: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+      appendOutput: () => undefined,
+    }),
+    /GMGN summary analytics envelope is invalid/u,
+  );
+  assert.equal(summaryRequests, 1);
+  assert.deepEqual(waits, []);
+});
+
+test("staged smoke rejects malformed retryable GMGN projections without waiting", async () => {
+  for (const status of ["unavailable", "partial"]) {
+    const waits = [];
+    let summaryRequests = 0;
+    const fixtureFetch = gmgnStagedFetch({
+      analyticsStatusSequence: { summary: [status, "ready"] },
+      mutateGmgnAnalytics: (value, section, responseIndex) =>
+        section === "summary" && responseIndex === 0
+          ? {
+              ...value,
+              analytics: { ...value.analytics, pool: {} },
+            }
+          : value,
+    });
+    await assert.rejects(
+      runStagedStaticDexscreenerSmokeV1({
+        environment: {
+          STAGED_TARGET_URL: "https://candidate.vercel.app/",
+          VERCEL_AUTOMATION_BYPASS_SECRET: "0123456789abcdef",
+          PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true",
+          GITHUB_OUTPUT: "/tmp/unused-public-smoke-output",
+        },
+        fetchImpl: async (url, init) => {
+          if (
+            url.pathname === "/api/explore/token/analytics" &&
+            url.searchParams.get("section") === "summary"
+          ) summaryRequests += 1;
+          return fixtureFetch(url, init);
+        },
+        waitForGmgnAnalyticsRecovery: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+        appendOutput: () => undefined,
+      }),
+      /GMGN summary analytics projection is invalid/u,
+    );
+    assert.equal(summaryRequests, 1, status);
+    assert.deepEqual(waits, [], status);
+  }
 });
 
 test("staged smoke rejects malformed public GMGN analytics projections", async () => {

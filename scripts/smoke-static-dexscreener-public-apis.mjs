@@ -50,6 +50,13 @@ const EXPLORE_MARKET_PROVIDERS = new Set([
 const EXPLORE_SNAPSHOT_ATTEMPTS = 3;
 const EXPLORE_SNAPSHOT_RETRY_DELAY_MS = 16_000;
 const STAGED_503_RETRY_AFTER_MAXIMUM_MS = 5_000;
+const GMGN_ANALYTICS_ATTEMPTS = 2;
+// New multiflight reservations expire after 15 seconds. The extra second keeps
+// the retry beyond the lease boundary even with timer and scheduling skew.
+const GMGN_ANALYTICS_RECOVERY_DELAY_MS = 16_000;
+// A partial summary may be served for 15 seconds and stale-revalidated for a
+// further 30 seconds. Retry only after that entire public cache window.
+const GMGN_ANALYTICS_PARTIAL_SUMMARY_RECOVERY_DELAY_MS = 46_000;
 const VISIBLE_EXPLORE_PAGE_SIZE = 9;
 const TRENDING_EXPLORE_PAGE_SIZE = 100;
 const TRENDING_EXPLORE_MAXIMUM_PAGES = 100;
@@ -64,6 +71,7 @@ const MARKET_CAP_RANKING_SEPARATE_KEYS = new Set([
 const GMGN_CANONICAL_SCAN_MAXIMUM_PAGES = 8;
 const PROVIDER_RECENT_MAXIMUM_AGE_MS = 5 * 60_000;
 const MINIMUM_FDV_LIQUIDITY_USD_WAD = 10_000n * 10n ** 18n;
+const ANALYTICS_STATUSES = new Set(["ready", "partial", "unavailable"]);
 
 class ExploreCatalogBoundaryDriftError extends Error {
   constructor(message) {
@@ -1976,27 +1984,51 @@ function sameAnalyticsIdentity(value, expected) {
     value.quoteAddress === expected.quoteAddress;
 }
 
+function acceptableAnalyticsIdentity(value, expected, status) {
+  if (sameAnalyticsIdentity(value, expected)) return true;
+  return status === "unavailable" && value === null;
+}
+
 function exactAnalyticsHeaders(
-  response, status, section, launchSource, lastIndexedAt, referenceHeaders,
+  response, status, section, launchSource, minimumLastIndexedAt,
 ) {
   const cache = response.headers.get("cache-control");
-  const expectedCache = section === "summary"
-    ? new Set([
-        "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
-        "public, max-age=0",
-      ])
-    : new Set(["private, max-age=0, no-store"]);
+  const unavailable = status === "unavailable";
+  const expectedCache = unavailable
+    ? new Set(["no-store"])
+    : section === "summary"
+      ? new Set([
+          "public, max-age=0, s-maxage=15, stale-while-revalidate=30",
+          "public, max-age=0",
+        ])
+      : new Set(["private, max-age=0, no-store"]);
+  const lastIndexedAt = response.headers.get(
+    "x-programmable-identity-last-indexed-at",
+  );
+  const canonicalReadStatus = response.headers.get(
+    "x-programmable-canonical-read-status",
+  );
+  const routerReadStatus = response.headers.get(
+    "x-programmable-router-read-status",
+  );
+  const launchSources = new Set(launchSource.split("+"));
+  const operationalReadStatusesAreValid =
+    (launchSources.has("envio-classic-v3")
+      ? CATALOG_STATUSES.has(canonicalReadStatus)
+      : canonicalReadStatus === "unavailable") &&
+    (launchSources.has("canonical-launch-stamp-router")
+      ? CATALOG_STATUSES.has(routerReadStatus)
+      : routerReadStatus === "unavailable");
   return expectedCache.has(cache) &&
     response.headers.get("x-content-type-options") === "nosniff" &&
     response.headers.get("referrer-policy") === "no-referrer" &&
     response.headers.get("x-programmable-chain-id") === "1" &&
     response.headers.get("x-programmable-launch-source") === launchSource &&
     response.headers.get("x-programmable-read-source") === `${launchSource}+gmgn` &&
-    response.headers.get("x-programmable-identity-last-indexed-at") === lastIndexedAt &&
-    response.headers.get("x-programmable-canonical-read-status") ===
-      referenceHeaders.get("x-programmable-canonical-read-status") &&
-    response.headers.get("x-programmable-router-read-status") ===
-      referenceHeaders.get("x-programmable-router-read-status") &&
+    exactIsoTimestamp(lastIndexedAt) &&
+    exactIsoTimestamp(minimumLastIndexedAt) &&
+    Date.parse(lastIndexedAt) >= Date.parse(minimumLastIndexedAt) &&
+    operationalReadStatusesAreValid &&
     response.headers.get("x-programmable-analytics-provider") === "gmgn" &&
     response.headers.get("x-programmable-analytics-scope") === "token" &&
     response.headers.get("x-programmable-analytics-pool-attribution") ===
@@ -2007,7 +2039,8 @@ function exactAnalyticsHeaders(
       (status === "ready" ? "complete" : status) &&
     response.headers.get("x-programmable-data-quality") ===
       (status === "ready" ? "current" : status) &&
-    response.headers.get("x-programmable-market-source") === "gmgn" &&
+    response.headers.get("x-programmable-market-source") ===
+      (unavailable ? null : "gmgn") &&
     response.headers.get("x-programmable-market-as-of") === null &&
     response.headers.get("x-programmable-price-source") === null &&
     response.headers.get("x-programmable-valuation-block") === null &&
@@ -2072,120 +2105,151 @@ function exactPublicSecurityTypes(security) {
     );
 }
 
+function exactSummaryAnalyticsProjection(body, identity, nowMs) {
+  const security = body.analytics?.security;
+  const pool = body.analytics?.pool;
+  const count = Number(security !== null) + Number(pool !== null);
+  const expectedCount = body.status === "ready"
+    ? 2
+    : body.status === "partial"
+      ? 1
+      : 0;
+  return exactObjectKeys(body.analytics, ["pool", "security"]) &&
+    count === expectedCount &&
+    (security === null || (
+      exactObjectKeys(security, ANALYTICS_SECURITY_KEYS) &&
+      security.schemaVersion === "programmable.gmgn-token-security.v1" &&
+      security.source === "gmgn" &&
+      currentProviderTimestamp(security.fetchedAt, nowMs) &&
+      canonicalMarketAddress(security.tokenAddress) === security.tokenAddress &&
+      security.tokenAddress === identity.tokenAddress &&
+      sameAnalyticsIdentity(security.identity, identity) &&
+      Array.isArray(security.flags) && security.flags.length <= 64 &&
+      exactPublicSecurityTypes(security) &&
+      (security.lockSummary === null || (
+        exactObjectKeys(security.lockSummary, [
+          "details", "isLocked", "lockRatio", "remainingLockRatio",
+        ]) && Array.isArray(security.lockSummary.details) &&
+        typeof security.lockSummary.isLocked === "boolean" &&
+        publicRatio(security.lockSummary.lockRatio) &&
+        publicRatio(security.lockSummary.remainingLockRatio) &&
+        security.lockSummary.details.length <= 256 &&
+        security.lockSummary.details.every((detail) =>
+          exactObjectKeys(detail, ["isBlackhole", "poolAddress", "ratio"]) &&
+          typeof detail.isBlackhole === "boolean" &&
+          canonicalMarketAddress(detail.poolAddress) === detail.poolAddress &&
+          publicRatio(detail.ratio)
+        )
+      ))
+    )) &&
+    (pool === null || (
+      exactObjectKeys(pool, ANALYTICS_POOL_KEYS) &&
+      pool.schemaVersion === "programmable.gmgn-token-pool-info.v1" &&
+      pool.source === "gmgn" && pool.currency === "USD" &&
+      pool.marketScope === "token" &&
+      pool.poolAttribution === "unavailable" &&
+      currentProviderTimestamp(pool.fetchedAt, nowMs) &&
+      sameAnalyticsIdentity(pool.identity, identity) &&
+      canonicalMarketAddress(pool.tokenAddress) === pool.tokenAddress &&
+      pool.tokenAddress === identity.tokenAddress &&
+      canonicalMarketAddress(pool.providerAddress) === pool.providerAddress &&
+      pool.providerAddress === identity.tokenAddress &&
+      canonicalMarketAddress(pool.baseAddress) === pool.baseAddress &&
+      pool.baseAddress === identity.tokenAddress &&
+      canonicalMarketAddress(pool.quoteAddress) === pool.quoteAddress &&
+      pool.quoteAddress === identity.quoteAddress &&
+      pool.exchange === "uniswap_v4" &&
+      [pool.token0Address, pool.token1Address].every((value) =>
+        canonicalMarketAddress(value) === value
+      ) &&
+      new Set([pool.token0Address, pool.token1Address]).size === 2 &&
+      [pool.token0Address, pool.token1Address].includes(identity.tokenAddress) &&
+      [pool.token0Address, pool.token1Address].includes(identity.quoteAddress) &&
+      [pool.liquidityUsd, pool.baseReserve, pool.quoteReserve].every(publicDecimal) &&
+      [
+        pool.baseReserveValueUsd, pool.quoteReserveValueUsd,
+        pool.initialLiquidityUsd, pool.initialBaseReserve,
+        pool.initialQuoteReserve, pool.priceUsd,
+      ].every(nullablePublicDecimal) &&
+      nullablePublicRatio(pool.feeRatio) &&
+      Number.isSafeInteger(pool.creationTimestamp) &&
+      pool.creationTimestamp >= 0 &&
+      (pool.quoteSymbol === null ||
+        (typeof pool.quoteSymbol === "string" && pool.quoteSymbol.length <= 64))
+    ));
+}
+
+function exactRankingAnalyticsProjection(body, nowMs) {
+  if (!exactObjectKeys(body.analytics, ["ranking"])) return false;
+  const ranking = body.analytics.ranking;
+  if (body.status === "unavailable") return ranking === null;
+  if (body.status !== "ready") return false;
+  return exactObjectKeys(ranking, ["fetchedAt", "wallets"]) &&
+    currentProviderTimestamp(ranking.fetchedAt, nowMs) &&
+    Array.isArray(ranking.wallets) && ranking.wallets.length <= 20 &&
+    ranking.wallets.every((wallet) =>
+      exactObjectKeys(wallet, ANALYTICS_WALLET_KEYS) &&
+      canonicalMarketAddress(wallet.address) === wallet.address &&
+      Object.entries(wallet).every(([key, value]) =>
+        key === "address" || finiteNullable(value)
+      )
+    );
+}
+
 async function readRequiredGmgnAnalytics({
   request, tokenAddress, identity, catalogBoundary, lastIndexedAt,
-  referenceHeaders, now,
+  waitForGmgnAnalyticsRecovery, now,
 }) {
   const reads = {};
+  let minimumAnalyticsLastIndexedAt = lastIndexedAt;
   for (const section of ["summary", "holders", "traders"]) {
     const suffix = section === "summary" ? "" : "&limit=20";
-    const response = await request(
-      `/api/explore/token/analytics?chain=1&address=${encodeURIComponent(tokenAddress)}` +
-        `&section=${section}${suffix}`,
-    );
-    const body = response.body;
-    if (
-      response.status !== 200 ||
-      !exactObjectKeys(body, [
-        "analytics", "analyticsScope", "identity", "poolAttribution",
-        "provider", "schemaVersion", "section", "status",
-      ]) ||
-      body.schemaVersion !== "programmable.token-analytics.v1" ||
-      body.provider !== "gmgn" || body.analyticsScope !== "token" ||
-      body.poolAttribution !== "unavailable" || body.section !== section ||
-      !sameAnalyticsIdentity(body.identity, identity) ||
-      !exactAnalyticsHeaders(
-        response, body.status, section, catalogBoundary.launchSource,
-        lastIndexedAt, referenceHeaders,
-      )
-    ) throw new Error(`GMGN ${section} analytics envelope is invalid`);
-
-    if (section === "summary") {
-      const security = body.analytics?.security;
-      const pool = body.analytics?.pool;
-      const count = Number(security !== null) + Number(pool !== null);
+    let body = null;
+    for (let attempt = 0; attempt < GMGN_ANALYTICS_ATTEMPTS; attempt += 1) {
+      const response = await request(
+        `/api/explore/token/analytics?chain=1&address=${encodeURIComponent(tokenAddress)}` +
+          `&section=${section}${suffix}`,
+      );
+      body = response.body;
       if (
-        !exactObjectKeys(body.analytics, ["pool", "security"]) ||
-        body.status !== "ready" || count !== 2 ||
-        (security !== null && (
-          !exactObjectKeys(security, ANALYTICS_SECURITY_KEYS) ||
-          security.schemaVersion !== "programmable.gmgn-token-security.v1" ||
-          security.source !== "gmgn" ||
-          !currentProviderTimestamp(security.fetchedAt, now().getTime()) ||
-          canonicalMarketAddress(security.tokenAddress) !== security.tokenAddress ||
-          security.tokenAddress !== identity.tokenAddress ||
-          !sameAnalyticsIdentity(security.identity, identity) ||
-          !Array.isArray(security.flags) || security.flags.length > 64 ||
-          !exactPublicSecurityTypes(security) ||
-          (security.lockSummary !== null && (
-            !exactObjectKeys(security.lockSummary, [
-              "details", "isLocked", "lockRatio", "remainingLockRatio",
-            ]) || !Array.isArray(security.lockSummary.details) ||
-            typeof security.lockSummary.isLocked !== "boolean" ||
-            !publicRatio(security.lockSummary.lockRatio) ||
-            !publicRatio(security.lockSummary.remainingLockRatio) ||
-            security.lockSummary.details.length > 256 ||
-            security.lockSummary.details.some((detail) =>
-              !exactObjectKeys(detail, ["isBlackhole", "poolAddress", "ratio"]) ||
-              typeof detail.isBlackhole !== "boolean" ||
-              canonicalMarketAddress(detail.poolAddress) !== detail.poolAddress ||
-              !publicRatio(detail.ratio)
-            )
-          ))
-        )) ||
-        (pool !== null && (
-          !exactObjectKeys(pool, ANALYTICS_POOL_KEYS) ||
-          pool.schemaVersion !== "programmable.gmgn-token-pool-info.v1" ||
-          pool.source !== "gmgn" || pool.currency !== "USD" ||
-          pool.marketScope !== "token" ||
-          pool.poolAttribution !== "unavailable" ||
-          !currentProviderTimestamp(pool.fetchedAt, now().getTime()) ||
-          !sameAnalyticsIdentity(pool.identity, identity) ||
-          canonicalMarketAddress(pool.tokenAddress) !== pool.tokenAddress ||
-          pool.tokenAddress !== identity.tokenAddress ||
-          canonicalMarketAddress(pool.providerAddress) !==
-            pool.providerAddress ||
-          pool.providerAddress !== identity.tokenAddress ||
-          canonicalMarketAddress(pool.baseAddress) !== pool.baseAddress ||
-          pool.baseAddress !== identity.tokenAddress ||
-          canonicalMarketAddress(pool.quoteAddress) !== pool.quoteAddress ||
-          pool.quoteAddress !== identity.quoteAddress ||
-          pool.exchange !== "uniswap_v4" ||
-          ![pool.token0Address, pool.token1Address].every((value) =>
-            canonicalMarketAddress(value) === value
-          ) ||
-          new Set([pool.token0Address, pool.token1Address]).size !== 2 ||
-          ![pool.token0Address, pool.token1Address].includes(identity.tokenAddress) ||
-          ![pool.token0Address, pool.token1Address].includes(identity.quoteAddress) ||
-          ![pool.liquidityUsd, pool.baseReserve, pool.quoteReserve].every(publicDecimal) ||
-          ![
-            pool.baseReserveValueUsd, pool.quoteReserveValueUsd,
-            pool.initialLiquidityUsd, pool.initialBaseReserve,
-            pool.initialQuoteReserve, pool.priceUsd,
-          ].every(nullablePublicDecimal) ||
-          !nullablePublicRatio(pool.feeRatio) ||
-          !Number.isSafeInteger(pool.creationTimestamp) || pool.creationTimestamp < 0 ||
-          !(pool.quoteSymbol === null ||
-            (typeof pool.quoteSymbol === "string" && pool.quoteSymbol.length <= 64))
-        ))
-      ) throw new Error("GMGN summary analytics projection is invalid");
-    } else {
-      const ranking = body.analytics?.ranking;
-      if (
-        body.status !== "ready" ||
-        !exactObjectKeys(body.analytics, ["ranking"]) ||
-        !exactObjectKeys(ranking, ["fetchedAt", "wallets"]) ||
-        !currentProviderTimestamp(ranking.fetchedAt, now().getTime()) ||
-        !Array.isArray(ranking.wallets) || ranking.wallets.length > 20 ||
-        ranking.wallets.some((wallet) =>
-          !exactObjectKeys(wallet, ANALYTICS_WALLET_KEYS) ||
-          canonicalMarketAddress(wallet.address) !== wallet.address ||
-          Object.entries(wallet).some(([key, value]) =>
-            key !== "address" && !finiteNullable(value)
-          )
+        response.status !== 200 ||
+        !exactObjectKeys(body, [
+          "analytics", "analyticsScope", "identity", "poolAttribution",
+          "provider", "schemaVersion", "section", "status",
+        ]) ||
+        body.schemaVersion !== "programmable.token-analytics.v1" ||
+        body.provider !== "gmgn" || body.analyticsScope !== "token" ||
+        body.poolAttribution !== "unavailable" || body.section !== section ||
+        !ANALYTICS_STATUSES.has(body.status) ||
+        !acceptableAnalyticsIdentity(body.identity, identity, body.status) ||
+        !exactAnalyticsHeaders(
+          response, body.status, section, catalogBoundary.launchSource,
+          minimumAnalyticsLastIndexedAt,
         )
-      ) throw new Error(`GMGN ${section} ranking projection is invalid`);
+      ) throw new Error(`GMGN ${section} analytics envelope is invalid`);
+      minimumAnalyticsLastIndexedAt = response.headers.get(
+        "x-programmable-identity-last-indexed-at",
+      );
+      if (section === "summary") {
+        if (!exactSummaryAnalyticsProjection(body, identity, now().getTime())) {
+          throw new Error("GMGN summary analytics projection is invalid");
+        }
+      } else if (!exactRankingAnalyticsProjection(body, now().getTime())) {
+        throw new Error(`GMGN ${section} ranking projection is invalid`);
+      }
+      if (body.status === "ready") break;
+      if (attempt === GMGN_ANALYTICS_ATTEMPTS - 1) {
+        throw new Error(`GMGN ${section} analytics is required`);
+      }
+      const recoveryDelayMs = section === "summary" && body.status === "partial"
+        ? GMGN_ANALYTICS_PARTIAL_SUMMARY_RECOVERY_DELAY_MS
+        : GMGN_ANALYTICS_RECOVERY_DELAY_MS;
+      await waitForGmgnAnalyticsRecovery(recoveryDelayMs);
     }
+    if (body === null || body.status !== "ready") {
+      throw new Error(`GMGN ${section} analytics retry contract is unreachable`);
+    }
+
     reads[section] = body.status;
   }
   return reads;
@@ -2197,12 +2261,17 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
   const appendOutput = input.appendOutput ?? appendFileSync;
   const waitForCatalogConvergence = input.waitForCatalogConvergence ?? sleep;
   const waitForStagedRetryAfter = input.waitForStagedRetryAfter ?? sleep;
+  const waitForGmgnAnalyticsRecovery =
+    input.waitForGmgnAnalyticsRecovery ?? sleep;
   const now = input.now ?? (() => new Date());
   if (typeof waitForCatalogConvergence !== "function") {
     throw new Error("Explore catalog convergence wait is invalid");
   }
   if (typeof waitForStagedRetryAfter !== "function") {
     throw new Error("Public API staged Retry-After wait is invalid");
+  }
+  if (typeof waitForGmgnAnalyticsRecovery !== "function") {
+    throw new Error("GMGN analytics recovery wait is invalid");
   }
   if (typeof now !== "function" || !Number.isFinite(now().getTime())) {
     throw new Error("Public API smoke clock is invalid");
@@ -2858,7 +2927,7 @@ export async function runStagedStaticDexscreenerSmokeV1(input = {}) {
       identity: chartIdentity,
       catalogBoundary,
       lastIndexedAt: highest.body.catalog.lastIndexedAt,
-      referenceHeaders: highest.headers,
+      waitForGmgnAnalyticsRecovery,
       now,
     });
     analyticsSummaryStatus = analytics.summary;

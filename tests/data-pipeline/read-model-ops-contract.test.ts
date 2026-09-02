@@ -1491,6 +1491,84 @@ describe("read-model operations source contract", () => {
     );
   });
 
+  it.each([
+    [
+      "visible bulk reads above the 12-lease ceiling",
+      "const GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES = 12",
+      "const GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES = 13",
+    ],
+    [
+      "foreground direct reads above the 20-lease ceiling",
+      "const GMGN_ACCOUNT_MAXIMUM_CONCURRENT_LEASES = 20",
+      "const GMGN_ACCOUNT_MAXIMUM_CONCURRENT_LEASES = 21",
+    ],
+    [
+      "visible bulk reads routed through the foreground lane",
+      'await readGmgnMarketSnapshotWithClassV1(entry, wait, "visible")',
+      'await readGmgnMarketSnapshotWithClassV1(entry, wait, "foreground")',
+    ],
+    [
+      "foreground direct reads routed through the visible lane",
+      'return readGmgnMarketSnapshotWithClassV1(entry, wait, "foreground")',
+      'return readGmgnMarketSnapshotWithClassV1(entry, wait, "visible")',
+    ],
+    [
+      "cross-lane in-flight deduplication",
+      'const inFlightKey = `${readClass}:${cacheKey}`;',
+      "const inFlightKey = cacheKey;",
+    ],
+    [
+      "visible reads unable to join matching foreground work",
+      "const active = snapshotInFlight.get(inFlightKey) ??\n" +
+        '    (readClass === "visible"\n' +
+        '      ? snapshotInFlight.get(`foreground:${cacheKey}`)\n' +
+        "      : undefined);",
+      "const active = snapshotInFlight.get(inFlightKey);",
+    ],
+    [
+      "foreground reads joining lower-ceiling visible work",
+      'readClass === "visible"\n' +
+        '      ? snapshotInFlight.get(`foreground:${cacheKey}`)',
+      'readClass === "foreground"\n' +
+        '      ? snapshotInFlight.get(`visible:${cacheKey}`)',
+    ],
+    [
+      "lane-separated successful snapshot caching",
+      "setCacheValue(\n" +
+        "          snapshotCache,\n" +
+        "          cacheKey,\n" +
+        "          snapshot,",
+      "setCacheValue(\n" +
+        "          snapshotCache,\n" +
+        "          inFlightKey,\n" +
+        "          snapshot,",
+    ],
+    [
+      "a late visible result overwriting a foreground cache success",
+      'if (snapshot !== null && (readClass === "foreground" || current === undefined)) {',
+      "if (snapshot !== null) {",
+    ],
+    [
+      "a provider gate that ignores the selected lane ceiling",
+      "maximumConcurrentLeases: wait.maximumConcurrentLeases,",
+      "maximumConcurrentLeases: GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES,",
+    ],
+  ])("rejects the GMGN market read-lane contract with %s", (
+    _label,
+    needle,
+    replacement,
+  ) => {
+    const path = "lib/market-data/gmgn.server.ts";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-public-provider-split-source-contract",
+    );
+  });
+
   it("rejects a staged descending GMGN gate detached from token_info", () => {
     const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
     const source = readFileSync(resolve(ROOT, path), "utf8");
@@ -2100,6 +2178,157 @@ describe("read-model operations source contract", () => {
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-profile-claim-trade-provider-boundary",
+    );
+  });
+
+  it.each([
+    [
+      "an unavailable response omitted from accepted analytics statuses",
+      'const ANALYTICS_STATUSES = new Set(["ready", "partial", "unavailable"])',
+      'const ANALYTICS_STATUSES = new Set(["ready", "partial"])',
+    ],
+    [
+      "cacheable headers on an unavailable analytics envelope",
+      'const expectedCache = unavailable\n    ? new Set(["no-store"])',
+      'const expectedCache = unavailable\n    ? new Set(["public, max-age=0"])',
+    ],
+    [
+      "GMGN market-source provenance on an unavailable analytics envelope",
+      'response.headers.get("x-programmable-market-source") ===\n' +
+        '      (unavailable ? null : "gmgn")',
+      'response.headers.get("x-programmable-market-source") === "gmgn"',
+    ],
+    [
+      "an arbitrary identity on an unavailable analytics envelope",
+      'return status === "unavailable" && value === null;',
+      'return status === "unavailable";',
+    ],
+    [
+      "one populated summary projection while analytics are unavailable",
+      'const expectedCount = body.status === "ready"\n' +
+        "    ? 2\n" +
+        '    : body.status === "partial"\n' +
+        "      ? 1\n" +
+        "      : 0;",
+      'const expectedCount = body.status === "ready"\n' +
+        "    ? 2\n" +
+        '    : body.status === "partial"\n' +
+        "      ? 1\n" +
+        "      : 1;",
+    ],
+    [
+      "a non-null ranking projection while analytics are unavailable",
+      'if (body.status === "unavailable") return ranking === null;',
+      'if (body.status === "unavailable") return true;',
+    ],
+    [
+      "summary analytics accepted without status-aware projection validation",
+      "!exactSummaryAnalyticsProjection(body, identity, now().getTime())",
+      "false",
+    ],
+    [
+      "ranking analytics accepted without status-aware projection validation",
+      "!exactRankingAnalyticsProjection(body, now().getTime())",
+      "false",
+    ],
+    [
+      "more than one analytics recovery retry",
+      "const GMGN_ANALYTICS_ATTEMPTS = 2",
+      "const GMGN_ANALYTICS_ATTEMPTS = 3",
+    ],
+    [
+      "an analytics recovery wait inside the 15-second lease",
+      "const GMGN_ANALYTICS_RECOVERY_DELAY_MS = 16_000",
+      "const GMGN_ANALYTICS_RECOVERY_DELAY_MS = 15_000",
+    ],
+    [
+      "an analytics recovery wait beyond the 16-second bound",
+      "const GMGN_ANALYTICS_RECOVERY_DELAY_MS = 16_000",
+      "const GMGN_ANALYTICS_RECOVERY_DELAY_MS = 17_000",
+    ],
+    [
+      "a partial-summary recovery wait inside its public cache window",
+      "const GMGN_ANALYTICS_PARTIAL_SUMMARY_RECOVERY_DELAY_MS = 46_000",
+      "const GMGN_ANALYTICS_PARTIAL_SUMMARY_RECOVERY_DELAY_MS = 45_000",
+    ],
+    [
+      "a partial summary using only the lease-recovery delay",
+      'const recoveryDelayMs = section === "summary" && body.status === "partial"\n' +
+        "        ? GMGN_ANALYTICS_PARTIAL_SUMMARY_RECOVERY_DELAY_MS\n" +
+        "        : GMGN_ANALYTICS_RECOVERY_DELAY_MS;",
+      "const recoveryDelayMs = GMGN_ANALYTICS_RECOVERY_DELAY_MS;",
+    ],
+    [
+      "a skipped analytics recovery wait",
+      "await waitForGmgnAnalyticsRecovery(recoveryDelayMs);",
+      "await Promise.resolve();",
+    ],
+    [
+      "status coherence without exact launch-source segments",
+      'const launchSources = new Set(launchSource.split("+"));',
+      "const launchSources = new Set([launchSource]);",
+    ],
+    [
+      "an Envio source with unavailable canonical status",
+      'launchSources.has("envio-classic-v3")\n' +
+        "      ? CATALOG_STATUSES.has(canonicalReadStatus)",
+      'launchSources.has("envio-classic-v3")\n' +
+        '      ? canonicalReadStatus === "unavailable"',
+    ],
+    [
+      "current canonical status without an Envio source segment",
+      ': canonicalReadStatus === "unavailable")',
+      ": CATALOG_STATUSES.has(canonicalReadStatus))",
+    ],
+    [
+      "a Router source with unavailable router status",
+      'launchSources.has("canonical-launch-stamp-router")\n' +
+        "      ? CATALOG_STATUSES.has(routerReadStatus)",
+      'launchSources.has("canonical-launch-stamp-router")\n' +
+        '      ? routerReadStatus === "unavailable"',
+    ],
+    [
+      "current router status without a Router source segment",
+      ': routerReadStatus === "unavailable");',
+      ": CATALOG_STATUSES.has(routerReadStatus));",
+    ],
+    [
+      "regressing analytics identity freshness",
+      "Date.parse(lastIndexedAt) >= Date.parse(minimumLastIndexedAt)",
+      "Date.parse(lastIndexedAt) <= Date.parse(minimumLastIndexedAt)",
+    ],
+    [
+      "analytics responses compared only to the initial freshness floor",
+      "response, body.status, section, catalogBoundary.launchSource,\n" +
+        "          minimumAnalyticsLastIndexedAt,",
+      "response, body.status, section, catalogBoundary.launchSource,\n" +
+        "          lastIndexedAt,",
+    ],
+    [
+      "a freshness high-water mark that does not advance",
+      'minimumAnalyticsLastIndexedAt = response.headers.get(\n' +
+        '        "x-programmable-identity-last-indexed-at",\n' +
+        "      );",
+      "minimumAnalyticsLastIndexedAt = lastIndexedAt;",
+    ],
+    [
+      "analytics header status detached from the response envelope",
+      'response.headers.get("x-programmable-analytics-read-status") === status',
+      'response.headers.get("x-programmable-analytics-read-status") === "ready"',
+    ],
+  ])("rejects a staged GMGN analytics recovery contract with %s", (
+    _label,
+    needle,
+    replacement,
+  ) => {
+    const path = "scripts/smoke-static-dexscreener-public-apis.mjs";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    expect(source).toContain(needle);
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: source.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
     );
   });
 

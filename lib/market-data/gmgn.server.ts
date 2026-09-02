@@ -38,6 +38,7 @@ const GMGN_MARKET_CACHE_TTL_MS = 30_000;
 const GMGN_MAXIMUM_CACHE_ENTRIES = 512;
 const GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT = 100;
 const GMGN_VISIBLE_CHUNK_SIZE = 20;
+const GMGN_ACCOUNT_MAXIMUM_CONCURRENT_LEASES = 20;
 // Reserve eight account-wide leases for ranking, search, chart, and analytics
 // reads. A timed-out visible token-info fanout can otherwise occupy the entire
 // shared provider gate after its Explore response has already returned.
@@ -66,9 +67,12 @@ type GmgnProviderReadWaitV1 = Readonly<{
   fetchImpl: FetchImplementation | undefined;
   now: () => Date;
   accountGate: GmgnAccountGateV1 | undefined;
+  maximumConcurrentLeases: number;
   deadlineMs: number;
   signal: AbortSignal;
 }>;
+
+type GmgnMarketReadClassV1 = "foreground" | "visible";
 
 type ProviderOperationV1 = Pick<
   GmgnProviderReadWaitV1,
@@ -115,7 +119,7 @@ export async function readGmgnExploreSnapshotsV1(
         try {
           return [
             entry.id,
-            await readGmgnMarketSnapshotV1(entry, wait),
+            await readGmgnMarketSnapshotWithClassV1(entry, wait, "visible"),
           ] as const;
         } catch {
           return [entry.id, null] as const;
@@ -153,6 +157,14 @@ export async function readGmgnMarketSnapshotV1(
   entry: ExploreEntry,
   wait: GmgnReadWaitV1 = {},
 ): Promise<GmgnMarketSnapshotV1 | null> {
+  return readGmgnMarketSnapshotWithClassV1(entry, wait, "foreground");
+}
+
+async function readGmgnMarketSnapshotWithClassV1(
+  entry: ExploreEntry,
+  wait: GmgnReadWaitV1,
+  readClass: GmgnMarketReadClassV1,
+): Promise<GmgnMarketSnapshotV1 | null> {
   const apiKey = readApiKey();
   const canonicalSupply = canonicalSupplyV1(entry);
   const identities = exploreEntryMarketIdentitiesV1(entry);
@@ -173,10 +185,22 @@ export async function readGmgnMarketSnapshotV1(
   if (!callerCanAwaitSharedRead(wait, nowMs)) return null;
   const cached = currentCacheValue(snapshotCache, cacheKey, nowMs);
   if (cached !== undefined) return cached;
-  const active = snapshotInFlight.get(cacheKey);
+  const inFlightKey = `${readClass}:${cacheKey}`;
+  // Foreground work must never inherit the lower visible ceiling. Visible
+  // callers may safely join an already-running foreground read for the same
+  // exact identity, avoiding an unnecessary second provider lease.
+  const active = snapshotInFlight.get(inFlightKey) ??
+    (readClass === "visible"
+      ? snapshotInFlight.get(`foreground:${cacheKey}`)
+      : undefined);
   if (active) return awaitSharedReadForCaller(active, wait);
 
-  const providerWait = sharedProviderWait(wait);
+  const providerWait = sharedProviderWait(
+    wait,
+    readClass === "visible"
+      ? GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES
+      : GMGN_ACCOUNT_MAXIMUM_CONCURRENT_LEASES,
+  );
   const providerRead = (async () => {
     const value = await gmgnJsonRequest(
       "/v1/token/info",
@@ -199,7 +223,14 @@ export async function readGmgnMarketSnapshotV1(
     (settled) => {
       if (settled === PROVIDER_OPERATION_TIMED_OUT) return null;
       const snapshot = settled;
-      if (snapshot !== null) {
+      // A visible read that started first may finish after a foreground read.
+      // Keep the foreground success already in the shared cache in that race.
+      const current = currentCacheValue(
+        snapshotCache,
+        cacheKey,
+        providerWait.now().getTime(),
+      );
+      if (snapshot !== null && (readClass === "foreground" || current === undefined)) {
         setCacheValue(
           snapshotCache,
           cacheKey,
@@ -210,11 +241,11 @@ export async function readGmgnMarketSnapshotV1(
       return snapshot;
     },
   ).catch(() => null).finally(() => {
-    if (snapshotInFlight.get(cacheKey) === promise) {
-      snapshotInFlight.delete(cacheKey);
+    if (snapshotInFlight.get(inFlightKey) === promise) {
+      snapshotInFlight.delete(inFlightKey);
     }
   });
-  snapshotInFlight.set(cacheKey, promise);
+  snapshotInFlight.set(inFlightKey, promise);
   return awaitSharedReadForCaller(promise, wait);
 }
 
@@ -414,7 +445,7 @@ async function gmgnJsonRequest(
     if (accountGate !== null) {
       const decision = await reserveProviderSlot(accountGate, {
         requestsPerSecond: gmgnEffectiveRequestsPerSecondV1(),
-        maximumConcurrentLeases: GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES,
+        maximumConcurrentLeases: wait.maximumConcurrentLeases,
         deadlineMs: gateDeadlineMs,
         signal: gateSignal,
       }, gateOperation);
@@ -633,13 +664,17 @@ function currentTimestampMs(now: () => Date, minimumMs: number): number {
   return Number.isFinite(value) ? Math.max(minimumMs, value) : minimumMs;
 }
 
-function sharedProviderWait(wait: GmgnReadWaitV1): GmgnProviderReadWaitV1 {
+function sharedProviderWait(
+  wait: GmgnReadWaitV1,
+  maximumConcurrentLeases: number,
+): GmgnProviderReadWaitV1 {
   const now = wait.now ?? (() => new Date());
   const startedAtMs = now().getTime();
   return {
     fetchImpl: wait.fetchImpl,
     now,
     accountGate: wait.accountGate,
+    maximumConcurrentLeases,
     deadlineMs: Number.isFinite(startedAtMs)
       ? startedAtMs + GMGN_PROVIDER_WORK_TIMEOUT_MS
       : Date.now() + GMGN_PROVIDER_WORK_TIMEOUT_MS,
