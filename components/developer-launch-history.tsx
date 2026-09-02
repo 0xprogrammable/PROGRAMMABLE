@@ -693,7 +693,7 @@ function parseV4Launch(
     || typeof value.launchId !== "string"
     || !requestIdPattern.test(value.launchId)
     || typeof value.requestId !== "string"
-    || value.requestId !== value.launchId
+    || !requestIdPattern.test(value.requestId)
     || !isRecord(value.controller)
     || value.controller.namespace !== "eip155:4663"
     || typeof value.controller.address !== "string"
@@ -1481,10 +1481,18 @@ function terminalStatus(status: LaunchStatus) {
   return status === "finalized" || status === "failed" || status === "cancelled";
 }
 
-function launchResourceKey(
-  launch: Pick<LaunchResource, "routeId" | "requestId">,
+export function launchResourceIdentity(
+  launch: Pick<LaunchResource, "routeId" | "launchId" | "requestId">,
 ) {
-  return `${launch.routeId}:${launch.requestId}`;
+  return launch.routeId === "custom-launch:create:v4"
+    ? launch.launchId
+    : launch.requestId;
+}
+
+function launchResourceKey(
+  launch: Pick<LaunchResource, "routeId" | "launchId" | "requestId">,
+) {
+  return `${launch.routeId}:${launchResourceIdentity(launch)}`;
 }
 
 function updatedAtTime(value: string) {
@@ -1820,10 +1828,11 @@ function ProjectMetadataReview({
     || requirements.complete;
   const website = presentation.links.find((link) => link.kind === "website");
   const xLink = presentation.links.find((link) => link.kind === "x");
+  const resourceIdentity = launchResourceIdentity(launch);
   return (
     <section
       className={styles.projectReview}
-      aria-labelledby={`project-metadata-${launch.requestId}`}
+      aria-labelledby={`project-metadata-${resourceIdentity}`}
     >
       <div className={styles.projectReviewHeading}>
         <div className={styles.projectArtwork}>
@@ -1842,7 +1851,7 @@ function ProjectMetadataReview({
         </div>
         <div className={styles.projectIdentity}>
           <span>Included in this launch</span>
-          <h4 id={`project-metadata-${launch.requestId}`}>{token.name}</h4>
+          <h4 id={`project-metadata-${resourceIdentity}`}>{token.name}</h4>
           <strong>${token.symbol}</strong>
         </div>
       </div>
@@ -1970,10 +1979,11 @@ function LaunchTruthLedger({ launch }: Readonly<{ launch: LaunchResource }>) {
     sourceVerification: launch.sourceVerification,
     liquidityIntent: launch.liquidityIntent,
   });
+  const resourceIdentity = launchResourceIdentity(launch);
   return (
-    <section className={styles.truthLedger} aria-labelledby={`truth-${launch.requestId}`}>
+    <section className={styles.truthLedger} aria-labelledby={`truth-${resourceIdentity}`}>
       <div className={styles.truthHeading}>
-        <h4 id={`truth-${launch.requestId}`}>What this record proves</h4>
+        <h4 id={`truth-${resourceIdentity}`}>What this record proves</h4>
         <span>Independent states</span>
       </div>
       <dl className={styles.truthGrid}>
@@ -2278,7 +2288,7 @@ export function DeveloperLaunchHistory({
   }, [account, getAuthHeaders]);
 
   const readLaunchResource = useCallback(async (
-    launch: Pick<LaunchResource, "requestId" | "routeId">,
+    launch: Pick<LaunchResource, "launchId" | "requestId" | "routeId">,
     signal?: AbortSignal,
   ) => {
     const version = launch.routeId === "custom-launch:create:v4"
@@ -2288,8 +2298,9 @@ export function DeveloperLaunchHistory({
       : launch.routeId === "custom-launch:create:v2"
         ? "v2"
         : "v1";
+    const resourceIdentity = launchResourceIdentity(launch);
     const response = await fetch(
-      `/api/developer/custom-launches/${encodeURIComponent(launch.requestId)}?walletAddress=${encodeURIComponent(account)}&version=${version}`,
+      `/api/developer/custom-launches/${encodeURIComponent(resourceIdentity)}?walletAddress=${encodeURIComponent(account)}&version=${version}`,
       {
         cache: "no-store",
         headers: await getAuthHeaders(),
@@ -2307,7 +2318,7 @@ export function DeveloperLaunchHistory({
     const updated = parseLaunch(body, account);
     if (
       !updated ||
-      updated.requestId !== launch.requestId ||
+      launchResourceIdentity(updated) !== resourceIdentity ||
       updated.routeId !== launch.routeId
     ) {
       throw new Error("The API returned an invalid launch status.");
@@ -2342,7 +2353,7 @@ export function DeveloperLaunchHistory({
     headers.set("Content-Type", "application/json");
     const response = await fetch(
       `/api/developer/custom-launches/${
-        encodeURIComponent(launch.requestId)
+        encodeURIComponent(launch.launchId)
       }/submission-hint?walletAddress=${
         encodeURIComponent(account)
       }&version=v4`,
@@ -2368,7 +2379,7 @@ export function DeveloperLaunchHistory({
       || !isRecord(body)
       || body.schemaVersion !== "programmable.custom-launch-submission-hint.v1"
       || body.apiVersion !== "v4"
-      || body.launchId !== launch.requestId
+      || body.launchId !== launch.launchId
       || body.chainId !== "4663"
       || body.chainDeploymentId !== "robinhood-mainnet-custom-launch-v1"
       || body.transactionHash !== transactionHash
@@ -2376,7 +2387,7 @@ export function DeveloperLaunchHistory({
       || body.authoritative !== false
       || typeof body.acceptedAt !== "string"
       || body.statusPath
-        !== `/v4/chains/4663/wallet-admin/custom-launches/${launch.requestId}`) {
+        !== `/v4/chains/4663/wallet-admin/custom-launches/${launch.launchId}`) {
       throw new Error("The API returned an invalid transaction discovery receipt.");
     }
     return body;
@@ -2406,7 +2417,7 @@ export function DeveloperLaunchHistory({
     const launch = parseLaunch(body, account);
     if (
       !launch
-      || launch.requestId !== launchId
+      || launchResourceIdentity(launch) !== launchId
       || launch.routeId !== `custom-launch:create:${version}`
     ) throw new Error("The API returned an invalid wallet handoff.");
     return launch;
@@ -2473,7 +2484,7 @@ export function DeveloperLaunchHistory({
             ? "Wallet handoff loaded. Review every field before opening your wallet."
             : "Launch loaded. Its current status does not request a wallet action.",
         );
-        focusLaunchCard(launch.requestId);
+        focusLaunchCard(launchResourceIdentity(launch));
       })
       .catch((cause) => {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
@@ -2578,7 +2589,7 @@ export function DeveloperLaunchHistory({
           ? "Exact remediation loaded. Fix every listed item before creating a new request."
           : "Exact launch evidence loaded.",
       );
-      focusLaunchCard(current.requestId);
+      focusLaunchCard(launchResourceIdentity(current));
     } catch (cause) {
       reportLaunchError(key, cause, "Unable to load the exact launch details.");
     } finally {
@@ -3327,6 +3338,7 @@ export function DeveloperLaunchHistory({
         <ul className={styles.launchList}>
           {launches.map((launch) => {
             const key = launchResourceKey(launch);
+            const resourceIdentity = launchResourceIdentity(launch);
             const reviewLaunch = reviewResourceForLaunch(
               launch,
               hydratedReviews[key],
@@ -3378,17 +3390,17 @@ export function DeveloperLaunchHistory({
               );
             return (
               <li
-                id={`custom-launch-${launch.requestId}`}
+                id={`custom-launch-${resourceIdentity}`}
                 className={styles.launchItem}
                 data-highlighted={
-                  highlightedLaunchId === launch.requestId ? "true" : "false"
+                  highlightedLaunchId === resourceIdentity ? "true" : "false"
                 }
                 key={key}
                 tabIndex={-1}
               >
                 <div className={styles.launchTopline}>
                   <div>
-                    <h3>Launch {shortId(launch.requestId)}</h3>
+                    <h3>Launch {shortId(resourceIdentity)}</h3>
                   </div>
                   <span className={styles.status} data-status={launch.status}>
                     {statusCopy(launch.status)}
