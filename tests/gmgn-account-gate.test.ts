@@ -673,15 +673,137 @@ describe("GMGN account gate", () => {
       }
 
       await database.exec("RESET ROLE");
-      const active = await database.query<{ count: number }>(`
-        SELECT count(*) AS count
+      const active = await database.query<{
+        count: number;
+        lease_ms: number;
+      }>(`
+        SELECT count(*) AS count,
+               ROUND(MAX(EXTRACT(EPOCH FROM
+                 (lease_until - reserved_at))) * 1000)::integer AS lease_ms
           FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
          WHERE generation = ${lease.generation}
            AND lease_holder = '${lease.holder}'
       `);
-      expect(active.rows).toEqual([{ count: 1 }]);
+      expect(active.rows).toEqual([{ count: 1, lease_ms: 15_000 }]);
     },
   );
+
+  it("reclaims an expired orphan after a failed outcome write", async () => {
+    const { database, pool } = await migratedGate();
+    const failingGate = new PostgresGmgnAccountGateV1(
+      new OutcomeFailPool(pool, "completed"),
+    );
+    const orphan = await failingGate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    if (orphan?.kind !== "reserved") throw new Error("test lease unavailable");
+    await expect(failingGate.complete(orphan)).rejects.toThrow(
+      "injected outcome write failure",
+    );
+
+    await database.exec(`
+      RESET ROLE;
+      UPDATE programmable_website_projection_v1.gmgn_account_gate_leases_v1
+         SET reserved_at = clock_timestamp() - INTERVAL '2 seconds',
+             lease_until = clock_timestamp() - INTERVAL '1 second'
+       WHERE generation = ${orphan.generation}
+         AND lease_holder = '${orphan.holder}';
+      UPDATE programmable_website_projection_v1.gmgn_account_gate_v1
+         SET next_slot_at = TIMESTAMPTZ 'epoch',
+             lease_until = clock_timestamp() - INTERVAL '1 millisecond'
+       WHERE gate_id = 'gmgn-openapi-v1';
+      SET ROLE programmable_website_projection_runtime;
+    `);
+
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const successor = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(successor?.kind).toBe("reserved");
+    if (successor?.kind !== "reserved") {
+      throw new Error("successor lease unavailable");
+    }
+    expect(successor.generation).toBe(orphan.generation + 1);
+
+    await database.exec("RESET ROLE");
+    const state = await database.query<{
+      active: number;
+      orphaned: number;
+    }>(`
+      SELECT count(*) FILTER (
+               WHERE lease_until > clock_timestamp()
+             ) AS active,
+             count(*) FILTER (
+               WHERE generation = ${orphan.generation}
+                 AND lease_holder = '${orphan.holder}'
+             ) AS orphaned
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+    `);
+    expect(state.rows).toEqual([{ active: 1, orphaned: 0 }]);
+  });
+
+  it("preserves a longer marker across a mixed-version rollout", async () => {
+    const { database, pool } = await migratedGate();
+    const gate = new PostgresGmgnAccountGateV1(pool);
+    const legacyDurationLease = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    if (legacyDurationLease?.kind !== "reserved") {
+      throw new Error("legacy-duration lease unavailable");
+    }
+
+    await database.exec(`
+      RESET ROLE;
+      UPDATE programmable_website_projection_v1.gmgn_account_gate_leases_v1
+         SET lease_until = reserved_at + INTERVAL '5 minutes'
+       WHERE generation = ${legacyDurationLease.generation}
+         AND lease_holder = '${legacyDurationLease.holder}';
+      UPDATE programmable_website_projection_v1.gmgn_account_gate_v1 AS gate
+         SET next_slot_at = TIMESTAMPTZ 'epoch',
+             lease_until = lease.lease_until
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+          AS lease
+       WHERE gate.gate_id = lease.gate_id
+         AND lease.generation = ${legacyDurationLease.generation}
+         AND lease.lease_holder = '${legacyDurationLease.holder}';
+      SET ROLE programmable_website_projection_runtime;
+    `);
+
+    const firstShortLease = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(firstShortLease?.kind).toBe("reserved");
+    const secondShortLease = await gate.reserveSlot({
+      requestsPerSecond: 20,
+      deadlineMs: Date.now() + 1_000,
+    });
+    expect(secondShortLease?.kind).toBe("reserved");
+    if (
+      firstShortLease?.kind !== "reserved"
+      || secondShortLease?.kind !== "reserved"
+    ) throw new Error("mixed-version successor lease unavailable");
+
+    await database.exec("RESET ROLE");
+    const leases = await database.query<{
+      generation: number;
+      lease_ms: number;
+    }>(`
+      SELECT generation,
+             ROUND(EXTRACT(EPOCH FROM
+               (lease_until - reserved_at)) * 1000)::integer AS lease_ms
+        FROM programmable_website_projection_v1.gmgn_account_gate_leases_v1
+       ORDER BY generation
+    `);
+    expect(leases.rows).toEqual([
+      { generation: legacyDurationLease.generation, lease_ms: 300_000 },
+      { generation: firstShortLease.generation, lease_ms: 15_000 },
+      { generation: secondShortLease.generation, lease_ms: 15_000 },
+    ]);
+  });
 
   it("rejects a stale generation release without clearing the active lease", async () => {
     const { database, pool } = await migratedGate();

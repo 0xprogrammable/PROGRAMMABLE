@@ -3462,6 +3462,12 @@ export function evaluateReadModelOperationsSourceContracts(
     ) &&
     includesEverySourceFragment(gmgnAccountGate, [
       'const GATE_ID = "gmgn-openapi-v1" as const',
+      "const MAXIMUM_PROVIDER_COOLDOWN_MS = 5 * 60_000",
+      "const MAXIMUM_RESERVATION_LEASE_MS = 15_000",
+      "const leaseUntilMs = decidedAtMs + MAXIMUM_RESERVATION_LEASE_MS",
+      "localNowMs + MAXIMUM_PROVIDER_COOLDOWN_MS",
+      "lease_until = GREATEST(gate.lease_until, $7::timestamptz)",
+      "SELECT gate_id, generation, $3::uuid, decided_at, $7::timestamptz",
       "lease_holder = $3::uuid",
       "lease_until = authority.decided_at + INTERVAL '5 minutes'",
       "AND gate.generation = $4::bigint",
