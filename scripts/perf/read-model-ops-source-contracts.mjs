@@ -3368,11 +3368,38 @@ export function evaluateReadModelOperationsSourceContracts(
       "const GMGN_RESPONSE_MAXIMUM_BYTES = 1_000_000",
       "const GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT = 100",
       "const GMGN_VISIBLE_CHUNK_SIZE = 20",
+      "const GMGN_ACCOUNT_MAXIMUM_CONCURRENT_LEASES = 20",
       "const GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES = 12",
+      'type GmgnMarketReadClassV1 = "foreground" | "visible"',
       "entries.slice(0, GMGN_VISIBLE_MAXIMUM_ENTRY_COUNT)",
       "offset += GMGN_VISIBLE_CHUNK_SIZE",
       "boundedEntries.slice(offset, offset + GMGN_VISIBLE_CHUNK_SIZE)",
       "gmgnVisibleMarketConcurrencyV1(chunk.length)",
+      'await readGmgnMarketSnapshotWithClassV1(entry, wait, "visible")',
+      'return readGmgnMarketSnapshotWithClassV1(entry, wait, "foreground")',
+      "const cached = currentCacheValue(snapshotCache, cacheKey, nowMs)",
+      'const inFlightKey = `${readClass}:${cacheKey}`',
+      "const active = snapshotInFlight.get(inFlightKey) ??",
+      'readClass === "visible"\n' +
+        '      ? snapshotInFlight.get(`foreground:${cacheKey}`)\n' +
+        "      : undefined",
+      'readClass === "visible"\n' +
+        "      ? GMGN_VISIBLE_MAXIMUM_CONCURRENT_LEASES\n" +
+        "      : GMGN_ACCOUNT_MAXIMUM_CONCURRENT_LEASES",
+      "maximumConcurrentLeases: wait.maximumConcurrentLeases",
+      "const current = currentCacheValue(\n" +
+        "        snapshotCache,\n" +
+        "        cacheKey,\n" +
+        "        providerWait.now().getTime(),\n" +
+        "      )",
+      'snapshot !== null && (readClass === "foreground" || current === undefined)',
+      "setCacheValue(\n" +
+        "          snapshotCache,\n" +
+        "          cacheKey,\n" +
+        "          snapshot,",
+      "snapshotInFlight.get(inFlightKey) === promise",
+      "snapshotInFlight.delete(inFlightKey)",
+      "snapshotInFlight.set(inFlightKey, promise)",
       "gmgnEffectiveRequestsPerSecondV1()",
       "gmgnVisibleMarketEntryEligibleV1(",
       "canonicalIdentities?.length === 1",
@@ -3410,7 +3437,6 @@ export function evaluateReadModelOperationsSourceContracts(
       "return settled !== PROVIDER_OPERATION_TIMED_OUT;",
       "if (!callerCanAwaitSharedRead(wait, nowMs)) return null;",
       "if (active) return awaitSharedReadForCaller(active, wait);",
-      "if (snapshot !== null) {",
       "!hasExactOptionalEthereumChain(response)",
       "!hasExactOptionalEthereumChain(data)",
       "return value;",
@@ -4509,6 +4535,10 @@ export function evaluateReadModelOperationsSourceContracts(
         'targetKind === "staged" ? waitForStagedRetryAfter : null',
         "const EXPLORE_SNAPSHOT_ATTEMPTS = 3",
         "const EXPLORE_SNAPSHOT_RETRY_DELAY_MS = 16_000",
+        "const GMGN_ANALYTICS_ATTEMPTS = 2",
+        "const GMGN_ANALYTICS_RECOVERY_DELAY_MS = 16_000",
+        "const GMGN_ANALYTICS_PARTIAL_SUMMARY_RECOVERY_DELAY_MS = 46_000",
+        'const ANALYTICS_STATUSES = new Set(["ready", "partial", "unavailable"])',
         "class ExploreCatalogBoundaryDriftError extends Error",
         "class ExploreMarketCapSnapshotDriftError extends Error",
         "snapshotAttempt < EXPLORE_SNAPSHOT_ATTEMPTS",
@@ -4593,10 +4623,57 @@ export function evaluateReadModelOperationsSourceContracts(
         "!matchedIdentities.includes(targetIdentity)",
         "async function readRequiredGmgnAnalytics({",
         'for (const section of ["summary", "holders", "traders"])',
+        "function acceptableAnalyticsIdentity(value, expected, status)",
+        "if (sameAnalyticsIdentity(value, expected)) return true",
+        'return status === "unavailable" && value === null',
+        "function exactSummaryAnalyticsProjection(body, identity, nowMs)",
+        'const expectedCount = body.status === "ready"\n' +
+          "    ? 2\n" +
+          '    : body.status === "partial"\n' +
+          "      ? 1\n" +
+          "      : 0",
+        "count === expectedCount",
+        "function exactRankingAnalyticsProjection(body, nowMs)",
+        'if (body.status === "unavailable") return ranking === null',
+        'if (body.status !== "ready") return false',
+        'const unavailable = status === "unavailable"',
+        'const expectedCache = unavailable\n    ? new Set(["no-store"])',
+        'const launchSources = new Set(launchSource.split("+"))',
+        "const operationalReadStatusesAreValid =",
+        '(launchSources.has("envio-classic-v3")\n' +
+          "      ? CATALOG_STATUSES.has(canonicalReadStatus)\n" +
+          '      : canonicalReadStatus === "unavailable")',
+        '(launchSources.has("canonical-launch-stamp-router")\n' +
+          "      ? CATALOG_STATUSES.has(routerReadStatus)\n" +
+          '      : routerReadStatus === "unavailable")',
+        "operationalReadStatusesAreValid",
+        "exactIsoTimestamp(lastIndexedAt)",
+        "exactIsoTimestamp(minimumLastIndexedAt)",
+        "Date.parse(lastIndexedAt) >= Date.parse(minimumLastIndexedAt)",
+        'response.headers.get("x-programmable-analytics-read-status") === status',
+        'response.headers.get("x-programmable-market-source") ===\n      (unavailable ? null : "gmgn")',
+        "!ANALYTICS_STATUSES.has(body.status)",
+        "!acceptableAnalyticsIdentity(body.identity, identity, body.status)",
+        "let minimumAnalyticsLastIndexedAt = lastIndexedAt",
+        "minimumAnalyticsLastIndexedAt,",
+        'minimumAnalyticsLastIndexedAt = response.headers.get(\n' +
+          '        "x-programmable-identity-last-indexed-at",\n' +
+          "      )",
+        "!exactSummaryAnalyticsProjection(body, identity, now().getTime())",
+        "!exactRankingAnalyticsProjection(body, now().getTime())",
+        'if (body.status === "ready") break',
+        "attempt === GMGN_ANALYTICS_ATTEMPTS - 1",
+        'const recoveryDelayMs = section === "summary" && body.status === "partial"',
+        "? GMGN_ANALYTICS_PARTIAL_SUMMARY_RECOVERY_DELAY_MS\n" +
+          "        : GMGN_ANALYTICS_RECOVERY_DELAY_MS",
+        "await waitForGmgnAnalyticsRecovery(recoveryDelayMs)",
+        'body === null || body.status !== "ready"',
+        "input.waitForGmgnAnalyticsRecovery ?? sleep",
+        'throw new Error("GMGN analytics recovery wait is invalid")',
         '"private, max-age=0, no-store"',
         "ANALYTICS_WALLET_KEYS",
-        "canonicalMarketAddress(wallet.address) !== wallet.address",
-        'pool.exchange !== "uniswap_v4"',
+        "canonicalMarketAddress(wallet.address) === wallet.address",
+        'pool.exchange === "uniswap_v4"',
         "analyticsSummaryStatus = analytics.summary",
         "`discovery_ranking_commitment=${trendingDiscovery.rankingCommitment}`",
         "`discovery_consistency=${trendingDiscoveryConsistency}`",
