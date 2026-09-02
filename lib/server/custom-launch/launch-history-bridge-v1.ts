@@ -555,7 +555,10 @@ export function createDeveloperLaunchHistoryBridgeV1(input: Readonly<{
             ?? await readVersion("v4");
         }
         if (!launch) throw new BrowserRequestErrorV1(404, "launch_not_found");
-        if (launch.requestId !== launchId.toLowerCase()) {
+        const resourceId = launch.routeId === "custom-launch:create:v4"
+          ? launch.launchId
+          : launch.requestId;
+        if (resourceId !== launchId.toLowerCase()) {
           throw new BackendContractErrorV1();
         }
         return jsonResponse(200, { ...launch });
@@ -1531,6 +1534,7 @@ function parseLaunchV4(
     "expiresAt",
     "secondsRemaining",
     "partnerAttribution",
+    "sourceVerification",
   ].filter((key) => Object.hasOwn(record, key));
   exactProjectKeys(record, [
     "schemaVersion", "apiVersion", "launchId", "requestId", "routeId",
@@ -1551,7 +1555,6 @@ function parseLaunchV4(
     || !UUID.test(record.launchId)
     || typeof record.requestId !== "string"
     || !UUID.test(record.requestId)
-    || record.launchId.toLowerCase() !== record.requestId.toLowerCase()
     || record.routeId !== "custom-launch:create:v4"
     || record.chainId !== "4663"
     || record.caip2 !== "eip155:4663"
@@ -1579,7 +1582,9 @@ function parseLaunchV4(
         || !REQUEST_HASH.test(record.walletTransactionPreimageHash)))
     || parseProjectMetadataV1(record.projectMetadata) === null
     || requiredTimestamp(record.createdAt) !== record.createdAt
-    || requiredTimestamp(record.updatedAt) !== record.updatedAt) {
+    || requiredTimestamp(record.updatedAt) !== record.updatedAt
+    || (Object.hasOwn(record, "sourceVerification")
+      && record.sourceVerification !== null)) {
     throw new BackendContractErrorV1();
   }
   const unevaluated = record.status === "received" || record.status === "validating";

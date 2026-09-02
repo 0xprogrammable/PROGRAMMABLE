@@ -25,6 +25,7 @@ const V3_LAUNCH_ID = "60000000-0000-4000-8000-000000000006";
 const V3_NATIVE_LAUNCH_ID = "70000000-0000-4000-8000-000000000007";
 const V3_ACTION_REQUIRED_LAUNCH_ID = "80000000-0000-4000-8000-000000000008";
 const V4_LAUNCH_ID = "90000000-0000-4000-8000-000000000009";
+const V4_REQUEST_ID = "a0000000-0000-4000-8000-00000000000a";
 const V4_CHAIN_DEPLOYMENT_ID = "robinhood-mainnet-custom-launch-v1";
 const V4_CHAIN_DEPLOYMENT_DIGEST = `0x${"aa".repeat(32)}` as const;
 const V4_TRANSACTION_HASH = `0x${"bb".repeat(32)}` as const;
@@ -321,7 +322,7 @@ function launchV4(ownerWallet: string = WALLET) {
     schemaVersion: "programmable.custom-launch.v4",
     apiVersion: "v4",
     launchId: V4_LAUNCH_ID,
-    requestId: V4_LAUNCH_ID,
+    requestId: V4_REQUEST_ID,
     routeId: "custom-launch:create:v4",
     chainId: "4663",
     caip2: "eip155:4663",
@@ -816,6 +817,49 @@ describe("developer launch history same-origin bridge", () => {
       .toBe(`Bearer ${WEBSITE_TOKEN}`);
     expect(new Headers(init.headers).get("x-programmable-wallet-address"))
       .toBe(WALLET);
+  });
+
+  it("accepts only null source verification on a non-finalized V4 wallet resource", async () => {
+    const resource = {
+      ...launchV4(),
+      status: "wallet_action_required",
+      walletTransaction: {},
+      preparedArtifact: {},
+      admissionReceipt: {},
+      simulationReceipt: {},
+      externalContractEvidenceReceipt: {},
+      sourceVerification: null,
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V4_LAUNCH_ID}?walletAddress=${WALLET}&version=v4`,
+      { headers: { authorization: "Bearer browser-privy-token" } },
+    ), V4_LAUNCH_ID);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(resource);
+
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify({
+      ...resource,
+      sourceVerification: SOURCE_VERIFICATION,
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const rejected = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V4_LAUNCH_ID}?walletAddress=${WALLET}&version=v4`,
+      { headers: { authorization: "Bearer browser-privy-token" } },
+    ), V4_LAUNCH_ID);
+
+    expect(rejected.status).toBe(503);
+    expect((await rejected.json()).error.code).toBe(
+      "launch_history_unavailable",
+    );
   });
 
   it("proxies only the chain-scoped V4 capabilities document", async () => {

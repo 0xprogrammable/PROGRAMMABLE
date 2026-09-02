@@ -14,6 +14,7 @@ import {
 import {
   launchPollingRetryAfterMs,
   fetchVerifiedProjectImageV1,
+  launchResourceIdentity,
   mergeLaunchResources,
   parseCustomLaunchProjectMetadataV1,
   parseHistoryPage,
@@ -571,7 +572,7 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain('? "v3"');
     expect(historySource).toContain('? "v2"');
     expect(historySource).toContain(
-      "encodeURIComponent(launch.requestId)",
+      "encodeURIComponent(resourceIdentity)",
     );
     expect(historySource).toContain("PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation");
     expect(historySource).toContain("Read the remediation catalog");
@@ -1381,8 +1382,97 @@ describe("developer launch history interface", () => {
       "readLaunchById(initialLaunchId, version, controller.signal)",
     );
     expect(historySource).toContain("Loading the exact wallet handoff.");
-    expect(historySource).toContain("focusLaunchCard(launch.requestId)");
+    expect(historySource).toContain(
+      "focusLaunchCard(launchResourceIdentity(launch))",
+    );
     expect(historySource).toContain("tabIndex={-1}");
+  });
+
+  it("keeps distinct V4 request and launch IDs on one launch-addressed card", () => {
+    const account = "0x0000000000000000000000000000000000000001";
+    const launchId = "90000000-0000-4000-8000-000000000009";
+    const requestId = "a0000000-0000-4000-8000-00000000000a";
+    const summary = {
+      schemaVersion: "programmable.custom-launch-summary.v4",
+      apiVersion: "v4",
+      launchId,
+      requestId: launchId,
+      routeId: "custom-launch:create:v4",
+      chainId: "4663",
+      caip2: "eip155:4663",
+      chainDeploymentId: "robinhood-mainnet-custom-launch-v1",
+      chainDeploymentDescriptorDigest: `0x${"aa".repeat(32)}`,
+      controller: { namespace: "eip155:4663", address: account },
+      status: "wallet_action_required",
+      walletHandoffUrl: null,
+      expiresAt: null,
+      createdAt: "2026-09-02T22:00:00.000Z",
+      updatedAt: "2026-09-02T22:00:01.000Z",
+    };
+    const resource = {
+      schemaVersion: "programmable.custom-launch.v4",
+      apiVersion: "v4",
+      launchId,
+      requestId,
+      routeId: "custom-launch:create:v4",
+      chainId: "4663",
+      caip2: "eip155:4663",
+      controller: { namespace: "eip155:4663", address: account },
+      status: "wallet_action_required",
+      requestHash: `sha256:${"11".repeat(32)}`,
+      profile: { profileDigest: `sha256:${"22".repeat(32)}` },
+      commitments: { launchIntent: `sha256:${"33".repeat(32)}` },
+      metadataCommitment: `sha256:${"44".repeat(32)}`,
+      projectMetadata: PROJECT_METADATA,
+      walletTransaction: {},
+      preparedArtifact: {},
+      sourceVerification: null,
+      onchain: null,
+      failure: null,
+      createdAt: "2026-09-02T22:00:00.000Z",
+      updatedAt: "2026-09-02T22:00:02.000Z",
+    };
+    const summaryPage = parseHistoryPage({
+      schemaVersion: "programmable.custom-launch-history.v1",
+      launches: [summary],
+      nextCursor: null,
+    }, account);
+    const resourcePage = parseHistoryPage({
+      schemaVersion: "programmable.custom-launch-history.v1",
+      launches: [resource],
+      nextCursor: null,
+    }, account);
+
+    expect(summaryPage).not.toBeNull();
+    expect(resourcePage).not.toBeNull();
+    expect(resourcePage!.launches[0]).toMatchObject({ launchId, requestId });
+    expect(launchResourceIdentity(resourcePage!.launches[0]!)).toBe(launchId);
+    expect(launchResourceIdentity(launch("legacy-request", "authorized",
+      "2026-09-02T22:00:00.000Z"))).toBe("legacy-request");
+    const merged = mergeLaunchResources(
+      summaryPage!.launches,
+      resourcePage!.launches,
+      false,
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ launchId, requestId });
+    expect(merged[0]?.rawResourceV4).not.toBeNull();
+
+    const readStart = historySource.indexOf(
+      "const readLaunchResource = useCallback",
+    );
+    const readEnd = historySource.indexOf(
+      "const readV4Capabilities = useCallback",
+      readStart,
+    );
+    const readBoundary = historySource.slice(readStart, readEnd);
+    expect(readBoundary).toContain(
+      "const resourceIdentity = launchResourceIdentity(launch)",
+    );
+    expect(readBoundary).toContain("encodeURIComponent(resourceIdentity)");
+    expect(readBoundary).toContain(
+      "launchResourceIdentity(updated) !== resourceIdentity",
+    );
   });
 
   it("keeps the V4 handoff owner-controlled and sends only its hash as a discovery hint", () => {
@@ -1433,6 +1523,12 @@ describe("developer launch history interface", () => {
     expect(hintBoundary).not.toContain("signedTransaction");
     expect(hintBoundary).not.toContain("evidence:");
     expect(hintBoundary).toContain("body.authoritative !== false");
+    expect(hintBoundary).toContain("encodeURIComponent(launch.launchId)");
+    expect(hintBoundary).toContain("body.launchId !== launch.launchId");
+    expect(hintBoundary).toContain(
+      "custom-launches/${launch.launchId}",
+    );
+    expect(hintBoundary).not.toContain("launch.requestId");
 
     const sendStart = historySource.indexOf(
       "const submitWalletTransaction = async",
