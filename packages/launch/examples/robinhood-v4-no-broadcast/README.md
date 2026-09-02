@@ -1,23 +1,22 @@
-# Robinhood V4 fee-gate no-broadcast clean room
+# Robinhood V4 funding-none no-broadcast clean room
 
-This negative example compiles three real Solidity targets with exact `solc` 0.8.26 and prepares a
+This example compiles three real Solidity targets with exact `solc` 0.8.26 and prepares a
 `programmable.launch-pack-config.v4` file for chain `4663`. It never embeds planned Programmable deployment
 addresses. At build time it fetches the unauthenticated production V4 capabilities document and copies the exact
 chain-deployment descriptor and integer-revision profile reference into the generated config. It fails closed while
 that route, any required trust root, the finality digest, or the production profile digest is unavailable.
 
 The request declares funding mode `none`, value `0`, an uninitialized empty pool, and no liquidity action. The hook
-authenticates `beforeSwap` calls against the capabilities-bound PoolManager. It deliberately has no canonical
-Programmable fee component, so V4 `pack` and `validate` must reject it with
-`ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE`. This fixture does not claim a fee, claiming, liquidity, deployment,
-or launched-token outcome. A successful local build is not API admission, wallet approval, onchain deployment, or
-public availability.
+authenticates `beforeSwap` calls against the capabilities-bound PoolManager. This fixture does not claim a fee,
+claiming, liquidity, deployment, or launched-token outcome. A successful local build, pack, or validation is not API
+admission, wallet approval, onchain deployment, or public availability.
 
 ## Prepare
 
-Use Node.js 24.14 and an exact reviewed checkout containing this clean-room example. Package version `4.0.0` is an
-unreleased source candidate, not a published or publicly installable release, and its release binding remains
-`releaseReady: false`. Copy the project from that checkout, then install its exact compiler lock:
+Use Node.js 24.14 and an exact reviewed checkout containing this clean-room example. Package version `4.0.0` is a
+planned pre-release source candidate, not a published or publicly installable release; Robinhood V4 remains
+`planned-not-deployed` with `releaseReady: false`. Copy the project from that checkout, then install its exact
+compiler lock:
 
 ```sh
 PACKAGE_ROOT="/absolute/path/to/exact-reviewed-checkout/packages/launch"
@@ -47,7 +46,7 @@ The builder deliberately refuses to run if `PROGRAMMABLE_API_KEY` is present. It
 plus `programmable-launch.config.json`. It has no wallet provider, signing method, RPC call, broadcast method,
 submission method, or API-origin override.
 
-## Confirm the fail-closed package gate
+## Pack and validate locally
 
 ```sh
 programmable-launch pack \
@@ -55,17 +54,12 @@ programmable-launch pack \
   --output launch.json \
   --receipt launch.receipt.json
 
-# Independently, with any pre-existing V4 request and its exact pack config:
-programmable-launch validate existing-v4-launch.json \
+programmable-launch validate launch.json \
   --config programmable-launch.config.json
 ```
 
-The first command must stop with `ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE` and therefore does not produce
-`launch.json`. The second command is a separate example for a V4 request produced before this gate; it stops with the
-same code and does not reach remote preflight. No environment variable, API response, pack config or client-supplied
-graph can open the gate. Do not edit the generated chain deployment or profile to bypass it. Positive packaging
-remains disabled until the reviewed canonical profile and deployed non-bypassable fee path are available.
+Run `build` again if the one-hour permit window expires or the public capabilities binding changes. Do not edit the
+generated chain deployment or profile to bypass that change; generate a new config and pack new bytes.
 
-The four public CLI commands are `pack`, `validate`, `submit`, and `status`. This example stops at the local package
-gate. It never calls `submit`, never reads an API key, never asks for a wallet signature, and never broadcasts a
-transaction.
+The four public CLI commands are `pack`, `validate`, `submit`, and `status`. This example stops after local validation.
+It never calls `submit`, never reads an API key, never asks for a wallet signature, and never broadcasts a transaction.

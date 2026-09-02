@@ -197,15 +197,9 @@ test("public V4 example source contains no fabricated nonzero deployment address
     "utf8",
   );
   assert.match(readme, /never embeds planned Programmable deployment\s+addresses/u);
-  assert.match(readme, /Package version `4\.0\.0` is an\s+unreleased source candidate/u);
+  assert.match(readme, /Package version `4\.0\.0` is a\s+planned pre-release source candidate/u);
   assert.match(readme, /not a published or publicly installable release/u);
-  assert.match(readme, /release binding remains\s+`releaseReady: false`/u);
-  assert.match(readme, /ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE/u);
-  assert.match(readme, /does not produce\s+`launch\.json`/u);
-  assert.match(
-    readme,
-    /no environment variable, API response, pack config or client-supplied\s+graph can open the gate/iu,
-  );
+  assert.match(readme, /`planned-not-deployed` with `releaseReady: false`/u);
   assert.doesNotMatch(readme, /verified `@programmable\/launch` 4\.0\.0 release artifact/u);
   assert.doesNotMatch(
     readme,

@@ -1,77 +1,72 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import solc from "solc";
 
-import { validateLaunchRemote } from "../src/api-client.mjs";
 import { buildLaunch, packLaunch } from "../src/pack.mjs";
-import {
-  ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE,
-} from "../src/robinhood-v4-fee-gate.mjs";
 import { validateLaunchFile } from "../src/validate.mjs";
-import { assertV4FundingValueMatchesGraph } from "../src/v4-contract.mjs";
+import { hashV4ChainDeployment } from "../src/v4-contract.mjs";
 import { v4ChainDeployment, v4Profile } from "./fixtures/v4.mjs";
 
-test("V4 pack and validation reject a fee-less graph while the canonical fee profile is unavailable", async () => {
+test("V4 pack builds and revalidates an exact 3-target Robinhood request without signing", async () => {
   const fixture = await materializeV4CompiledFixture();
   try {
+    const first = await buildLaunch({ configPath: fixture.configPath });
     const outputPath = path.join(fixture.root, "launch.json");
     const receiptPath = path.join(fixture.root, "launch.receipt.json");
-    await assert.rejects(packLaunch({
-      configPath: fixture.configPath, outputPath, receiptPath,
-    }), (error) => assertCanonicalFeeProfileUnavailable(error, "pack"));
-    await assert.rejects(access(outputPath), { code: "ENOENT" });
-    await assert.rejects(access(receiptPath), { code: "ENOENT" });
-
-    const legacyRequestPath = path.join(fixture.root, "legacy-fee-less-launch.json");
-    await writeFile(legacyRequestPath, JSON.stringify({
-      schemaVersion: "programmable.custom-launch-create-request.v4",
-      chainId: "4663",
-      caip2: "eip155:4663",
-      chainDeployment: null,
-      chainDeploymentDescriptorDigest: null,
-      profile: null,
-      launchWallet: null,
-      nonce: null,
-      permitWindow: null,
-      sourceDescriptor: null,
-      sourceBundleManifest: null,
-      externalContracts: null,
-      graphBundle: null,
-      projectMetadata: null,
-      projectMetadataHash: null,
-      projectMetadataImageArtifact: null,
-      verificationBundle: null,
-      funding: null,
-      liquidityModel: null,
-      launchIntentHash: null,
-      agentAttestation: null,
-    }), "utf8");
-    await assert.rejects(validateLaunchFile({
-      launchPath: legacyRequestPath,
+    const packed = await packLaunch({
       configPath: fixture.configPath,
-    }), (error) => assertCanonicalFeeProfileUnavailable(error, "validate"));
-
-    let fetchCalls = 0;
-    let apiKeyReads = 0;
-    await assert.rejects(validateLaunchRemote({
-      launchPath: legacyRequestPath,
+      outputPath,
+      receiptPath,
+    });
+    const validation = await validateLaunchFile({
+      launchPath: outputPath,
       configPath: fixture.configPath,
-      fetchImpl: async () => {
-        fetchCalls += 1;
-        throw new Error("network must remain unreachable");
-      },
-      loadApiKeyImpl: async () => {
-        apiKeyReads += 1;
-        throw new Error("API key must remain unread");
-      },
-    }), (error) => assertCanonicalFeeProfileUnavailable(error, "validate"));
-    assert.equal(fetchCalls, 0);
-    assert.equal(apiKeyReads, 0);
+    });
 
+    assert.equal(first.request.schemaVersion, "programmable.custom-launch-create-request.v4");
+    assert.equal(first.request.chainId, "4663");
+    assert.equal(first.request.caip2, "eip155:4663");
+    assert.equal(first.request.chainDeployment.chainDeploymentId,
+      "robinhood-mainnet-custom-launch-v1");
+    assert.equal(first.request.chainDeploymentDescriptorDigest,
+      hashV4ChainDeployment(v4ChainDeployment));
+    assert.equal(first.request.profile.profileRevision, 1);
+    assert.equal(first.request.graphBundle.targets.length, 3);
+    assert.equal(first.predictions.length, 3);
+    assert.equal(first.request.funding.mode, "none");
+    assert.equal(first.request.funding.valueWei, "0");
+    assert.equal(first.request.liquidityModel.model, "none-empty-pool");
+    assert.match(first.request.launchIntentHash, /^sha256:[0-9a-f]{64}$/u);
+    assert.equal(first.request.agentAttestation.subjectLaunchIntentHash,
+      first.request.launchIntentHash);
+    assert.deepEqual(await readFile(outputPath), first.requestBytes);
+    assert.deepEqual(await readFile(receiptPath), first.receiptBytes);
+    assert.equal(packed.requestSha256, first.requestSha256);
+    assert.equal(validation.requestSha256, first.requestSha256);
+    assert.equal(validation.reproducedFromConfig, true);
+    assert.equal(validation.exactSourceIncluded, true);
+    assert.equal(validation.predictions.length, 3);
+    assert.equal(first.receipt.apiVersion, "v4");
+    assert.equal(first.receipt.package.version, "4.0.0");
+    assert.equal(first.receipt.openapi,
+      "https://programmable.market/openapi/custom-launch-v4.json");
+    const outputKeys = deepObjectKeys(first);
+    for (const forbidden of [
+      "privateKey",
+      "signature",
+      "signedTransaction",
+      "rawTransaction",
+    ]) {
+      assert.equal(outputKeys.has(forbidden), false, forbidden);
+    }
+    assert.equal(
+      first.request.chainDeployment.deploymentEvidence.transactionHash,
+      v4ChainDeployment.deploymentEvidence.transactionHash,
+    );
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
@@ -101,47 +96,31 @@ test("V4 pack rejects 2-target and cross-chain configs before compiling", async 
   }
 });
 
-test("V4 funding value exactly covers every graph deployment and initializer value", () => {
-  const graphBundle = {
-    targets: [
-      { deploymentValueWei: "2", initializerValueWei: "0" },
-      { deploymentValueWei: "0", initializerValueWei: "0" },
-      { deploymentValueWei: "3", initializerValueWei: "0" },
-    ],
-  };
-  const funding = {
-    schemaVersion: "programmable.custom-launch-funding-intent.v2",
-    mode: "wallet-transaction-value",
-    valueWei: "5",
-  };
-  assert.deepEqual(assertV4FundingValueMatchesGraph(funding, graphBundle), funding);
-  assert.throws(
-    () => assertV4FundingValueMatchesGraph({ ...funding, valueWei: "4" }, graphBundle),
-    /exactly equal the sum/u,
-  );
-});
+test("V4 funding value exactly covers every graph deployment and initializer value", async () => {
+  const fixture = await materializeV4CompiledFixture();
+  try {
+    const config = JSON.parse(await readFile(fixture.configPath, "utf8"));
+    config.targets[0].deploymentValueWei = "2";
+    config.targets[2].deploymentValueWei = "3";
+    config.funding = {
+      schemaVersion: "programmable.custom-launch-funding-intent.v2",
+      mode: "wallet-transaction-value",
+      valueWei: "5",
+    };
+    await writeFile(fixture.configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    const built = await buildLaunch({ configPath: fixture.configPath });
+    assert.equal(built.request.funding.valueWei, "5");
 
-function assertCanonicalFeeProfileUnavailable(error, stage) {
-  assert.equal(error?.code, ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE);
-  assert.equal(error?.diagnostic?.stage, stage);
-  assert.equal(error?.diagnostic?.observed?.packageState, "fail-closed");
-  assert.equal(error?.diagnostic?.retryable, false);
-  assert.equal(error?.diagnostic?.requiresNewRequest, true);
-  assert.equal(error?.diagnostic?.resumeAt, "pack");
-  assert.equal(error?.diagnostic?.expected?.ownerDecision?.ratePpm, "2000");
-  assert.equal(error?.diagnostic?.expected?.ownerDecision?.platformId, "programmable");
-  assert.equal(error?.diagnostic?.expected?.ownerDecision?.category, "custom");
-  assert.equal(error?.diagnostic?.expected?.ownerDecision?.label, "Programmable Custom");
-  assert.equal(
-    error?.diagnostic?.expected?.ownerDecision?.recipient,
-    "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
-  );
-  assert.match(
-    error?.message ?? "",
-    new RegExp(ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE, "u"),
-  );
-  return true;
-}
+    config.funding.valueWei = "4";
+    await writeFile(fixture.configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    await assert.rejects(
+      buildLaunch({ configPath: fixture.configPath }),
+      /exactly equal the sum/u,
+    );
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
 
 async function materializeV4CompiledFixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "programmable-launch-v4-pack-"));
@@ -333,4 +312,17 @@ async function materializeV4CompiledFixture() {
   const configPath = path.join(root, "programmable-launch.config.json");
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return { root, configPath };
+}
+
+function deepObjectKeys(value, keys = new Set()) {
+  if (value === null || typeof value !== "object") return keys;
+  if (Array.isArray(value)) {
+    for (const entry of value) deepObjectKeys(entry, keys);
+    return keys;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    keys.add(key);
+    deepObjectKeys(entry, keys);
+  }
+  return keys;
 }

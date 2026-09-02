@@ -58,7 +58,6 @@ import {
   hashBehaviorScenarioInputs,
   validateBehaviorScenarioInputs,
 } from "./behavior-scenario-inputs.mjs";
-import { assertCanonicalRobinhoodV4FeeProfileAvailable } from "./robinhood-v4-fee-gate.mjs";
 import {
   assertDeployableRuntimeCode,
   assertNoDelegatingRuntimeOpcodes,
@@ -562,7 +561,6 @@ function validateV4LaunchRequest(request) {
     || request.caip2 !== `eip155:${ROBINHOOD_CHAIN_ID}`) {
     throw new TypeError("V4 request must bind Robinhood Chain mainnet eip155:4663");
   }
-  assertCanonicalRobinhoodV4FeeProfileAvailable({ stage: "validate" });
   const chainDeployment = normalizeV4ChainDeployment(request.chainDeployment);
   const chainDeploymentDescriptorDigest = assertV4DeploymentDescriptorDigest(
     request.chainDeploymentDescriptorDigest,

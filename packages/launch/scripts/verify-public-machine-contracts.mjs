@@ -986,18 +986,13 @@ assert.match(
 );
 assert.match(
   readmeSource,
-  /Package version `4\.0\.0`[\s\S]{0,180}unreleased source candidate/u,
-  "packaged README must identify V4 as an unreleased source candidate",
+  /Package version `4\.0\.0`[\s\S]{0,180}planned pre-release source\s+candidate/u,
+  "packaged README must identify V4 as a planned pre-release source candidate",
 );
 assert.match(
   readmeSource,
   /`releaseReady: false`/u,
   "packaged README must retain the negative V4 release binding",
-);
-assert.match(
-  readmeSource,
-  /ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE/u,
-  "packaged README must publish the stable fail-closed V4 fee-profile code",
 );
 assert.doesNotMatch(
   readmeSource,
