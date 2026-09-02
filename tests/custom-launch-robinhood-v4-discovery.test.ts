@@ -16,16 +16,18 @@ import {
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
-describe("planned Robinhood Chain V4 discovery", () => {
-  it("publishes one non-live chain-bound V4 contract", () => {
+describe("Robinhood Chain V4 public self-serve release discovery", () => {
+  it("publishes one pending-promotion chain-bound V4 contract", () => {
     const document = programmableWellKnownDocumentV1(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
     );
     const v4 = document.customLaunchApi.versions.v4;
 
     expect(v4).toEqual({
-      status: "planned",
-      activationStage: "planned-not-deployed",
+      status: "release-candidate",
+      runtimeStatus: "routes-deployed",
+      activationStage: "pending-public-discovery-promotion",
+      targetLaunchPath: "public-self-serve",
       publicAuthorization: false,
       publicWrites: false,
       releaseReady: false,
@@ -35,6 +37,7 @@ describe("planned Robinhood Chain V4 discovery", () => {
       caip2: "eip155:4663",
       network: "Robinhood Chain Mainnet",
       capabilitiesPath: "/v4/chains/4663/capabilities",
+      readinessPath: "/v4/chains/4663/readiness",
       preflightPath: "/v4/chains/4663/custom-launches/preflight",
       createPath: "/v4/chains/4663/custom-launches",
       statusPath: "/v4/chains/4663/custom-launches/{launchId}",
@@ -46,6 +49,17 @@ describe("planned Robinhood Chain V4 discovery", () => {
         "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json",
       guideUrl:
         "https://programmable.market/docs/developers/custom-launch#robinhood-v4",
+      terminalIndexerGuideUrl:
+        "https://programmable.market/docs/developers/robinhood-terminal-indexer",
+      terminalIndexerFixtureUrl:
+        "https://programmable.market/fixtures/robinhood-terminal-indexer-v1.json",
+      launchStampRouterAbiUrl:
+        "https://programmable.market/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json",
+      launchStampRouterAbiSha256:
+        "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
+      launchStampRouterProfileNormalizedAbiSha256:
+        "sha256:ab25262ce1cb907eba1cb820492754c0cd5d7278eb5fd6a024ba24c767323ac0",
+      launchStampRouterProfileNormalizedAbiHashing: "jq -cS plus trailing LF",
       admissionDescriptorUrl:
         "https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json",
       sourceRepository: "https://github.com/programmablehq/PROGRAMMABLE",
@@ -94,6 +108,8 @@ describe("planned Robinhood Chain V4 discovery", () => {
         finalityIndependent: true,
       },
       deploymentEvidence: {
+        status: "generator-promotion-pending",
+        liveAuthorityPath: "/v4/chains/4663/readiness",
         chainDeploymentDescriptorDigest: null,
         chainDeploymentId: null,
         finalityPolicyDigest: null,
@@ -132,17 +148,39 @@ describe("planned Robinhood Chain V4 discovery", () => {
       erc20FundingStatus: "not-advertised-until-separate-proof",
       safetyClaim: false,
       feeBehaviorClaim: false,
+      universalFeeBehaviorClaim: false,
+      platformFeePolicyStatus: "required-default-configuration",
+      platformFeePolicy: {
+        required: true,
+        status: "required-default-configuration",
+        appliesTo: "new-robinhood-v4-api-custom-launches-only",
+        changesExistingLaunches: false,
+        changesEthereumLaunches: false,
+        rateBps: 20,
+        ratePpm: 2_000,
+        ratePercent: "0.20%",
+        recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+        basis: null,
+        feeCurrency: null,
+        accountingMode: null,
+        rounding: null,
+        accrual: null,
+        claimMechanism: null,
+        enforcement: "not-guaranteed-onchain",
+        canonicalOnchainEnforcementProven: false,
+        guaranteedRevenue: false,
+        feeBehaviorClaim: false,
+        universalFeeBehaviorClaim: false,
+      },
       genericFeeClaiming: "not-live",
       genericBuybackManagement: "not-live",
       externalIndexingGuaranteed: false,
       legacyIntake: { registry: "closed", github: "closed" },
       activationBlockers: [
-        "programmable-chain-deployments",
-        "server-chain-fork-simulation",
-        "wallet-chain-binding",
-        "finalized-router-evidence",
-        "source-verification-provider-binding",
-        "chain-indexing-readiness",
+        "public-cli-release",
+        "generated-release-evidence",
+        "clean-room-end-to-end-proof",
+        "public-indexing-canary",
       ],
     });
     expect(document.chains).toContainEqual({
@@ -150,9 +188,12 @@ describe("planned Robinhood Chain V4 discovery", () => {
       caip2: "eip155:4663",
       name: "Robinhood Chain Mainnet",
       explorerUrl: "https://robinhoodchain.blockscout.com",
-      status: "planned",
+      status: "release-candidate",
       customLaunchApiVersion: "4",
-      activationStage: "planned-not-deployed",
+      runtimeStatus: "routes-deployed",
+      activationStage: "pending-public-discovery-promotion",
+      targetLaunchPath: "public-self-serve",
+      publicAuthorization: false,
       publicWrites: false,
       releaseReady: false,
       externalIndexingGuaranteed: false,
@@ -161,10 +202,12 @@ describe("planned Robinhood Chain V4 discovery", () => {
     expect(foundationSourceCommitment).toBe(
       "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
     );
-    expect(JSON.stringify(withoutSourceCommitment)).not.toMatch(/0x[0-9a-f]{40}/iu);
+    expect(
+      JSON.stringify(withoutSourceCommitment).match(/0x[0-9a-f]{40}/giu),
+    ).toEqual(["0xD88539d3c4C460136a733A3Fd60cf6BF269079da"]);
   });
 
-  it("serializes the same planned contract through public well-known discovery", async () => {
+  it("serializes the same release candidate through public well-known discovery", async () => {
     const response = createProgrammableWellKnownHandlerV1({})(
       new Request("https://programmable.market/.well-known/programmable.json"),
     );
@@ -172,8 +215,10 @@ describe("planned Robinhood Chain V4 discovery", () => {
 
     expect(response.status).toBe(200);
     expect(document.customLaunchApi.versions.v4).toMatchObject({
-      status: "planned",
-      activationStage: "planned-not-deployed",
+      status: "release-candidate",
+      runtimeStatus: "routes-deployed",
+      activationStage: "pending-public-discovery-promotion",
+      targetLaunchPath: "public-self-serve",
       publicAuthorization: false,
       publicWrites: false,
       releaseReady: false,
@@ -182,6 +227,19 @@ describe("planned Robinhood Chain V4 discovery", () => {
       clientSelectableProfile: false,
       apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY",
       feeBehaviorClaim: false,
+      universalFeeBehaviorClaim: false,
+      platformFeePolicyStatus: "required-default-configuration",
+      platformFeePolicy: {
+        required: true,
+        rateBps: 20,
+        ratePpm: 2_000,
+        recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+        enforcement: "not-guaranteed-onchain",
+        canonicalOnchainEnforcementProven: false,
+        guaranteedRevenue: false,
+        feeBehaviorClaim: false,
+        universalFeeBehaviorClaim: false,
+      },
       externalIndexingGuaranteed: false,
       cli: {
         sourceCandidateVersion: "4.0.0",
@@ -219,7 +277,7 @@ describe("planned Robinhood Chain V4 discovery", () => {
     });
   });
 
-  it("keeps public guides aligned with the planned and non-authorizing boundary", () => {
+  it("keeps public guides aligned with the pending-promotion boundary", () => {
     const developerGuide = read("docs/public/developers/custom-launch.md");
     const rawGuide = read("public/developers/custom-launch-api-v1.md");
     const websiteGuide = read("app/docs/developers/custom-launch/page.tsx");
@@ -242,8 +300,8 @@ describe("planned Robinhood Chain V4 discovery", () => {
     ].join("\n");
 
     expect(publicDocs).toMatch(/Robinhood Chain V4/iu);
-    expect(publicDocs).toMatch(/planned/iu);
-    expect(publicDocs).toMatch(/planned-not-deployed|not deployed/iu);
+    expect(publicDocs).toMatch(/public self-serve/iu);
+    expect(publicDocs).toMatch(/pending-public-discovery-promotion/iu);
     expect(publicDocs).toContain("$PROGRAMMABLE_API_KEY");
     expect(publicDocs).toMatch(/external index/iu);
     expect(publicDocs).toMatch(/generic fee claiming/iu);
@@ -306,8 +364,10 @@ describe("planned Robinhood Chain V4 discovery", () => {
 
     expect(programmablePublicOpenApi["x-programmable-availability"].v4)
       .toMatchObject({
-        status: "planned",
-        activationStage: "planned-not-deployed",
+        status: "release-candidate",
+        runtimeStatus: "routes-deployed",
+        activationStage: "pending-public-discovery-promotion",
+        targetLaunchPath: "public-self-serve",
         profileVersion: "4.0.0",
         released: false,
         installable: false,

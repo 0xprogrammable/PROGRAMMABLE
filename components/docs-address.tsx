@@ -24,9 +24,11 @@ export function getDocsAddressCopyStatus(
 
 export function DocsAddress({
   address,
+  explorerUrl,
   label,
 }: {
   address: string;
+  explorerUrl?: string;
   label: string;
 }) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
@@ -70,7 +72,7 @@ export function DocsAddress({
   return (
     <span className={styles.addressRow}>
       <DocsExternalLink
-        href={`https://etherscan.io/address/${address}#code`}
+        href={explorerUrl ?? `https://etherscan.io/address/${address}#code`}
         variant="address"
       >
         {address}

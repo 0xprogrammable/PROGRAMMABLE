@@ -192,7 +192,7 @@ describe("interaction state regressions", () => {
     expect(detailSource).toContain('setCopyError("Could not copy address")');
     expect(detailSource).toContain('<p className="toast" role="alert">');
     expect(detailSource).toContain(
-      "Robinhood Chain token discovery is planned but not deployed yet",
+      "Robinhood Chain token discovery is not active in Explore yet",
     );
     expect(exploreSource).toContain("Copy ${token.name} contract address");
     expect(exploreSource).toContain(

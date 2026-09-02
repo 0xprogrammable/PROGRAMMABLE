@@ -3946,12 +3946,12 @@ export function ExploreView({
           <div>
             <h2>
               {viewChainId === 4663
-                ? "Robinhood Explore is planned"
+                ? "Robinhood Explore is not active yet"
                 : "Explore is getting ready"}
             </h2>
             <p>
               {viewChainId === 4663
-                ? "Robinhood Chain launches are not deployed yet."
+                ? "The Robinhood Explore and indexing lane is not available yet."
                 : "The launch index is not available in this environment yet."}
             </p>
           </div>

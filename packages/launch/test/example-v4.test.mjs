@@ -196,10 +196,12 @@ test("public V4 example source contains no fabricated nonzero deployment address
     new URL("../examples/robinhood-v4-no-broadcast/README.md", import.meta.url),
     "utf8",
   );
-  assert.match(readme, /never embeds planned Programmable deployment\s+addresses/u);
-  assert.match(readme, /Package version `4\.0\.0` is a\s+planned pre-release source candidate/u);
-  assert.match(readme, /not a published or publicly installable release/u);
-  assert.match(readme, /`planned-not-deployed` with `releaseReady: false`/u);
+  assert.match(readme, /never hard-codes Programmable deployment\s+addresses/u);
+  assert.match(
+    readme,
+    /Package version `4\.0\.0` remains\s+an unpublished, non-installable pre-release source candidate/u,
+  );
+  assert.match(readme, /`pending-public-discovery-promotion` with `releaseReady: false`/u);
   assert.doesNotMatch(readme, /verified `@programmable\/launch` 4\.0\.0 release artifact/u);
   assert.doesNotMatch(
     readme,

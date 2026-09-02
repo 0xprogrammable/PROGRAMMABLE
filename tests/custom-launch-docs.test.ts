@@ -76,7 +76,7 @@ describe("Custom Launch API documentation", () => {
     }
   });
 
-  it("keeps planned Robinhood V4 distinct from the live Ethereum release", () => {
+  it("keeps the deployed Robinhood V4 release candidate distinct from public activation", () => {
     const v4Sources = [
       gitBookGuide,
       websiteGuide,
@@ -91,7 +91,9 @@ describe("Custom Launch API documentation", () => {
 
     for (const source of v4Sources) {
       expect(source).toContain("4.0.0");
-      expect(source).toMatch(/source candidate|source-candidate/iu);
+      expect(source).toMatch(
+        /(?:source|release)[ -]candidate/iu,
+      );
       expect(source).toContain("3.3.9");
       expect(source).toContain("publicWrites");
       expect(source).toContain("releaseReady");
@@ -122,8 +124,10 @@ describe("Custom Launch API documentation", () => {
       .toEqual(statuses);
     expect(programmablePublicOpenApi["x-programmable-availability"].v4)
       .toMatchObject({
-        status: "planned",
-        activationStage: "planned-not-deployed",
+        status: "release-candidate",
+        runtimeStatus: "routes-deployed",
+        activationStage: "pending-public-discovery-promotion",
+        targetLaunchPath: "public-self-serve",
         profileVersion: "4.0.0",
         released: false,
         installable: false,
@@ -143,7 +147,7 @@ describe("Custom Launch API documentation", () => {
     expect(cliGuide).toContain(
       "No `programmable-launch-v4.0.0` GitHub Release",
     );
-    expect(cliGuide).toMatch(/planned pre-release source\s+candidate/iu);
+    expect(cliGuide).toMatch(/unpublished pre-release source\s+candidate/iu);
     expect(cliGuide).not.toContain(
       "releases/download/programmable-launch-v4.0.0",
     );

@@ -49,9 +49,11 @@ submissions. CLI `3.3.9` is the current installable release and defaults to live
 Each release defines its funding and signing path. User-funded flows keep the connected wallet in control of its own
 transaction.
 
-Robinhood Chain V4 is published as a planned, not-deployed integration contract. Public writes and authorization are
-disabled until chain deployment, server simulation, wallet binding, finalized Router evidence, source verification
-and indexing readiness are independently proven. Stable V4 route and schema pointers do not make the network live.
+Robinhood Chain V4 Router and backend are deployed and ready and target a public self-serve launch path. This source
+snapshot remains `pending-public-discovery-promotion`: deployed runtime is not public launch authorization. Require
+live `publicWrites: true`, `publicAuthorization: true` and `releaseReady: true` discovery before creating. The required
+default policy for new Robinhood V4 API Custom launches is 20 bps to the published recipient; it is not proof of
+canonical onchain fee enforcement, a charged fee or platform revenue, and fee-path absence is not itself a write blocker.
 
 ## Launch models
 
@@ -151,8 +153,9 @@ publication, wallet spending or production activation.
 | Custom Launch V1 OpenAPI     | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
 | Custom Launch V2 OpenAPI     | [V2 reads, schemas and write fence](https://programmable.market/openapi/custom-launch-v2.json)             |
 | Custom Launch V3 OpenAPI     | [preparatory profile 3.4 contract; live/default remains discovery-bound profile 3.3](https://programmable.market/openapi/custom-launch-v3.json) |
-| Custom Launch V4 OpenAPI     | [planned Robinhood Chain contract; public writes disabled](https://programmable.market/openapi/custom-launch-v4.json) |
-| Custom Launch V4 schema      | [planned Robinhood Chain pack config](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
+| Custom Launch V4 OpenAPI     | [Robinhood public self-serve release candidate](https://programmable.market/openapi/custom-launch-v4.json) |
+| Custom Launch V4 schema      | [Robinhood pack configuration](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
+| Robinhood terminal integration | [chain-bound Router, finalized feed and fail-closed fixture](https://programmable.market/docs/developers/robinhood-terminal-indexer) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |
@@ -164,10 +167,13 @@ V2 and V1 list and single-resource reads remain live for existing wallet-owned r
 non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 is the current
 production submission contract. CLI and preflight checks prepare and classify exact bytes, while the API server makes
 the durable decision and exposes no wallet handoff until the per-launch behavior, fee and liquidity evidence required
-by the selected lane is verified. A 10 bps claim applies only to a fee-certified profile or adapter and its exact
-stamped PoolKey; arbitrary Custom hooks are not automatically fee-enforced. No admission result is an audit or a
-universal safety, honeypot, liquidity, tradeability or fee-behavior guarantee. Legacy Registry and GitHub submission
-intake is closed.
+by the selected lane is verified. Existing Ethereum fee-certified profiles and their exact stamped PoolKeys remain
+unchanged; they do not establish a Robinhood fee path. The required policy and default configuration for new Robinhood
+V4 API Custom launches is `20 bps` (`0.20%`, `2,000 ppm`) to
+`0xD88539d3c4C460136a733A3Fd60cf6BF269079da`. Existing launches and Ethereum are unchanged. This is not canonical
+onchain enforcement, charged-fee or revenue evidence. Basis, currency, accounting mode, rounding, accrual and claim
+mechanics remain unpublished, and fee-path absence is not itself a Robinhood write blocker. No admission result is an audit or a universal safety, honeypot, liquidity,
+tradeability or fee-behavior guarantee. Legacy Registry and GitHub submission intake is closed.
 
 ## Related repositories
 

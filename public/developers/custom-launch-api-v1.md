@@ -7,9 +7,9 @@ and `POST /v1/custom-launches` are permanently read only with non-retryable `409
 `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is
 closed.
 
-The public installable CLI is `@programmable/launch` `3.3.9` for the live Ethereum V3 contract. The repository's
-`4.0.0` package is a Robinhood V4 source candidate only. It has no published installable release and does not change
-V4 `publicWrites: false` or `releaseReady: false`.
+The public installable CLI is `@programmable/launch` `3.3.9` for the live Ethereum V3 contract. Robinhood V4 has a
+deployed Router and backend routes. The repository's `4.0.0` package remains an unpublished, non-installable source
+candidate and does not change this snapshot's `publicWrites: false` or `releaseReady: false`.
 
 V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
 simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
@@ -25,14 +25,15 @@ Human guide: <https://programmable.market/docs/developers/custom-launch>
 
 Readiness: <https://api.programmable.market/readyz>
 
-## Robinhood Chain V4 planned contract
+## Robinhood Chain V4 deployed release candidate
 
-Robinhood Chain Mainnet is `chainId: 4663` and `eip155:4663`. Discovery advertises V4 as `planned` and
-`planned-not-deployed`; public writes and public authorization are false. The authenticated API server selects the
+Robinhood Chain Mainnet is `chainId: 4663` and `eip155:4663`. The Router and backend routes are deployed. This
+release snapshot is `pending-public-discovery-promotion`; public writes, public authorization and release readiness
+remain false. Deployed runtime is not activated public discovery. The authenticated API server selects the
 `robinhood-launch-readiness` or `robinhood-production-launch` policy profile from the chain binding. A caller cannot
 select either profile.
 
-Stable planned pointers:
+Release-candidate pointers:
 
 - `GET /v4/chains/4663/capabilities`
 - `POST /v4/chains/4663/custom-launches/preflight`
@@ -57,21 +58,22 @@ JPEG, WebP, and animated GIF are rejected by the V4 packer before any network re
 
 A bounded external-contract reference is allowed only when the protected API server verifies its exact
 `eip155:4663` address, live runtime hash, source-verification evidence, declared graph role and checkpoint. Arbitrary
-or unbound references gain no trust and block admission. These planned checks are not deployment or live evidence.
+or unbound references gain no trust and block admission. These checks are not public-activation or behavior evidence.
 
 Foundation source commitment:
-`0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`. It binds reviewed source, not a deployed
-address. Sourcify v2 provider-native `match` is required; exact source authority is the separate protected-build/finalized-bytecode binding. Robinhood Blockscout is optional, unproven and degraded; it cannot
+`0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`. By itself it binds reviewed source, not a
+deployed address. Sourcify v2 provider-native `match` is required; exact source authority is the separate protected-build/finalized-bytecode binding. Robinhood Blockscout is optional, unproven and degraded; it cannot
 support an exact-source claim or block or revise finality.
 
-Planned discovery keeps the complete V4 `deploymentEvidence` record null, including all contract roots. Canary
-requires the exact deployment ID and descriptor digest, foundation source commitment, finality-policy digest,
+The release candidate carries non-null V4 `deploymentEvidence` for its deployed roots. Production clients must still
+fetch and match the exact deployment ID and descriptor digest, foundation source commitment, finality-policy digest,
 finalized block, pinned finalized-evidence reference, and address/runtime-hash/start-block tuples for the Programmable
-Router, GraphFactory, PermitAuthority Safe and relevant Uniswap roots. Partial evidence cannot promote the lane.
+Router, GraphFactory, PermitAuthority Safe and relevant Uniswap roots. Partial or stale evidence cannot activate or
+promote the lane.
 
 ### V4 lifecycle and wallet handoff
 
-The planned V4 resource uses these exact statuses:
+The V4 resource uses these exact statuses:
 
 | Status | Meaning |
 | --- | --- |
@@ -99,7 +101,7 @@ programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch 
 Provider source verification starts after `finalized` and remains independent. Finality does not imply
 `sourceVerification.status: exact_match`; verification retries or failures do not revise finality. Programmable
 indexing, third-party indexing, trading readiness, publication and public announcements are separate outcomes. The
-planned V4 routes and source candidate prove none of them is live.
+deployed V4 routes and source candidate prove neither public write activation nor any of those independent outcomes.
 
 The live unauthenticated `GET /v3/finalized-custom-launches` response uses top-level `launches` and required top-level
 `quality`. Quality contains `status` (`complete` or `partial`), `sourceRowCount`, `publishedRowCount`,

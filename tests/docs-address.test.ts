@@ -22,6 +22,24 @@ describe("Docs deployment addresses", () => {
     expect(html).toContain('role="status"');
   });
 
+  it("uses an explicit chain explorer without changing the copy control", () => {
+    const address = "0x34965F2A2ee9254522232C32F02056E92BE0C98a";
+    const explorerUrl =
+      `https://robinhoodchain.blockscout.com/address/${address}`;
+    const html = renderToStaticMarkup(
+      createElement(DocsAddress, {
+        address,
+        explorerUrl,
+        label: "Robinhood Launch Stamp Router",
+      }),
+    );
+
+    expect(html).toContain(`href="${explorerUrl}"`);
+    expect(html).toContain(
+      'aria-label="Copy Robinhood Launch Stamp Router address"',
+    );
+  });
+
   it("provides explicit assistive feedback for success and failure", () => {
     expect(getDocsAddressCopyStatus("Launcher", "idle")).toBe("");
     expect(getDocsAddressCopyStatus("Launcher", "copied")).toBe(

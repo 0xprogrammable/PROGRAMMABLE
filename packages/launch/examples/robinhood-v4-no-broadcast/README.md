@@ -1,7 +1,7 @@
 # Robinhood V4 funding-none no-broadcast clean room
 
 This example compiles three real Solidity targets with exact `solc` 0.8.26 and prepares a
-`programmable.launch-pack-config.v4` file for chain `4663`. It never embeds planned Programmable deployment
+`programmable.launch-pack-config.v4` file for chain `4663`. It never hard-codes Programmable deployment
 addresses. At build time it fetches the unauthenticated production V4 capabilities document and copies the exact
 chain-deployment descriptor and integer-revision profile reference into the generated config. It fails closed while
 that route, any required trust root, the finality digest, or the production profile digest is unavailable.
@@ -13,10 +13,10 @@ admission, wallet approval, onchain deployment, or public availability.
 
 ## Prepare
 
-Use Node.js 24.14 and an exact reviewed checkout containing this clean-room example. Package version `4.0.0` is a
-planned pre-release source candidate, not a published or publicly installable release; Robinhood V4 remains
-`planned-not-deployed` with `releaseReady: false`. Copy the project from that checkout, then install its exact
-compiler lock:
+Use Node.js 24.14 and an exact reviewed checkout containing this clean-room example. Package version `4.0.0` remains
+an unpublished, non-installable pre-release source candidate. The Robinhood V4 Router and backend routes are deployed,
+but this release snapshot is `pending-public-discovery-promotion` with `releaseReady: false`. Copy the project from
+that checkout, then install its exact compiler lock:
 
 ```sh
 PACKAGE_ROOT="/absolute/path/to/exact-reviewed-checkout/packages/launch"

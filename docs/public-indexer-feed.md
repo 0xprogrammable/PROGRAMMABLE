@@ -23,17 +23,20 @@ The former `/api/indexers/v1/tokens`, `/api/indexers/v1/token` and
 `/api/indexers/v1/token-list` routes are retired. Do not use them for new
 integrations.
 
-## Chain availability
+## Explore read-model availability
 
 Ethereum Mainnet (`chainId: 1`) is the active production indexing lane.
 
-Robinhood Chain Mainnet (`chainId: 4663`) is planned and fail-closed. Until its
-production deployment, manifest and indexer binding are published, the
+Robinhood Chain Mainnet (`chainId: 4663`) has a deployed Launch Stamp Router
+and Custom V4 backend routes, but this legacy Product Explore read-model lane is
+not activated. Its
 [`GET /api/explore?chain=4663`](https://programmable.market/api/explore?chain=4663)
-response remains `not-deployed` with the activation stage
-`planned-not-deployed`. Do not interpret that planned empty response as
-authoritative evidence that no launches exist, and do not infer Router addresses
-or start blocks.
+response intentionally remains `not-deployed` with activation stage
+`planned-not-deployed`. That response describes only this Explore lane; it is
+not evidence that the Router or backend is undeployed and is not authoritative
+evidence that no launches exist. Use the
+[Robinhood terminal integration](https://programmable.market/docs/developers/robinhood-terminal-indexer)
+for the exact Router, start block and finalized-feed boundary.
 
 ## Launch models
 

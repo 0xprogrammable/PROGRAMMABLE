@@ -349,6 +349,28 @@
   margin-top: 36px;
 }
 
+.codeExample {
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 10px;
+  color: var(--text-soft);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 20px 0 0;
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.codeExample:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
 .tableScroll {
   background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
   border: 1px solid var(--panel-border-soft);
@@ -447,7 +469,8 @@
   }
 
   .dataList,
-  .codeList {
+  .codeList,
+  .codeExample {
     padding: 16px;
   }
 
@@ -482,6 +505,7 @@
 @media (forced-colors: active) {
   .dataList,
   .codeList,
+  .codeExample,
   .tableScroll {
     border-color: CanvasText;
   }

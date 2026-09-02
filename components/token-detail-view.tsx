@@ -3030,7 +3030,7 @@ export function TokenDetailView({
       ? "This token is not in the Programmable index yet"
       : activeState.phase === "not-deployed"
         ? chainId === 4663
-          ? "Robinhood Chain token discovery is planned but not deployed yet"
+          ? "Robinhood Chain token discovery is not active in Explore yet"
           : "No finalized token data is available"
         : activeState.message;
 
