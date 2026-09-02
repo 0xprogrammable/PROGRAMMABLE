@@ -21,6 +21,8 @@ import {
 
 import styles from "@/components/developer-api-keys.module.css";
 import { DeveloperLaunchHistory } from "@/components/developer-launch-history";
+import { DeveloperRobinhoodLaunch } from
+  "@/components/developer-robinhood-launch";
 import {
   useWallet,
   type CustomLaunchWalletActionInputV4,
@@ -74,7 +76,7 @@ type ApiKeyMutationState =
   | Readonly<{ kind: "rotate"; credentialId: string }>;
 
 type ListState = "idle" | "loading" | "ready" | "error";
-type ActiveSection = "keys" | "history";
+type ActiveSection = "keys" | "launch" | "history";
 type ApiKeyLoadMode = "initial" | "refresh" | "mutation";
 type DeveloperApiKeysViewProps = Readonly<{
   account: `0x${string}` | null;
@@ -810,6 +812,16 @@ function DeveloperApiKeysView({
 
   useEffect(() => {
     const url = new URL(window.location.href);
+    if (
+      url.searchParams.get("start") === "custom"
+      && url.searchParams.get("chainId") === "4663"
+    ) {
+      const update = window.setTimeout(() => {
+        setActiveSection("launch");
+        setStatusMessage("Opening Robinhood Custom launch.");
+      }, 0);
+      return () => window.clearTimeout(update);
+    }
     const candidate = url.searchParams.get("launchId");
     if (!candidate || !launchRequestIdPattern.test(candidate)) return;
     const chainId = url.searchParams.get("chainId");
@@ -969,16 +981,43 @@ function DeveloperApiKeysView({
   const showSection = (section: ActiveSection) => {
     setActiveSection(section);
     const url = new URL(window.location.href);
-    if (section === "keys") {
+    if (section === "launch") {
+      url.searchParams.set("start", "custom");
+      url.searchParams.set("chainId", "4663");
       url.searchParams.delete("launchId");
-      url.searchParams.delete("chainId");
       setInitialLaunchId(null);
       setInitialLaunchChainId(null);
+    } else {
+      url.searchParams.delete("start");
+      if (section === "keys") {
+        url.searchParams.delete("launchId");
+        url.searchParams.delete("chainId");
+        setInitialLaunchId(null);
+        setInitialLaunchChainId(null);
+      } else if (!url.searchParams.has("launchId")) {
+        url.searchParams.delete("chainId");
+      }
     }
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
     setStatusMessage(
-      section === "keys" ? "Showing API keys." : "Showing launch history.",
+      section === "keys"
+        ? "Showing API keys."
+        : section === "launch"
+          ? "Showing Robinhood Custom launch."
+          : "Showing launch history.",
     );
+  };
+
+  const openRobinhoodLaunchHistory = (launchId: string) => {
+    setInitialLaunchId(launchId);
+    setInitialLaunchChainId("4663");
+    setActiveSection("history");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("start");
+    url.searchParams.set("launchId", launchId);
+    url.searchParams.set("chainId", "4663");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    setStatusMessage("Opening the new Robinhood launch in history.");
   };
 
   const beginRevoke = (apiKeyId: string, trigger: HTMLButtonElement) => {
@@ -1354,6 +1393,13 @@ function DeveloperApiKeysView({
               onClick={() => showSection("keys")}
             >
               API keys
+            </button>
+            <button
+              aria-pressed={activeSection === "launch"}
+              type="button"
+              onClick={() => showSection("launch")}
+            >
+              Launch
             </button>
             <button
               aria-pressed={activeSection === "history"}
@@ -1758,6 +1804,10 @@ function DeveloperApiKeysView({
                 ) : null}
               </section>
             </div>
+          ) : activeSection === "launch" ? (
+            <DeveloperRobinhoodLaunch
+              onOpenLaunch={openRobinhoodLaunchHistory}
+            />
           ) : (
             <DeveloperLaunchHistory
               account={account}
