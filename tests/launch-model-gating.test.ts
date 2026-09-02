@@ -192,19 +192,23 @@ describe("unreleased launch model gating", () => {
       /<a[^>]*data-launch-model-option="custom"[^>]*>/,
     )?.[0];
     expect(customCard).toContain('data-launch-model-available="true"');
-    expect(customCard).toContain('data-launch-model-entry="public-api"');
+    expect(customCard).toContain('data-launch-model-entry="api-key-launch"');
     expect(customCard).toContain('data-launch-model-launchable="false"');
-    expect(customCard).toContain('href="/docs/developers/custom-launch"');
+    expect(customCard).toContain(
+      'href="/developers/api-keys?start=custom&amp;chainId=4663"',
+    );
     expect(customCard).not.toContain("disabled");
     expect(html).toContain(
       'id="launch-model-custom-title">Custom</strong>',
     );
     expect(html).toContain("Create a Classic coin");
-    expect(html).toContain('data-status="live">Live API</small>');
     expect(html).toContain(
-      "Package, validate and submit a deterministic Custom launch through the public V3 API. Your connected wallet reviews and signs separately.",
+      'data-status="pending">Preflight required</small>',
     );
-    expect(html).toContain("Open API launch guide");
+    expect(html).toContain(
+      "Upload an exact packed Custom launch, preflight it against Robinhood Chain, then create the request. Your wallet reviews and signs later.",
+    );
+    expect(html).toContain("Open Custom launch");
     expect(html).not.toContain("approved GitHub revision");
     expect(html.indexOf('data-launch-model-option="classic"')).toBeLessThan(
       html.indexOf('data-launch-model-option="custom"'),
@@ -226,7 +230,7 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("keeps the public Custom API entry independent of the legacy gate", () => {
+  it("keeps the Robinhood Custom entry independent of the legacy gate", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         onChoose: () => undefined,
@@ -237,11 +241,15 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-option="custom"');
     expect(html).toContain('id="launch-model-custom-title"');
     expect(html).toContain('data-launch-model-available="true"');
-    expect(html).toContain('data-launch-model-entry="public-api"');
+    expect(html).toContain('data-launch-model-entry="api-key-launch"');
     expect(html).toContain('data-launch-model-launchable="false"');
-    expect(html).toContain('data-status="live">Live API</small>');
-    expect(html).toContain('href="/docs/developers/custom-launch"');
-    expect(html).toContain("Open API launch guide");
+    expect(html).toContain(
+      'data-status="pending">Preflight required</small>',
+    );
+    expect(html).toContain(
+      'href="/developers/api-keys?start=custom&amp;chainId=4663"',
+    );
+    expect(html).toContain("Open Custom launch");
     expect(html).not.toContain("approved GitHub revision");
     expect(html).not.toContain("Build or resume");
   });

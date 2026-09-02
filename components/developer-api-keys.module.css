@@ -148,7 +148,7 @@
   border-radius: var(--webde-radius-control);
   display: inline-grid;
   gap: 4px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 16px;
   padding: 4px;
 }

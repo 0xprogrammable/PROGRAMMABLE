@@ -64,8 +64,10 @@ describe("launch model artwork", () => {
     );
     expect(source).toContain('data-launch-model-option="custom"');
     expect(source).toContain('data-launch-model-available="true"');
-    expect(source).toContain('data-launch-model-entry="public-api"');
-    expect(source).toContain('href="/docs/developers/custom-launch"');
+    expect(source).toContain('data-launch-model-entry="api-key-launch"');
+    expect(source).toContain(
+      'href="/developers/api-keys?start=custom&chainId=4663"',
+    );
     expect(source).not.toContain('onChoose("custom")');
     expect(source).not.toContain("customLaunchPublicEnabled");
     expect(source).not.toContain("custom-launch-experience");
