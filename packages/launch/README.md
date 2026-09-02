@@ -7,7 +7,8 @@ Release and installability are version-specific.
 ## Install the current public Ethereum V3 release
 
 The commands below intentionally install the published CLI `3.3.9`. No `programmable-launch-v4.0.0` GitHub Release
-asset exists while Robinhood V4 remains `planned`, `planned-not-deployed`, and `releaseReady: false`.
+asset exists while the V4 release binding remains `releaseReady: false` and the canonical Robinhood fee profile is
+unavailable.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
@@ -48,16 +49,26 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## Robinhood Chain V4 source candidate
 
-Package version `4.0.0` in this repository, including local `npm pack` output, is a planned pre-release source
-candidate for Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). It is not a published or publicly installable
-release and must not be described as live. Product discovery still reports `status: planned`,
-`activationStage: planned-not-deployed`, `publicWrites: false` and `publicAuthorization: false`; the release binding
-remains `releaseReady: false`. The installable production CLI is still `3.3.9` for Ethereum V3.
+Package version `4.0.0` in this repository, including local `npm pack` output, is an unreleased source candidate for
+Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). It is not a published or publicly installable release and
+must not be described as live. The release binding remains `releaseReady: false`. The installable production CLI is
+still `3.3.9` for Ethereum V3.
+
+The owner policy for new Robinhood API Custom launches fixes the Programmable fee at 2,000 ppm with recipient
+`0xD88539d3c4C460136a733A3Fd60cf6BF269079da`; it does not change existing launches or Ethereum. Those two values are
+not a live fee claim. Until one authoritative profile binds the basis, currency, rounding, accrual and claim semantics
+to exact source, runtime, reciprocal composition, a deployed non-bypassable fee component and the canonical Launch
+Stamp Router, V4 `pack`, `validate` and `submit` fail closed with
+`ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE`. API metadata alone cannot open the gate, and applicants never choose
+or override the platform rate or recipient. The gate is unconditional in this source candidate: no environment
+variable, API response, pack config or client-supplied graph enables V4 packaging. `pack` writes neither request nor
+receipt when it stops; `validate --remote` stops locally before capabilities fetch, credential access or preflight.
+The diagnostic is non-retryable for the same CLI/request and requires a freshly packed request after a reviewed future
+release replaces the gate.
 
 V4 requires an explicit API version and chain. The CLI default remains Ethereum V3, preserving V1, V2 and V3
-behavior. The V4 source candidate can prepare and validate exact bytes, submit only when the server eventually
-authorizes public writes, poll the chain-scoped resource and display the exact wallet transaction. It never signs or
-broadcasts:
+behavior. Chain-scoped `status` remains available for existing V4 resources and can display a server-authored wallet
+handoff, but the CLI never signs or broadcasts:
 
 ```sh
 programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized
@@ -401,7 +412,9 @@ typed `requiredChange` and `resumeAt` instructions, and public documentation/cat
 resolvable JSON Pointers such as `#/remediations/0`, rather than non-resolving code-shaped anchors. Stable local repair
 codes include `PACK_CONFIG_V3_MISSING`,
 `PACK_CONFIG_V3_INVALID`, `FUNDING_AUTHORIZATION_PATCH_PATH_INVALID`, and the legacy migration code
-`FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL`. Raw source-string indicators never become hard safety findings; a legacy
+`FUNDING_SIGNATURE_PATCH_NOT_TOP_LEVEL`. Robinhood V4 additionally returns the stable
+`ROBINHOOD_V4_CANONICAL_FEE_PROFILE_UNAVAILABLE` code while its complete canonical fee binding is absent. Raw
+source-string indicators never become hard safety findings; a legacy
 descriptor may instead return nonblocking `FUNDING_NONCE_DERIVATION_CONFLICT_SUSPECTED` or
 `FUNDING_NONCE_CONFORMANCE_UNPROVEN`. Exact Router simulation is one required input, not authorization by itself.
 
@@ -417,9 +430,10 @@ unique and sorted by UTF-8 path bytes; `contentBase64` encodes exact file bytes 
 The closed API request body is limited to 8,388,608 bytes. The decoded Standard JSON limit leaves room for canonical
 base64 and the rest of the request envelope; `pack` and `validate` enforce both limits before network access.
 
-For Robinhood V4, `metadataImage.mediaTypes` is exactly `image/png` and `image/gif`, and GIF input must contain one
-frame. JPEG, WebP, and animated GIF remain valid in the applicable immutable V3 profiles but are not V4-admitted.
-The V4 packer binds the exact image bytes and rejects unsupported or multi-frame input before network access.
+The dormant Robinhood V4 format limits `metadataImage.mediaTypes` to `image/png` and `image/gif`, with exactly one GIF
+frame. JPEG, WebP, and animated GIF remain valid in the applicable immutable V3 profiles but are outside that V4
+format. The current source candidate stops at the canonical fee-profile gate before reading source or image artifacts;
+these image rules do not imply that positive V4 packing or admission is available.
 
 ## Retry and local state
 

@@ -34,6 +34,7 @@ import {
 } from "./behavior-scenario-inputs.mjs";
 import { validateDirectNativePermitWindow } from "./profile-direct-native-v1.mjs";
 import { buildSourceBundle } from "./source-bundle.mjs";
+import { assertCanonicalRobinhoodV4FeeProfileAvailable } from "./robinhood-v4-fee-gate.mjs";
 import {
   assertV4ExternalContractLocators,
   assertV4FundingValueMatchesGraph,
@@ -55,6 +56,7 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 
 export async function buildV4Launch({ config, configPath }) {
   validateV4PackConfig(config);
+  assertCanonicalRobinhoodV4FeeProfileAvailable({ stage: "pack" });
   const absoluteConfig = path.resolve(configPath);
   const configDirectory = path.dirname(absoluteConfig);
   const sourceRoot = resolveSourceRoot(configDirectory, config.source.root);
