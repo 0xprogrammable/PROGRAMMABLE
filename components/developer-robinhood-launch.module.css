@@ -184,6 +184,35 @@
   padding: 14px;
 }
 
+.policyDisclosure {
+  background: var(--webde-surface-raised);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.policyDisclosure h3 {
+  color: var(--webde-ink);
+  font-size: 13px;
+  font-weight: 620;
+  margin: 0;
+}
+
+.policyDisclosure p {
+  color: var(--webde-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.policyDisclosure code {
+  font-family: var(--font-plex-mono), monospace;
+  overflow-wrap: anywhere;
+}
+
 .preflightResult[data-deployable="true"],
 .createdResult {
   border-color: color-mix(in srgb, var(--success) 40%, var(--webde-line));
@@ -322,6 +351,7 @@
 @media (forced-colors: active) {
   .readinessBadge,
   .fileControl,
+  .policyDisclosure,
   .preflightResult,
   .createdResult {
     border: 1px solid CanvasText;

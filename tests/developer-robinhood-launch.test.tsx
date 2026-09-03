@@ -216,6 +216,13 @@ describe("Robinhood Custom launch website flow", () => {
     expect(html).toContain("Preflight required");
     expect(html).toContain("Create launch request");
     expect(html).toContain("never signs or broadcasts");
+    expect(html).toContain(
+      "Programmable policy for new Robinhood Custom launches is 0.20% (2,000 ppm), recipient <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>.",
+    );
+    expect(html).toContain(
+      "The current V4 runtime does not claim immutable onchain fee enforcement, fee behavior, claiming, or guaranteed revenue. The Launch Stamp proves provenance only.",
+    );
+    expect(html).not.toContain("fee-policy-pending");
     expect(html).not.toContain(apiKey);
     expect(componentSource).not.toContain("localStorage");
     expect(componentSource).not.toContain("sessionStorage");
