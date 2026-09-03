@@ -9,14 +9,14 @@ import { useWallet } from "@/components/wallet-provider";
 import styles from "./profile-entry.module.css";
 
 const ethereumAddressPattern = /^0x[0-9a-f]{40}$/;
-const ProfileView = dynamic(
-  () =>
-    import("@/components/profile-view").then((module) => module.ProfileView),
-  { loading: () => <ProfileEntryLoadingState /> },
-);
+const loadProfileView = () =>
+  import("@/components/profile-view").then((module) => module.ProfileView);
+const ProfileView = dynamic(loadProfileView, {
+  loading: () => <ProfileEntryLoadingState />,
+});
 
 function preloadProfileView() {
-  void import("@/components/profile-view");
+  void loadProfileView().catch(() => undefined);
 }
 
 export function profileEntryHasPublicAccount(
